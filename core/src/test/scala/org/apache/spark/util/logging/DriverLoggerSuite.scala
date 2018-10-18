@@ -72,7 +72,7 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
   private def getSparkContext(): SparkContext = {
     val conf = new SparkConf()
     conf.set(DRIVER_LOG_DFS_DIR, rootHdfsDir.getAbsolutePath())
-    conf.set(DRIVER_LOG_SYNCTODFS, true)
+    conf.set(DRIVER_LOG_PERSISTTODFS, true)
     conf.set(SparkLauncher.SPARK_MASTER, "local")
     conf.set(SparkLauncher.DEPLOY_MODE, "client")
     sc = new SparkContext("local", "DriverLogTest", conf)

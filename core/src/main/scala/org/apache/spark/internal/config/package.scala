@@ -57,8 +57,8 @@ package object config {
       .stringConf
       .createWithDefault("%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n")
 
-  private[spark] val DRIVER_LOG_SYNCTODFS =
-    ConfigBuilder("spark.driver.log.syncToDfs.enabled")
+  private[spark] val DRIVER_LOG_PERSISTTODFS =
+    ConfigBuilder("spark.driver.log.persistToDfs.enabled")
       .booleanConf
       .createWithDefault(false)
 

@@ -280,11 +280,11 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td><code>spark.driver.log.syncToDfs.enabled</code></td>
+  <td><code>spark.driver.log.persistToDfs.enabled</code></td>
   <td>false</td>
   <td>
-    If true, spark application running in client mode will sync driver logs to a persistent storage, configured
-    in spark.driver.log.dfsDir. If spark.driver.log.dfsDir is not configured, driver logs will not be synced.
+    If true, spark application running in client mode will write driver logs to a persistent storage, configured
+    in spark.driver.log.dfsDir. If spark.driver.log.dfsDir is not configured, driver logs will not be persisted.
     Additionally, enable the cleaner by setting spark.history.fs.driverlog.cleaner.enabled to true.
   </td>
 </tr>
@@ -292,7 +292,7 @@ of the most common options to set are:
   <td><code>spark.driver.log.layout</code></td>
   <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n</td>
   <td>
-    The layout for the driver logs that are synced to spark.driver.log.dfsDir. If spark.driver.log.syncToDfs.enabled
+    The layout for the driver logs that are synced to spark.driver.log.dfsDir. If spark.driver.log.persistToDfs.enabled
     is true and this configuration is used. If this is not configured, it uses the layout for the first appender defined
     in log4j.properties. If that is also not configured, driver logs use the default layout.
   </td>
