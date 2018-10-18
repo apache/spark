@@ -339,15 +339,17 @@ private[hive] case class HiveUDAFFunction(
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inputInspectors, false, false)
     resolver.getEvaluator(parameterInfo)
   }
-  
-  private case class Mode(evaluator: GenericUDAFEvaluator, objectInspector: ObjectInspector)
+
+  private case class PartialEvaluator(
+    evaluator: GenericUDAFEvaluator,
+    objectInspector: ObjectInspector)
 
   // The UDAF evaluator used to consume raw input rows and produce partial aggregation results.
   // Hive `ObjectInspector` used to inspect partial aggregation results.
   @transient
   private lazy val partial1Mode = {
     val evaluator = newEvaluator()
-    Mode(evaluator, evaluator.init(GenericUDAFEvaluator.Mode.PARTIAL1, inputInspectors))
+    PartialEvaluator(evaluator, evaluator.init(GenericUDAFEvaluator.Mode.PARTIAL1, inputInspectors))
   }
 
   // The UDAF evaluator used to merge partial aggregation results.
@@ -367,7 +369,7 @@ private[hive] case class HiveUDAFFunction(
   @transient
   private lazy val finalMode = {
     val evaluator = newEvaluator()
-    Mode(
+    PartialEvaluator(
       evaluator,
       evaluator.init(GenericUDAFEvaluator.Mode.FINAL, Array(partial1Mode.objectInspector)))
   }
