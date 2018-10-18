@@ -83,6 +83,7 @@ class SparkSession(object):
 
         _lock = RLock()
         _options = {}
+        _sc = None
 
         @since(2.0)
         def config(self, key=None, value=None, conf=None):
@@ -139,6 +140,11 @@ class SparkSession(object):
             """
             return self.config("spark.sql.catalogImplementation", "hive")
 
+        def _sparkContext(self, sc):
+            with self._lock:
+                self._sc = sc
+                return self
+
         @since(2.0)
         def getOrCreate(self):
             """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a
@@ -150,7 +156,7 @@ class SparkSession(object):
             default.
 
             >>> s1 = SparkSession.builder.config("k1", "v1").getOrCreate()
-            >>> s1.conf.get("k1") == s1.sparkContext.getConf().get("k1") == "v1"
+            >>> s1.conf.get("k1") == "v1"
             True
 
             In case an existing SparkSession is returned, the config options specified
@@ -167,22 +173,19 @@ class SparkSession(object):
                 from pyspark.conf import SparkConf
                 session = SparkSession._instantiatedSession
                 if session is None or session._sc._jsc is None:
-                    sparkConf = SparkConf()
-                    for key, value in self._options.items():
-                        sparkConf.set(key, value)
-                    sc = SparkContext.getOrCreate(sparkConf)
-                    # This SparkContext may be an existing one.
-                    for key, value in self._options.items():
-                        # we need to propagate the confs
-                        # before we create the SparkSession. Otherwise, confs like
-                        # warehouse path and metastore url will not be set correctly (
-                        # these confs cannot be changed once the SparkSession is created).
-                        sc._conf.set(key, value)
+                    if self._sc is not None:
+                        sc = self._sc
+                    else:
+                        sparkConf = SparkConf()
+                        for key, value in self._options.items():
+                            sparkConf.set(key, value)
+                        # This SparkContext may be an existing one.
+                        sc = SparkContext.getOrCreate(sparkConf)
+                    # Do not update `SparkConf` for existing `SparkContext`, as it's shared
+                    # by all sessions.
                     session = SparkSession(sc)
                 for key, value in self._options.items():
                     session._jsparkSession.sessionState().conf().setConfString(key, value)
-                for key, value in self._options.items():
-                    session.sparkContext._conf.set(key, value)
                 return session
 
     builder = Builder()

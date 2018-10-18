@@ -680,23 +680,24 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.driver.limit.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify a hard cpu [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the driver pod.
+    Specify a hard cpu <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">limit</a> for the driver pod.
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.request.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify the cpu request for each executor pod. Values conform to the Kubernetes [convention](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu). 
-    Example values include 0.1, 500m, 1.5, 5, etc., with the definition of cpu units documented in [CPU units](https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#cpu-units).   
+    Specify the cpu request for each executor pod. Values conform to the Kubernetes <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu">convention</a>.
+    Example values include 0.1, 500m, 1.5, 5, etc., with the definition of cpu units documented in <a href="https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#cpu-units">CPU units</a>.
     This is distinct from <code>spark.executor.cores</code>: it is only used and takes precedence over <code>spark.executor.cores</code> for specifying the executor pod cpu request if set. Task 
     parallelism, e.g., number of tasks an executor can run concurrently is not affected by this.
+  </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.limit.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify a hard cpu [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for each executor pod launched for the Spark Application.
+    Specify a hard cpu <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">limit</a> for each executor pod launched for the Spark Application.
   </td>
 </tr>
 <tr>
@@ -799,7 +800,7 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.local.dirs.tmpfs</code></td>
-  <td><code>false</code>
+  <td><code>false</code></td>
   <td>
    Configure the <code>emptyDir</code> volumes used to back <code>SPARK_LOCAL_DIRS</code> within the Spark driver and executor pods to use <code>tmpfs</code> backing i.e. RAM.  See <a href="#local-storage">Local Storage</a> earlier on this page
    for more discussion of this.
@@ -818,6 +819,47 @@ specific to Spark on Kubernetes.
   <td><code>"2"</code></td>
   <td>
    This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.krb5.path</code></td>
+  <td><code>(none)</code></td>
+  <td>
+   Specify the local location of the krb5.conf file to be mounted on the driver and executors for Kerberos interaction.
+   It is important to note that the KDC defined needs to be visible from inside the containers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.krb5.configMapName</code></td>
+  <td><code>(none)</code></td>
+  <td>
+   Specify the name of the ConfigMap, containing the krb5.conf file, to be mounted on the driver and executors
+   for Kerberos interaction. The KDC defined needs to be visible from inside the containers. The ConfigMap must also
+   be in the same namespace of the driver and executor pods.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.hadoop.configMapName</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, to be mounted on the driver 
+    and executors for custom Hadoop configuration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokenSecret.name</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the name of the secret where your existing delegation tokens are stored. This removes the need for the job user
+    to provide any kerberos credentials for launching a job. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokenSecret.itemKey</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the item key of the data where your existing delegation tokens are stored. This removes the need for the job user 
+    to provide any kerberos credentials for launching a job.
   </td>
 </tr>
 </table>

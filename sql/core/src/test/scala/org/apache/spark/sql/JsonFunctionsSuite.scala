@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import collection.JavaConverters._
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -400,6 +402,12 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       true) :: Nil)
 
     assert(out.schema == expected)
+  }
+
+  test("infers schemas using options") {
+    val df = spark.range(1)
+      .select(schema_of_json(lit("{a:1}"), Map("allowUnquotedFieldNames" -> "true").asJava))
+    checkAnswer(df, Seq(Row("struct<a:bigint>")))
   }
 
   test("from_json - array of primitive types") {

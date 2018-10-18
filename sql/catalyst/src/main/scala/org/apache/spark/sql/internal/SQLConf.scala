@@ -974,8 +974,9 @@ object SQLConf {
         "Note: This configuration cannot be changed between query restarts from the same " +
         "checkpoint location.")
       .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
       .checkValue(
-        str => Set("min", "max").contains(str.toLowerCase),
+        str => Set("min", "max").contains(str),
         "Invalid value for 'spark.sql.streaming.multipleWatermarkPolicy'. " +
           "Valid values are 'min' and 'max'")
       .createWithDefault("min") // must be same as MultipleWatermarkPolicy.DEFAULT_POLICY_NAME
@@ -1331,6 +1332,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LITERAL_PICK_MINIMUM_PRECISION =
+    buildConf("spark.sql.legacy.literal.pickMinimumPrecision")
+      .internal()
+      .doc("When integral literal is used in decimal operations, pick a minimum precision " +
+        "required by the literal if this config is true, to make the resulting precision and/or " +
+        "scale smaller. This can reduce the possibility of precision lose and/or overflow.")
+      .booleanConf
+      .createWithDefault(true)
+
   val SQL_OPTIONS_REDACTION_PATTERN =
     buildConf("spark.sql.redaction.options.regex")
       .doc("Regex to decide which keys in a Spark SQL command's options map contain sensitive " +
@@ -1558,6 +1568,14 @@ object SQLConf {
     .internal()
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
+    buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
+      .internal()
+      .doc("If it is set to true, the parser will treat HAVING without GROUP BY as a normal " +
+        "WHERE, which does not follow SQL standard.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -1925,6 +1943,8 @@ class SQLConf extends Serializable with Logging {
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
+
+  def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
