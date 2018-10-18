@@ -1149,6 +1149,75 @@ class SQLTests(ReusedSQLTestCase):
         result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
 
+    def test_infer_schema_specification(self):
+        from decimal import Decimal
+
+        class A(object):
+            def __init__(self):
+                self.a = 1
+
+        data = [
+            True,
+            1,
+            "a",
+            u"a",
+            datetime.date(1970, 1, 1),
+            datetime.datetime(1970, 1, 1, 0, 0),
+            1.0,
+            array.array("d", [1]),
+            [1],
+            (1, ),
+            {"a": 1},
+            bytearray(1),
+            Decimal(1),
+            Row(a=1),
+            Row("a")(1),
+            A(),
+        ]
+
+        df = self.spark.createDataFrame([data])
+        actual = list(map(lambda x: x.dataType.simpleString(), df.schema))
+        expected = [
+            'boolean',
+            'bigint',
+            'string',
+            'string',
+            'date',
+            'timestamp',
+            'double',
+            'array<double>',
+            'array<bigint>',
+            'struct<_1:bigint>',
+            'map<string,bigint>',
+            'binary',
+            'decimal(38,18)',
+            'struct<a:bigint>',
+            'struct<a:bigint>',
+            'struct<a:bigint>',
+        ]
+        self.assertEqual(actual, expected)
+
+        actual = list(df.first())
+        expected = [
+            True,
+            1,
+            'a',
+            u"a",
+            datetime.date(1970, 1, 1),
+            datetime.datetime(1970, 1, 1, 0, 0),
+            1.0,
+            [1.0],
+            [1],
+            Row(_1=1),
+            {"a": 1},
+            bytearray(b'\x00'),
+            Decimal('1.000000000000000000'),
+            Row(a=1),
+            Row(a=1),
+            Row(a=1),
+        ]
+        self.assertEqual(actual, expected)
+
     def test_infer_schema_not_enough_names(self):
         df = self.spark.createDataFrame([["a", "b"]], ["col1"])
         self.assertEqual(df.columns, ['col1', '_2'])
@@ -3603,6 +3672,31 @@ class SQLTests(ReusedSQLTestCase):
                     self.assertEquals(None, df._repr_html_())
                     self.assertEquals(expected, df.__repr__())
 
+    # SPARK-25591
+    def test_same_accumulator_in_udfs(self):
+        from pyspark.sql.functions import udf
+
+        data_schema = StructType([StructField("a", IntegerType(), True),
+                                  StructField("b", IntegerType(), True)])
+        data = self.spark.createDataFrame([[1, 2]], schema=data_schema)
+
+        test_accum = self.sc.accumulator(0)
+
+        def first_udf(x):
+            test_accum.add(1)
+            return x
+
+        def second_udf(x):
+            test_accum.add(100)
+            return x
+
+        func_udf = udf(first_udf, IntegerType())
+        func_udf2 = udf(second_udf, IntegerType())
+        data = data.withColumn("out1", func_udf(data["a"]))
+        data = data.withColumn("out2", func_udf2(data["b"]))
+        data.collect()
+        self.assertEqual(test_accum.value, 101)
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
@@ -3741,6 +3835,48 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
             self.assertTrue(
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should be called after 'toPandas'")
+
+
+class SparkExtensionsTest(unittest.TestCase):
+    # These tests are separate because it uses 'spark.sql.extensions' which is
+    # static and immutable. This can't be set or unset, for example, via `spark.conf`.
+
+    @classmethod
+    def setUpClass(cls):
+        import glob
+        from pyspark.find_spark_home import _find_spark_home
+
+        SPARK_HOME = _find_spark_home()
+        filename_pattern = (
+            "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
+            "SparkSessionExtensionSuite.class")
+        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
+            raise unittest.SkipTest(
+                "'org.apache.spark.sql.SparkSessionExtensionSuite' is not "
+                "available. Will skip the related tests.")
+
+        # Note that 'spark.sql.extensions' is a static immutable configuration.
+        cls.spark = SparkSession.builder \
+            .master("local[4]") \
+            .appName(cls.__name__) \
+            .config(
+                "spark.sql.extensions",
+                "org.apache.spark.sql.MyExtensions") \
+            .getOrCreate()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.spark.stop()
+
+    def test_use_custom_class_for_extensions(self):
+        self.assertTrue(
+            self.spark._jsparkSession.sessionState().planner().strategies().contains(
+                self.spark._jvm.org.apache.spark.sql.MySparkStrategy(self.spark._jsparkSession)),
+            "MySparkStrategy not found in active planner strategies")
+        self.assertTrue(
+            self.spark._jsparkSession.sessionState().analyzer().extendedResolutionRules().contains(
+                self.spark._jvm.org.apache.spark.sql.MyRule(self.spark._jsparkSession)),
+            "MyRule not found in extended resolution rules")
 
 
 class SparkSessionTests(PySparkTestCase):

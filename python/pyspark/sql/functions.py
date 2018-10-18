@@ -25,9 +25,12 @@ import warnings
 if sys.version < "3":
     from itertools import imap as map
 
+if sys.version >= '3':
+    basestring = str
+
 from pyspark import since, SparkContext
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.sql.column import Column, _to_java_column, _to_seq
+from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
@@ -2678,6 +2681,38 @@ def sequence(start, stop, step=None):
             _to_java_column(start), _to_java_column(stop), _to_java_column(step)))
 
 
+@ignore_unicode_prefix
+@since(3.0)
+def from_csv(col, schema, options={}):
+    """
+    Parses a column containing a CSV string to a row with the specified schema.
+    Returns `null`, in the case of an unparseable string.
+
+    :param col: string column in CSV format
+    :param schema: a string with schema in DDL format to use when parsing the CSV column.
+    :param options: options to control parsing. accepts the same options as the CSV datasource
+
+    >>> data = [(1, '1')]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_csv(df.value, "a INT").alias("csv")).collect()
+    [Row(csv=Row(a=1))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_csv(df.value, lit("a INT")).alias("csv")).collect()
+    [Row(csv=Row(a=1))]
+    """
+
+    sc = SparkContext._active_spark_context
+    if isinstance(schema, basestring):
+        schema = _create_column_from_literal(schema)
+    elif isinstance(schema, Column):
+        schema = _to_java_column(schema)
+    else:
+        raise TypeError("schema argument should be a column or string")
+
+    jc = sc._jvm.functions.from_csv(_to_java_column(col), schema, options)
+    return Column(jc)
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 class PandasUDFType(object):
@@ -2733,6 +2768,39 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
+
+    # The following table shows most of Python data and SQL type conversions in normal UDFs that
+    # are not yet visible to the user. Some of behaviors are buggy and might be changed in the near
+    # future. The table might have to be eventually documented externally.
+    # Please see SPARK-25666's PR to see the codes in order to generate the table below.
+    #
+    # +-----------------------------+--------------+----------+------+-------+---------------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+-----------------+------------+--------------+------------------+----------------------+  # noqa
+    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|1(int)|1(long)|         a(str)|     a(unicode)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|1.0(float)|array('i', [1])(array)|[1](list)|         (1,)(tuple)|   ABC(bytearray)|  1(Decimal)|{'a': 1}(dict)|Row(kwargs=1)(Row)|Row(namedtuple=1)(Row)|  # noqa
+    # +-----------------------------+--------------+----------+------+-------+---------------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+-----------------+------------+--------------+------------------+----------------------+  # noqa
+    # |                      boolean|          None|      True|  None|   None|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
+    # |                      tinyint|          None|      None|     1|      1|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
+    # |                     smallint|          None|      None|     1|      1|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
+    # |                          int|          None|      None|     1|      1|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
+    # |                       bigint|          None|      None|     1|      1|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
+    # |                       string|          None|   u'true'|  u'1'|   u'1'|           u'a'|           u'a'|u'java.util.Grego...|         u'java.util.Grego...|    u'1.0'|        u'[I@24a83055'|   u'[1]'|u'[Ljava.lang.Obj...|   u'[B@49093632'|        u'1'|      u'{a=1}'|                 X|                     X|  # noqa
+    # |                         date|          None|         X|     X|      X|              X|              X|datetime.date(197...|         datetime.date(197...|         X|                     X|        X|                   X|                X|           X|             X|                 X|                     X|  # noqa
+    # |                    timestamp|          None|         X|     X|      X|              X|              X|                   X|         datetime.datetime...|         X|                     X|        X|                   X|                X|           X|             X|                 X|                     X|  # noqa
+    # |                        float|          None|      None|  None|   None|           None|           None|                None|                         None|       1.0|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
+    # |                       double|          None|      None|  None|   None|           None|           None|                None|                         None|       1.0|                  None|     None|                None|             None|        None|          None|                 X|                     X|  # noqa
+    # |                   array<int>|          None|      None|  None|   None|           None|           None|                None|                         None|      None|                   [1]|      [1]|                 [1]|     [65, 66, 67]|        None|          None|                 X|                     X|  # noqa
+    # |                       binary|          None|      None|  None|   None|bytearray(b'a')|bytearray(b'a')|                None|                         None|      None|                  None|     None|                None|bytearray(b'ABC')|        None|          None|                 X|                     X|  # noqa
+    # |                decimal(10,0)|          None|      None|  None|   None|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|Decimal('1')|          None|                 X|                     X|  # noqa
+    # |              map<string,int>|          None|      None|  None|   None|           None|           None|                None|                         None|      None|                  None|     None|                None|             None|        None|     {u'a': 1}|                 X|                     X|  # noqa
+    # |               struct<_1:int>|          None|         X|     X|      X|              X|              X|                   X|                            X|         X|                     X|Row(_1=1)|           Row(_1=1)|                X|           X|  Row(_1=None)|         Row(_1=1)|             Row(_1=1)|  # noqa
+    # +-----------------------------+--------------+----------+------+-------+---------------+---------------+--------------------+-----------------------------+----------+----------------------+---------+--------------------+-----------------+------------+--------------+------------------+----------------------+  # noqa
+    #
+    # Note: DDL formatted string is used for 'SQL Type' for simplicity. This string can be
+    #       used in `returnType`.
+    # Note: The values inside of the table are generated by `repr`.
+    # Note: Python 2 is used to generate this table since it is used to check the backward
+    #       compatibility often in practice.
+    # Note: 'X' means it throws an exception during the conversion.
+
     # decorator @udf, @udf(), @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
@@ -2948,6 +3016,12 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         can fail on special rows, the workaround is to incorporate the condition into the functions.
 
     .. note:: The user-defined functions do not take keyword arguments on the calling side.
+
+    .. note:: The data type of returned `pandas.Series` from the user-defined functions should be
+        matched with defined returnType (see :meth:`types.to_arrow_type` and
+        :meth:`types.from_arrow_type`). When there is mismatch between them, Spark might do
+        conversion on returned data. The conversion is not guaranteed to be correct and results
+        should be checked for accuracy by users.
     """
     # decorator @pandas_udf(returnType, functionType)
     is_decorator = f is None or isinstance(f, (str, DataType))

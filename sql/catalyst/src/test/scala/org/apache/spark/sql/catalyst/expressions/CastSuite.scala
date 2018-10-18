@@ -112,7 +112,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
-    for (tz <- Random.shuffle(ALL_TIMEZONES).take(50)) {
+    ALL_TIMEZONES.par.foreach { tz =>
       def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
         checkEvaluation(cast(Literal(str), TimestampType, Option(tz.getID)), expected)
       }
