@@ -29,7 +29,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{CausedBy, Utils}
 
 /**
  * This helper class uses some of Hadoop 3 methods from the YARN API,
@@ -121,6 +121,8 @@ private object ResourceRequestHelper extends Logging {
         case _: MatchError =>
           throw new IllegalArgumentException(s"Resource request for '$name' ('$rawAmount') " +
               s"does not match pattern $AMOUNT_AND_UNIT_REGEX.")
+        case CausedBy(e: IllegalArgumentException) =>
+          throw new IllegalArgumentException(s"Invalid request for $name: ${e.getMessage}")
         case e: InvocationTargetException if e.getCause != null => throw e.getCause
       }
     }

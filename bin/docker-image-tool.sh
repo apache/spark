@@ -47,6 +47,11 @@ function build {
 
   if [ ! -f "$SPARK_HOME/RELEASE" ]; then
     # Set image build arguments accordingly if this is a source repo and not a distribution archive.
+    #
+    # Note that this will copy all of the example jars directory into the image, and that will
+    # contain a lot of duplicated jars with the main Spark directory. In a proper distribution,
+    # the examples directory is cleaned up before generating the distribution tarball, so this
+    # issue does not occur.
     IMG_PATH=resource-managers/kubernetes/docker/src/main/dockerfiles
     BUILD_ARGS=(
       ${BUILD_PARAMS}
@@ -54,6 +59,8 @@ function build {
       img_path=$IMG_PATH
       --build-arg
       spark_jars=assembly/target/scala-$SPARK_SCALA_VERSION/jars
+      --build-arg
+      example_jars=examples/target/scala-$SPARK_SCALA_VERSION/jars
       --build-arg
       k8s_tests=resource-managers/kubernetes/integration-tests/tests
     )
@@ -78,14 +85,23 @@ function build {
   docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
     -f "$BASEDOCKERFILE" .
+  if [[ $? != 0 ]]; then
+    error "Failed to build Spark docker image."
+  fi
 
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-py) \
     -f "$PYDOCKERFILE" .
+  if [[ $? != 0 ]]; then
+    error "Failed to build PySpark docker image."
+  fi
 
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-r) \
     -f "$RDOCKERFILE" .
+  if [[ $? != 0 ]]; then
+    error "Failed to build SparkR docker image."
+  fi
 }
 
 function push {
