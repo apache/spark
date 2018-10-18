@@ -371,6 +371,7 @@ object AggUtils {
       functionsWithoutDistinct: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
       mergeSessionsInLocalPartition: Boolean,
+      stateFormatVersion: Int,
       child: SparkPlan): Seq[SparkPlan] = {
 
     val groupWithoutSessionExpression = groupingExpressions.filterNot { p =>
@@ -420,7 +421,8 @@ object AggUtils {
 
     // shuffle & sort happens here: most of details are also handled in this physical plan
     val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
-      sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None, partialMerged1)
+      sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None,
+      stateFormatVersion, partialMerged1)
 
     val mergedSessions = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
@@ -448,6 +450,7 @@ object AggUtils {
         stateInfo = None,
         outputMode = None,
         eventTimeWatermark = None,
+        stateFormatVersion,
         mergedSessions)
 
     val finalAndCompleteAggregate: SparkPlan = {

@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.streaming.state.MultiValuesStateManager
+import org.apache.spark.sql.execution.streaming.state.StreamingSessionStateManager
 
 // FIXME: javadoc!!
 class MergingSortWithMultiValuesStateIterator(
     iter: Iterator[InternalRow],
-    stateManager: MultiValuesStateManager,
+    stateManager: StreamingSessionStateManager,
     groupWithoutSessionExpressions: Seq[Expression],
     sessionExpression: Expression,
     keysProjection: UnsafeProjection,
@@ -34,7 +34,7 @@ class MergingSortWithMultiValuesStateIterator(
 
   def this(
       iter: Iterator[InternalRow],
-      stateManager: MultiValuesStateManager,
+      stateManager: StreamingSessionStateManager,
       groupWithoutSessionExpressions: Seq[Expression],
       sessionExpression: Expression,
       inputSchema: Seq[Attribute]) {

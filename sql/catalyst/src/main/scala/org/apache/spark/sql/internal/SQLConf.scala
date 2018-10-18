@@ -915,6 +915,26 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
+  val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
+    buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
+      .internal()
+      .doc("When true, streaming session window sorts and merge sessions in local partition " +
+        "prior to shuffle. This is to reduce the rows to shuffle, but only beneficial when " +
+        "there're lots of rows in a batch being assigned to same sessions.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_SESSION_WINDOW_STATE_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.sessionWindow.stateFormatVersion")
+      .internal()
+      .doc("State format version used by streaming session window aggregation operations " +
+        "in a streaming query. " +
+        "State between versions are tend to be incompatible, so state format version shouldn't " +
+        "be modified after running.")
+      .intConf
+      .checkValue(v => Set(1).contains(v), "Valid versions are 1")
+      .createWithDefault(1)
+
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
       .internal()
@@ -1221,15 +1241,6 @@ object SQLConf {
       .doc("Threshold for number of rows to be spilled by window operator")
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
-
-  val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
-    buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
-      .internal()
-      .doc("When true, streaming session window sorts and merge sessions in local partition " +
-        "prior to shuffle. This is to reduce the rows to shuffle, but only beneficial when " +
-        "there're lots of rows in a batch being assigned to same sessions.")
-      .booleanConf
-      .createWithDefault(false)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")

@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.streaming.state.{MultiValuesStateManager, StateStore, StateStoreConf}
+import org.apache.spark.sql.execution.streaming.state.{MultiValuesStateManager, MultiValuesStateManagerInjectable, StateStore, StateStoreConf, StreamingSessionStateManager}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -49,8 +49,12 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
     attr => List("aggVal1", "aggVal2").contains(attr.name)
   }
 
+  // TODO: would we want to randomize or test all?
+  val stateStoreVersion = StreamingSessionStateManager.supportedVersions.last
+
   test("no row in input data") {
-    withStateManager(rowAttributes, keysWithoutSessionAttributes) { manager =>
+    withStreamingSessionStateManager(rowAttributes, keysWithoutSessionAttributes,
+      stateStoreVersion) { manager =>
       val iterator = new MergingSortWithMultiValuesStateIterator(None.iterator,
         manager, keysWithoutSessionAttributes, sessionAttribute, rowAttributes)
 
@@ -59,7 +63,8 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
   }
 
   test("no row in input data but having state") {
-    withStateManager(rowAttributes, keysWithoutSessionAttributes) { manager =>
+    withStreamingSessionStateManager(rowAttributes, keysWithoutSessionAttributes,
+      stateStoreVersion) { manager =>
       val srow11 = createRow("a", 1, 55, 85, 50, 2.5)
       val srow12 = createRow("a", 1, 105, 140, 30, 2.0)
       appendRowToStateManager(manager, srow11, srow12)
@@ -72,7 +77,8 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
   }
 
   test("no previous state") {
-    withStateManager(rowAttributes, keysWithoutSessionAttributes) { manager =>
+    withStreamingSessionStateManager(rowAttributes, keysWithoutSessionAttributes,
+      stateStoreVersion) { manager =>
       val row1 = createRow("a", 1, 100, 110, 10, 1.1)
       val row2 = createRow("a", 1, 100, 110, 20, 1.2)
       val row3 = createRow("a", 2, 110, 120, 10, 1.1)
@@ -92,7 +98,8 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
   }
 
   test("multiple keys in input data and state") {
-    withStateManager(rowAttributes, keysWithoutSessionAttributes) { manager =>
+    withStreamingSessionStateManager(rowAttributes, keysWithoutSessionAttributes,
+      stateStoreVersion) { manager =>
       // key 1 - placing sessions in state to start and end
       val row11 = createRow("a", 1, 100, 110, 10, 1.1)
       val row12 = createRow("a", 1, 100, 110, 20, 1.2)
@@ -179,11 +186,13 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
       assert(doubleEquals(retRow.getDouble(2), expectedRow.getDouble(2)))
     }
 
-    def appendNoKeyRowToStateManager(manager: MultiValuesStateManager, rows: UnsafeRow*): Unit = {
-      rows.foreach(row => manager.append(new UnsafeRow(0), row))
+    def appendNoKeyRowToStateManager(manager: StreamingSessionStateManager, rows: UnsafeRow*)
+      : Unit = {
+      rows.foreach(manager.append)
     }
 
-    withStateManager(noKeyRowAttributes, Seq.empty[Attribute]) { manager =>
+    withStreamingSessionStateManager(noKeyRowAttributes, Seq.empty[Attribute],
+      stateStoreVersion) { manager =>
       // only input data
       val row1 = createNoKeyRow(100, 110, 10, 1.1)
       val row2 = createNoKeyRow(100, 110, 20, 1.2)
@@ -206,12 +215,6 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
 
       assert(!iterator.hasNext)
     }
-  }
-
-  private def getKeyRow(row: UnsafeRow): UnsafeRow = {
-    val keyProjection = GenerateUnsafeProjection.generate(keysWithoutSessionAttributes,
-      rowAttributes)
-    keyProjection(row)
   }
 
   private def createRow(key1: String, key2: Int, sessionStart: Long, sessionEnd: Long,
@@ -238,8 +241,9 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
     rowProjection(genericRow)
   }
 
-  private def appendRowToStateManager(manager: MultiValuesStateManager, rows: UnsafeRow*): Unit = {
-    rows.foreach(row => manager.append(getKeyRow(row), row))
+  private def appendRowToStateManager(manager: StreamingSessionStateManager, rows: UnsafeRow*)
+    : Unit = {
+    rows.foreach(row => manager.append(row))
   }
 
   private def doubleEquals(value1: Double, value2: Double): Boolean = {
@@ -255,19 +259,32 @@ class MergingSortWithMultiValuesStateIteratorSuite extends SharedSQLContext {
     assert(doubleEquals(retRow.getDouble(3), expectedRow.getDouble(3)))
   }
 
-  private def withStateManager(
+  private def withStreamingSessionStateManager(
       inputValueAttribs: Seq[Attribute],
-      keyExprs: Seq[Expression])(f: MultiValuesStateManager => Unit): Unit = {
+      keyAttribs: Seq[Attribute],
+      stateVersion: Int)(f: StreamingSessionStateManager => Unit): Unit = {
 
     withTempDir { file =>
       val storeConf = new StateStoreConf()
       val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
-      val manager = new MultiValuesStateManager("session-", inputValueAttribs, keyExprs,
-        Some(stateInfo), storeConf, new Configuration)
-      try {
-        f(manager)
-      } finally {
-        manager.abortIfNeeded()
+
+      val manager = StreamingSessionStateManager.createStateManager(
+        keyAttribs, inputValueAttribs, None, stateVersion)
+
+      manager match {
+        case mvState: MultiValuesStateManagerInjectable =>
+          val store = new MultiValuesStateManager("session-", inputValueAttribs, keyAttribs,
+            Some(stateInfo), storeConf, new Configuration)
+          mvState.setMultiValuesStateManager(store)
+
+          try {
+            f(manager)
+          } finally {
+
+            store.abortIfNeeded()
+          }
+
+        case _ => throw new IllegalStateException("Should inject matching underlying state store!")
       }
     }
     StateStore.stop()

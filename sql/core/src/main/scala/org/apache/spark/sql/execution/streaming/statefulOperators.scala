@@ -431,6 +431,7 @@ case class SessionWindowStateStoreRestoreExec(
     sessionExpression: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     eventTimeWatermark: Option[Long],
+    stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader with WatermarkSupport {
 
@@ -445,7 +446,17 @@ case class SessionWindowStateStoreRestoreExec(
       child.output.toStructType,
       indexOrdinal = None,
       sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { case (stateManager, iter) =>
+      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
+
+      val stateManager = StreamingSessionStateManager.createStateManager(
+        keyWithoutSessionExpressions, child.output, watermarkPredicateForData, stateFormatVersion)
+
+      stateManager match {
+        case mvState: MultiValuesStateManagerInjectable =>
+          mvState.setMultiValuesStateManager(store)
+        case _ => throw new IllegalStateException("Session state manager is expected to work " +
+          "with MultiValuesStateManager")
+      }
 
       val keyWithoutSessionProjection = GenerateUnsafeProjection.generate(
         keyWithoutSessionExpressions, child.output)
@@ -503,6 +514,7 @@ case class SessionWindowStateStoreSaveExec(
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None,
+    stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
@@ -519,14 +531,16 @@ case class SessionWindowStateStoreSaveExec(
       child.output.toStructType,
       indexOrdinal = None,
       sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { (stateManager, iter) =>
+      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
 
-      def evictSessionsByWatermark(manager: MultiValuesStateManager): Iterator[UnsafeRowPair] = {
-        manager.removeByValueCondition { row => watermarkPredicateForData match {
-            case Some(predicate) => predicate.eval(row)
-            case None => false
-          }
-        }
+      val stateManager = StreamingSessionStateManager.createStateManager(
+        keyWithoutSessionExpressions, child.output, watermarkPredicateForData, stateFormatVersion)
+
+      stateManager match {
+        case mvState: MultiValuesStateManagerInjectable =>
+          mvState.setMultiValuesStateManager(store)
+        case _ => throw new IllegalStateException("Session state manager is expected to work " +
+          "with MultiValuesStateManager")
       }
 
       val numOutputRows = longMetric("numOutputRows")
@@ -535,48 +549,24 @@ case class SessionWindowStateStoreSaveExec(
       val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
       val commitTimeMs = longMetric("commitTimeMs")
 
-      var currentKey: UnsafeRow = null
-      var previousSessions: List[UnsafeRow] = null
-
-      val keyProjection = GenerateUnsafeProjection.generate(keyWithoutSessionExpressions,
-        child.output)
-
-      val keyOrdering = TypeUtils.getInterpretedOrdering(keyWithoutSessionExpressions.toStructType)
-      val valueOrdering = TypeUtils.getInterpretedOrdering(child.output.toStructType)
-
       // assuming late events were dropped from MergingSortWithMultiValuesStateIterator
       outputMode match {
         case Some(Complete) =>
           allUpdatesTimeMs += timeTakenMs {
             while (iter.hasNext) {
               val row = iter.next().asInstanceOf[UnsafeRow]
-              val keys = keyProjection(row)
-
-              if (currentKey == null || !keyOrdering.equiv(currentKey, keys)) {
-                currentKey = keys.copy()
-
-                // This is necessary because MultiValuesStateManager doesn't guarantee
-                // stable ordering.
-                // The number of values for the given key is expected to be likely small,
-                // so listing it here doesn't hurt.
-                previousSessions = stateManager.get(keys).toList
-
-                stateManager.removeKey(keys)
-              }
-
-              stateManager.append(keys, row)
-
-              if (!previousSessions.exists(p => valueOrdering.equiv(row, p))) {
-                // such session is not in previous session
+              if (stateManager.append(row)) {
                 numUpdatedStateRows += 1
               }
             }
+
+            stateManager.doFinalize()
           }
 
           CompletionIterator[InternalRow, Iterator[InternalRow]](
-            stateManager.getAllRowPairs.map(_.value), {
-            commitTimeMs += timeTakenMs { stateManager.commit() }
-            setStoreMetrics(stateManager)
+            stateManager.getAll(), {
+            commitTimeMs += timeTakenMs { store.commit() }
+            setStoreMetrics(store)
           })
 
         // Update and output only sessions being evicted from the MultiValuesStateManager
@@ -585,24 +575,7 @@ case class SessionWindowStateStoreSaveExec(
           allUpdatesTimeMs += timeTakenMs {
             while (iter.hasNext) {
               val row = iter.next().asInstanceOf[UnsafeRow]
-              val keys = keyProjection(row)
-
-              if (currentKey == null || !keyOrdering.equiv(currentKey, keys)) {
-                currentKey = keys.copy()
-
-                // This is necessary because MultiValuesStateManager doesn't guarantee
-                // stable ordering.
-                // The number of values for the given key is expected to be likely small,
-                // so listing it here doesn't hurt.
-                previousSessions = stateManager.get(keys).toList
-
-                stateManager.removeKey(keys)
-              }
-
-              stateManager.append(keys, row)
-
-              if (!previousSessions.exists(p => valueOrdering.equiv(row, p))) {
-                // such session is not in previous session
+              if (stateManager.append(row)) {
                 numUpdatedStateRows += 1
               }
             }
@@ -610,15 +583,15 @@ case class SessionWindowStateStoreSaveExec(
 
           val removalStartTimeNs = System.nanoTime
 
-          val retIter = evictSessionsByWatermark(stateManager).map(_.value).map { row =>
+          val retIter = stateManager.evictSessionsByWatermark().map { row =>
             numOutputRows += 1
             row
           }
 
           CompletionIterator[InternalRow, Iterator[InternalRow]](retIter, {
             allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
-            commitTimeMs += timeTakenMs { stateManager.commit() }
-            setStoreMetrics(stateManager)
+            commitTimeMs += timeTakenMs { store.commit() }
+            setStoreMetrics(store)
           })
 
         // Update and output modified rows from the MultiValuesStateManager.
@@ -632,24 +605,7 @@ case class SessionWindowStateStoreSaveExec(
 
               while (ret == null && iter.hasNext) {
                 val row = iter.next().asInstanceOf[UnsafeRow]
-                val keys = keyProjection(row)
-
-                if (currentKey == null || !keyOrdering.equiv(currentKey, keys)) {
-                  currentKey = keys.copy()
-
-                  // This is necessary because MultiValuesStateManager doesn't guarantee
-                  // stable ordering.
-                  // The number of values for the given key is expected to be likely small,
-                  // so listing it here doesn't hurt.
-                  previousSessions = stateManager.get(keys).toList
-
-                  stateManager.removeKey(keys)
-                }
-
-                stateManager.append(keys, row)
-
-                if (!previousSessions.exists(p => valueOrdering.equiv(row, p))) {
-                  // such session is not in previous session
+                if (stateManager.append(row)) {
                   numUpdatedStateRows += 1
                   ret = row
                 }
@@ -668,15 +624,15 @@ case class SessionWindowStateStoreSaveExec(
             }
 
             override protected def close(): Unit = {
+              stateManager.doFinalize()
               allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
 
               // Remove old aggregates if watermark specified
               allRemovalsTimeMs += timeTakenMs {
-                // fully consume iterator to let removal take effect
-                evictSessionsByWatermark(stateManager).toList
+                stateManager.doEvictSessionsByWatermark()
               }
-              commitTimeMs += timeTakenMs { stateManager.commit() }
-              setStoreMetrics(stateManager)
+              commitTimeMs += timeTakenMs { store.commit() }
+              setStoreMetrics(store)
             }
           }
 
