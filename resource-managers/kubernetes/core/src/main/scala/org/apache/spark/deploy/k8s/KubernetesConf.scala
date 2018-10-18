@@ -19,12 +19,15 @@ package org.apache.spark.deploy.k8s
 import scala.collection.mutable
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
+import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientApplication._
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.ConfigEntry
 
 
@@ -47,6 +50,13 @@ private[spark] case class KubernetesExecutorSpecificConf(
     driverPod: Option[Pod])
   extends KubernetesRoleSpecificConf
 
+/*
+ * Structure containing metadata for HADOOP_CONF_DIR customization
+ */
+private[spark] case class HadoopConfSpec(
+    hadoopConfDir: Option[String],
+    hadoopConfigMapName: Option[String])
+
 /**
  * Structure containing metadata for Kubernetes logic to build Spark pods.
  */
@@ -61,7 +71,15 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleSecretEnvNamesToKeyRefs: Map[String, String],
     roleEnvs: Map[String, String],
     roleVolumes: Iterable[KubernetesVolumeSpec[_ <: KubernetesVolumeSpecificConf]],
-    sparkFiles: Seq[String]) {
+    sparkFiles: Seq[String],
+    hadoopConfSpec: Option[HadoopConfSpec]) {
+
+  def hadoopConfigMapName: String = s"$appResourceNamePrefix-hadoop-config"
+
+  def krbConfigMapName: String = s"$appResourceNamePrefix-krb5-file"
+
+  def tokenManager(conf: SparkConf, hConf: Configuration): KubernetesHadoopDelegationTokenManager =
+    new KubernetesHadoopDelegationTokenManager(new HadoopDelegationTokenManager(conf, hConf))
 
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
 
@@ -116,7 +134,8 @@ private[spark] object KubernetesConf {
       mainAppResource: Option[MainAppResource],
       mainClass: String,
       appArgs: Array[String],
-      maybePyFiles: Option[String]): KubernetesConf[KubernetesDriverSpecificConf] = {
+      maybePyFiles: Option[String],
+      hadoopConfDir: Option[String]): KubernetesConf[KubernetesDriverSpecificConf] = {
     val sparkConfWithMainAppJar = sparkConf.clone()
     val additionalFiles = mutable.ArrayBuffer.empty[String]
     mainAppResource.foreach {
@@ -175,6 +194,19 @@ private[spark] object KubernetesConf {
       .map(str => str.split(",").toSeq)
       .getOrElse(Seq.empty[String]) ++ additionalFiles
 
+    val hadoopConfigMapName = sparkConf.get(KUBERNETES_HADOOP_CONF_CONFIG_MAP)
+    KubernetesUtils.requireNandDefined(
+      hadoopConfDir,
+      hadoopConfigMapName,
+      "Do not specify both the `HADOOP_CONF_DIR` in your ENV and the ConfigMap " +
+      "as the creation of an additional ConfigMap, when one is already specified is extraneous" )
+    val hadoopConfSpec =
+      if (hadoopConfDir.isDefined || hadoopConfigMapName.isDefined) {
+        Some(HadoopConfSpec(hadoopConfDir, hadoopConfigMapName))
+      } else {
+        None
+      }
+
     KubernetesConf(
       sparkConfWithMainAppJar,
       KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs),
@@ -186,7 +218,8 @@ private[spark] object KubernetesConf {
       driverSecretEnvNamesToKeyRefs,
       driverEnvs,
       driverVolumes,
-      sparkFiles)
+      sparkFiles,
+      hadoopConfSpec)
   }
 
   def createExecutorConf(
@@ -242,6 +275,7 @@ private[spark] object KubernetesConf {
       executorEnvSecrets,
       executorEnv,
       executorVolumes,
-      Seq.empty[String])
+      Seq.empty[String],
+      None)
   }
 }
