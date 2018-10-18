@@ -723,7 +723,8 @@ class SQLTests(ReusedSQLTestCase):
             d = [Row(l=list(range(3)), d={"key": list(range(5))})]
             rdd = self.sc.parallelize(d)
             self.spark.createDataFrame(rdd).createOrReplaceTempView("test")
-            self.spark.catalog.registerFunction("copylist", lambda l: list(l), ArrayType(IntegerType()))
+            self.spark.catalog.registerFunction(
+                "copylist", lambda l: list(l), ArrayType(IntegerType()))
             self.spark.catalog.registerFunction("maplen", lambda d: len(d), IntegerType())
             [(l1, l2)] = self.spark.sql("select copylist(l), maplen(d) from test").collect()
             self.assertEqual(list(range(3)), l1)
