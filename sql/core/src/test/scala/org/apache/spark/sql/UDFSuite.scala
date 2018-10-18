@@ -356,10 +356,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
           .withColumn("b", udf1($"a", lit(10)))
         df.cache()
         df.write.saveAsTable("t")
+        sparkContext.listenerBus.waitUntilEmpty(1000)
         assert(numTotalCachedHit == 1, "expected to be cached in saveAsTable")
         df.write.insertInto("t")
+        sparkContext.listenerBus.waitUntilEmpty(1000)
         assert(numTotalCachedHit == 2, "expected to be cached in insertInto")
         df.write.save(path.getCanonicalPath)
+        sparkContext.listenerBus.waitUntilEmpty(1000)
         assert(numTotalCachedHit == 3, "expected to be cached in save for native")
       }
     }

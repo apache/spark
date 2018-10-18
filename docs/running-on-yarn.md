@@ -122,6 +122,43 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.resource.{resource-type}</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Amount of resource to use for the YARN Application Master in client mode.
+    In cluster mode, use <code>spark.yarn.driver.resource.&lt;resource-type&gt;</code> instead.
+    Please note that this feature can be used only with YARN 3.0+
+    For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
+    <p/>
+    Example: 
+    To request GPU resources from YARN, use: <code>spark.yarn.am.resource.yarn.io/gpu</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.driver.resource.{resource-type}</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Amount of resource to use for the YARN Application Master in cluster mode.
+    Please note that this feature can be used only with YARN 3.0+
+    For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
+    <p/>
+    Example: 
+    To request GPU resources from YARN, use: <code>spark.yarn.driver.resource.yarn.io/gpu</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.executor.resource.{resource-type}</code></td>
+  <td><code>(none)</code></td>
+ <td>
+     Amount of resource to use per executor process.
+     Please note that this feature can be used only with YARN 3.0+
+     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
+     <p/>
+     Example: 
+     To request GPU resources from YARN, use: <code>spark.yarn.executor.resource.yarn.io/gpu</code>
+ </td>
+</tr>
+<tr>
   <td><code>spark.yarn.am.cores</code></td>
   <td><code>1</code></td>
   <td>
@@ -396,8 +433,7 @@ To use a custom metrics.properties for the application master and executors, upd
   and those log files will be aggregated in a rolling fashion.
   This will be used with YARN's rolling log aggregation, to enable this feature in YARN side
   <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
-  configured in yarn-site.xml.
-  This feature can only be used with Hadoop 2.6.4+. The Spark log4j appender needs be changed to use
+  configured in yarn-site.xml. The Spark log4j appender needs be changed to use
   FileAppender or another appender that can handle the files being removed while it is running. Based
   on the file name configured in the log4j configuration (like spark.log), the user should set the
   regex (spark*) to include all the log files that need to be aggregated.
