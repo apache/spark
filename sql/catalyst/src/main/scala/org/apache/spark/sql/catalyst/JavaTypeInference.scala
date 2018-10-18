@@ -267,12 +267,12 @@ object JavaTypeInference {
 
       case c if listType.isAssignableFrom(typeToken) =>
         val et = elementType(typeToken)
+
         val array =
           Invoke(
-            MapObjects(
+            UnresolvedMapObjects(
               p => deserializerFor(et, Some(p)),
-              getPath,
-              inferDataType(et)._1),
+              getPath),
             "array",
             ObjectType(classOf[Array[Any]]))
 
