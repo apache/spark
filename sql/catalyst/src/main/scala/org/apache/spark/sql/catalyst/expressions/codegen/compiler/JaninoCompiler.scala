@@ -59,7 +59,7 @@ object JaninoCompiler extends CompilerBase {
     evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName(className)
-    evaluator.setDefaultImports(importClassNames.toArray)
+    importClassNames.map(evaluator.setDefaultImports(_))
     evaluator.setExtendedClass(extendedClass)
 
     logDebug({
