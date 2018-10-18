@@ -270,7 +270,7 @@ of the most common options to set are:
   <td><code>spark.driver.log.dfsDir</code></td>
   <td>(none)</td>
   <td>
-    Base directory in which Spark driver logs are synced, if spark.driver.log.syncToDfs.enabled is true.
+    Base directory in which Spark driver logs are synced, if spark.driver.log.persistToDfs.enabled is true.
     Within this base directory, Spark creates a sub-directory for each application, and logs the driver logs
     specific to the application in this directory. Users may want to set this to a unified location like an
     HDFS directory so driver log files can be persisted for later usage. This directory should allow any spark
