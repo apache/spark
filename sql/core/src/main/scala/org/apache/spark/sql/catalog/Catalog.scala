@@ -499,6 +499,17 @@ abstract class Catalog {
   def uncacheTable(tableName: String): Unit
 
   /**
+   * Removes the specified table from the in-memory cache.
+   *
+   * @param tableName is either a qualified or unqualified name that designates a table/view.
+   *                  If no database identifier is provided, it refers to a temporary view or
+   *                  a table/view in the current database.
+   * @param blocking Whether to block until all blocks are deleted.
+   * @since 2.3.0
+   */
+  def uncacheTable(tableName: String, blocking: Boolean): Unit
+
+  /**
    * Removes all cached tables from the in-memory cache.
    *
    * @since 2.0.0

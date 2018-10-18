@@ -186,6 +186,22 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
   }
 
+  test("SPARK-22613 UNCACHE LAZY TABLE tableName") {
+    withTempView("testCacheTable") {
+      sql("CACHE TABLE testCacheTable AS SELECT key FROM src LIMIT 10")
+      assertCached(table("testCacheTable"))
+
+      val rddId = rddIdOf("testCacheTable")
+      assert(
+        isMaterialized(rddId),
+        "Eagerly cached in-memory table should have already been materialized")
+
+      sql("UNCACHE LAZY TABLE testCacheTable")
+      assert(!spark.catalog.isCached("testCacheTable"),
+        "Table 'testCacheTable' should not be cached")
+    }
+  }
+
   test("CACHE TABLE with Hive UDF") {
     withTempView("udfTest") {
       sql("CACHE TABLE udfTest AS SELECT * FROM src WHERE floor(key) = 1")
