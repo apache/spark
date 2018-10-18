@@ -607,7 +607,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
-    // make an offer. We will schedule the task from the second taskSet
+    // make an offer. We will schedule the task from the second taskSet. Since a task was scheduled
+    // we do not kick off the abort timer for taskSet1
     val secondTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
       WorkerOffer("executor0", "host0", 1)
     )).flatten
@@ -617,6 +618,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.statusUpdate(failedTask2.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
     when(tsm2.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
       "executor0", failedTask2.index)).thenReturn(true)
+
+    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
+    // timer for taskSet1
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten.size === 0)
 
     // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
     // timer for taskSet2
