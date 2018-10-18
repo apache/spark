@@ -48,11 +48,15 @@ abstract class BenchmarkBase {
       if (!file.exists()) {
         file.createNewFile()
       }
-      output = Option(new FileOutputStream(file))
+      output = Some(new FileOutputStream(file))
     }
 
     runBenchmarkSuite()
 
-    output.foreach(_.close())
+    output.foreach { o =>
+      if (o != null) {
+        o.close()
+      }
+    }
   }
 }

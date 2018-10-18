@@ -4,12 +4,11 @@ parsing large select expressions
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
 parsing large select:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 select expressions                             2 /    5          0.0     2183931.0       1.0X
-100 select expressions                           4 /    5          0.0     3614440.0       0.6X
-2500 select expressions                         67 /   74          0.0    66814202.0       0.0X
+1 select expressions                             2 /    4          0.0     1934953.0       1.0X
+100 select expressions                           4 /    5          0.0     3659399.0       0.5X
+2500 select expressions                         68 /   76          0.0    68278937.0       0.0X
 
 
 ================================================================================================
@@ -18,21 +17,20 @@ many column field read and write
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
 many column field r/w:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 cols x 100000 rows (read in-mem)              33 /   52          3.1         325.2       1.0X
-1 cols x 100000 rows (exec in-mem)              35 /   76          2.9         348.2       0.9X
-1 cols x 100000 rows (read parquet)             82 /  188          1.2         824.2       0.4X
-1 cols x 100000 rows (write parquet)           407 /  571          0.2        4066.9       0.1X
-100 cols x 1000 rows (read in-mem)              33 /   63          3.0         331.2       1.0X
-100 cols x 1000 rows (exec in-mem)              39 /   75          2.6         390.9       0.8X
-100 cols x 1000 rows (read parquet)             65 /  103          1.5         651.9       0.5X
-100 cols x 1000 rows (write parquet)           237 /  271          0.4        2368.0       0.1X
-2500 cols x 40 rows (read in-mem)              209 /  225          0.5        2090.8       0.2X
-2500 cols x 40 rows (exec in-mem)              340 /  401          0.3        3400.2       0.1X
-2500 cols x 40 rows (read parquet)              86 /   99          1.2         856.2       0.4X
-2500 cols x 40 rows (write parquet)            315 /  329          0.3        3150.8       0.1X
+1 cols x 100000 rows (read in-mem)              22 /   25          4.6         219.4       1.0X
+1 cols x 100000 rows (exec in-mem)              22 /   28          4.5         223.8       1.0X
+1 cols x 100000 rows (read parquet)             45 /   49          2.2         449.6       0.5X
+1 cols x 100000 rows (write parquet)           204 /  223          0.5        2044.4       0.1X
+100 cols x 1000 rows (read in-mem)              26 /   28          3.9         255.8       0.9X
+100 cols x 1000 rows (exec in-mem)              32 /   35          3.1         319.3       0.7X
+100 cols x 1000 rows (read parquet)             45 /   52          2.2         445.9       0.5X
+100 cols x 1000 rows (write parquet)           275 /  536          0.4        2746.1       0.1X
+2500 cols x 40 rows (read in-mem)              261 /  434          0.4        2607.3       0.1X
+2500 cols x 40 rows (exec in-mem)              624 /  701          0.2        6240.5       0.0X
+2500 cols x 40 rows (read parquet)             196 /  301          0.5        1963.4       0.1X
+2500 cols x 40 rows (write parquet)            687 / 1049          0.1        6870.6       0.0X
 
 
 ================================================================================================
@@ -41,21 +39,20 @@ wide shallowly nested struct field read and write
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
 wide shallowly nested struct field r/w:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 wide x 100000 rows (read in-mem)              23 /   28          4.3         235.0       1.0X
-1 wide x 100000 rows (exec in-mem)              29 /   32          3.5         285.2       0.8X
-1 wide x 100000 rows (read parquet)             97 /  103          1.0         968.3       0.2X
-1 wide x 100000 rows (write parquet)           209 /  338          0.5        2087.1       0.1X
-100 wide x 1000 rows (read in-mem)              44 /   82          2.3         435.5       0.5X
-100 wide x 1000 rows (exec in-mem)              54 /   81          1.9         537.3       0.4X
-100 wide x 1000 rows (read parquet)            138 /  282          0.7        1376.5       0.2X
-100 wide x 1000 rows (write parquet)           247 /  378          0.4        2469.7       0.1X
-2500 wide x 40 rows (read in-mem)               53 /   92          1.9         532.7       0.4X
-2500 wide x 40 rows (exec in-mem)              240 /  252          0.4        2398.1       0.1X
-2500 wide x 40 rows (read parquet)            1166 / 1171          0.1       11664.2       0.0X
-2500 wide x 40 rows (write parquet)            227 /  291          0.4        2269.5       0.1X
+1 wide x 100000 rows (read in-mem)              23 /   42          4.4         226.2       1.0X
+1 wide x 100000 rows (exec in-mem)              29 /   53          3.5         288.5       0.8X
+1 wide x 100000 rows (read parquet)             93 /  102          1.1         928.2       0.2X
+1 wide x 100000 rows (write parquet)           201 /  222          0.5        2009.6       0.1X
+100 wide x 1000 rows (read in-mem)              42 /   55          2.4         421.8       0.5X
+100 wide x 1000 rows (exec in-mem)              55 /  113          1.8         547.0       0.4X
+100 wide x 1000 rows (read parquet)            139 /  263          0.7        1390.6       0.2X
+100 wide x 1000 rows (write parquet)           245 /  338          0.4        2450.9       0.1X
+2500 wide x 40 rows (read in-mem)               51 /   72          2.0         511.7       0.4X
+2500 wide x 40 rows (exec in-mem)              265 /  303          0.4        2654.8       0.1X
+2500 wide x 40 rows (read parquet)            1285 / 1339          0.1       12845.1       0.0X
+2500 wide x 40 rows (write parquet)            238 /  262          0.4        2378.8       0.1X
 
 
 ================================================================================================
@@ -64,21 +61,20 @@ deeply nested struct field read and write
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
 deeply nested struct field r/w:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 deep x 100000 rows (read in-mem)              21 /   32          4.8         209.1       1.0X
-1 deep x 100000 rows (exec in-mem)              24 /   33          4.2         235.9       0.9X
-1 deep x 100000 rows (read parquet)             50 /   77          2.0         496.9       0.4X
-1 deep x 100000 rows (write parquet)           248 /  310          0.4        2475.4       0.1X
-100 deep x 1000 rows (read in-mem)              44 /   82          2.3         443.6       0.5X
-100 deep x 1000 rows (exec in-mem)             543 /  793          0.2        5433.8       0.0X
-100 deep x 1000 rows (read parquet)           8755 / 8936          0.0       87553.5       0.0X
-100 deep x 1000 rows (write parquet)           216 /  365          0.5        2163.1       0.1X
-250 deep x 400 rows (read in-mem)              154 /  168          0.6        1544.8       0.1X
-250 deep x 400 rows (exec in-mem)             2617 / 2728          0.0       26172.1       0.0X
-250 deep x 400 rows (read parquet)        113432 / 114016          0.0     1134316.8       0.0X
-250 deep x 400 rows (write parquet)            329 /  361          0.3        3291.9       0.1X
+1 deep x 100000 rows (read in-mem)              20 /   24          5.1         197.9       1.0X
+1 deep x 100000 rows (exec in-mem)              23 /   28          4.4         227.8       0.9X
+1 deep x 100000 rows (read parquet)             50 /   58          2.0         500.1       0.4X
+1 deep x 100000 rows (write parquet)           195 /  219          0.5        1945.1       0.1X
+100 deep x 1000 rows (read in-mem)              39 /   57          2.5         393.1       0.5X
+100 deep x 1000 rows (exec in-mem)             480 /  556          0.2        4795.7       0.0X
+100 deep x 1000 rows (read parquet)           7943 / 7950          0.0       79427.5       0.0X
+100 deep x 1000 rows (write parquet)           227 /  245          0.4        2267.6       0.1X
+250 deep x 400 rows (read in-mem)              150 /  168          0.7        1500.1       0.1X
+250 deep x 400 rows (exec in-mem)             2925 / 2979          0.0       29247.3       0.0X
+250 deep x 400 rows (read parquet)        121815 / 128302          0.0     1218145.9       0.0X
+250 deep x 400 rows (write parquet)            335 /  362          0.3        3351.9       0.1X
 
 
 ================================================================================================
@@ -87,21 +83,20 @@ bushy struct field read and write
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
 bushy struct field r/w:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 x 1 deep x 100000 rows (read in-mem)          23 /   27          4.3         233.2       1.0X
-1 x 1 deep x 100000 rows (exec in-mem)          26 /   29          3.9         258.4       0.9X
-1 x 1 deep x 100000 rows (read parquet)         36 /   40          2.8         359.1       0.6X
-1 x 1 deep x 100000 rows (write parquet)       199 /  213          0.5        1987.1       0.1X
-128 x 8 deep x 1000 rows (read in-mem)          19 /   22          5.4         186.9       1.2X
-128 x 8 deep x 1000 rows (exec in-mem)          56 /   61          1.8         558.9       0.4X
-128 x 8 deep x 1000 rows (read parquet)        200 /  209          0.5        2001.6       0.1X
-128 x 8 deep x 1000 rows (write parquet)       193 /  207          0.5        1928.5       0.1X
-1024 x 11 deep x 100 rows (read in-mem)         50 /   54          2.0         502.4       0.5X
-1024 x 11 deep x 100 rows (exec in-mem)        214 /  220          0.5        2139.0       0.1X
-1024 x 11 deep x 100 rows (read parquet)      1371 / 1378          0.1       13706.6       0.0X
-1024 x 11 deep x 100 rows (write parquet)       230 /  245          0.4        2297.8       0.1X
+1 x 1 deep x 100000 rows (read in-mem)          23 /   27          4.4         229.0       1.0X
+1 x 1 deep x 100000 rows (exec in-mem)          25 /   30          4.0         249.3       0.9X
+1 x 1 deep x 100000 rows (read parquet)         35 /   40          2.8         351.1       0.7X
+1 x 1 deep x 100000 rows (write parquet)       193 /  213          0.5        1929.8       0.1X
+128 x 8 deep x 1000 rows (read in-mem)          18 /   21          5.6         179.2       1.3X
+128 x 8 deep x 1000 rows (exec in-mem)          54 /   61          1.8         544.4       0.4X
+128 x 8 deep x 1000 rows (read parquet)        195 /  212          0.5        1950.2       0.1X
+128 x 8 deep x 1000 rows (write parquet)       195 /  203          0.5        1952.2       0.1X
+1024 x 11 deep x 100 rows (read in-mem)         47 /   51          2.1         468.4       0.5X
+1024 x 11 deep x 100 rows (exec in-mem)        210 /  219          0.5        2102.0       0.1X
+1024 x 11 deep x 100 rows (read parquet)      1332 / 1367          0.1       13323.4       0.0X
+1024 x 11 deep x 100 rows (write parquet)       223 /  241          0.4        2230.3       0.1X
 
 
 ================================================================================================
@@ -110,21 +105,20 @@ wide array field read and write
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
 wide array field r/w:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 wide x 100000 rows (read in-mem)              20 /   42          4.9         203.4       1.0X
-1 wide x 100000 rows (exec in-mem)              23 /   27          4.3         231.7       0.9X
-1 wide x 100000 rows (read parquet)             55 /   66          1.8         554.9       0.4X
-1 wide x 100000 rows (write parquet)           194 /  228          0.5        1942.9       0.1X
-100 wide x 1000 rows (read in-mem)              16 /   25          6.1         164.0       1.2X
-100 wide x 1000 rows (exec in-mem)              19 /   23          5.2         191.3       1.1X
-100 wide x 1000 rows (read parquet)             40 /   49          2.5         403.7       0.5X
-100 wide x 1000 rows (write parquet)           190 /  224          0.5        1902.7       0.1X
-2500 wide x 40 rows (read in-mem)               17 /   22          5.8         171.1       1.2X
-2500 wide x 40 rows (exec in-mem)               19 /   23          5.2         192.1       1.1X
-2500 wide x 40 rows (read parquet)              39 /   44          2.6         389.2       0.5X
-2500 wide x 40 rows (write parquet)            195 /  210          0.5        1953.7       0.1X
+1 wide x 100000 rows (read in-mem)              19 /   21          5.3         188.9       1.0X
+1 wide x 100000 rows (exec in-mem)              23 /   29          4.3         232.0       0.8X
+1 wide x 100000 rows (read parquet)             59 /   65          1.7         588.8       0.3X
+1 wide x 100000 rows (write parquet)           200 /  217          0.5        1998.0       0.1X
+100 wide x 1000 rows (read in-mem)              16 /   18          6.2         162.5       1.2X
+100 wide x 1000 rows (exec in-mem)              19 /   21          5.4         185.2       1.0X
+100 wide x 1000 rows (read parquet)             42 /   45          2.4         415.6       0.5X
+100 wide x 1000 rows (write parquet)           193 /  216          0.5        1928.5       0.1X
+2500 wide x 40 rows (read in-mem)               16 /   19          6.2         162.4       1.2X
+2500 wide x 40 rows (exec in-mem)               18 /   21          5.4         184.0       1.0X
+2500 wide x 40 rows (read parquet)              40 /   44          2.5         398.7       0.5X
+2500 wide x 40 rows (write parquet)            194 /  211          0.5        1943.6       0.1X
 
 
 ================================================================================================
@@ -133,20 +127,19 @@ wide map field read and write
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
 wide map field r/w:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-1 wide x 100000 rows (read in-mem)              17 /   18          6.0         165.3       1.0X
-1 wide x 100000 rows (exec in-mem)              21 /   25          4.7         212.8       0.8X
-1 wide x 100000 rows (read parquet)             80 /   85          1.3         798.4       0.2X
-1 wide x 100000 rows (write parquet)           187 /  204          0.5        1867.8       0.1X
-100 wide x 1000 rows (read in-mem)              12 /   14          8.3         120.7       1.4X
-100 wide x 1000 rows (exec in-mem)              15 /   16          6.9         145.9       1.1X
-100 wide x 1000 rows (read parquet)             46 /   51          2.2         461.2       0.4X
-100 wide x 1000 rows (write parquet)           186 /  197          0.5        1862.2       0.1X
-2500 wide x 40 rows (read in-mem)               14 /   15          7.4         135.7       1.2X
-2500 wide x 40 rows (exec in-mem)               17 /   19          6.0         167.4       1.0X
-2500 wide x 40 rows (read parquet)              46 /   51          2.2         462.9       0.4X
-2500 wide x 40 rows (write parquet)            181 /  197          0.6        1807.6       0.1X
+1 wide x 100000 rows (read in-mem)              17 /   20          6.0         165.5       1.0X
+1 wide x 100000 rows (exec in-mem)              21 /   25          4.7         214.3       0.8X
+1 wide x 100000 rows (read parquet)             79 /  105          1.3         785.8       0.2X
+1 wide x 100000 rows (write parquet)           196 /  240          0.5        1957.0       0.1X
+100 wide x 1000 rows (read in-mem)              12 /   13          8.6         115.7       1.4X
+100 wide x 1000 rows (exec in-mem)              15 /   17          6.8         147.8       1.1X
+100 wide x 1000 rows (read parquet)             46 /   52          2.2         460.9       0.4X
+100 wide x 1000 rows (write parquet)           184 /  202          0.5        1843.1       0.1X
+2500 wide x 40 rows (read in-mem)               13 /   15          7.4         134.7       1.2X
+2500 wide x 40 rows (exec in-mem)               17 /   19          6.0         167.5       1.0X
+2500 wide x 40 rows (read parquet)              46 /   51          2.2         461.0       0.4X
+2500 wide x 40 rows (write parquet)            189 /  206          0.5        1887.0       0.1X
 
 
