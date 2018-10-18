@@ -134,8 +134,6 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
     assert(summary.numIter == 20)
-    assert(summary.trainingCost < 0.1)
-    assert(model.computeCost(dataset) == summary.trainingCost)
 
     model.setSummary(None)
     assert(!model.hasSummary)

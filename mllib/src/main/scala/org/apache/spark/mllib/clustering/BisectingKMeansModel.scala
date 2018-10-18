@@ -41,12 +41,11 @@ import org.apache.spark.sql.{Row, SparkSession}
 @Since("1.6.0")
 class BisectingKMeansModel private[clustering] (
     private[clustering] val root: ClusteringTreeNode,
-    @Since("2.4.0") val distanceMeasure: String,
-    @Since("2.4.0") val trainingCost: Double
+    @Since("2.4.0") val distanceMeasure: String
   ) extends Serializable with Saveable with Logging {
 
   @Since("1.6.0")
-  def this(root: ClusteringTreeNode) = this(root, DistanceMeasure.EUCLIDEAN, 0.0)
+  def this(root: ClusteringTreeNode) = this(root, DistanceMeasure.EUCLIDEAN)
 
   private val distanceMeasureInstance: DistanceMeasure =
     DistanceMeasure.decodeFromString(distanceMeasure)
@@ -196,7 +195,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       val data = rows.select("index", "size", "center", "norm", "cost", "height", "children")
       val nodes = data.rdd.map(Data.apply).collect().map(d => (d.index, d)).toMap
       val rootNode = buildTree(rootId, nodes)
-      new BisectingKMeansModel(rootNode, DistanceMeasure.EUCLIDEAN, 0.0)
+      new BisectingKMeansModel(rootNode, DistanceMeasure.EUCLIDEAN)
     }
   }
 
@@ -210,8 +209,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
-          ~ ("rootId" -> model.root.index) ~ ("distanceMeasure" -> model.distanceMeasure)
-          ~ ("trainingCost" -> model.trainingCost)))
+          ~ ("rootId" -> model.root.index) ~ ("distanceMeasure" -> model.distanceMeasure)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val data = getNodes(model.root).map(node => Data(node.index, node.size,
@@ -227,14 +225,13 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       assert(formatVersion == thisFormatVersion)
       val rootId = (metadata \ "rootId").extract[Int]
       val distanceMeasure = (metadata \ "distanceMeasure").extract[String]
-      val trainingCost = (metadata \ "trainingCost").extract[Double]
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val rows = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Data](rows.schema)
       val data = rows.select("index", "size", "center", "norm", "cost", "height", "children")
       val nodes = data.rdd.map(Data.apply).collect().map(d => (d.index, d)).toMap
       val rootNode = buildTree(rootId, nodes)
-      new BisectingKMeansModel(rootNode, distanceMeasure, trainingCost)
+      new BisectingKMeansModel(rootNode, distanceMeasure)
     }
   }
 }
