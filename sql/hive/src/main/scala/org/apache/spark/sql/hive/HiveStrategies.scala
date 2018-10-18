@@ -129,7 +129,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
       val cachedRelation = sessionState.catalog.getCachedTable(qualifiedTableName)
 
-      val needCalculateStats = cachedRelation match {
+      cachedRelation match {
         case LogicalRelation(_, _, Some(catalogTable), _) =>
           val cachedFallBackToHdfsValue = catalogTable.properties
             .getOrElse(fallBackToHdfsKey, fallBackToHdfsValue.toString)
@@ -139,45 +139,36 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
           if (cachedFallBackToHdfsValue.toBoolean != fallBackToHdfsValue
             || cachedDefaultSizeInBytesValue.toLong != defaultSizeInBytesValue) {
             sessionState.catalog.invalidateCachedTable(qualifiedTableName)
-            true
-          } else {
-            // The stats calculated in this situation will not affect the execution plan,
-            // because it always use the cached data, so we don't need to calculate it.
-            false
           }
-        case _ => true
+        case _ =>
       }
 
-      if (needCalculateStats) {
-        val sizeInBytes = if (fallBackToHdfsValue) {
-          try {
-            val hadoopConf = session.sessionState.newHadoopConf()
-            val tablePath = new Path(table.location)
-            val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-            fs.getContentSummary(tablePath).getLength
-          } catch {
-            case e: IOException =>
-              logWarning("Failed to get table size from hdfs.", e)
-              defaultSizeInBytesValue
-          }
-        } else {
-          defaultSizeInBytesValue
+      val sizeInBytes = if (fallBackToHdfsValue) {
+        try {
+          val hadoopConf = session.sessionState.newHadoopConf()
+          val tablePath = new Path(table.location)
+          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+          fs.getContentSummary(tablePath).getLength
+        } catch {
+          case e: IOException =>
+            logWarning("Failed to get table size from hdfs.", e)
+            defaultSizeInBytesValue
         }
-
-        val statsConfig = Map(
-          fallBackToHdfsKey -> fallBackToHdfsValue.toString,
-          defaultSizeInBytesKey -> defaultSizeInBytesValue.toString)
-
-        // We save the stats related configuration to table properties,
-        // and we invalidate cached table if the configuration changed.
-        // Note that: stats related configuration will not persist to Hive metastore.
-        val withStats = table.copy(
-          stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))),
-          properties = table.properties ++ statsConfig)
-        relation.copy(tableMeta = withStats)
       } else {
-        relation
+        defaultSizeInBytesValue
       }
+
+      val statsConfig = Map(
+        fallBackToHdfsKey -> fallBackToHdfsValue.toString,
+        defaultSizeInBytesKey -> defaultSizeInBytesValue.toString)
+
+      // We save the stats related configuration to table properties,
+      // and we invalidate cached table if the configuration changed.
+      // Note that: stats related configuration will not persist to Hive metastore.
+      val withStats = table.copy(
+        stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))),
+        properties = table.properties ++ statsConfig)
+      relation.copy(tableMeta = withStats)
   }
 }
 
