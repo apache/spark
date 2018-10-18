@@ -25,9 +25,9 @@
     - text: Parquet Files
       url: sql-data-sources-parquet.html
     - text: ORC Files
-      url: sql-data-sources-other.html#orc-files
+      url: sql-data-sources-orc.html
     - text: JSON Datasets
-      url: sql-data-sources-other.html#json-datasets
+      url: sql-data-sources-json.html
     - text: Hive Tables
       url: sql-data-sources-hive-tables.html
     - text: JDBC To Other Databases
@@ -35,7 +35,7 @@
     - text: Avro Files
       url: sql-data-sources-avro.html
     - text: Troubleshooting
-      url: sql-data-sources-other.html#troubleshooting
+      url: sql-data-sources-troubleshooting.html
 - text: Performance Turing
   url: sql-performance-turing.html
   subitems:
