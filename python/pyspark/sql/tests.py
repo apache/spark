@@ -233,8 +233,6 @@ class SQLTestUtils(object):
         """
         assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
 
-        if len(databases) == 1 and isinstance(databases[0], (list, set)):
-            databases = databases[0]
         try:
             yield
         finally:
@@ -250,8 +248,6 @@ class SQLTestUtils(object):
         """
         assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
 
-        if len(tables) == 1 and isinstance(tables[0], (list, set)):
-            tables = tables[0]
         try:
             yield
         finally:
@@ -266,8 +262,6 @@ class SQLTestUtils(object):
         """
         assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
 
-        if len(functions) == 1 and isinstance(functions[0], (list, set)):
-            functions = functions[0]
         try:
             yield
         finally:
