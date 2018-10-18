@@ -2675,14 +2675,6 @@
     </profile>
 
     <profile>
-      <id>kafka-0-8</id>
-      <modules>
-        <module>external/kafka-0-8</module>
-        <module>external/kafka-0-8-assembly</module>
-      </modules>
-    </profile>
-
-    <profile>
       <id>test-java-home</id>
       <activation>
         <property><name>env.JAVA_HOME</name></property>

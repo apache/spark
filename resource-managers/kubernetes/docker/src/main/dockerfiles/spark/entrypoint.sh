@@ -83,6 +83,10 @@ elif [ "$PYSPARK_MAJOR_PYTHON_VERSION" == "3" ]; then
     export PYSPARK_DRIVER_PYTHON="python3"
 fi
 
+if ! [ -z ${HADOOP_CONF_DIR+x} ]; then
+  SPARK_CLASSPATH="$HADOOP_CONF_DIR:$SPARK_CLASSPATH";
+fi
+
 case "$SPARK_K8S_CMD" in
   driver)
     CMD=(
