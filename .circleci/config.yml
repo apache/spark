@@ -456,7 +456,6 @@ jobs:
           key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
       - *restore-build-binaries-cache
 
-      - run: git clean -dfx
       - run: ./gradlew --info bintrayUpload | tee -a "/tmp/publish_docker_image_generator_plugin.log"
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
