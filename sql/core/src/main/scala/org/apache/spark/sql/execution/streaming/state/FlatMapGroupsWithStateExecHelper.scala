@@ -215,7 +215,7 @@ object FlatMapGroupsWithStateExecHelper {
 
     override val stateSerializerExprs: Seq[Expression] = {
       val boundRefToSpecificInternalRow = BoundReference(
-        0, stateEncoder.serializer.collect { case b: BoundReference => b.dataType }.head, true)
+        0, stateEncoder.serializer.head.collect { case b: BoundReference => b.dataType }.head, true)
 
       val nestedStateSerExpr =
         CreateNamedStruct(stateEncoder.namedExpressions.flatMap(e => Seq(Literal(e.name), e)))
