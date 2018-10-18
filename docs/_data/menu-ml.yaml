@@ -1,6 +1,6 @@
 - text: Basic statistics
   url: ml-statistics.html
-- text: Datasource
+- text: Data sources
   url: ml-datasource
 - text: Pipelines
   url: ml-pipeline.html

@@ -5,7 +5,7 @@ displayTitle: Data sources
 ---
 
 In this section, we introduce how to use data source in ML to load data.
-Beside some general data sources like Parquet, CSV, JSON and JDBC, we also provide some specific data source for ML.
+Beside some general data sources such as Parquet, CSV, JSON and JDBC, we also provide some specific data source for ML.
 
 **Table of Contents**
 
@@ -14,15 +14,15 @@ Beside some general data sources like Parquet, CSV, JSON and JDBC, we also provi
 
 ## Image data source
 
-This image data source is used to load image files from a directory, it can load compressed image (jpeg, png, etc.) into raw image representation via ImageIO in Java library.
-The loaded DataFrame has one StructType column: "image". containing image data stored as image schema.
+This image data source is used to load image files from a directory, it can load compressed image (jpeg, png, etc.) into raw image representation via `ImageIO` in Java library.
+The loaded DataFrame has one `StructType` column: "image", containing image data stored as image schema.
 The schema of the `image` column is:
- - origin: String (represents the file path of the image)
- - height: Int (height of the image)
- - width: Int (width of the image)
- - nChannels: Int (number of the image channels)
- - mode: Int (OpenCV-compatible type)
- - data: BinaryType (Image bytes in OpenCV-compatible order: row-wise BGR in most cases)
+ - origin: `StringType` (represents the file path of the image)
+ - height: `IntegerType` (height of the image)
+ - width: `IntegerType` (width of the image)
+ - nChannels: `IntegerType` (number of the image channels)
+ - mode: `IntegerType` (OpenCV-compatible type)
+ - data: `BinaryType` (Image bytes in OpenCV-compatible order: row-wise BGR in most cases)
 
 
 <div class="codetabs">
@@ -86,5 +86,28 @@ In PySpark we provide Spark SQL data source API for loading image data as DataFr
 +-----------------------------------------------------------------------+-----+------+
 {% endhighlight %}
 </div>
+
+<div data-lang="r" markdown="1">
+In SparkR we provide Spark SQL data source API for loading image data as DataFrame.
+
+{% highlight r %}
+> df = read.df("data/mllib/images/origin/kittens", "image")
+> head(select(df, df$image.origin, df$image.width, df$image.height))
+
+1               file:///spark/data/mllib/images/origin/kittens/54893.jpg
+2            file:///spark/data/mllib/images/origin/kittens/DP802813.jpg
+3 file:///spark/data/mllib/images/origin/kittens/29.5.a_b_EGDP022204.jpg
+4            file:///spark/data/mllib/images/origin/kittens/DP153539.jpg
+5           file:///spark/data/mllib/images/origin/kittens/not-image.txt
+  width height
+1   300    311
+2   199    313
+3   300    200
+4   300    296
+5    -1     -1
+
+{% endhighlight %}
+</div>
+
 
 </div>
