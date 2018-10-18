@@ -381,6 +381,7 @@ class SQLTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
+        cls.spark.catalog._reset()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
