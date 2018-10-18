@@ -58,7 +58,7 @@ the following case-insensitive options:
       Below are couple of restrictions while using this option.<br>
       <ol>
          <li> It is not allowed to specify `dbtable` and `query` options at the same time. </li>
-         <li> It is not allowed to spcify `query` and `partitionColumn` options at the same time. When specifying
+         <li> It is not allowed to specify `query` and `partitionColumn` options at the same time. When specifying
             `partitionColumn` option is required, the subquery can be specified using `dbtable` option instead and
             partition columns can be qualified using the subquery alias provided as part of `dbtable`. <br>
             Example:<br>

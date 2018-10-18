@@ -81,5 +81,4 @@ To start the Spark SQL CLI, run the following in the Spark directory:
     ./bin/spark-sql
 
 Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` and `hdfs-site.xml` files in `conf/`.
-You may run `./bin/spark-sql --help` for a complete list of all available
-options.
+You may run `./bin/spark-sql --help` for a complete list of all available options.

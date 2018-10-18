@@ -145,7 +145,7 @@ new data.
   <td><code>"ignore"</code></td>
   <td>
     Ignore mode means that when saving a DataFrame to a data source, if data already exists,
-    the save operation is expected to not save the contents of the DataFrame and to not
+    the save operation is expected not to save the contents of the DataFrame and not to
     change the existing data. This is similar to a <code>CREATE TABLE IF NOT EXISTS</code> in SQL.
   </td>
 </tr>

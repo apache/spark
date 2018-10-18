@@ -26,7 +26,7 @@
       url: sql-data-sources-parquet.html
     - text: ORC Files
       url: sql-data-sources-orc.html
-    - text: JSON Datasets
+    - text: JSON Files
       url: sql-data-sources-json.html
     - text: Hive Tables
       url: sql-data-sources-hive-tables.html

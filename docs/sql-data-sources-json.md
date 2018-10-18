@@ -1,7 +1,7 @@
 ---
 layout: global
-title: JSON Datasets
-displayTitle: JSON Datasets
+title: JSON Files
+displayTitle: JSON Files
 ---
 
 <div class="codetabs">

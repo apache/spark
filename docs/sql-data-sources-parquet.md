@@ -120,7 +120,7 @@ users set `basePath` to `path/to/table/`, `gender` will be a partitioning column
 
 ### Schema Merging
 
-Like ProtocolBuffer, Avro, and Thrift, Parquet also supports schema evolution. Users can start with
+Like Protocol Buffer, Avro, and Thrift, Parquet also supports schema evolution. Users can start with
 a simple schema, and gradually add more columns to the schema as needed. In this way, users may end
 up with multiple Parquet files with different but mutually compatible schemas. The Parquet data
 source is now able to automatically detect this case and merge schemas of all these files.
