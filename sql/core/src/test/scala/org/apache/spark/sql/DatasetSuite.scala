@@ -1547,6 +1547,42 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       df.where($"city".contains(new java.lang.Character('A'))),
       Seq(Row("Amsterdam")))
   }
+
+  test("SPARK-23034 show rdd names in RDD scan nodes") {
+    val rddWithName = spark.sparkContext.parallelize(SingleData(1) :: Nil).setName("testRdd")
+    val df = spark.createDataFrame(rddWithName)
+    val output = new java.io.ByteArrayOutputStream()
+    Console.withOut(output) {
+      df.explain(extended = false)
+    }
+    assert(output.toString.contains("Scan testRdd"))
+  }
+
+  test("SPARK-25177: Decimal zero with scale > 6 in PlainString") {
+    val ds = sql("SELECT 0.0000000 a , 1.0000000 b")
+    val expected =
+      """+---------+---------+
+        ||        a|        b|
+        |+---------+---------+
+        ||0.0000000|1.0000000|
+        |+---------+---------+
+        |""".stripMargin
+
+    checkShowString(ds, expected)
+  }
+
+  test("SPARK-25177: Decimal zero with scale < 6 in PlainString") {
+    val ds = sql("SELECT 0.00000 a , 1.00000 b")
+    val expected =
+      """+-------+-------+
+        ||      a|      b|
+        |+-------+-------+
+        ||0.00000|1.00000|
+        |+-------+-------+
+        |""".stripMargin
+
+    checkShowString(ds, expected)
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)

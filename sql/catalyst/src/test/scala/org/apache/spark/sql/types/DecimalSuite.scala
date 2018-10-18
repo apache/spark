@@ -64,12 +64,12 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("creating decimals with negative scale") {
-    checkDecimal(Decimal(BigDecimal("98765"), 5, -3), "9.9E+4", 5, -3)
-    checkDecimal(Decimal(BigDecimal("314.159"), 6, -2), "3E+2", 6, -2)
-    checkDecimal(Decimal(BigDecimal(1.579e12), 4, -9), "1.579E+12", 4, -9)
-    checkDecimal(Decimal(BigDecimal(1.579e12), 4, -10), "1.58E+12", 4, -10)
-    checkDecimal(Decimal(103050709L, 9, -10), "1.03050709E+18", 9, -10)
-    checkDecimal(Decimal(1e8.toLong, 10, -10), "1.00000000E+18", 10, -10)
+    checkDecimal(Decimal(BigDecimal("98765"), 5, -3), "99000", 5, -3)
+    checkDecimal(Decimal(BigDecimal("314.159"), 6, -2), "300", 6, -2)
+    checkDecimal(Decimal(BigDecimal(1.579e12), 4, -9), "1579000000000", 4, -9)
+    checkDecimal(Decimal(BigDecimal(1.579e12), 4, -10), "1580000000000", 4, -10)
+    checkDecimal(Decimal(103050709L, 9, -10), "1030507090000000000", 9, -10)
+    checkDecimal(Decimal(1e8.toLong, 10, -10), "1000000000000000000", 10, -10)
   }
 
   test("double and long values") {
