@@ -304,11 +304,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(isExpectStorageLevel(rddId, Disk))
   }
 
-  test("SQL interface select from table support storageLevel(DISK_ONLY)") {
-    sql("CACHE TABLE testSelect OPTIONS('storageLevel' 'DISK_ONLY') SELECT * FROM testData")
-    assertCached(spark.table("testSelect"))
-    val rddId = rddIdOf("testSelect")
-    assert(isExpectStorageLevel(rddId, Disk))
+  test("SQL interface cache SELECT ... support storageLevel(DISK_ONLY)") {
+    withTempView("testCacheSelect") {
+      sql("CACHE TABLE testCacheSelect OPTIONS('storageLevel' 'DISK_ONLY') SELECT * FROM testData")
+      assertCached(spark.table("testCacheSelect"))
+      val rddId = rddIdOf("testCacheSelect")
+      assert(isExpectStorageLevel(rddId, Disk))
+    }
   }
 
   test("SQL interface support storageLevel(DISK_ONLY) with invalid options") {
