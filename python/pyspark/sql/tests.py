@@ -3837,6 +3837,48 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                 "The callback from the query execution listener should be called after 'toPandas'")
 
 
+class SparkExtensionsTest(unittest.TestCase):
+    # These tests are separate because it uses 'spark.sql.extensions' which is
+    # static and immutable. This can't be set or unset, for example, via `spark.conf`.
+
+    @classmethod
+    def setUpClass(cls):
+        import glob
+        from pyspark.find_spark_home import _find_spark_home
+
+        SPARK_HOME = _find_spark_home()
+        filename_pattern = (
+            "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
+            "SparkSessionExtensionSuite.class")
+        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
+            raise unittest.SkipTest(
+                "'org.apache.spark.sql.SparkSessionExtensionSuite' is not "
+                "available. Will skip the related tests.")
+
+        # Note that 'spark.sql.extensions' is a static immutable configuration.
+        cls.spark = SparkSession.builder \
+            .master("local[4]") \
+            .appName(cls.__name__) \
+            .config(
+                "spark.sql.extensions",
+                "org.apache.spark.sql.MyExtensions") \
+            .getOrCreate()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.spark.stop()
+
+    def test_use_custom_class_for_extensions(self):
+        self.assertTrue(
+            self.spark._jsparkSession.sessionState().planner().strategies().contains(
+                self.spark._jvm.org.apache.spark.sql.MySparkStrategy(self.spark._jsparkSession)),
+            "MySparkStrategy not found in active planner strategies")
+        self.assertTrue(
+            self.spark._jsparkSession.sessionState().analyzer().extendedResolutionRules().contains(
+                self.spark._jvm.org.apache.spark.sql.MyRule(self.spark._jsparkSession)),
+            "MyRule not found in extended resolution rules")
+
+
 class SparkSessionTests(PySparkTestCase):
 
     # This test is separate because it's closely related with session's start and stop.
