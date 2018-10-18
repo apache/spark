@@ -24,6 +24,7 @@ import scala.language.postfixOps
 import org.apache.spark.CleanerListener
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.executor.DataReadMethod._
+import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
@@ -297,11 +298,23 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
-  test("SQL interface support storageLevel(DISK_ONLY)") {
-    sql("CACHE TABLE testData OPTIONS('storageLevel' 'DISK_ONLY')")
+  private def assertStorageLevel(cacheOptions: String, level: DataReadMethod): Unit = {
+    sql(s"CACHE TABLE testData OPTIONS$cacheOptions")
     assertCached(spark.table("testData"))
     val rddId = rddIdOf("testData")
-    assert(isExpectStorageLevel(rddId, Disk))
+    assert(isExpectStorageLevel(rddId, level))
+  }
+
+  test("SQL interface support storageLevel(DISK_ONLY)") {
+    assertStorageLevel("('storageLevel' 'DISK_ONLY')", Disk)
+  }
+
+  test("SQL interface support storageLevel(DISK_ONLY) with invalid options") {
+    assertStorageLevel("('storageLevel' 'DISK_ONLY', 'a' '1', 'b' '2')", Disk)
+  }
+
+  test("SQL interface support storageLevel(MEMORY_ONLY)") {
+    assertStorageLevel("('storageLevel' 'MEMORY_ONLY')", Memory)
   }
 
   test("SQL interface cache SELECT ... support storageLevel(DISK_ONLY)") {
@@ -311,20 +324,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       val rddId = rddIdOf("testCacheSelect")
       assert(isExpectStorageLevel(rddId, Disk))
     }
-  }
-
-  test("SQL interface support storageLevel(DISK_ONLY) with invalid options") {
-    sql("CACHE TABLE testData OPTIONS('storageLevel' 'DISK_ONLY', 'a' '1', 'b' '2')")
-    assertCached(spark.table("testData"))
-    val rddId = rddIdOf("testData")
-    assert(isExpectStorageLevel(rddId, Disk))
-  }
-
-  test("SQL interface support storageLevel(MEMORY_ONLY)") {
-    sql("CACHE TABLE testData OPTIONS('storageLevel' 'MEMORY_ONLY')")
-    assertCached(spark.table("testData"))
-    val rddId = rddIdOf("testData")
-    assert(isExpectStorageLevel(rddId, Memory))
   }
 
   test("SQL interface support storageLevel(Invalid StorageLevel)") {
