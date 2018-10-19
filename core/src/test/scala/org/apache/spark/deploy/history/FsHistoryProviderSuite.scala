@@ -23,10 +23,12 @@ import java.util.{Date, Locale}
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.security.AccessControlException
@@ -40,6 +42,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
 import org.apache.spark.internal.config.History._
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
@@ -47,6 +50,7 @@ import org.apache.spark.security.GroupMappingServiceProvider
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
+import org.apache.spark.util.logging.DriverLogger
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
 
@@ -411,6 +415,68 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       totalEntries should be (1)
       inputStream.close()
     }
+  }
+
+  test("driver log cleaner") {
+    val firstFileModifiedTime = TimeUnit.SECONDS.toMillis(10)
+    val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
+    val maxAge = TimeUnit.SECONDS.toSeconds(40)
+    val clock = new ManualClock(0)
+    val testConf = new SparkConf()
+    testConf.set("spark.history.fs.logDirectory",
+      Utils.createTempDir(namePrefix = "eventLog").getAbsolutePath())
+    testConf.set(DRIVER_LOG_DFS_DIR, testDir.getAbsolutePath())
+    testConf.set(DRIVER_LOG_CLEANER_ENABLED, true)
+    testConf.set(DRIVER_LOG_CLEANER_INTERVAL, maxAge / 4)
+    testConf.set(MAX_DRIVER_LOG_AGE_S, maxAge)
+    val provider = new FsHistoryProvider(testConf, clock)
+
+    val log1 = FileUtils.getFile(testDir, "1" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    createEmptyFile(log1)
+    val modTime1 = System.currentTimeMillis()
+
+    clock.setTime(modTime1 + firstFileModifiedTime)
+    provider.cleanDriverLogs()
+
+    val log2 = FileUtils.getFile(testDir, "2" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    createEmptyFile(log2)
+    val log3 = FileUtils.getFile(testDir, "3" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    createEmptyFile(log3)
+    val modTime2 = System.currentTimeMillis()
+
+    clock.setTime(modTime1 + secondFileModifiedTime)
+    provider.cleanDriverLogs()
+
+    // This should not trigger any cleanup
+    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(3)
+
+    // Should trigger cleanup for first file but not second one
+    clock.setTime(modTime1 + firstFileModifiedTime + TimeUnit.SECONDS.toMillis(maxAge) + 1)
+    provider.cleanDriverLogs()
+    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(2)
+    assert(!log1.exists())
+    assert(log2.exists())
+    assert(log3.exists())
+
+    // Should cleanup the second file but not the third file, as filelength changed.
+    val writer = new OutputStreamWriter(new BufferedOutputStream(new FileOutputStream(log3)))
+    Utils.tryWithSafeFinally {
+      writer.append("Add logs to file")
+    } {
+      writer.close()
+    }
+    clock.setTime(modTime2 + secondFileModifiedTime + TimeUnit.SECONDS.toMillis(maxAge) + 1)
+    provider.cleanDriverLogs()
+    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(1)
+    assert(!log1.exists())
+    assert(!log2.exists())
+    assert(log3.exists())
+
+    // Should cleanup the third file as well.
+    clock.setTime(modTime2 + secondFileModifiedTime + 2 * TimeUnit.SECONDS.toMillis(maxAge) + 2)
+    provider.cleanDriverLogs()
+    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(0)
+    assert(!log3.exists())
   }
 
   test("SPARK-8372: new logs with no app ID are ignored") {

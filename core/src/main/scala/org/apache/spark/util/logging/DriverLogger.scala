@@ -102,7 +102,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         throw new RuntimeException(s"${rootDir} does not exist." +
           s" Please create this dir in order to persist driver logs")
       }
-      FileUtils.getFile(rootDir, appId, DriverLogger.DRIVER_LOG_FILE).getAbsolutePath()
+      FileUtils.getFile(rootDir, appId + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()
     }
     private var inStream: InputStream = null
     private var outputStream: FSDataOutputStream = null
@@ -181,6 +181,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 private[spark] object DriverLogger extends Logging {
   val DRIVER_LOG_DIR = "__driver_logs__"
   val DRIVER_LOG_FILE = "driver.log"
+  val DRIVER_LOG_FILE_SUFFIX = "_" + DRIVER_LOG_FILE
   val APPENDER_NAME = "_DriverLogAppender"
 
   def apply(conf: SparkConf): Option[DriverLogger] = {

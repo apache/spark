@@ -2871,11 +2871,11 @@ private[spark] object Utils extends Logging {
     if (str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
   }
 
-  private[spark] def sanitizeDirName(str: String): String = {
+  def sanitizeDirName(str: String): String = {
     str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }
 
-  private[spark] def isClientMode(conf: SparkConf): Boolean = {
+  def isClientMode(conf: SparkConf): Boolean = {
     "client".equals(conf.get(SparkLauncher.DEPLOY_MODE, "client"))
   }
 }
