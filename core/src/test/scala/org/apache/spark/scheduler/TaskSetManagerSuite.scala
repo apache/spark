@@ -287,6 +287,26 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec2", "host2", NO_PREF).get.index == 3)
   }
 
+  test("scheduling the tasks which have no higher level locality first") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(3,
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host1", "exec1"), TaskLocation("host2")),
+      Seq(TaskLocation("host2"))
+    )
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    // First offer host1, exec1: first task should be chosen
+    assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL).get.index === 0)
+    assert(manager.resourceOffer("exec2", "host2", PROCESS_LOCAL) == None)
+
+    clock.advance(LOCALITY_WAIT_MS)
+    // Scheduling the tasks which have no higher level locality first, so this returns 2
+    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL).get.index === 2)
+    assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL).get.index === 1)
+  }
+
   test("we do not need to delay scheduling when we only have noPref tasks in the queue") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec3", "host2"))

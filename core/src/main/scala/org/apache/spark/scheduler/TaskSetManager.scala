@@ -397,7 +397,24 @@ private[spark] class TaskSetManager(
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NODE_LOCAL)) {
-      for (index <- dequeueTaskFromList(execId, host, getPendingTasksForHost(host))) {
+      val tasksForHost = getPendingTasksForHost(host)
+      var tasksForExecutor = new ArrayBuffer[Int]
+      val allTasksForExecutorHashSet = new HashSet[Int]
+      val allTasksForExecutor = pendingTasksForExecutor.valuesIterator
+      while (allTasksForExecutor.hasNext) {
+        val next = allTasksForExecutor.next()
+        allTasksForExecutorHashSet ++= next.toSet
+      }
+      for (index <- tasksForHost) {
+        if (allTasksForExecutorHashSet.contains(index)) {
+          tasksForExecutor += index
+        }
+      }
+      // Scheduling the tasks which have no higher level locality first
+      for (index <- dequeueTaskFromList(execId, host, tasksForHost -- tasksForExecutor)) {
+        return Some((index, TaskLocality.NODE_LOCAL, false))
+      }
+      for (index <- dequeueTaskFromList(execId, host, tasksForExecutor)) {
         return Some((index, TaskLocality.NODE_LOCAL, false))
       }
     }
