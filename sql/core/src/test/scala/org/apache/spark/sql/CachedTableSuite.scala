@@ -22,7 +22,6 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.spark.CleanerListener
-import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -67,7 +66,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     maybeBlock.nonEmpty
   }
 
-  def isExpectStorageLevel(rddId: Int, level: DataReadMethod.DataReadMethod): Boolean = {
+  def isExpectStorageLevel(rddId: Int, level: DataReadMethod): Boolean = {
     val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
     val isExpectLevel = maybeBlock.forall(_.readMethod === level)
     maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
@@ -336,8 +335,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   test("SQL interface support storageLevel(with LAZY)") {
     sql("CACHE LAZY TABLE testData OPTIONS('storageLevel' 'disk_only')")
     assertCached(spark.table("testData"))
+
     val rddId = rddIdOf("testData")
+    assert(
+      !isMaterialized(rddId),
+      "Lazily cached in-memory table shouldn't be materialized eagerly")
+
     sql("SELECT COUNT(*) FROM testData").collect()
+    assert(
+      isMaterialized(rddId),
+      "Lazily cached in-memory table should have been materialized")
     assert(isExpectStorageLevel(rddId, Disk))
   }
 
