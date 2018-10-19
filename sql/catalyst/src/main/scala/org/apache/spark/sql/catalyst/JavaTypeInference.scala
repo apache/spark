@@ -269,7 +269,7 @@ object JavaTypeInference {
       case c if listType.isAssignableFrom(typeToken) =>
         val et = elementType(typeToken)
         UnresolvedMapObjects(
-          p => deserializerFor(et, Some(p)),
+          p => deserializerFor(et, p),
           path,
           customCollectionCls = Some(c))
 
