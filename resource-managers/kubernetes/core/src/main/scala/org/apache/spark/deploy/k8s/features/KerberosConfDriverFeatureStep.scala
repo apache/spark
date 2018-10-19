@@ -16,7 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.HasMetadata
+import java.io.File
+
+import com.google.common.io.Files
+import io.fabric8.kubernetes.api.model._
+import org.apache.commons.codec.binary.Base64
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
@@ -25,6 +29,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesDriverSpecificConf
 import org.apache.spark.deploy.k8s.features.hadooputils._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 
 /**
  * Runs the necessary Hadoop-based logic based on Kerberos configs and the presence of the
@@ -107,13 +112,16 @@ private[spark] class KerberosConfDriverFeatureStep(
     }
   )
 
+  private def ktSecretName: String = s"${kubernetesConf.appResourceNamePrefix}-kerberos-keytab"
+
   override def configurePod(pod: SparkPod): SparkPod = {
     val hadoopBasedSparkPod = HadoopBootstrapUtil.bootstrapHadoopConfDir(
       hadoopConfDirSpec.hadoopConfDir,
       newHadoopConfigMapName,
       hadoopConfDirSpec.hadoopConfigMapName,
       pod)
-    kerberosConfSpec.map { hSpec =>
+
+    val kerberizedPod = kerberosConfSpec.map { hSpec =>
       HadoopBootstrapUtil.bootstrapKerberosPod(
         hSpec.dtSecretName,
         hSpec.dtSecretItemKey,
@@ -126,20 +134,53 @@ private[spark] class KerberosConfDriverFeatureStep(
       HadoopBootstrapUtil.bootstrapSparkUserPod(
         kubeTokenManager.getCurrentUser.getShortUserName,
         hadoopBasedSparkPod))
+
+    if (keytab.isDefined) {
+      val podWitKeytab = new PodBuilder(kerberizedPod.pod)
+        .editOrNewSpec()
+          .addNewVolume()
+            .withName(KERBEROS_KEYTAB_VOLUME)
+            .withNewSecret()
+              .withSecretName(ktSecretName)
+              .endSecret()
+            .endVolume()
+          .endSpec()
+        .build()
+
+      val containerWithKeytab = new ContainerBuilder(kerberizedPod.container)
+        .addNewVolumeMount()
+          .withName(KERBEROS_KEYTAB_VOLUME)
+          .withMountPath(KERBEROS_KEYTAB_MOUNT_POINT)
+          .endVolumeMount()
+        .build()
+
+      SparkPod(podWitKeytab, containerWithKeytab)
+    } else {
+      kerberizedPod
+    }
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
-    val resolvedConfValues = kerberosConfSpec.map { hSpec =>
-      Map(KERBEROS_DT_SECRET_NAME -> hSpec.dtSecretName,
-        KERBEROS_DT_SECRET_KEY -> hSpec.dtSecretItemKey,
-        KERBEROS_SPARK_USER_NAME -> hSpec.jobUserName,
-        KRB5_CONFIG_MAP_NAME -> krb5CMap.getOrElse(kubernetesConf.krbConfigMapName))
-      }.getOrElse(
-        Map(KERBEROS_SPARK_USER_NAME ->
-          kubeTokenManager.getCurrentUser.getShortUserName))
-    Map(HADOOP_CONFIG_MAP_NAME ->
-      hadoopConfDirSpec.hadoopConfigMapName.getOrElse(
-      kubernetesConf.hadoopConfigMapName)) ++ resolvedConfValues
+    val krbConfValues = kerberosConfSpec match {
+      case Some(hSpec) =>
+        Seq(KERBEROS_DT_SECRET_NAME -> hSpec.dtSecretName,
+          KERBEROS_DT_SECRET_KEY -> hSpec.dtSecretItemKey,
+          KERBEROS_SPARK_USER_NAME -> hSpec.jobUserName,
+          KRB5_CONFIG_MAP_NAME -> krb5CMap.getOrElse(kubernetesConf.krbConfigMapName))
+
+      case _ =>
+        Seq(KERBEROS_SPARK_USER_NAME -> kubeTokenManager.getCurrentUser.getShortUserName)
+    }
+
+    val keytabConf = keytab.map { path =>
+      val ktName = new File(path).getName()
+      (KEYTAB.key -> s"$KERBEROS_KEYTAB_MOUNT_POINT/$ktName")
+    }
+
+    val hadoopConf = Seq(HADOOP_CONFIG_MAP_NAME ->
+      hadoopConfDirSpec.hadoopConfigMapName.getOrElse(kubernetesConf.hadoopConfigMapName))
+
+    (hadoopConf ++ krbConfValues ++ keytabConf).toMap
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
@@ -158,8 +199,20 @@ private[spark] class KerberosConfDriverFeatureStep(
 
     val kerberosDTSecret = kerberosConfSpec.flatMap(_.dtSecret)
 
+    val keytabSecret = keytab.map { kt =>
+      val ktName = new File(kt).getName()
+      val ktData = Files.toByteArray(new File(kt))
+      new SecretBuilder()
+        .withNewMetadata()
+          .withName(ktSecretName)
+          .endMetadata()
+        .addToData(ktName, Base64.encodeBase64String(ktData))
+        .build()
+    }
+
     hadoopConfConfigMap.toSeq ++
       krb5ConfigMap.toSeq ++
-      kerberosDTSecret.toSeq
+      kerberosDTSecret.toSeq ++
+      keytabSecret
   }
 }
