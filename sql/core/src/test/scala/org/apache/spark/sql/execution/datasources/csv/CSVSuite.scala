@@ -52,6 +52,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val carsNullFile = "test-data/cars-null.csv"
   private val carsEmptyValueFile = "test-data/cars-empty-value.csv"
   private val carsBlankColName = "test-data/cars-blank-column-name.csv"
+  private val carsCrlf = "test-data/cars-crlf.csv"
   private val emptyFile = "test-data/empty.csv"
   private val commentsFile = "test-data/comments.csv"
   private val disableCommentsFile = "test-data/disable_comments.csv"
@@ -218,6 +219,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       // scalastyle:on
       verifyCars(spark.table("carsTable"), withHeader = true)
     }
+  }
+
+  test("crlf line separators in multiline mode") {
+    val cars = spark
+      .read
+      .format("csv")
+      .option("multiLine", "true")
+      .option("header", "true")
+      .load(testFile(carsCrlf))
+
+    verifyCars(cars, withHeader = true)
   }
 
   test("test aliases sep and encoding for delimiter and charset") {
