@@ -184,7 +184,7 @@ case class InsertIntoHadoopFsRelationCommand(
       }
 
       if (catalogTable.nonEmpty) {
-        sparkSession.catalog.refreshTable(catalogTable.get.identifier.quotedString)
+        sparkSession.sessionState.catalog.refreshTable(catalogTable.get.identifier)
         CommandUtils.updateTableStats(sparkSession, catalogTable.get)
       } else {
         // refresh cached files in FileIndex
