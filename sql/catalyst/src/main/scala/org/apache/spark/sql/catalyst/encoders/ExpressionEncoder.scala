@@ -88,9 +88,7 @@ object ExpressionEncoder {
    * name/positional binding is preserved.
    */
   def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
-    if (encoders.length > 22) {
-      throw new RuntimeException("Can't construct a tuple encoder for more than 22 encoders.")
-    }
+    // TODO: check if encoders length is more than 22 and throw exception for it.
 
     encoders.foreach(_.assertUnresolved())
 
@@ -114,7 +112,7 @@ object ExpressionEncoder {
         returnNullable = originalInputObject.nullable)
 
       val newSerializer = enc.objSerializer.transformUp {
-        case b: BoundReference if b == originalInputObject => newInputObject
+        case b: BoundReference => newInputObject
       }
 
       Alias(newSerializer, s"_${index + 1}")()
@@ -200,7 +198,7 @@ case class ExpressionEncoder[T](
   extends Encoder[T] {
 
   /**
-   * A set of expressions, one for each top-level field that can be used to
+   * A sequence of expressions, one for each top-level field that can be used to
    * extract the values from a raw object into an [[InternalRow]]:
    * 1. If `serializer` encodes a raw object to a struct, we directly use the `serializer`.
    * 2. For other cases, we create a struct to wrap the `serializer`.
@@ -217,7 +215,7 @@ case class ExpressionEncoder[T](
           AssertNotNull(r, Seq("top level Product or row object"))
       }
       nullSafeSerializer match {
-        case If(_, _, s: CreateNamedStruct) => s
+        case If(_: IsNull, _, s: CreateNamedStruct) => s
         case s: CreateNamedStruct => s
         case _ =>
           throw new RuntimeException(s"class $clsName has unexpected serializer: $objSerializer")
