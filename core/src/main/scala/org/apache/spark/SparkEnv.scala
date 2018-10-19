@@ -22,9 +22,9 @@ import java.net.Socket
 import java.util.{Locale, ServiceLoader}
 
 import com.google.common.collect.MapMaker
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Properties
-import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory

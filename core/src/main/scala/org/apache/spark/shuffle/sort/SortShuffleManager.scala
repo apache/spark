@@ -100,9 +100,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       val transportContext = new TransportContext(
         backupShuffleTransportConf,
         new NoOpRpcHandler(),
-        true)
-      (address, transportContext.createClientFactory().createClient(
-        addressAsUri.getHost, addressAsUri.getPort))
+        false)
+      (address, addressAsUri, transportContext.createClientFactory())
     })
 
   /**
@@ -175,10 +174,13 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     Random.shuffle(backupShuffleTransportClients)
       .headOption
       .map(addressAndClient => {
+        val transportClient =
+          addressAndClient._3.createClient(
+            addressAndClient._2.getHost, addressAndClient._2.getPort)
         new BackingUpShuffleWriter(
           shuffleBlockResolver,
           baseWriter,
-          addressAndClient._2,
+          transportClient,
           backupShuffleTransportConf,
           env.mapOutputTracker,
           ThreadUtils.newDaemonCachedThreadPool("backup-shuffle-files"),
@@ -204,7 +206,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {
     shuffleBlockResolver.stop()
-    backupShuffleTransportClients.foreach(_._2.close())
+    backupShuffleTransportClients.foreach(_._3.close())
   }
 }
 
@@ -216,7 +218,7 @@ private[spark] object SortShuffleManager extends Logging {
    * buffering map outputs in a serialized form. This is an extreme defensive programming measure,
    * since it's extremely unlikely that a single shuffle produces over 16 million output partitions.
    * */
-  val MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE =
+  val MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE: Int =
     PackedRecordPointer.MAXIMUM_PARTITION_ID + 1
 
   /**

@@ -219,8 +219,10 @@ private[spark] case class ReportBackedUpMapOutput(
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 private[spark] case object GetBackupShuffleServiceAddresses extends MapOutputTrackerMessage
 
+private[spark] sealed trait BackupMessage
+private[spark] case class HeartbeaterMessage(appId: String) extends BackupMessage
 private[spark] case class GetMapOutputMessage(shuffleId: Int, context: RpcCallContext)
-
+  extends BackupMessage
 /** RpcEndpoint class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterEndpoint(
     override val rpcEnv: RpcEnv, tracker: MapOutputTrackerMaster, conf: SparkConf)
@@ -232,11 +234,11 @@ private[spark] class MapOutputTrackerMasterEndpoint(
     case GetMapOutputStatuses(shuffleId: Int, getBackup: Boolean) =>
       val hostPort = context.senderAddress.hostPort
       logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + hostPort)
-      val message = new GetMapOutputMessage(shuffleId, context)
-      val mapOutputStatuses = if (getBackup) {
-        tracker.postToBackup(message)
+      val message = GetMapOutputMessage(shuffleId, context)
+      if (getBackup) {
+        tracker.postToBackup[GetMapOutputMessage](message)
       } else {
-        tracker.post(message)
+        tracker.post[GetMapOutputMessage](message)
       }
 
     case GetBackupShuffleServiceAddresses =>
@@ -305,14 +307,14 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   /**
-    * Called from executors to get the server URIs and output sizes for each shuffle block that
-    * needs to be read from a given range of map output partitions (startPartition is included but
-    * endPartition is excluded from the range).
-    *
-    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
-    *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
-    *         describing the shuffle blocks that are stored at that block manager.
-    */
+   * Called from executors to get the server URIs and output sizes for each shuffle block that
+   * needs to be read from a given range of map output partitions (startPartition is included but
+   * endPartition is excluded from the range).
+   *
+   * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
+   *         and the second item is a sequence of (shuffle block id, shuffle block size) tuples
+   *         describing the shuffle blocks that are stored at that block manager.
+   */
   def getMapSizesByExecutorId(
       shuffleId: Int, startPartition: Int, endPartition: Int, getBackup: Boolean)
       : Iterator[(BlockManagerId, Seq[(BlockId, Long)])]
@@ -378,7 +380,7 @@ private[spark] class MapOutputTrackerMaster(
   private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
 
   // requests for map output statuses
-  private val mapOutputRequests = new LinkedBlockingQueue[GetMapOutputMessage]
+  private val mapOutputRequests = new LinkedBlockingQueue[BackupMessage]
 
   // Thread pool used for handling map output status requests. This is a separate thread pool
   // to ensure we don't block the normal dispatcher threads.
@@ -401,12 +403,12 @@ private[spark] class MapOutputTrackerMaster(
     throw new IllegalArgumentException(msg)
   }
 
-  def post(message: GetMapOutputMessage): Unit = {
+  def post[T <: BackupMessage](message: T): Unit = {
     mapOutputRequests.offer(message)
   }
 
-  def postToBackup(message: GetMapOutputMessage): Unit = {
-    require(backupMaster.isDefined, "No backup master available (is this the backup master?)")
+  def postToBackup[T <: BackupMessage](message: T): Unit = {
+    require(backupMaster.isDefined, "No backup master available")
     backupMaster.foreach(_.post(message))
   }
 
@@ -417,19 +419,20 @@ private[spark] class MapOutputTrackerMaster(
         while (true) {
           try {
             val data = mapOutputRequests.take()
-             if (data == PoisonPill) {
-              // Put PoisonPill back so that other MessageLoops can see it.
-              mapOutputRequests.offer(PoisonPill)
-              return
+            data match {
+              case PoisonPill =>
+                // Put PoisonPill back so that other MessageLoops can see it.
+                mapOutputRequests.offer(PoisonPill)
+                return
+              case GetMapOutputMessage(shuffleId, context) =>
+                val hostPort = context.senderAddress.hostPort
+                // TODO: Change back to debug
+                logDebug("Handling request to send map output locations for shuffle " + shuffleId +
+                  " to " + hostPort)
+                val shuffleStatus = shuffleStatuses.get(shuffleId).head
+                context.reply(
+                  shuffleStatus.serializedMapStatus(broadcastManager, isLocal, minSizeForBroadcast))
             }
-            val context = data.context
-            val shuffleId = data.shuffleId
-            val hostPort = context.senderAddress.hostPort
-            logDebug("Handling request to send map output locations for shuffle " + shuffleId +
-              " to " + hostPort)
-            val shuffleStatus = shuffleStatuses.get(shuffleId).head
-            context.reply(
-              shuffleStatus.serializedMapStatus(broadcastManager, isLocal, minSizeForBroadcast))
           } catch {
             case NonFatal(e) => logError(e.getMessage, e)
           }
@@ -685,7 +688,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   def getBackupShuffleServiceAddresses: List[(String, Int)] =
-      shuffleServiceAddressProvider.getShuffleServiceAddresses()
+    shuffleServiceAddressProvider.getShuffleServiceAddresses()
 
   // Get blocks sizes by executor Id. Note that zero-sized blocks are excluded in the result.
   // This method is only called in local-mode.
@@ -693,7 +696,7 @@ private[spark] class MapOutputTrackerMaster(
       shuffleId: Int, startPartition: Int, endPartition: Int, getBackup: Boolean)
       : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     if (getBackup) {
-      require(backupMaster.isDefined, "Backup master not defined (is this the backup master?")
+      require(backupMaster.isDefined, "Backup master not defined")
       backupMaster.get.getMapSizesByExecutorId(shuffleId, startPartition, endPartition, false)
     } else {
       logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
@@ -720,7 +723,7 @@ private[spark] class MapOutputTrackerMaster(
 /**
  * Executor-side client for fetching map output info from the driver's MapOutputTrackerMaster.
  * Note that this is not used in local-mode; instead, local-mode Executors access the
- * MapOutputTrackerMaster directly (which is possible because the master and worker share a comon
+ * MapOutputTrackerMaster directly (which is possible because the master and worker share a common
  * superclass).
  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {

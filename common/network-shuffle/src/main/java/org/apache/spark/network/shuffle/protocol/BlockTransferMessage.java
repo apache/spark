@@ -23,8 +23,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 import org.apache.spark.network.protocol.Encodable;
-import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver;
-import org.apache.spark.network.shuffle.protocol.mesos.ShuffleServiceHeartbeat;
 
 /**
  * Messages handled by the {@link org.apache.spark.network.shuffle.ExternalShuffleBlockHandler}, or
@@ -67,7 +65,7 @@ public abstract class BlockTransferMessage implements Encodable {
         case 2: return RegisterExecutor.decode(buf);
         case 3: return StreamHandle.decode(buf);
         case 4: return RegisterDriver.decode(buf);
-        case 5: return ShuffleServiceHeartbeat.decode(buf);
+        case 5: return ExternalServiceHeartbeat.decode(buf);
         case 6: return UploadBlockStream.decode(buf);
         case 7: return UploadShuffleFileStream.decode(buf);
         case 8: return UploadShuffleIndexFileStream.decode(buf);

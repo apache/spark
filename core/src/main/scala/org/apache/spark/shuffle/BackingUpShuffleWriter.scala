@@ -23,6 +23,7 @@ import java.util.concurrent.ExecutorService
 
 import com.google.common.util.concurrent.SettableFuture
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 import org.apache.spark.{MapOutputTracker, ReportBackedUpMapOutput}
 import org.apache.spark.internal.Logging
@@ -67,24 +68,19 @@ class BackingUpShuffleWriter[K, V](
         val uploadIndexFileRequest = new UploadShuffleIndexFileStream(
           appId, execId, shuffleId, mapId)
 
-        val backupDataFileTask = Future {
+        val backupFileTask: Future[Unit] = Future {
           backupFile(outputFile, uploadBackupFileRequest)
-        }
-
-        val backupIndexFileTask = Future {
           backupFile(indexFile, uploadIndexFileRequest)
         }
 
-        // TODO experiment with asynchronous backup.
-        for {
-          backupDataSuccess <- backupDataFileTask
-          backupIndexSuccess <- backupIndexFileTask
-        } yield {
-          val backedUpMapStatus = RelocatedMapStatus(
-            delegateMapStatus.get,
-            BlockManagerId(execId, backupHost, backupPort, None, isBackup = true))
-          mapOutputTracker.trackerEndpoint.send(
+        backupFileTask.onComplete {
+          case Success(_) =>
+            val backedUpMapStatus = RelocatedMapStatus(
+              delegateMapStatus.get,
+              BlockManagerId(execId, backupHost, backupPort, None, isBackup = true))
+            mapOutputTracker.trackerEndpoint.send(
               ReportBackedUpMapOutput(shuffleId, mapId, backedUpMapStatus))
+          case Failure(_) => logError("An error has occured in backing up")
         }
       }
     }
@@ -100,7 +96,6 @@ class BackingUpShuffleWriter[K, V](
     val awaitCompletion = SettableFuture.create[Boolean]
     backupShuffleServiceClient.uploadStream(
       uploadBackupRequestBuffer, dataFileBuffer, new RpcResponseCallback {
-
         override def onSuccess(response: ByteBuffer): Unit = {
           logInfo("Successfully backed up shuffle map data file" +
             s" (shuffle id: $shuffleId, map id: $mapId, executor id: $execId)")

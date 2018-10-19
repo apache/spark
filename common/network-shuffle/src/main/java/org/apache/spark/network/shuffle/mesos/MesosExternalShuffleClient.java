@@ -24,7 +24,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.apache.spark.network.shuffle.protocol.mesos.ShuffleServiceHeartbeat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +31,8 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.shuffle.ExternalShuffleClient;
-import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver;
+import org.apache.spark.network.shuffle.protocol.RegisterDriver;
+import org.apache.spark.network.shuffle.protocol.ExternalServiceHeartbeat;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -117,7 +117,7 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
     @Override
     public void run() {
       // TODO: Stop sending heartbeats if the shuffle service has lost the app due to timeout
-      client.send(new ShuffleServiceHeartbeat(appId).toByteBuffer());
+      client.send(new ExternalServiceHeartbeat(appId).toByteBuffer());
     }
   }
 }

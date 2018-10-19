@@ -50,7 +50,7 @@ object ExecutorPodsSnapshot extends Logging {
     }.toMap
   }
 
-  private def toState(pod: Pod): ExecutorPodState = {
+  private def toState(pod: Pod): SparkPodState = {
     if (isDeleted(pod)) {
       PodDeleted(pod)
     } else {

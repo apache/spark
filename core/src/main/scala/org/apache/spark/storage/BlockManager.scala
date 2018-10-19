@@ -43,7 +43,7 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+import org.apache.spark.network.shuffle.protocol.{ExecutorShuffleInfo, ExternalServiceHeartbeat, RegisterDriver}
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
@@ -256,12 +256,18 @@ private[spark] class BlockManager(
       require(backupShuffleServiceAddresses.isEmpty,
         "Cannot use the external shuffle service while using backup shuffle services.")
       val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
-      new ExternalShuffleClient(transConf, securityManager,
-        securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
+      new ExternalShuffleClient(transConf,
+        securityManager,
+        securityManager.isAuthenticationEnabled(),
+        conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
     } else if (backupShuffleServiceAddresses.nonEmpty) {
+      logInfo("Using BackupShuffleService")
       val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
-      val externalShuffleClient = new ExternalShuffleClient(transConf, securityManager,
-        securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
+      val externalShuffleClient = new ExternalShuffleClient(
+        transConf,
+        securityManager,
+        securityManager.isAuthenticationEnabled(),
+        conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
       new ExternalFallbackShuffleClient(externalShuffleClient, blockTransferService)
     } else blockTransferService
     shuffleClient.init(appId)
@@ -288,7 +294,10 @@ private[spark] class BlockManager(
     }
 
     backupShuffleServiceAddresses.foreach(address => {
-      registerWithBackupShuffleServer(address._1, address._2)
+      registerWithBackupShuffleServer(
+        address._1,
+        address._2,
+        appId)
     })
 
     logInfo(s"Initialized BlockManager: $blockManagerId")
@@ -332,8 +341,11 @@ private[spark] class BlockManager(
     }
   }
 
-  private def registerWithBackupShuffleServer(shuffleServerHost: String, shuffleServerPort: Int)
-      : Unit = {
+  private def registerWithBackupShuffleServer(
+      shuffleServerHost: String,
+      shuffleServerPort: Int,
+      appId: String)
+    : Unit = {
     val MAX_ATTEMPTS = conf.get(config.SHUFFLE_REGISTRATION_MAX_ATTEMPTS)
     val SLEEP_TIME_SECS = 5
     for (i <- 1 to MAX_ATTEMPTS) {
