@@ -19,12 +19,25 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
-import org.apache.spark.sql.types.{MapType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils {
 
   def evalSchemaExpr(exp: Expression): StructType = exp match {
     case Literal(s, StringType) => StructType.fromDDL(s.toString)
+    case e @ SchemaOfCsv(_: Literal, _) =>
+      val ddlSchema = e.eval().asInstanceOf[UTF8String]
+      StructType.fromDDL(ddlSchema.toString)
+    case e => throw new AnalysisException(
+      s"Schema should be specified in DDL format as a string literal instead of ${e.sql}")
+  }
+
+  def evalTypeExpr(exp: Expression): DataType = exp match {
+    case Literal(s, StringType) => DataType.fromDDL(s.toString)
+    case e @ SchemaOfJson(_: Literal, _) =>
+      val ddlSchema = e.eval().asInstanceOf[UTF8String]
+      DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
       s"Schema should be specified in DDL format as a string literal instead of ${e.sql}")
   }
