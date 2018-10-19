@@ -359,6 +359,7 @@ displayTitle: Spark SQL Upgrading Guide
      --conf spark.sql.hive.thriftServer.singleSession=true \
      ...
    {% endhighlight %}
+
  - Since 1.6.1, withColumn method in sparkR supports adding a new column to or replacing existing columns
    of the same name of a DataFrame.
 
