@@ -3894,6 +3894,7 @@ object functions {
    */
   def from_csv(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
     withExpr(new CsvToStructs(e.expr, schema.expr, options.asScala.toMap))
+  }
 
   /**
    * Parses a column containing a CSV string and infers its schema.
