@@ -58,6 +58,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df2, Seq(
       Row(Row(null, null, "0,2013-111-11 12:13:14")),
       Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
+  }
 
   test("infers schemas using options") {
     val df = spark.range(1)
