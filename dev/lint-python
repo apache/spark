@@ -27,7 +27,7 @@ PYDOCSTYLE_REPORT_PATH="$SPARK_ROOT_DIR/dev/pydocstyle-report.txt"
 PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
 PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
 PYDOCSTYLEBUILD="pydocstyle"
-EXPECTED_PYDOCSTYLEVERSION="2.1.1"
+EXPECTED_PYDOCSTYLEVERSION="3.0.0"
 PYDOCSTYLEVERSION=$(python -c 'import pkg_resources; print(pkg_resources.get_distribution("pydocstyle").version)' 2> /dev/null)
 SPHINXBUILD=${SPHINXBUILD:=sphinx-build}
 SPHINX_REPORT_PATH="$SPARK_ROOT_DIR/dev/sphinx-report.txt"
@@ -121,7 +121,7 @@ if hash "$PYDOCSTYLEBUILD" 2> /dev/null; then
         fi
 
     else
-        echo "The pydocstyle version needs to be latest 2.1.1. Skipping pydoc checks for now"
+        echo "The pydocstyle version needs to be latest 3.0.0. Skipping pydoc checks for now"
     fi
 else
   echo >&2 "The pydocstyle command was not found. Skipping pydoc checks for now"
