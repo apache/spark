@@ -276,8 +276,9 @@ of the most common options to set are:
     HDFS directory so driver log files can be persisted for later usage. This directory should allow any Spark
     user to read/write files and the Spark History Server user to delete files. Additionally, older logs from
     this directory are cleaned by Spark History Server if <code>spark.history.fs.driverlog.cleaner.enabled</code>
-    is true. They are cleaned if they are older than max age configured at
-    <code>spark.history.fs.driverlog.cleaner.maxAge</code>.
+    is true or if not configured, falling back to <code>spark.history.fs.cleaner.enabled</code>. They are cleaned
+    if they are older than max age configured at <code>spark.history.fs.driverlog.cleaner.maxAge</code> or if not
+    configured, falling back to <code>spark.history.fs.cleaner.maxAge</code>.
   </td>
 </tr>
 <tr>

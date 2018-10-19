@@ -83,8 +83,9 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       case e: Exception =>
         logError(s"Error in persisting driver logs", e)
     } finally {
-      Utils.tryLogNonFatalError(JavaUtils.deleteRecursively(
-        FileUtils.getFile(localLogFile).getParentFile()))
+      Utils.tryLogNonFatalError {
+        JavaUtils.deleteRecursively(FileUtils.getFile(localLogFile).getParentFile())
+      }
     }
   }
 
