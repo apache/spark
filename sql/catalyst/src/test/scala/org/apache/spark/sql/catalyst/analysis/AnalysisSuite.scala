@@ -314,24 +314,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     // non-primitive parameters do not need special null handling
-    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil)
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil, true :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
-      nullableTypes = true :: false :: Nil)
+      true :: false :: Nil)
     val expected2 =
-      If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
+      If(IsNull(double), nullResult, udf2.copy(inputsNullSafe = true :: true :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
     val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
-      nullableTypes = false :: false :: Nil)
+      false :: false :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3.copy(children = KnownNotNull(short) :: KnownNotNull(double) :: Nil))
+      udf3.copy(inputsNullSafe = true :: true :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
@@ -340,19 +340,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       (s: Short, d: Double) => "x",
       StringType,
       short :: double.withNullability(false) :: Nil,
-      nullableTypes = false :: false :: Nil)
+      false :: false :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4.copy(children = KnownNotNull(short) :: double.withNullability(false) :: Nil))
+      udf4.copy(inputsNullSafe = true :: true :: Nil))
     // checkUDF(udf4, expected4)
   }
 
   test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
     val a = testRelation.output(0)
     val func = (x: Int, y: Int) => x + y
-    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil, nullableTypes = false :: false :: Nil)
-    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil, nullableTypes = false :: false :: Nil)
+    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil, false :: false :: Nil)
+    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil, false :: false :: Nil)
     val plan = Project(Alias(udf2, "")() :: Nil, testRelation)
     comparePlans(plan.analyze, plan.analyze.analyze)
   }
