@@ -60,8 +60,8 @@ object CSVUtils {
   }
 
   /**
-    * Generates a header from the given row which is null-safe and duplicate-safe.
-    */
+   * Generates a header from the given row which is null-safe and duplicate-safe.
+   */
   def makeSafeHeader(
       row: Array[String],
       caseSensitive: Boolean,
@@ -74,6 +74,7 @@ object CSVUtils {
         // scalastyle:on caselocale
         headerNames.diff(headerNames.distinct).distinct
       }
+
       row.zipWithIndex.map { case (value, index) =>
         if (value == null || value.isEmpty || value == options.nullValue) {
           // When there are empty strings or the values set in `nullValue`, put the
