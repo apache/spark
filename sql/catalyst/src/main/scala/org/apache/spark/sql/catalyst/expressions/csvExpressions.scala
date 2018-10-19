@@ -21,6 +21,7 @@ import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util._
@@ -137,7 +138,7 @@ case class CsvToStructs(
 case class SchemaOfCsv(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with String2StringExpression with CodegenFallback {
+  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -145,20 +146,32 @@ case class SchemaOfCsv(
     child = child,
     options = ExprUtils.convertToMapData(options))
 
-  override def convert(v: UTF8String): UTF8String = {
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[DataType] = Seq(StringType)
+
+  override def nullable: Boolean = false
+
+  @transient
+  private lazy val csv = child.eval().asInstanceOf[UTF8String]
+
+  override def checkInputDataTypes(): TypeCheckResult = child match {
+    case Literal(s, StringType) if s != null => super.checkInputDataTypes()
+    case _ => TypeCheckResult.TypeCheckFailure(
+      s"The input csv should be a string literal and not null; however, got ${child.sql}.")
+  }
+
+  override def eval(v: InternalRow = EmptyRow): Any = {
     val parsedOptions = new CSVOptions(options, true, "UTC")
     val parser = new CsvParser(parsedOptions.asParserSettings)
-    val row = parser.parseLine(v.toString)
+    val row = parser.parseLine(csv.toString)
+    assert(row != null, "Parsed CSV record should not be null.")
 
-    if (row != null) {
-      val header = row.zipWithIndex.map { case (_, index) => s"_c$index" }
-      val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-      val fieldTypes = CSVInferSchema.inferRowType(parsedOptions)(startType, row)
-      val st = StructType(CSVInferSchema.toStructFields(fieldTypes, header, parsedOptions))
-      UTF8String.fromString(st.catalogString)
-    } else {
-      null
-    }
+    val header = row.zipWithIndex.map { case (_, index) => s"_c$index" }
+    val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
+    val fieldTypes = CSVInferSchema.inferRowType(parsedOptions)(startType, row)
+    val st = StructType(CSVInferSchema.toStructFields(fieldTypes, header, parsedOptions))
+    UTF8String.fromString(st.catalogString)
   }
 
   override def prettyName: String = "schema_of_csv"

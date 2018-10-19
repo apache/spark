@@ -8,5 +8,10 @@ select from_csv('1', 'a INT', named_struct('mode', 'PERMISSIVE'));
 select from_csv('1', 'a INT', map('mode', 1));
 select from_csv();
 -- infer schema of json literal
-select schema_of_csv('1,abc');
+select from_csv('1,abc', schema_of_csv('1,abc'));
 select schema_of_csv('1|abc', map('delimiter', '|'));
+select schema_of_csv(null);
+CREATE TEMPORARY VIEW csvTable(csvField, a) AS SELECT * FROM VALUES ('1,abc', 'a');
+SELECT schema_of_csv(csvField) FROM csvTable;
+-- Clean up
+DROP VIEW IF EXISTS csvTable;
