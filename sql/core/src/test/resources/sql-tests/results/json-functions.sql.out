@@ -44,7 +44,7 @@ Usage: to_json(expr[, options]) - Returns a JSON string with a given struct valu
 -- !query 2
 select to_json(named_struct('a', 1, 'b', 2))
 -- !query 2 schema
-struct<structstojson(named_struct(a, 1, b, 2)):string>
+struct<to_json(named_struct(a, 1, b, 2)):string>
 -- !query 2 output
 {"a":1,"b":2}
 
@@ -52,7 +52,7 @@ struct<structstojson(named_struct(a, 1, b, 2)):string>
 -- !query 3
 select to_json(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'))
 -- !query 3 schema
-struct<structstojson(named_struct(time, to_timestamp('2015-08-26', 'yyyy-MM-dd'))):string>
+struct<to_json(named_struct(time, to_timestamp('2015-08-26', 'yyyy-MM-dd'))):string>
 -- !query 3 output
 {"time":"26/08/2015"}
 
@@ -60,7 +60,7 @@ struct<structstojson(named_struct(time, to_timestamp('2015-08-26', 'yyyy-MM-dd')
 -- !query 4
 select to_json(array(named_struct('a', 1, 'b', 2)))
 -- !query 4 schema
-struct<structstojson(array(named_struct(a, 1, b, 2))):string>
+struct<to_json(array(named_struct(a, 1, b, 2))):string>
 -- !query 4 output
 [{"a":1,"b":2}]
 
@@ -68,7 +68,7 @@ struct<structstojson(array(named_struct(a, 1, b, 2))):string>
 -- !query 5
 select to_json(map(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 2)))
 -- !query 5 schema
-struct<structstojson(map(named_struct(a, 1, b, 2), named_struct(a, 1, b, 2))):string>
+struct<to_json(map(named_struct(a, 1, b, 2), named_struct(a, 1, b, 2))):string>
 -- !query 5 output
 {"[1,2]":{"a":1,"b":2}}
 
@@ -76,7 +76,7 @@ struct<structstojson(map(named_struct(a, 1, b, 2), named_struct(a, 1, b, 2))):st
 -- !query 6
 select to_json(map('a', named_struct('a', 1, 'b', 2)))
 -- !query 6 schema
-struct<structstojson(map(a, named_struct(a, 1, b, 2))):string>
+struct<to_json(map(a, named_struct(a, 1, b, 2))):string>
 -- !query 6 output
 {"a":{"a":1,"b":2}}
 
@@ -84,7 +84,7 @@ struct<structstojson(map(a, named_struct(a, 1, b, 2))):string>
 -- !query 7
 select to_json(map('a', 1))
 -- !query 7 schema
-struct<structstojson(map(a, 1)):string>
+struct<to_json(map(a, 1)):string>
 -- !query 7 output
 {"a":1}
 
@@ -92,7 +92,7 @@ struct<structstojson(map(a, 1)):string>
 -- !query 8
 select to_json(array(map('a',1)))
 -- !query 8 schema
-struct<structstojson(array(map(a, 1))):string>
+struct<to_json(array(map(a, 1))):string>
 -- !query 8 output
 [{"a":1}]
 
@@ -100,7 +100,7 @@ struct<structstojson(array(map(a, 1))):string>
 -- !query 9
 select to_json(array(map('a',1), map('b',2)))
 -- !query 9 schema
-struct<structstojson(array(map(a, 1), map(b, 2))):string>
+struct<to_json(array(map(a, 1), map(b, 2))):string>
 -- !query 9 output
 [{"a":1},{"b":2}]
 
@@ -164,7 +164,7 @@ Usage: from_json(jsonStr, schema[, options]) - Returns a struct value with the g
 -- !query 15
 select from_json('{"a":1}', 'a INT')
 -- !query 15 schema
-struct<jsontostructs({"a":1}):struct<a:int>>
+struct<from_json({"a":1}):struct<a:int>>
 -- !query 15 output
 {"a":1}
 
@@ -172,7 +172,7 @@ struct<jsontostructs({"a":1}):struct<a:int>>
 -- !query 16
 select from_json('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'))
 -- !query 16 schema
-struct<jsontostructs({"time":"26/08/2015"}):struct<time:timestamp>>
+struct<from_json({"time":"26/08/2015"}):struct<time:timestamp>>
 -- !query 16 output
 {"time":2015-08-26 00:00:00.0}
 
@@ -271,7 +271,7 @@ struct<entries:map<string,int>>
 -- !query 27
 select from_json('{"a":1, "b":"2"}', 'struct<a:int,b:string>')
 -- !query 27 schema
-struct<jsontostructs({"a":1, "b":"2"}):struct<a:int,b:string>>
+struct<from_json({"a":1, "b":"2"}):struct<a:int,b:string>>
 -- !query 27 output
 {"a":1,"b":"2"}
 
@@ -279,7 +279,7 @@ struct<jsontostructs({"a":1, "b":"2"}):struct<a:int,b:string>>
 -- !query 28
 select schema_of_json('{"c1":0, "c2":[1]}')
 -- !query 28 schema
-struct<schemaofjson({"c1":0, "c2":[1]}):string>
+struct<schema_of_json({"c1":0, "c2":[1]}):string>
 -- !query 28 output
 struct<c1:bigint,c2:array<bigint>>
 
@@ -287,7 +287,7 @@ struct<c1:bigint,c2:array<bigint>>
 -- !query 29
 select from_json('{"c1":[1, 2, 3]}', schema_of_json('{"c1":[0]}'))
 -- !query 29 schema
-struct<jsontostructs({"c1":[1, 2, 3]}):struct<c1:array<bigint>>>
+struct<from_json({"c1":[1, 2, 3]}):struct<c1:array<bigint>>>
 -- !query 29 output
 {"c1":[1,2,3]}
 
@@ -295,7 +295,7 @@ struct<jsontostructs({"c1":[1, 2, 3]}):struct<c1:array<bigint>>>
 -- !query 30
 select from_json('[1, 2, 3]', 'array<int>')
 -- !query 30 schema
-struct<jsontostructs([1, 2, 3]):array<int>>
+struct<from_json([1, 2, 3]):array<int>>
 -- !query 30 output
 [1,2,3]
 
@@ -303,7 +303,7 @@ struct<jsontostructs([1, 2, 3]):array<int>>
 -- !query 31
 select from_json('[1, "2", 3]', 'array<int>')
 -- !query 31 schema
-struct<jsontostructs([1, "2", 3]):array<int>>
+struct<from_json([1, "2", 3]):array<int>>
 -- !query 31 output
 NULL
 
@@ -311,7 +311,7 @@ NULL
 -- !query 32
 select from_json('[1, 2, null]', 'array<int>')
 -- !query 32 schema
-struct<jsontostructs([1, 2, null]):array<int>>
+struct<from_json([1, 2, null]):array<int>>
 -- !query 32 output
 [1,2,null]
 
@@ -319,7 +319,7 @@ struct<jsontostructs([1, 2, null]):array<int>>
 -- !query 33
 select from_json('[{"a": 1}, {"a":2}]', 'array<struct<a:int>>')
 -- !query 33 schema
-struct<jsontostructs([{"a": 1}, {"a":2}]):array<struct<a:int>>>
+struct<from_json([{"a": 1}, {"a":2}]):array<struct<a:int>>>
 -- !query 33 output
 [{"a":1},{"a":2}]
 
@@ -327,7 +327,7 @@ struct<jsontostructs([{"a": 1}, {"a":2}]):array<struct<a:int>>>
 -- !query 34
 select from_json('{"a": 1}', 'array<struct<a:int>>')
 -- !query 34 schema
-struct<jsontostructs({"a": 1}):array<struct<a:int>>>
+struct<from_json({"a": 1}):array<struct<a:int>>>
 -- !query 34 output
 [{"a":1}]
 
@@ -335,7 +335,7 @@ struct<jsontostructs({"a": 1}):array<struct<a:int>>>
 -- !query 35
 select from_json('[null, {"a":2}]', 'array<struct<a:int>>')
 -- !query 35 schema
-struct<jsontostructs([null, {"a":2}]):array<struct<a:int>>>
+struct<from_json([null, {"a":2}]):array<struct<a:int>>>
 -- !query 35 output
 [null,{"a":2}]
 
@@ -343,7 +343,7 @@ struct<jsontostructs([null, {"a":2}]):array<struct<a:int>>>
 -- !query 36
 select from_json('[{"a": 1}, {"b":2}]', 'array<map<string,int>>')
 -- !query 36 schema
-struct<jsontostructs([{"a": 1}, {"b":2}]):array<map<string,int>>>
+struct<from_json([{"a": 1}, {"b":2}]):array<map<string,int>>>
 -- !query 36 output
 [{"a":1},{"b":2}]
 
@@ -351,7 +351,7 @@ struct<jsontostructs([{"a": 1}, {"b":2}]):array<map<string,int>>>
 -- !query 37
 select from_json('[{"a": 1}, 2]', 'array<map<string,int>>')
 -- !query 37 schema
-struct<jsontostructs([{"a": 1}, 2]):array<map<string,int>>>
+struct<from_json([{"a": 1}, 2]):array<map<string,int>>>
 -- !query 37 output
 NULL
 
@@ -359,7 +359,7 @@ NULL
 -- !query 38
 select to_json(array('1', '2', '3'))
 -- !query 38 schema
-struct<structstojson(array(1, 2, 3)):string>
+struct<to_json(array(1, 2, 3)):string>
 -- !query 38 output
 ["1","2","3"]
 
@@ -367,7 +367,7 @@ struct<structstojson(array(1, 2, 3)):string>
 -- !query 39
 select to_json(array(array(1, 2, 3), array(4)))
 -- !query 39 schema
-struct<structstojson(array(array(1, 2, 3), array(4))):string>
+struct<to_json(array(array(1, 2, 3), array(4))):string>
 -- !query 39 output
 [[1,2,3],[4]]
 
@@ -375,7 +375,7 @@ struct<structstojson(array(array(1, 2, 3), array(4))):string>
 -- !query 40
 select schema_of_json('{"c1":1}', map('primitivesAsString', 'true'))
 -- !query 40 schema
-struct<schemaofjson({"c1":1}):string>
+struct<schema_of_json({"c1":1}):string>
 -- !query 40 output
 struct<c1:string>
 
@@ -383,6 +383,6 @@ struct<c1:string>
 -- !query 41
 select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'true', 'prefersDecimal', 'true'))
 -- !query 41 schema
-struct<schemaofjson({"c1":01, "c2":0.1}):string>
+struct<schema_of_json({"c1":01, "c2":0.1}):string>
 -- !query 41 output
 struct<c1:bigint,c2:decimal(1,1)>
