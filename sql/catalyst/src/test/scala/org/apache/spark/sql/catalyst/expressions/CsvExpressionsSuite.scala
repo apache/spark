@@ -154,6 +154,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
         InternalRow(null))
     }.getCause
     assert(exception.getMessage.contains("from_csv() doesn't support the DROPMALFORMED mode"))
+  }
 
   test("infer schema of CSV strings") {
     checkEvaluation(new SchemaOfCsv(Literal.create("1,abc")), "struct<_c0:int,_c1:string>")
