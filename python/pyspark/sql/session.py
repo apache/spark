@@ -270,8 +270,16 @@ class SparkSession(object):
         >>> df.select("age").collect()
         [Row(age=1)]
         """
-        from pyspark.sql import functions
-        return functions._getActiveSession()
+        from pyspark import SparkContext
+        sc = SparkContext._active_spark_context
+        if sc is None:
+            return None
+        else:
+            if sc._jvm.SparkSession.getActiveSession().isDefined():
+                SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
+                return SparkSession._activeSession
+            else:
+                return None
 
     @property
     @since(2.0)

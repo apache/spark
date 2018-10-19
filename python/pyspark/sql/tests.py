@@ -3926,7 +3926,7 @@ class SparkSessionTests2(unittest.TestCase):
         finally:
             spark.stop()
 
-    def test_config_option_propagated_to_existing_SparkSession(self):
+    def test_config_option_propagated_to_existing_session(self):
         session1 = SparkSession.builder \
             .master("local") \
             .config("spark-config1", "a") \
@@ -3968,38 +3968,50 @@ class SparkSessionTests2(unittest.TestCase):
     def test_active_session_with_None_and_not_None_context(self):
         from pyspark.context import SparkContext
         from pyspark.conf import SparkConf
-        sc = SparkContext._active_spark_context
-        self.assertEqual(sc, None)
-        activeSession = SparkSession.getActiveSession()
-        self.assertEqual(activeSession, None)
-        sparkConf = SparkConf()
-        sc = SparkContext.getOrCreate(sparkConf)
-        activeSession = sc._jvm.SparkSession.getActiveSession()
-        self.assertFalse(activeSession.isDefined())
-        session = SparkSession(sc)
-        activeSession = sc._jvm.SparkSession.getActiveSession()
-        self.assertTrue(activeSession.isDefined())
-        activeSession2 = SparkSession.getActiveSession()
-        self.assertNotEqual(activeSession2, None)
+        sc = None
+        session = None
+        try:
+            sc = SparkContext._active_spark_context
+            self.assertEqual(sc, None)
+            activeSession = SparkSession.getActiveSession()
+            self.assertEqual(activeSession, None)
+            sparkConf = SparkConf()
+            sc = SparkContext.getOrCreate(sparkConf)
+            activeSession = sc._jvm.SparkSession.getActiveSession()
+            self.assertFalse(activeSession.isDefined())
+            session = SparkSession(sc)
+            activeSession = sc._jvm.SparkSession.getActiveSession()
+            self.assertTrue(activeSession.isDefined())
+            activeSession2 = SparkSession.getActiveSession()
+            self.assertNotEqual(activeSession2, None)
+        finally:
+            if session is not None:
+                session.stop()
+            if sc is not None:
+                sc.stop()
 
 
 class SparkSessionTests3(ReusedSQLTestCase):
 
     def test_get_active_session_after_create_dataframe(self):
-        activeSession1 = SparkSession.getActiveSession()
-        session1 = self.spark
-        self.assertEqual(session1, activeSession1)
-        session2 = self.spark.newSession()
-        activeSession2 = SparkSession.getActiveSession()
-        self.assertEqual(session1, activeSession2)
-        self.assertNotEqual(session2, activeSession2)
-        session2.createDataFrame([(1, 'Alice')], ['age', 'name'])
-        activeSession3 = SparkSession.getActiveSession()
-        self.assertEqual(session2, activeSession3)
-        session1.createDataFrame([(1, 'Alice')], ['age', 'name'])
-        activeSession4 = SparkSession.getActiveSession()
-        self.assertEqual(session1, activeSession4)
-        session2.stop()
+        session2 = None
+        try:
+            activeSession1 = SparkSession.getActiveSession()
+            session1 = self.spark
+            self.assertEqual(session1, activeSession1)
+            session2 = self.spark.newSession()
+            activeSession2 = SparkSession.getActiveSession()
+            self.assertEqual(session1, activeSession2)
+            self.assertNotEqual(session2, activeSession2)
+            session2.createDataFrame([(1, 'Alice')], ['age', 'name'])
+            activeSession3 = SparkSession.getActiveSession()
+            self.assertEqual(session2, activeSession3)
+            session1.createDataFrame([(1, 'Alice')], ['age', 'name'])
+            activeSession4 = SparkSession.getActiveSession()
+            self.assertEqual(session1, activeSession4)
+        finally:
+            if session2 is not None:
+                session2.stop()
 
 
 class UDFInitializationTests(unittest.TestCase):

@@ -2713,25 +2713,6 @@ def from_csv(col, schema, options={}):
     return Column(jc)
 
 
-@since(3.0)
-def _getActiveSession():
-    """
-    Returns the active SparkSession for the current thread
-    This method is not intended for user to call directly.
-    It is only used for getActiveSession method in session.py
-    """
-    from pyspark.sql import SparkSession
-    sc = SparkContext._active_spark_context
-    if sc is None:
-        return None
-    else:
-        if sc._jvm.SparkSession.getActiveSession().isDefined():
-            SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
-            return SparkSession._activeSession
-        else:
-            return None
-
-
 # ---------------------------- User Defined Function ----------------------------------
 
 class PandasUDFType(object):
