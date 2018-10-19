@@ -860,7 +860,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logFiles.foreach { f =>
           try {
             val info = listing.read(classOf[LogInfo], f.getPath().toString())
-            if (info.fileSize < f.getLen()) {
+            if (info.fileSize < f.getLen() || info.lastProcessed < f.getModificationTime()) {
               listing.write(info.copy(f.getPath().toString(), currentTime, None, None, f.getLen()))
               deleteDir = false
             } else if (info.lastProcessed > maxTime) {
