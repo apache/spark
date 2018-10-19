@@ -340,38 +340,39 @@ private[hive] case class HiveUDAFFunction(
     resolver.getEvaluator(parameterInfo)
   }
 
-  private case class PartialEvaluator(
-    evaluator: GenericUDAFEvaluator,
-    objectInspector: ObjectInspector)
+  private case class HiveEvaluator(
+      evaluator: GenericUDAFEvaluator,
+      objectInspector: ObjectInspector)
 
   // The UDAF evaluator used to consume raw input rows and produce partial aggregation results.
   // Hive `ObjectInspector` used to inspect partial aggregation results.
   @transient
-  private lazy val partial1Mode = {
+  private lazy val partial1HiveEvaluator = {
     val evaluator = newEvaluator()
-    PartialEvaluator(evaluator, evaluator.init(GenericUDAFEvaluator.Mode.PARTIAL1, inputInspectors))
+    HiveEvaluator(evaluator, evaluator.init(GenericUDAFEvaluator.Mode.PARTIAL1, inputInspectors))
   }
 
   // The UDAF evaluator used to merge partial aggregation results.
   @transient
   private lazy val partial2ModeEvaluator = {
     val evaluator = newEvaluator()
-    evaluator.init(GenericUDAFEvaluator.Mode.PARTIAL2, Array(partial1Mode.objectInspector))
+    evaluator.init(GenericUDAFEvaluator.Mode.PARTIAL2, Array(partial1HiveEvaluator.objectInspector))
     evaluator
   }
 
   // Spark SQL data type of partial aggregation results
   @transient
-  private lazy val partialResultDataType = inspectorToDataType(partial1Mode.objectInspector)
+  private lazy val partialResultDataType =
+    inspectorToDataType(partial1HiveEvaluator.objectInspector)
 
   // The UDAF evaluator used to compute the final result from a partial aggregation result objects.
   // Hive `ObjectInspector` used to inspect the final aggregation result object.
   @transient
-  private lazy val finalMode = {
+  private lazy val finalHiveEvaluator = {
     val evaluator = newEvaluator()
-    PartialEvaluator(
+    HiveEvaluator(
       evaluator,
-      evaluator.init(GenericUDAFEvaluator.Mode.FINAL, Array(partial1Mode.objectInspector)))
+      evaluator.init(GenericUDAFEvaluator.Mode.FINAL, Array(partial1HiveEvaluator.objectInspector)))
   }
 
   // Wrapper functions used to wrap Spark SQL input arguments into Hive specific format.
@@ -381,7 +382,7 @@ private[hive] case class HiveUDAFFunction(
   // Unwrapper function used to unwrap final aggregation result objects returned by Hive UDAFs into
   // Spark SQL specific format.
   @transient
-  private lazy val resultUnwrapper = unwrapperFor(finalMode.objectInspector)
+  private lazy val resultUnwrapper = unwrapperFor(finalHiveEvaluator.objectInspector)
 
   @transient
   private lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
@@ -391,7 +392,7 @@ private[hive] case class HiveUDAFFunction(
 
   override def nullable: Boolean = true
 
-  override lazy val dataType: DataType = inspectorToDataType(finalMode.objectInspector)
+  override lazy val dataType: DataType = inspectorToDataType(finalHiveEvaluator.objectInspector)
 
   override def prettyName: String = name
 
@@ -401,13 +402,13 @@ private[hive] case class HiveUDAFFunction(
   }
 
   override def createAggregationBuffer(): AggregationBuffer =
-    partial1Mode.evaluator.getNewAggregationBuffer
+    partial1HiveEvaluator.evaluator.getNewAggregationBuffer
 
   @transient
   private lazy val inputProjection = UnsafeProjection.create(children)
 
   override def update(buffer: AggregationBuffer, input: InternalRow): AggregationBuffer = {
-    partial1Mode.evaluator.iterate(
+    partial1HiveEvaluator.evaluator.iterate(
       buffer, wrap(inputProjection(input), inputWrappers, cached, inputDataTypes))
     buffer
   }
@@ -417,12 +418,12 @@ private[hive] case class HiveUDAFFunction(
     // buffer in the 3rd format mentioned in the ScalaDoc of this class. Originally, Hive converts
     // this `AggregationBuffer`s into this format before shuffling partial aggregation results, and
     // calls `GenericUDAFEvaluator.terminatePartial()` to do the conversion.
-    partial2ModeEvaluator.merge(buffer, partial1Mode.evaluator.terminatePartial(input))
+    partial2ModeEvaluator.merge(buffer, partial1HiveEvaluator.evaluator.terminatePartial(input))
     buffer
   }
 
   override def eval(buffer: AggregationBuffer): Any = {
-    resultUnwrapper(finalMode.evaluator.terminate(buffer))
+    resultUnwrapper(finalHiveEvaluator.evaluator.terminate(buffer))
   }
 
   override def serialize(buffer: AggregationBuffer): Array[Byte] = {
@@ -439,10 +440,10 @@ private[hive] case class HiveUDAFFunction(
 
   // Helper class used to de/serialize Hive UDAF `AggregationBuffer` objects
   private class AggregationBufferSerDe {
-    private val partialResultUnwrapper = unwrapperFor(partial1Mode.objectInspector)
+    private val partialResultUnwrapper = unwrapperFor(partial1HiveEvaluator.objectInspector)
 
     private val partialResultWrapper =
-      wrapperFor(partial1Mode.objectInspector, partialResultDataType)
+      wrapperFor(partial1HiveEvaluator.objectInspector, partialResultDataType)
 
     private val projection = UnsafeProjection.create(Array(partialResultDataType))
 
@@ -452,7 +453,8 @@ private[hive] case class HiveUDAFFunction(
       // `GenericUDAFEvaluator.terminatePartial()` converts an `AggregationBuffer` into an object
       // that can be inspected by the `ObjectInspector` returned by `GenericUDAFEvaluator.init()`.
       // Then we can unwrap it to a Spark SQL value.
-      mutableRow.update(0, partialResultUnwrapper(partial1Mode.evaluator.terminatePartial(buffer)))
+      mutableRow.update(0, partialResultUnwrapper(
+        partial1HiveEvaluator.evaluator.terminatePartial(buffer)))
       val unsafeRow = projection(mutableRow)
       val bytes = ByteBuffer.allocate(unsafeRow.getSizeInBytes)
       unsafeRow.writeTo(bytes)
