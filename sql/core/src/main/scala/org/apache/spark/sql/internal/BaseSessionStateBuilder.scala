@@ -95,7 +95,8 @@ abstract class BaseSessionStateBuilder(
    * This either gets cloned from a pre-existing version or cloned from the built-in registry.
    */
   protected lazy val functionRegistry: FunctionRegistry = {
-    parentState.map(_.functionRegistry).getOrElse(FunctionRegistry.builtin).clone()
+    parentState.map(_.functionRegistry.clone())
+      .getOrElse(extensions.registerFunctions(FunctionRegistry.builtin.clone()))
   }
 
   /**
