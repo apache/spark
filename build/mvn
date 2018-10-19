@@ -139,8 +139,17 @@ if [ "$1" == "--force" ]; then
   shift
 fi
 
+if [ "$1" == "--zinc" ]; then
+  echo "Using zinc for incremental compilation. Be sure you are aware of the implications of "
+  echo "running this server process on your machine"
+  USE_ZINC=1
+  shift
+fi
+
 # Install the proper version of Scala, Zinc and Maven for the build
-install_zinc
+if [ -n "${USE_ZINC}" ]; then
+  install_zinc
+fi
 install_scala
 install_mvn
 
@@ -149,12 +158,15 @@ cd "${_CALLING_DIR}"
 
 # Now that zinc is ensured to be installed, check its status and, if its
 # not running or just installed, start it
-if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`"${ZINC_BIN}" -status -port ${ZINC_PORT}`" ]; then
-  export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
-  "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
-  "${ZINC_BIN}" -start -port ${ZINC_PORT} \
-    -scala-compiler "${SCALA_COMPILER}" \
-    -scala-library "${SCALA_LIBRARY}" &>/dev/null
+if [ -n "${USE_ZINC}" ]; then
+  if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`"${ZINC_BIN}" -status -port ${ZINC_PORT}`" ]; then
+    export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
+    "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
+    "${ZINC_BIN}" -start -port ${ZINC_PORT} -server 127.0.0.1 \
+      -idle-timeout 30m \
+      -scala-compiler "${SCALA_COMPILER}" \
+      -scala-library "${SCALA_LIBRARY}" &>/dev/null
+  fi
 fi
 
 # Set any `mvn` options if not already present
@@ -164,3 +176,8 @@ echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
 # Last, call the `mvn` command as usual
 "${MVN_BIN}" -DzincPort=${ZINC_PORT} "$@"
+
+if [ -n "${USE_ZINC}" ]; then
+  # Try to shut down zinc explicitly
+  "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
+fi
