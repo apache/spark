@@ -249,15 +249,6 @@ def get_zinc_port():
     return random.randrange(3030, 4030)
 
 
-def kill_zinc_on_port(zinc_port):
-    """
-    Kill the Zinc process running on the given port, if one exists.
-    """
-    cmd = "%s -P |grep %s | grep LISTEN | awk '{ print $2; }' | xargs kill"
-    lsof_exe = which("lsof")
-    subprocess.check_call(cmd % (lsof_exe if lsof_exe else "/usr/sbin/lsof", zinc_port), shell=True)
-
-
 def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
@@ -267,7 +258,6 @@ def exec_maven(mvn_args=()):
     zinc_flag = "-DzincPort=%s" % zinc_port
     flags = [os.path.join(SPARK_HOME, "build", "mvn"), "--force", zinc_flag]
     run_cmd(flags + mvn_args)
-    kill_zinc_on_port(zinc_port)
 
 
 def exec_sbt(sbt_args=()):

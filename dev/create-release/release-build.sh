@@ -323,9 +323,6 @@ if [[ "$1" == "publish-snapshot" ]]; then
   #$MVN -DzincPort=$ZINC_PORT --settings $tmp_settings \
   #  -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
 
-  # Clean-up Zinc nailgun process
-  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
-
   rm $tmp_settings
   cd ..
   exit 0
@@ -359,9 +356,6 @@ if [[ "$1" == "publish-release" ]]; then
   #./dev/change-scala-version.sh 2.12
   #$MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo \
   #  -DskipTests $SCALA_2_12_PROFILES §$PUBLISH_PROFILES clean install
-
-  # Clean-up Zinc nailgun process
-  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   #./dev/change-scala-version.sh 2.11
 
