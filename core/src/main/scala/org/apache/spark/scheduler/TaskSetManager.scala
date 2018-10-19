@@ -637,7 +637,7 @@ private[spark] class TaskSetManager(
    */
   private[scheduler] def getCompletelyBlacklistedTaskIfAny(
       hostToExecutors: HashMap[String, HashSet[String]]): Option[Int] = {
-    taskSetBlacklistHelperOpt.foreach { taskSetBlacklist =>
+    taskSetBlacklistHelperOpt.flatMap { taskSetBlacklist =>
       val appBlacklist = blacklistTracker.get
       // Only look for unschedulable tasks when at least one executor has registered. Otherwise,
       // task sets will be (unnecessarily) aborted in cases when no executors have registered yet.
@@ -658,11 +658,11 @@ private[spark] class TaskSetManager(
           }
         }
 
-        pendingTask.foreach { indexInTaskSet =>
+        pendingTask.find { indexInTaskSet =>
           // try to find some executor this task can run on.  Its possible that some *other*
           // task isn't schedulable anywhere, but we will discover that in some later call,
           // when that unschedulable task is the last task remaining.
-          val blacklistedEverywhere = hostToExecutors.forall { case (host, execsOnHost) =>
+          hostToExecutors.forall { case (host, execsOnHost) =>
             // Check if the task can run on the node
             val nodeBlacklisted =
               appBlacklist.isNodeBlacklisted(host) ||
@@ -679,14 +679,11 @@ private[spark] class TaskSetManager(
               }
             }
           }
-
-          if (blacklistedEverywhere) {
-            return Some(indexInTaskSet)
-          }
         }
+      } else {
+        None
       }
     }
-    None
   }
 
   private[scheduler] def abortSinceCompletelyBlacklisted(indexInTaskSet: Int): Unit = {

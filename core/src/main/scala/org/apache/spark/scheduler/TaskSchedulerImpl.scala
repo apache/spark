@@ -423,7 +423,7 @@ private[spark] class TaskSchedulerImpl(
 
         if (!launchedAnyTask) {
           taskSet.getCompletelyBlacklistedTaskIfAny(hostToExecutors) match {
-            case taskIndex: Some[Int] => // Returns the taskIndex which was unschedulable
+            case Some(taskIndex) => // Returns the taskIndex which was unschedulable
 
               // If the taskSet is unschedulable we try to find an existing idle blacklisted
               // executor. If we cannot find one, we abort immediately. Else we kill the idle
@@ -447,34 +447,23 @@ private[spark] class TaskSchedulerImpl(
                     val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
                     logInfo(s"Waiting for $timeout ms for completely "
                       + s"blacklisted task to be schedulable again before aborting $taskSet.")
-                    abortTimer.schedule(new TimerTask() {
-                      override def run() {
-                        if (unschedulableTaskSetToExpiryTime.contains(taskSet) &&
-                          (unschedulableTaskSetToExpiryTime(taskSet) + timeout)
-                            <= clock.getTimeMillis()
-                        ) {
-                          logInfo("Cannot schedule any task because of complete blacklisting. " +
-                            s"Wait time for scheduling expired. Aborting $taskSet.")
-                          taskSet.abortSinceCompletelyBlacklisted(taskIndex.get)
-                        } else {
-                          this.cancel()
-                        }
-                      }
-                    }, timeout)
+                    abortTimer.schedule(getAbortTimer(taskSet, taskIndex, timeout), timeout)
                   }
                 case _ => // Abort Immediately
                   logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
                     s" executors can be found to kill. Aborting $taskSet." )
-                  taskSet.abortSinceCompletelyBlacklisted(taskIndex.get)
+                  taskSet.abortSinceCompletelyBlacklisted(taskIndex)
               }
             case _ => // Do nothing if no tasks completely blacklisted.
           }
         } else {
-          // If a task was scheduled, we clear the expiry time for all the taskSets. This ensures
-          // that we have got atleast a non blacklisted executor and the job can progress. The
-          // abort timer checks this entry to decide if we want to abort the taskSet.
+          // We want to differ killing any taskSets as long as we have a non blacklisted executor
+          // which can be used to schedule a task from any active taskSets. This ensures that the
+          // job can make progress and if we encounter a flawed taskSet it will eventually either
+          // fail or abort due to being completely blacklisted.
           if (unschedulableTaskSetToExpiryTime.nonEmpty) {
-            logInfo("Clearing the expiry times for all unschedulable taskSets as")
+            logInfo("Clearing the expiry times for all unschedulable taskSets as a task was " +
+              "recently scheduled.")
             unschedulableTaskSetToExpiryTime.clear()
           }
         }
@@ -512,6 +501,22 @@ private[spark] class TaskSchedulerImpl(
       hasLaunchedTask = true
     }
     return tasks
+  }
+
+  private def getAbortTimer(taskSet: TaskSetManager, taskIndex: Int, timeout: Long): TimerTask = {
+    new TimerTask() {
+      override def run() {
+        if (unschedulableTaskSetToExpiryTime.contains(taskSet) &&
+          (unschedulableTaskSetToExpiryTime(taskSet) + timeout) <= clock.getTimeMillis()
+        ) {
+          logInfo("Cannot schedule any task because of complete blacklisting. " +
+            s"Wait time for scheduling expired. Aborting $taskSet.")
+          taskSet.abortSinceCompletelyBlacklisted(taskIndex)
+        } else {
+          this.cancel()
+        }
+      }
+    }
   }
 
   /**
