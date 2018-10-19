@@ -30,7 +30,8 @@ object ExprUtils {
       val ddlSchema = e.eval().asInstanceOf[UTF8String]
       StructType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
-      s"Schema should be specified in DDL format as a string literal instead of ${e.sql}")
+      "Schema should be specified in DDL format as a string literal or output of " +
+        s"the schema_of_csv function instead of ${e.sql}")
   }
 
   def evalTypeExpr(exp: Expression): DataType = exp match {
@@ -39,7 +40,8 @@ object ExprUtils {
       val ddlSchema = e.eval().asInstanceOf[UTF8String]
       DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
-      s"Schema should be specified in DDL format as a string literal instead of ${e.sql}")
+      "Schema should be specified in DDL format as a string literal or output of " +
+        s"the schema_of_json function instead of ${e.sql}")
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
