@@ -73,19 +73,24 @@ case class UserDefinedFunction protected[sql] (
    */
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
-    if (inputTypes.isDefined && nullableTypes.isDefined) {
-      require(inputTypes.get.length == nullableTypes.get.length)
+    // TODO: make sure this class is only instantiated through `SparkUserDefinedFunction.create()`
+    // and `nullableTypes` is always set.
+    if (nullableTypes.isEmpty) {
+      nullableTypes = Some(ScalaReflection.getParameterTypeNullability(f))
+    }
+    if (inputTypes.isDefined) {
+      assert(inputTypes.get.length == nullableTypes.get.length)
     }
 
     Column(ScalaUDF(
       f,
       dataType,
       exprs.map(_.expr),
+      nullableTypes.get,
       inputTypes.getOrElse(Nil),
       udfName = _nameOption,
       nullable = _nullable,
-      udfDeterministic = _deterministic,
-      nullableTypes = nullableTypes.getOrElse(Nil)))
+      udfDeterministic = _deterministic))
   }
 
   private def copyAll(): UserDefinedFunction = {
@@ -146,9 +151,14 @@ private[sql] object SparkUserDefinedFunction {
   def create(
       f: AnyRef,
       dataType: DataType,
-      inputSchemas: Option[Seq[ScalaReflection.Schema]]): UserDefinedFunction = {
-    val udf = new UserDefinedFunction(f, dataType, inputSchemas.map(_.map(_.dataType)))
-    udf.nullableTypes = inputSchemas.map(_.map(_.nullable))
+      inputSchemas: Seq[Option[ScalaReflection.Schema]]): UserDefinedFunction = {
+    val inputTypes = if (inputSchemas.contains(None)) {
+      None
+    } else {
+      Some(inputSchemas.map(_.get.dataType))
+    }
+    val udf = new UserDefinedFunction(f, dataType, inputTypes)
+    udf.nullableTypes = Some(inputSchemas.map(_.map(_.nullable).getOrElse(true)))
     udf
   }
 }
