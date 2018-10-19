@@ -26,7 +26,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
@@ -60,14 +59,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     securityManager: SecurityManager)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
-
-  private val tokenManager: HadoopDelegationTokenManager = {
-    if (UserGroupInformation.isSecurityEnabled()) {
-      new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration)
-    } else {
-      null
-    }
-  }
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
@@ -199,11 +190,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   override def start() {
     super.start()
-
-    if (tokenManager != null) {
-      require(driverEndpoint != null, "Driver endpoint not initialized!")
-      tokenManager.start(Some(driverEndpoint))
-    }
 
     if (sc.deployMode == "client") {
       launcherBackend.connect()
@@ -700,10 +686,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       super.stop()
     }
 
-    if (tokenManager != null) {
-      tokenManager.stop()
-    }
-
     // Wait for executors to report done, or else mesosDriver.stop() will forcefully kill them.
     // See SPARK-12330
     val startTime = System.nanoTime()
@@ -790,6 +772,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       // See [[o.a.s.scheduler.cluster.CoarseGrainedSchedulerBackend.killExecutors]]
       true
     }
+  }
+
+  override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
+    Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration))
   }
 
   private def numExecutors(): Int = {
