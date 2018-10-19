@@ -343,9 +343,6 @@ if [[ "$1" == "publish-snapshot" ]]; then
   $MVN -DzincPort=$ZINC_PORT -Dscala-2.10 --settings $tmp_settings \
     -DskipTests $PUBLISH_PROFILES clean deploy
 
-  # Clean-up Zinc nailgun process
-  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
-
   rm $tmp_settings
   cd ..
   exit 0
@@ -380,9 +377,6 @@ if [[ "$1" == "publish-release" ]]; then
 
   $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -Dscala-2.10 \
     -DskipTests $PUBLISH_PROFILES clean install
-
-  # Clean-up Zinc nailgun process
-  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   ./dev/change-version-to-2.10.sh
 
