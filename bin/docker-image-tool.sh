@@ -44,6 +44,7 @@ function image_ref {
 function build {
   local BUILD_ARGS
   local IMG_PATH
+  local JARS
 
   if [ ! -f "$SPARK_HOME/RELEASE" ]; then
     # Set image build arguments accordingly if this is a source repo and not a distribution archive.
@@ -53,26 +54,38 @@ function build {
     # the examples directory is cleaned up before generating the distribution tarball, so this
     # issue does not occur.
     IMG_PATH=resource-managers/kubernetes/docker/src/main/dockerfiles
+    JARS=assembly/target/scala-$SPARK_SCALA_VERSION/jars
     BUILD_ARGS=(
       ${BUILD_PARAMS}
       --build-arg
       img_path=$IMG_PATH
       --build-arg
-      spark_jars=assembly/target/scala-$SPARK_SCALA_VERSION/jars
+      spark_jars=$JARS
       --build-arg
       example_jars=examples/target/scala-$SPARK_SCALA_VERSION/jars
       --build-arg
       k8s_tests=resource-managers/kubernetes/integration-tests/tests
     )
   else
-    # Not passed as an argument to docker, but used to validate the Spark directory.
+    # Not passed as arguments to docker, but used to validate the Spark directory.
     IMG_PATH="kubernetes/dockerfiles"
+    JARS=jars
     BUILD_ARGS=(${BUILD_PARAMS})
   fi
 
+  # Verify that the Docker image content directory is present
   if [ ! -d "$IMG_PATH" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
+
+  # Verify that Spark has actually been built/is a runnable distribution
+  # i.e. the Spark JARs that the Docker files will place into the image are present
+  local TOTAL_JARS=$(ls $JARS/spark-* | wc -l)
+  TOTAL_JARS=$(( $TOTAL_JARS ))
+  if [ "${TOTAL_JARS}" -eq 0 ]; then
+    error "Cannot find Spark JARs. This script assumes that Apache Spark has first been built locally or this is a runnable distribution."
+  fi
+
   local BINDING_BUILD_ARGS=(
     ${BUILD_PARAMS}
     --build-arg
@@ -85,29 +98,37 @@ function build {
   docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
     -f "$BASEDOCKERFILE" .
-  if [[ $? != 0 ]]; then
-    error "Failed to build Spark docker image."
+  if [ $? -ne 0 ]; then
+    error "Failed to build Spark JVM Docker image, please refer to Docker build output for details."
   fi
 
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-py) \
     -f "$PYDOCKERFILE" .
-  if [[ $? != 0 ]]; then
-    error "Failed to build PySpark docker image."
-  fi
-
+    if [ $? -ne 0 ]; then
+      error "Failed to build PySpark Docker image, please refer to Docker build output for details."
+    fi
   docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
     -t $(image_ref spark-r) \
     -f "$RDOCKERFILE" .
-  if [[ $? != 0 ]]; then
-    error "Failed to build SparkR docker image."
+  if [ $? -ne 0 ]; then
+    error "Failed to build SparkR Docker image, please refer to Docker build output for details."
   fi
 }
 
 function push {
   docker push "$(image_ref spark)"
+  if [ $? -ne 0 ]; then
+    error "Failed to push Spark JVM Docker image."
+  fi
   docker push "$(image_ref spark-py)"
+  if [ $? -ne 0 ]; then
+    error "Failed to push PySpark Docker image."
+  fi
   docker push "$(image_ref spark-r)"
+  if [ $? -ne 0 ]; then
+    error "Failed to push SparkR Docker image."
+  fi
 }
 
 function usage {
