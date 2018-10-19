@@ -49,7 +49,7 @@ case class UserDefinedFunction protected[sql] (
 
   // This is a `var` instead of in the constructor for backward compatibility of this case class.
   // TODO: revisit this case class in Spark 3.0, and narrow down the public surface.
-  private[sql] var nullableTypes: Seq[Boolean] = Nil
+  private[sql] var nullableTypes: Option[Seq[Boolean]] = None
 
   /**
    * Returns true when the UDF can return a nullable value.
@@ -73,17 +73,20 @@ case class UserDefinedFunction protected[sql] (
    */
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
-    val numOfArgs = ScalaReflection.getParameterCount(f)
-    assert(nullableTypes.length == numOfArgs)
+    // TODO: make sure this class is only instantiated through `SparkUserDefinedFunction.create()`
+    // and `nullableTypes` is always set.
+    if (nullableTypes.isEmpty) {
+      nullableTypes = Some(ScalaReflection.getParameterTypeNullability(f))
+    }
     if (inputTypes.isDefined) {
-      assert(inputTypes.get.length == numOfArgs)
+      assert(inputTypes.get.length == nullableTypes.get.length)
     }
 
     Column(ScalaUDF(
       f,
       dataType,
       exprs.map(_.expr),
-      nullableTypes,
+      nullableTypes.get,
       inputTypes.getOrElse(Nil),
       udfName = _nameOption,
       nullable = _nullable,
@@ -155,7 +158,7 @@ private[sql] object SparkUserDefinedFunction {
       Some(inputSchemas.map(_.get.dataType))
     }
     val udf = new UserDefinedFunction(f, dataType, inputTypes)
-    udf.nullableTypes = inputSchemas.map(_.map(_.nullable).getOrElse(true))
+    udf.nullableTypes = Some(inputSchemas.map(_.map(_.nullable).getOrElse(true)))
     udf
   }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.DataType
@@ -59,12 +59,11 @@ case class ScalaUDF(
       function: AnyRef,
       dataType: DataType,
       children: Seq[Expression],
-      inputsNullSafe: Seq[Boolean],
       inputTypes: Seq[DataType],
       udfName: Option[String]) = {
     this(
-      function, dataType, children, inputsNullSafe, inputTypes, udfName,
-      nullable = true, udfDeterministic = true)
+      function, dataType, children, ScalaReflection.getParameterTypeNullability(function),
+      inputTypes, udfName, nullable = true, udfDeterministic = true)
   }
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)

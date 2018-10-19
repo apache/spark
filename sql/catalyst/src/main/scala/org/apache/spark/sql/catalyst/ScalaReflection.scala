@@ -19,8 +19,11 @@ package org.apache.spark.sql.catalyst
 
 import java.lang.reflect.Constructor
 
+import scala.util.Properties
+
 import org.apache.commons.lang3.reflect.ConstructorUtils
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -879,7 +882,7 @@ object ScalaReflection extends ScalaReflection {
  * Support for generating catalyst schemas for scala objects.  Note that unlike its companion
  * object, this trait able to work in both the runtime and the compile time (macro) universe.
  */
-trait ScalaReflection {
+trait ScalaReflection extends Logging {
   /** The universe we work in (runtime or macro) */
   val universe: scala.reflect.api.Universe
 
@@ -933,12 +936,20 @@ trait ScalaReflection {
   }
 
   /**
-   * Returns the number of input parameters of scala function object.
+   * Returns the nullability of the input parameter types of the scala function object.
+   *
+   * Note that this only works with Scala 2.11, and the information returned may be inaccurate if
+   * used with a different Scala version.
    */
-  def getParameterCount(func: AnyRef): Int = {
+  def getParameterTypeNullability(func: AnyRef): Seq[Boolean] = {
+    if (!Properties.versionString.contains("2.11")) {
+      logWarning(s"Scala ${Properties.versionString} is not supported so UDF input parameter "
+        + s"type nullability may be inferred incorrectly. To avoid this problem, use the "
+        + s"latest UDF interfaces instead.")
+    }
     val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
     assert(methods.length == 1)
-    methods.head.getParameterCount
+    methods.head.getParameterTypes.map(!_.isPrimitive)
   }
 
   /**

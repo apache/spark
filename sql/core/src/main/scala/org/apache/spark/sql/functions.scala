@@ -4291,8 +4291,9 @@ object functions {
    * @since 2.0.0
    */
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
-    val numOfArgs = ScalaReflection.getParameterCount(f)
-    SparkUserDefinedFunction.create(f, dataType, inputSchemas = Seq.fill(numOfArgs)(None))
+    // TODO: should call SparkUserDefinedFunction.create() instead but inputSchemas is currently
+    // unavailable. We may need to create type-safe overloaded versions of udf() methods.
+    new UserDefinedFunction(f, dataType, inputTypes = None)
   }
 
   /**

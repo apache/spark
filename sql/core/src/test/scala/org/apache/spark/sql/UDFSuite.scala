@@ -398,7 +398,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25044 Verify null input handling for primitive types - with udf()") {
-    val udf1 = udf({(x: Long, y: Any) => x * 2 + (if (y == null) 1 else 0)})
+    val udf1 = udf((x: Long, y: Any) => x * 2 + (if (y == null) 1 else 0))
     val df = spark.range(0, 3).toDF("a")
       .withColumn("b", udf1($"a", lit(null)))
       .withColumn("c", udf1(lit(null), $"a"))
@@ -413,10 +413,8 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-25044 Verify null input handling for primitive types - with udf.register") {
     withTable("t") {
-      sql("create table t(a varchar(10), b int, c varchar(10)) using parquet")
-      sql("insert into table t values(null, 1, 'x')")
-      sql("insert into table t values('M', null, 'y')")
-      sql("insert into table t values('N', 3, null)")
+      Seq((null, new Integer(1), "x"), ("M", null, "y"), ("N", new Integer(3), null))
+        .toDF("a", "b", "c").write.format("json").saveAsTable("t")
       spark.udf.register("f", (a: String, b: Int, c: Any) => a + b + c)
       val df = spark.sql("SELECT f(a, b, c) FROM t")
       checkAnswer(df, Seq(Row("null1x"), Row(null), Row("N3null")))
