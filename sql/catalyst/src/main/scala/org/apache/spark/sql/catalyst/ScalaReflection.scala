@@ -192,10 +192,9 @@ object ScalaReflection extends ScalaReflection {
 
     /** Returns the current path with a field at ordinal extracted. */
     def addToPathOrdinal(
-                          path: Expression,
-                          ordinal: Int,
-                          dataType: DataType,
-                          walkedTypePath: Seq[String]): Expression = {
+        ordinal: Int,
+        dataType: DataType,
+        walkedTypePath: Seq[String]): Expression = {
       val newPath = GetStructField(path, ordinal)
       upCastToExpectedType(newPath, dataType, walkedTypePath)
     }
@@ -385,7 +384,7 @@ object ScalaReflection extends ScalaReflection {
           val constructor = if (cls.getName startsWith "scala.Tuple") {
             deserializerFor(
               fieldType,
-              addToPathOrdinal(path, i, dataType, newTypePath),
+              addToPathOrdinal(i, dataType, newTypePath),
               newTypePath)
           } else {
             deserializerFor(
