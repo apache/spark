@@ -223,8 +223,8 @@ class StreamingSessionWindowSuite extends StreamTest
       // ("hello", 10, 21, 11, 2)
       // ("world", 10, 21, 11, 2)
       // ("spark", 10, 20, 10, 1)
-      // ("structured", 11, 21, 10, 2)
-      // ("streaming", 11, 21, 10, 2)
+      // ("structured", 11, 21, 10, 1)
+      // ("streaming", 11, 21, 10, 1)
       CheckNewAnswer(),
 
       AddData(inputData, ("spark streaming", 15L)),
@@ -232,7 +232,7 @@ class StreamingSessionWindowSuite extends StreamTest
       // current sessions after batch:
       // ("hello", 10, 21, 11, 2)
       // ("world", 10, 21, 11, 2)
-      // ("structured", 11, 21, 10, 2)
+      // ("structured", 11, 21, 10, 1)
       // ("spark", 10, 25, 15, 2)
       // ("streaming", 11, 25, 14, 2)
       CheckNewAnswer(),
@@ -251,7 +251,7 @@ class StreamingSessionWindowSuite extends StreamTest
 
       AddData(inputData, ("hello world", 3L)),
       // input can match to not-yet-evicted sessions, but input itself is less than watermark
-      // so it should not match exiting sessions
+      // so it should not match existing sessions
       // Watermark kept 15 seconds
       // current sessions after batch:
       // ("hello", 10, 21, 11, 2)
@@ -425,7 +425,7 @@ class StreamingSessionWindowSuite extends StreamTest
       // current sessions after batch:
       // ("hello", 10, 21, 11, 2)
       // ("world", 10, 21, 11, 2)
-      // ("structured", 11, 21, 10, 2)
+      // ("structured", 11, 21, 10, 1)
       // ("spark", 10, 25, 15, 2)
       // ("streaming", 11, 25, 14, 2)
       CheckNewAnswer(("spark", 10, 25, 15, 2), ("streaming", 11, 25, 14, 2)),
@@ -435,7 +435,7 @@ class StreamingSessionWindowSuite extends StreamTest
       // current sessions after batch:
       // ("hello", 10, 21, 11, 2)
       // ("world", 10, 21, 11, 2)
-      // ("structured", 11, 21, 10, 2)
+      // ("structured", 11, 21, 10, 1)
       // ("spark", 10, 25, 15, 2)
       // ("streaming", 11, 25, 14, 2)
       // ("hello", 25, 35, 10, 1)
@@ -449,7 +449,7 @@ class StreamingSessionWindowSuite extends StreamTest
       // current sessions after batch:
       // ("hello", 10, 21, 11, 2)
       // ("world", 10, 21, 11, 2)
-      // ("structured", 11, 21, 10, 2)
+      // ("structured", 11, 21, 10, 1)
       // ("spark", 10, 25, 15, 2)
       // ("streaming", 11, 25, 14, 2)
       // ("hello", 25, 35, 10, 1)
