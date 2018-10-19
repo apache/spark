@@ -24,14 +24,24 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils {
 
-  def evalSchemaExpr(exp: Expression): StructType = exp match {
-    case Literal(s, StringType) => StructType.fromDDL(s.toString)
-    case e @ SchemaOfCsv(_: Literal, _) =>
-      val ddlSchema = e.eval().asInstanceOf[UTF8String]
-      StructType.fromDDL(ddlSchema.toString)
-    case e => throw new AnalysisException(
-      "Schema should be specified in DDL format as a string literal or output of " +
-        s"the schema_of_csv function instead of ${e.sql}")
+  def evalSchemaExpr(exp: Expression): StructType = {
+    // Use `DataType.fromDDL` since the type string can be struct<...>.
+    val dataType = exp match {
+      case Literal(s, StringType) =>
+        DataType.fromDDL(s.toString)
+      case e @ SchemaOfCsv(_: Literal, _) =>
+        val ddlSchema = e.eval().asInstanceOf[UTF8String]
+        DataType.fromDDL(ddlSchema.toString)
+      case e => throw new AnalysisException(
+        "Schema should be specified in DDL format as a string literal or output of " +
+          s"the schema_of_csv function instead of ${e.sql}")
+    }
+
+    if (!dataType.isInstanceOf[StructType]) {
+      throw new AnalysisException(
+        s"Schema should be struct type but got ${dataType.sql}.")
+    }
+    dataType.asInstanceOf[StructType]
   }
 
   def evalTypeExpr(exp: Expression): DataType = exp match {

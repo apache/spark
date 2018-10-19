@@ -2378,9 +2378,15 @@ def schema_of_csv(col, options={}):
     >>> df.select(schema_of_csv(df.value, {'sep':'|'}).alias("csv")).collect()
     [Row(csv=u'struct<_c0:int,_c1:string>')]
     """
+    if isinstance(col, basestring):
+        col = _create_column_from_literal(col)
+    elif isinstance(col, Column):
+        col = _to_java_column(col)
+    else:
+        raise TypeError("schema argument should be a column or string")
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.schema_of_csv(_to_java_column(col), options)
+    jc = sc._jvm.functions.schema_of_csv(col, options)
     return Column(jc)
 
 
@@ -2684,7 +2690,7 @@ def from_csv(col, schema, options={}):
     :param schema: a string with schema in DDL format to use when parsing the CSV column.
     :param options: options to control parsing. accepts the same options as the CSV datasource
 
-    >>> data = [('1,2,3',)]
+    >>> data = [("1,2,3",)]
     >>> df = spark.createDataFrame(data, ("value",))
     >>> df.select(from_csv(df.value, "a INT, b INT, c INT").alias("csv")).collect()
     [Row(csv=Row(a=1, b=2, c=3))]
