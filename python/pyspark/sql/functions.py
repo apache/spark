@@ -2373,7 +2373,6 @@ def schema_of_csv(col, options={}):
     :param col: string column in CSV format
     :param options: options to control parsing. accepts the same options as the CSV datasource
 
-    >>> from pyspark.sql.types import *
     >>> data = [(1, '1|a')]
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(schema_of_csv(df.value, {'sep':'|'}).alias("csv")).collect()
