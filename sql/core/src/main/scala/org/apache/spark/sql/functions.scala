@@ -3864,7 +3864,6 @@ object functions {
   @scala.annotation.varargs
   def map_concat(cols: Column*): Column = withExpr { MapConcat(cols.map(_.expr)) }
 
-<<<<<<< HEAD
   /**
    * Parses a column containing a CSV string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
