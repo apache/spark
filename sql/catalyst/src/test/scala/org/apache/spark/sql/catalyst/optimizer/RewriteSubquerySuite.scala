@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.ListQuery
+import org.apache.spark.sql.catalyst.expressions.{IsNotNull, ListQuery}
 import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 
 
 class RewriteSubquerySuite extends PlanTest {
@@ -33,23 +34,43 @@ class RewriteSubquerySuite extends PlanTest {
       Batch("Rewrite Subquery", FixedPoint(1),
         RewritePredicateSubquery,
         ColumnPruning,
+        InferFiltersFromConstraints,
         CollapseProject,
         RemoveRedundantProject) :: Nil
   }
 
   test("Column pruning after rewriting predicate subquery") {
-    val relation = LocalRelation('a.int, 'b.int)
-    val relInSubquery = LocalRelation('x.int, 'y.int, 'z.int)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val relation = LocalRelation('a.int, 'b.int)
+      val relInSubquery = LocalRelation('x.int, 'y.int, 'z.int)
 
-    val query = relation.where('a.in(ListQuery(relInSubquery.select('x)))).select('a)
+      val query = relation.where('a.in(ListQuery(relInSubquery.select('x)))).select('a)
 
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = relation
-      .select('a)
-      .join(relInSubquery.select('x), LeftSemi, Some('a === 'x))
-      .analyze
+      val optimized = Optimize.execute(query.analyze)
+      val correctAnswer = relation
+        .select('a)
+        .join(relInSubquery.select('x), LeftSemi, Some('a === 'x))
+        .analyze
 
-    comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("Infer filters from constraints after rewriting predicate subquery") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
+      val relation = LocalRelation('a.int, 'b.int)
+      val relInSubquery = LocalRelation('x.int, 'y.int, 'z.int)
+
+      val query = relation.where('a.in(ListQuery(relInSubquery.select('x)))).select('a)
+
+      val optimized = Optimize.execute(query.analyze)
+      val correctAnswer = relation
+        .select('a).where(IsNotNull('a))
+        .join(relInSubquery.select('x).where(IsNotNull('x)), LeftSemi, Some('a === 'x))
+        .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
 }

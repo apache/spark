@@ -171,9 +171,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     // "Extract PythonUDF From JoinCondition".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
-    Batch("RewriteSubquery", Once,
+    Batch("Rewrite Subquery", Once,
       RewritePredicateSubquery,
       ColumnPruning,
+      InferFiltersFromConstraints,
       CollapseProject,
       RemoveRedundantProject) :+
     Batch("UpdateAttributeReferences", Once,
