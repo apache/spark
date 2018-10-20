@@ -610,6 +610,8 @@ case class JsonToStructs(
     case _: MapType => "entries"
     case _ => super.sql
   }
+
+  override def prettyName: String = "from_json"
 }
 
 /**
@@ -730,6 +732,8 @@ case class StructsToJson(
   override def nullSafeEval(value: Any): Any = converter(value)
 
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
+
+  override def prettyName: String = "to_json"
 }
 
 /**
@@ -774,6 +778,8 @@ case class SchemaOfJson(
 
     UTF8String.fromString(dt.catalogString)
   }
+
+  override def prettyName: String = "schema_of_json"
 }
 
 object JsonExprUtils {
