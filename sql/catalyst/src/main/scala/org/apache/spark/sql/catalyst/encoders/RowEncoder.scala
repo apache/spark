@@ -59,7 +59,7 @@ object RowEncoder {
     val cls = classOf[Row]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val serializer = serializerFor(inputObject, schema)
-    val deserializer = deserializerFor(GetColumnByOrdinal(0, serializer.dataType), schema)
+    val deserializer = deserializerFor(GetColumnByOrdinal(0, schema), schema)
     new ExpressionEncoder[Row](
       serializer,
       deserializer,
@@ -235,10 +235,6 @@ object RowEncoder {
 
   private def deserializerFor(input: Expression, schema: StructType): Expression = {
     val fields = schema.zipWithIndex.map { case (f, i) =>
-      val dt = f.dataType match {
-        case p: PythonUserDefinedType => p.sqlType
-        case other => other
-      }
       deserializerFor(GetStructField(input, i))
     }
     CreateExternalRow(fields, schema)
