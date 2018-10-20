@@ -22,7 +22,7 @@ Spark SQL can also be used to read data from an existing Hive installation. For 
 configure this feature, please refer to the [Hive Tables](sql-data-sources-hive-tables.html) section. When running
 SQL from within another programming language the results will be returned as a [Dataset/DataFrame](#datasets-and-dataframes).
 You can also interact with the SQL interface using the [command-line](sql-distributed-sql-engine.html#running-the-spark-sql-cli)
-or over [JDBC/ODBC](#sql-distributed-sql-engine.html#running-the-thrift-jdbcodbc-server).
+or over [JDBC/ODBC](sql-distributed-sql-engine.html#running-the-thrift-jdbcodbc-server).
 
 ## Datasets and DataFrames
 
