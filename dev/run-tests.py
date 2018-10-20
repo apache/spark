@@ -551,8 +551,7 @@ def main():
     if not changed_files or any(f.endswith(".scala")
                                 or f.endswith("scalastyle-config.xml")
                                 for f in changed_files):
-        # run_scala_style_checks()
-        pass
+        run_scala_style_checks()
     should_run_java_style_checks = False
     if not changed_files or any(f.endswith(".java")
                                 or f.endswith("checkstyle.xml")
