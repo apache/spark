@@ -114,6 +114,7 @@ for python in "${PYTHON_EXECS[@]}"; do
 
     cd /
 
+    unset SPARK_HOME
     echo "Run basic sanity check on pip installed version with spark-submit"
     spark-submit "$FWDIR"/dev/pip-sanity-check.py
     echo "Run basic sanity check with import based"
