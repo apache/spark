@@ -79,7 +79,7 @@ function build {
   fi
 
   # Verify that Spark has actually been built/is a runnable distribution
-  # i.e. the Spark JARs that the Docker files will place into the image are present
+  # i.e. the Spark JARs that the Docker files will place into the image are present
   local TOTAL_JARS=$(ls $JARS/spark-* | wc -l)
   TOTAL_JARS=$(( $TOTAL_JARS ))
   if [ "${TOTAL_JARS}" -eq 0 ]; then
