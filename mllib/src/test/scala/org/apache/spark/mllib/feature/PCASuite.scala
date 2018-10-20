@@ -20,6 +20,7 @@ package org.apache.spark.mllib.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -53,5 +54,22 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(PCAUtil.memoryCost(10, 100) < Int.MaxValue)
     // check overflowing
     assert(PCAUtil.memoryCost(40000, 60000) > Int.MaxValue)
+  }
+
+  test("number of features more than 65535") {
+    val rows = 10
+    val columns = 100000
+    val k = 5
+    val randomRDD = RandomRDDs.normalVectorRDD(sc, rows, columns, 0, 0)
+    val pca = new PCA(k).fit(randomRDD)
+    assert(pca.explainedVariance.size === 5)
+    assert(pca.pc.numRows === 100000 && pca.pc.numCols === 5)
+    // Eigen values should not be negative
+    assert(!pca.explainedVariance.values.exists(_ < 0))
+
+    // Norm of the principle component should be 1.0
+    val colIndex = scala.util.Random.nextInt(k) - 1
+    assert(Math.sqrt(pca.pc.values.slice(colIndex * 100000, (colIndex + 1) * 100000)
+      .map(Math.pow(_, 2)).sum) ~== 1.0 relTol 1e-8)
   }
 }
