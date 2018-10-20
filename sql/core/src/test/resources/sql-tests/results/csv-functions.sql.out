@@ -5,7 +5,7 @@
 -- !query 0
 select from_csv('1, 3.14', 'a INT, f FLOAT')
 -- !query 0 schema
-struct<csvtostructs(1, 3.14):struct<a:int,f:float>>
+struct<from_csv(1, 3.14):struct<a:int,f:float>>
 -- !query 0 output
 {"a":1,"f":3.14}
 
@@ -13,7 +13,7 @@ struct<csvtostructs(1, 3.14):struct<a:int,f:float>>
 -- !query 1
 select from_csv('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'))
 -- !query 1 schema
-struct<csvtostructs(26/08/2015):struct<time:timestamp>>
+struct<from_csv(26/08/2015):struct<time:timestamp>>
 -- !query 1 output
 {"time":2015-08-26 00:00:00.0}
 
