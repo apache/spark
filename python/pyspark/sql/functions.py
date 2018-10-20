@@ -2373,9 +2373,10 @@ def schema_of_csv(col, options={}):
     :param col: string column in CSV format
     :param options: options to control parsing. accepts the same options as the CSV datasource
 
-    >>> data = [(1, '1|a')]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(schema_of_csv(df.value, {'sep':'|'}).alias("csv")).collect()
+    >>> df = spark.range(1)
+    >>> df.select(schema_of_csv(lit('1|a'), {'sep':'|'}).alias("csv")).collect()
+    [Row(csv=u'struct<_c0:int,_c1:string>')]
+    >>> df.select(schema_of_csv('1|a', {'sep':'|'}).alias("csv")).collect()
     [Row(csv=u'struct<_c0:int,_c1:string>')]
     """
     if isinstance(col, basestring):

@@ -162,8 +162,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
 
   test("infer schema of CSV strings by using options") {
     checkEvaluation(
-      new SchemaOfCsv(Literal.create("1|abc"),
-        CreateMap(Seq(Literal.create("delimiter"), Literal.create("|")))),
+      new SchemaOfCsv(Literal.create("1|abc"), Map("delimiter" -> "|")),
       "struct<_c0:int,_c1:string>")
   }
 }

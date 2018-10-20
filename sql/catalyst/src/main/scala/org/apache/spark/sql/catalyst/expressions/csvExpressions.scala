@@ -63,7 +63,7 @@ case class CsvToStructs(
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
-      schema = ExprUtils.evalSchemaExpr(schema).asInstanceOf[StructType],
+      schema = ExprUtils.evalSchemaExpr(schema),
       options = options,
       child = child,
       timeZoneId = None)
@@ -72,7 +72,7 @@ case class CsvToStructs(
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
-      schema = ExprUtils.evalSchemaExpr(schema).asInstanceOf[StructType],
+      schema = ExprUtils.evalSchemaExpr(schema),
       options = ExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
