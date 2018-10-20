@@ -169,7 +169,7 @@ object RowEncoder {
 
       if (inputObject.nullable) {
         If(IsNull(inputObject),
-          Literal.create(null, inputType),
+          Literal.create(null, nonNullOutput.dataType),
           nonNullOutput)
       } else {
         nonNullOutput
@@ -185,7 +185,7 @@ object RowEncoder {
         val convertedField = if (field.nullable) {
           If(
             Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
-            Literal.create(null, field.dataType),
+            Literal.create(null, fieldValue.dataType),
             fieldValue
           )
         } else {
@@ -196,7 +196,7 @@ object RowEncoder {
 
       if (inputObject.nullable) {
         If(IsNull(inputObject),
-          Literal.create(null, inputType),
+          Literal.create(null, nonNullOutput.dataType),
           nonNullOutput)
       } else {
         nonNullOutput

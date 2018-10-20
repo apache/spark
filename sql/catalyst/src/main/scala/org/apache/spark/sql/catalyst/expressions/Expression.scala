@@ -709,37 +709,19 @@ trait ComplexTypeMergingExpression extends Expression {
   @transient
   lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
 
-  // If there is `PythonUserDefinedType`, `TypeCoercion.haveSameType` checks will fail.
-  // This method converts Python UDT to its underlying storage data type.
-  private def convertPythonUserDefinedType(dt: DataType): DataType = dt match {
-    case u: PythonUserDefinedType => u.sqlType
-    case ArrayType(et, containsNull) => ArrayType(convertPythonUserDefinedType(et), containsNull)
-    case MapType(kt, vt, valueContainsNull) =>
-      MapType(convertPythonUserDefinedType(kt), convertPythonUserDefinedType(vt), valueContainsNull)
-    case s: StructType =>
-      val fields = s.map { field =>
-        StructField(field.name, convertPythonUserDefinedType(field.dataType), field.nullable,
-          field.metadata)
-      }
-      StructType(fields)
-    case o => o
-  }
-
-  private lazy val actualInputTypes = inputTypesForMerging.map(convertPythonUserDefinedType(_))
-
   def dataTypeCheck: Unit = {
     require(
       inputTypesForMerging.nonEmpty,
       "The collection of input data types must not be empty.")
     require(
-      TypeCoercion.haveSameType(actualInputTypes),
+      TypeCoercion.haveSameType(inputTypesForMerging),
       "All input types must be the same except nullable, containsNull, valueContainsNull flags." +
         s" The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}")
   }
 
   override def dataType: DataType = {
     dataTypeCheck
-    actualInputTypes.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
+    inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
 }
 
