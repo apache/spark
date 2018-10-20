@@ -35,6 +35,7 @@ class RewriteSubquerySuite extends PlanTest {
         RewritePredicateSubquery,
         ColumnPruning,
         InferFiltersFromConstraints,
+        PushDownPredicate,
         CollapseProject,
         RemoveRedundantProject) :: Nil
   }
@@ -56,7 +57,7 @@ class RewriteSubquerySuite extends PlanTest {
     }
   }
 
-  test("Infer filters from constraints after rewriting predicate subquery") {
+  test("Infer filters and push down predicate after rewriting predicate subquery") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
       val relation = LocalRelation('a.int, 'b.int)
       val relInSubquery = LocalRelation('x.int, 'y.int, 'z.int)
@@ -65,8 +66,8 @@ class RewriteSubquerySuite extends PlanTest {
 
       val optimized = Optimize.execute(query.analyze)
       val correctAnswer = relation
-        .select('a).where(IsNotNull('a))
-        .join(relInSubquery.select('x).where(IsNotNull('x)), LeftSemi, Some('a === 'x))
+        .where(IsNotNull('a)).select('a)
+        .join(relInSubquery.where(IsNotNull('x)).select('x), LeftSemi, Some('a === 'x))
         .analyze
 
       comparePlans(optimized, correctAnswer)
