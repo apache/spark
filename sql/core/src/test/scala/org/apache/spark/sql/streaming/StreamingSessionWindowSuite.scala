@@ -70,80 +70,65 @@ class StreamingSessionWindowSuite extends StreamTest
         "numEvents")
 
     testStream(sessionUpdates, OutputMode.Complete())(
-      AddData(inputData, ("hello world spark", 10L), ("world hello structured streaming", 11L)),
+      AddData(inputData,
+        ("hello world spark streaming", 40L),
+        ("world hello structured streaming", 41L)
+      ),
       CheckNewAnswer(
-        ("hello", 10, 21, 11, 2),
-        ("world", 10, 21, 11, 2),
-        ("spark", 10, 20, 10, 1),
-        ("structured", 11, 21, 10, 1),
-        ("streaming", 11, 21, 10, 1)
+        ("hello", 40, 51, 11, 2),
+        ("world", 40, 51, 11, 2),
+        ("streaming", 40, 51, 11, 2),
+        ("spark", 40, 50, 10, 1),
+        ("structured", 41, 51, 10, 1)
       ),
 
-      AddData(inputData, ("spark streaming", 15L)),
+      // placing new sessions "before" previous sessions
+      AddData(inputData, ("spark streaming", 25L)),
       CheckNewAnswer(
-        ("hello", 10, 21, 11, 2),
-        ("world", 10, 21, 11, 2),
-        ("spark", 10, 25, 15, 2),
-        ("structured", 11, 21, 10, 1),
-        ("streaming", 11, 25, 14, 2)
+        ("spark", 25, 35, 10, 1),
+        ("streaming", 25, 35, 10, 1),
+        ("hello", 40, 51, 11, 2),
+        ("world", 40, 51, 11, 2),
+        ("streaming", 40, 51, 11, 2),
+        ("spark", 40, 50, 10, 1),
+        ("structured", 41, 51, 10, 1)
       ),
 
-      AddData(inputData, ("hello world", 25L)),
+      // concatenating multiple previous sessions into one
+      AddData(inputData, ("spark streaming", 30L)),
       CheckNewAnswer(
-        ("hello", 10, 21, 11, 2),
-        ("world", 10, 21, 11, 2),
-        ("spark", 10, 25, 15, 2),
-        ("structured", 11, 21, 10, 1),
-        ("streaming", 11, 25, 14, 2),
-        ("hello", 25, 35, 10, 1),
-        ("world", 25, 35, 10, 1)
+        ("spark", 25, 50, 25, 3),
+        ("streaming", 25, 51, 26, 4),
+        ("hello", 40, 51, 11, 2),
+        ("world", 40, 51, 11, 2),
+        ("structured", 41, 51, 10, 1)
       ),
 
-      AddData(inputData, ("hello world", 3L)),
-      CheckNewAnswer(
-        ("hello", 3, 21, 18, 3),
-        ("world", 3, 21, 18, 3),
-        ("spark", 10, 25, 15, 2),
-        ("structured", 11, 21, 10, 1),
-        ("streaming", 11, 25, 14, 2),
-        ("hello", 25, 35, 10, 1),
-        ("world", 25, 35, 10, 1)
-      ),
-
-      AddData(inputData, ("hello", 31L)),
-      CheckNewAnswer(
-        ("hello", 3, 21, 18, 3),
-        ("world", 3, 21, 18, 3),
-        ("spark", 10, 25, 15, 2),
-        ("structured", 11, 21, 10, 1),
-        ("streaming", 11, 25, 14, 2),
-        ("hello", 25, 41, 16, 2),
-        ("world", 25, 35, 10, 1)
-      ),
-
-      AddData(inputData, ("hello", 35L)),
-      CheckNewAnswer(
-        ("hello", 3, 21, 18, 3),
-        ("world", 3, 21, 18, 3),
-        ("spark", 10, 25, 15, 2),
-        ("structured", 11, 21, 10, 1),
-        ("streaming", 11, 25, 14, 2),
-        ("hello", 25, 45, 20, 3),
-        ("world", 25, 35, 10, 1)
-      ),
-
+      // placing new sessions after previous sessions
       AddData(inputData, ("hello apache spark", 60L)),
       CheckNewAnswer(
-        ("hello", 3, 21, 18, 3),
-        ("world", 3, 21, 18, 3),
-        ("spark", 10, 25, 15, 2),
-        ("structured", 11, 21, 10, 1),
-        ("streaming", 11, 25, 14, 2),
-        ("hello", 25, 45, 20, 3),
-        ("world", 25, 35, 10, 1),
+        ("spark", 25, 50, 25, 3),
+        ("streaming", 25, 51, 26, 4),
+        ("hello", 40, 51, 11, 2),
+        ("world", 40, 51, 11, 2),
+        ("structured", 41, 51, 10, 1),
         ("hello", 60, 70, 10, 1),
         ("apache", 60, 70, 10, 1),
         ("spark", 60, 70, 10, 1)
+      ),
+
+      AddData(inputData, ("structured streaming", 90L)),
+      CheckNewAnswer(
+        ("spark", 25, 50, 25, 3),
+        ("streaming", 25, 51, 26, 4),
+        ("hello", 40, 51, 11, 2),
+        ("world", 40, 51, 11, 2),
+        ("structured", 41, 51, 10, 1),
+        ("hello", 60, 70, 10, 1),
+        ("apache", 60, 70, 10, 1),
+        ("spark", 60, 70, 10, 1),
+        ("structured", 90, 100, 10, 1),
+        ("streaming", 90, 100, 10, 1)
       )
     )
   }
@@ -207,7 +192,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .select($"_1".as("value"), $"_2".as("timestamp"))
       .withColumn("eventTime", $"timestamp".cast("timestamp"))
       .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
-      .withWatermark("eventTime", "10 seconds")
+      .withWatermark("eventTime", "30 seconds")
 
     val sessionUpdates = events
       .groupBy(session_window($"eventTime", "10 seconds") as 'session, 'sessionId)
@@ -217,126 +202,91 @@ class StreamingSessionWindowSuite extends StreamTest
         "numEvents")
 
     testStream(sessionUpdates, OutputMode.Append())(
-      AddData(inputData, ("hello world spark", 10L), ("world hello structured streaming", 11L)),
-      // Advance watermark to 1 seconds
-      // current sessions after batch:
-      // ("hello", 10, 21, 11, 2)
-      // ("world", 10, 21, 11, 2)
-      // ("spark", 10, 20, 10, 1)
-      // ("structured", 11, 21, 10, 1)
-      // ("streaming", 11, 21, 10, 1)
-      CheckNewAnswer(),
-
-      AddData(inputData, ("spark streaming", 15L)),
-      // Advance watermark to 5 seconds
-      // current sessions after batch:
-      // ("hello", 10, 21, 11, 2)
-      // ("world", 10, 21, 11, 2)
-      // ("structured", 11, 21, 10, 1)
-      // ("spark", 10, 25, 15, 2)
-      // ("streaming", 11, 25, 14, 2)
-      CheckNewAnswer(),
-
-      AddData(inputData, ("hello world", 25L)),
-      // Advance watermark to 15 seconds
-      // current sessions after batch:
-      // ("hello", 10, 21, 11, 2)
-      // ("world", 10, 21, 11, 2)
-      // ("structured", 11, 21, 10, 2)
-      // ("spark", 10, 25, 15, 2)
-      // ("streaming", 11, 25, 14, 2)
-      // ("hello", 25, 35, 10, 1)
-      // ("world", 25, 35, 10, 1)
-      CheckNewAnswer(),
-
-      AddData(inputData, ("hello world", 3L)),
-      // input can match to not-yet-evicted sessions, but input itself is less than watermark
-      // so it should not match existing sessions
-      // Watermark kept 15 seconds
-      // current sessions after batch:
-      // ("hello", 10, 21, 11, 2)
-      // ("world", 10, 21, 11, 2)
-      // ("structured", 11, 21, 10, 2)
-      // ("spark", 10, 25, 15, 2)
-      // ("streaming", 11, 25, 14, 2)
-      // ("hello", 25, 35, 10, 1)
-      // ("world", 25, 35, 10, 1)
-      CheckNewAnswer(),
-
-      AddData(inputData, ("hello", 31L)),
-      // Advance watermark to 21 seconds
-      // current sessions after batch:
-      // ("spark", 10, 25, 15, 2)
-      // ("streaming", 11, 25, 14, 2)
-      // ("hello", 25, 41, 16, 2)
-      // ("world", 25, 35, 10, 1)
-      CheckNewAnswer(
-        ("hello", 10, 21, 11, 2),
-        ("world", 10, 21, 11, 2),
-        ("structured", 11, 21, 10, 1)
+      AddData(inputData,
+        ("hello world spark streaming", 40L),
+        ("world hello structured streaming", 41L)
       ),
 
-      AddData(inputData, ("hello", 35L)),
-      // Advance watermark to 25 seconds
-      // current sessions after batch:
-      // ("hello", 25, 45, 20, 3)
-      // ("world", 25, 35, 10, 1)
+      // watermark: 11
+      // current sessions
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("streaming", 40, 51, 11, 2),
+      // ("spark", 40, 50, 10, 1),
+      // ("structured", 41, 51, 10, 1)
       CheckNewAnswer(
-        ("spark", 10, 25, 15, 2),
-        ("streaming", 11, 25, 14, 2)
       ),
 
+      // placing new sessions "before" previous sessions
+      AddData(inputData, ("spark streaming", 25L)),
+      // watermark: 11
+      // current sessions
+      // ("spark", 25, 35, 10, 1),
+      // ("streaming", 25, 35, 10, 1),
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("streaming", 40, 51, 11, 2),
+      // ("spark", 40, 50, 10, 1),
+      // ("structured", 41, 51, 10, 1)
+      CheckNewAnswer(
+      ),
+
+      // late event which session's end 10 would be later than watermark 11: should be dropped
+      AddData(inputData, ("spark streaming", 0L)),
+      // watermark: 11
+      // current sessions
+      // ("spark", 25, 35, 10, 1),
+      // ("streaming", 25, 35, 10, 1),
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("streaming", 40, 51, 11, 2),
+      // ("spark", 40, 50, 10, 1),
+      // ("structured", 41, 51, 10, 1)
+      CheckNewAnswer(
+      ),
+
+      // concatenating multiple previous sessions into one
+      AddData(inputData, ("spark streaming", 30L)),
+      // watermark: 11
+      // current sessions
+      // ("spark", 25, 50, 25, 3),
+      // ("streaming", 25, 51, 26, 4),
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("structured", 41, 51, 10, 1)
+      CheckNewAnswer(
+      ),
+
+      // placing new sessions after previous sessions
       AddData(inputData, ("hello apache spark", 60L)),
-      // Advance watermark to 50 seconds
-      // current sessions after batch:
-      // ("hello", 60, 70, 10, 1)
-      // ("apache", 60, 70, 10, 1)
+      // watermark: 30
+      // current sessions
+      // ("spark", 25, 50, 25, 3),
+      // ("streaming", 25, 51, 26, 4),
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("structured", 41, 51, 10, 1),
+      // ("hello", 60, 70, 10, 1),
+      // ("apache", 60, 70, 10, 1),
       // ("spark", 60, 70, 10, 1)
-      CheckNewAnswer(("hello", 25, 45, 20, 3), ("world", 25, 35, 10, 1))
-    )
-  }
+      CheckNewAnswer(
+      ),
 
-  testWithAllOptionsMergingSessionInLocalPartition("append mode - session window - " +
-    "storing multiple sessions in given key") {
-    val inputData = MemoryStream[Int]
-    val windowedAggregation = inputData.toDF()
-      .selectExpr("*", "CAST(MOD(value, 2) AS INT) AS valuegroup")
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "10 seconds")
-      .groupBy(session_window($"eventTime", "5 seconds") as 'session, 'valuegroup)
-      .agg(count("*") as 'count, sum("value") as 'sum)
-      .select($"valuegroup", $"session".getField("start").cast("long").as[Long],
-        $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
-
-    testStream(windowedAggregation, OutputMode.Append())(
-      AddData(inputData, 10, 11, 12, 13),
-      // Advance watermark to 3 seconds
-      // sessions: key 0 => (10, 17, 2, 22) / key 1 => (11, 18, 2, 24)
-      CheckNewAnswer(),
-      AddData(inputData, 17),
-      // Advance watermark to 7 seconds
-      // sessions: key 0 => (10, 17, 2, 22) / key 1 => (11, 22, 3, 41)
-      CheckNewAnswer(),
-      AddData(inputData, 25),
-      // Advance watermark to 15 seconds
-      // sessions: key 0 => (10, 17, 2, 22) / key 1 => (11, 22, 3, 41), (25, 30, 1, 25)
-      CheckNewAnswer(),
-      AddData(inputData, 35),
-      // Advance watermark to 25 seconds
-      // sessions: key 0 => (10, 17, 2, 22) / key 1 => (11, 22, 3, 41), (25, 30, 1, 25),
-      // (35, 40, 1, 35)
-      // evicts: key 0 => (10, 17, 2, 22) / key 1 => (11, 22, 3, 41)
-      CheckNewAnswer((0, 10, 17, 2, 22), (1, 11, 22, 3, 41)),
-      AddData(inputData, 27),
-      // don't advance watermark
-      // sessions: key 1 => (25, 32, 2, 52), (35, 40, 1, 35)
-      CheckNewAnswer(),
-      AddData(inputData, 10),   // Should not emit anything as data less than watermark
-      CheckNewAnswer(),
-      AddData(inputData, 40),
-      // Advance watermark to 30 seconds
-      // sessions: key 0 => (40, 45, 1, 40) / key 1 => (25, 32, 2, 52), (35, 40, 1, 35)
-      CheckNewAnswer()
+      AddData(inputData, ("structured streaming", 90L)),
+      // watermark: 60
+      // current sessions
+      // ("hello", 60, 70, 10, 1),
+      // ("apache", 60, 70, 10, 1),
+      // ("spark", 60, 70, 10, 1),
+      // ("structured", 90, 100, 10, 1),
+      // ("streaming", 90, 100, 10, 1)
+      CheckNewAnswer(
+        ("spark", 25, 50, 25, 3),
+        ("streaming", 25, 51, 26, 4),
+        ("hello", 40, 51, 11, 2),
+        ("world", 40, 51, 11, 2),
+        ("structured", 41, 51, 10, 1)
+      )
     )
   }
 
@@ -404,129 +354,105 @@ class StreamingSessionWindowSuite extends StreamTest
         "numEvents")
 
     testStream(sessionUpdates, OutputMode.Update())(
-      AddData(inputData, ("hello world spark", 10L), ("world hello structured streaming", 11L)),
-      // Advance watermark to 1 seconds
-      // current sessions after batch:
-      // ("hello", 10, 21, 11, 2)
-      // ("world", 10, 21, 11, 2)
-      // ("spark", 10, 20, 10, 1)
-      // ("structured", 11, 21, 10, 1)
-      // ("streaming", 11, 21, 10, 1)
+      AddData(inputData,
+        ("hello world spark streaming", 40L),
+        ("world hello structured streaming", 41L)
+      ),
+      // watermark: 11
+      // current sessions
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("streaming", 40, 51, 11, 2),
+      // ("spark", 40, 50, 10, 1),
+      // ("structured", 41, 51, 10, 1)
       CheckNewAnswer(
-        ("hello", 10, 21, 11, 2),
-        ("world", 10, 21, 11, 2),
-        ("spark", 10, 20, 10, 1),
-        ("structured", 11, 21, 10, 1),
-        ("streaming", 11, 21, 10, 1)
+        ("hello", 40, 51, 11, 2),
+        ("world", 40, 51, 11, 2),
+        ("streaming", 40, 51, 11, 2),
+        ("spark", 40, 50, 10, 1),
+        ("structured", 41, 51, 10, 1)
       ),
 
-      AddData(inputData, ("spark streaming", 15L)),
-      // Advance watermark to 5 seconds
-      // current sessions after batch:
-      // ("hello", 10, 21, 11, 2)
-      // ("world", 10, 21, 11, 2)
-      // ("structured", 11, 21, 10, 1)
-      // ("spark", 10, 25, 15, 2)
-      // ("streaming", 11, 25, 14, 2)
-      CheckNewAnswer(("spark", 10, 25, 15, 2), ("streaming", 11, 25, 14, 2)),
+      // placing new sessions "before" previous sessions
+      AddData(inputData, ("spark streaming", 25L)),
+      // watermark: 11
+      // current sessions
+      // ("spark", 25, 35, 10, 1),
+      // ("streaming", 25, 35, 10, 1),
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("streaming", 40, 51, 11, 2),
+      // ("spark", 40, 50, 10, 1),
+      // ("structured", 41, 51, 10, 1)
+      CheckNewAnswer(
+        ("spark", 25, 35, 10, 1),
+        ("streaming", 25, 35, 10, 1)
+      ),
 
-      AddData(inputData, ("hello world", 25L)),
-      // Advance watermark to 15 seconds
-      // current sessions after batch:
-      // ("hello", 10, 21, 11, 2)
-      // ("world", 10, 21, 11, 2)
-      // ("structured", 11, 21, 10, 1)
-      // ("spark", 10, 25, 15, 2)
-      // ("streaming", 11, 25, 14, 2)
-      // ("hello", 25, 35, 10, 1)
-      // ("world", 25, 35, 10, 1)
-      CheckNewAnswer(("hello", 25, 35, 10, 1), ("world", 25, 35, 10, 1)),
+      // late event which session's end 10 would be later than watermark 11: should be dropped
+      AddData(inputData, ("spark streaming", 0L)),
+      // watermark: 11
+      // current sessions
+      // ("spark", 25, 35, 10, 1),
+      // ("streaming", 25, 35, 10, 1),
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("streaming", 40, 51, 11, 2),
+      // ("spark", 40, 50, 10, 1),
+      // ("structured", 41, 51, 10, 1)
+      CheckNewAnswer(
+      ),
 
-      AddData(inputData, ("hello world", 3L)),
-      // input can match to not-yet-evicted sessions, but input itself is less than watermark
-      // so it should not match exiting sessions
-      // Watermark kept 15 seconds
-      // current sessions after batch:
-      // ("hello", 10, 21, 11, 2)
-      // ("world", 10, 21, 11, 2)
-      // ("structured", 11, 21, 10, 1)
-      // ("spark", 10, 25, 15, 2)
-      // ("streaming", 11, 25, 14, 2)
-      // ("hello", 25, 35, 10, 1)
-      // ("world", 25, 35, 10, 1)
-      CheckNewAnswer(),
+      // concatenating multiple previous sessions into one
+      AddData(inputData, ("spark streaming", 30L)),
+      // watermark: 11
+      // current sessions
+      // ("spark", 25, 50, 25, 3),
+      // ("streaming", 25, 51, 26, 4),
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("structured", 41, 51, 10, 1)
+      CheckNewAnswer(
+        ("spark", 25, 50, 25, 3),
+        ("streaming", 25, 51, 26, 4)
+      ),
 
-      AddData(inputData, ("hello", 31L)),
-      // Advance watermark to 21 seconds
-      // current sessions after batch:
-      // ("spark", 10, 25, 15, 2)
-      // ("streaming", 11, 25, 14, 2)
-      // ("hello", 25, 41, 16, 2)
-      // ("world", 25, 35, 10, 1)
-      CheckNewAnswer(("hello", 25, 41, 16, 2)),
-
-      AddData(inputData, ("hello", 35L)),
-      // Advance watermark to 25 seconds
-      // current sessions after batch:
-      // ("hello", 25, 45, 20, 3)
-      // ("world", 25, 35, 10, 1)
-      CheckNewAnswer(("hello", 25, 45, 20, 3)),
-
+      // placing new sessions after previous sessions
       AddData(inputData, ("hello apache spark", 60L)),
-      // Advance watermark to 50 seconds
-      // current sessions after batch:
-      // ("hello", 60, 70, 10, 1)
-      // ("apache", 60, 70, 10, 1)
+      // watermark: 30
+      // current sessions
+      // ("spark", 25, 50, 25, 3),
+      // ("streaming", 25, 51, 26, 4),
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("structured", 41, 51, 10, 1),
+      // ("hello", 60, 70, 10, 1),
+      // ("apache", 60, 70, 10, 1),
       // ("spark", 60, 70, 10, 1)
-      CheckNewAnswer(("hello", 60, 70, 10, 1), ("apache", 60, 70, 10, 1), ("spark", 60, 70, 10, 1))
-    )
-  }
+      CheckNewAnswer(
+        ("hello", 60, 70, 10, 1),
+        ("apache", 60, 70, 10, 1),
+        ("spark", 60, 70, 10, 1)
+      ),
 
-  testWithAllOptionsMergingSessionInLocalPartition("update mode - session window - " +
-    "storing multiple sessions in given key") {
-    val inputData = MemoryStream[Int]
-    val windowedAggregation = inputData.toDF()
-      .selectExpr("*", "CAST(MOD(value, 2) AS INT) AS valuegroup")
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "10 seconds")
-      .groupBy(session_window($"eventTime", "5 seconds") as 'session, 'valuegroup)
-      .agg(count("*") as 'count, sum("value") as 'sum)
-      .select($"valuegroup", $"session".getField("start").cast("long").as[Long],
-        $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
-
-    testStream(windowedAggregation, OutputMode.Update())(
-      AddData(inputData, 10, 11, 12, 13),
-      // Advance watermark to 3 seconds
-      // sessions: key 0 => (10,17) / key 1 => (11, 18)
-      CheckNewAnswer((0, 10, 17, 2, 22), (1, 11, 18, 2, 24)),
-      AddData(inputData, 17),
-      // Advance watermark to 7 seconds
-      // sessions: key 0 => (10,17) / key 1 => (11, 22)
-      // updated: key 1 => (11,22)
-      CheckNewAnswer((1, 11, 22, 3, 41)),
-      AddData(inputData, 25),
-      // Advance watermark to 15 seconds
-      // sessions: key 0 => (10,17) / key 1 => (11,22), (25,30)
-      // updated: key 1 => (25,30)
-      CheckNewAnswer((1, 25, 30, 1, 25)),
-      AddData(inputData, 35),
-      // Advance watermark to 25 seconds
-      // sessions: key 0 => (10,17) / key 1 => (11,22), (25,30), (35,40)
-      // updated: key 1 => (35,40)
-      // evicts: key 0 => (10,17) / key 1 => (11,22)
-      CheckNewAnswer((1, 35, 40, 1, 35)),
-      AddData(inputData, 27),
-      // don't advance watermark
-      // sessions: key 1 => (25,32), (35,40)
-      // updated: key 1 => (25,32)
-      CheckNewAnswer((1, 25, 32, 2, 52)),
-      AddData(inputData, 10),   // Should not emit anything as data less than watermark
-      CheckNewAnswer(),
-      AddData(inputData, 40),
-      // Advance watermark to 30 seconds
-      // sessions: key 0 => (40,45) / key 1 => (25,32), (35,40)
-      // updated: key 0 => (40,45)
-      CheckNewAnswer((0, 40, 45, 1, 40))
+      AddData(inputData, ("structured streaming", 90L)),
+      // watermark: 60
+      // current sessions
+      // ("hello", 60, 70, 10, 1),
+      // ("apache", 60, 70, 10, 1),
+      // ("spark", 60, 70, 10, 1),
+      // ("structured", 90, 100, 10, 1),
+      // ("streaming", 90, 100, 10, 1)
+      // evicted
+      // ("spark", 25, 50, 25, 3),
+      // ("streaming", 25, 51, 26, 4),
+      // ("hello", 40, 51, 11, 2),
+      // ("world", 40, 51, 11, 2),
+      // ("structured", 41, 51, 10, 1)
+      CheckNewAnswer(
+        ("structured", 90, 100, 10, 1),
+        ("streaming", 90, 100, 10, 1)
+      )
     )
   }
 
