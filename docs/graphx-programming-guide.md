@@ -726,7 +726,7 @@ class GraphOps[VD, ED] {
     var g = mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
 
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
+    var messages = GraphXUtils.mapReduceTriplets(g, sendMsg, mergeMsg)
     var activeMessages = messages.count()
     // Loop until no messages remain or maxIterations is achieved
     var i = 0
