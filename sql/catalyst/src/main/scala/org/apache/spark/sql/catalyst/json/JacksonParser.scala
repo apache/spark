@@ -310,14 +310,14 @@ class JacksonParser(
   }
 
   /**
-   * This function throws an exception for failed conversion. For empty string on non string
-   * types, this also throws an exception.
+   * This function throws an exception for failed conversion. For empty string on data types
+   * except for string and binary types, this also throws an exception.
    */
   private def failedConversion[R >: Null](
       parser: JsonParser,
       dataType: DataType): PartialFunction[JsonToken, R] = {
 
-    // SPARK-25040: Disallow empty strings for non string types.
+    // SPARK-25040: Disallow empty strings for data types except for string and binary types.
     case VALUE_STRING if parser.getTextLength < 1 =>
       throw new RuntimeException(
         s"Failed to parse an empty string for data type ${dataType.catalogString}")
