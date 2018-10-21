@@ -278,7 +278,9 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val pythonUDT = new PythonUserDefinedType(udtSQLType, "pyUDT", "serializedPyClass")
     val schema = new StructType().add("pythonUDT", pythonUDT, true)
     val encoder = RowEncoder(schema)
+    // scalastyle:off println
     encoder.serializer.foreach(s => println(s.dataType))
+    // scalastyle:on println
   }
 
   for {
