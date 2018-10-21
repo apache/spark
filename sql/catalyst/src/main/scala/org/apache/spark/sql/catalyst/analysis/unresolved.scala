@@ -98,8 +98,18 @@ case class UnresolvedTableValuedFunction(
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
 
-  def name: String =
-    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+  def name: String = {
+    nameParts.map(n =>
+      if (n.contains(".")) s"`$n`"
+      else {
+        if (nameParts.length > 1) {
+          s"`$n`"
+        } else {
+          n
+        }
+      }
+    ).mkString(".")
+  }
 
   override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")

@@ -45,7 +45,7 @@ SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't.`(a)?+.+`' given input columns: [t.A, t.B, t.c, t.d]; line 1 pos 7
+cannot resolve '`t`.`(a)?+.+`' given input columns: [t.A, t.B, t.c, t.d]; line 1 pos 7
 
 
 -- !query 5

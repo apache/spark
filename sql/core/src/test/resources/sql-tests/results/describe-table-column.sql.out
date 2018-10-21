@@ -188,7 +188,7 @@ DESC FORMATTED desc_complex_col_table col.x
 struct<>
 -- !query 14 output
 org.apache.spark.sql.AnalysisException
-DESC TABLE COLUMN command does not support nested data types: col.x;
+DESC TABLE COLUMN command does not support nested data types: `col`.`x`;
 
 
 -- !query 15
