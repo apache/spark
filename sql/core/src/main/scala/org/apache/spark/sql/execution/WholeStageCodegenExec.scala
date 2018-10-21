@@ -143,7 +143,7 @@ trait CodegenSupport extends SparkPlan {
    */
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
     val inputVars =
-      if (outputVars != null) {
+      (if (outputVars != null) {
         assert(outputVars.length == output.length)
         // outputVars will be used to generate the code for UnsafeRow, so we should copy them
         outputVars.map(_.copy())
@@ -154,7 +154,7 @@ trait CodegenSupport extends SparkPlan {
         output.zipWithIndex.map { case (attr, i) =>
           BoundReference(i, attr.dataType, attr.nullable).genCode(ctx)
         }
-      }
+      }).toBuffer
 
     val rowVar = prepareRowVar(ctx, row, outputVars)
 
