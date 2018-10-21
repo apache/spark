@@ -60,12 +60,38 @@ class ValidSQLStreaming(sparkSession: SparkSession, sqlConf: SQLConf)
         val partitionColumnNames = table.partitionColumnNames
         SQLStreamingSink(sparkSession, extraOptions, partitionColumnNames, child)
 
-      case None =>
+      case None if sqlConf.sqlStreamConsoleSinkEnable =>
+        logInfo("Enable to use ConsoleSink")
         // Used when user use just select stream * from table.
         var extraOptions = Map("numRows" -> sqlConf.sqlStreamConsoleOutputRows)
         extraOptions += ("source" -> "console")
         val partitionColumnNames = Seq()
         SQLStreamingSink(sparkSession, extraOptions, partitionColumnNames, child)
+
+      // Sink_table is not defined, and user disable console sink
+      // The purpose of this part of the design is to keep synchronous with the design of
+      // offline Spark-sql, allowing users to submit streaming in "code + SQL", which is,
+      // users can generate df by querying stream_table and then customize the sink output.
+      // here is a little example
+      // val kafkaDF =
+      //  spark.sql("select stream cast(key as string), cast(value as string) from kafka_sql_test")
+      //  kafkaDF.writeStream
+      //    .foreach(new ForeachWriter[Row] {
+      //      override def process(value: Row) = {
+      //        println(value.toSeq(1))
+      //      }
+      //      override def close(errorOrNull: Throwable) = {
+      //     }
+      //      override def open(partitionId: Long, version: Long) = {
+      //        true
+      //      }
+      //    })
+      //    .trigger(Trigger.ProcessingTime(10, TimeUnit.SECONDS))
+      //    .start()
+      //    .awaitTermination()
+      case _ =>
+        logWarning("No sink available in sqlstreaming, user should define StructStreaming Sink")
+        child
     }
   }
 
@@ -75,7 +101,7 @@ class ValidSQLStreaming(sparkSession: SparkSession, sqlConf: SQLConf)
    * @return logicalPlan
    */
   private def removeUnusedWithStreamDefinition(plan: LogicalPlan): LogicalPlan =
-    plan.resolveOperators {
+      plan.resolveOperators {
       case logical: WithStreamDefinition =>
         logical.child
     }

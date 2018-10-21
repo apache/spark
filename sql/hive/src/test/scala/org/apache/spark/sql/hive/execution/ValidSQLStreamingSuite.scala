@@ -42,6 +42,7 @@ class ValidSQLStreamingSuite extends ResolveStreamRelationSuite {
 
   test("select stream * from csvTable with enable=true") {
     sqlConf.setConf(SQLConf.SQLSTREAM_QUERY_ENABLE, true)
+    sqlConf.setConf(SQLConf.SQLSTREAM_CONSOLESINK_ENABLE, true)
     assertAnalysisSuccess(
       WithStreamDefinition(
         UnresolvedStreamRelation(TableIdentifier("csvTable"))

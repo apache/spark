@@ -21,14 +21,15 @@ import java.util.Locale
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog, UnresolvedCatalogRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Used to resolve UnResolvedStreamRelaTion, which is used in sqlstreaming
@@ -39,9 +40,17 @@ import org.apache.spark.sql.types.StructType
  * @param sparkSession
  */
 class ResolveStreamRelation(catalog: SessionCatalog,
-                            conf: SQLConf,
-                            sparkSession: SparkSession)
+    sqlConf: SQLConf,
+    sparkSession: SparkSession)
   extends Rule[LogicalPlan] with CheckAnalysis {
+
+  /**
+   * SQLStreaming watermark configuration.
+   * User must use spark.sqlstreaming.watermark.{db}.{table}.[column/delay] to set watermark.
+   */
+  private val SQLSTREAM_WATERMARK = "spark.sqlstreaming.watermark"
+  private val COLUMN = "column"
+  private val DELAY = "delay"
 
   private def lookupRelation(relation: UnresolvedStreamRelation,
                              defaultDatabase: Option[String] = None): LogicalPlan = {
@@ -76,14 +85,14 @@ class ResolveStreamRelation(catalog: SessionCatalog,
    * Format table name, taking into account case sensitivity.
    */
   protected[this] def formatTableName(name: String): String = {
-    if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    if (sqlConf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
   }
 
   /**
    * Format database name, taking into account case sensitivity.
    */
   protected[this] def formatDatabaseName(name: String): String = {
-    if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    if (sqlConf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
   }
 
   /**
@@ -94,7 +103,7 @@ class ResolveStreamRelation(catalog: SessionCatalog,
   private[hive] def lookupStreamingRelation(table: CatalogTable): LogicalPlan = {
     table.provider match {
       case Some(sourceName) =>
-        DataSource.lookupDataSource(sourceName, conf).newInstance() match {
+        DataSource.lookupDataSource(sourceName, sqlConf).newInstance() match {
           case s: StreamSourceProvider =>
             createStreamingRelation(table, usingFileStreamSource = false)
           case format: FileFormat =>
@@ -129,15 +138,50 @@ class ResolveStreamRelation(catalog: SessionCatalog,
       sourceProperties += ("path" -> table.location.getPath)
     }
 
-    StreamingRelation(
+    val relation = StreamingRelation(
       DataSource(
         sparkSession,
         sourceName,
         userSpecifiedSchema = userSpecifiedSchema,
         options = sourceProperties,
         partitionColumns = partitionColumnNames
-      )
+      ),
+      sourceName,
+      table.schema.toAttributes
     )
+
+    /**
+     * Check watermark
+     */
+    withWaterMark(relation, table)
+  }
+
+  /**
+   * Check watermark enable. If true, add watermark to relation.
+   * @param relation the basic streaming relation
+   * @param metadata table meta
+   * @return
+   */
+  private def withWaterMark(relation: LogicalPlan, metadata: CatalogTable): LogicalPlan = {
+    if (sqlConf.sqlStreamWaterMarkEnable) {
+
+      logInfo("Using watermark in sqlstreaming")
+      val tableName = s"${metadata.identifier.database.get}.${metadata.identifier.table}"
+      val SQLSTREAM_WATERMARK_COLUMN = s"$SQLSTREAM_WATERMARK.$tableName.$COLUMN"
+      val SQLSTREAM_WATERMARK_DELAY = s"$SQLSTREAM_WATERMARK.$tableName.$DELAY"
+      val column = sqlConf.getConfString(SQLSTREAM_WATERMARK_COLUMN)
+      val delay = sqlConf.getConfString(SQLSTREAM_WATERMARK_DELAY)
+
+      EventTimeWatermark(
+        UnresolvedAttribute(column),
+        CalendarInterval.fromString(s"interval $delay"),
+        relation
+      )
+    } else {
+
+      logInfo("None watermark found in sqlstreaming")
+      relation
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {

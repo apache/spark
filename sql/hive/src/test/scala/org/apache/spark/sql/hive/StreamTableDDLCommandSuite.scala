@@ -30,11 +30,10 @@ class StreamTableDDLCommandSuite extends SQLTestUtils with TestHiveSingleton {
           s"""CREATE TABLE t USING PARQUET
              |OPTIONS (
              |PATH = '${dir.toURI}',
-        |location = '${dir.toURI}',
-        |isStreaming = 'true')
-        |AS SELECT 1 AS a, 2 AS b, 3 AS c
-        """.stripMargin
-        )
+             |location = '${dir.toURI}',
+             |isStreaming = 'true')
+             |AS SELECT 1 AS a, 2 AS b, 3 AS c
+          """.stripMargin)
         val streamTable = catalog.getTableMetadata(TableIdentifier("t"))
         assert(streamTable.isStreaming)
       }

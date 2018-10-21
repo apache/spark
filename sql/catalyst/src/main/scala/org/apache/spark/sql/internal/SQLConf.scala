@@ -631,6 +631,16 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
+  val SQLSTREAM_WATERMARK_ENABLE = buildConf("spark.sqlstreaming.watermark.enable")
+    .doc("Whether use watermark in sqlstreaming.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val SQLSTREAM_CONSOLESINK_ENABLE = buildConf("spark.sqlstreaming.consoleSink.enable")
+    .doc("Whether use console sink when user does not define insert into table.")
+    .booleanConf
+    .createWithDefault(false)
+
   val SQLSTREAM_OUTPUTMODE = buildConf("spark.sqlstreaming.outputMode")
     .doc("The output mode used in sqlstreaming")
     .stringConf
@@ -1839,6 +1849,10 @@ class SQLConf extends Serializable with Logging {
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
   def broadcastTimeout: Long = getConf(BROADCAST_TIMEOUT)
+
+  def sqlStreamWaterMarkEnable: Boolean = getConf(SQLSTREAM_WATERMARK_ENABLE)
+
+  def sqlStreamConsoleSinkEnable: Boolean = getConf(SQLSTREAM_CONSOLESINK_ENABLE)
 
   def sqlStreamOutputMode: String = getConf(SQLSTREAM_OUTPUTMODE)
 

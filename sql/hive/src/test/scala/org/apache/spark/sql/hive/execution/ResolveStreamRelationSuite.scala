@@ -126,15 +126,32 @@ class ResolveStreamRelationSuite extends AnalysisTest with TestHiveSingleton {
       )
     )
 
-  test("resolve stream relations") {
+  test("resolve stream relations with manage table") {
     assertAnalysisError(UnresolvedStreamRelation(TableIdentifier("tAbLe")), Seq())
+  }
+
+  test("resolve stream relations with csv stream tabl") {
     checkAnalysis(
       UnresolvedStreamRelation(TableIdentifier("csvTable")),
       getStreamRelation("csv", csvOptions)
     )
+  }
+
+  test("resolve stream relations with parquet stream table") {
     checkAnalysis(
       UnresolvedStreamRelation(TableIdentifier("parquetTable")),
       getStreamRelation("parquet", parquetOptions)
+    )
+  }
+
+  test("resolve stream relations with watermark") {
+    val column: String = "timestamp"
+    val delay: String = "2 seconds"
+    sqlConf.setConf(SQLConf.SQLSTREAM_WATERMARK_ENABLE, true)
+    sqlConf.setConfString("spark.sqlstreaming.watermark.default.csvTable.column", column)
+    sqlConf.setConfString("spark.sqlstreaming.watermark.default.csvTable.delay", delay)
+    assertAnalysisSuccess(
+      UnresolvedStreamRelation(TableIdentifier("csvTable"))
     )
   }
 }

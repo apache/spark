@@ -20,11 +20,13 @@ package org.apache.spark.sql.hive.execution
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.StreamingWriteSupportProvider
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.Utils
@@ -75,6 +77,7 @@ case class SQLStreamingSink(sparkSession: SparkSession,
     // Builder pattern config options
     ///////////////////////////////////////////////////////////////////////////////////////
     val df = Dataset.ofRows(sparkSession, child)
+//    val df = Dataset.ofRows(sparkSession, child)
     val source = extraOptions("source")
     val outputMode = InternalOutputModes(sqlConf.sqlStreamOutputMode)
     val normalizedParCols = partitionColumnNames.map {
