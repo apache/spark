@@ -90,9 +90,21 @@ object HiveThriftServer2 extends Logging {
       uiTab.foreach(_.detach())
     }
 
+    val hadoopConf = SparkSQLEnv.sqlContext.sessionState.newHadoopConf()
+
     val executionHive = HiveUtils.newClientForExecution(
       SparkSQLEnv.sqlContext.sparkContext.conf,
-      SparkSQLEnv.sqlContext.sessionState.newHadoopConf())
+      hadoopConf
+    )
+
+    Seq(ConfVars.METASTOREURIS,
+      ConfVars.METASTORECONNECTURLKEY,
+      ConfVars.METASTORE_CONNECTION_USER_NAME,
+      ConfVars.METASTOREPWD,
+      ConfVars.METASTORE_CONNECTION_DRIVER,
+      ConfVars.METASTOREWAREHOUSE).foreach { key =>
+      executionHive.conf.set(key.varname, hadoopConf.get(key.varname))
+    }
 
     try {
       val server = new HiveThriftServer2(SparkSQLEnv.sqlContext)
