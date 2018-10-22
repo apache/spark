@@ -443,11 +443,12 @@ private[spark] class TaskSchedulerImpl(
                   if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
                     blacklistTrackerOpt.foreach(blt => blt.killBlacklistedIdleExecutor(executorId))
 
-                    unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis()
                     val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
+                    unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
                     logInfo(s"Waiting for $timeout ms for completely "
                       + s"blacklisted task to be schedulable again before aborting $taskSet.")
-                    abortTimer.schedule(getAbortTimer(taskSet, taskIndex, timeout), timeout)
+                    abortTimer.schedule(
+                      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex, timeout), timeout)
                   }
                 case _ => // Abort Immediately
                   logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
@@ -457,7 +458,7 @@ private[spark] class TaskSchedulerImpl(
             case _ => // Do nothing if no tasks completely blacklisted.
           }
         } else {
-          // We want to differ killing any taskSets as long as we have a non blacklisted executor
+          // We want to defer killing any taskSets as long as we have a non blacklisted executor
           // which can be used to schedule a task from any active taskSets. This ensures that the
           // job can make progress and if we encounter a flawed taskSet it will eventually either
           // fail or abort due to being completely blacklisted.
@@ -503,11 +504,14 @@ private[spark] class TaskSchedulerImpl(
     return tasks
   }
 
-  private def getAbortTimer(taskSet: TaskSetManager, taskIndex: Int, timeout: Long): TimerTask = {
+  private def createUnschedulableTaskSetAbortTimer(
+      taskSet: TaskSetManager,
+      taskIndex: Int,
+      timeout: Long): TimerTask = {
     new TimerTask() {
       override def run() {
         if (unschedulableTaskSetToExpiryTime.contains(taskSet) &&
-          (unschedulableTaskSetToExpiryTime(taskSet) + timeout) <= clock.getTimeMillis()
+          unschedulableTaskSetToExpiryTime(taskSet) <= clock.getTimeMillis()
         ) {
           logInfo("Cannot schedule any task because of complete blacklisting. " +
             s"Wait time for scheduling expired. Aborting $taskSet.")

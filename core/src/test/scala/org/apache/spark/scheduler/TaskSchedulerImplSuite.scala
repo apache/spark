@@ -20,10 +20,12 @@ package org.apache.spark.scheduler
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
+import scala.concurrent.duration._
 
 import org.mockito.Matchers.{anyInt, anyObject, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
+import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
@@ -40,7 +42,7 @@ class FakeSchedulerBackend extends SchedulerBackend {
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
-    with Logging with MockitoSugar {
+    with Logging with MockitoSugar with Eventually {
 
   var failedTaskSetException: Option[Throwable] = None
   var failedTaskSetReason: String = null
@@ -538,8 +540,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     )).flatten.size === 0)
     // Wait for the abort timer to kick in. Without sleep the test exits before the timer is
     // triggered.
-    Thread.sleep(500)
-    assert(tsm.isZombie)
+    eventually(timeout(500.milliseconds)) {
+      assert(tsm.isZombie)
+    }
   }
 
   test("SPARK-22148 try to acquire a new executor when task is unschedulable with 1 executor") {
@@ -572,7 +575,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(taskScheduler.resourceOffers(IndexedSeq(
       WorkerOffer("executor0", "host0", 1)
     )).flatten.size === 0)
-    Thread.sleep(500)
     assert(!tsm.isZombie)
 
     // Offer a new executor which should be accepted
