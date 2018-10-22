@@ -114,7 +114,7 @@ write.df(namesAndAges, "namesAndAges.parquet", "parquet")
 
 
 # $example on:manual_load_options_csv$
-df <- read.df("examples/src/main/resources/people.csv", "csv")
+df <- read.df("examples/src/main/resources/people.csv", "csv", sep=";", inferSchema=T, header=T)
 namesAndAges <- select(df, "name", "age")
 # $example off:manual_load_options_csv$
 
