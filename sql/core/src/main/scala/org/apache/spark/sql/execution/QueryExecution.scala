@@ -89,7 +89,6 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
-    python.ExtractPythonUDFs,
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
     CollapseCodegenStages(sparkSession.sessionState.conf),
@@ -155,6 +154,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       case (null, _) => "null"
       case (s: String, StringType) => "\"" + s + "\""
       case (decimal, DecimalType()) => decimal.toString
+      case (interval, CalendarIntervalType) => interval.toString
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
@@ -178,6 +178,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
           DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone))
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
       case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
+      case (interval, CalendarIntervalType) => interval.toString
       case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
     }
   }
@@ -223,7 +224,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
    * Redact the sensitive information in the given string.
    */
   private def withRedaction(message: String): String = {
-    Utils.redact(sparkSession.sessionState.conf.stringRedationPattern, message)
+    Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, message)
   }
 
   /** A special namespace for commands that can be used to debug query execution. */

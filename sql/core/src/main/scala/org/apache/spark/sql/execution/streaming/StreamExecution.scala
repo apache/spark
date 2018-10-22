@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -282,7 +283,7 @@ abstract class StreamExecution(
         // `stop()` is already called. Let `finally` finish the cleanup.
       }
     } catch {
-      case e if isInterruptedByStop(e) =>
+      case e if isInterruptedByStop(e, sparkSession.sparkContext) =>
         // interrupted by stop()
         updateStatusMessage("Stopped")
       case e: IOException if e.getMessage != null
@@ -354,9 +355,9 @@ abstract class StreamExecution(
     }
   }
 
-  private def isInterruptedByStop(e: Throwable): Boolean = {
+  private def isInterruptedByStop(e: Throwable, sc: SparkContext): Boolean = {
     if (state.get == TERMINATED) {
-      StreamExecution.isInterruptionException(e)
+      StreamExecution.isInterruptionException(e, sc)
     } else {
       false
     }
@@ -379,28 +380,10 @@ abstract class StreamExecution(
   }
 
   /**
-   * Signals to the thread executing micro-batches that it should stop running after the next
-   * batch. This method blocks until the thread stops running.
-   */
-  override def stop(): Unit = {
-    // Set the state to TERMINATED so that the batching thread knows that it was interrupted
-    // intentionally
-    state.set(TERMINATED)
-    if (queryExecutionThread.isAlive) {
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
-      queryExecutionThread.interrupt()
-      queryExecutionThread.join()
-      // microBatchThread may spawn new jobs, so we need to cancel again to prevent a leak
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
-    }
-    logInfo(s"Query $prettyIdString was stopped")
-  }
-
-  /**
    * Blocks the current thread until processing for data from the given `source` has reached at
    * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
-  private[sql] def awaitOffset(sourceIndex: Int, newOffset: Offset): Unit = {
+  private[sql] def awaitOffset(sourceIndex: Int, newOffset: Offset, timeoutMs: Long): Unit = {
     assertAwaitThread()
     def notDone = {
       val localCommittedOffsets = committedOffsets
@@ -416,7 +399,7 @@ abstract class StreamExecution(
     while (notDone) {
       awaitProgressLock.lock()
       try {
-        awaitProgressLockCondition.await(100, TimeUnit.MILLISECONDS)
+        awaitProgressLockCondition.await(timeoutMs, TimeUnit.MILLISECONDS)
         if (streamDeathCause != null) {
           throw streamDeathCause
         }
@@ -547,8 +530,9 @@ abstract class StreamExecution(
 
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
+  val IS_CONTINUOUS_PROCESSING = "__is_continuous_processing"
 
-  def isInterruptionException(e: Throwable): Boolean = e match {
+  def isInterruptionException(e: Throwable, sc: SparkContext): Boolean = e match {
     // InterruptedIOException - thrown when an I/O operation is interrupted
     // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
     case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
@@ -563,7 +547,18 @@ object StreamExecution {
     //                               ExecutionException, such as BiFunction.apply
     case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
         if e2.getCause != null =>
-      isInterruptionException(e2.getCause)
+      isInterruptionException(e2.getCause, sc)
+    case se: SparkException =>
+      val jobGroup = sc.getLocalProperty("spark.jobGroup.id")
+      if (jobGroup == null) return false
+      val errorMsg = se.getMessage
+      if (errorMsg.contains("cancelled") && errorMsg.contains(jobGroup) && se.getCause == null) {
+        true
+      } else if (se.getCause != null) {
+        isInterruptionException(se.getCause, sc)
+      } else {
+        false
+      }
     case _ =>
       false
   }

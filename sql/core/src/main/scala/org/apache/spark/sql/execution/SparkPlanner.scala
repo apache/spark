@@ -36,11 +36,13 @@ class SparkPlanner(
   override def strategies: Seq[Strategy] =
     experimentalMethods.extraStrategies ++
       extraPlanningStrategies ++ (
+      PythonEvals ::
       DataSourceV2Strategy ::
       FileSourceStrategy ::
       DataSourceStrategy(conf) ::
       SpecialLimits ::
       Aggregation ::
+      Window ::
       JoinSelection ::
       InMemoryScans ::
       BasicOperators :: Nil)

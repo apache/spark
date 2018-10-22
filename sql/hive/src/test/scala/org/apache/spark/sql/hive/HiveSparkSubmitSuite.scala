@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.{BufferedWriter, File, FileWriter}
 
-import scala.tools.nsc.Properties
+import scala.util.Properties
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterEach, Matchers}
@@ -33,11 +33,13 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.types.{DecimalType, StructType}
+import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
  * This suite tests spark-submit with applications using HiveContext.
  */
+@ExtendedHiveTest
 class HiveSparkSubmitSuite
   extends SparkSubmitTestUtils
   with Matchers
@@ -45,8 +47,6 @@ class HiveSparkSubmitSuite
   with ResetSystemProperties {
 
   override protected val enableAutoThreadAudit = false
-
-  // TODO: rewrite these or mark them as slow tests to be run sparingly
 
   override def beforeEach() {
     super.beforeEach()
@@ -330,7 +330,7 @@ class HiveSparkSubmitSuite
 
 object SetMetastoreURLTest extends Logging {
   def main(args: Array[String]): Unit = {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
 
     val sparkConf = new SparkConf(loadDefaults = true)
     val builder = SparkSession.builder()
@@ -354,7 +354,7 @@ object SetMetastoreURLTest extends Logging {
 
     // HiveExternalCatalog is used when Hive support is enabled.
     val actualMetastoreURL =
-      spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
         .getConf("javax.jdo.option.ConnectionURL", "this_is_a_wrong_URL")
     logInfo(s"javax.jdo.option.ConnectionURL is $actualMetastoreURL")
 
@@ -368,7 +368,7 @@ object SetMetastoreURLTest extends Logging {
 
 object SetWarehouseLocationTest extends Logging {
   def main(args: Array[String]): Unit = {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
 
     val sparkConf = new SparkConf(loadDefaults = true).set("spark.ui.enabled", "false")
     val providedExpectedWarehouseLocation =
@@ -447,7 +447,7 @@ object SetWarehouseLocationTest extends Logging {
 // can load the jar defined with the function.
 object TemporaryHiveUDFTest extends Logging {
   def main(args: Array[String]) {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
@@ -485,7 +485,7 @@ object TemporaryHiveUDFTest extends Logging {
 // can load the jar defined with the function.
 object PermanentHiveUDFTest1 extends Logging {
   def main(args: Array[String]) {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
@@ -523,7 +523,7 @@ object PermanentHiveUDFTest1 extends Logging {
 // can load the jar defined with the function.
 object PermanentHiveUDFTest2 extends Logging {
   def main(args: Array[String]) {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
@@ -558,7 +558,7 @@ object PermanentHiveUDFTest2 extends Logging {
 // We test if we can load user jars in both driver and executors when HiveContext is used.
 object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]) {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val hiveWarehouseLocation = Utils.createTempDir()
     conf.set("spark.ui.enabled", "false")
@@ -628,7 +628,7 @@ object SparkSubmitClassLoaderTest extends Logging {
 // We test if we can correctly set spark sql configurations when HiveContext is used.
 object SparkSQLConfTest extends Logging {
   def main(args: Array[String]) {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
     // We override the SparkConf to add spark.sql.hive.metastore.version and
     // spark.sql.hive.metastore.jars to the beginning of the conf entry array.
     // So, if metadataHive get initialized after we set spark.sql.hive.metastore.version but
@@ -669,7 +669,7 @@ object SPARK_9757 extends QueryTest {
   protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
 
     val hiveWarehouseLocation = Utils.createTempDir()
     val sparkContext = new SparkContext(
@@ -718,7 +718,7 @@ object SPARK_11009 extends QueryTest {
   protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
 
     val sparkContext = new SparkContext(
       new SparkConf()
@@ -749,7 +749,7 @@ object SPARK_14244 extends QueryTest {
   protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
 
     val sparkContext = new SparkContext(
       new SparkConf()
@@ -780,7 +780,8 @@ object SPARK_18360 {
     val defaultDbLocation = spark.catalog.getDatabase("default").locationUri
     assert(new Path(defaultDbLocation) == new Path(spark.sharedState.warehousePath))
 
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+    val hiveClient =
+      spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
 
     try {
       val tableMeta = CatalogTable(

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 from abc import abstractmethod, ABCMeta
 
 from pyspark import since, keyword_only
@@ -446,4 +447,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

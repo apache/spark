@@ -26,10 +26,10 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("basic") {
-    val intUdf = ScalaUDF((i: Int) => i + 1, IntegerType, Literal(1) :: Nil)
+    val intUdf = ScalaUDF((i: Int) => i + 1, IntegerType, Literal(1) :: Nil, true :: Nil)
     checkEvaluation(intUdf, 2)
 
-    val stringUdf = ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil)
+    val stringUdf = ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil, true :: Nil)
     checkEvaluation(stringUdf, "ax")
   }
 
@@ -37,20 +37,21 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
     val udf = ScalaUDF(
       (s: String) => s.toLowerCase(Locale.ROOT),
       StringType,
-      Literal.create(null, StringType) :: Nil)
+      Literal.create(null, StringType) :: Nil,
+      true :: Nil)
 
     val e1 = intercept[SparkException](udf.eval())
     assert(e1.getMessage.contains("Failed to execute user defined function"))
 
     val e2 = intercept[SparkException] {
-      checkEvalutionWithUnsafeProjection(udf, null)
+      checkEvaluationWithUnsafeProjection(udf, null)
     }
     assert(e2.getMessage.contains("Failed to execute user defined function"))
   }
 
   test("SPARK-22695: ScalaUDF should not use global variables") {
     val ctx = new CodegenContext
-    ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil).genCode(ctx)
+    ScalaUDF((s: String) => s + "x", StringType, Literal("a") :: Nil, true :: Nil).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)
   }
 }

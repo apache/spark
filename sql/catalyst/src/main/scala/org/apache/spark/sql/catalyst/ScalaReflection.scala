@@ -17,10 +17,17 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.lang.reflect.Constructor
+
+import scala.util.Properties
+
+import org.apache.commons.lang3.reflect.ConstructorUtils
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -382,22 +389,22 @@ object ScalaReflection extends ScalaReflection {
           val clsName = getClassNameFromType(fieldType)
           val newTypePath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           // For tuples, we based grab the inner fields by ordinal instead of name.
-          if (cls.getName startsWith "scala.Tuple") {
+          val constructor = if (cls.getName startsWith "scala.Tuple") {
             deserializerFor(
               fieldType,
               Some(addToPathOrdinal(i, dataType, newTypePath)),
               newTypePath)
           } else {
-            val constructor = deserializerFor(
+            deserializerFor(
               fieldType,
               Some(addToPath(fieldName, dataType, newTypePath)),
               newTypePath)
+          }
 
-            if (!nullable) {
-              AssertNotNull(constructor, newTypePath)
-            } else {
-              constructor
-            }
+          if (!nullable) {
+            AssertNotNull(constructor, newTypePath)
+          } else {
+            constructor
           }
         }
 
@@ -705,6 +712,8 @@ object ScalaReflection extends ScalaReflection {
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
     case Schema(s: StructType, _) =>
       s.toAttributes
+    case others =>
+      throw new UnsupportedOperationException(s"Attributes for type $others is not supported")
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
@@ -782,10 +791,24 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
+   * Finds an accessible constructor with compatible parameters. This is a more flexible search
+   * than the exact matching algorithm in `Class.getConstructor`. The first assignment-compatible
+   * matching constructor is returned. Otherwise, it returns `None`.
+   */
+  def findConstructor(cls: Class[_], paramTypes: Seq[Class[_]]): Option[Constructor[_]] = {
+    Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*))
+  }
+
+  /**
    * Whether the fields of the given type is defined entirely by its constructor parameters.
    */
   def definedByConstructorParams(tpe: Type): Boolean = cleanUpReflectionObjects {
-    tpe.dealias <:< localTypeOf[Product] || tpe.dealias <:< localTypeOf[DefinedByConstructorParams]
+    tpe.dealias match {
+      // `Option` is a `Product`, but we don't wanna treat `Option[Int]` as a struct type.
+      case t if t <:< localTypeOf[Option[_]] => definedByConstructorParams(t.typeArgs.head)
+      case _ => tpe.dealias <:< localTypeOf[Product] ||
+        tpe.dealias <:< localTypeOf[DefinedByConstructorParams]
+    }
   }
 
   private val javaKeywords = Set("abstract", "assert", "boolean", "break", "byte", "case", "catch",
@@ -794,13 +817,72 @@ object ScalaReflection extends ScalaReflection {
     "interface", "long", "native", "new", "null", "package", "private", "protected", "public",
     "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this", "throw",
     "throws", "transient", "true", "try", "void", "volatile", "while")
+
+  val typeJavaMapping = Map[DataType, Class[_]](
+    BooleanType -> classOf[Boolean],
+    ByteType -> classOf[Byte],
+    ShortType -> classOf[Short],
+    IntegerType -> classOf[Int],
+    LongType -> classOf[Long],
+    FloatType -> classOf[Float],
+    DoubleType -> classOf[Double],
+    StringType -> classOf[UTF8String],
+    DateType -> classOf[DateType.InternalType],
+    TimestampType -> classOf[TimestampType.InternalType],
+    BinaryType -> classOf[BinaryType.InternalType],
+    CalendarIntervalType -> classOf[CalendarInterval]
+  )
+
+  val typeBoxedJavaMapping = Map[DataType, Class[_]](
+    BooleanType -> classOf[java.lang.Boolean],
+    ByteType -> classOf[java.lang.Byte],
+    ShortType -> classOf[java.lang.Short],
+    IntegerType -> classOf[java.lang.Integer],
+    LongType -> classOf[java.lang.Long],
+    FloatType -> classOf[java.lang.Float],
+    DoubleType -> classOf[java.lang.Double],
+    DateType -> classOf[java.lang.Integer],
+    TimestampType -> classOf[java.lang.Long]
+  )
+
+  def dataTypeJavaClass(dt: DataType): Class[_] = {
+    dt match {
+      case _: DecimalType => classOf[Decimal]
+      case _: StructType => classOf[InternalRow]
+      case _: ArrayType => classOf[ArrayData]
+      case _: MapType => classOf[MapData]
+      case ObjectType(cls) => cls
+      case _ => typeJavaMapping.getOrElse(dt, classOf[java.lang.Object])
+    }
+  }
+
+  def javaBoxedType(dt: DataType): Class[_] = dt match {
+    case _: DecimalType => classOf[Decimal]
+    case BinaryType => classOf[Array[Byte]]
+    case StringType => classOf[UTF8String]
+    case CalendarIntervalType => classOf[CalendarInterval]
+    case _: StructType => classOf[InternalRow]
+    case _: ArrayType => classOf[ArrayType]
+    case _: MapType => classOf[MapType]
+    case udt: UserDefinedType[_] => javaBoxedType(udt.sqlType)
+    case ObjectType(cls) => cls
+    case _ => ScalaReflection.typeBoxedJavaMapping.getOrElse(dt, classOf[java.lang.Object])
+  }
+
+  def expressionJavaClasses(arguments: Seq[Expression]): Seq[Class[_]] = {
+    if (arguments != Nil) {
+      arguments.map(e => dataTypeJavaClass(e.dataType))
+    } else {
+      Seq.empty
+    }
+  }
 }
 
 /**
  * Support for generating catalyst schemas for scala objects.  Note that unlike its companion
  * object, this trait able to work in both the runtime and the compile time (macro) universe.
  */
-trait ScalaReflection {
+trait ScalaReflection extends Logging {
   /** The universe we work in (runtime or macro) */
   val universe: scala.reflect.api.Universe
 
@@ -854,12 +936,20 @@ trait ScalaReflection {
   }
 
   /**
-   * Returns classes of input parameters of scala function object.
+   * Returns the nullability of the input parameter types of the scala function object.
+   *
+   * Note that this only works with Scala 2.11, and the information returned may be inaccurate if
+   * used with a different Scala version.
    */
-  def getParameterTypes(func: AnyRef): Seq[Class[_]] = {
+  def getParameterTypeNullability(func: AnyRef): Seq[Boolean] = {
+    if (!Properties.versionString.contains("2.11")) {
+      logWarning(s"Scala ${Properties.versionString} cannot get type nullability correctly via " +
+        "reflection, thus Spark cannot add proper input null check for UDF. To avoid this " +
+        "problem, use the typed UDF interfaces instead.")
+    }
     val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
     assert(methods.length == 1)
-    methods.head.getParameterTypes
+    methods.head.getParameterTypes.map(!_.isPrimitive)
   }
 
   /**

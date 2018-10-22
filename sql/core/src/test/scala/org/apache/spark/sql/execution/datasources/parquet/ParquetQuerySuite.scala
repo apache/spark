@@ -108,7 +108,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val queryOutput = selfJoin.queryExecution.analyzed.output
 
       assertResult(4, "Field count mismatches")(queryOutput.size)
-      assertResult(2, "Duplicated expression ID in query plan:\n $selfJoin") {
+      assertResult(2, s"Duplicated expression ID in query plan:\n $selfJoin") {
         queryOutput.filter(_.name == "_1").map(_.exprId).size
       }
 
@@ -117,7 +117,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("nested data - struct with array field") {
-    val data = (1 to 10).map(i => Tuple1((i, Seq("val_$i"))))
+    val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
     withParquetTable(data, "t") {
       checkAnswer(sql("SELECT _1._2[0] FROM t"), data.map {
         case Tuple1((_, Seq(string))) => Row(string)
@@ -126,7 +126,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("nested data - array of struct") {
-    val data = (1 to 10).map(i => Tuple1(Seq(i -> "val_$i")))
+    val data = (1 to 10).map(i => Tuple1(Seq(i -> s"val_$i")))
     withParquetTable(data, "t") {
       checkAnswer(sql("SELECT _1[0]._2 FROM t"), data.map {
         case Tuple1(Seq((_, string))) => Row(string)
@@ -275,7 +275,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
-      ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true"
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL"
     ) {
       testSchemaMerging(2)
     }
@@ -876,6 +876,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
         val withShortField = new StructType().add("f", ShortType)
         checkAnswer(spark.read.schema(withShortField).parquet(path), Row(1: Short))
+      }
+    }
+  }
+
+  test("SPARK-24230: filter row group using dictionary") {
+    withSQLConf(("parquet.filter.dictionary.enabled", "true")) {
+      // create a table with values from 0, 2, ..., 18 that will be dictionary-encoded
+      withParquetTable((0 until 100).map(i => ((i * 2) % 20, s"data-$i")), "t") {
+        // search for a key that is not present so the dictionary filter eliminates all row groups
+        // Fails without SPARK-24230:
+        //   java.io.IOException: expecting more rows but reached last block. Read 0 out of 50
+        checkAnswer(sql("SELECT _2 FROM t WHERE t._1 = 5"), Seq.empty)
       }
     }
   }

@@ -104,7 +104,7 @@ object SQLMetrics {
    * spill size, etc.
    */
   def createSizeMetric(sc: SparkContext, name: String): SQLMetric = {
-    // The final result of this metric in physical operator UI may looks like:
+    // The final result of this metric in physical operator UI may look like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
     val acc = new SQLMetric(SIZE_METRIC, -1)

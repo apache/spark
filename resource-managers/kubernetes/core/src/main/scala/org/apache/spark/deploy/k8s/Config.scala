@@ -54,10 +54,18 @@ private[spark] object Config extends Logging {
       .checkValues(Set("Always", "Never", "IfNotPresent"))
       .createWithDefault("IfNotPresent")
 
+  val IMAGE_PULL_SECRETS =
+    ConfigBuilder("spark.kubernetes.container.image.pullSecrets")
+      .doc("Comma separated list of the Kubernetes secrets used " +
+        "to access private image registries.")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver.mounted"
+  val KUBERNETES_AUTH_CLIENT_MODE_PREFIX = "spark.kubernetes.authenticate"
   val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
   val OAUTH_TOKEN_FILE_CONF_SUFFIX = "oauthTokenFile"
   val CLIENT_KEY_FILE_CONF_SUFFIX = "clientKeyFile"
@@ -79,9 +87,21 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_DRIVER_SUBMIT_CHECK =
+    ConfigBuilder("spark.kubernetes.submitInDriver")
+    .internal()
+    .booleanConf
+    .createWithDefault(false)
+
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
       .doc("Specify the hard cpu limit for each executor pod")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_REQUEST_CORES =
+    ConfigBuilder("spark.kubernetes.executor.request.cores")
+      .doc("Specify the cpu request for each executor pod")
       .stringConf
       .createOptional
 
@@ -97,6 +117,41 @@ private[spark] object Config extends Logging {
       .internal()
       .stringConf
       .createWithDefault("spark")
+
+  val KUBERNETES_PYSPARK_PY_FILES =
+    ConfigBuilder("spark.kubernetes.python.pyFiles")
+      .doc("The PyFiles that are distributed via client arguments")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_PYSPARK_MAIN_APP_RESOURCE =
+    ConfigBuilder("spark.kubernetes.python.mainAppResource")
+      .doc("The main app resource for pyspark jobs")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_PYSPARK_APP_ARGS =
+    ConfigBuilder("spark.kubernetes.python.appArgs")
+      .doc("The app arguments for PySpark Jobs")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_R_MAIN_APP_RESOURCE =
+    ConfigBuilder("spark.kubernetes.r.mainAppResource")
+      .doc("The main app resource for SparkR jobs")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_R_APP_ARGS =
+    ConfigBuilder("spark.kubernetes.r.appArgs")
+      .doc("The app arguments for SparkR Jobs")
+      .internal()
+      .stringConf
+      .createOptional
 
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
@@ -135,72 +190,93 @@ private[spark] object Config extends Logging {
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
 
-  val JARS_DOWNLOAD_LOCATION =
-    ConfigBuilder("spark.kubernetes.mountDependencies.jarsDownloadDir")
-      .doc("Location to download jars to in the driver and executors. When using " +
-        "spark-submit, this directory must be empty and will be mounted as an empty directory " +
-        "volume on the driver and executor pod.")
+  val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
+      .doc("Interval between polls against the Kubernetes API server to inspect the " +
+        "state of executors.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, s"API server polling interval must be a" +
+        " positive time value.")
+      .createWithDefaultString("30s")
+
+  val KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.eventProcessingInterval")
+      .doc("Interval between successive inspection of executor events sent from the" +
+        " Kubernetes API.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, s"Event processing interval must be a positive" +
+        " time value.")
+      .createWithDefaultString("1s")
+
+  val MEMORY_OVERHEAD_FACTOR =
+    ConfigBuilder("spark.kubernetes.memoryOverheadFactor")
+      .doc("This sets the Memory Overhead Factor that will allocate memory to non-JVM jobs " +
+        "which in the case of JVM tasks will default to 0.10 and 0.40 for non-JVM jobs")
+      .doubleConf
+      .checkValue(mem_overhead => mem_overhead >= 0 && mem_overhead < 1,
+        "Ensure that memory overhead is a double between 0 --> 1.0")
+      .createWithDefault(0.1)
+
+  val PYSPARK_MAJOR_PYTHON_VERSION =
+    ConfigBuilder("spark.kubernetes.pyspark.pythonVersion")
+      .doc("This sets the major Python version. Either 2 or 3. (Python2 or Python3)")
       .stringConf
-      .createWithDefault("/var/spark-data/spark-jars")
+      .checkValue(pv => List("2", "3").contains(pv),
+        "Ensure that major Python version is either Python2 or Python3")
+      .createWithDefault("2")
 
-  val FILES_DOWNLOAD_LOCATION =
-    ConfigBuilder("spark.kubernetes.mountDependencies.filesDownloadDir")
-      .doc("Location to download files to in the driver and executors. When using " +
-        "spark-submit, this directory must be empty and will be mounted as an empty directory " +
-        "volume on the driver and executor pods.")
+  val KUBERNETES_KERBEROS_KRB5_FILE =
+    ConfigBuilder("spark.kubernetes.kerberos.krb5.path")
+      .doc("Specify the local location of the krb5.conf file to be mounted on the driver " +
+        "and executors for Kerberos. Note: The KDC defined needs to be " +
+        "visible from inside the containers ")
       .stringConf
-      .createWithDefault("/var/spark-data/spark-files")
+      .createOptional
 
-  val INIT_CONTAINER_IMAGE =
-    ConfigBuilder("spark.kubernetes.initContainer.image")
-      .doc("Image for the driver and executor's init-container for downloading dependencies.")
-      .fallbackConf(CONTAINER_IMAGE)
+  val KUBERNETES_KERBEROS_KRB5_CONFIG_MAP =
+    ConfigBuilder("spark.kubernetes.kerberos.krb5.configMapName")
+      .doc("Specify the name of the ConfigMap, containing the krb5.conf file, to be mounted " +
+        "on the driver and executors for Kerberos. Note: The KDC defined" +
+        "needs to be visible from inside the containers ")
+      .stringConf
+      .createOptional
 
-  val INIT_CONTAINER_MOUNT_TIMEOUT =
-    ConfigBuilder("spark.kubernetes.mountDependencies.timeout")
-      .doc("Timeout before aborting the attempt to download and unpack dependencies from remote " +
-        "locations into the driver and executor pods.")
-      .timeConf(TimeUnit.SECONDS)
-      .createWithDefault(300)
+  val KUBERNETES_HADOOP_CONF_CONFIG_MAP =
+    ConfigBuilder("spark.kubernetes.hadoop.configMapName")
+      .doc("Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, " +
+        "to be mounted on the driver and executors for custom Hadoop configuration.")
+      .stringConf
+      .createOptional
 
-  val INIT_CONTAINER_MAX_THREAD_POOL_SIZE =
-    ConfigBuilder("spark.kubernetes.mountDependencies.maxSimultaneousDownloads")
-      .doc("Maximum number of remote dependencies to download simultaneously in a driver or " +
-        "executor pod.")
-      .intConf
-      .createWithDefault(5)
+  val KUBERNETES_KERBEROS_DT_SECRET_NAME =
+    ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.name")
+      .doc("Specify the name of the secret where your existing delegation tokens are stored. " +
+        "This removes the need for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
 
-  val INIT_CONTAINER_REMOTE_JARS =
-    ConfigBuilder("spark.kubernetes.initContainer.remoteJars")
-      .doc("Comma-separated list of jar URIs to download in the init-container. This is " +
-        "calculated from spark.jars.")
+  val KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY =
+    ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.itemKey")
+      .doc("Specify the item key of the data where your existing delegation tokens are stored. " +
+        "This removes the need for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
+
+  val APP_RESOURCE_TYPE =
+    ConfigBuilder("spark.kubernetes.resource.type")
+      .doc("This sets the resource type internally")
       .internal()
       .stringConf
       .createOptional
 
-  val INIT_CONTAINER_REMOTE_FILES =
-    ConfigBuilder("spark.kubernetes.initContainer.remoteFiles")
-      .doc("Comma-separated list of file URIs to download in the init-container. This is " +
-        "calculated from spark.files.")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val INIT_CONTAINER_CONFIG_MAP_NAME =
-    ConfigBuilder("spark.kubernetes.initContainer.configMapName")
-      .doc("Name of the config map to use in the init-container that retrieves submitted files " +
-        "for the executor.")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val INIT_CONTAINER_CONFIG_MAP_KEY_CONF =
-    ConfigBuilder("spark.kubernetes.initContainer.configMapKey")
-      .doc("Key for the entry in the init container config map for submitted files that " +
-        "corresponds to the properties for this init-container.")
-      .internal()
-      .stringConf
-      .createOptional
+  val KUBERNETES_LOCAL_DIRS_TMPFS =
+    ConfigBuilder("spark.kubernetes.local.dirs.tmpfs")
+      .doc("If set to true then emptyDir volumes created to back SPARK_LOCAL_DIRS will have " +
+        "their medium set to Memory so that they will be created as tmpfs (i.e. RAM) backed " +
+        "volumes. This may improve performance but scratch space usage will count towards " +
+        "your pods memory limit so you may wish to request more memory.")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
@@ -210,10 +286,24 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
+  val KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX = "spark.kubernetes.driver.secretKeyRef."
+  val KUBERNETES_DRIVER_VOLUMES_PREFIX = "spark.kubernetes.driver.volumes."
 
   val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
   val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
   val KUBERNETES_EXECUTOR_SECRETS_PREFIX = "spark.kubernetes.executor.secrets."
+  val KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX = "spark.kubernetes.executor.secretKeyRef."
+  val KUBERNETES_EXECUTOR_VOLUMES_PREFIX = "spark.kubernetes.executor.volumes."
 
-  val KUBERNETES_DRIVER_ENV_KEY = "spark.kubernetes.driverEnv."
+  val KUBERNETES_VOLUMES_HOSTPATH_TYPE = "hostPath"
+  val KUBERNETES_VOLUMES_PVC_TYPE = "persistentVolumeClaim"
+  val KUBERNETES_VOLUMES_EMPTYDIR_TYPE = "emptyDir"
+  val KUBERNETES_VOLUMES_MOUNT_PATH_KEY = "mount.path"
+  val KUBERNETES_VOLUMES_MOUNT_READONLY_KEY = "mount.readOnly"
+  val KUBERNETES_VOLUMES_OPTIONS_PATH_KEY = "options.path"
+  val KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY = "options.claimName"
+  val KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY = "options.medium"
+  val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
+
+  val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 }

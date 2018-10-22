@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -61,12 +62,12 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     if (child.nullable) {
       Seq(
         /* sum = */
-        Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType)), sum))
+        coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
       )
     } else {
       Seq(
         /* sum = */
-        Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType))
+        coalesce(sum, zero) + child.cast(sumDataType)
       )
     }
   }
@@ -74,7 +75,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   override lazy val mergeExpressions: Seq[Expression] = {
     Seq(
       /* sum = */
-      Coalesce(Seq(Add(Coalesce(Seq(sum.left, zero)), sum.right), sum.left))
+      coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
     )
   }
 

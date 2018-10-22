@@ -417,9 +417,9 @@ class PartitionedTablePerfStatsSuite
       import spark.implicits._
       Seq(1).toDF("a").write.mode("overwrite").save(dir.getAbsolutePath)
       HiveCatalogMetrics.reset()
-      spark.read.parquet(dir.getAbsolutePath)
+      spark.read.load(dir.getAbsolutePath)
       assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 1)
-      assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 1)
+      assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
     }
   }
 }

@@ -35,7 +35,10 @@ trait SharedSQLContext extends SQLTestUtils with SharedSparkSession {
   }
 
   protected override def afterAll(): Unit = {
-    super.afterAll()
-    doThreadPostAudit()
+    try {
+      super.afterAll()
+    } finally {
+      doThreadPostAudit()
+    }
   }
 }

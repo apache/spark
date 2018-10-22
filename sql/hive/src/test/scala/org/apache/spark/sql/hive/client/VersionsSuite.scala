@@ -134,8 +134,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client = buildClient(version, hadoopConf, HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
       if (versionSpark != null) versionSpark.reset()
       versionSpark = TestHiveVersion(client)
-      assert(versionSpark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
-        .version.fullVersion.startsWith(version))
+      assert(versionSpark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+        .client.version.fullVersion.startsWith(version))
     }
 
     def table(database: String, tableName: String): CatalogTable = {

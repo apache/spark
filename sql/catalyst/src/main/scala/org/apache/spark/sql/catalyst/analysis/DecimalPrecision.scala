@@ -82,14 +82,14 @@ object DecimalPrecision extends TypeCoercionRule {
     PromotePrecision(Cast(e, dataType))
   }
 
-  override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // fix decimal precision for expressions
     case q => q.transformExpressionsUp(
       decimalAndDecimal.orElse(integralAndDecimalLiteral).orElse(nondecimalAndDecimal))
   }
 
   /** Decimal precision promotion for +, -, *, /, %, pmod, and binary comparison. */
-  private val decimalAndDecimal: PartialFunction[Expression, Expression] = {
+  private[catalyst] val decimalAndDecimal: PartialFunction[Expression, Expression] = {
     // Skip nodes whose children have not been resolved yet
     case e if !e.childrenResolved => e
 
@@ -286,15 +286,17 @@ object DecimalPrecision extends TypeCoercionRule {
         // Consider the following example: multiplying a column which is DECIMAL(38, 18) by 2.
         // If we use the default precision and scale for the integer type, 2 is considered a
         // DECIMAL(10, 0). According to the rules, the result would be DECIMAL(38 + 10 + 1, 18),
-        // which is out of range and therefore it will becomes DECIMAL(38, 7), leading to
+        // which is out of range and therefore it will become DECIMAL(38, 7), leading to
         // potentially loosing 11 digits of the fractional part. Using only the precision needed
         // by the Literal, instead, the result would be DECIMAL(38 + 1 + 1, 18), which would
         // become DECIMAL(38, 16), safely having a much lower precision loss.
-        case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType]
-          && l.dataType.isInstanceOf[IntegralType] =>
+        case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType] &&
+            l.dataType.isInstanceOf[IntegralType] &&
+            SQLConf.get.literalPickMinimumPrecision =>
           b.makeCopy(Array(Cast(l, DecimalType.fromLiteral(l)), r))
-        case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType]
-          && r.dataType.isInstanceOf[IntegralType] =>
+        case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType] &&
+            r.dataType.isInstanceOf[IntegralType] &&
+            SQLConf.get.literalPickMinimumPrecision =>
           b.makeCopy(Array(l, Cast(r, DecimalType.fromLiteral(r))))
         // Promote integers inside a binary expression with fixed-precision decimals to decimals,
         // and fixed-precision decimals in an expression with floats / doubles to doubles

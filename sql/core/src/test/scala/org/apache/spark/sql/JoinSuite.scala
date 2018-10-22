@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 import scala.language.existentials
@@ -239,7 +241,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
             Row(2, 2, 1, null) ::
             Row(2, 2, 2, 2) :: Nil)
       }
-      assert(e.getMessage.contains("Detected cartesian product for INNER join " +
+      assert(e.getMessage.contains("Detected implicit cartesian product for INNER join " +
         "between logical plans"))
     }
   }
@@ -611,7 +613,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       val e = intercept[Exception] {
         checkAnswer(sql(query), Nil);
       }
-      assert(e.getMessage.contains("Detected cartesian product"))
+      assert(e.getMessage.contains("Detected implicit cartesian product"))
     }
 
     cartesianQueries.foreach(checkCartesianDetection)
@@ -831,7 +833,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         case _ =>
       }
       val joinPairs = physicalJoins.zip(executedJoins)
-      val numOfJoins = sqlString.split(" ").count(_.toUpperCase == "JOIN")
+      val numOfJoins = sqlString.split(" ").count(_.toUpperCase(Locale.ROOT) == "JOIN")
       assert(joinPairs.size == numOfJoins)
 
       joinPairs.foreach {
@@ -880,6 +882,17 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       assert(joins(0).isInstanceOf[SortMergeJoinExec])
       assert(joins(1).isInstanceOf[BroadcastHashJoinExec])
       checkAnswer(df, Row(3, 8, 7, 2) :: Row(3, 8, 4, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-24495: Join may return wrong result when having duplicated equal-join keys") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(0, 100, 1, 2)
+      val df2 = spark.range(100).select($"id".as("b1"), (- $"id").as("b2"))
+      val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2").select($"b1", $"b2", $"id")
+      checkAnswer(res, Row(0, 0, 0))
     }
   }
 }

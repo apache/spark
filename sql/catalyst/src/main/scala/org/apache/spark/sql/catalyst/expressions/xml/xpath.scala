@@ -160,7 +160,7 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
   """)
 // scalastyle:on line.size.limit
 case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
-  override def prettyName: String = "xpath_float"
+  override def prettyName: String = "xpath_double"
   override def dataType: DataType = DoubleType
 
   override def nullSafeEval(xml: Any, path: Any): Any = {

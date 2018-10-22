@@ -22,6 +22,7 @@ import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.hadoop.fs.Path
+import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
 
@@ -47,7 +48,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   }
 
   test("Simple replay") {
-    val logFilePath = Utils.getFilePath(testDir, "events.txt")
+    val logFilePath = getFilePath(testDir, "events.txt")
     val fstream = fileSystem.create(logFilePath)
     val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
@@ -97,7 +98,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
       // scalastyle:on println
     }
 
-    val logFilePath = Utils.getFilePath(testDir, "events.lz4.inprogress")
+    val logFilePath = getFilePath(testDir, "events.lz4.inprogress")
     val bytes = buffered.toByteArray
     Utils.tryWithResource(fileSystem.create(logFilePath)) { fstream =>
       fstream.write(bytes, 0, buffered.size)
@@ -129,7 +130,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   }
 
   test("Replay incompatible event log") {
-    val logFilePath = Utils.getFilePath(testDir, "incompatible.txt")
+    val logFilePath = getFilePath(testDir, "incompatible.txt")
     val fstream = fileSystem.create(logFilePath)
     val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Incompatible App", None,
@@ -217,13 +218,21 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     // Verify the same events are replayed in the same order
     assert(sc.eventLogger.isDefined)
-    val originalEvents = sc.eventLogger.get.loggedEvents
+    val originalEvents = sc.eventLogger.get.loggedEvents.filter { e =>
+      !JsonProtocol.sparkEventFromJson(e).isInstanceOf[SparkListenerStageExecutorMetrics]
+    }
     val replayedEvents = eventMonster.loggedEvents
     originalEvents.zip(replayedEvents).foreach { case (e1, e2) =>
       // Don't compare the JSON here because accumulators in StageInfo may be out of order
       JsonProtocolSuite.assertEquals(
         JsonProtocol.sparkEventFromJson(e1), JsonProtocol.sparkEventFromJson(e2))
     }
+  }
+
+  private def getFilePath(dir: File, fileName: String): Path = {
+    assert(dir.isDirectory)
+    val path = new File(dir, fileName).getAbsolutePath
+    new Path(path)
   }
 
   /**

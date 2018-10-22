@@ -44,7 +44,7 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
       EmptyFunctionRegistry,
       new SQLConf())) {
     val newBatch = Batch("OptimizeRuleBreakSI", Once, OptimizeRuleBreakSI)
-    override def batches: Seq[Batch] = Seq(newBatch) ++ super.batches
+    override def defaultBatches: Seq[Batch] = Seq(newBatch) ++ super.defaultBatches
   }
 
   test("check for invalid plan after execution of rule") {

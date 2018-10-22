@@ -44,32 +44,91 @@ function image_ref {
 function build {
   local BUILD_ARGS
   local IMG_PATH
+  local JARS
 
   if [ ! -f "$SPARK_HOME/RELEASE" ]; then
     # Set image build arguments accordingly if this is a source repo and not a distribution archive.
+    #
+    # Note that this will copy all of the example jars directory into the image, and that will
+    # contain a lot of duplicated jars with the main Spark directory. In a proper distribution,
+    # the examples directory is cleaned up before generating the distribution tarball, so this
+    # issue does not occur.
     IMG_PATH=resource-managers/kubernetes/docker/src/main/dockerfiles
+    JARS=assembly/target/scala-$SPARK_SCALA_VERSION/jars
     BUILD_ARGS=(
+      ${BUILD_PARAMS}
       --build-arg
       img_path=$IMG_PATH
       --build-arg
-      spark_jars=assembly/target/scala-$SPARK_SCALA_VERSION/jars
+      spark_jars=$JARS
+      --build-arg
+      example_jars=examples/target/scala-$SPARK_SCALA_VERSION/jars
+      --build-arg
+      k8s_tests=resource-managers/kubernetes/integration-tests/tests
     )
   else
-    # Not passed as an argument to docker, but used to validate the Spark directory.
+    # Not passed as arguments to docker, but used to validate the Spark directory.
     IMG_PATH="kubernetes/dockerfiles"
+    JARS=jars
+    BUILD_ARGS=(${BUILD_PARAMS})
   fi
 
+  # Verify that the Docker image content directory is present
   if [ ! -d "$IMG_PATH" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
 
-  docker build "${BUILD_ARGS[@]}" \
+  # Verify that Spark has actually been built/is a runnable distribution
+  # i.e. the Spark JARs that the Docker files will place into the image are present
+  local TOTAL_JARS=$(ls $JARS/spark-* | wc -l)
+  TOTAL_JARS=$(( $TOTAL_JARS ))
+  if [ "${TOTAL_JARS}" -eq 0 ]; then
+    error "Cannot find Spark JARs. This script assumes that Apache Spark has first been built locally or this is a runnable distribution."
+  fi
+
+  local BINDING_BUILD_ARGS=(
+    ${BUILD_PARAMS}
+    --build-arg
+    base_img=$(image_ref spark)
+  )
+  local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
+  local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile"}
+  local RDOCKERFILE=${RDOCKERFILE:-"$IMG_PATH/spark/bindings/R/Dockerfile"}
+
+  docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
-    -f "$IMG_PATH/spark/Dockerfile" .
+    -f "$BASEDOCKERFILE" .
+  if [ $? -ne 0 ]; then
+    error "Failed to build Spark JVM Docker image, please refer to Docker build output for details."
+  fi
+
+  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+    -t $(image_ref spark-py) \
+    -f "$PYDOCKERFILE" .
+    if [ $? -ne 0 ]; then
+      error "Failed to build PySpark Docker image, please refer to Docker build output for details."
+    fi
+  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+    -t $(image_ref spark-r) \
+    -f "$RDOCKERFILE" .
+  if [ $? -ne 0 ]; then
+    error "Failed to build SparkR Docker image, please refer to Docker build output for details."
+  fi
 }
 
 function push {
   docker push "$(image_ref spark)"
+  if [ $? -ne 0 ]; then
+    error "Failed to push Spark JVM Docker image."
+  fi
+  docker push "$(image_ref spark-py)"
+  if [ $? -ne 0 ]; then
+    error "Failed to push PySpark Docker image."
+  fi
+  docker push "$(image_ref spark-r)"
+  if [ $? -ne 0 ]; then
+    error "Failed to push SparkR Docker image."
+  fi
 }
 
 function usage {
@@ -83,9 +142,15 @@ Commands:
   push        Push a pre-built image to a registry. Requires a repository address to be provided.
 
 Options:
-  -r repo     Repository address.
-  -t tag      Tag to apply to the built image, or to identify the image to be pushed.
-  -m          Use minikube's Docker daemon.
+  -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
+  -p file               Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
+  -R file               Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
+  -r repo               Repository address.
+  -t tag                Tag to apply to the built image, or to identify the image to be pushed.
+  -m                    Use minikube's Docker daemon.
+  -n                    Build docker image with --no-cache
+  -b arg      Build arg to build or push the image. For multiple build args, this option needs to
+              be used separately for each build arg.
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
 There is no need to push the images into minikube in that case, they'll be automatically
@@ -112,12 +177,22 @@ fi
 
 REPO=
 TAG=
-while getopts mr:t: option
+BASEDOCKERFILE=
+PYDOCKERFILE=
+RDOCKERFILE=
+NOCACHEARG=
+BUILD_PARAMS=
+while getopts f:p:R:mr:t:n:b: option
 do
  case "${option}"
  in
+ f) BASEDOCKERFILE=${OPTARG};;
+ p) PYDOCKERFILE=${OPTARG};;
+ R) RDOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
+ n) NOCACHEARG="--no-cache";;
+ b) BUILD_PARAMS=${BUILD_PARAMS}" --build-arg "${OPTARG};;
  m)
    if ! which minikube 1>/dev/null; then
      error "Cannot find minikube."

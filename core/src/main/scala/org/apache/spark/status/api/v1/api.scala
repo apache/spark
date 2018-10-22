@@ -19,10 +19,17 @@ package org.apache.spark.status.api.v1
 import java.lang.{Long => JLong}
 import java.util.Date
 
+import scala.xml.{NodeSeq, Text}
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
+import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
+import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.metrics.ExecutorMetricType
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -96,13 +103,46 @@ class ExecutorSummary private[spark](
     val removeReason: Option[String],
     val executorLogs: Map[String, String],
     val memoryMetrics: Option[MemoryMetrics],
-    val blacklistedInStages: Set[Int])
+    val blacklistedInStages: Set[Int],
+    @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
+    @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
+    val peakMemoryMetrics: Option[ExecutorMetrics])
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,
     val usedOffHeapStorageMemory: Long,
     val totalOnHeapStorageMemory: Long,
     val totalOffHeapStorageMemory: Long)
+
+/** deserializer for peakMemoryMetrics: convert map to ExecutorMetrics */
+private[spark] class ExecutorMetricsJsonDeserializer
+    extends JsonDeserializer[Option[ExecutorMetrics]] {
+  override def deserialize(
+      jsonParser: JsonParser,
+      deserializationContext: DeserializationContext): Option[ExecutorMetrics] = {
+    val metricsMap = jsonParser.readValueAs[Option[Map[String, Long]]](
+      new TypeReference[Option[Map[String, java.lang.Long]]] {})
+    metricsMap.map(metrics => new ExecutorMetrics(metrics))
+  }
+}
+/** serializer for peakMemoryMetrics: convert ExecutorMetrics to map with metric name as key */
+private[spark] class ExecutorMetricsJsonSerializer
+    extends JsonSerializer[Option[ExecutorMetrics]] {
+  override def serialize(
+      metrics: Option[ExecutorMetrics],
+      jsonGenerator: JsonGenerator,
+      serializerProvider: SerializerProvider): Unit = {
+    metrics.foreach { m: ExecutorMetrics =>
+      val metricsMap = ExecutorMetricType.values.map { metricType =>
+            metricType.name -> m.getMetricValue(metricType)
+      }.toMap
+      jsonGenerator.writeObject(metricsMap)
+    }
+  }
+
+  override def isEmpty(provider: SerializerProvider, value: Option[ExecutorMetrics]): Boolean =
+    value.isEmpty
+}
 
 class JobData private[spark](
     val jobId: Int,
@@ -317,11 +357,31 @@ class RuntimeInfo private[spark](
     val javaHome: String,
     val scalaVersion: String)
 
+case class StackTrace(elems: Seq[String]) {
+  override def toString: String = elems.mkString
+
+  def html: NodeSeq = {
+    val withNewLine = elems.foldLeft(NodeSeq.Empty) { (acc, elem) =>
+      if (acc.isEmpty) {
+        acc :+ Text(elem)
+      } else {
+        acc :+ <br /> :+ Text(elem)
+      }
+    }
+
+    withNewLine
+  }
+
+  def mkString(start: String, sep: String, end: String): String = {
+    elems.mkString(start, sep, end)
+  }
+}
+
 case class ThreadStackTrace(
     val threadId: Long,
     val threadName: String,
     val threadState: Thread.State,
-    val stackTrace: String,
+    val stackTrace: StackTrace,
     val blockedByThreadId: Option[Long],
     val blockedByLock: String,
     val holdingLocks: Seq[String])

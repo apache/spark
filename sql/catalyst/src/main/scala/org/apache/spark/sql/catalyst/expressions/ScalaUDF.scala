@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -30,6 +31,9 @@ import org.apache.spark.sql.types.DataType
  *                  null. Use boxed type or [[Option]] if you wanna do the null-handling yourself.
  * @param dataType  Return type of function.
  * @param children  The input expressions of this UDF.
+ * @param inputsNullSafe Whether the inputs are of non-primitive types or not nullable. Null values
+ *                       of Scala primitive types will be converted to the type's default value and
+ *                       lead to wrong results, thus need special handling before calling the UDF.
  * @param inputTypes  The expected input types of this UDF, used to perform type coercion. If we do
  *                    not want to perform coercion, simply use "Nil". Note that it would've been
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
@@ -43,6 +47,7 @@ case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
+    inputsNullSafe: Seq[Boolean],
     inputTypes: Seq[DataType] = Nil,
     udfName: Option[String] = None,
     nullable: Boolean = true,
@@ -57,7 +62,8 @@ case class ScalaUDF(
       inputTypes: Seq[DataType],
       udfName: Option[String]) = {
     this(
-      function, dataType, children, inputTypes, udfName, nullable = true, udfDeterministic = true)
+      function, dataType, children, ScalaReflection.getParameterTypeNullability(function),
+      inputTypes, udfName, nullable = true, udfDeterministic = true)
   }
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
@@ -1018,24 +1024,25 @@ case class ScalaUDF(
     val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.length}")
     val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
     val resultConverter = s"$convertersTerm[${children.length}]"
+    val boxedType = CodeGenerator.boxedType(dataType)
     val callFunc =
       s"""
-         |${ctx.boxedType(dataType)} $resultTerm = null;
+         |$boxedType $resultTerm = null;
          |try {
-         |  $resultTerm = (${ctx.boxedType(dataType)})$resultConverter.apply($getFuncResult);
+         |  $resultTerm = ($boxedType)$resultConverter.apply($getFuncResult);
          |} catch (Exception e) {
          |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
          |}
        """.stripMargin
 
     ev.copy(code =
-      s"""
+      code"""
          |$evalCode
          |${initArgs.mkString("\n")}
          |$callFunc
          |
          |boolean ${ev.isNull} = $resultTerm == null;
-         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
          |}
@@ -1046,8 +1053,9 @@ case class ScalaUDF(
 
   lazy val udfErrorMessage = {
     val funcCls = function.getClass.getSimpleName
-    val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
-    s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+    val inputTypes = children.map(_.dataType.catalogString).mkString(", ")
+    val outputType = dataType.catalogString
+    s"Failed to execute user defined function($funcCls: ($inputTypes) => $outputType)"
   }
 
   override def eval(input: InternalRow): Any = {

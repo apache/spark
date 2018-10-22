@@ -24,6 +24,7 @@ import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ExternalClusterManager
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -144,6 +145,39 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 10)
     assert(numExecutorsToAdd(manager) === 1)
   }
+
+  def testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
+    val conf = new SparkConf()
+      .setMaster("myDummyLocalExternalClusterManager")
+      .setAppName("test-executor-allocation-manager")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+      .set("spark.dynamicAllocation.maxExecutors", "15")
+      .set("spark.dynamicAllocation.minExecutors", "3")
+      .set("spark.dynamicAllocation.executorAllocationRatio", divisor.toString)
+      .set("spark.executor.cores", cores.toString)
+    val sc = new SparkContext(conf)
+    contexts += sc
+    var manager = sc.executorAllocationManager.get
+    post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(0, 20)))
+    for (i <- 0 to 5) {
+      addExecutors(manager)
+    }
+    assert(numExecutorsTarget(manager) === expected)
+    sc.stop()
+  }
+
+  test("executionAllocationRatio is correctly handled") {
+    testAllocationRatio(1, 0.5, 10)
+    testAllocationRatio(1, 1.0/3.0, 7)
+    testAllocationRatio(2, 1.0/3.0, 4)
+    testAllocationRatio(1, 0.385, 8)
+
+    // max/min executors capping
+    testAllocationRatio(1, 1.0, 15) // should be 20 but capped by max
+    testAllocationRatio(4, 1.0/3.0, 3)  // should be 2 but elevated by min
+  }
+
 
   test("add executors capped by num pending tasks") {
     sc = createSparkContext(0, 10, 0)
@@ -1059,7 +1093,7 @@ class ExecutorAllocationManagerSuite
     val maxExecutors = 2
     val conf = new SparkConf()
       .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.shuffle.service.enabled", "true")
+      .set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
       .set("spark.dynamicAllocation.minExecutors", minExecutors.toString)
       .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
       .set("spark.dynamicAllocation.initialExecutors", initialExecutors.toString)
@@ -1342,6 +1376,8 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
   override def reviveOffers(): Unit = sb.reviveOffers()
 
   override def defaultParallelism(): Int = sb.defaultParallelism()
+
+  override def maxNumConcurrentTasks(): Int = sb.maxNumConcurrentTasks()
 
   override def killExecutorsOnHost(host: String): Boolean = {
     false

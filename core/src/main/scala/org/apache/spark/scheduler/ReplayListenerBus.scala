@@ -115,7 +115,11 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
         }
       }
     } catch {
+      case e: HaltReplayException =>
+        // Just stop replay.
       case _: EOFException if maybeTruncated =>
+      case _: IOException if maybeTruncated =>
+        logWarning(s"Failed to read Spark event log: $sourceName")
       case ioe: IOException =>
         throw ioe
       case e: Exception =>
@@ -124,8 +128,17 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
     }
   }
 
+  override protected def isIgnorableException(e: Throwable): Boolean = {
+    e.isInstanceOf[HaltReplayException]
+  }
+
 }
 
+/**
+ * Exception that can be thrown by listeners to halt replay. This is handled by ReplayListenerBus
+ * only, and will cause errors if thrown when using other bus implementations.
+ */
+private[spark] class HaltReplayException extends RuntimeException
 
 private[spark] object ReplayListenerBus {
 

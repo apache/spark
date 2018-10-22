@@ -199,44 +199,33 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     var changed = false
     val remainingNewChildren = newChildren.toBuffer
     val remainingOldChildren = children.toBuffer
+    def mapTreeNode(node: TreeNode[_]): TreeNode[_] = {
+      val newChild = remainingNewChildren.remove(0)
+      val oldChild = remainingOldChildren.remove(0)
+      if (newChild fastEquals oldChild) {
+        oldChild
+      } else {
+        changed = true
+        newChild
+      }
+    }
+    def mapChild(child: Any): Any = child match {
+      case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
+      case nonChild: AnyRef => nonChild
+      case null => null
+    }
     val newArgs = mapProductIterator {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
-      case s: Seq[_] => s.map {
-        case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = remainingNewChildren.remove(0)
-          val oldChild = remainingOldChildren.remove(0)
-          if (newChild fastEquals oldChild) {
-            oldChild
-          } else {
-            changed = true
-            newChild
-          }
-        case nonChild: AnyRef => nonChild
-        case null => null
-      }
-      case m: Map[_, _] => m.mapValues {
-        case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = remainingNewChildren.remove(0)
-          val oldChild = remainingOldChildren.remove(0)
-          if (newChild fastEquals oldChild) {
-            oldChild
-          } else {
-            changed = true
-            newChild
-          }
-        case nonChild: AnyRef => nonChild
-        case null => null
-      }.view.force // `mapValues` is lazy and we need to force it to materialize
-      case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = remainingNewChildren.remove(0)
-        val oldChild = remainingOldChildren.remove(0)
-        if (newChild fastEquals oldChild) {
-          oldChild
-        } else {
-          changed = true
-          newChild
-        }
+      case s: Stream[_] =>
+        // Stream is lazy so we need to force materialization
+        s.map(mapChild).force
+      case s: Seq[_] =>
+        s.map(mapChild)
+      case m: Map[_, _] =>
+        // `mapValues` is lazy and we need to force it to materialize
+        m.mapValues(mapChild).view.force
+      case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case nonChild: AnyRef => nonChild
       case null => null
     }
@@ -301,6 +290,37 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def mapChildren(f: BaseType => BaseType): BaseType = {
     if (children.nonEmpty) {
       var changed = false
+      def mapChild(child: Any): Any = child match {
+        case arg: TreeNode[_] if containsChild(arg) =>
+          val newChild = f(arg.asInstanceOf[BaseType])
+          if (!(newChild fastEquals arg)) {
+            changed = true
+            newChild
+          } else {
+            arg
+          }
+        case tuple@(arg1: TreeNode[_], arg2: TreeNode[_]) =>
+          val newChild1 = if (containsChild(arg1)) {
+            f(arg1.asInstanceOf[BaseType])
+          } else {
+            arg1.asInstanceOf[BaseType]
+          }
+
+          val newChild2 = if (containsChild(arg2)) {
+            f(arg2.asInstanceOf[BaseType])
+          } else {
+            arg2.asInstanceOf[BaseType]
+          }
+
+          if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
+            changed = true
+            (newChild1, newChild2)
+          } else {
+            tuple
+          }
+        case other => other
+      }
+
       val newArgs = mapProductIterator {
         case arg: TreeNode[_] if containsChild(arg) =>
           val newChild = f(arg.asInstanceOf[BaseType])
@@ -330,36 +350,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
           case other => other
         }.view.force // `mapValues` is lazy and we need to force it to materialize
         case d: DataType => d // Avoid unpacking Structs
-        case args: Traversable[_] => args.map {
-          case arg: TreeNode[_] if containsChild(arg) =>
-            val newChild = f(arg.asInstanceOf[BaseType])
-            if (!(newChild fastEquals arg)) {
-              changed = true
-              newChild
-            } else {
-              arg
-            }
-          case tuple@(arg1: TreeNode[_], arg2: TreeNode[_]) =>
-            val newChild1 = if (containsChild(arg1)) {
-              f(arg1.asInstanceOf[BaseType])
-            } else {
-              arg1.asInstanceOf[BaseType]
-            }
-
-            val newChild2 = if (containsChild(arg2)) {
-              f(arg2.asInstanceOf[BaseType])
-            } else {
-              arg2.asInstanceOf[BaseType]
-            }
-
-            if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
-              changed = true
-              (newChild1, newChild2)
-            } else {
-              tuple
-            }
-          case other => other
-        }
+        case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
+        case args: Traversable[_] => args.map(mapChild)
         case nonChild: AnyRef => nonChild
         case null => null
       }

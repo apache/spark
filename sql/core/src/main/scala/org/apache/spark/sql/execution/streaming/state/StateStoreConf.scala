@@ -34,6 +34,9 @@ class StateStoreConf(@transient private val sqlConf: SQLConf)
   /** Minimum versions a State Store implementation should retain to allow rollbacks */
   val minVersionsToRetain: Int = sqlConf.minBatchesToRetain
 
+  /** Maximum count of versions a State Store implementation should retain in memory */
+  val maxVersionsToRetainInMemory: Int = sqlConf.maxBatchesToRetainInMemory
+
   /**
    * Optional fully qualified name of the subclass of [[StateStoreProvider]]
    * managing state data. That is, the implementation of the State Store to use.

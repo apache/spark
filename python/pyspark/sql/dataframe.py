@@ -29,7 +29,7 @@ import warnings
 
 from pyspark import copy_func, since, _NoValue
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import ArrowSerializer, BatchedSerializer, PickleSerializer, \
+from pyspark.serializers import ArrowStreamSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
@@ -78,6 +78,9 @@ class DataFrame(object):
         self.is_cached = False
         self._schema = None  # initialized lazily
         self._lazy_rdd = None
+        # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
+        # by __repr__ and _repr_html_ while eager evaluation opened.
+        self._support_repr_html = False
 
     @property
     @since(1.3)
@@ -290,6 +293,31 @@ class DataFrame(object):
         else:
             print(self._jdf.queryExecution().simpleString())
 
+    @since(2.4)
+    def exceptAll(self, other):
+        """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
+        not in another :class:`DataFrame` while preserving duplicates.
+
+        This is equivalent to `EXCEPT ALL` in SQL.
+
+        >>> df1 = spark.createDataFrame(
+        ...         [("a", 1), ("a", 1), ("a", 1), ("a", 2), ("b",  3), ("c", 4)], ["C1", "C2"])
+        >>> df2 = spark.createDataFrame([("a", 1), ("b", 3)], ["C1", "C2"])
+
+        >>> df1.exceptAll(df2).show()
+        +---+---+
+        | C1| C2|
+        +---+---+
+        |  a|  1|
+        |  a|  1|
+        |  a|  2|
+        |  c|  4|
+        +---+---+
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+        """
+        return DataFrame(self._jdf.exceptAll(other._jdf), self.sql_ctx)
+
     @since(1.3)
     def isLocal(self):
         """Returns ``True`` if the :func:`collect` and :func:`take` methods can be run locally
@@ -352,7 +380,46 @@ class DataFrame(object):
             print(self._jdf.showString(n, int(truncate), vertical))
 
     def __repr__(self):
-        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+        if not self._support_repr_html and self.sql_ctx._conf.isReplEagerEvalEnabled():
+            vertical = False
+            return self._jdf.showString(
+                self.sql_ctx._conf.replEagerEvalMaxNumRows(),
+                self.sql_ctx._conf.replEagerEvalTruncate(), vertical)
+        else:
+            return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+    def _repr_html_(self):
+        """Returns a dataframe with html code when you enabled eager evaluation
+        by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
+        using support eager evaluation with HTML.
+        """
+        import cgi
+        if not self._support_repr_html:
+            self._support_repr_html = True
+        if self.sql_ctx._conf.isReplEagerEvalEnabled():
+            max_num_rows = max(self.sql_ctx._conf.replEagerEvalMaxNumRows(), 0)
+            sock_info = self._jdf.getRowsToPython(
+                max_num_rows, self.sql_ctx._conf.replEagerEvalTruncate())
+            rows = list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
+            head = rows[0]
+            row_data = rows[1:]
+            has_more_data = len(row_data) > max_num_rows
+            row_data = row_data[:max_num_rows]
+
+            html = "<table border='1'>\n"
+            # generate table head
+            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: cgi.escape(x), head))
+            # generate table rows
+            for row in row_data:
+                html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
+                    map(lambda x: cgi.escape(x), row))
+            html += "</table>\n"
+            if has_more_data:
+                html += "only showing top %d %s\n" % (
+                    max_num_rows, "row" if max_num_rows == 1 else "rows")
+            return html
+        else:
+            return None
 
     @since(2.1)
     def checkpoint(self, eager=True):
@@ -463,8 +530,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectToPython()
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+            sock_info = self._jdf.collectToPython()
+        return list(_load_from_socket(sock_info, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -477,8 +544,8 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.toPythonIterator()
-        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
+            sock_info = self._jdf.toPythonIterator()
+        return _load_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -588,6 +655,8 @@ class DataFrame(object):
         """
         Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
 
+        :param numPartitions: int, to specify the target number of partitions
+
         Similar to coalesce defined on an :class:`RDD`, this operation results in a
         narrow dependency, e.g. if you go from 1000 partitions to 100 partitions,
         there will not be a shuffle, instead each of the 100 new partitions will
@@ -612,9 +681,10 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is hash partitioned.
 
-        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
-        If it is a Column, it will be used as the first partitioning column. If not specified,
-        the default number of partitions is used.
+        :param numPartitions:
+            can be an int to specify the target number of partitions or a Column.
+            If it is a Column, it will be used as the first partitioning column. If not specified,
+            the default number of partitions is used.
 
         .. versionchanged:: 1.6
            Added optional arguments to specify the partitioning columns. Also made numPartitions
@@ -673,9 +743,10 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is range partitioned.
 
-        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
-        If it is a Column, it will be used as the first partitioning column. If not specified,
-        the default number of partitions is used.
+        :param numPartitions:
+            can be an int to specify the target number of partitions or a Column.
+            If it is a Column, it will be used as the first partitioning column. If not specified,
+            the default number of partitions is used.
 
         At least one partition-by expression must be specified.
         When no explicit sort order is specified, "ascending nulls first" is assumed.
@@ -809,16 +880,23 @@ class DataFrame(object):
         |  0|    5|
         |  1|    9|
         +---+-----+
+        >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
+        33
 
+        .. versionchanged:: 3.0
+           Added sampling by a column of :class:`Column`
         """
-        if not isinstance(col, basestring):
-            raise ValueError("col must be a string, but got %r" % type(col))
+        if isinstance(col, basestring):
+            col = Column(col)
+        elif not isinstance(col, Column):
+            raise ValueError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):
             raise ValueError("fractions must be a dict but got %r" % type(fractions))
         for k, v in fractions.items():
             if not isinstance(k, (float, int, long, basestring)):
                 raise ValueError("key must be float, int, long, or string, but got %r" % type(k))
             fractions[k] = float(v)
+        col = col._jc
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         return DataFrame(self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
 
@@ -891,6 +969,8 @@ class DataFrame(object):
     @since(1.3)
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
+
+        :param alias: string, an alias name to be set for the DataFrame.
 
         >>> from pyspark.sql.functions import *
         >>> df_as1 = df.alias("df_as1")
@@ -1427,6 +1507,28 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.intersect(other._jdf), self.sql_ctx)
 
+    @since(2.4)
+    def intersectAll(self, other):
+        """ Return a new :class:`DataFrame` containing rows in both this dataframe and other
+        dataframe while preserving duplicates.
+
+        This is equivalent to `INTERSECT ALL` in SQL.
+        >>> df1 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"])
+        >>> df2 = spark.createDataFrame([("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"])
+
+        >>> df1.intersectAll(df2).sort("C1", "C2").show()
+        +---+---+
+        | C1| C2|
+        +---+---+
+        |  a|  1|
+        |  a|  1|
+        |  b|  3|
+        +---+---+
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+        """
+        return DataFrame(self._jdf.intersectAll(other._jdf), self.sql_ctx)
+
     @since(1.3)
     def subtract(self, other):
         """ Return a new :class:`DataFrame` containing rows in this frame
@@ -1900,7 +2002,7 @@ class DataFrame(object):
         This is a no-op if schema doesn't contain the given column name.
 
         :param existing: string, name of the existing column to rename.
-        :param col: string, new name of the column.
+        :param new: string, new name of the column.
 
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
@@ -1969,6 +2071,8 @@ class DataFrame(object):
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
 
+        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+
         >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
@@ -1979,73 +2083,107 @@ class DataFrame(object):
 
         import pandas as pd
 
-        if self.sql_ctx.getConf("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
-           == "true":
-            timezone = self.sql_ctx.getConf("spark.sql.session.timeZone")
+        if self.sql_ctx._conf.pandasRespectSessionTimeZone():
+            timezone = self.sql_ctx._conf.sessionLocalTimeZone()
         else:
             timezone = None
 
-        if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
+        if self.sql_ctx._conf.arrowEnabled():
+            use_arrow = True
             try:
-                from pyspark.sql.types import _check_dataframe_convert_date, \
-                    _check_dataframe_localize_timestamps, to_arrow_schema
+                from pyspark.sql.types import to_arrow_schema
                 from pyspark.sql.utils import require_minimum_pyarrow_version
+
                 require_minimum_pyarrow_version()
-                import pyarrow
                 to_arrow_schema(self.schema)
-                tables = self._collectAsArrow()
-                if tables:
-                    table = pyarrow.concat_tables(tables)
-                    pdf = table.to_pandas()
-                    pdf = _check_dataframe_convert_date(pdf, self.schema)
-                    return _check_dataframe_localize_timestamps(pdf, timezone)
-                else:
-                    return pd.DataFrame.from_records([], columns=self.columns)
             except Exception as e:
-                msg = (
-                    "Note: toPandas attempted Arrow optimization because "
-                    "'spark.sql.execution.arrow.enabled' is set to true. Please set it to false "
-                    "to disable this.")
-                raise RuntimeError("%s\n%s" % (_exception_message(e), msg))
+
+                if self.sql_ctx._conf.arrowFallbackEnabled():
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                        "failed by the reason below:\n  %s\n"
+                        "Attempting non-optimization as "
+                        "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                        "true." % _exception_message(e))
+                    warnings.warn(msg)
+                    use_arrow = False
+                else:
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and will not continue because automatic fallback "
+                        "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                        "false.\n  %s" % _exception_message(e))
+                    warnings.warn(msg)
+                    raise
+
+            # Try to use Arrow optimization when the schema is supported and the required version
+            # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
+            if use_arrow:
+                try:
+                    from pyspark.sql.types import _check_dataframe_convert_date, \
+                        _check_dataframe_localize_timestamps
+                    import pyarrow
+                    batches = self._collectAsArrow()
+                    if len(batches) > 0:
+                        table = pyarrow.Table.from_batches(batches)
+                        pdf = table.to_pandas()
+                        pdf = _check_dataframe_convert_date(pdf, self.schema)
+                        return _check_dataframe_localize_timestamps(pdf, timezone)
+                    else:
+                        return pd.DataFrame.from_records([], columns=self.columns)
+                except Exception as e:
+                    # We might have to allow fallback here as well but multiple Spark jobs can
+                    # be executed. So, simply fail in this case for now.
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and can not continue. Note that "
+                        "'spark.sql.execution.arrow.fallback.enabled' does not have an effect "
+                        "on failures in the middle of computation.\n  %s" % _exception_message(e))
+                    warnings.warn(msg)
+                    raise
+
+        # Below is toPandas without Arrow optimization.
+        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+        dtype = {}
+        for field in self.schema:
+            pandas_type = _to_corrected_pandas_type(field.dataType)
+            # SPARK-21766: if an integer field is nullable and has null values, it can be
+            # inferred by pandas as float column. Once we convert the column with NaN back
+            # to integer type e.g., np.int16, we will hit exception. So we use the inferred
+            # float type, not the corrected type from the schema in this case.
+            if pandas_type is not None and \
+                not(isinstance(field.dataType, IntegralType) and field.nullable and
+                    pdf[field.name].isnull().any()):
+                dtype[field.name] = pandas_type
+
+        for f, t in dtype.items():
+            pdf[f] = pdf[f].astype(t, copy=False)
+
+        if timezone is None:
+            return pdf
         else:
-            pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
-
-            dtype = {}
+            from pyspark.sql.types import _check_series_convert_timestamps_local_tz
             for field in self.schema:
-                pandas_type = _to_corrected_pandas_type(field.dataType)
-                # SPARK-21766: if an integer field is nullable and has null values, it can be
-                # inferred by pandas as float column. Once we convert the column with NaN back
-                # to integer type e.g., np.int16, we will hit exception. So we use the inferred
-                # float type, not the corrected type from the schema in this case.
-                if pandas_type is not None and \
-                    not(isinstance(field.dataType, IntegralType) and field.nullable and
-                        pdf[field.name].isnull().any()):
-                    dtype[field.name] = pandas_type
-
-            for f, t in dtype.items():
-                pdf[f] = pdf[f].astype(t, copy=False)
-
-            if timezone is None:
-                return pdf
-            else:
-                from pyspark.sql.types import _check_series_convert_timestamps_local_tz
-                for field in self.schema:
-                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-                    if isinstance(field.dataType, TimestampType):
-                        pdf[field.name] = \
-                            _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
-                return pdf
+                # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+                if isinstance(field.dataType, TimestampType):
+                    pdf[field.name] = \
+                        _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
+            return pdf
 
     def _collectAsArrow(self):
         """
-        Returns all records as list of deserialized ArrowPayloads, pyarrow must be installed
-        and available.
+        Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
+        and available on driver and worker Python environments.
 
         .. note:: Experimental.
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(port, ArrowSerializer()))
+            sock_info = self._jdf.collectAsArrowToPython()
+        return list(_load_from_socket(sock_info, ArrowStreamSerializer()))
 
     ##########################################################################################
     # Pandas compatibility
@@ -2189,7 +2327,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

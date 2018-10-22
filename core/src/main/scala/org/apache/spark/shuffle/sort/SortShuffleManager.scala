@@ -27,7 +27,7 @@ import org.apache.spark.shuffle._
  * In sort-based shuffle, incoming records are sorted according to their target partition ids, then
  * written to a single map output file. Reducers fetch contiguous regions of this file in order to
  * read their portion of the map output. In cases where the map output data is too large to fit in
- * memory, sorted subsets of the output can are spilled to disk and those on-disk files are merged
+ * memory, sorted subsets of the output can be spilled to disk and those on-disk files are merged
  * to produce the final output file.
  *
  * Sort-based shuffle has two different write paths for producing its map output files:

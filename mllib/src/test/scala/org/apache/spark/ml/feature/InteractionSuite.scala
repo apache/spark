@@ -19,15 +19,15 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 
-class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class InteractionSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -63,9 +63,9 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
 
   test("numeric interaction") {
     val data = Seq(
-      (2, Vectors.dense(3.0, 4.0)),
-      (1, Vectors.dense(1.0, 5.0))
-    ).toDF("a", "b")
+      (2, Vectors.dense(3.0, 4.0), Vectors.dense(6.0, 8.0)),
+      (1, Vectors.dense(1.0, 5.0), Vectors.dense(1.0, 5.0))
+    ).toDF("a", "b", "expected")
     val groupAttr = new AttributeGroup(
       "b",
       Array[Attribute](
@@ -73,14 +73,15 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
         NumericAttribute.defaultAttr.withName("bar")))
     val df = data.select(
       col("a").as("a", NumericAttribute.defaultAttr.toMetadata()),
-      col("b").as("b", groupAttr.toMetadata()))
+      col("b").as("b", groupAttr.toMetadata()),
+      col("expected"))
     val trans = new Interaction().setInputCols(Array("a", "b")).setOutputCol("features")
+    testTransformer[(Int, Vector, Vector)](df, trans, "features", "expected") {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features === expected)
+    }
+
     val res = trans.transform(df)
-    val expected = Seq(
-      (2, Vectors.dense(3.0, 4.0), Vectors.dense(6.0, 8.0)),
-      (1, Vectors.dense(1.0, 5.0), Vectors.dense(1.0, 5.0))
-    ).toDF("a", "b", "features")
-    assert(res.collect() === expected.collect())
     val attrs = AttributeGroup.fromStructField(res.schema("features"))
     val expectedAttrs = new AttributeGroup(
       "features",
@@ -92,9 +93,9 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
 
   test("nominal interaction") {
     val data = Seq(
-      (2, Vectors.dense(3.0, 4.0)),
-      (1, Vectors.dense(1.0, 5.0))
-    ).toDF("a", "b")
+      (2, Vectors.dense(3.0, 4.0), Vectors.dense(0, 0, 0, 0, 3, 4)),
+      (1, Vectors.dense(1.0, 5.0), Vectors.dense(0, 0, 1, 5, 0, 0))
+    ).toDF("a", "b", "expected")
     val groupAttr = new AttributeGroup(
       "b",
       Array[Attribute](
@@ -103,14 +104,15 @@ class InteractionSuite extends SparkFunSuite with MLlibTestSparkContext with Def
     val df = data.select(
       col("a").as(
         "a", NominalAttribute.defaultAttr.withValues(Array("up", "down", "left")).toMetadata()),
-      col("b").as("b", groupAttr.toMetadata()))
+      col("b").as("b", groupAttr.toMetadata()),
+      col("expected"))
     val trans = new Interaction().setInputCols(Array("a", "b")).setOutputCol("features")
+    testTransformer[(Int, Vector, Vector)](df, trans, "features", "expected") {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features === expected)
+    }
+
     val res = trans.transform(df)
-    val expected = Seq(
-      (2, Vectors.dense(3.0, 4.0), Vectors.dense(0, 0, 0, 0, 3, 4)),
-      (1, Vectors.dense(1.0, 5.0), Vectors.dense(0, 0, 1, 5, 0, 0))
-    ).toDF("a", "b", "features")
-    assert(res.collect() === expected.collect())
     val attrs = AttributeGroup.fromStructField(res.schema("features"))
     val expectedAttrs = new AttributeGroup(
       "features",

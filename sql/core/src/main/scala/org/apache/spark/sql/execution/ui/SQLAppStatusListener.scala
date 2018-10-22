@@ -81,14 +81,14 @@ class SQLAppStatusListener(
 
     // Record the accumulator IDs for the stages of this job, so that the code that keeps
     // track of the metrics knows which accumulators to look at.
-    val accumIds = exec.metrics.map(_.accumulatorId).sorted.toList
+    val accumIds = exec.metrics.map(_.accumulatorId).toSet
     event.stageIds.foreach { id =>
-      stageMetrics.put(id, new LiveStageMetrics(id, 0, accumIds.toArray, new ConcurrentHashMap()))
+      stageMetrics.put(id, new LiveStageMetrics(id, 0, accumIds, new ConcurrentHashMap()))
     }
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
     exec.stages ++= event.stageIds.toSet
-    update(exec)
+    update(exec, force = true)
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
@@ -289,7 +289,7 @@ class SQLAppStatusListener(
   private def onDriverAccumUpdates(event: SparkListenerDriverAccumUpdates): Unit = {
     val SparkListenerDriverAccumUpdates(executionId, accumUpdates) = event
     Option(liveExecutions.get(executionId)).foreach { exec =>
-      exec.driverAccumUpdates = accumUpdates.toMap
+      exec.driverAccumUpdates = exec.driverAccumUpdates ++ accumUpdates
       update(exec)
     }
   }
@@ -308,11 +308,13 @@ class SQLAppStatusListener(
       })
   }
 
-  private def update(exec: LiveExecutionData): Unit = {
+  private def update(exec: LiveExecutionData, force: Boolean = false): Unit = {
     val now = System.nanoTime()
     if (exec.endEvents >= exec.jobs.size + 1) {
       exec.write(kvstore, now)
       liveExecutions.remove(exec.executionId)
+    } else if (force) {
+      exec.write(kvstore, now)
     } else if (liveUpdatePeriodNs >= 0) {
       if (now - exec.lastWriteTime > liveUpdatePeriodNs) {
         exec.write(kvstore, now)
@@ -334,7 +336,10 @@ class SQLAppStatusListener(
 
     val view = kvstore.view(classOf[SQLExecutionUIData]).index("completionTime").first(0L)
     val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt)(_.completionTime.isDefined)
-    toDelete.foreach { e => kvstore.delete(e.getClass(), e.executionId) }
+    toDelete.foreach { e =>
+      kvstore.delete(e.getClass(), e.executionId)
+      kvstore.delete(classOf[SparkPlanGraphWrapper], e.executionId)
+    }
   }
 
 }
@@ -377,7 +382,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 private class LiveStageMetrics(
     val stageId: Int,
     var attemptId: Int,
-    val accumulatorIds: Array[Long],
+    val accumulatorIds: Set[Long],
     val taskMetrics: ConcurrentHashMap[Long, LiveTaskMetrics])
 
 private class LiveTaskMetrics(

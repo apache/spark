@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, LazilyGeneratedOrdering}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.util.Utils
@@ -46,6 +46,15 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
   }
 }
 
+object BaseLimitExec {
+  private val curId = new java.util.concurrent.atomic.AtomicInteger()
+
+  def newLimitCountTerm(): String = {
+    val id = curId.getAndIncrement()
+    s"_limit_counter_$id"
+  }
+}
+
 /**
  * Helper trait which defines methods that are shared by both
  * [[LocalLimitExec]] and [[GlobalLimitExec]].
@@ -66,26 +75,25 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
   // to the parent operator.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
+  private lazy val countTerm = BaseLimitExec.newLimitCountTerm()
+
+  override lazy val limitNotReachedChecks: Seq[String] = {
+    s"$countTerm < $limit" +: super.limitNotReachedChecks
+  }
+
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val stopEarly = ctx.addMutableState(ctx.JAVA_BOOLEAN, "stopEarly") // init as stopEarly = false
-
-    ctx.addNewFunction("stopEarly", s"""
-      @Override
-      protected boolean stopEarly() {
-        return $stopEarly;
-      }
-    """, inlineToOuterClass = true)
-    val countTerm = ctx.addMutableState(ctx.JAVA_INT, "count") // init as count = 0
+    // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.
+    // Here we have to inline it to not change its name. This is fine as we won't have many limit
+    // operators in one query.
+    ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
     s"""
        | if ($countTerm < $limit) {
        |   $countTerm += 1;
        |   ${consume(ctx, input)}
-       | } else {
-       |   $stopEarly = true;
        | }
      """.stripMargin
   }

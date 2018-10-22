@@ -39,7 +39,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
         <div>
           <p>Cannot find driver {driverId}</p>
         </div>
-      return UIUtils.basicSparkPage(content, s"Details for Job $driverId")
+      return UIUtils.basicSparkPage(request, content, s"Details for Job $driverId")
     }
     val driverState = state.get
     val driverHeaders = Seq("Driver property", "Value")
@@ -68,7 +68,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
         retryHeaders, retryRow, Iterable.apply(driverState.description.retryState))
     val content =
       <p>Driver state information for driver id {driverId}</p>
-        <a href={UIUtils.prependBaseUri("/")}>Back to Drivers</a>
+        <a href={UIUtils.prependBaseUri(request, "/")}>Back to Drivers</a>
         <div class="row-fluid">
           <div class="span12">
             <h4>Driver state: {driverState.state}</h4>
@@ -87,7 +87,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
           </div>
         </div>;
 
-    UIUtils.basicSparkPage(content, s"Details for Job $driverId")
+    UIUtils.basicSparkPage(request, content, s"Details for Job $driverId")
   }
 
   private def launchedRow(submissionState: Option[MesosClusterSubmissionState]): Seq[Node] = {

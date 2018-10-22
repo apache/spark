@@ -21,19 +21,20 @@ import java.io.File
 
 import scala.collection.mutable.HashMap
 
+import org.apache.spark.TestUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.util.Utils
 
 
 trait SQLMetricsTestUtils extends SQLTestUtils {
   import testImplicits._
 
   protected def currentExecutionIds(): Set[Long] = {
+    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     statusStore.executionsList.map(_.executionId).toSet
   }
 
@@ -91,7 +92,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
         (0 until 100).map(i => (i, i + 1)).toDF("i", "j").repartition(2)
           .write.format(dataFormat).mode("overwrite").insertInto(tableName)
       }
-      assert(Utils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
+      assert(TestUtils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
     }
   }
 
@@ -121,7 +122,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
           .mode("overwrite")
           .insertInto(tableName)
       }
-      assert(Utils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
+      assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
     }
   }
 

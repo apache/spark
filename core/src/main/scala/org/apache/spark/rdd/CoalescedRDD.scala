@@ -266,17 +266,17 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
         numCreated += 1
       }
     }
-    tries = 0
     // if we don't have enough partition groups, create duplicates
     while (numCreated < targetLen) {
-      val (nxt_replica, nxt_part) = partitionLocs.partsWithLocs(tries)
-      tries += 1
+      // Copy the preferred location from a random input partition.
+      // This helps in avoiding skew when the input partitions are clustered by preferred location.
+      val (nxt_replica, nxt_part) = partitionLocs.partsWithLocs(
+        rnd.nextInt(partitionLocs.partsWithLocs.length))
       val pgroup = new PartitionGroup(Some(nxt_replica))
       groupArr += pgroup
       groupHash.getOrElseUpdate(nxt_replica, ArrayBuffer()) += pgroup
       addPartToPGroup(nxt_part, pgroup)
       numCreated += 1
-      if (tries >= partitionLocs.partsWithLocs.length) tries = 0
     }
   }
 

@@ -34,6 +34,7 @@ import com.google.common.base.Objects;
 import org.junit.*;
 import org.junit.rules.ExpectedException;
 
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.sql.*;
@@ -334,6 +335,23 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<Tuple5<Integer, String, Long, String, Boolean>> ds5 =
       spark.createDataset(data5, encoder5);
     Assert.assertEquals(data5, ds5.collectAsList());
+  }
+
+  @Test
+  public void testTupleEncoderSchema() {
+    Encoder<Tuple2<String, Tuple2<String,String>>> encoder =
+      Encoders.tuple(Encoders.STRING(), Encoders.tuple(Encoders.STRING(), Encoders.STRING()));
+    List<Tuple2<String, Tuple2<String, String>>> data = Arrays.asList(tuple2("1", tuple2("a", "b")),
+      tuple2("2", tuple2("c", "d")));
+    Dataset<Row> ds1 = spark.createDataset(data, encoder).toDF("value1", "value2");
+
+    JavaPairRDD<String, Tuple2<String, String>> pairRDD = jsc.parallelizePairs(data);
+    Dataset<Row> ds2 = spark.createDataset(JavaPairRDD.toRDD(pairRDD), encoder)
+      .toDF("value1", "value2");
+
+    Assert.assertEquals(ds1.schema(), ds2.schema());
+    Assert.assertEquals(ds1.select(expr("value2._1")).collectAsList(),
+      ds2.select(expr("value2._1")).collectAsList());
   }
 
   @Test

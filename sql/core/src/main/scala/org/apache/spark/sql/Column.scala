@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.InterfaceStability
@@ -103,7 +104,7 @@ class TypedColumn[-T, U](
  *
  * {{{
  *   df("columnName")            // On a specific `df` DataFrame.
- *   col("columnName")           // A generic column no yet associated with a DataFrame.
+ *   col("columnName")           // A generic column not yet associated with a DataFrame.
  *   col("columnName.field")     // Extracting a struct field
  *   col("`a.column.with.dots`") // Escape `.` in column names.
  *   $"columnName"               // Scala short hand for a named column.
@@ -198,13 +199,13 @@ class Column(val expr: Expression) extends Logging {
   /**
    * Extracts a value or values from a complex type.
    * The following types of extraction are supported:
-   *
-   *  - Given an Array, an integer ordinal can be used to retrieve a single value.
-   *  - Given a Map, a key of the correct type can be used to retrieve an individual value.
-   *  - Given a Struct, a string fieldName can be used to extract that field.
-   *  - Given an Array of Structs, a string fieldName can be used to extract filed
-   *    of every struct in that array, and return an Array of fields
-   *
+   * <ul>
+   * <li>Given an Array, an integer ordinal can be used to retrieve a single value.</li>
+   * <li>Given a Map, a key of the correct type can be used to retrieve an individual value.</li>
+   * <li>Given a Struct, a string fieldName can be used to extract that field.</li>
+   * <li>Given an Array of Structs, a string fieldName can be used to extract filed
+   *    of every struct in that array, and return an Array of fields.</li>
+   * </ul>
    * @group expr_ops
    * @since 1.4.0
    */
@@ -344,7 +345,7 @@ class Column(val expr: Expression) extends Logging {
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
-   *   people.select( people("age").gt(21) );
+   *   people.select( people.col("age").gt(21) );
    * }}}
    *
    * @group expr_ops
@@ -360,7 +361,7 @@ class Column(val expr: Expression) extends Logging {
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
-   *   people.select( people("age").gt(21) );
+   *   people.select( people.col("age").gt(21) );
    * }}}
    *
    * @group java_expr_ops
@@ -375,7 +376,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") < 21 )
    *
    *   // Java:
-   *   people.select( people("age").lt(21) );
+   *   people.select( people.col("age").lt(21) );
    * }}}
    *
    * @group expr_ops
@@ -390,7 +391,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") < 21 )
    *
    *   // Java:
-   *   people.select( people("age").lt(21) );
+   *   people.select( people.col("age").lt(21) );
    * }}}
    *
    * @group java_expr_ops
@@ -405,7 +406,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") <= 21 )
    *
    *   // Java:
-   *   people.select( people("age").leq(21) );
+   *   people.select( people.col("age").leq(21) );
    * }}}
    *
    * @group expr_ops
@@ -420,7 +421,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") <= 21 )
    *
    *   // Java:
-   *   people.select( people("age").leq(21) );
+   *   people.select( people.col("age").leq(21) );
    * }}}
    *
    * @group java_expr_ops
@@ -435,7 +436,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") >= 21 )
    *
    *   // Java:
-   *   people.select( people("age").geq(21) )
+   *   people.select( people.col("age").geq(21) )
    * }}}
    *
    * @group expr_ops
@@ -450,7 +451,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") >= 21 )
    *
    *   // Java:
-   *   people.select( people("age").geq(21) )
+   *   people.select( people.col("age").geq(21) )
    * }}}
    *
    * @group java_expr_ops
@@ -587,7 +588,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.filter( people("inSchool") || people("isEmployed") )
    *
    *   // Java:
-   *   people.filter( people("inSchool").or(people("isEmployed")) );
+   *   people.filter( people.col("inSchool").or(people.col("isEmployed")) );
    * }}}
    *
    * @group expr_ops
@@ -602,7 +603,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.filter( people("inSchool") || people("isEmployed") )
    *
    *   // Java:
-   *   people.filter( people("inSchool").or(people("isEmployed")) );
+   *   people.filter( people.col("inSchool").or(people.col("isEmployed")) );
    * }}}
    *
    * @group java_expr_ops
@@ -617,7 +618,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("inSchool") && people("isEmployed") )
    *
    *   // Java:
-   *   people.select( people("inSchool").and(people("isEmployed")) );
+   *   people.select( people.col("inSchool").and(people.col("isEmployed")) );
    * }}}
    *
    * @group expr_ops
@@ -632,7 +633,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("inSchool") && people("isEmployed") )
    *
    *   // Java:
-   *   people.select( people("inSchool").and(people("isEmployed")) );
+   *   people.select( people.col("inSchool").and(people.col("isEmployed")) );
    * }}}
    *
    * @group java_expr_ops
@@ -647,7 +648,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") + people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").plus(people("weight")) );
+   *   people.select( people.col("height").plus(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -662,7 +663,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") + people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").plus(people("weight")) );
+   *   people.select( people.col("height").plus(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -677,7 +678,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") - people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").minus(people("weight")) );
+   *   people.select( people.col("height").minus(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -692,7 +693,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") - people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").minus(people("weight")) );
+   *   people.select( people.col("height").minus(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -707,7 +708,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") * people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").multiply(people("weight")) );
+   *   people.select( people.col("height").multiply(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -722,7 +723,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") * people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").multiply(people("weight")) );
+   *   people.select( people.col("height").multiply(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -737,7 +738,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") / people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").divide(people("weight")) );
+   *   people.select( people.col("height").divide(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -752,7 +753,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") / people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").divide(people("weight")) );
+   *   people.select( people.col("height").divide(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -780,11 +781,53 @@ class Column(val expr: Expression) extends Logging {
    * A boolean expression that is evaluated to true if the value of this expression is contained
    * by the evaluated values of the arguments.
    *
+   * Note: Since the type of the elements in the list are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
    * @group expr_ops
    * @since 1.5.0
    */
   @scala.annotation.varargs
   def isin(list: Any*): Column = withExpr { In(expr, list.map(lit(_).expr)) }
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided collection.
+   *
+   * Note: Since the type of the elements in the collection are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
+   * @group expr_ops
+   * @since 2.4.0
+   */
+  def isInCollection(values: scala.collection.Iterable[_]): Column = isin(values.toSeq: _*)
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided collection.
+   *
+   * Note: Since the type of the elements in the collection are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
+   * @group java_expr_ops
+   * @since 2.4.0
+   */
+  def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
 
   /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
@@ -1083,10 +1126,10 @@ class Column(val expr: Expression) extends Logging {
    * and null values return before non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order and null values appearing first.
-   *   df.sort(df("age").asc_nulls_last)
+   *   df.sort(df("age").asc_nulls_first)
    *
    *   // Java
-   *   df.sort(df.col("age").asc_nulls_last());
+   *   df.sort(df.col("age").asc_nulls_first());
    * }}}
    *
    * @group expr_ops

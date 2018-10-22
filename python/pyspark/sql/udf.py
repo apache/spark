@@ -18,12 +18,14 @@
 User-defined function related classes and functions
 """
 import functools
+import sys
 
 from pyspark import SparkContext, since
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.types import StringType, DataType, ArrayType, StructType, MapType, \
-    _parse_datatype_string, to_arrow_type, to_arrow_schema
+from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string,\
+    to_arrow_type, to_arrow_schema
+from pyspark.util import _get_argspec
 
 __all__ = ["UDFRegistration"]
 
@@ -41,11 +43,10 @@ def _create_udf(f, returnType, evalType):
                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
 
-        import inspect
         from pyspark.sql.utils import require_minimum_pyarrow_version
-
         require_minimum_pyarrow_version()
-        argspec = inspect.getargspec(f)
+
+        argspec = _get_argspec(f)
 
         if evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF and len(argspec.args) == 0 and \
                 argspec.varargs is None:
@@ -54,11 +55,11 @@ def _create_udf(f, returnType, evalType):
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
 
-        if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and len(argspec.args) != 1:
+        if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF \
+                and len(argspec.args) not in (1, 2):
             raise ValueError(
                 "Invalid function: pandas_udfs with function type GROUPED_MAP "
-                "must take a single arg that is a pandas DataFrame."
-            )
+                "must take either one argument (data) or two arguments (key, data).")
 
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
@@ -297,6 +298,15 @@ class UDFRegistration(object):
             >>> spark.sql("SELECT add_one(id) FROM range(3)").collect()  # doctest: +SKIP
             [Row(add_one(id)=1), Row(add_one(id)=2), Row(add_one(id)=3)]
 
+            >>> @pandas_udf("integer", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
+            ... def sum_udf(v):
+            ...     return v.sum()
+            ...
+            >>> _ = spark.udf.register("sum_udf", sum_udf)  # doctest: +SKIP
+            >>> q = "SELECT sum_udf(v1) FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2"
+            >>> spark.sql(q).collect()  # doctest: +SKIP
+            [Row(sum_udf(v1)=1), Row(sum_udf(v1)=5)]
+
             .. note:: Registration for a user-defined function (case 2.) was added from
                 Spark 2.3.0.
         """
@@ -309,9 +319,11 @@ class UDFRegistration(object):
                     "Invalid returnType: data type can not be specified when f is"
                     "a user-defined function, but got %s." % returnType)
             if f.evalType not in [PythonEvalType.SQL_BATCHED_UDF,
-                                  PythonEvalType.SQL_SCALAR_PANDAS_UDF]:
+                                  PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                                  PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
                 raise ValueError(
-                    "Invalid f: f must be either SQL_BATCHED_UDF or SQL_SCALAR_PANDAS_UDF")
+                    "Invalid f: f must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF or "
+                    "SQL_GROUPED_AGG_PANDAS_UDF")
             register_udf = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
                                                evalType=f.evalType,
                                                deterministic=f.deterministic)
@@ -395,7 +407,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -20,11 +20,11 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable,
-  SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions.{avg, col, udf}
 import org.apache.spark.sql.types.DoubleType
@@ -106,15 +106,21 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
 
   @Since("2.3.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.validateVectorCompatibleColumn(dataset.schema, $(featuresCol))
     SchemaUtils.checkNumericType(dataset.schema, $(predictionCol))
+
+    val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
+    val df = dataset.select(col($(predictionCol)),
+      vectorCol.as($(featuresCol), dataset.schema($(featuresCol)).metadata))
 
     ($(metricName), $(distanceMeasure)) match {
       case ("silhouette", "squaredEuclidean") =>
         SquaredEuclideanSilhouette.computeSilhouetteScore(
-          dataset, $(predictionCol), $(featuresCol))
+          df, $(predictionCol), $(featuresCol))
       case ("silhouette", "cosine") =>
-        CosineSilhouette.computeSilhouetteScore(dataset, $(predictionCol), $(featuresCol))
+        CosineSilhouette.computeSilhouetteScore(df, $(predictionCol), $(featuresCol))
+      case (mn, dm) =>
+        throw new IllegalArgumentException(s"No support for metric $mn, distance $dm")
     }
   }
 }
@@ -169,6 +175,15 @@ private[evaluation] abstract class Silhouette {
    */
   def overallScore(df: DataFrame, scoreColumn: Column): Double = {
     df.select(avg(scoreColumn)).collect()(0).getDouble(0)
+  }
+
+  protected def getNumberOfFeatures(dataFrame: DataFrame, columnName: String): Int = {
+    val group = AttributeGroup.fromStructField(dataFrame.schema(columnName))
+    if (group.size < 0) {
+      dataFrame.select(col(columnName)).first().getAs[Vector](0).size
+    } else {
+      group.size
+    }
   }
 }
 
@@ -360,7 +375,7 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
     df: DataFrame,
     predictionCol: String,
     featuresCol: String): Map[Double, ClusterStats] = {
-    val numFeatures = df.select(col(featuresCol)).first().getAs[Vector](0).size
+    val numFeatures = getNumberOfFeatures(df, featuresCol)
     val clustersStatsRDD = df.select(
         col(predictionCol).cast(DoubleType), col(featuresCol), col("squaredNorm"))
       .rdd
@@ -552,8 +567,11 @@ private[evaluation] object CosineSilhouette extends Silhouette {
    * @return A [[scala.collection.immutable.Map]] which associates each cluster id to a
    *         its statistics (ie. the precomputed values `N` and `$\Omega_{\Gamma}$`).
    */
-  def computeClusterStats(df: DataFrame, predictionCol: String): Map[Double, (Vector, Long)] = {
-    val numFeatures = df.select(col(normalizedFeaturesColName)).first().getAs[Vector](0).size
+  def computeClusterStats(
+      df: DataFrame,
+      featuresCol: String,
+      predictionCol: String): Map[Double, (Vector, Long)] = {
+    val numFeatures = getNumberOfFeatures(df, featuresCol)
     val clustersStatsRDD = df.select(
       col(predictionCol).cast(DoubleType), col(normalizedFeaturesColName))
       .rdd
@@ -626,7 +644,8 @@ private[evaluation] object CosineSilhouette extends Silhouette {
       normalizeFeatureUDF(col(featuresCol)))
 
     // compute aggregate values for clusters needed by the algorithm
-    val clustersStatsMap = computeClusterStats(dfWithNormalizedFeatures, predictionCol)
+    val clustersStatsMap = computeClusterStats(dfWithNormalizedFeatures, featuresCol,
+      predictionCol)
 
     // Silhouette is reasonable only when the number of clusters is greater then 1
     assert(clustersStatsMap.size > 1, "Number of clusters must be greater than one.")

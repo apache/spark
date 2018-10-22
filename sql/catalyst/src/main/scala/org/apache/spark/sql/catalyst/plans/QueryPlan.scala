@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -27,8 +27,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   /**
    * The active config object within the current scope.
-   * Note that if you want to refer config values during execution, you have to capture them
-   * in Driver and use the captured values in Executors.
    * See [[SQLConf.get]] for more information.
    */
   def conf: SQLConf = SQLConf.get
@@ -44,7 +42,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def references: AttributeSet = AttributeSet(expressions.flatMap(_.references))
+  def references: AttributeSet = AttributeSet.fromAttributeSets(expressions.map(_.references))
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -103,7 +101,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     var changed = false
 
     @inline def transformExpression(e: Expression): Expression = {
-      val newE = f(e)
+      val newE = CurrentOrigin.withOrigin(e.origin) {
+        f(e)
+      }
       if (newE.fastEquals(e)) {
         e
       } else {
@@ -117,6 +117,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case Some(value) => Some(recursiveTransform(value))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
+      case stream: Stream[_] => stream.map(recursiveTransform).force
       case seq: Traversable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
       case null => null
@@ -283,7 +284,7 @@ object QueryPlan extends PredicateHelper {
         if (ordinal == -1) {
           ar
         } else {
-          ar.withExprId(ExprId(ordinal))
+          ar.withExprId(ExprId(ordinal)).canonicalized
         }
     }.canonicalized.asInstanceOf[T]
   }
