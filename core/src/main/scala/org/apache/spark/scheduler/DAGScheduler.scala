@@ -1386,14 +1386,14 @@ private[spark] class DAGScheduler(
                     markStageAsFinished(resultStage)
                     cleanupStateForJobAndIndependentStages(job)
                     try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
-                      logInfo(
-                        s"Job ${job.jobId} is finished. Killing speculative tasks for this job")
+                      logInfo(s"Job ${job.jobId} is finished. Killing potential speculative or " +
+                        s"zombie tasks for this job")
                       // ResultStage is only used by this job. It's safe to kill speculative or
                       // zombie tasks in this stage.
                       taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job))
                     } catch {
                       case e: UnsupportedOperationException =>
-                        logInfo(s"Could not cancel tasks for stage $stageId", e)
+                        logWarning(s"Could not cancel tasks for stage $stageId", e)
                     }
                     listenerBus.post(
                       SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
@@ -1944,8 +1944,8 @@ private[spark] class DAGScheduler(
               markStageAsFinished(stage, Some(failureReason))
             } catch {
               case e: UnsupportedOperationException =>
-                logInfo(s"Could not cancel tasks for stage $stageId", e)
-              ableToCancelStages = false
+                logWarning(s"Could not cancel tasks for stage $stageId", e)
+                ableToCancelStages = false
             }
           }
         }
