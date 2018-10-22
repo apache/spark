@@ -88,7 +88,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     blacklist = mock[BlacklistTracker]
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     conf.set(config.BLACKLIST_ENABLED, true)
-    confs.foreach{ case (k, v) => conf.set(k, v) }
+    confs.foreach { case (k, v) => conf.set(k, v) }
 
     sc = new SparkContext(conf)
     taskScheduler =
@@ -508,7 +508,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   test("SPARK-22148 abort timer should kick in when task is completely blacklisted & no new " +
-    "executor can be acquired") {
+      "executor can be acquired") {
     // set the abort timer to fail immediately
     taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
       config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0")
@@ -603,6 +603,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       WorkerOffer("executor0", "host0", 1)
     )).flatten
 
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.size == 0)
+
     // Fail the running task
     val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
     taskScheduler.statusUpdate(failedTask.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
@@ -615,6 +617,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       WorkerOffer("executor0", "host0", 1)
     )).flatten
 
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.size == 0)
+
     val tsm2 = stageToMockTaskSetManager(1)
     val failedTask2 = secondTaskAttempts.find(_.executorId == "executor0").get
     taskScheduler.statusUpdate(failedTask2.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
@@ -622,13 +626,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       "executor0", failedTask2.index)).thenReturn(true)
 
     // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
-    // timer for taskSet1
-    assert(taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor0", "host0", 1)
-    )).flatten.size === 0)
-
-    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
-    // timer for taskSet2
+    // timer for taskSet1 and taskSet2
     assert(taskScheduler.resourceOffers(IndexedSeq(
       WorkerOffer("executor0", "host0", 1)
     )).flatten.size === 0)
