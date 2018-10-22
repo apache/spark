@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.encoders
 
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{`Type`, RuntimeClass, TypeTag}
+import scala.reflect.runtime.universe.{`Type`, typeTag, RuntimeClass, TypeTag}
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
@@ -47,7 +47,7 @@ object ExpressionEncoder {
 
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
     val mirror = ScalaReflection.mirror
-    val tpe = ScalaReflection.localTypeOf[T]
+    val tpe = typeTag[T].in(mirror).tpe
     val cls = mirror.runtimeClass(tpe)
 
     if (ScalaReflection.optionOfProductType(tpe)) {
