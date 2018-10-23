@@ -248,7 +248,14 @@ def _create_batch(series, timezone):
             # TODO: see ARROW-2432. Remove when the minimum PyArrow version becomes 0.10.0.
             return pa.Array.from_pandas(s.apply(
                 lambda v: decimal.Decimal('NaN') if v is None else v), mask=mask, type=t)
-        return pa.Array.from_pandas(s, mask=mask, type=t)
+        try:
+            array = pa.Array.from_pandas(s, mask=mask, type=t)
+        except pa.ArrowInvalid as e:
+            raise RuntimeError("Detected unsafe type conversion when converting from Pandas.Series "
+                               "(%s) to PyArrow.Array (%s). Please verify the return type of pandas"
+                               " user defined function is consistent with returned Pandas.Series."
+                               % (s.dtype, t), e)
+        return array
 
     arrs = [create_array(s, t) for s, t in series]
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])

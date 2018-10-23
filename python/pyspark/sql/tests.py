@@ -4961,6 +4961,31 @@ class PandasUDFTests(ReusedSQLTestCase):
             ).collect
         )
 
+    def test_pandas_udf_detect_unsafe_type_conversion(self):
+        from distutils.version import LooseVersion
+        from pyspark.sql.functions import pandas_udf
+        import pandas as pd
+        import numpy as np
+        import pyarrow as pa
+
+        values = [1.0] * 3
+        pdf = pd.DataFrame({'A': values})
+        df = self.spark.createDataFrame(pdf).repartition(1)
+
+        @pandas_udf(returnType="int")
+        def udf(column):
+            return pd.Series(np.linspace(0, 1, 3))
+
+        udf_boolean = df.select(['A']).withColumn('udf', udf('A'))
+
+        # Since 0.11.0, PyArrow supports the feature to raise an error for unsafe cast.
+        if LooseVersion(pa.__version__) >= LooseVersion("0.11.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(
+                        Exception,
+                        "Detected unsafe type conversion when converting from Pandas.Series"):
+                    udf_boolean.collect()
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
