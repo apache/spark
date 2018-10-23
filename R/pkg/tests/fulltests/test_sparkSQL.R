@@ -1647,6 +1647,13 @@ test_that("column functions", {
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 
+  # Test from_csv()
+  df <- as.DataFrame(list(list("col" = "1")))
+  c <- collect(select(df, alias(from_csv(df$col, "a INT"), "csv")))
+  expect_equal(c[[1]][[1]]$a, 1)
+  c <- collect(select(df, alias(from_csv(df$col, lit("a INT")), "csv")))
+  expect_equal(c[[1]][[1]]$a, 1)
+
   # Test to_json(), from_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
   j <- collect(select(df, alias(to_json(df$people), "json")))
@@ -1818,6 +1825,14 @@ test_that("string operators", {
   expect_equal(
     collect(select(df4, split_string(df4$a, "\\\\")))[1, 1],
     list(list("a.b@c.d   1", "b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\.", 2)))[1, 1],
+    list(list("a", "b@c.d   1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "b", 0)))[1, 1],
+    list(list("a.", "@c.d   1\\", ""))
   )
 
   l5 <- list(list(a = "abc"))

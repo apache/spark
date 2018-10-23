@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import org.json4s.jackson.JsonMethods.parse
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
+import org.apache.spark.sql.LocalSparkSession
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.util.JsonProtocol
 
-class SQLJsonProtocolSuite extends SparkFunSuite {
+class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
 
   test("SparkPlanGraph backward compatibility: metadata") {
     val SQLExecutionStartJsonString =
@@ -48,5 +50,30 @@ class SQLJsonProtocolSuite extends SparkFunSuite {
     val expectedEvent = SparkListenerSQLExecutionStart(0, "test desc", "test detail", "test plan",
       new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0)
     assert(reconstructedEvent == expectedEvent)
+  }
+
+  test("SparkListenerSQLExecutionEnd backward compatibility") {
+    spark = new TestSparkSession()
+    val qe = spark.sql("select 1").queryExecution
+    val event = SparkListenerSQLExecutionEnd(1, 10)
+    event.duration = 1000
+    event.executionName = Some("test")
+    event.qe = qe
+    event.executionFailure = Some(new RuntimeException("test"))
+    val json = JsonProtocol.sparkEventToJson(event)
+    assert(json == parse(
+      """
+        |{
+        |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
+        |  "executionId" : 1,
+        |  "time" : 10
+        |}
+      """.stripMargin))
+    val readBack = JsonProtocol.sparkEventFromJson(json)
+    event.duration = 0
+    event.executionName = None
+    event.qe = null
+    event.executionFailure = None
+    assert(readBack == event)
   }
 }

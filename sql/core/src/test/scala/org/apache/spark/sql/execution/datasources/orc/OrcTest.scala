@@ -106,4 +106,14 @@ abstract class OrcTest extends QueryTest with SQLTestUtils with BeforeAndAfterAl
       df: DataFrame, path: File): Unit = {
     df.write.mode(SaveMode.Overwrite).orc(path.getCanonicalPath)
   }
+
+  protected def checkPredicatePushDown(df: DataFrame, numRows: Int, predicate: String): Unit = {
+    withTempPath { file =>
+      // It needs to repartition data so that we can have several ORC files
+      // in order to skip stripes in ORC.
+      df.repartition(numRows).write.orc(file.getCanonicalPath)
+      val actual = stripSparkFilter(spark.read.orc(file.getCanonicalPath).where(predicate)).count()
+      assert(actual < numRows)
+    }
+  }
 }

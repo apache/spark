@@ -722,7 +722,82 @@ with encryption, at least.
 The Kerberos login will be periodically renewed using the provided credentials, and new delegation
 tokens for supported will be created.
 
+## Secure Interaction with Kubernetes
 
+When talking to Hadoop-based services behind Kerberos, it was noted that Spark needs to obtain delegation tokens
+so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are 
+shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job: 
+
+In all cases you must define the environment variable: `HADOOP_CONF_DIR` or 
+`spark.kubernetes.hadoop.configMapName.`
+
+It also important to note that the KDC needs to be visible from inside the containers.
+
+If a user wishes to use a remote HADOOP_CONF directory, that contains the Hadoop configuration files, this could be
+achieved by setting `spark.kubernetes.hadoop.configMapName` to a pre-existing ConfigMap.
+
+1. Submitting with a $kinit that stores a TGT in the Local Ticket Cache:
+```bash
+/usr/bin/kinit -kt <keytab_file> <username>/<krb5 realm>
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --class org.apache.spark.examples.HdfsTest \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.executor.instances=1 \
+    --conf spark.app.name=spark-hdfs \
+    --conf spark.kubernetes.container.image=spark:latest \
+    --conf spark.kubernetes.kerberos.krb5.path=/etc/krb5.conf \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
+    <HDFS_FILE_LOCATION>
+```
+2. Submitting with a local Keytab and Principal
+```bash
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --class org.apache.spark.examples.HdfsTest \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.executor.instances=1 \
+    --conf spark.app.name=spark-hdfs \
+    --conf spark.kubernetes.container.image=spark:latest \
+    --conf spark.kerberos.keytab=<KEYTAB_FILE> \
+    --conf spark.kerberos.principal=<PRINCIPAL> \
+    --conf spark.kubernetes.kerberos.krb5.path=/etc/krb5.conf \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
+    <HDFS_FILE_LOCATION>
+```
+
+3. Submitting with pre-populated secrets, that contain the Delegation Token, already existing within the namespace
+```bash
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --class org.apache.spark.examples.HdfsTest \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.executor.instances=1 \
+    --conf spark.app.name=spark-hdfs \
+    --conf spark.kubernetes.container.image=spark:latest \
+    --conf spark.kubernetes.kerberos.tokenSecret.name=<SECRET_TOKEN_NAME> \
+    --conf spark.kubernetes.kerberos.tokenSecret.itemKey=<SECRET_ITEM_KEY> \
+    --conf spark.kubernetes.kerberos.krb5.path=/etc/krb5.conf \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
+    <HDFS_FILE_LOCATION>
+```
+
+3b. Submitting like in (3) however specifying a pre-created krb5 ConfigMap and pre-created `HADOOP_CONF_DIR` ConfigMap
+```bash
+/opt/spark/bin/spark-submit \
+    --deploy-mode cluster \
+    --class org.apache.spark.examples.HdfsTest \
+    --master k8s://<KUBERNETES_MASTER_ENDPOINT> \
+    --conf spark.executor.instances=1 \
+    --conf spark.app.name=spark-hdfs \
+    --conf spark.kubernetes.container.image=spark:latest \
+    --conf spark.kubernetes.kerberos.tokenSecret.name=<SECRET_TOKEN_NAME> \
+    --conf spark.kubernetes.kerberos.tokenSecret.itemKey=<SECRET_ITEM_KEY> \
+    --conf spark.kubernetes.hadoop.configMapName=<HCONF_CONFIG_MAP_NAME> \
+    --conf spark.kubernetes.kerberos.krb5.configMapName=<KRB_CONFIG_MAP_NAME> \
+    local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
+    <HDFS_FILE_LOCATION>
+```
 # Event Logging
 
 If your applications are using event logging, the directory where the event logs go
