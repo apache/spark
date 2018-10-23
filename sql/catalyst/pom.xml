@@ -103,6 +103,11 @@
       <groupId>commons-codec</groupId>
       <artifactId>commons-codec</artifactId>
     </dependency>
+    <dependency>
+      <groupId>yaooqinn</groupId>
+      <artifactId>spark-authorizer</artifactId>
+      <version>2.0.0</version>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
