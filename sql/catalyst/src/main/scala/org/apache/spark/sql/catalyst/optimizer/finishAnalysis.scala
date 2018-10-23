@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -38,6 +39,18 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Rewrites the aggregates expressions by replacing them with another. This is mainly used to
+ * provide compatibiity with other databases. For example, we use this to support
+ * Every, Any/Some by rewriting them to Min, Max respectively.
+ */
+object RewriteUnevaluableAggregates extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case SomeAgg(arg) => Max(arg)
+    case AnyAgg(arg) => Max(arg)
+    case EveryAgg(arg) => Min(arg)
+  }
+}
 
 /**
  * Computes the current date and time to make sure we return the same result in a single query.
