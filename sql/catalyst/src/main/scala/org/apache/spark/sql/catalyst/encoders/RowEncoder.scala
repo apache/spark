@@ -187,6 +187,8 @@ object RowEncoder {
         val convertedField = if (field.nullable) {
           If(
             Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
+            // Because we strip UDTs, `field.dataType` can be different from `fieldValue.dataType`.
+            // We should use `fieldValue.dataType` here.
             Literal.create(null, fieldValue.dataType),
             fieldValue
           )
