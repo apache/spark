@@ -120,7 +120,7 @@ namesAndAges <- select(df, "name", "age")
 
 # $example on:manual_save_options_orc$
 df <- read.df("examples/src/main/resources/users.orc", "orc")
-write.orc(df, "users_with_options.orc", mode="overwrite", orc.bloom.filter.columns="favorite_color", orc.dictionary.key.threshold=1.0, orc.column.encoding.direct="name")
+write.orc(df, "users_with_options.orc", orc.bloom.filter.columns="favorite_color", orc.dictionary.key.threshold=1.0, orc.column.encoding.direct="name")
 # $example off:manual_save_options_orc$
 
 # $example on:direct_sql$
