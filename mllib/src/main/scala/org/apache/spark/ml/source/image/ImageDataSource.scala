@@ -27,7 +27,7 @@ package org.apache.spark.ml.source.image
  *  - origin: `StringType` (represents the file path of the image)
  *  - height: `IntegerType` (height of the image)
  *  - width: `IntegerType` (width of the image)
- *  - nChannels: `IntegerType` (number of the image channels)
+ *  - nChannels: `IntegerType` (number of image channels)
  *  - mode: `IntegerType` (OpenCV-compatible type)
  *  - data: `BinaryType` (Image bytes in OpenCV-compatible order: row-wise BGR in most cases)
  *
