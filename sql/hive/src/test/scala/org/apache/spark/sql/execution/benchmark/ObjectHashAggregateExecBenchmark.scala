@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
 /**
- * Benchmark to measure read performance with Filter pushdown.
+ * Benchmark to measure hash based aggregation.
  * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
