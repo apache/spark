@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
@@ -156,5 +157,25 @@ object InternalRow {
     } else {
       getValueNullSafe
     }
+  }
+
+  /**
+   * Returns a writer for an `InternalRow` with given data type.
+   */
+  def getWriter(ordinal: Int, dt: DataType): (InternalRow, Any) => Unit = dt match {
+    case BooleanType => (input, v) => input.setBoolean(ordinal, v.asInstanceOf[Boolean])
+    case ByteType => (input, v) => input.setByte(ordinal, v.asInstanceOf[Byte])
+    case ShortType => (input, v) => input.setShort(ordinal, v.asInstanceOf[Short])
+    case IntegerType | DateType => (input, v) => input.setInt(ordinal, v.asInstanceOf[Int])
+    case LongType | TimestampType => (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
+    case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
+    case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
+    case DecimalType.Fixed(precision, _) =>
+      (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
+    case CalendarIntervalType | BinaryType | _: ArrayType | StringType | _: StructType |
+         _: MapType | _: ObjectType | _: UserDefinedType[_] =>
+      (input, v) => input.update(ordinal, v)
+    case NullType => (input, v) => {}
+    case _ => throw new SparkException(s"Unsupported data type $dt")
   }
 }

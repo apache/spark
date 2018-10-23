@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
-import org.apache.spark.sql.types._
 
 
 /**
@@ -59,44 +57,18 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
   }
 
   private[this] val fieldWriters = validExprs.map { case (e, i) =>
-    val writer = generateRowWriter(i, e.dataType)
+    val writer = InternalRow.getWriter(i, e.dataType)
     if (!e.nullable) {
-      (v: Any) => writer(v)
+      (v: Any) => writer(mutableRow, v)
     } else {
       (v: Any) => {
         if (v == null) {
           mutableRow.setNullAt(i)
         } else {
-          writer(v)
+          writer(mutableRow, v)
         }
       }
     }
-  }
-
-  private def generateRowWriter(ordinal: Int, dt: DataType): Any => Unit = dt match {
-    case BooleanType =>
-      v => mutableRow.setBoolean(ordinal, v.asInstanceOf[Boolean])
-    case ByteType =>
-      v => mutableRow.setByte(ordinal, v.asInstanceOf[Byte])
-    case ShortType =>
-      v => mutableRow.setShort(ordinal, v.asInstanceOf[Short])
-    case IntegerType | DateType =>
-      v => mutableRow.setInt(ordinal, v.asInstanceOf[Int])
-    case LongType | TimestampType =>
-      v => mutableRow.setLong(ordinal, v.asInstanceOf[Long])
-    case FloatType =>
-      v => mutableRow.setFloat(ordinal, v.asInstanceOf[Float])
-    case DoubleType =>
-      v => mutableRow.setDouble(ordinal, v.asInstanceOf[Double])
-    case DecimalType.Fixed(precision, _) =>
-      v => mutableRow.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
-    case CalendarIntervalType | BinaryType | _: ArrayType | StringType | _: StructType |
-         _: MapType | _: UserDefinedType[_] =>
-      v => mutableRow.update(ordinal, v)
-    case NullType =>
-      v => {}
-    case _ =>
-      throw new SparkException(s"Unsupported data type $dt")
   }
 
   override def apply(input: InternalRow): InternalRow = {

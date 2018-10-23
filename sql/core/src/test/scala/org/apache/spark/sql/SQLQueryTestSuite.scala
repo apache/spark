@@ -22,6 +22,7 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -142,12 +143,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     val (comments, code) = input.split("\n").partition(_.startsWith("--"))
 
-    // Runs all the tests on both codegen-only and interpreter modes. Since explain results differ
-    // when `WHOLESTAGE_CODEGEN_ENABLED` disabled, we don't run these tests now.
-    val codegenConfigSets = Array(("false", "NO_CODEGEN"), ("true", "CODEGEN_ONLY")).map {
-      case (wholeStageCodegenEnabled, codegenFactoryMode) =>
-        Array( // SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegenEnabled,
-          SQLConf.CODEGEN_FACTORY_MODE.key -> codegenFactoryMode)
+    // Runs all the tests on both codegen-only and interpreter modes
+    val codegenConfigSets = Array(CODEGEN_ONLY, NO_CODEGEN).map {
+      case codegenFactoryMode =>
+        Array(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenFactoryMode.toString)
     }
     val configSets = {
       val configLines = comments.filter(_.startsWith("--SET")).map(_.substring(5))
