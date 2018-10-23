@@ -153,6 +153,7 @@ if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`"${ZINC_BIN}" -status -port ${ZINC_PORT}`
   export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
   "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
   "${ZINC_BIN}" -start -port ${ZINC_PORT} \
+    -server 127.0.0.1 -idle-timeout 30m \
     -scala-compiler "${SCALA_COMPILER}" \
     -scala-library "${SCALA_LIBRARY}" &>/dev/null
 fi
@@ -164,3 +165,6 @@ echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
 # Last, call the `mvn` command as usual
 "${MVN_BIN}" -DzincPort=${ZINC_PORT} "$@"
+
+# Try to shut down zinc explicitly
+"${ZINC_BIN}" -shutdown -port ${ZINC_PORT}

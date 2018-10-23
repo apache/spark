@@ -30,6 +30,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.util.{ByteArrayWritableChannel, LimitedInputStream}
 import org.apache.spark.storage.StorageUtils
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
 /**
@@ -169,24 +170,25 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 
 }
 
-object ChunkedByteBuffer {
+private[spark] object ChunkedByteBuffer {
+
+
   // TODO eliminate this method if we switch BlockManager to getting InputStreams
-  def fromManagedBuffer(data: ManagedBuffer, maxChunkSize: Int): ChunkedByteBuffer = {
+  def fromManagedBuffer(data: ManagedBuffer): ChunkedByteBuffer = {
     data match {
       case f: FileSegmentManagedBuffer =>
-        fromFile(f.getFile, maxChunkSize, f.getOffset, f.getLength)
+        fromFile(f.getFile, f.getOffset, f.getLength)
       case other =>
         new ChunkedByteBuffer(other.nioByteBuffer())
     }
   }
 
-  def fromFile(file: File, maxChunkSize: Int): ChunkedByteBuffer = {
-    fromFile(file, maxChunkSize, 0, file.length())
+  def fromFile(file: File): ChunkedByteBuffer = {
+    fromFile(file, 0, file.length())
   }
 
   private def fromFile(
       file: File,
-      maxChunkSize: Int,
       offset: Long,
       length: Long): ChunkedByteBuffer = {
     // We do *not* memory map the file, because we may end up putting this into the memory store,
@@ -195,7 +197,7 @@ object ChunkedByteBuffer {
     val is = new FileInputStream(file)
     ByteStreams.skipFully(is, offset)
     val in = new LimitedInputStream(is, length)
-    val chunkSize = math.min(maxChunkSize, length).toInt
+    val chunkSize = math.min(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH, length).toInt
     val out = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate _)
     Utils.tryWithSafeFinally {
       IOUtils.copy(in, out)
