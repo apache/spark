@@ -608,6 +608,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Fail the running task
     val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
     taskScheduler.statusUpdate(failedTask.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
+    tsm.handleFailedTask(failedTask.taskId, TaskState.FAILED, UnknownReason)
     when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
       "executor0", failedTask.index)).thenReturn(true)
 
@@ -622,6 +623,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val tsm2 = stageToMockTaskSetManager(1)
     val failedTask2 = secondTaskAttempts.find(_.executorId == "executor0").get
     taskScheduler.statusUpdate(failedTask2.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
+    tsm2.handleFailedTask(failedTask2.taskId, TaskState.FAILED, UnknownReason)
     when(tsm2.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
       "executor0", failedTask2.index)).thenReturn(true)
 
@@ -639,6 +641,42 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     )).flatten.size === 1)
 
     // Check if all the taskSets are cleared
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.size == 0)
+
+    assert(!tsm.isZombie)
+  }
+
+  // this test is to check that we don't abort a taskSet which is not being scheduled on other
+  // executors as it is waiting on locality timeout and not being aborted because it is still not
+  // completely blacklisted.
+  test("SPARK-22148 Ensure we don't abort the taskSet if we haven't been completely blacklisted") {
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0")
+
+    val preferredLocation = Seq(ExecutorCacheTaskLocation("host0", "executor0"))
+    val taskSet1 = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0,
+      preferredLocation)
+    taskScheduler.submitTasks(taskSet1)
+
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    var taskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    // Fail the running task
+    val failedTask = taskAttempts.find(_.executorId == "executor0").get
+    taskScheduler.statusUpdate(failedTask.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
+    tsm.handleFailedTask(failedTask.taskId, TaskState.FAILED, UnknownReason)
+    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
+      "executor0", failedTask.index)).thenReturn(true)
+
+    // make an offer but we won't schedule anything yet as scheduler locality is still PROCESS_LOCAL
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor1", "host0", 1)
+    )).flatten.isEmpty)
+
     assert(taskScheduler.unschedulableTaskSetToExpiryTime.size == 0)
 
     assert(!tsm.isZombie)
