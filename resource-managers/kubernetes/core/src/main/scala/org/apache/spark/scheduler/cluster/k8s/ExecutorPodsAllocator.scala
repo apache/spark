@@ -26,7 +26,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.SafeLogging
 import org.apache.spark.util.{Clock, Utils}
 
 private[spark] class ExecutorPodsAllocator(
@@ -34,7 +34,7 @@ private[spark] class ExecutorPodsAllocator(
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    clock: Clock) extends Logging {
+    clock: Clock) extends SafeLogging {
 
   private val EXECUTOR_ID_COUNTER = new AtomicLong(0L)
 
@@ -82,7 +82,7 @@ private[spark] class ExecutorPodsAllocator(
     newlyCreatedExecutors.foreach { case (execId, timeCreated) =>
       val currentTime = clock.getTimeMillis()
       if (currentTime - timeCreated > podCreationTimeout) {
-        logWarning(s"Executor with id $execId was not detected in the Kubernetes" +
+        safeLogWarning(s"Executor with id $execId was not detected in the Kubernetes" +
           s" cluster after $podCreationTimeout milliseconds despite the fact that a" +
           " previous allocation attempt tried to create it. The executor may have been" +
           " deleted but the application missed the deletion event.")
@@ -94,7 +94,7 @@ private[spark] class ExecutorPodsAllocator(
         }
         newlyCreatedExecutors -= execId
       } else {
-        logDebug(s"Executor with id $execId was not found in the Kubernetes cluster since it" +
+        safeLogDebug(s"Executor with id $execId was not found in the Kubernetes cluster since it" +
           s" was created ${currentTime - timeCreated} milliseconds ago.")
       }
     }
@@ -112,7 +112,7 @@ private[spark] class ExecutorPodsAllocator(
         case _ => false
       }
       val currentTotalExpectedExecutors = totalExpectedExecutors.get
-      logDebug(s"Currently have $currentRunningExecutors running executors and" +
+      safeLogDebug(s"Currently have $currentRunningExecutors running executors and" +
         s" $currentPendingExecutors pending executors. $newlyCreatedExecutors executors" +
         s" have been requested but are pending appearance in the cluster.")
       if (newlyCreatedExecutors.isEmpty
@@ -120,7 +120,7 @@ private[spark] class ExecutorPodsAllocator(
         && currentRunningExecutors < currentTotalExpectedExecutors) {
         val numExecutorsToAllocate = math.min(
           currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
-        logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
+        safeLogInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
         for ( _ <- 0 until numExecutorsToAllocate) {
           val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
           val executorConf = KubernetesConf.createExecutorConf(
@@ -136,14 +136,14 @@ private[spark] class ExecutorPodsAllocator(
             .build()
           kubernetesClient.pods().create(podWithAttachedContainer)
           newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
-          logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+          safeLogDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
         }
       } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
         // TODO handle edge cases if we end up with more running executors than expected.
-        logDebug("Current number of running executors is equal to the number of requested" +
+        safeLogDebug("Current number of running executors is equal to the number of requested" +
           " executors. Not scaling up further.")
       } else if (newlyCreatedExecutors.nonEmpty || currentPendingExecutors != 0) {
-        logDebug(s"Still waiting for ${newlyCreatedExecutors.size + currentPendingExecutors}" +
+        safeLogDebug(s"Still waiting for ${newlyCreatedExecutors.size + currentPendingExecutors}" +
           s" executors to begin running before requesting for more executors. # of executors in" +
           s" pending status in the cluster: $currentPendingExecutors. # of executors that we have" +
           s" created but we have not observed as being present in the cluster yet:" +
