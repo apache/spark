@@ -1390,7 +1390,10 @@ private[spark] class DAGScheduler(
                         s"zombie tasks for this job")
                       // ResultStage is only used by this job. It's safe to kill speculative or
                       // zombie tasks in this stage.
-                      taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job))
+                      taskScheduler.killAllTaskAttempts(
+                        stageId,
+                        shouldInterruptTaskThread(job),
+                        reason = "Stage finished")
                     } catch {
                       case e: UnsupportedOperationException =>
                         logWarning(s"Could not cancel tasks for stage $stageId", e)
