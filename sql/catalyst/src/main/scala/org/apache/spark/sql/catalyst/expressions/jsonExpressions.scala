@@ -539,7 +539,7 @@ case class JsonToStructs(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = JsonExprUtils.evalSchemaExpr(schema),
-      options = JsonExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
 
@@ -610,6 +610,8 @@ case class JsonToStructs(
     case _: MapType => "entries"
     case _ => super.sql
   }
+
+  override def prettyName: String = "from_json"
 }
 
 /**
@@ -650,7 +652,7 @@ case class StructsToJson(
   def this(child: Expression) = this(Map.empty, child, None)
   def this(child: Expression, options: Expression) =
     this(
-      options = JsonExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
 
@@ -730,6 +732,8 @@ case class StructsToJson(
   override def nullSafeEval(value: Any): Any = converter(value)
 
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
+
+  override def prettyName: String = "to_json"
 }
 
 /**
@@ -754,7 +758,7 @@ case class SchemaOfJson(
 
   def this(child: Expression, options: Expression) = this(
       child = child,
-      options = JsonExprUtils.convertToMapData(options))
+      options = ExprUtils.convertToMapData(options))
 
   @transient
   private lazy val jsonOptions = new JSONOptions(options, "UTC")
@@ -774,10 +778,11 @@ case class SchemaOfJson(
 
     UTF8String.fromString(dt.catalogString)
   }
+
+  override def prettyName: String = "schema_of_json"
 }
 
 object JsonExprUtils {
-
   def evalSchemaExpr(exp: Expression): DataType = exp match {
     case Literal(s, StringType) => DataType.fromDDL(s.toString)
     case e @ SchemaOfJson(_: Literal, _) =>
@@ -786,19 +791,5 @@ object JsonExprUtils {
     case e => throw new AnalysisException(
       "Schema should be specified in DDL format as a string literal" +
       s" or output of the schema_of_json function instead of ${e.sql}")
-  }
-
-  def convertToMapData(exp: Expression): Map[String, String] = exp match {
-    case m: CreateMap
-        if m.dataType.acceptsType(MapType(StringType, StringType, valueContainsNull = false)) =>
-      val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
-      ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
-        key.toString -> value.toString
-      }
-    case m: CreateMap =>
-      throw new AnalysisException(
-        s"A type of keys and values in map() must be string, but got ${m.dataType.catalogString}")
-    case _ =>
-      throw new AnalysisException("Must use a map() function for options")
   }
 }

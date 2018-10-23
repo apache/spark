@@ -273,6 +273,14 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
   }
 
+  test("SPARK-25791: Datatype of serializers should be accessible") {
+    val udtSQLType = new StructType().add("a", IntegerType)
+    val pythonUDT = new PythonUserDefinedType(udtSQLType, "pyUDT", "serializedPyClass")
+    val schema = new StructType().add("pythonUDT", pythonUDT, true)
+    val encoder = RowEncoder(schema)
+    assert(encoder.serializer(0).dataType == pythonUDT.sqlType)
+  }
+
   for {
     elementType <- Seq(IntegerType, StringType)
     containsNull <- Seq(true, false)

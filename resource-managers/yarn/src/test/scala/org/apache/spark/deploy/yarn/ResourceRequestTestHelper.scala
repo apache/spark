@@ -18,20 +18,18 @@
 package org.apache.spark.deploy.yarn
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ListBuffer
 
 import org.apache.hadoop.yarn.api.records.Resource
 
 import org.apache.spark.util.Utils
 
 object ResourceRequestTestHelper {
-  def initializeResourceTypes(resourceTypes: List[String]): Unit = {
+  def initializeResourceTypes(resourceTypes: Seq[String]): Unit = {
     if (!ResourceRequestHelper.isYarnResourceTypesAvailable()) {
       throw new IllegalStateException("This method should not be invoked " +
         "since YARN resource types is not available because of old Hadoop version!" )
     }
 
-    val allResourceTypes = new ListBuffer[AnyRef]
     // ResourceUtils.reinitializeResources() is the YARN-way
     // to specify resources for the execution of the tests.
     // This method should receive standard resources with names of memory-mb and vcores.
@@ -42,8 +40,7 @@ object ResourceRequestTestHelper {
       createResourceTypeInfo("memory-mb"),
       createResourceTypeInfo("vcores"))
     val customResourceTypes = resourceTypes.map(createResourceTypeInfo)
-    allResourceTypes ++= defaultResourceTypes
-    allResourceTypes ++= customResourceTypes
+    val allResourceTypes = defaultResourceTypes ++ customResourceTypes
 
     val resourceUtilsClass =
       Utils.classForName("org.apache.hadoop.yarn.util.resource.ResourceUtils")
@@ -58,8 +55,8 @@ object ResourceRequestTestHelper {
     resTypeInfoNewInstanceMethod.invoke(null, resourceName)
   }
 
-  def getResourceTypeValue(res: Resource, name: String): AnyRef = {
-    val resourceInformation = getResourceInformation(res, name)
+  def getRequestedValue(res: Resource, rtype: String): AnyRef = {
+    val resourceInformation = getResourceInformation(res, rtype)
     invokeMethod(resourceInformation, "getValue")
   }
 
@@ -88,5 +85,5 @@ object ResourceRequestTestHelper {
     getValueMethod.invoke(resourceInformation)
   }
 
-  case class ResourceInformation(name: String, value: Long, units: String)
+  case class ResourceInformation(name: String, value: Long, unit: String)
 }

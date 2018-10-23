@@ -20,14 +20,11 @@ package org.apache.spark.streaming.kafka010
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.Experimental
 
 /**
- * :: Experimental ::
  * Interface for user-supplied configurations that can't otherwise be set via Spark properties,
  * because they need tweaking on a per-partition basis,
  */
-@Experimental
 abstract class PerPartitionConfig extends Serializable {
   /**
    *  Maximum rate (number of records per second) at which data will be read
