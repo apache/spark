@@ -53,34 +53,16 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
     (e, f)
   }
 
-  private def isPrimitive(dataType: DataType): Boolean = dataType match {
-    case BooleanType => true
-    case ByteType => true
-    case ShortType => true
-    case IntegerType => true
-    case LongType => true
-    case FloatType => true
-    case DoubleType => true
-    case _ => false
-  }
-
   private def generateSafeValueConverter(dt: DataType): Any => Any = dt match {
     case ArrayType(elemType, _) =>
-      if (isPrimitive(elemType)) {
-        v => {
-          val arrayValue = v.asInstanceOf[ArrayData]
-          new GenericArrayData(arrayValue.toArray[Any](elemType))
-        }
-      } else {
-        val elementConverter = generateSafeValueConverter(elemType)
-        v => {
-          val arrayValue = v.asInstanceOf[ArrayData]
-          val result = new Array[Any](arrayValue.numElements())
-          arrayValue.foreach(elemType, (i, e) => {
-            result(i) = elementConverter(e)
-          })
-          new GenericArrayData(result)
-        }
+      val elementConverter = generateSafeValueConverter(elemType)
+      v => {
+        val arrayValue = v.asInstanceOf[ArrayData]
+        val result = new Array[Any](arrayValue.numElements())
+        arrayValue.foreach(elemType, (i, e) => {
+          result(i) = elementConverter(e)
+        })
+        new GenericArrayData(result)
       }
 
     case st: StructType =>
@@ -104,11 +86,8 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
         val mapValue = v.asInstanceOf[MapData]
         val keys = mapValue.keyArray().toArray[Any](keyType)
         val values = mapValue.valueArray().toArray[Any](valueType)
-        val convertedKeys =
-          if (isPrimitive(keyType)) keys else keys.map(keyConverter)
-        val convertedValues =
-          if (isPrimitive(valueType)) values else values.map(valueConverter)
-
+        val convertedKeys = keys.map(keyConverter)
+        val convertedValues = values.map(valueConverter)
         ArrayBasedMapData(convertedKeys, convertedValues)
       }
 
