@@ -168,7 +168,7 @@ class JacksonParser(
         case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
           parser.getFloatValue
 
-        case VALUE_STRING =>
+        case VALUE_STRING if parser.getTextLength >= 1 =>
           // Special case handling for NaN and Infinity.
           parser.getText match {
             case "NaN" => Float.NaN
@@ -184,7 +184,7 @@ class JacksonParser(
         case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
           parser.getDoubleValue
 
-        case VALUE_STRING =>
+        case VALUE_STRING if parser.getTextLength >= 1 =>
           // Special case handling for NaN and Infinity.
           parser.getText match {
             case "NaN" => Double.NaN
@@ -211,7 +211,7 @@ class JacksonParser(
 
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
-        case VALUE_STRING =>
+        case VALUE_STRING if parser.getTextLength >= 1 =>
           val stringValue = parser.getText
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.
@@ -230,7 +230,7 @@ class JacksonParser(
 
     case DateType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
-        case VALUE_STRING =>
+        case VALUE_STRING if parser.getTextLength >= 1 =>
           val stringValue = parser.getText
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.x
@@ -310,16 +310,17 @@ class JacksonParser(
   }
 
   /**
-   * This function throws an exception for failed conversion, but returns null for empty string,
-   * to guard the non string types.
+   * This function throws an exception for failed conversion. For empty string on data types
+   * except for string and binary types, this also throws an exception.
    */
   private def failedConversion[R >: Null](
       parser: JsonParser,
       dataType: DataType): PartialFunction[JsonToken, R] = {
+
+    // SPARK-25040: Disallow empty strings for data types except for string and binary types.
     case VALUE_STRING if parser.getTextLength < 1 =>
-      // If conversion is failed, this produces `null` rather than throwing exception.
-      // This will protect the mismatch of types.
-      null
+      throw new RuntimeException(
+        s"Failed to parse an empty string for data type ${dataType.catalogString}")
 
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
