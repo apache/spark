@@ -1385,7 +1385,9 @@ private[spark] class DAGScheduler(
                   if (job.numFinished == job.numPartitions) {
                     markStageAsFinished(resultStage)
                     cleanupStateForJobAndIndependentStages(job)
-                    try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
+                    try {
+                      // killAllTaskAttempts will fail if a SchedulerBackend does not implement
+                      // killTask.
                       logInfo(s"Job ${job.jobId} is finished. Killing potential speculative or " +
                         s"zombie tasks for this job")
                       // ResultStage is only used by this job. It's safe to kill speculative or
