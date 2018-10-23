@@ -21,7 +21,7 @@ import java.io.{File, FilenameFilter}
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
-import java.util.UUID
+import java.util.{Properties, UUID}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -32,11 +32,11 @@ import scala.util.{Random, Try}
 
 import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.jdbc.HiveDriver
+import org.apache.hive.jdbc.{HiveConnection, HiveDriver, HiveQueryResultSet, Utils => JdbcUtils}
 import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.{FetchOrientation, FetchType, GetInfoType}
+import org.apache.hive.service.cli.thrift._
 import org.apache.hive.service.cli.thrift.TCLIService.Client
-import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
@@ -280,7 +280,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     var defaultV2: String = null
     var data: ArrayBuffer[Int] = null
 
-    withMultipleConnectionJdbcStatement("test_map")(
+    withMultipleConnectionJdbcStatement("test_map", "db1.test_map2")(
       // create table
       { statement =>
 
@@ -642,6 +642,47 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
       resultSet.next()
       assert(resultSet.getString(1) === "4.56")
+    }
+  }
+
+  test("SPARK-24196: SQL client(DBeaver) can't show tables") {
+    val testTableName = "test"
+    withJdbcStatement(testTableName) { statement =>
+      // Create table first
+      val queries = Seq(s"CREATE TABLE $testTableName(key INT, val STRING)")
+      queries.foreach(statement.execute)
+
+      val rawTransport = new TSocket("localhost", serverPort)
+      val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
+      val user = System.getProperty("user.name")
+      val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
+      val client = new TCLIService.Client(new TBinaryProtocol(transport))
+      transport.open()
+      try {
+        val openResp = client.OpenSession(new TOpenSessionReq)
+        val sessHandle = openResp.getSessionHandle
+
+        val getTableReq = new TGetTablesReq(sessHandle)
+        getTableReq.setTableName("%")
+
+        val getTableResp = client.GetTables(getTableReq)
+
+        JdbcUtils.verifySuccess(getTableResp.getStatus)
+
+        val rs = new HiveQueryResultSet.Builder(connection)
+          .setClient(client)
+          .setSessionHandle(sessHandle)
+          .setStmtHandle(getTableResp.getOperationHandle)
+          .build()
+
+        assert(rs.next())
+        assert(rs.getRow === 1)
+        assert(rs.getString("TABLE_NAME") === testTableName)
+      } finally {
+        connection.close()
+        transport.close()
+        rawTransport.close()
+      }
     }
   }
 }
