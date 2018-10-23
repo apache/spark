@@ -384,14 +384,19 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
 
       case t if isValueClass(t) =>
-        // nested value class is treated as its underlying type
-        // top level value class must be treated as a product
         val underlyingType = getUnderlyingTypeOf(t)
         val underlyingClsName = getClassNameFromType(underlyingType)
         val clsName = getUnerasedClassNameFromType(t)
         val newTypePath = s"""- Scala value class: $clsName($underlyingClsName)""" +:
           walkedTypePath
 
+        // Nested value class is treated as its underlying type
+        // because the compiler will convert value class in the schema to
+        // its underlying type.
+        // However, for top-level value class, if it is used as another type
+        // (e.g. as its parent trait or generic), the compiler keeps the class
+        // so we must provide an instance of the class too. In other cases,
+        // the compiler will handle wrapping/unwrapping for us automatically.
         val arg = deserializerFor(underlyingType, path, newTypePath)
         if (path.isDefined) {
           arg
