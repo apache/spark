@@ -736,3 +736,65 @@ object CombineConcats extends Rule[LogicalPlan] {
       flattenConcats(concat)
   }
 }
+
+/**
+ * A rule that replaces `Literal(null, _)` with `FalseLiteral` for further optimizations.
+ *
+ * For example, `Filter(Literal(null, _))` is equal to `Filter(FalseLiteral)`.
+ *
+ * Another example containing branches is `Filter(If(cond, FalseLiteral, Literal(null, _)))`;
+ * this can be optimized to `Filter(If(cond, FalseLiteral, FalseLiteral))`, and eventually
+ * `Filter(FalseLiteral)`.
+ *
+ * As a result, many unnecessary computations can be removed in the query optimization phase.
+ *
+ * Similarly, the same logic can be applied to conditions in [[Join]], predicates in [[If]],
+ * conditions in [[CaseWhen]].
+ */
+object ReplaceNullWithFalse extends Rule[LogicalPlan] {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
+    case j @ Join(_, _, _, Some(cond)) => j.copy(condition = Some(replaceNullWithFalse(cond)))
+    case p: LogicalPlan => p transformExpressions {
+      case i @ If(pred, _, _) => i.copy(predicate = replaceNullWithFalse(pred))
+      case CaseWhen(branches, elseValue) =>
+        val newBranches = branches.map { case (cond, value) =>
+          replaceNullWithFalse(cond) -> value
+        }
+        CaseWhen(newBranches, elseValue)
+    }
+  }
+
+  /**
+   * Recursively replaces `Literal(null, _)` with `FalseLiteral`.
+   *
+   * Note that `transformExpressionsDown` can not be used here as we must stop as soon as we hit
+   * an expression that is not [[CaseWhen]], [[If]], [[And]], [[Or]] or `Literal(null, _)`.
+   */
+  private def replaceNullWithFalse(e: Expression): Expression = e match {
+    case cw: CaseWhen if getValues(cw).forall(isNullOrBoolean) =>
+      val newBranches = cw.branches.map { case (cond, value) =>
+        replaceNullWithFalse(cond) -> replaceNullWithFalse(value)
+      }
+      val newElseValue = cw.elseValue.map(replaceNullWithFalse)
+      CaseWhen(newBranches, newElseValue)
+    case If(pred, trueVal, falseVal) if Seq(trueVal, falseVal).forall(isNullOrBoolean) =>
+      If(replaceNullWithFalse(pred), replaceNullWithFalse(trueVal), replaceNullWithFalse(falseVal))
+    case And(left, right) =>
+      And(replaceNullWithFalse(left), replaceNullWithFalse(right))
+    case Or(left, right) =>
+      Or(replaceNullWithFalse(left), replaceNullWithFalse(right))
+    case Literal(null, _) => FalseLiteral
+    case _ => e
+  }
+
+  private def getValues(caseWhen: CaseWhen): Seq[Expression] = {
+    caseWhen.branches.map { case (_, value) => value } ++ caseWhen.elseValue
+  }
+
+  private def isNullOrBoolean(e: Expression): Boolean = e match {
+    case Literal(null, _) => true
+    case _ => e.dataType == BooleanType
+  }
+}

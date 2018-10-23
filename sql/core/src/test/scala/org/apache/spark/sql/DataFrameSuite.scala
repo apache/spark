@@ -29,16 +29,16 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.Uuid
+import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
-import org.apache.spark.sql.test.SQLTestData.{NullInts, NullStrings, TestData2}
+import org.apache.spark.sql.test.SQLTestData.{NullStrings, TestData2}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -2584,5 +2584,46 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val swappedDf = df.select($"key".as("map"), $"map".as("key"))
 
     checkAnswer(swappedDf.filter($"key"($"map") > "a"), Row(2, Map(2 -> "b")))
+  }
+
+  test("SPARK-25860: Replace Literal(null, _) with FalseLiteral whenever possible") {
+
+    def checkPlanIsEmptyLocalScan(df: DataFrame): Unit = df.queryExecution.executedPlan match {
+      case s: LocalTableScanExec => assert(s.rows.isEmpty)
+      case p => fail(s"$p is not LocalTableScanExec")
+    }
+
+    val df1 = Seq((1, true), (2, false)).toDF("l", "b")
+    val df2 = Seq(2, 3).toDF("l")
+
+    val q1 = df1.where("IF(l > 10, false, b AND null)")
+    checkAnswer(q1, Seq.empty)
+    checkPlanIsEmptyLocalScan(q1)
+
+    val q2 = df1.where("CASE WHEN l < 10 THEN null WHEN l > 40 THEN false ELSE null END")
+    checkAnswer(q2, Seq.empty)
+    checkPlanIsEmptyLocalScan(q2)
+
+    val q3 = df1.join(df2, when(df1("l") > df2("l"), lit(null)).otherwise(df1("b") && lit(null)))
+    checkAnswer(q3, Seq.empty)
+    checkPlanIsEmptyLocalScan(q3)
+
+    val q4 = df1.where("IF(IF(b, null, false), true, null)")
+    checkAnswer(q4, Seq.empty)
+    checkPlanIsEmptyLocalScan(q4)
+
+    val q5 = df1.selectExpr("IF(l > 1 AND null, 5, 1) AS out")
+    checkAnswer(q5, Row(1) :: Row(1) :: Nil)
+    q5.queryExecution.executedPlan.foreach { p =>
+      assert(p.expressions.forall(e => e.find(_.isInstanceOf[If]).isEmpty))
+    }
+
+    val q6 = df1.selectExpr("CASE WHEN (l > 2 AND null) THEN 3 ELSE 2 END")
+    checkAnswer(q6, Row(2) :: Row(2) :: Nil)
+    q6.queryExecution.executedPlan.foreach { p =>
+      assert(p.expressions.forall(e => e.find(_.isInstanceOf[CaseWhen]).isEmpty))
+    }
+
+    checkAnswer(df1.where("IF(l > 10, false, b OR null)"), Row(1, true))
   }
 }
