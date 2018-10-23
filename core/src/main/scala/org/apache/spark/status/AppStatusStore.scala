@@ -350,7 +350,7 @@ private[spark] class AppStatusStore(
     val stageKey = Array(stageId, stageAttemptId)
     store.view(classOf[TaskDataWrapper]).index("stage").first(stageKey).last(stageKey).reverse()
       .max(maxTasks).asScala.map { taskDataWrapper =>
-      interceptAndModifyTaskData(taskDataWrapper)
+      constructTaskData(taskDataWrapper)
     }.toSeq.reverse
   }
 
@@ -391,7 +391,7 @@ private[spark] class AppStatusStore(
 
     val ordered = if (ascending) indexed else indexed.reverse()
     ordered.skip(offset).max(length).asScala.map { taskDataWrapper =>
-      interceptAndModifyTaskData(taskDataWrapper)
+      constructTaskData(taskDataWrapper)
     }.toSeq
   }
 
@@ -498,7 +498,7 @@ private[spark] class AppStatusStore(
     store.close()
   }
 
-  def interceptAndModifyTaskData(taskDataWrapper: TaskDataWrapper) : v1.TaskData = {
+  def constructTaskData(taskDataWrapper: TaskDataWrapper) : v1.TaskData = {
     val taskDataOld: v1.TaskData = taskDataWrapper.toApi
     val executorLogs: Option[Map[String, String]] = try {
       Some(executorSummary(taskDataOld.executorId).executorLogs)

@@ -50,21 +50,19 @@ $.extend( $.fn.dataTable.ext.type.order, {
 // e.g. (history) https://domain:50509/history/application_1536254569791_3806251/1/stages/stage/?id=4&attempt=1
 // e.g. (proxy) https://domain:50505/proxy/application_1502220952225_59143/stages/stage?id=4&attempt=1
 function stageEndPoint(appId) {
-    var urlRegex = /https\:\/\/[^\/]+\/([^\/]+)\/([^\/]+)\/([^\/]+)?\/?([^\/]+)?\/?([^\/]+)?\/?([^\/]+)?/gm;
-    var urlArray = urlRegex.exec(document.baseURI);
-    var indexOfProxy = urlArray.indexOf("proxy");
     var queryString = document.baseURI.split('?');
     var words = document.baseURI.split('/');
+    var indexOfProxy = words.indexOf("proxy");
     var stageId = queryString[1].split("&").filter(word => word.includes("id="))[0].split("=")[1];
     if (indexOfProxy > 0) {
-        var appId = urlArray[2];
+        var appId = words[indexOfProxy + 1];
         var newBaseURI = words.slice(0, words.indexOf("proxy") + 2).join('/');
         return newBaseURI + "/api/v1/applications/" + appId + "/stages/" + stageId;
     }
-    var indexOfHistory = urlArray.indexOf("history");
+    var indexOfHistory = words.indexOf("history");
     if (indexOfHistory > 0) {
-        var appId = urlArray[2];
-        var appAttemptId = urlArray[indexOfHistory + 2];
+        var appId = words[indexOfHistory + 1];
+        var appAttemptId = words[indexOfHistory + 2];
         var newBaseURI = words.slice(0, words.indexOf("history")).join('/');
         if (isNaN(appAttemptId) || appAttemptId == "0") {
             return newBaseURI + "/api/v1/applications/" + appId + "/stages/" + stageId;
@@ -484,7 +482,7 @@ $(document).ready(function () {
                 });
 
                 var quantiles = "0,0.25,0.5,0.75,1.0";
-                $.getJSON(stageEndPoint(appId) + "/" + stageAttemptId + "/taskSummary?quantiles=" + quantiles,
+                $.getJSON(endPoint + "/" + stageAttemptId + "/taskSummary?quantiles=" + quantiles,
                   function(taskMetricsResponse, status, jqXHR) {
                     var taskMetricKeys = Object.keys(taskMetricsResponse);
                     taskMetricKeys.forEach(function (columnKey) {
@@ -614,7 +612,7 @@ $(document).ready(function () {
                     "lengthMenu": [[20, 40, 60, 100, totalTasksToShow], [20, 40, 60, 100, "All"]],
                     "orderMulti": false,
                     "ajax": {
-                        "url": stageEndPoint(appId) + "/" + stageAttemptId + "/taskTable",
+                        "url": endPoint + "/" + stageAttemptId + "/taskTable",
                         "data": function (data) {
                             var columnIndexToSort = 0;
                             var columnNameToSort = "Index";
