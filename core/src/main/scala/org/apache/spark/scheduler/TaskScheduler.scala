@@ -109,4 +109,7 @@ private[spark] trait TaskScheduler {
    */
   def applicationAttemptId(): Option[String]
 
+  def markPartitionIdAsCompletedAndKillCorrespondingTaskAttempts(
+    partitionId: Int, stageId: Int): Unit
+
 }

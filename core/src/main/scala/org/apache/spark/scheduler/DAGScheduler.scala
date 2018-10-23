@@ -1360,6 +1360,8 @@ private[spark] class DAGScheduler(
                 if (!job.finished(rt.outputId)) {
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
+                  taskScheduler.markPartitionIdAsCompletedAndKillCorrespondingTaskAttempts(
+                    task.partitionId, task.stageId)
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
                     markStageAsFinished(resultStage)

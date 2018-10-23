@@ -1091,6 +1091,10 @@ private[spark] class TaskSetManager(
   def executorAdded() {
     recomputeLocality()
   }
+
+  def markPartitionIdAsCompletedForTaskAttempt(index: Int): Unit = {
+    successful(index) = true
+  }
 }
 
 private[spark] object TaskSetManager {

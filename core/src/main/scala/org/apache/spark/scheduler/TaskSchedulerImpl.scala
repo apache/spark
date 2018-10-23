@@ -281,6 +281,23 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  override def markPartitionIdAsCompletedAndKillCorrespondingTaskAttempts(
+      partitionId: Int, stageId: Int): Unit = {
+    taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
+      val index: Option[Int] = tsm.partitionToIndex.get(partitionId)
+      if (!index.isEmpty) {
+        tsm.markPartitionIdAsCompletedForTaskAttempt(index.get)
+        val taskInfoList = tsm.taskAttempts(index.get)
+        taskInfoList.foreach { taskInfo =>
+          if (taskInfo.running) {
+            killTaskAttempt(taskInfo.taskId, false, "Corresponding Partition Id " + partitionId +
+              " has been marked as Completed")
+          }
+        }
+      }
+    }
+  }
+
   /**
    * Called to indicate that all task attempts (including speculated tasks) associated with the
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be
