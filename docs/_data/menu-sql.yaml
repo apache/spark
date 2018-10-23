@@ -36,15 +36,15 @@
       url: sql-data-sources-avro.html
     - text: Troubleshooting
       url: sql-data-sources-troubleshooting.html
-- text: Performance Turing
-  url: sql-performance-turing.html
+- text: Performance Tuning
+  url: sql-performance-tuning.html
   subitems:
     - text: Caching Data In Memory
-      url: sql-performance-turing.html#caching-data-in-memory
+      url: sql-performance-tuning.html#caching-data-in-memory
     - text: Other Configuration Options
-      url: sql-performance-turing.html#other-configuration-options
+      url: sql-performance-tuning.html#other-configuration-options
     - text: Broadcast Hint for SQL Queries
-      url: sql-performance-turing.html#broadcast-hint-for-sql-queries
+      url: sql-performance-tuning.html#broadcast-hint-for-sql-queries
 - text: Distributed SQL Engine
   url: sql-distributed-sql-engine.html
   subitems:
