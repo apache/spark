@@ -114,10 +114,14 @@ write.df(namesAndAges, "namesAndAges.parquet", "parquet")
 
 
 # $example on:manual_load_options_csv$
-df <- read.df("examples/src/main/resources/people.csv", "csv", sep=";", inferSchema=T, header=T)
+df <- read.df("examples/src/main/resources/people.csv", "csv", sep = ";", inferSchema = TRUE, header = TRUE)
 namesAndAges <- select(df, "name", "age")
 # $example off:manual_load_options_csv$
 
+# $example on:manual_save_options_orc$
+df <- read.df("examples/src/main/resources/users.orc", "orc")
+write.orc(df, "users_with_options.orc", orc.bloom.filter.columns = "favorite_color", orc.dictionary.key.threshold = 1.0, orc.column.encoding.direct = "name")
+# $example off:manual_save_options_orc$
 
 # $example on:direct_sql$
 df <- sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")

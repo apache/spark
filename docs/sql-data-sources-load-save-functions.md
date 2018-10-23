@@ -82,6 +82,50 @@ To load a CSV file you can use:
 </div>
 </div>
 
+The extra options are also used during write operation.
+For example, you can control bloom filters and dictionary encodings for ORC data sources.
+The following ORC example will create bloom filter and use dictionary encoding only for `favorite_color`.
+For Parquet, there exists `parquet.enable.dictionary`, too.
+To find more detailed information about the extra ORC/Parquet options,
+visit the official Apache ORC/Parquet websites.
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+{% include_example manual_save_options_orc scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example manual_save_options_orc java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example manual_save_options_orc python/sql/datasource.py %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example manual_save_options_orc r/RSparkSQLExample.R %}
+</div>
+
+<div data-lang="sql"  markdown="1">
+
+{% highlight sql %}
+CREATE TABLE users_with_options (
+  name STRING,
+  favorite_color STRING,
+  favorite_numbers array<integer>
+) USING ORC
+OPTIONS (
+  orc.bloom.filter.columns 'favorite_color',
+  orc.dictionary.key.threshold '1.0',
+  orc.column.encoding.direct 'name'
+)
+{% endhighlight %}
+
+</div>
+
+</div>
+
 ### Run SQL on files directly
 
 Instead of using read API to load a file into DataFrame and query it, you can also query that
