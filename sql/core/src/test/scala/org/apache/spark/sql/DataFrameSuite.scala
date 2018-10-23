@@ -2549,6 +2549,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
       val df = spark.read.json(path.getCanonicalPath)
       assert(df.columns === Array("i", "p"))
+      spark.sparkContext.listenerBus.waitUntilEmpty(10000)
       assert(numJobs == 1)
     }
   }
