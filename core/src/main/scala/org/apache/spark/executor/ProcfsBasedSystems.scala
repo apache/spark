@@ -45,7 +45,7 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
   var pageSize = computePageSize()
   var isAvailable: Boolean = isProcfsAvailable
   private val pid = computePid()
-  private val ptree = mutable.Map[ Int, Set[Int]]()
+  private var ptree = mutable.Map[ Int, Set[Int]]()
 
   var allMetrics: ProcfsBasedSystemsMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
 
@@ -84,7 +84,7 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
       return pid;
     }
     catch {
-      case e: SparkException => logDebug("IO Exception when trying to compute process tree." +
+      case e: SparkException => logWarning("Exception when trying to compute process tree." +
         " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
         return -1
@@ -95,15 +95,23 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
     if (testing) {
       return 0;
     }
-    val cmd = Array("getconf", "PAGESIZE")
-    val out2 = Utils.executeAndGetOutput(cmd)
-    return Integer.parseInt(out2.split("\n")(0))
+    try {
+      val cmd = Array("getconf", "PAGESIZE")
+      val out2 = Utils.executeAndGetOutput(cmd)
+      return Integer.parseInt(out2.split("\n")(0))
+    } catch {
+      case e: Exception => logWarning("Exception when trying to compute pagesize, as a" +
+        " result reporting of ProcessTree metrics is stopped")
+        isAvailable = false
+        return 0
+    }
   }
 
   private def computeProcessTree(): Unit = {
     if (!isAvailable || testing) {
       return
     }
+    ptree = mutable.Map[ Int, Set[Int]]()
     val queue = mutable.Queue.empty[Int]
     queue += pid
     while( !queue.isEmpty ) {
@@ -121,34 +129,34 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
 
   private def getChildPids(pid: Int): ArrayBuffer[Int] = {
     try {
-      val cmd = Array("pgrep", "-P", pid.toString)
+      // val cmd = Array("pgrep", "-P", pid.toString)
       val builder = new ProcessBuilder("pgrep", "-P", pid.toString)
       val process = builder.start()
-      val output = new StringBuilder()
+      // val output = new StringBuilder()
       val threadName = "read stdout for " + "pgrep"
-      def appendToOutput(s: String): Unit = output.append(s).append("\n")
+      val childPidsInInt = mutable.ArrayBuffer.empty[Int]
+      def appendChildPid(s: String): Unit = {
+        if (s != "") {
+          logDebug("Found a child pid:" + s)
+          childPidsInInt += Integer.parseInt(s)
+        }
+      }
       val stdoutThread = Utils.processStreamByLine(threadName,
-        process.getInputStream, appendToOutput)
+        process.getInputStream, appendChildPid)
       val exitCode = process.waitFor()
       stdoutThread.join()
       // pgrep will have exit code of 1 if there are more than one child process
       // and it will have a exit code of 2 if there is no child process
       if (exitCode != 0 && exitCode > 2) {
-        logError(s"Process $cmd exited with code $exitCode: $output")
+        val cmd = builder.command().toArray.mkString(" ")
+        logWarning(s"Process $cmd" +
+          s" exited with code $exitCode, with stderr:" + s"${process.getErrorStream} ")
         throw new SparkException(s"Process $cmd exited with code $exitCode")
-      }
-      val childPids = output.toString.split("\n")
-      val childPidsInInt = mutable.ArrayBuffer.empty[Int]
-      for (p <- childPids) {
-        if (p != "") {
-          logDebug("Found a child pid: " + p)
-          childPidsInInt += Integer.parseInt(p)
-        }
       }
       childPidsInInt
     } catch {
-      case e: IOException => logDebug("IO Exception when trying to compute process tree." +
-        " As a result reporting of ProcessTree metrics is stopped", e)
+      case e: Exception => logWarning("Exception when trying to compute process tree." +
+        " As a result reporting of ProcessTree metrics is stopped.", e)
         isAvailable = false
         return mutable.ArrayBuffer.empty[Int]
     }
@@ -173,48 +181,35 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
             val vmem = procInfoSplit(22).toLong
             val rssPages = procInfoSplit(23).toLong
             if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
-              allMetrics = ProcfsBasedSystemsMetrics(
-                allMetrics.jvmVmemTotal + vmem,
-                allMetrics.jvmRSSTotal + (rssPages*pageSize),
-                allMetrics.pythonVmemTotal,
-                allMetrics.pythonRSSTotal,
-                allMetrics.otherVmemTotal,
-                allMetrics.otherRSSTotal
+              allMetrics = allMetrics.copy(
+                jvmVmemTotal = allMetrics.jvmVmemTotal + vmem,
+                jvmRSSTotal = allMetrics.jvmRSSTotal + (rssPages*pageSize)
               )
             }
             else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
-              allMetrics = ProcfsBasedSystemsMetrics(
-                allMetrics.jvmVmemTotal,
-                allMetrics.jvmRSSTotal,
-                allMetrics.pythonVmemTotal + vmem,
-                allMetrics.pythonRSSTotal + (rssPages*pageSize),
-                allMetrics.otherVmemTotal,
-                allMetrics.otherRSSTotal
+              allMetrics = allMetrics.copy(
+                pythonVmemTotal = allMetrics.pythonVmemTotal + vmem,
+                pythonRSSTotal = allMetrics.pythonRSSTotal + (rssPages*pageSize)
               )
             }
             else {
-              allMetrics = ProcfsBasedSystemsMetrics(
-                allMetrics.jvmVmemTotal,
-                allMetrics.jvmRSSTotal,
-                allMetrics.pythonVmemTotal,
-                allMetrics.pythonRSSTotal,
-                allMetrics.otherVmemTotal + vmem,
-                allMetrics.otherRSSTotal + (rssPages*pageSize)
+              allMetrics = allMetrics.copy(
+                otherVmemTotal = allMetrics.otherVmemTotal + vmem,
+                otherRSSTotal = allMetrics.otherRSSTotal + (rssPages*pageSize)
               )
             }
           }
         }
       }
     } catch {
-      case f: FileNotFoundException => logDebug("There was a problem with reading" +
-        " the stat file of the process", f)
+      case f: FileNotFoundException => logWarning("There was a problem with reading" +
+        " the stat file of the process. ", f)
     }
   }
 
-  private[spark] def computeAllMetrics(): Unit = {
+  private[spark] def computeAllMetrics(): ProcfsBasedSystemsMetrics = {
     if (!isAvailable) {
-      allMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
-      return
+      return ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
     }
     computeProcessTree
     val pids = ptree.keySet
@@ -222,5 +217,6 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
     for (p <- pids) {
       computeProcessInfo(p)
     }
+    return allMetrics
   }
 }

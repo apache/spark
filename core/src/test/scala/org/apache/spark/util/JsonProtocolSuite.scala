@@ -755,8 +755,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertEquals(metrics1: ExecutorMetrics, metrics2: ExecutorMetrics): Unit = {
-    ExecutorMetricType.definedMetrics.foreach { metricType =>
-      assert(metrics1.getMetricValue(metricType) === metrics2.getMetricValue(metricType))
+    ExecutorMetricType.definedMetricsAndOffset.foreach { metric =>
+      assert(metrics1.getMetricValue(metric._1) === metrics2.getMetricValue(metric._1))
     }
   }
 
