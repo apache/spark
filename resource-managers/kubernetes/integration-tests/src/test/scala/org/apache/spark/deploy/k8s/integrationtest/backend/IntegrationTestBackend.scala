@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.k8s.integrationtest.backend
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
-
+import org.apache.spark.deploy.k8s.integrationtest.backend.docker.DockerForDesktopBackend
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.MinikubeTestBackend
 
 private[spark] trait IntegrationTestBackend {
@@ -30,14 +30,16 @@ private[spark] trait IntegrationTestBackend {
 private[spark] object IntegrationTestBackendFactory {
   val deployModeConfigKey = "spark.kubernetes.test.deployMode"
 
+  val backendMinikube = "minikube"
+  val backendDockerForDesktop = "docker-for-desktop"
+
   def getTestBackend: IntegrationTestBackend = {
     val deployMode = Option(System.getProperty(deployModeConfigKey))
-      .getOrElse("minikube")
-    if (deployMode == "minikube") {
-      MinikubeTestBackend
-    } else {
-      throw new IllegalArgumentException(
-        "Invalid " + deployModeConfigKey + ": " + deployMode)
+      .getOrElse(backendMinikube)
+    deployMode match {
+      case `backendMinikube` => MinikubeTestBackend
+      case `backendDockerForDesktop` => DockerForDesktopBackend
+      case _ => throw new IllegalArgumentException("Invalid " + deployModeConfigKey + ": " + deployMode)
     }
   }
 }
