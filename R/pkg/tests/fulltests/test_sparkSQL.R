@@ -3731,7 +3731,6 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   dropTempView("cars")
 })
 
-
 compare_list <- function(list1, list2) {
   # get testthat to show the diff by first making the 2 lists equal in length
   expect_equal(length(list1), length(list2))

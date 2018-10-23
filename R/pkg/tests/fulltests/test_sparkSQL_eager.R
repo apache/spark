@@ -17,7 +17,7 @@
 
 library(testthat)
 
-context("Show SparkDataFrame when eager execution is enabled.")
+context("test show SparkDataFrame when eager execution is enabled.")
 
 test_that("eager execution is not enabled", {
   # Start Spark session without eager execution enabled
@@ -34,8 +34,7 @@ test_that("eager execution is not enabled", {
 
 test_that("eager execution is enabled", {
   # Start Spark session with eager execution enabled
-  sparkConfig <- list(spark.sql.repl.eagerEval.enabled = "true",
-                      spark.sql.repl.eagerEval.maxNumRows = as.integer(10))
+  sparkConfig <- list(spark.sql.repl.eagerEval.enabled = "true")
   
   sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE, sparkConfig = sparkConfig)
   
@@ -44,7 +43,28 @@ test_that("eager execution is enabled", {
   expected <- paste0("(+---------+-------+\n",
                      "|eruptions|waiting|\n",
                      "+---------+-------+\n)*",
-                     "(only showing top 10 rows)")
+                     "(only showing top 20 rows)")
+  expect_output(show(df), expected)
+  
+  # Stop Spark session
+  sparkR.session.stop()
+})
+
+test_that("eager execution is enabled with maxNumRows and truncate set", {
+  # Start Spark session with eager execution enabled
+  sparkConfig <- list(spark.sql.repl.eagerEval.enabled = "true",
+                      spark.sql.repl.eagerEval.maxNumRows = as.integer(5),
+                      spark.sql.repl.eagerEval.truncate = as.integer(2))
+  
+  sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE, sparkConfig = sparkConfig)
+  
+  df <- arrange(createDataFrame(faithful), "waiting")
+  expect_is(df, "SparkDataFrame")
+  expected <- paste0("(+---------+-------+\n",
+                     "|eruptions|waiting|\n",
+                     "+---------+-------+\n",
+                     "|       1.|     43|\n)*",
+                     "(only showing top 5 rows)")
   expect_output(show(df), expected)
   
   # Stop Spark session

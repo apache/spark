@@ -253,14 +253,14 @@ setMethod("show", "SparkDataFrame",
               argsList$x <- object
               prop <- allConf[["spark.sql.repl.eagerEval.maxNumRows"]]
               if (!is.null(prop)) {
-                numRows <- as.numeric(prop)
+                numRows <- as.integer(prop)
                 if (numRows > 0) {
                   argsList$numRows <- numRows
                 }
               }
               prop <- allConf[["spark.sql.repl.eagerEval.truncate"]]
               if (!is.null(prop)) {
-                truncate <- as.numeric(prop)
+                truncate <- as.integer(prop)
                 if (truncate > 0) {
                   argsList$truncate <- truncate
                 }
