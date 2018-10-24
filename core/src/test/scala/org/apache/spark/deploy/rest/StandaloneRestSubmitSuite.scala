@@ -89,7 +89,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val masterUrl = startDummyServer(submitId = submittedDriverId, submitMessage = submitMessage)
     val conf = new SparkConf(loadDefaults = false)
     val RANDOM_PORT = 9000
-    val allMasters = "%s,%s:%d".format(masterUrl, Utils.localHostName(), RANDOM_PORT)
+    val allMasters = s"$masterUrl,${Utils.localHostName()}:$RANDOM_PORT"
     conf.set("spark.master", allMasters)
     conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
