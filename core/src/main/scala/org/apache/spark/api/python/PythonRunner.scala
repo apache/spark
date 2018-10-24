@@ -114,7 +114,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     context.addTaskCompletionListener[Unit] { _ =>
       writerThread.shutdownOnTaskCompletion()
-      if (!reuseWorker || !released.get) {
+      if (!reuseWorker || released.compareAndSet(false, true)) {
         try {
           worker.close()
         } catch {
@@ -464,8 +464,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
         if (reuseWorker) {
-          env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
-          released.set(true)
+          if (released.compareAndSet(false, true)) {
+            env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
+          }
         }
       }
       eos = true
