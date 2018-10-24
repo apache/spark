@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
@@ -110,6 +112,10 @@ object TestingUDT {
 
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
+
+  // A helper method used to test `ScalaReflection.deserializerForType`.
+  private def deserializerFor[T: TypeTag]: Expression =
+    deserializerForType(ScalaReflection.localTypeOf[T])
 
   test("SQLUserDefinedType annotation on Scala structure") {
     val schema = schemaFor[TestingUDT.NestedStruct]
@@ -269,7 +275,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK 16792: Get correct deserializer for List[_]") {
-    val listDeserializer = deserializerForType(ScalaReflection.localTypeOf[List[Int]])
+    val listDeserializer = deserializerFor[List[Int]]
     assert(listDeserializer.dataType == ObjectType(classOf[List[_]]))
   }
 
@@ -278,14 +284,14 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val queueSerializer = serializerForType(ScalaReflection.localTypeOf[Queue[Int]])
     assert(queueSerializer.dataType ==
       ArrayType(IntegerType, containsNull = false))
-    val queueDeserializer = deserializerForType(ScalaReflection.localTypeOf[Queue[Int]])
+    val queueDeserializer = deserializerFor[Queue[Int]]
     assert(queueDeserializer.dataType == ObjectType(classOf[Queue[_]]))
 
     import scala.collection.mutable.ArrayBuffer
     val arrayBufferSerializer = serializerForType(ScalaReflection.localTypeOf[ArrayBuffer[Int]])
     assert(arrayBufferSerializer.dataType ==
       ArrayType(IntegerType, containsNull = false))
-    val arrayBufferDeserializer = deserializerForType(ScalaReflection.localTypeOf[ArrayBuffer[Int]])
+    val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]]
     assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
   }
 
@@ -293,14 +299,14 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val mapSerializer = serializerForType(ScalaReflection.localTypeOf[Map[Int, Int]])
     assert(mapSerializer.dataType ==
       MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val mapDeserializer = deserializerForType(ScalaReflection.localTypeOf[Map[Int, Int]])
+    val mapDeserializer = deserializerFor[Map[Int, Int]]
     assert(mapDeserializer.dataType == ObjectType(classOf[Map[_, _]]))
 
     import scala.collection.immutable.HashMap
     val hashMapSerializer = serializerForType(ScalaReflection.localTypeOf[HashMap[Int, Int]])
     assert(hashMapSerializer.dataType ==
       MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val hashMapDeserializer = deserializerForType(ScalaReflection.localTypeOf[HashMap[Int, Int]])
+    val hashMapDeserializer = deserializerFor[HashMap[Int, Int]]
     assert(hashMapDeserializer.dataType == ObjectType(classOf[HashMap[_, _]]))
 
     import scala.collection.mutable.{LinkedHashMap => LHMap}
@@ -308,8 +314,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
         ScalaReflection.localTypeOf[LHMap[Long, String]])
     assert(linkedHashMapSerializer.dataType ==
       MapType(LongType, StringType, valueContainsNull = true))
-    val linkedHashMapDeserializer = deserializerForType(
-      ScalaReflection.localTypeOf[LHMap[Long, String]])
+    val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]]
     assert(linkedHashMapDeserializer.dataType == ObjectType(classOf[LHMap[_, _]]))
   }
 
@@ -318,7 +323,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
       .collect {
         case If(_, _, s: CreateNamedStruct) => s
       }.head
-    val deserializer = deserializerForType(ScalaReflection.localTypeOf[SpecialCharAsFieldData])
+    val deserializer = deserializerFor[SpecialCharAsFieldData]
     assert(serializer.dataType(0).name == "field.1")
     assert(serializer.dataType(1).name == "field 2")
 
@@ -332,8 +337,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-22472: add null check for top-level primitive values") {
-    assert(deserializerForType(ScalaReflection.localTypeOf[Int]).isInstanceOf[AssertNotNull])
-    assert(!deserializerForType(ScalaReflection.localTypeOf[String]).isInstanceOf[AssertNotNull])
+    assert(deserializerFor[Int].isInstanceOf[AssertNotNull])
+    assert(!deserializerFor[String].isInstanceOf[AssertNotNull])
   }
 
   test("SPARK-23025: schemaFor should support Null type") {
@@ -350,12 +355,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
       val newInstance = deserializer.collect { case n: NewInstance => n}.head
       newInstance.arguments.count(_.isInstanceOf[AssertNotNull])
     }
-    assert(numberOfCheckedArguments(
-      deserializerForType(ScalaReflection.localTypeOf[(Double, Double)])) == 2)
-    assert(numberOfCheckedArguments(
-      deserializerForType(ScalaReflection.localTypeOf[(java.lang.Double, Int)])) == 1)
-    assert(numberOfCheckedArguments(
-      deserializerForType(
-        ScalaReflection.localTypeOf[(java.lang.Integer, java.lang.Integer)])) == 0)
+    assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
   }
 }
