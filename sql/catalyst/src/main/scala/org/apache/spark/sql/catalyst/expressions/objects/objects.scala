@@ -30,6 +30,7 @@ import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -1786,4 +1787,79 @@ case class ValidateExternalType(child: Expression, expected: DataType)
     """
     ev.copy(code = code, isNull = input.isNull)
   }
+}
+
+object GetKeyArrayFromMap {
+
+  /**
+   * Construct an instance of GetArrayFromMap case class
+   * extracting a key array from a Map expression.
+   *
+   * @param child a Map expression to extract a key array from
+   */
+  def apply(child: Expression): Expression = {
+    GetArrayFromMap(
+      child,
+      "keyArray",
+      _.keyArray(),
+      { case MapType(kt, _, _) => kt })
+  }
+}
+
+object GetValueArrayFromMap {
+
+  /**
+   * Construct an instance of GetArrayFromMap case class
+   * extracting a value array from a Map expression.
+   *
+   * @param child a Map expression to extract a value array from
+   */
+  def apply(child: Expression): Expression = {
+    GetArrayFromMap(
+      child,
+      "valueArray",
+      _.valueArray(),
+      { case MapType(_, vt, _) => vt })
+  }
+}
+
+/**
+ * Extracts a key/value array from a Map expression.
+ *
+ * @param child a Map expression to extract an array from
+ * @param functionName name of the function that is invoked to extract an array
+ * @param arrayGetter function extracting `ArrayData` from `MapData`
+ * @param elementTypeGetter function extracting array element `DataType` from `MapType`
+ */
+case class GetArrayFromMap private(
+    child: Expression,
+    functionName: String,
+    arrayGetter: MapData => ArrayData,
+    elementTypeGetter: MapType => DataType) extends UnaryExpression with NonSQLExpression {
+
+  private lazy val encodedFunctionName: String = TermName(functionName).encodedName.toString
+
+  lazy val dataType: DataType = {
+    val mt: MapType = child.dataType.asInstanceOf[MapType]
+    ArrayType(elementTypeGetter(mt))
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.dataType.isInstanceOf[MapType]) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"Can't extract array from $child: need map type but got ${child.dataType.catalogString}")
+    }
+  }
+
+  override def nullSafeEval(input: Any): Any = {
+    arrayGetter(input.asInstanceOf[MapData])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, childValue => s"$childValue.$encodedFunctionName()")
+  }
+
+  override def toString: String = s"$child.$functionName"
 }

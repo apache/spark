@@ -275,24 +275,20 @@ object JavaTypeInference {
 
       case _ if mapType.isAssignableFrom(typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
-        val keyDataType = inferDataType(keyType)._1
-        val valueDataType = inferDataType(valueType)._1
 
         val keyData =
           Invoke(
-            MapObjects(
+            UnresolvedMapObjects(
               p => deserializerFor(keyType, p),
-              Invoke(path, "keyArray", ArrayType(keyDataType)),
-              keyDataType),
+              GetKeyArrayFromMap(path)),
             "array",
             ObjectType(classOf[Array[Any]]))
 
         val valueData =
           Invoke(
-            MapObjects(
+            UnresolvedMapObjects(
               p => deserializerFor(valueType, p),
-              Invoke(path, "valueArray", ArrayType(valueDataType)),
-              valueDataType),
+              GetValueArrayFromMap(path)),
             "array",
             ObjectType(classOf[Array[Any]]))
 
