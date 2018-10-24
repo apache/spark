@@ -72,7 +72,8 @@ case class CreateHiveTableAsSelectCommand(
           ifPartitionNotExists = false,
           outputColumnNames = outputColumnNames).run(sparkSession, child)
       } else {
-        getHadoopFsRelationCommand(sparkSession, tableDesc, mode).run(sparkSession, child)
+        getHadoopFsRelationCommand(sparkSession, metastoreCatalog, tableDesc, mode)
+          .run(sparkSession, child)
       }
     } else {
       // TODO ideally, we should get the output data ready first and then
@@ -96,8 +97,8 @@ case class CreateHiveTableAsSelectCommand(
             ifPartitionNotExists = false,
             outputColumnNames = outputColumnNames).run(sparkSession, child)
         } else {
-          getHadoopFsRelationCommand(sparkSession, createdTableMeta, SaveMode.Overwrite)
-            .run(sparkSession, child)
+          getHadoopFsRelationCommand(sparkSession, metastoreCatalog, createdTableMeta,
+            SaveMode.Overwrite).run(sparkSession, child)
         }
       } catch {
         case NonFatal(e) =>

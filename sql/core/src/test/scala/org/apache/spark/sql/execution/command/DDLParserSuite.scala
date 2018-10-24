@@ -77,7 +77,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
-      case CreateTable(tableDesc, mode, _, _) => (tableDesc, mode == SaveMode.Ignore)
+      case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
     }.head
   }
 
@@ -431,7 +431,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     )
 
     parser.parsePlan(query) match {
-      case CreateTable(tableDesc, _, None, _) =>
+      case CreateTable(tableDesc, _, None) =>
         assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
@@ -453,7 +453,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     )
 
     parser.parsePlan(query) match {
-      case CreateTable(tableDesc, _, None, _) =>
+      case CreateTable(tableDesc, _, None) =>
         assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
@@ -473,7 +473,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       comment = Some("abc"))
 
     parser.parsePlan(sql) match {
-      case CreateTable(tableDesc, _, None, _) =>
+      case CreateTable(tableDesc, _, None) =>
         assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
@@ -493,7 +493,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       properties = Map("test" -> "test"))
 
     parser.parsePlan(sql) match {
-      case CreateTable(tableDesc, _, None, _) =>
+      case CreateTable(tableDesc, _, None) =>
         assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
@@ -543,7 +543,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       provider = Some("parquet"))
 
     parser.parsePlan(v1) match {
-      case CreateTable(tableDesc, _, None, _) =>
+      case CreateTable(tableDesc, _, None) =>
         assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
@@ -574,7 +574,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       provider = Some("parquet"))
 
     parser.parsePlan(sql) match {
-      case CreateTable(tableDesc, _, None, _) =>
+      case CreateTable(tableDesc, _, None) =>
         assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
@@ -1183,7 +1183,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     )
 
     parser.parsePlan(sql) match {
-      case CreateTable(tableDesc, _, None, _) =>
+      case CreateTable(tableDesc, _, None) =>
         assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
