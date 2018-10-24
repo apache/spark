@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
+import com.palantir.logsafe.SafeArg
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.mutable
@@ -26,7 +27,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
-import org.apache.spark.internal.SafeLogging
+import org.apache.spark.logging.SafeLogging
 import org.apache.spark.util.{Clock, Utils}
 
 private[spark] class ExecutorPodsAllocator(
@@ -82,10 +83,12 @@ private[spark] class ExecutorPodsAllocator(
     newlyCreatedExecutors.foreach { case (execId, timeCreated) =>
       val currentTime = clock.getTimeMillis()
       if (currentTime - timeCreated > podCreationTimeout) {
-        safeLogWarning(s"Executor with id $execId was not detected in the Kubernetes" +
-          s" cluster after $podCreationTimeout milliseconds despite the fact that a" +
+        safeLogWarning("Executor with id {execId} was not detected in the Kubernetes" +
+          " cluster after {podCreationTimeout} milliseconds despite the fact that a" +
           " previous allocation attempt tried to create it. The executor may have been" +
-          " deleted but the application missed the deletion event.")
+          " deleted but the application missed the deletion event.",
+          SafeArg.of("execId", execId),
+          SafeArg.of("podCreationTimeout", podCreationTimeout))
         Utils.tryLogNonFatalError {
           kubernetesClient
             .pods()
@@ -94,8 +97,10 @@ private[spark] class ExecutorPodsAllocator(
         }
         newlyCreatedExecutors -= execId
       } else {
-        safeLogDebug(s"Executor with id $execId was not found in the Kubernetes cluster since it" +
-          s" was created ${currentTime - timeCreated} milliseconds ago.")
+        safeLogDebug("Executor with id {execId} was not found in the Kubernetes cluster since it" +
+          " was created {timeSinceCreation} milliseconds ago.",
+          SafeArg.of("execId", execId),
+          SafeArg.of("timeSinceCreation", currentTime - timeCreated))
       }
     }
 
@@ -112,15 +117,19 @@ private[spark] class ExecutorPodsAllocator(
         case _ => false
       }
       val currentTotalExpectedExecutors = totalExpectedExecutors.get
-      safeLogDebug(s"Currently have $currentRunningExecutors running executors and" +
-        s" $currentPendingExecutors pending executors. $newlyCreatedExecutors executors" +
-        s" have been requested but are pending appearance in the cluster.")
+      safeLogDebug("Currently have {currentRunningExecutors} running executors and" +
+        " {currentPendingExecutors} pending executors. {newlyCreatedExecutors} executors" +
+        " have been requested but are pending appearance in the cluster.",
+        SafeArg.of("currentRunningExecutors", currentRunningExecutors),
+        SafeArg.of("currentPendingExecutors", currentPendingExecutors),
+        SafeArg.of("newlyCreatedExecutors", newlyCreatedExecutors))
       if (newlyCreatedExecutors.isEmpty
         && currentPendingExecutors == 0
         && currentRunningExecutors < currentTotalExpectedExecutors) {
         val numExecutorsToAllocate = math.min(
           currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
-        safeLogInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
+        safeLogInfo("Going to request {numExecutorsToAllocate} executors from Kubernetes.",
+          SafeArg.of("numExecutorsToAllocate", numExecutorsToAllocate))
         for ( _ <- 0 until numExecutorsToAllocate) {
           val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
           val executorConf = KubernetesConf.createExecutorConf(
@@ -136,18 +145,23 @@ private[spark] class ExecutorPodsAllocator(
             .build()
           kubernetesClient.pods().create(podWithAttachedContainer)
           newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
-          safeLogDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+          safeLogDebug("Requested executor with id {newExecutorId} from Kubernetes.",
+            SafeArg.of("newExecutorId", newExecutorId))
         }
       } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
         // TODO handle edge cases if we end up with more running executors than expected.
         safeLogDebug("Current number of running executors is equal to the number of requested" +
           " executors. Not scaling up further.")
       } else if (newlyCreatedExecutors.nonEmpty || currentPendingExecutors != 0) {
-        safeLogDebug(s"Still waiting for ${newlyCreatedExecutors.size + currentPendingExecutors}" +
-          s" executors to begin running before requesting for more executors. # of executors in" +
-          s" pending status in the cluster: $currentPendingExecutors. # of executors that we have" +
-          s" created but we have not observed as being present in the cluster yet:" +
-          s" ${newlyCreatedExecutors.size}.")
+        safeLogDebug("Still waiting for {currentWaitingExecutors}" +
+          " executors to begin running before requesting for more executors. # of executors in" +
+          " pending status in the cluster: {currentPendingExecutors}. # of executors that we have" +
+          " created but we have not observed as being present in the cluster yet:" +
+          " ${newlyCreatedExecutors}.",
+          SafeArg.of("currentWaitingExecutors",
+            newlyCreatedExecutors.size + currentPendingExecutors),
+          SafeArg.of("currentPendingExecutors", currentPendingExecutors),
+          SafeArg.of("newlyCreatedExecutors", newlyCreatedExecutors.size))
       }
     }
   }
