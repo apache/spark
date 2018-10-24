@@ -33,6 +33,7 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -217,7 +218,7 @@ private class EncryptedBlockData(
       var remaining = blockSize
       val chunks = new ListBuffer[ByteBuffer]()
       while (remaining > 0) {
-        val chunkSize = math.min(remaining, Int.MaxValue)
+        val chunkSize = math.min(remaining, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
         val chunk = allocator(chunkSize.toInt)
         remaining -= chunkSize
         JavaUtils.readFully(source, chunk)
