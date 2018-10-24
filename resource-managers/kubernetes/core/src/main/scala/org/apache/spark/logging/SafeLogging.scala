@@ -28,7 +28,7 @@ trait SafeLogging {
   }
 
   def safeLogInfo(message: String, error: Throwable, args: Arg[_]*): Unit = {
-    if (log_.isInfoEnabled) log_.info(message, error, args: _*)
+    if (log_.isInfoEnabled) log_.info(message, args :+ error: _*)
   }
 
   def safeLogDebug(message: String, args: Arg[_]*): Unit = {
@@ -36,7 +36,7 @@ trait SafeLogging {
   }
 
   def safeLogDebug(message: String, error: Throwable, args: Arg[_]*): Unit = {
-    if (log_.isDebugEnabled) log_.debug(message, error, args: _*)
+    if (log_.isDebugEnabled) log_.debug(message, args :+ error: _*)
   }
 
   def safeLogTrace(message: String, args: Arg[_]*): Unit = {
@@ -44,7 +44,7 @@ trait SafeLogging {
   }
 
   def safeLogTrace(message: String, error: Throwable, args: Arg[_]*): Unit = {
-    if (log_.isTraceEnabled) log_.trace(message, error, args: _*)
+    if (log_.isTraceEnabled) log_.trace(message, args :+ error: _*)
   }
 
   def safeLogWarning(message: String, args: Arg[_]*): Unit = {
@@ -52,7 +52,7 @@ trait SafeLogging {
   }
 
   def safeLogWarning(message: String, error: Throwable, args: Arg[_]*): Unit = {
-    if (log_.isWarnEnabled) log_.warn(message, error, args: _*)
+    if (log_.isWarnEnabled) log_.warn(message, args :+ error: _*)
   }
 
   def safeLogError(message: String, args: Arg[_]*): Unit = {
@@ -60,6 +60,6 @@ trait SafeLogging {
   }
 
   def safeLogError(message: String, error: Throwable, args: Arg[_]*): Unit = {
-    if (log_.isErrorEnabled) log_.error(message, error, args: _*)
+    if (log_.isErrorEnabled) log_.error(message, args :+ error: _*)
   }
 }
