@@ -29,7 +29,7 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.Uuid
+import org.apache.spark.sql.catalyst.expressions.{MapKeys, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
@@ -2577,5 +2577,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         df.filter("col1 = 'abc' OR (col1 != 'abc' AND col2 == 3)"),
         Row ("abc", 1))
     }
+  }
+
+  test("SPARK-25816 ResolveReferences works bottom-up on expressions") {
+    val df0 = Seq((1, Map(1 -> "a")), (2, Map(2 -> "b"))).toDF("1", "2")
+    val df1 = df0.select($"1".as("2"), $"2".as("1"))
+    val df2 = df1.filter($"1"(Column(MapKeys($"1".expr))(0)) > "a")
+
+    checkAnswer(df2, Row(2, Map(2 -> "b")))
   }
 }
