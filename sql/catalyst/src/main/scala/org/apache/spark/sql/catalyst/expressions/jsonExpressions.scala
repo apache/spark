@@ -554,18 +554,36 @@ case class JsonToStructs(
   @transient
   lazy val converter = nullableSchema match {
     case _: StructType =>
-      (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
     case _: ArrayType =>
-      (rows: Seq[InternalRow]) => rows.head.getArray(0)
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
     case _: MapType =>
-      (rows: Seq[InternalRow]) => rows.head.getMap(0)
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
   }
 
-  @transient
-  lazy val parser =
-    new JacksonParser(
-      nullableSchema,
-      new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
+  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
+  @transient lazy val parser = {
+    val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
+    val mode = parsedOptions.parseMode
+    if (mode != PermissiveMode && mode != FailFastMode) {
+      throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
+        s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
+    }
+    val rawParser = new JacksonParser(nullableSchema, parsedOptions, allowArrayAsStructs = false)
+    val createParser = CreateJacksonParser.utf8String _
+
+    val parserSchema = nullableSchema match {
+      case s: StructType => s
+      case other => StructType(StructField("value", other) :: Nil)
+    }
+
+    new FailureSafeParser[UTF8String](
+      input => rawParser.parse(input, createParser, identity[UTF8String]),
+      mode,
+      parserSchema,
+      parsedOptions.columnNameOfCorruptRecord,
+      parsedOptions.multiLine)
+  }
 
   override def dataType: DataType = nullableSchema
 
@@ -573,35 +591,7 @@ case class JsonToStructs(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
-    // When input is,
-    //   - `null`: `null`.
-    //   - invalid json: `null`.
-    //   - empty string: `null`.
-    //
-    // When the schema is array,
-    //   - json array: `Array(Row(...), ...)`
-    //   - json object: `Array(Row(...))`
-    //   - empty json array: `Array()`.
-    //   - empty json object: `Array(Row(null))`.
-    //
-    // When the schema is a struct,
-    //   - json object/array with single element: `Row(...)`
-    //   - json array with multiple elements: `null`
-    //   - empty json array: `null`.
-    //   - empty json object: `Row(null)`.
-
-    // We need `null` if the input string is an empty string. `JacksonParser` can
-    // deal with this but produces `Nil`.
-    if (json.toString.trim.isEmpty) return null
-
-    try {
-      converter(parser.parse(
-        json.asInstanceOf[UTF8String],
-        CreateJacksonParser.utf8String,
-        identity[UTF8String]))
-    } catch {
-      case _: BadRecordException => null
-    }
+    converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
