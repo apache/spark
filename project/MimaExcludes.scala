@@ -36,6 +36,10 @@ object MimaExcludes {
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
+    // [SPARK-25737] Remove JavaSparkContextVarargsWorkaround
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.api.java.JavaSparkContext"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.api.java.JavaSparkContext.union"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.streaming.api.java.JavaStreamingContext.union"),
     // [SPARK-16775] Remove deprecated accumulator v1 APIs
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.Accumulable"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.AccumulatorParam"),
@@ -55,9 +59,12 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.api.java.JavaSparkContext.accumulable"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.api.java.JavaSparkContext.doubleAccumulator"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.api.java.JavaSparkContext.accumulator"),
+    // [SPARK-24109] Remove class SnappyOutputStreamWrapper
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.io.SnappyCompressionCodec.version"),
+    // [SPARK-19287] JavaPairRDD flatMapValues requires function returning Iterable, not Iterator
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.api.java.JavaPairRDD.flatMapValues"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.streaming.api.java.JavaPairDStream.flatMapValues"),
+    // [SPARK-25680] SQL execution listener shouldn't happen on execution thread
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.util.ExecutionListenerManager.clone"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.util.ExecutionListenerManager.this")
   )
