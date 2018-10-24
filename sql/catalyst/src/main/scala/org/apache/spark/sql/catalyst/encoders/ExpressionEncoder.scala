@@ -200,8 +200,9 @@ case class ExpressionEncoder[T](
   /**
    * A sequence of expressions, one for each top-level field that can be used to
    * extract the values from a raw object into an [[InternalRow]]:
-   * 1. If `serializer` encodes a raw object to a struct, we directly use the `serializer`.
-   * 2. For other cases, we create a struct to wrap the `serializer`.
+   * 1. If `serializer` encodes a raw object to a struct, strip the outer If-IsNull and get
+   *    the `CreateNamedStruct`.
+   * 2. For other cases, wrap the single serializer with `CreateNamedStruct`.
    */
   val serializer: Seq[NamedExpression] = {
     val clsName = Utils.getSimpleName(clsTag.runtimeClass)
