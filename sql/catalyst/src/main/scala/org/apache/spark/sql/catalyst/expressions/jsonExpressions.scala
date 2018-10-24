@@ -539,7 +539,7 @@ case class JsonToStructs(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = JsonExprUtils.evalSchemaExpr(schema),
-      options = JsonExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
 
@@ -610,6 +610,8 @@ case class JsonToStructs(
     case _: MapType => "entries"
     case _ => super.sql
   }
+
+  override def prettyName: String = "from_json"
 }
 
 /**
@@ -650,7 +652,7 @@ case class StructsToJson(
   def this(child: Expression) = this(Map.empty, child, None)
   def this(child: Expression, options: Expression) =
     this(
-      options = JsonExprUtils.convertToMapData(options),
+      options = ExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
 
@@ -730,6 +732,8 @@ case class StructsToJson(
   override def nullSafeEval(value: Any): Any = converter(value)
 
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
+
+  override def prettyName: String = "to_json"
 }
 
 /**
@@ -740,15 +744,31 @@ case class StructsToJson(
   examples = """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
-       array<struct<col:int>>
+       array<struct<col:bigint>>
+      > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
+       array<struct<col:bigint>>
   """,
   since = "2.4.0")
-case class SchemaOfJson(child: Expression)
+case class SchemaOfJson(
+    child: Expression,
+    options: Map[String, String])
   extends UnaryExpression with String2StringExpression with CodegenFallback {
 
-  private val jsonOptions = new JSONOptions(Map.empty, "UTC")
-  private val jsonFactory = new JsonFactory()
-  jsonOptions.setJacksonOptions(jsonFactory)
+  def this(child: Expression) = this(child, Map.empty[String, String])
+
+  def this(child: Expression, options: Expression) = this(
+      child = child,
+      options = ExprUtils.convertToMapData(options))
+
+  @transient
+  private lazy val jsonOptions = new JSONOptions(options, "UTC")
+
+  @transient
+  private lazy val jsonFactory = {
+    val factory = new JsonFactory()
+    jsonOptions.setJacksonOptions(factory)
+    factory
+  }
 
   override def convert(v: UTF8String): UTF8String = {
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, v)) { parser =>
@@ -758,31 +778,18 @@ case class SchemaOfJson(child: Expression)
 
     UTF8String.fromString(dt.catalogString)
   }
+
+  override def prettyName: String = "schema_of_json"
 }
 
 object JsonExprUtils {
-
   def evalSchemaExpr(exp: Expression): DataType = exp match {
     case Literal(s, StringType) => DataType.fromDDL(s.toString)
-    case e @ SchemaOfJson(_: Literal) =>
+    case e @ SchemaOfJson(_: Literal, _) =>
       val ddlSchema = e.eval().asInstanceOf[UTF8String]
       DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
       "Schema should be specified in DDL format as a string literal" +
       s" or output of the schema_of_json function instead of ${e.sql}")
-  }
-
-  def convertToMapData(exp: Expression): Map[String, String] = exp match {
-    case m: CreateMap
-        if m.dataType.acceptsType(MapType(StringType, StringType, valueContainsNull = false)) =>
-      val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
-      ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
-        key.toString -> value.toString
-      }
-    case m: CreateMap =>
-      throw new AnalysisException(
-        s"A type of keys and values in map() must be string, but got ${m.dataType.catalogString}")
-    case _ =>
-      throw new AnalysisException("Must use a map() function for options")
   }
 }

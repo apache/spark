@@ -100,8 +100,11 @@ private[spark] class ExecutorPodsLifecycleManager(
         }
       }
     }
-    logDebug(s"Removed executors with ids ${execIdsRemovedInThisRound.mkString(",")}" +
-      s" from Spark that were either found to be deleted or non-existent in the cluster.")
+
+    if (execIdsRemovedInThisRound.nonEmpty) {
+      logDebug(s"Removed executors with ids ${execIdsRemovedInThisRound.mkString(",")}" +
+        s" from Spark that were either found to be deleted or non-existent in the cluster.")
+    }
   }
 
   private def onFinalNonDeletedState(
@@ -109,8 +112,8 @@ private[spark] class ExecutorPodsLifecycleManager(
       execId: Long,
       schedulerBackend: KubernetesClusterSchedulerBackend,
       execIdsRemovedInRound: mutable.Set[Long]): Unit = {
-    removeExecutorFromK8s(podState.pod)
     removeExecutorFromSpark(schedulerBackend, podState, execId)
+    removeExecutorFromK8s(podState.pod)
     execIdsRemovedInRound += execId
   }
 
