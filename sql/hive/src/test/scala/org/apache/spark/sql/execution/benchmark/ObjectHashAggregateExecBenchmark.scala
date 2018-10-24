@@ -48,190 +48,207 @@ object ObjectHashAggregateExecBenchmark extends BenchmarkBase with SQLHelper {
 
   val spark: SparkSession = TestHive.sparkSession
 
-  override def runBenchmarkSuite(): Unit = {
-    runBenchmark("Hive UDAF vs Spark AF") {
-      val N = 2 << 15
+  private def hiveUDAFvsSparkAF(): Unit = {
+    val N = 2 << 15
 
-      val benchmark = new Benchmark(
-        name = "hive udaf vs spark af",
-        valuesPerIteration = N,
-        minNumIters = 5,
-        warmupTime = 5.seconds,
-        minTime = 10.seconds,
-        outputPerIteration = true,
-        output = output
-      )
+    val benchmark = new Benchmark(
+      name = "hive udaf vs spark af",
+      valuesPerIteration = N,
+      minNumIters = 5,
+      warmupTime = 5.seconds,
+      minTime = 10.seconds,
+      outputPerIteration = true,
+      output = output
+    )
 
-      spark.sql(s"CREATE TEMPORARY FUNCTION hive_percentile_approx AS '" +
-          s"${classOf[GenericUDAFPercentileApprox].getName}'")
+    spark.sql(
+      s"CREATE TEMPORARY FUNCTION hive_percentile_approx AS '" +
+        s"${classOf[GenericUDAFPercentileApprox].getName}'"
+    )
 
-      spark.range(N).createOrReplaceTempView("t")
+    spark.range(N).createOrReplaceTempView("t")
 
-      benchmark.addCase("hive udaf w/o group by") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-          spark.sql("SELECT hive_percentile_approx(id, 0.5) FROM t").collect()
-        }
+    benchmark.addCase("hive udaf w/o group by") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+        spark.sql("SELECT hive_percentile_approx(id, 0.5) FROM t").collect()
       }
-
-      benchmark.addCase("spark af w/o group by") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-          spark.sql("SELECT percentile_approx(id, 0.5) FROM t").collect()
-        }
-      }
-
-      benchmark.addCase("hive udaf w/ group by") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-          spark
-            .sql(
-              s"SELECT hive_percentile_approx(id, 0.5) " +
-                s"FROM t GROUP BY CAST(id / ${N / 4} AS BIGINT)"
-            )
-            .collect()
-        }
-      }
-
-      benchmark.addCase("spark af w/ group by w/o fallback") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-          spark
-            .sql(
-              s"SELECT percentile_approx(id, 0.5) FROM t GROUP BY CAST(id / ${N / 4} AS BIGINT)"
-            )
-            .collect()
-        }
-      }
-
-      benchmark.addCase("spark af w/ group by w/ fallback") { _ =>
-        withSQLConf(
-          SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
-          SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "2") {
-            spark
-              .sql(
-                s"SELECT percentile_approx(id, 0.5) FROM t GROUP BY CAST(id / ${N / 4} AS BIGINT)"
-              )
-              .collect()
-          }
-      }
-
-      benchmark.run()
     }
 
-    runBenchmark("ObjectHashAggregateExec vs SortAggregateExec - typed_count") {
-      val N: Long = 1024 * 1024 * 100
-
-      val benchmark = new Benchmark(
-        name = "object agg v.s. sort agg",
-        valuesPerIteration = N,
-        minNumIters = 1,
-        warmupTime = 10.seconds,
-        minTime = 45.seconds,
-        outputPerIteration = true,
-        output = output
-      )
-
-      import spark.implicits._
-
-      def typed_count(column: Column): Column =
-        Column(TestingTypedCount(column.expr).toAggregateExpression())
-
-      val df = spark.range(N)
-
-      benchmark.addCase("sort agg w/ group by") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-          df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).collect()
-        }
+    benchmark.addCase("spark af w/o group by") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
+        spark.sql("SELECT percentile_approx(id, 0.5) FROM t").collect()
       }
-
-      benchmark.addCase("object agg w/ group by w/o fallback") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-          df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).collect()
-        }
-      }
-
-      benchmark.addCase("object agg w/ group by w/ fallback") { _ =>
-        withSQLConf(
-          SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
-          SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "2") {
-            df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).collect()
-          }
-      }
-
-      benchmark.addCase("sort agg w/o group by") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-          df.select(typed_count($"id")).collect()
-        }
-      }
-
-      benchmark.addCase("object agg w/o group by w/o fallback") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-          df.select(typed_count($"id")).collect()
-        }
-      }
-
-      benchmark.run()
     }
 
-    runBenchmark("ObjectHashAggregateExec vs SortAggregateExec - percentile_approx") {
-      val N = 2 << 20
-
-      val benchmark = new Benchmark(
-        name = "object agg v.s. sort agg",
-        valuesPerIteration = N,
-        minNumIters = 5,
-        warmupTime = 15.seconds,
-        minTime = 45.seconds,
-        outputPerIteration = true,
-        output = output
-      )
-
-      import spark.implicits._
-
-      val df = spark.range(N).coalesce(1)
-
-      benchmark.addCase("sort agg w/ group by") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-          df.groupBy($"id" / (N / 4) cast LongType)
-            .agg(percentile_approx($"id", 0.5))
-            .collect()
-        }
+    benchmark.addCase("hive udaf w/ group by") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+        spark
+          .sql(
+            s"SELECT hive_percentile_approx(id, 0.5) " +
+              s"FROM t GROUP BY CAST(id / ${N / 4} AS BIGINT)"
+          )
+          .collect()
       }
-
-      benchmark.addCase("object agg w/ group by w/o fallback") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-          df.groupBy($"id" / (N / 4) cast LongType)
-            .agg(percentile_approx($"id", 0.5))
-            .collect()
-        }
-      }
-
-      benchmark.addCase("object agg w/ group by w/ fallback") { _ =>
-        withSQLConf(
-          SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
-          SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "2") {
-            df.groupBy($"id" / (N / 4) cast LongType)
-              .agg(percentile_approx($"id", 0.5))
-              .collect()
-          }
-      }
-
-      benchmark.addCase("sort agg w/o group by") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-          df.select(percentile_approx($"id", 0.5)).collect()
-        }
-      }
-
-      benchmark.addCase("object agg w/o group by w/o fallback") { _ =>
-        withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
-          df.select(percentile_approx($"id", 0.5)).collect()
-        }
-      }
-
-      benchmark.run()
     }
+
+    benchmark.addCase("spark af w/ group by w/o fallback") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
+        spark
+          .sql(
+            s"SELECT percentile_approx(id, 0.5) FROM t GROUP BY CAST(id / ${N / 4} AS BIGINT)"
+          )
+          .collect()
+      }
+    }
+
+    benchmark.addCase("spark af w/ group by w/ fallback") { _ =>
+      withSQLConf(
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
+        SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "2"
+      ) {
+        spark
+          .sql(
+            s"SELECT percentile_approx(id, 0.5) FROM t GROUP BY CAST(id / ${N / 4} AS BIGINT)"
+          )
+          .collect()
+      }
+    }
+
+    benchmark.run()
+  }
+
+  private def objectHashAggregateExecVsSortAggregateExecUsingTypedCount(): Unit = {
+    val N: Long = 1024 * 1024 * 100
+
+    val benchmark = new Benchmark(
+      name = "object agg v.s. sort agg",
+      valuesPerIteration = N,
+      minNumIters = 1,
+      warmupTime = 10.seconds,
+      minTime = 45.seconds,
+      outputPerIteration = true,
+      output = output
+    )
+
+    import spark.implicits._
+
+    def typed_count(column: Column): Column =
+      Column(TestingTypedCount(column.expr).toAggregateExpression())
+
+    val df = spark.range(N)
+
+    benchmark.addCase("sort agg w/ group by") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+        df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).collect()
+      }
+    }
+
+    benchmark.addCase("object agg w/ group by w/o fallback") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
+        df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).collect()
+      }
+    }
+
+    benchmark.addCase("object agg w/ group by w/ fallback") { _ =>
+      withSQLConf(
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
+        SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "2"
+      ) {
+        df.groupBy($"id" < (N / 2)).agg(typed_count($"id")).collect()
+      }
+    }
+
+    benchmark.addCase("sort agg w/o group by") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+        df.select(typed_count($"id")).collect()
+      }
+    }
+
+    benchmark.addCase("object agg w/o group by w/o fallback") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
+        df.select(typed_count($"id")).collect()
+      }
+    }
+
+    benchmark.run()
+  }
+
+  private def objectHashAggregateExecVsSortAggregateExecUsingPercentileApprox(): Unit = {
+    val N = 2 << 20
+
+    val benchmark = new Benchmark(
+      name = "object agg v.s. sort agg",
+      valuesPerIteration = N,
+      minNumIters = 5,
+      warmupTime = 15.seconds,
+      minTime = 45.seconds,
+      outputPerIteration = true,
+      output = output
+    )
+
+    import spark.implicits._
+
+    val df = spark.range(N).coalesce(1)
+
+    benchmark.addCase("sort agg w/ group by") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+        df.groupBy($"id" / (N / 4) cast LongType)
+          .agg(percentile_approx($"id", 0.5))
+          .collect()
+      }
+    }
+
+    benchmark.addCase("object agg w/ group by w/o fallback") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
+        df.groupBy($"id" / (N / 4) cast LongType)
+          .agg(percentile_approx($"id", 0.5))
+          .collect()
+      }
+    }
+
+    benchmark.addCase("object agg w/ group by w/ fallback") { _ =>
+      withSQLConf(
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
+        SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "2"
+      ) {
+        df.groupBy($"id" / (N / 4) cast LongType)
+          .agg(percentile_approx($"id", 0.5))
+          .collect()
+      }
+    }
+
+    benchmark.addCase("sort agg w/o group by") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+        df.select(percentile_approx($"id", 0.5)).collect()
+      }
+    }
+
+    benchmark.addCase("object agg w/o group by w/o fallback") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
+        df.select(percentile_approx($"id", 0.5)).collect()
+      }
+    }
+
+    benchmark.run()
   }
 
   private def percentile_approx(
       column: Column, percentage: Double, isDistinct: Boolean = false): Column = {
     val approxPercentile = new ApproximatePercentile(column.expr, Literal(percentage))
     Column(approxPercentile.toAggregateExpression(isDistinct))
+  }
+
+  override def runBenchmarkSuite(): Unit = {
+    runBenchmark("Hive UDAF vs Spark AF") {
+      hiveUDAFvsSparkAF()
+    }
+
+    runBenchmark("ObjectHashAggregateExec vs SortAggregateExec - typed_count") {
+      objectHashAggregateExecVsSortAggregateExecUsingTypedCount
+    }
+
+    runBenchmark("ObjectHashAggregateExec vs SortAggregateExec - percentile_approx") {
+      objectHashAggregateExecVsSortAggregateExecUsingPercentileApprox
+    }
   }
 }
