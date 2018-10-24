@@ -187,29 +187,25 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     checkResult(data, avroTypeJson, 5.848603E35f)
   }
 
-  test("Random invalid complex input") {
-    val seed = scala.util.Random.nextLong()
-    val rand = new scala.util.Random(seed)
-    val actualTypes = Seq(
-      IntegerType,
-      LongType,
-      FloatType
-    )
+  test("Handle unsupported input of record type") {
+    val actualSchema = StructType(Seq(
+      StructField("col_0", StringType, false),
+      StructField("col_1", ShortType, false),
+      StructField("col_2", DecimalType(8, 4), false),
+      StructField("col_3", BooleanType, true),
+      StructField("col_4", DecimalType(38, 38), false)))
 
-    val expectedTypes = Seq(
-      StringType,
-      DoubleType
-    )
+    val expectedSchema = StructType(Seq(
+      StructField("col_0", BinaryType, false),
+      StructField("col_1", DoubleType, false),
+      StructField("col_2", DecimalType(18, 4), false),
+      StructField("col_3", StringType, true),
+      StructField("col_4", DecimalType(38, 38), false)))
 
-    for(_ <- 1 to 5) {
-      val actualSchema = RandomDataGenerator.randomSchema(rand, 3, actualTypes)
-      val expectedSchema = RandomDataGenerator.randomSchema(rand, 3, expectedTypes)
-
-      val data = RandomDataGenerator.randomRow(rand, actualSchema)
-      val converter = CatalystTypeConverters.createToCatalystConverter(actualSchema)
-      val input = Literal.create(converter(data), actualSchema)
-      val avroSchema = SchemaConverters.toAvroType(expectedSchema)
-      checkUnsupportedRead(input, avroSchema.toString)
-    }
+    val data = RandomDataGenerator.randomRow(new scala.util.Random, actualSchema)
+    val converter = CatalystTypeConverters.createToCatalystConverter(actualSchema)
+    val input = Literal.create(converter(data), actualSchema)
+    val avroSchema = SchemaConverters.toAvroType(expectedSchema).toString
+    checkUnsupportedRead(input, avroSchema)
   }
 }
