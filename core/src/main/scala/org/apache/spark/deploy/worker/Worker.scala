@@ -462,7 +462,7 @@ private[deploy] class Worker(
           // when cleaning up
           val appIdFromDir = dir.getName
           val isAppStillRunning = appIds.contains(appIdFromDir)
-          dir.isDirectory && !isAppStillRunning &&
+          dir.isDirectory && !isAppStillRunning && appIdFromDir.startsWith("app-") &&
           !Utils.doesDirectoryContainAnyNewFiles(dir, APP_DATA_RETENTION_SECONDS)
         }.foreach { dir =>
           logInfo(s"Removing directory: ${dir.getPath}")
