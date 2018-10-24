@@ -40,7 +40,7 @@ private[kafka010] object TokenUtil extends Logging {
     override def getKind: Text = TOKEN_KIND;
   }
 
-  def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
+  def obtainToken(sparkConf: SparkConf): Token[_ <: TokenIdentifier] = {
     val adminClient = AdminClient.create(createAdminClientProperties(sparkConf))
     val createDelegationTokenOptions = new CreateDelegationTokenOptions()
     val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
