@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.hive.thriftserver.server
 
-import java.util.{Map => JMap}
+import java.util.{List => JList, Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
+import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, MetadataOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.thriftserver.{ReflectionUtils, SparkExecuteStatementOperation}
+import org.apache.spark.sql.hive.thriftserver.{ReflectionUtils, SparkExecuteStatementOperation, SparkGetTablesOperation}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -60,6 +60,22 @@ private[thriftserver] class SparkSQLOperationManager()
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created Operation for $statement with session=$parentSession, " +
       s"runInBackground=$runInBackground")
+    operation
+  }
+
+  override def newGetTablesOperation(
+      parentSession: HiveSession,
+      catalogName: String,
+      schemaName: String,
+      tableName: String,
+      tableTypes: JList[String]): MetadataOperation = synchronized {
+    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+      s" initialized or had already closed.")
+    val operation = new SparkGetTablesOperation(parentSession,
+      catalogName, schemaName, tableName, tableTypes)(sqlContext, sessionToActivePool)
+    handleToOperation.put(operation.getHandle, operation)
+    logDebug(s"Created GetTablesOperation with session=$parentSession.")
     operation
   }
 

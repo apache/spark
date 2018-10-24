@@ -55,7 +55,7 @@ object HiveThriftServer2 extends Logging {
   def startWithContext(sqlContext: SQLContext): Unit = {
     val server = new HiveThriftServer2(sqlContext)
 
-    val executionHive = HiveUtils.newClientFromHadoopConfig(
+    val executionHive = HiveUtils.newClientForExecution(
       sqlContext.sparkContext.conf,
       sqlContext.sessionState.newHadoopConf())
 
@@ -90,7 +90,7 @@ object HiveThriftServer2 extends Logging {
       uiTab.foreach(_.detach())
     }
 
-    val executionHive = HiveUtils.newClientFromHadoopConfig(
+    val executionHive = HiveUtils.newClientForExecution(
       SparkSQLEnv.sqlContext.sparkContext.conf,
       SparkSQLEnv.sqlContext.sessionState.newHadoopConf())
 
