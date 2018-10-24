@@ -59,7 +59,7 @@ object RowEncoder {
     val cls = classOf[Row]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val serializer = serializerFor(inputObject, schema)
-    val deserializer = deserializerFor(GetColumnByOrdinal(0, schema), schema)
+    val deserializer = deserializerFor(GetColumnByOrdinal(0, serializer.dataType), schema)
     new ExpressionEncoder[Row](
       serializer,
       deserializer,
@@ -185,6 +185,8 @@ object RowEncoder {
         val convertedField = if (field.nullable) {
           If(
             Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
+            // Because we strip UDTs, `field.dataType` can be different from `fieldValue.dataType`.
+            // We should use `fieldValue.dataType` here.
             Literal.create(null, fieldValue.dataType),
             fieldValue
           )
