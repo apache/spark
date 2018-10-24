@@ -149,15 +149,13 @@ object HiveAnalysis extends Rule[LogicalPlan] {
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
         ifPartitionNotExists, query.output.map(_.name))
 
-    case CreateTable(tableDesc, mode, None, _) if DDLUtils.isHiveTable(tableDesc) =>
+    case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc)
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
-    case CreateTable(tableDesc, mode, Some(query), useExternalSerde)
-        if DDLUtils.isHiveTable(tableDesc) =>
+    case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc)
-      CreateHiveTableAsSelectCommand(tableDesc, query, query.output.map(_.name), mode,
-        useExternalSerde)
+      CreateHiveTableAsSelectCommand(tableDesc, query, query.output.map(_.name), mode)
 
     case InsertIntoDir(isLocal, storage, provider, child, overwrite)
         if DDLUtils.isHiveTable(provider) =>
@@ -185,15 +183,6 @@ case class RelationConversions(
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperators {
-      case c @ CreateTable(tableDesc, _, Some(_), _) if DDLUtils.isHiveTable(tableDesc) =>
-        if (tableDesc.partitionColumnNames.isEmpty &&
-            metastoreCatalog.isConvertible(tableDesc)) {
-          // We don't support inserting into partitioned table in Parquet/Orc data source (yet).
-          c.copy(useExternalSerde = false)
-        } else {
-          c.copy(useExternalSerde = true)
-        }
-
       // Write path
       case InsertIntoTable(r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
         // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).

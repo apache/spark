@@ -131,11 +131,11 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case CreateTable(tableDesc, mode, None, _) if DDLUtils.isDatasourceTable(tableDesc) =>
+    case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc)
       CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
-    case CreateTable(tableDesc, mode, Some(query), false)
+    case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))

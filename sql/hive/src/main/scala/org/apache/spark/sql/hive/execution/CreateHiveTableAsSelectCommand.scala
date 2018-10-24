@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
-import org.apache.spark.sql.hive.HiveSessionCatalog
+import org.apache.spark.sql.hive.{HiveMetastoreCatalog, HiveSessionCatalog}
 
 
 /**
@@ -34,20 +34,23 @@ import org.apache.spark.sql.hive.HiveSessionCatalog
  * @param tableDesc the Table Describe, which may contain serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
  * @param mode SaveMode
- * @param useHiveSerde whether to use Hive Serde to write data.
  */
 case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
     outputColumnNames: Seq[String],
-    mode: SaveMode,
-    useHiveSerde: Boolean)
+    mode: SaveMode)
   extends DataWritingCommand {
 
   private val tableIdentifier = tableDesc.identifier
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val metastoreCatalog = catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
+
+    // Whether this table is convertible to data source relation.
+    val isConvertible = metastoreCatalog.isConvertible(tableDesc)
+
     if (catalog.tableExists(tableIdentifier)) {
       assert(mode != SaveMode.Overwrite,
         s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
@@ -60,7 +63,7 @@ case class CreateHiveTableAsSelectCommand(
         return Seq.empty
       }
 
-      if (useHiveSerde) {
+      if (!isConvertible) {
         InsertIntoHiveTable(
           tableDesc,
           Map.empty,
@@ -82,7 +85,7 @@ case class CreateHiveTableAsSelectCommand(
       try {
         // Read back the metadata of the table which was created just now.
         val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
-        if (useHiveSerde) {
+        if (!isConvertible) {
           // For CTAS, there is no static partition values to insert.
           val partition = createdTableMeta.partitionColumnNames.map(_ -> None).toMap
           InsertIntoHiveTable(
@@ -109,11 +112,13 @@ case class CreateHiveTableAsSelectCommand(
 
   // Converts Hive table to data source one and returns an `InsertIntoHadoopFsRelationCommand`
   // used to write data into it.
-  private def getHadoopFsRelationCommand(sparkSession: SparkSession, tableDesc: CatalogTable,
+  private def getHadoopFsRelationCommand(
+      sparkSession: SparkSession,
+      metastoreCatalog: HiveMetastoreCatalog,
+      tableDesc: CatalogTable,
       mode: SaveMode): InsertIntoHadoopFsRelationCommand = {
     val hiveTable = DDLUtils.readHiveTable(tableDesc)
-    val hadoopRelation = sparkSession.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
-      .metastoreCatalog.convert(hiveTable) match {
+    val hadoopRelation = metastoreCatalog.convert(hiveTable) match {
         case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
         case _ => throw new AnalysisException(s"$tableIdentifier should be converted to " +
           "HadoopFsRelation.")
