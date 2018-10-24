@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
@@ -172,11 +171,8 @@ object InternalRow {
     case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
     case DecimalType.Fixed(precision, _) =>
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
-    case CalendarIntervalType | BinaryType | _: ArrayType | StringType | _: StructType |
-         _: MapType | _: ObjectType =>
-      (input, v) => input.update(ordinal, v)
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
     case NullType => (input, _) => input.setNullAt(ordinal)
-    case _ => throw new SparkException(s"Unsupported data type $dt")
+    case _ => (input, v) => input.update(ordinal, v)
   }
 }
