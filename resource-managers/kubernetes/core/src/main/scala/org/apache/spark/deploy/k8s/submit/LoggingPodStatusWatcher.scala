@@ -18,13 +18,10 @@ package org.apache.spark.deploy.k8s.submit
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import scala.collection.JavaConverters._
-
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 
-import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ThreadUtils

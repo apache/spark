@@ -27,4 +27,36 @@ object Utils extends Logging {
     val resource = createResource
     try f.apply(resource) finally resource.close()
   }
+
+  def checkAndGetK8sMasterUrl(rawMasterURL: String): String = {
+    require(rawMasterURL.startsWith("k8s://"),
+      "Kubernetes master URL must start with k8s://.")
+    val masterWithoutK8sPrefix = rawMasterURL.substring("k8s://".length)
+
+    // To handle master URLs, e.g., k8s://host:port.
+    if (!masterWithoutK8sPrefix.contains("://")) {
+      val resolvedURL = s"https://$masterWithoutK8sPrefix"
+      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+        s"URL is $resolvedURL.")
+      return s"k8s://$resolvedURL"
+    }
+
+    val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
+    val resolvedURL = masterScheme.toLowerCase match {
+      case "https" =>
+        masterWithoutK8sPrefix
+      case "http" =>
+        logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
+        masterWithoutK8sPrefix
+      case null =>
+        val resolvedURL = s"https://$masterWithoutK8sPrefix"
+        logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+          s"URL is $resolvedURL.")
+        resolvedURL
+      case _ =>
+        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
+    }
+
+    s"k8s://$resolvedURL"
+  }
 }

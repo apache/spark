@@ -17,6 +17,25 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 object TestConstants {
-  val MINIKUBE_TEST_BACKEND = "minikube"
-  val GCE_TEST_BACKEND = "gce"
+  val BACKEND_MINIKUBE = "minikube"
+  val BACKEND_DOCKER_FOR_DESKTOP = "docker-for-desktop"
+  val BACKEND_CLOUD = "cloud"
+  val BACKEND_CLOUD_URL = "cloud-url"
+
+  val CONFIG_KEY_DEPLOY_MODE = "spark.kubernetes.test.deployMode"
+  val CONFIG_KEY_KUBE_CONFIG_CONTEXT = "spark.kubernetes.test.kubeConfigContext"
+  val CONFIG_KEY_KUBE_MASTER_URL = "spark.kubernetes.test.master"
+
+
+  /*
+  <spark.kubernetes.test.unpackSparkDir>${project.build.directory}/spark-dist-unpacked</spark.kubernetes.test.unpackSparkDir>
+    <spark.kubernetes.test.imageTag>N/A</spark.kubernetes.test.imageTag>
+    <spark.kubernetes.test.imageTagFile>${project.build.directory}/imageTag.txt</spark.kubernetes.test.imageTagFile>
+    <spark.kubernetes.test.deployMode>minikube</spark.kubernetes.test.deployMode>
+    <spark.kubernetes.test.imageRepo>docker.io/kubespark</spark.kubernetes.test.imageRepo>
+    <spark.kubernetes.test.kubeConfigContext></spark.kubernetes.test.kubeConfigContext>
+    <spark.kubernetes.test.master></spark.kubernetes.test.master>
+    <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
+    <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
+   */
 }

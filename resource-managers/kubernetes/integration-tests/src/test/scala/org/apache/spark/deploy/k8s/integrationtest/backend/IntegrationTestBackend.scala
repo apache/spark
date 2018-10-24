@@ -18,6 +18,8 @@
 package org.apache.spark.deploy.k8s.integrationtest.backend
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
+import org.apache.spark.deploy.k8s.integrationtest.backend.cloud.{KubeConfigBackend, CloudTestBackend}
 import org.apache.spark.deploy.k8s.integrationtest.backend.docker.DockerForDesktopBackend
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.MinikubeTestBackend
 
@@ -28,18 +30,16 @@ private[spark] trait IntegrationTestBackend {
 }
 
 private[spark] object IntegrationTestBackendFactory {
-  val deployModeConfigKey = "spark.kubernetes.test.deployMode"
-
-  val backendMinikube = "minikube"
-  val backendDockerForDesktop = "docker-for-desktop"
-
   def getTestBackend: IntegrationTestBackend = {
-    val deployMode = Option(System.getProperty(deployModeConfigKey))
-      .getOrElse(backendMinikube)
+    val deployMode = Option(System.getProperty(CONFIG_KEY_DEPLOY_MODE))
+      .getOrElse(BACKEND_MINIKUBE)
     deployMode match {
-      case `backendMinikube` => MinikubeTestBackend
-      case `backendDockerForDesktop` => DockerForDesktopBackend
-      case _ => throw new IllegalArgumentException("Invalid " + deployModeConfigKey + ": " + deployMode)
+      case BACKEND_MINIKUBE => MinikubeTestBackend
+      case BACKEND_CLOUD => new KubeConfigBackend(null)
+      case BACKEND_CLOUD_URL => CloudTestBackend
+      case BACKEND_DOCKER_FOR_DESKTOP => DockerForDesktopBackend
+      case _ => throw new IllegalArgumentException("Invalid " +
+        CONFIG_KEY_DEPLOY_MODE + ": " + deployMode)
     }
   }
 }
