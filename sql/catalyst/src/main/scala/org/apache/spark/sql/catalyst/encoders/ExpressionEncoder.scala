@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.encoders
 
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{`Type`, typeTag, RuntimeClass, TypeTag}
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
@@ -48,7 +48,6 @@ object ExpressionEncoder {
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
     val mirror = ScalaReflection.mirror
     val tpe = typeTag[T].in(mirror).tpe
-    val cls = mirror.runtimeClass(tpe)
 
     if (ScalaReflection.optionOfProductType(tpe)) {
       throw new UnsupportedOperationException(
@@ -59,7 +58,8 @@ object ExpressionEncoder {
           "`val ds: Dataset[Tuple1[MyClass]] = Seq(Tuple1(MyClass(...)), Tuple1(null)).toDS`")
     }
 
-    val serializer = ScalaReflection.serializerForType(tpe, cls)
+    val cls = mirror.runtimeClass(tpe)
+    val serializer = ScalaReflection.serializerForType(tpe)
     val deserializer = ScalaReflection.deserializerForType(tpe)
 
     new ExpressionEncoder[T](
@@ -204,10 +204,9 @@ case class ExpressionEncoder[T](
    * 2. For other cases, we create a struct to wrap the `serializer`.
    */
   val serializer: Seq[NamedExpression] = {
-    val serializedAsStruct = objSerializer.dataType.isInstanceOf[StructType]
     val clsName = Utils.getSimpleName(clsTag.runtimeClass)
 
-    if (serializedAsStruct) {
+    if (isSerializedAsStruct) {
       val nullSafeSerializer = objSerializer.transformUp {
         case r: BoundReference =>
           // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
@@ -236,9 +235,7 @@ case class ExpressionEncoder[T](
    * `GetColumnByOrdinal` with corresponding ordinal.
    */
   val deserializer: Expression = {
-    val serializedAsStruct = objSerializer.dataType.isInstanceOf[StructType]
-
-    if (serializedAsStruct) {
+    if (isSerializedAsStruct) {
       // We serialized this kind of objects to root-level row. The input of general deserializer
       // is a `GetColumnByOrdinal(0)` expression to extract first column of a row. We need to
       // transform attributes accessors.
@@ -263,6 +260,11 @@ case class ExpressionEncoder[T](
   val schema: StructType = StructType(serializer.map { s =>
     StructField(s.name, s.dataType, s.nullable)
   })
+
+  /**
+   * Returns true if the type `T` is serialized as a struct.
+   */
+  def isSerializedAsStruct: Boolean = objSerializer.dataType.isInstanceOf[StructType]
 
   // serializer expressions are used to encode an object to a row, while the object is usually an
   // intermediate value produced inside an operator, not from the output of the child operator. This

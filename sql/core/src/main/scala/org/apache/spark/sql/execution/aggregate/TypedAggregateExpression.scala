@@ -32,7 +32,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 object TypedAggregateExpression {
-
   def apply[BUF : Encoder, OUT : Encoder](
       aggregator: Aggregator[_, BUF, OUT]): TypedAggregateExpression = {
     val bufferEncoder = encoderFor[BUF]
@@ -46,8 +45,7 @@ object TypedAggregateExpression {
     // serialization.
     val isSimpleBuffer = {
       bufferSerializer.head match {
-        case Alias(_: BoundReference, _)
-          if !bufferEncoder.objSerializer.dataType.isInstanceOf[StructType] => true
+        case Alias(_: BoundReference, _) if !bufferEncoder.isSerializedAsStruct => true
         case _ => false
       }
     }
