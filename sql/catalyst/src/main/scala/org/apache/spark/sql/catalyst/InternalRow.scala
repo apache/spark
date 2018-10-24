@@ -173,9 +173,10 @@ object InternalRow {
     case DecimalType.Fixed(precision, _) =>
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
     case CalendarIntervalType | BinaryType | _: ArrayType | StringType | _: StructType |
-         _: MapType | _: ObjectType | _: UserDefinedType[_] =>
+         _: MapType | _: ObjectType =>
       (input, v) => input.update(ordinal, v)
-    case NullType => (input, v) => {}
+    case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
+    case NullType => (input, _) => input.setNullAt(ordinal)
     case _ => throw new SparkException(s"Unsupported data type $dt")
   }
 }
