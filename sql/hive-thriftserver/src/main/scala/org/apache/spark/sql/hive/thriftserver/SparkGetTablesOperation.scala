@@ -98,18 +98,16 @@ private[hive] class SparkGetTablesOperation(
     matchingDbs.foreach { dbName =>
       catalog.listTables(dbName, tablePattern).foreach { tableIdentifier =>
         val catalogTable = catalog.getTableMetadata(tableIdentifier)
-
-        val rowData = Array[AnyRef](
-          "",
-          catalogTable.database,
-          catalogTable.identifier.table,
-          sparkToClientMapping.get(catalogTable.tableType),
-          catalogTable.comment)
-
-        if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(
-          sparkToClientMapping.get(catalogTable.tableType))) {
+        val tableType = sparkToClientMapping(catalogTable.tableType)
+        if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(tableType)) {
+          val rowData = Array[AnyRef](
+            "",
+            catalogTable.database,
+            catalogTable.identifier.table,
+            tableType,
+            catalogTable.comment.getOrElse(""))
           rowSet.addRow(rowData)
-         }
+        }
       }
     }
 
