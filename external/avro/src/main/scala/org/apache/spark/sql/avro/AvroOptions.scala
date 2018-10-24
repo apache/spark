@@ -20,7 +20,8 @@ package org.apache.spark.sql.avro
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -78,5 +79,24 @@ class AvroOptions(
    */
   val compression: String = {
     parameters.get("compression").getOrElse(SQLConf.get.avroCompressionCodec)
+  }
+
+  @transient private val acceptableParseMode = Seq(PermissiveMode, FailFastMode)
+
+  val parseMode: ParseMode = {
+    val mode = parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
+    assert(acceptableParseMode.contains(mode),
+      s"Acceptable modes are ${acceptableParseMode.map(_.name).mkString(",")}.")
+    mode
+  }
+}
+
+object AvroOptions {
+  def apply(parameters: Map[String, String]): AvroOptions = {
+    val hadoopConf = SparkSession
+      .getActiveSession
+      .map(_.sessionState.newHadoopConf())
+      .getOrElse(new Configuration())
+    new AvroOptions(CaseInsensitiveMap(parameters), hadoopConf)
   }
 }

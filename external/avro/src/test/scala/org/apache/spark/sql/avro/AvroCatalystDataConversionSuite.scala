@@ -17,14 +17,19 @@
 
 package org.apache.spark.sql.avro
 
+import org.apache.avro.Schema
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.RandomDataGenerator
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalHelper {
+class AvroCatalystDataConversionSuite extends SparkFunSuite
+  with SharedSQLContext
+  with ExpressionEvalHelper {
 
   private def roundTripTest(data: Literal): Unit = {
     val avroType = SchemaConverters.toAvroType(data.dataType, data.nullable)
@@ -32,15 +37,29 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
   }
 
   private def checkResult(data: Literal, schema: String, expected: Any): Unit = {
-    checkEvaluation(
-      AvroDataToCatalyst(CatalystDataToAvro(data), schema),
-      prepareExpectedResult(expected))
+    Seq("FAILFAST", "PERMISSIVE").foreach { mode =>
+      checkEvaluation(
+        AvroDataToCatalyst(CatalystDataToAvro(data), schema, Map("mode" -> mode)),
+        prepareExpectedResult(expected))
+    }
   }
 
-  private def assertFail(data: Literal, schema: String): Unit = {
-    intercept[java.io.EOFException] {
-      AvroDataToCatalyst(CatalystDataToAvro(data), schema).eval()
+  protected def checkUnsupportedRead(data: Literal, schema: String): Unit = {
+    val binary = CatalystDataToAvro(data)
+    intercept[Exception] {
+      AvroDataToCatalyst(binary, schema, Map("mode" -> "FAILFAST")).eval()
     }
+
+    val expected = {
+      val avroSchema = new Schema.Parser().parse(schema)
+      SchemaConverters.toSqlType(avroSchema).dataType match {
+        case st: StructType => Row.fromSeq((0 until st.length).map(_ => null))
+        case _ => null
+      }
+    }
+
+    checkEvaluation(AvroDataToCatalyst(binary, schema, Map("mode" -> "PERMISSIVE")),
+      expected)
   }
 
   private val testingTypes = Seq(
@@ -121,7 +140,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
        """.stripMargin
 
     // When read int as string, avro reader is not able to parse the binary and fail.
-    assertFail(data, avroTypeJson)
+    checkUnsupportedRead(data, avroTypeJson)
   }
 
   test("read string as int") {
@@ -151,7 +170,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
 
     // When read float data as double, avro reader fails(trying to read 8 bytes while the data have
     // only 4 bytes).
-    assertFail(data, avroTypeJson)
+    checkUnsupportedRead(data, avroTypeJson)
   }
 
   test("read double as float") {
@@ -166,5 +185,31 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalH
 
     // avro reader reads the first 4 bytes of a double as a float, the result is totally undefined.
     checkResult(data, avroTypeJson, 5.848603E35f)
+  }
+
+  test("Random invalid complex input") {
+    val seed = scala.util.Random.nextLong()
+    val rand = new scala.util.Random(seed)
+    val actualTypes = Seq(
+      IntegerType,
+      LongType,
+      FloatType
+    )
+
+    val expectedTypes = Seq(
+      StringType,
+      DoubleType
+    )
+
+    for(_ <- 1 to 5) {
+      val actualSchema = RandomDataGenerator.randomSchema(rand, 3, actualTypes)
+      val expectedSchema = RandomDataGenerator.randomSchema(rand, 3, expectedTypes)
+
+      val data = RandomDataGenerator.randomRow(rand, actualSchema)
+      val converter = CatalystTypeConverters.createToCatalystConverter(actualSchema)
+      val input = Literal.create(converter(data), actualSchema)
+      val avroSchema = SchemaConverters.toAvroType(expectedSchema)
+      checkUnsupportedRead(input, avroSchema.toString)
+    }
   }
 }

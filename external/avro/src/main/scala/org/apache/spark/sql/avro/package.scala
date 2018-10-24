@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.annotation.Experimental
 
 package object avro {
+
   /**
    * Converts a binary column of avro format into its corresponding catalyst value. The specified
    * schema must match the read data, otherwise the behavior is undefined: it may fail or return
@@ -31,9 +32,31 @@ package object avro {
    * @since 2.4.0
    */
   @Experimental
-  def from_avro(data: Column, jsonFormatSchema: String): Column = {
-    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema))
+  def from_avro(
+      data: Column,
+      jsonFormatSchema: String): Column = {
+    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, Map.empty))
   }
+
+  /**
+   * Converts a binary column of avro format into its corresponding catalyst value. The specified
+   * schema must match the read data, otherwise the behavior is undefined: it may fail or return
+   * arbitrary result.
+   *
+   * @param data the binary column.
+   * @param jsonFormatSchema the avro schema in JSON string format.
+   * @param options options to control how the Avro record is parsed.
+   *
+   * @since 2.4.0
+   */
+  @Experimental
+  def from_avro(
+      data: Column,
+      jsonFormatSchema: String,
+      options: Map[String, String]): Column = {
+    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, options))
+  }
+
 
   /**
    * Converts a column into binary of avro format.
