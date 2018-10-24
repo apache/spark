@@ -550,7 +550,12 @@ final class ShuffleBlockFetcherIterator(
 
   private def throwFetchFailedException(blockId: BlockId, address: BlockManagerId, e: Throwable) = {
     blockId match {
-      case blockId: ShuffleBlockIdBase =>
+      case blockId: ContinuousShuffleBlockId =>
+        val message = "If external shuffle service is lower than 3.0, " +
+          "please update it or set spark.shuffle.continuousBlockBatchFetch false"
+        throw new FetchFailedException(
+          address, blockId.shuffleId, blockId.mapId, blockId.reduceId, message, e)
+      case blockId: ShuffleBlockId =>
         throw new FetchFailedException(
           address, blockId.shuffleId, blockId.mapId, blockId.reduceId, e)
       case _ =>

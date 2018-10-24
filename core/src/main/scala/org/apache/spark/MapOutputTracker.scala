@@ -283,6 +283,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 
   protected def supportsContinuousBlockBatchFetch(serializerRelocatable: Boolean): Boolean = {
+    if (!conf.getBoolean("spark.shuffle.continuousBlockBatchFetch", true)) {
+      return false
+    }
+
     if (!serializerRelocatable) {
       false
     } else {
