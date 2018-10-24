@@ -113,6 +113,10 @@ object TestingUDT {
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
 
+  // A helper method used to test `ScalaReflection.serializerForType`.
+  private def serializerFor[T: TypeTag]: Expression =
+    serializerForType(ScalaReflection.localTypeOf[T])
+
   // A helper method used to test `ScalaReflection.deserializerForType`.
   private def deserializerFor[T: TypeTag]: Expression =
     deserializerForType(ScalaReflection.localTypeOf[T])
@@ -268,7 +272,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
 
   test("SPARK-15062: Get correct serializer for List[_]") {
     val list = List(1, 2, 3)
-    val serializer = serializerForType(ScalaReflection.localTypeOf[List[Int]])
+    val serializer = serializerFor[List[Int]]
     assert(serializer.isInstanceOf[NewInstance])
     assert(serializer.asInstanceOf[NewInstance]
       .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
@@ -281,14 +285,14 @@ class ScalaReflectionSuite extends SparkFunSuite {
 
   test("serialize and deserialize arbitrary sequence types") {
     import scala.collection.immutable.Queue
-    val queueSerializer = serializerForType(ScalaReflection.localTypeOf[Queue[Int]])
+    val queueSerializer = serializerFor[Queue[Int]]
     assert(queueSerializer.dataType ==
       ArrayType(IntegerType, containsNull = false))
     val queueDeserializer = deserializerFor[Queue[Int]]
     assert(queueDeserializer.dataType == ObjectType(classOf[Queue[_]]))
 
     import scala.collection.mutable.ArrayBuffer
-    val arrayBufferSerializer = serializerForType(ScalaReflection.localTypeOf[ArrayBuffer[Int]])
+    val arrayBufferSerializer = serializerFor[ArrayBuffer[Int]]
     assert(arrayBufferSerializer.dataType ==
       ArrayType(IntegerType, containsNull = false))
     val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]]
@@ -296,22 +300,21 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("serialize and deserialize arbitrary map types") {
-    val mapSerializer = serializerForType(ScalaReflection.localTypeOf[Map[Int, Int]])
+    val mapSerializer = serializerFor[Map[Int, Int]]
     assert(mapSerializer.dataType ==
       MapType(IntegerType, IntegerType, valueContainsNull = false))
     val mapDeserializer = deserializerFor[Map[Int, Int]]
     assert(mapDeserializer.dataType == ObjectType(classOf[Map[_, _]]))
 
     import scala.collection.immutable.HashMap
-    val hashMapSerializer = serializerForType(ScalaReflection.localTypeOf[HashMap[Int, Int]])
+    val hashMapSerializer = serializerFor[HashMap[Int, Int]]
     assert(hashMapSerializer.dataType ==
       MapType(IntegerType, IntegerType, valueContainsNull = false))
     val hashMapDeserializer = deserializerFor[HashMap[Int, Int]]
     assert(hashMapDeserializer.dataType == ObjectType(classOf[HashMap[_, _]]))
 
     import scala.collection.mutable.{LinkedHashMap => LHMap}
-    val linkedHashMapSerializer = serializerForType(
-        ScalaReflection.localTypeOf[LHMap[Long, String]])
+    val linkedHashMapSerializer = serializerFor[LHMap[Long, String]]
     assert(linkedHashMapSerializer.dataType ==
       MapType(LongType, StringType, valueContainsNull = true))
     val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]]
@@ -319,7 +322,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-22442: Generate correct field names for special characters") {
-    val serializer = serializerForType(ScalaReflection.localTypeOf[SpecialCharAsFieldData])
+    val serializer = serializerFor[SpecialCharAsFieldData]
       .collect {
         case If(_, _, s: CreateNamedStruct) => s
       }.head
