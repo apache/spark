@@ -60,11 +60,9 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     def expr = prepareEvaluation(expression)
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
-    if (expected != null) {
-      checkEvaluationWithMutableProjection(expr, catalystValue, inputRow)
-      if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-        checkEvaluationWithUnsafeProjection(expr, catalystValue, inputRow)
-      }
+    checkEvaluationWithMutableProjection(expr, catalystValue, inputRow)
+    if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
+      checkEvaluationWithUnsafeProjection(expr, catalystValue, inputRow)
     }
     checkEvaluationWithOptimization(expr, catalystValue, inputRow)
   }

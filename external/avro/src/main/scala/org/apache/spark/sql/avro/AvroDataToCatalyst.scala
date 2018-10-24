@@ -72,7 +72,7 @@ case class AvroDataToCatalyst(
       s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}."
   }
 
-  @transient private lazy val nullResultRow: SpecificInternalRow = dataType match {
+  @transient private lazy val nullResultRow: Any = dataType match {
       case st: StructType =>
         val resultRow = new SpecificInternalRow(st.map(_.dataType))
         for(i <- 0 until st.length) {
@@ -116,7 +116,17 @@ case class AvroDataToCatalyst(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
-    defineCodeGen(ctx, ev, input =>
-      s"(${CodeGenerator.boxedType(dataType)})$expr.nullSafeEval($input)")
+    nullSafeCodeGen(ctx, ev, eval => {
+      val result = ctx.freshName("tempResult")
+      s"""
+        ${CodeGenerator.boxedType(dataType)} $result =
+          (${CodeGenerator.boxedType(dataType)})$expr.nullSafeEval($eval);
+        if ($result == null) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = $result;
+        }
+      """
+    })
   }
 }
