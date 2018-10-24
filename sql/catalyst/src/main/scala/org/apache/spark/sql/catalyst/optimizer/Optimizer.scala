@@ -118,7 +118,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
-      RewriteUnevaluableAggregates,
       RewriteDistinctAggregates,
       ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -207,8 +206,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PullupCorrelatedPredicates.ruleName ::
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
-      PullOutPythonUDFInJoinCondition.ruleName ::
-      RewriteUnevaluableAggregates.ruleName :: Nil
+      PullOutPythonUDFInJoinCondition.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.

@@ -29,23 +29,18 @@ import org.apache.spark.sql.types._
 
 
 /**
- * Finds all [[RuntimeReplaceable]] expressions and replace them with the expressions that can
- * be evaluated. This is mainly used to provide compatibility with other databases.
- * For example, we use this to support "nvl" by replacing it with "coalesce".
+ * Finds all the expressions that are unevaluable and replace/rewrite them with semantically
+ * equivalent expressions that can be evaluated. Currently we replace two kinds of expressions :
+ * 1) [[RuntimeReplaceable]] expressions
+ * 2) [[UnevaluableAggrgate]] expressions such as Every, Some, Any
+ * This is mainly used to provide compatibility with other databases.
+ * Few examples are :
+ *   we use this to support "nvl" by replacing it with "coalesce".
+ *   we use this to replace Every and Any with Min and Max respectively.
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case e: RuntimeReplaceable => e.child
-  }
-}
-
-/**
- * Rewrites the aggregates expressions by replacing them with another. This is mainly used to
- * provide compatibiity with other databases. For example, we use this to support
- * Every, Any/Some by rewriting them to Min, Max respectively.
- */
-object RewriteUnevaluableAggregates extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case SomeAgg(arg) => Max(arg)
     case AnyAgg(arg) => Max(arg)
     case EveryAgg(arg) => Min(arg)

@@ -137,7 +137,7 @@ SELECT any(1L);
 -- input type checking String
 SELECT every("true");
 
--- every/some/any aggregates are not supported as windows expression.
+-- every/some/any aggregates are supported as windows expression.
 SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 SELECT k, v, some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
 SELECT k, v, any(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
