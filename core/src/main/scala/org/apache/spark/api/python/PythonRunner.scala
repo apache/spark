@@ -463,10 +463,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
-        if (reuseWorker) {
-          if (released.compareAndSet(false, true)) {
-            env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
-          }
+        if (reuseWorker && released.compareAndSet(false, true)) {
+          env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
         }
       }
       eos = true
