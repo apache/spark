@@ -572,10 +572,15 @@ case class JsonToStructs(
     val rawParser = new JacksonParser(nullableSchema, parsedOptions, allowArrayAsStructs = false)
     val createParser = CreateJacksonParser.utf8String _
 
+    val parserSchema = nullableSchema match {
+      case s: StructType => s
+      case other => StructType(StructField("value", other) :: Nil)
+    }
+
     new FailureSafeParser[UTF8String](
       input => rawParser.parse(input, createParser, identity[UTF8String]),
       mode,
-      schema,
+      parserSchema,
       parsedOptions.columnNameOfCorruptRecord,
       parsedOptions.multiLine)
   }
