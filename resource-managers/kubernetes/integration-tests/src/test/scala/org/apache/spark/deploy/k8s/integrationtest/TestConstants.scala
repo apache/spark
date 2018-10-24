@@ -25,17 +25,10 @@ object TestConstants {
   val CONFIG_KEY_DEPLOY_MODE = "spark.kubernetes.test.deployMode"
   val CONFIG_KEY_KUBE_CONFIG_CONTEXT = "spark.kubernetes.test.kubeConfigContext"
   val CONFIG_KEY_KUBE_MASTER_URL = "spark.kubernetes.test.master"
-
-
-  /*
-  <spark.kubernetes.test.unpackSparkDir>${project.build.directory}/spark-dist-unpacked</spark.kubernetes.test.unpackSparkDir>
-    <spark.kubernetes.test.imageTag>N/A</spark.kubernetes.test.imageTag>
-    <spark.kubernetes.test.imageTagFile>${project.build.directory}/imageTag.txt</spark.kubernetes.test.imageTagFile>
-    <spark.kubernetes.test.deployMode>minikube</spark.kubernetes.test.deployMode>
-    <spark.kubernetes.test.imageRepo>docker.io/kubespark</spark.kubernetes.test.imageRepo>
-    <spark.kubernetes.test.kubeConfigContext></spark.kubernetes.test.kubeConfigContext>
-    <spark.kubernetes.test.master></spark.kubernetes.test.master>
-    <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
-    <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
-   */
+  val CONFIG_KEY_KUBE_NAMESPACE = "spark.kubernetes.test.namespace"
+  val CONFIG_KEY_KUBE_SVC_ACCOUNT = "spark.kubernetes.test.serviceAccountName"
+  val CONFIG_KEY_IMAGE_TAG = "spark.kubernetes.test.imageTagF"
+  val CONFIG_KEY_IMAGE_TAG_FILE = "spark.kubernetes.test.imageTagFile"
+  val CONFIG_KEY_IMAGE_REPO = "spark.kubernetes.test.imageRepo"
+  val CONFIG_KEY_UNPACK_DIR = "spark.kubernetes.test.unpackSparkDir"
 }

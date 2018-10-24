@@ -100,7 +100,7 @@ then
      *)
        echo "Unrecognized deploy mode $DEPLOY_MODE" && exit 1
        ;;
-  fi
+  esac
   cd -
 fi
 
