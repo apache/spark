@@ -146,7 +146,7 @@ class SessionWindowLinkedListStateSuite extends StreamTest {
     }
   }
 
-  test("get all pairs") {
+  test("get all pairs, iterate pointers, find first") {
     withSessionWindowLinkedListState(inputValueAttribs, keyExprs) { state =>
       implicit val st = state
       assert(numRows === 0)
@@ -173,6 +173,36 @@ class SessionWindowLinkedListStateSuite extends StreamTest {
       assert(groupedTuples(20).map(_._2) === Seq(1, 2, 3, 4))
       assert(groupedTuples(30).map(_._2) === Seq(5, 6, 7, 8))
       assert(groupedTuples(40).map(_._2) === Seq(10, 11, 12, 13))
+
+      // iterate pointers
+
+      val expected = Seq((1, None, Some(2)), (2, Some(1), Some(3)), (3, Some(2), Some(4)),
+        (4, Some(3), None))
+      expected.foreach { case (current, expectedPrev, expectedNext) =>
+        assert(getPrevTime(20, current) == expectedPrev)
+        assert(getNextTime(20, current) == expectedNext)
+      }
+
+      assert(iterateTimes(20).toSeq === expected.map(s => (s._1, s._2, s._3)))
+
+      // against non-exist key
+      assert(iterateTimes(100).toSeq === Seq.empty)
+
+      // find first
+
+      assert(findFirstTime(20, time => time > 0) === Some(1))
+      assert(findFirstTime(20, time => time > 3) === Some(4))
+      assert(findFirstTime(20, time => time > 5) === None)
+
+      // using start time to skip elements
+      assert(findFirstTime(20, time => time > 0, startTime = 3) === Some(3))
+      assert(findFirstTime(20, time => time > 3, startTime = 1) === Some(4))
+      intercept[IllegalArgumentException] {
+        findFirstTime(20, time => time > 3, startTime = 7)
+      }
+
+      // against non-exist key
+      assert(findFirstTime(100, time => time > 1) === None)
     }
   }
 
@@ -268,6 +298,37 @@ class SessionWindowLinkedListStateSuite extends StreamTest {
 
   def get(key: Int)(implicit state: SessionWindowLinkedListState): Seq[Int] = {
     state.get(toKeyRow(key)).map(toValueInt).toSeq
+  }
+
+  def iterateTimes(key: Int)(implicit state: SessionWindowLinkedListState)
+    : Iterator[(Int, Option[Int], Option[Int])] = {
+    state.iteratePointers(toKeyRow(key)).map { s =>
+      (s._1.toInt, s._2.map(_.toInt), s._3.map(_.toInt))
+    }
+  }
+
+  def getPrevTime(key: Int, time: Int)(implicit state: SessionWindowLinkedListState)
+    : Option[Int] = {
+    state.getPrevSessionStart(toKeyRow(key), time).map(_.toInt)
+  }
+
+  def getNextTime(key: Int, time: Int)(implicit state: SessionWindowLinkedListState)
+    : Option[Int] = {
+    state.getNextSessionStart(toKeyRow(key), time).map(_.toInt)
+  }
+
+  def findFirstTime(key: Int, predicate: Int => Boolean)
+                   (implicit state: SessionWindowLinkedListState): Option[Int] = {
+    val ret = state.findFirstSessionStartEnsurePredicate(
+      toKeyRow(key), (s: Long) => predicate.apply(s.intValue()))
+    ret.map(_.intValue())
+  }
+
+  def findFirstTime(key: Int, predicate: Int => Boolean, startTime: Int)
+                   (implicit state: SessionWindowLinkedListState): Option[Int] = {
+    val ret = state.findFirstSessionStartEnsurePredicate(
+      toKeyRow(key), (s: Long) => predicate.apply(s.intValue()), startTime)
+    ret.map(_.intValue())
   }
 
   def getAllRowPairs(implicit state: SessionWindowLinkedListState): Seq[(Int, Int)] = {

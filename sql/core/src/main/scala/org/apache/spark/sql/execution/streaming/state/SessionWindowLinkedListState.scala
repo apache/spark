@@ -76,6 +76,34 @@ class SessionWindowLinkedListState(
     keyAndSessionStartToValueStore.get(key, sessionStart)
   }
 
+  def iteratePointers(key: UnsafeRow): Iterator[(Long, Option[Long], Option[Long])] = {
+    keyToHeadSessionStartStore.get(key) match {
+      case Some(headSessionStart) =>
+        new NextIterator[(Long, Option[Long], Option[Long])] {
+          var curSessionStart: Option[Long] = Some(headSessionStart)
+
+          override protected def getNext(): (Long, Option[Long], Option[Long]) = {
+            curSessionStart match {
+              case Some(sessionStart) =>
+                val ret = keyAndSessionStartToPointerStore.get(key, sessionStart)
+                assertValidPointer(ret)
+                curSessionStart = ret._2
+                (sessionStart, ret._1, ret._2)
+
+              case None =>
+                finished = true
+                null
+            }
+          }
+
+          override protected def close(): Unit = {}
+        }
+
+      case None =>
+        Seq.empty[(Long, Option[Long], Option[Long])].iterator
+    }
+  }
+
   def setHead(key: UnsafeRow, sessionStart: Long, value: UnsafeRow): Unit = {
     require(keyToHeadSessionStartStore.get(key).isEmpty, "Head should not be exist.")
 
@@ -135,6 +163,55 @@ class SessionWindowLinkedListState(
     assertValidPointer(targetPointer)
 
     keyAndSessionStartToValueStore.put(key, sessionStart, newValue)
+  }
+
+  def isEmpty(key: UnsafeRow): Boolean = {
+    keyToHeadSessionStartStore.get(key).isEmpty
+  }
+
+  def findFirstSessionStartEnsurePredicate(key: UnsafeRow, predicate: Long => Boolean,
+                                           startIndex: Long): Option[Long] = {
+
+    val pointers = keyAndSessionStartToPointerStore.get(key, startIndex)
+    assertValidPointer(pointers)
+
+    var currentSessionStart: Option[Long] = Some(startIndex)
+    var ret: Option[Long] = None
+    var found = false
+
+    while (!found && currentSessionStart.isDefined) {
+      val cur = currentSessionStart.get
+      if (predicate.apply(cur)) {
+        ret = Some(cur)
+        found = true
+      } else {
+        currentSessionStart = getNextSessionStart(key, cur)
+      }
+    }
+
+    ret
+  }
+
+  def findFirstSessionStartEnsurePredicate(key: UnsafeRow, predicate: Long => Boolean)
+    : Option[Long] = {
+    val head = keyToHeadSessionStartStore.get(key)
+    if (head.isEmpty) {
+      return None
+    }
+
+    findFirstSessionStartEnsurePredicate(key, predicate, head.get)
+  }
+
+  def getPrevSessionStart(key: UnsafeRow, sessionStart: Long): Option[Long] = {
+    val pointers = keyAndSessionStartToPointerStore.get(key, sessionStart)
+    assertValidPointer(pointers)
+    pointers._1
+  }
+
+  def getNextSessionStart(key: UnsafeRow, sessionStart: Long): Option[Long] = {
+    val pointers = keyAndSessionStartToPointerStore.get(key, sessionStart)
+    assertValidPointer(pointers)
+    pointers._2
   }
 
   def remove(key: UnsafeRow, sessionStart: Long): Unit = {
