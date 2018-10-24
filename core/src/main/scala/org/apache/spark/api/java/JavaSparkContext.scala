@@ -21,6 +21,7 @@ import java.io.Closeable
 import java.util
 import java.util.{Map => JMap}
 
+import scala.annotation.varargs
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -33,7 +34,7 @@ import org.apache.spark._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
-import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
+import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD}
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
@@ -42,8 +43,7 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
  * Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before
  * creating a new one.  This limitation may eventually be removed; see SPARK-2243 for more details.
  */
-class JavaSparkContext(val sc: SparkContext)
-  extends JavaSparkContextVarargsWorkaround with Closeable {
+class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   /**
    * Create a JavaSparkContext that loads settings from system properties (for instance, when
@@ -506,27 +506,29 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaNewHadoopRDD(rdd.asInstanceOf[NewHadoopRDD[K, V]])
   }
 
-  /** Build the union of two or more RDDs. */
-  override def union[T](first: JavaRDD[T], rest: java.util.List[JavaRDD[T]]): JavaRDD[T] = {
-    val rdds: Seq[RDD[T]] = (Seq(first) ++ rest.asScala).map(_.rdd)
-    implicit val ctag: ClassTag[T] = first.classTag
-    sc.union(rdds)
+  /** Build the union of JavaRDDs. */
+  @varargs
+  def union[T](rdds: JavaRDD[T]*): JavaRDD[T] = {
+    require(rdds.nonEmpty, "Union called on no RDDs")
+    implicit val ctag: ClassTag[T] = rdds.head.classTag
+    sc.union(rdds.map(_.rdd))
   }
 
-  /** Build the union of two or more RDDs. */
-  override def union[K, V](first: JavaPairRDD[K, V], rest: java.util.List[JavaPairRDD[K, V]])
-      : JavaPairRDD[K, V] = {
-    val rdds: Seq[RDD[(K, V)]] = (Seq(first) ++ rest.asScala).map(_.rdd)
-    implicit val ctag: ClassTag[(K, V)] = first.classTag
-    implicit val ctagK: ClassTag[K] = first.kClassTag
-    implicit val ctagV: ClassTag[V] = first.vClassTag
-    new JavaPairRDD(sc.union(rdds))
+  /** Build the union of JavaPairRDDs. */
+  @varargs
+  def union[K, V](rdds: JavaPairRDD[K, V]*): JavaPairRDD[K, V] = {
+    require(rdds.nonEmpty, "Union called on no RDDs")
+    implicit val ctag: ClassTag[(K, V)] = rdds.head.classTag
+    implicit val ctagK: ClassTag[K] = rdds.head.kClassTag
+    implicit val ctagV: ClassTag[V] = rdds.head.vClassTag
+    new JavaPairRDD(sc.union(rdds.map(_.rdd)))
   }
 
-  /** Build the union of two or more RDDs. */
-  override def union(first: JavaDoubleRDD, rest: java.util.List[JavaDoubleRDD]): JavaDoubleRDD = {
-    val rdds: Seq[RDD[Double]] = (Seq(first) ++ rest.asScala).map(_.srdd)
-    new JavaDoubleRDD(sc.union(rdds))
+  /** Build the union of JavaDoubleRDDs. */
+  @varargs
+  def union(rdds: JavaDoubleRDD*): JavaDoubleRDD = {
+    require(rdds.nonEmpty, "Union called on no RDDs")
+    new JavaDoubleRDD(sc.union(rdds.map(_.srdd)))
   }
 
   /**
