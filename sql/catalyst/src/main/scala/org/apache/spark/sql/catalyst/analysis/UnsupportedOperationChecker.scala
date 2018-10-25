@@ -257,6 +257,10 @@ object UnsupportedOperationChecker {
               if (!left.isStreaming && right.isStreaming) {
                 throwError("Left outer join with a streaming DataFrame/Dataset " +
                   "on the right and a static DataFrame/Dataset on the left is not supported")
+              } else if (left.isStreaming && right.isStreaming &&
+                outputMode != InternalOutputModes.Append) {
+                throwError("Left outer join between two streaming DataFrames/Datasets is not " +
+                  s"supported in ${outputMode} output mode, only in Append output mode")
               } else if (left.isStreaming && right.isStreaming) {
                 val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(subPlan)
 
@@ -277,6 +281,10 @@ object UnsupportedOperationChecker {
               if (left.isStreaming && !right.isStreaming) {
                 throwError("Right outer join with a streaming DataFrame/Dataset on the left and " +
                     "a static DataFrame/DataSet on the right not supported")
+              } else if (left.isStreaming && right.isStreaming &&
+                outputMode != InternalOutputModes.Append) {
+                throwError("Right outer join between two streaming DataFrames/Datasets is not " +
+                  s"supported in ${outputMode} output mode, only in Append output mode")
               } else if (left.isStreaming && right.isStreaming) {
                 val isWatermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(subPlan)
 

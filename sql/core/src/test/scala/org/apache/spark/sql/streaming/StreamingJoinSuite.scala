@@ -712,5 +712,29 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       assertNumStateRows(total = 2, updated = 2)
     )
   }
+
+  // Test unsupported mode for outer join
+  test("SPARK-25834 stream stream outer join without Append Mode") {
+    val (leftInput, df1) = setupStream("left", 2)
+    val (rightInput, df2) = setupStream("right", 3)
+    val left = df1.select('key, window('leftTime, "10 second"), 'leftValue)
+    val right = df2.select('key, window('rightTime, "10 second"), 'rightValue.cast("string"))
+
+    Seq("left", "right").foreach(joinType => {
+      val joined = left.join(
+        right,
+        left("key") === right("key")
+          && left("window") === right("window"),
+        joinType)
+        .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
+      val exp = intercept[AnalysisException] {
+        val q = joined.writeStream.format("memory").queryName("testUpdateMode")
+          .outputMode("update").start()
+        q.awaitTermination(10000)
+      }
+      assert(exp.toString.contains("outer join between two streaming DataFrames/Datasets is not " +
+        "supported in Update output mode, only in Append output mode"))
+    })
+  }
 }
 
