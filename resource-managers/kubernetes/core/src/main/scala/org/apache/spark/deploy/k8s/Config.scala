@@ -223,7 +223,7 @@ private[spark] object Config extends Logging {
       .stringConf
       .checkValue(pv => List("2", "3").contains(pv),
         "Ensure that major Python version is either Python2 or Python3")
-      .createWithDefault("2")
+      .createWithDefault("3")
 
   val KUBERNETES_KERBEROS_KRB5_FILE =
     ConfigBuilder("spark.kubernetes.kerberos.krb5.path")
