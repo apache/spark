@@ -34,7 +34,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 import org.fusesource.leveldbjni.internal.NativeDB
@@ -449,7 +449,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               listing.write(info.copy(lastProcessed = newLastScanTime, fileSize = entry.getLen()))
             }
 
-            if (info.fileSize < entry.getLen()) {
+            if (shouldReloadLog(info, entry)) {
               if (info.appId.isDefined && fastInProgressParsing) {
                 // When fast in-progress parsing is on, we don't need to re-parse when the
                 // size changes, but we do need to invalidate any existing UIs.
@@ -539,6 +539,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
+  }
+
+  private[history] def shouldReloadLog(info: LogInfo, entry: FileStatus): Boolean = {
+    var result = info.fileSize < entry.getLen
+    if (!result && info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)) {
+      try {
+        result = Utils.tryWithResource(fs.open(entry.getPath)) { in =>
+          in.getWrappedStream match {
+            case dfsIn: DFSInputStream => info.fileSize < dfsIn.getFileLength
+            case _ => false
+          }
+        }
+      } catch {
+        case e: Exception =>
+          logDebug(s"Failed to check the length for the file : ${info.logPath}", e)
+      }
+    }
+    result
   }
 
   private def cleanAppData(appId: String, attemptId: Option[String], logPath: String): Unit = {
