@@ -101,8 +101,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   /** List of test cases to ignore, in lower cases. */
   private val blackList = Set(
     "blacklist.sql",  // Do NOT remove this one. It is here to test the blacklist functionality.
-    ".DS_Store"       // A meta-file that may be created on Mac by Finder App.
+    ".DS_Store",       // A meta-file that may be created on Mac by Finder App.
                       // We should ignore this file from processing.
+    "mapZipWith.sql"
   )
 
   // Create all the test cases.

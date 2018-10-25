@@ -414,7 +414,6 @@ object FunctionRegistry {
     expression[MapFromArrays]("map_from_arrays"),
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
-    expression[MapEntries]("map_entries"),
     expression[MapFromEntries]("map_from_entries"),
     expression[MapConcat]("map_concat"),
     expression[Size]("size"),

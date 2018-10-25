@@ -509,7 +509,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("map_entries") {
+  ignore("map_entries") {
     // Primitive-type elements
     val idf = Seq(
       Map[Int, Int](1 -> 100, 2 -> 200, 3 -> 300),
@@ -2070,7 +2070,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex3.getMessage.contains("cannot resolve '`a`'"))
   }
 
-  test("map_filter") {
+  ignore("map_filter") {
     val dfInts = Seq(
       Map(1 -> 10, 2 -> 20, 3 -> 30),
       Map(1 -> -1, 2 -> -2, 3 -> -3),
@@ -2449,7 +2449,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex5.getMessage.contains("cannot resolve '`a`'"))
   }
 
-  test("map_zip_with function - map of primitive types") {
+  ignore("map_zip_with function - map of primitive types") {
     val df = Seq(
       (Map(8 -> 6L, 3 -> 5L, 6 -> 2L), Map[Integer, Integer]((6, 4), (8, 2), (3, 2))),
       (Map(10 -> 6L, 8 -> 3L), Map[Integer, Integer]((8, 4), (4, null))),
@@ -2465,7 +2465,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null)))
   }
 
-  test("map_zip_with function - map of non-primitive types") {
+  ignore("map_zip_with function - map of non-primitive types") {
     val df = Seq(
       (Map("z" -> "a", "y" -> "b", "x" -> "c"), Map("x" -> "a", "z" -> "c")),
       (Map("b" -> "a", "c" -> "d"), Map("c" -> "a", "b" -> null, "d" -> "k")),
@@ -2481,7 +2481,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null)))
   }
 
-  test("map_zip_with function - invalid") {
+  ignore("map_zip_with function - invalid") {
     val df = Seq(
       (Map(1 -> 2), Map(1 -> "a"), Map("a" -> "b"), Map(Map(1 -> 2) -> 2), 1)
     ).toDF("mii", "mis", "mss", "mmi", "i")
@@ -2513,7 +2513,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(ex5.getMessage.contains("function map_zip_with does not support ordering on type map"))
   }
 
-  test("transform keys function - primitive data types") {
+  ignore("transform keys function - primitive data types") {
     val dfExample1 = Seq(
       Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
     ).toDF("i")
@@ -2568,7 +2568,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     testMapOfPrimitiveTypesCombination()
   }
 
-  test("transform keys function - Invalid lambda functions and exceptions") {
+  ignore("transform keys function - Invalid lambda functions and exceptions") {
     val dfExample1 = Seq(
       Map[String, String]("a" -> null)
     ).toDF("i")
@@ -2600,7 +2600,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       "data type mismatch: argument 1 requires map type"))
   }
 
-  test("transform values function - test primitive data types") {
+  ignore("transform values function - test primitive data types") {
     val dfExample1 = Seq(
       Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
     ).toDF("i")
@@ -2670,7 +2670,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     testMapOfPrimitiveTypesCombination()
   }
 
-  test("transform values function - test empty") {
+  ignore("transform values function - test empty") {
     val dfExample1 = Seq(
       Map.empty[Integer, Integer]
     ).toDF("i")
@@ -2708,7 +2708,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     testEmpty()
   }
 
-  test("transform values function - test null values") {
+  ignore("transform values function - test null values") {
     val dfExample1 = Seq(
       Map[Int, Integer](1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4)
     ).toDF("a")
@@ -2732,7 +2732,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     testNullValue()
   }
 
-  test("transform values function - test invalid functions") {
+  ignore("transform values function - test invalid functions") {
     val dfExample1 = Seq(
       Map[Int, Int](1 -> 1, 9 -> 9, 8 -> 8, 7 -> 7)
     ).toDF("i")
