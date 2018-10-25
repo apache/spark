@@ -214,6 +214,32 @@ class SessionWindowLinkedListState(
     pointers._2
   }
 
+  // FIXME: cover with test cases
+  def getFirstSessionStart(key: UnsafeRow): Option[Long] = {
+    keyToHeadSessionStartStore.get(key)
+  }
+
+  // FIXME: cover with test cases
+  def getLastSessionStart(key: UnsafeRow): Option[Long] = {
+    getFirstSessionStart(key) match {
+      case Some(start) => getLastSessionStart(key, start)
+      case None => None
+    }
+  }
+
+  // FIXME: cover with test cases
+  def getLastSessionStart(key: UnsafeRow, startIndex: Long): Option[Long] = {
+    val pointers = keyAndSessionStartToPointerStore.get(key, startIndex)
+    assertValidPointer(pointers)
+
+    var lastSessionStart = startIndex
+    while (getNextSessionStart(key, lastSessionStart).isDefined) {
+      lastSessionStart = getNextSessionStart(key, lastSessionStart).get
+    }
+
+    Some(lastSessionStart)
+  }
+
   def remove(key: UnsafeRow, sessionStart: Long): Unit = {
     val targetPointer = keyAndSessionStartToPointerStore.get(key, sessionStart)
     assertValidPointer(targetPointer)
@@ -441,7 +467,7 @@ class SessionWindowLinkedListState(
 
   private def assertValidPointer(targetPointer: (Option[Long], Option[Long])): Unit = {
     if (targetPointer == null) {
-      throw new IllegalArgumentException("Update must be against existing session start.")
+      throw new IllegalArgumentException("Invalid pointer is provided.")
     }
   }
 
