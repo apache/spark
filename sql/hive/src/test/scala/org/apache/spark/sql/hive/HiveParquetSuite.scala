@@ -94,16 +94,16 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
   }
 
   test("SPARK-25271: write empty map into hive parquet table") {
-    val testData = hiveContext.getHiveFile("data/files/empty_map.dat").getCanonicalFile()
-    val sourceTable = "sourceTable"
-    val targetTable = "targetTable"
-    withTable(sourceTable, targetTable) {
-      sql(s"CREATE TABLE $sourceTable (i int,m map<int, string>) ROW FORMAT DELIMITED FIELDS " +
-        "TERMINATED BY ',' COLLECTION ITEMS TERMINATED BY ':' MAP KEYS TERMINATED BY '$'")
-      sql(s"LOAD DATA LOCAL INPATH '${testData.toURI}' INTO TABLE $sourceTable")
-      sql(s"CREATE TABLE $targetTable STORED AS PARQUET AS SELECT m FROM $sourceTable")
-      checkAnswer(sql(s"SELECT m FROM $targetTable"),
-        Row(Map(1 -> "abc2$pqr", 3 -> "xyz")) :: Row(Map.empty[Int, String]) :: Nil)
+    import testImplicits._
+
+    Seq(Map(1 -> "a"), Map.empty[Int, String]).toDF("m").createOrReplaceTempView("p")
+    withTempView("p") {
+      val targetTable = "targetTable"
+      withTable(targetTable) {
+        sql(s"CREATE TABLE $targetTable STORED AS PARQUET AS SELECT m FROM p")
+        checkAnswer(sql(s"SELECT m FROM $targetTable"),
+          Row(Map(1 -> "a")) :: Row(Map.empty[Int, String]) :: Nil)
+      }
     }
   }
 }
