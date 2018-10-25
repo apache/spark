@@ -43,7 +43,9 @@ notifications:
 
 before_install:
   - unset SBT_OPTS JVM_OPTS
-  
+  - wget -P $HOME/.m2/repository/yaooqinn/spark-authorizer/2.0.0 http://dl.bintray.com/spark-packages/maven/yaooqinn/spark-authorizer/2.0.0/spark-authorizer-2.0.0.jar
+  - wget -P $HOME/.m2/repository/yaooqinn/spark-authorizer/2.0.0 http://dl.bintray.com/spark-packages/maven/yaooqinn/spark-authorizer/2.0.0/spark-authorizer-2.0.0.pom
+
 # 5. Run maven install before running lint-java.
 install:
   - build/sbt -Phadoop-2.7 -Pyarn -Pkafka-0-8 -Phive assembly/package test:package | grep -v  "^.*[info].*Resolving"
