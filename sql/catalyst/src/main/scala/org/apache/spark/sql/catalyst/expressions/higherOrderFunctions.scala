@@ -261,56 +261,6 @@ case class ArrayTransform(
 }
 
 /**
- * Filters entries in a map using the provided function.
- */
-@ExpressionDescription(
-usage = "_FUNC_(expr, func) - Filters entries in a map using the function.",
-examples = """
-    Examples:
-      > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
-       {1:0,3:-1}
-  """,
-since = "2.4.0")
-case class MapFilter(
-    argument: Expression,
-    function: Expression)
-  extends MapBasedSimpleHigherOrderFunction with CodegenFallback {
-
-  @transient lazy val (keyVar, valueVar) = {
-    val args = function.asInstanceOf[LambdaFunction].arguments
-    (args.head.asInstanceOf[NamedLambdaVariable], args.tail.head.asInstanceOf[NamedLambdaVariable])
-  }
-
-  @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
-
-  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): MapFilter = {
-    copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
-  }
-
-  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
-    val m = argumentValue.asInstanceOf[MapData]
-    val f = functionForEval
-    val retKeys = new mutable.ListBuffer[Any]
-    val retValues = new mutable.ListBuffer[Any]
-    m.foreach(keyType, valueType, (k, v) => {
-      keyVar.value.set(k)
-      valueVar.value.set(v)
-      if (f.eval(inputRow).asInstanceOf[Boolean]) {
-        retKeys += k
-        retValues += v
-      }
-    })
-    ArrayBasedMapData(retKeys.toArray, retValues.toArray)
-  }
-
-  override def dataType: DataType = argument.dataType
-
-  override def functionType: AbstractDataType = BooleanType
-
-  override def prettyName: String = "map_filter"
-}
-
-/**
  * Filters the input array using the given lambda function.
  */
 @ExpressionDescription(
