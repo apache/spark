@@ -226,7 +226,9 @@ setMethod("showDF",
 
 #' show
 #'
-#' Print class and type information of a Spark object.
+#' If eager evaluation is enabled and the Spark object is a SparkDataFrame, evaluate the
+#' SparkDataFrame and print top rows of the SparkDataFrame, otherwise, print the class 
+#' and type information of the Spark object.
 #'
 #' @param object a Spark object. Can be a SparkDataFrame, Column, GroupedData, WindowSpec.
 #'
@@ -244,11 +246,33 @@ setMethod("showDF",
 #' @note show(SparkDataFrame) since 1.4.0
 setMethod("show", "SparkDataFrame",
           function(object) {
-            cols <- lapply(dtypes(object), function(l) {
-              paste(l, collapse = ":")
-            })
-            s <- paste(cols, collapse = ", ")
-            cat(paste(class(object), "[", s, "]\n", sep = ""))
+            allConf <- sparkR.conf()
+            prop <- allConf[["spark.sql.repl.eagerEval.enabled"]]
+            if (!is.null(prop) && identical(prop, "true")) {
+              argsList <- list()
+              argsList$x <- object
+              prop <- allConf[["spark.sql.repl.eagerEval.maxNumRows"]]
+              if (!is.null(prop)) {
+                numRows <- as.integer(prop)
+                if (numRows > 0) {
+                  argsList$numRows <- numRows
+                }
+              }
+              prop <- allConf[["spark.sql.repl.eagerEval.truncate"]]
+              if (!is.null(prop)) {
+                truncate <- as.integer(prop)
+                if (truncate > 0) {
+                  argsList$truncate <- truncate
+                }
+              }
+              do.call(showDF, argsList)
+            } else {
+              cols <- lapply(dtypes(object), function(l) {
+                paste(l, collapse = ":")
+              })
+              s <- paste(cols, collapse = ", ")
+              cat(paste(class(object), "[", s, "]\n", sep = ""))
+            }
           })
 
 #' DataTypes

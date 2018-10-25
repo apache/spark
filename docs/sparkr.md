@@ -450,6 +450,48 @@ print(model.summaries)
 {% endhighlight %}
 </div>
 
+### Eager execution
+
+If eager execution is enabled, the data will be returned to R client immediately when the `SparkDataFrame` is created. By default, eager execution is not enabled and can be enabled by setting the configuration property `spark.sql.repl.eagerEval.enabled` to `true` when the `SparkSession` is started up.
+
+Maximum number of rows and maximum number of characters per column of data to display can be controlled by `spark.sql.repl.eagerEval.maxNumRows` and `spark.sql.repl.eagerEval.truncate` configuration properties, respectively. These properties are only effective when eager execution is enabled. If these properties are not set explicitly, by default, data up to 20 rows and up to 20 characters per column will be showed.
+
+<div data-lang="r" markdown="1">
+{% highlight r %}
+
+# Start up spark session with eager execution enabled
+sparkR.session(master = "local[*]",
+               sparkConfig = list(spark.sql.repl.eagerEval.enabled = "true",
+                                  spark.sql.repl.eagerEval.maxNumRows = as.integer(10)))
+
+# Create a grouped and sorted SparkDataFrame
+df <- createDataFrame(faithful)
+df2 <- arrange(summarize(groupBy(df, df$waiting), count = n(df$waiting)), "waiting")
+
+# Similar to R data.frame, displays the data returned, instead of SparkDataFrame class string
+df2
+
+##+-------+-----+
+##|waiting|count|
+##+-------+-----+
+##|   43.0|    1|
+##|   45.0|    3|
+##|   46.0|    5|
+##|   47.0|    4|
+##|   48.0|    3|
+##|   49.0|    5|
+##|   50.0|    5|
+##|   51.0|    6|
+##|   52.0|    5|
+##|   53.0|    7|
+##+-------+-----+
+##only showing top 10 rows
+
+{% endhighlight %} 
+</div>
+
+Note that to enable eager execution in `sparkR` shell, add `spark.sql.repl.eagerEval.enabled=true` configuration property to the `--conf` option.
+
 ## Running SQL Queries from SparkR
 A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data.
 The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
