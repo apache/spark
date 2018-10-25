@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, Literal, SpecificInternalRow, UpCast}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 case class PrimitiveData(
     intField: Int,
@@ -111,6 +112,14 @@ object TestingUDT {
 
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
+
+  // A helper method used to test `ScalaReflection.serializerForType`.
+  private def serializerFor[T: TypeTag]: Expression =
+    serializerForType(ScalaReflection.localTypeOf[T])
+
+  // A helper method used to test `ScalaReflection.deserializerForType`.
+  private def deserializerFor[T: TypeTag]: Expression =
+    deserializerForType(ScalaReflection.localTypeOf[T])
 
   test("SQLUserDefinedType annotation on Scala structure") {
     val schema = schemaFor[TestingUDT.NestedStruct]
@@ -263,13 +272,9 @@ class ScalaReflectionSuite extends SparkFunSuite {
 
   test("SPARK-15062: Get correct serializer for List[_]") {
     val list = List(1, 2, 3)
-    val serializer = serializerFor[List[Int]](BoundReference(
-      0, ObjectType(list.getClass), nullable = false))
-    assert(serializer.children.size == 2)
-    assert(serializer.children.head.isInstanceOf[Literal])
-    assert(serializer.children.head.asInstanceOf[Literal].value === UTF8String.fromString("value"))
-    assert(serializer.children.last.isInstanceOf[NewInstance])
-    assert(serializer.children.last.asInstanceOf[NewInstance]
+    val serializer = serializerFor[List[Int]]
+    assert(serializer.isInstanceOf[NewInstance])
+    assert(serializer.asInstanceOf[NewInstance]
       .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
   }
 
@@ -280,59 +285,58 @@ class ScalaReflectionSuite extends SparkFunSuite {
 
   test("serialize and deserialize arbitrary sequence types") {
     import scala.collection.immutable.Queue
-    val queueSerializer = serializerFor[Queue[Int]](BoundReference(
-      0, ObjectType(classOf[Queue[Int]]), nullable = false))
-    assert(queueSerializer.dataType.head.dataType ==
+    val queueSerializer = serializerFor[Queue[Int]]
+    assert(queueSerializer.dataType ==
       ArrayType(IntegerType, containsNull = false))
     val queueDeserializer = deserializerFor[Queue[Int]]
     assert(queueDeserializer.dataType == ObjectType(classOf[Queue[_]]))
 
     import scala.collection.mutable.ArrayBuffer
-    val arrayBufferSerializer = serializerFor[ArrayBuffer[Int]](BoundReference(
-      0, ObjectType(classOf[ArrayBuffer[Int]]), nullable = false))
-    assert(arrayBufferSerializer.dataType.head.dataType ==
+    val arrayBufferSerializer = serializerFor[ArrayBuffer[Int]]
+    assert(arrayBufferSerializer.dataType ==
       ArrayType(IntegerType, containsNull = false))
     val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]]
     assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
   }
 
   test("serialize and deserialize arbitrary map types") {
-    val mapSerializer = serializerFor[Map[Int, Int]](BoundReference(
-      0, ObjectType(classOf[Map[Int, Int]]), nullable = false))
-    assert(mapSerializer.dataType.head.dataType ==
+    val mapSerializer = serializerFor[Map[Int, Int]]
+    assert(mapSerializer.dataType ==
       MapType(IntegerType, IntegerType, valueContainsNull = false))
     val mapDeserializer = deserializerFor[Map[Int, Int]]
     assert(mapDeserializer.dataType == ObjectType(classOf[Map[_, _]]))
 
     import scala.collection.immutable.HashMap
-    val hashMapSerializer = serializerFor[HashMap[Int, Int]](BoundReference(
-      0, ObjectType(classOf[HashMap[Int, Int]]), nullable = false))
-    assert(hashMapSerializer.dataType.head.dataType ==
+    val hashMapSerializer = serializerFor[HashMap[Int, Int]]
+    assert(hashMapSerializer.dataType ==
       MapType(IntegerType, IntegerType, valueContainsNull = false))
     val hashMapDeserializer = deserializerFor[HashMap[Int, Int]]
     assert(hashMapDeserializer.dataType == ObjectType(classOf[HashMap[_, _]]))
 
     import scala.collection.mutable.{LinkedHashMap => LHMap}
-    val linkedHashMapSerializer = serializerFor[LHMap[Long, String]](BoundReference(
-      0, ObjectType(classOf[LHMap[Long, String]]), nullable = false))
-    assert(linkedHashMapSerializer.dataType.head.dataType ==
+    val linkedHashMapSerializer = serializerFor[LHMap[Long, String]]
+    assert(linkedHashMapSerializer.dataType ==
       MapType(LongType, StringType, valueContainsNull = true))
     val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]]
     assert(linkedHashMapDeserializer.dataType == ObjectType(classOf[LHMap[_, _]]))
   }
 
   test("SPARK-22442: Generate correct field names for special characters") {
-    val serializer = serializerFor[SpecialCharAsFieldData](BoundReference(
-      0, ObjectType(classOf[SpecialCharAsFieldData]), nullable = false))
+    val serializer = serializerFor[SpecialCharAsFieldData]
+      .collect {
+        case If(_, _, s: CreateNamedStruct) => s
+      }.head
     val deserializer = deserializerFor[SpecialCharAsFieldData]
     assert(serializer.dataType(0).name == "field.1")
     assert(serializer.dataType(1).name == "field 2")
 
-    val argumentsFields = deserializer.asInstanceOf[NewInstance].arguments.flatMap { _.collect {
-      case UpCast(u: UnresolvedAttribute, _, _) => u.nameParts
+    val newInstance = deserializer.collect { case n: NewInstance => n }.head
+
+    val argumentsFields = newInstance.arguments.flatMap { _.collect {
+      case UpCast(u: UnresolvedExtractValue, _, _) => u.extraction.toString
     }}
-    assert(argumentsFields(0) == Seq("field.1"))
-    assert(argumentsFields(1) == Seq("field 2"))
+    assert(argumentsFields(0) == "field.1")
+    assert(argumentsFields(1) == "field 2")
   }
 
   test("SPARK-22472: add null check for top-level primitive values") {
@@ -351,8 +355,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
 
   test("SPARK-23835: add null check to non-nullable types in Tuples") {
     def numberOfCheckedArguments(deserializer: Expression): Int = {
-      assert(deserializer.isInstanceOf[NewInstance])
-      deserializer.asInstanceOf[NewInstance].arguments.count(_.isInstanceOf[AssertNotNull])
+      val newInstance = deserializer.collect { case n: NewInstance => n}.head
+      newInstance.arguments.count(_.isInstanceOf[AssertNotNull])
     }
     assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
