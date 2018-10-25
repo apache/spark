@@ -54,7 +54,7 @@ object RawNetworkGrep {
       ssc.rawSocketStream[String](host, port, StorageLevel.MEMORY_ONLY_SER_2)).toArray
     val union = ssc.union(rawStreams)
     union.filter(_.contains("the")).count().foreachRDD(r =>
-      println("Grep count: " + r.collect().mkString))
+      println(s"Grep count: ${r.collect().mkString}"))
     ssc.start()
     ssc.awaitTermination()
   }

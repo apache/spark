@@ -86,8 +86,15 @@ private[scheduler] case class ExecutorAdded(execId: String, host: String) extend
 private[scheduler] case class ExecutorLost(execId: String, reason: ExecutorLossReason)
   extends DAGSchedulerEvent
 
+private[scheduler] case class WorkerRemoved(workerId: String, host: String, message: String)
+  extends DAGSchedulerEvent
+
 private[scheduler]
 case class TaskSetFailed(taskSet: TaskSet, reason: String, exception: Option[Throwable])
   extends DAGSchedulerEvent
 
 private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent
+
+private[scheduler]
+case class SpeculativeTaskSubmitted(task: Task[_]) extends DAGSchedulerEvent
+

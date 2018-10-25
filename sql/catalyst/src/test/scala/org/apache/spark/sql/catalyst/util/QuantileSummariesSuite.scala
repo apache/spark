@@ -55,15 +55,25 @@ class QuantileSummariesSuite extends SparkFunSuite {
   }
 
   private def checkQuantile(quant: Double, data: Seq[Double], summary: QuantileSummaries): Unit = {
-    val approx = summary.query(quant)
-    // The rank of the approximation.
-    val rank = data.count(_ < approx) // has to be <, not <= to be exact
-    val lower = math.floor((quant - summary.relativeError) * data.size)
-    val upper = math.ceil((quant + summary.relativeError) * data.size)
-    val msg =
-      s"$rank not in [$lower $upper], requested quantile: $quant, approx returned: $approx"
-    assert(rank >= lower, msg)
-    assert(rank <= upper, msg)
+    if (data.nonEmpty) {
+      val approx = summary.query(quant).get
+      // Get the rank of the approximation.
+      val rankOfValue = data.count(_ <= approx)
+      val rankOfPreValue = data.count(_ < approx)
+      // `rankOfValue` is the last position of the quantile value. If the input repeats the value
+      // chosen as the quantile, e.g. in (1,2,2,2,2,2,3), the 50% quantile is 2, then it's
+      // improper to choose the last position as its rank. Instead, we get the rank by averaging
+      // `rankOfValue` and `rankOfPreValue`.
+      val rank = math.ceil((rankOfValue + rankOfPreValue) / 2.0)
+      val lower = math.floor((quant - summary.relativeError) * data.size)
+      val upper = math.ceil((quant + summary.relativeError) * data.size)
+      val msg =
+        s"$rank not in [$lower $upper], requested quantile: $quant, approx returned: $approx"
+      assert(rank >= lower, msg)
+      assert(rank <= upper, msg)
+    } else {
+      assert(summary.query(quant).isEmpty)
+    }
   }
 
   for {
@@ -74,9 +84,9 @@ class QuantileSummariesSuite extends SparkFunSuite {
 
     test(s"Extremas with epsi=$epsi and seq=$seq_name, compression=$compression") {
       val s = buildSummary(data, epsi, compression)
-      val min_approx = s.query(0.0)
+      val min_approx = s.query(0.0).get
       assert(min_approx == data.min, s"Did not return the min: min=${data.min}, got $min_approx")
-      val max_approx = s.query(1.0)
+      val max_approx = s.query(1.0).get
       assert(max_approx == data.max, s"Did not return the max: max=${data.max}, got $max_approx")
     }
 
@@ -100,6 +110,18 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantile(0.1, data, s)
       checkQuantile(0.001, data, s)
     }
+
+    test(s"Tests on empty data with epsi=$epsi and seq=$seq_name, compression=$compression") {
+      val emptyData = Seq.empty[Double]
+      val s = buildSummary(emptyData, epsi, compression)
+      assert(s.count == 0, s"Found count=${s.count} but data size=0")
+      assert(s.sampled.isEmpty, s"if QuantileSummaries is empty, sampled should be empty")
+      checkQuantile(0.9999, emptyData, s)
+      checkQuantile(0.9, emptyData, s)
+      checkQuantile(0.5, emptyData, s)
+      checkQuantile(0.1, emptyData, s)
+      checkQuantile(0.001, emptyData, s)
+    }
   }
 
   // Tests for merging procedure
@@ -118,9 +140,9 @@ class QuantileSummariesSuite extends SparkFunSuite {
       val s1 = buildSummary(data1, epsi, compression)
       val s2 = buildSummary(data2, epsi, compression)
       val s = s1.merge(s2)
-      val min_approx = s.query(0.0)
+      val min_approx = s.query(0.0).get
       assert(min_approx == data.min, s"Did not return the min: min=${data.min}, got $min_approx")
-      val max_approx = s.query(1.0)
+      val max_approx = s.query(1.0).get
       assert(max_approx == data.max, s"Did not return the max: max=${data.max}, got $max_approx")
       checkQuantile(0.9999, data, s)
       checkQuantile(0.9, data, s)
@@ -137,9 +159,9 @@ class QuantileSummariesSuite extends SparkFunSuite {
       val s1 = buildSummary(data11, epsi, compression)
       val s2 = buildSummary(data12, epsi, compression)
       val s = s1.merge(s2)
-      val min_approx = s.query(0.0)
+      val min_approx = s.query(0.0).get
       assert(min_approx == data.min, s"Did not return the min: min=${data.min}, got $min_approx")
-      val max_approx = s.query(1.0)
+      val max_approx = s.query(1.0).get
       assert(max_approx == data.max, s"Did not return the max: max=${data.max}, got $max_approx")
       checkQuantile(0.9999, data, s)
       checkQuantile(0.9, data, s)

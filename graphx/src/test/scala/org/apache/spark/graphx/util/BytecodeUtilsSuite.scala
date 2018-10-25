@@ -18,6 +18,7 @@
 package org.apache.spark.graphx.util
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.ClosureCleanerSuite2
 
 
 // scalastyle:off println
@@ -26,6 +27,7 @@ class BytecodeUtilsSuite extends SparkFunSuite {
   import BytecodeUtilsSuite.TestClass
 
   test("closure invokes a method") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val c1 = {e: TestClass => println(e.foo); println(e.bar); println(e.baz); }
     assert(BytecodeUtils.invokedMethod(c1, classOf[TestClass], "foo"))
     assert(BytecodeUtils.invokedMethod(c1, classOf[TestClass], "bar"))
@@ -43,6 +45,7 @@ class BytecodeUtilsSuite extends SparkFunSuite {
   }
 
   test("closure inside a closure invokes a method") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val c1 = {e: TestClass => println(e.foo); println(e.bar); println(e.baz); }
     val c2 = {e: TestClass => c1(e); println(e.foo); }
     assert(BytecodeUtils.invokedMethod(c2, classOf[TestClass], "foo"))
@@ -51,6 +54,7 @@ class BytecodeUtilsSuite extends SparkFunSuite {
   }
 
   test("closure inside a closure inside a closure invokes a method") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val c1 = {e: TestClass => println(e.baz); }
     val c2 = {e: TestClass => c1(e); println(e.foo); }
     val c3 = {e: TestClass => c2(e) }
@@ -60,6 +64,7 @@ class BytecodeUtilsSuite extends SparkFunSuite {
   }
 
   test("closure calling a function that invokes a method") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     def zoo(e: TestClass) {
       println(e.baz)
     }
@@ -70,6 +75,7 @@ class BytecodeUtilsSuite extends SparkFunSuite {
   }
 
   test("closure calling a function that invokes a method which uses another closure") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val c2 = {e: TestClass => println(e.baz)}
     def zoo(e: TestClass) {
       c2(e)
@@ -81,6 +87,7 @@ class BytecodeUtilsSuite extends SparkFunSuite {
   }
 
   test("nested closure") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val c2 = {e: TestClass => println(e.baz)}
     def zoo(e: TestClass, c: TestClass => Unit) {
       c(e)

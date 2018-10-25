@@ -39,7 +39,8 @@ def print_err(msg):
 def post_message_to_github(msg, ghprb_pull_id):
     print("Attempting to post to Github...")
 
-    url = "https://api.github.com/repos/apache/spark/issues/" + ghprb_pull_id + "/comments"
+    api_url = os.getenv("GITHUB_API_BASE", "https://api.github.com/repos/apache/spark")
+    url = api_url + "/issues/" + ghprb_pull_id + "/comments"
     github_oauth_key = os.environ["GITHUB_OAUTH_KEY"]
 
     posted_message = json.dumps({"body": msg})
@@ -115,7 +116,8 @@ def run_tests(tests_timeout):
                                          os.path.join(SPARK_HOME, 'dev', 'run-tests')]).wait()
 
     failure_note_by_errcode = {
-        1: 'executing the `dev/run-tests` script',  # error to denote run-tests script failures
+        # error to denote run-tests script failures:
+        1: 'executing the `dev/run-tests` script',
         ERROR_CODES["BLOCK_GENERAL"]: 'some tests',
         ERROR_CODES["BLOCK_RAT"]: 'RAT tests',
         ERROR_CODES["BLOCK_SCALA_STYLE"]: 'Scala style tests',
@@ -130,14 +132,16 @@ def run_tests(tests_timeout):
         ERROR_CODES["BLOCK_PYSPARK_UNIT_TESTS"]: 'PySpark unit tests',
         ERROR_CODES["BLOCK_PYSPARK_PIP_TESTS"]: 'PySpark pip packaging tests',
         ERROR_CODES["BLOCK_SPARKR_UNIT_TESTS"]: 'SparkR unit tests',
-        ERROR_CODES["BLOCK_TIMEOUT"]: 'from timeout after a configured wait of \`%s\`' % (
+        ERROR_CODES["BLOCK_TIMEOUT"]: 'from timeout after a configured wait of `%s`' % (
             tests_timeout)
     }
 
     if test_result_code == 0:
         test_result_note = ' * This patch passes all tests.'
     else:
-        test_result_note = ' * This patch **fails %s**.' % failure_note_by_errcode[test_result_code]
+        note = failure_note_by_errcode.get(
+            test_result_code, "due to an unknown error code, %s" % test_result_code)
+        test_result_note = ' * This patch **fails %s**.' % note
 
     return [test_result_code, test_result_note]
 
@@ -173,14 +177,16 @@ def main():
     build_display_name = os.environ["BUILD_DISPLAY_NAME"]
     build_url = os.environ["BUILD_URL"]
 
-    commit_url = "https://github.com/apache/spark/commit/" + ghprb_actual_commit
+    project_url = os.getenv("SPARK_PROJECT_URL", "https://github.com/apache/spark")
+    commit_url = project_url + "/commit/" + ghprb_actual_commit
 
     # GitHub doesn't auto-link short hashes when submitted via the API, unfortunately. :(
     short_commit_hash = ghprb_actual_commit[0:7]
 
     # format: http://linux.die.net/man/1/timeout
-    # must be less than the timeout configured on Jenkins (currently 300m)
-    tests_timeout = "250m"
+    # must be less than the timeout configured on Jenkins. Usually Jenkins's timeout is higher
+    # then this. Please consult with the build manager or a committer when it should be increased.
+    tests_timeout = "400m"
 
     # Array to capture all test names to run on the pull request. These tests are represented
     # by their file equivalents in the dev/tests/ directory.

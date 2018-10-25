@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util._
 /**
  * A framework for running the query tests that are listed as a set of text files.
  *
- * TestSuites that derive from this class must provide a map of testCaseName -> testCaseFiles
+ * TestSuites that derive from this class must provide a map of testCaseName to testCaseFiles
  * that should be included. Additionally, there is support for whitelisting and blacklisting
  * tests as development progresses.
  */

@@ -9,6 +9,7 @@
     "duration" : 34935,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "",
     "endTimeEpoch" : 1426633945177,
     "startTimeEpoch" : 1426633910242,
     "lastUpdatedEpoch" : 0
@@ -20,6 +21,7 @@
     "duration" : 34935,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "",
     "endTimeEpoch" : 1426533945177,
     "startTimeEpoch" : 1426533910242,
     "lastUpdatedEpoch" : 0

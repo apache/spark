@@ -44,6 +44,7 @@ private[r] class GBTClassifierWrapper private (
   lazy val featureImportances: Vector = gbtcModel.featureImportances
   lazy val numTrees: Int = gbtcModel.getNumTrees
   lazy val treeWeights: Array[Double] = gbtcModel.treeWeights
+  lazy val maxDepth: Int = gbtcModel.getMaxDepth
 
   def summary: String = gbtcModel.toDebugString
 
@@ -77,11 +78,13 @@ private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] 
       seed: String,
       subsamplingRate: Double,
       maxMemoryInMB: Int,
-      cacheNodeIds: Boolean): GBTClassifierWrapper = {
+      cacheNodeIds: Boolean,
+      handleInvalid: String): GBTClassifierWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
       .setForceIndexLabel(true)
+      .setHandleInvalid(handleInvalid)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 

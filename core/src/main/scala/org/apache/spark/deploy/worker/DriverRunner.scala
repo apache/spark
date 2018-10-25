@@ -57,7 +57,8 @@ private[deploy] class DriverRunner(
   @volatile private[worker] var finalException: Option[Exception] = None
 
   // Timeout to wait for when trying to terminate a driver.
-  private val DRIVER_TERMINATE_TIMEOUT_MS = 10 * 1000
+  private val DRIVER_TERMINATE_TIMEOUT_MS =
+    conf.getTimeAsMs("spark.worker.driverTerminateTimeout", "10s")
 
   // Decoupled for testing
   def setClock(_clock: Clock): Unit = {
@@ -224,7 +225,7 @@ private[deploy] class DriverRunner(
       // check if attempting another run
       keepTrying = supervise && exitCode != 0 && !killed
       if (keepTrying) {
-        if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000) {
+        if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000L) {
           waitSeconds = 1
         }
         logInfo(s"Command exited with status $exitCode, re-launching after $waitSeconds s.")

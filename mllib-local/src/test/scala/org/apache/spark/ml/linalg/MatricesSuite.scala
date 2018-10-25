@@ -21,7 +21,7 @@ import java.util.Random
 
 import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
-import org.scalatest.mock.MockitoSugar._
+import org.scalatest.mockito.MockitoSugar._
 import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.ml.SparkMLFunSuite
@@ -160,22 +160,416 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sparseMat.values(2) === 10.0)
   }
 
-  test("toSparse, toDense") {
-    val m = 3
-    val n = 2
-    val values = Array(1.0, 2.0, 4.0, 5.0)
-    val allValues = Array(1.0, 2.0, 0.0, 0.0, 4.0, 5.0)
-    val colPtrs = Array(0, 2, 4)
-    val rowIndices = Array(0, 1, 1, 2)
+  test("dense to dense") {
+    /*
+      dm1 =  4.0 2.0 -8.0
+            -1.0 7.0  4.0
 
-    val spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values)
-    val deMat1 = new DenseMatrix(m, n, allValues)
+      dm2 = 5.0 -9.0  4.0
+            1.0 -3.0 -8.0
+     */
+    val dm1 = new DenseMatrix(2, 3, Array(4.0, -1.0, 2.0, 7.0, -8.0, 4.0))
+    val dm2 = new DenseMatrix(2, 3, Array(5.0, -9.0, 4.0, 1.0, -3.0, -8.0), isTransposed = true)
 
-    val spMat2 = deMat1.toSparse
-    val deMat2 = spMat1.toDense
+    val dm8 = dm1.toDenseColMajor
+    assert(dm8 === dm1)
+    assert(dm8.isColMajor)
+    assert(dm8.values.equals(dm1.values))
 
-    assert(spMat1.asBreeze === spMat2.asBreeze)
-    assert(deMat1.asBreeze === deMat2.asBreeze)
+    val dm5 = dm2.toDenseColMajor
+    assert(dm5 === dm2)
+    assert(dm5.isColMajor)
+    assert(dm5.values === Array(5.0, 1.0, -9.0, -3.0, 4.0, -8.0))
+
+    val dm4 = dm1.toDenseRowMajor
+    assert(dm4 === dm1)
+    assert(dm4.isRowMajor)
+    assert(dm4.values === Array(4.0, 2.0, -8.0, -1.0, 7.0, 4.0))
+
+    val dm6 = dm2.toDenseRowMajor
+    assert(dm6 === dm2)
+    assert(dm6.isRowMajor)
+    assert(dm6.values.equals(dm2.values))
+
+    val dm3 = dm1.toDense
+    assert(dm3 === dm1)
+    assert(dm3.isColMajor)
+    assert(dm3.values.equals(dm1.values))
+
+    val dm9 = dm2.toDense
+    assert(dm9 === dm2)
+    assert(dm9.isRowMajor)
+    assert(dm9.values.equals(dm2.values))
+  }
+
+  test("dense to sparse") {
+    /*
+      dm1 = 0.0 4.0 5.0
+            0.0 2.0 0.0
+
+      dm2 = 0.0 4.0 5.0
+            0.0 2.0 0.0
+
+      dm3 = 0.0 0.0 0.0
+            0.0 0.0 0.0
+     */
+    val dm1 = new DenseMatrix(2, 3, Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
+    val dm2 = new DenseMatrix(2, 3, Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0), isTransposed = true)
+    val dm3 = new DenseMatrix(2, 3, Array(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+
+    val sm1 = dm1.toSparseColMajor
+    assert(sm1 === dm1)
+    assert(sm1.isColMajor)
+    assert(sm1.values === Array(4.0, 2.0, 5.0))
+
+    val sm3 = dm2.toSparseColMajor
+    assert(sm3 === dm2)
+    assert(sm3.isColMajor)
+    assert(sm3.values === Array(4.0, 2.0, 5.0))
+
+    val sm5 = dm3.toSparseColMajor
+    assert(sm5 === dm3)
+    assert(sm5.values === Array.empty[Double])
+    assert(sm5.isColMajor)
+
+    val sm2 = dm1.toSparseRowMajor
+    assert(sm2 === dm1)
+    assert(sm2.isRowMajor)
+    assert(sm2.values === Array(4.0, 5.0, 2.0))
+
+    val sm4 = dm2.toSparseRowMajor
+    assert(sm4 === dm2)
+    assert(sm4.isRowMajor)
+    assert(sm4.values === Array(4.0, 5.0, 2.0))
+
+    val sm6 = dm3.toSparseRowMajor
+    assert(sm6 === dm3)
+    assert(sm6.values === Array.empty[Double])
+    assert(sm6.isRowMajor)
+
+    val sm7 = dm1.toSparse
+    assert(sm7 === dm1)
+    assert(sm7.values === Array(4.0, 2.0, 5.0))
+    assert(sm7.isColMajor)
+
+    val sm10 = dm2.toSparse
+    assert(sm10 === dm2)
+    assert(sm10.values === Array(4.0, 5.0, 2.0))
+    assert(sm10.isRowMajor)
+  }
+
+  test("sparse to sparse") {
+    /*
+      sm1 = sm2 = sm3 = sm4 = 0.0 4.0 5.0
+                              0.0 2.0 0.0
+      smZeros = 0.0 0.0 0.0
+                0.0 0.0 0.0
+     */
+    val sm1 = new SparseMatrix(2, 3, Array(0, 0, 2, 3), Array(0, 1, 0), Array(4.0, 2.0, 5.0))
+    val sm2 = new SparseMatrix(2, 3, Array(0, 2, 3), Array(1, 2, 1), Array(4.0, 5.0, 2.0),
+      isTransposed = true)
+    val sm3 = new SparseMatrix(2, 3, Array(0, 0, 2, 4), Array(0, 1, 0, 1),
+      Array(4.0, 2.0, 5.0, 0.0))
+    val sm4 = new SparseMatrix(2, 3, Array(0, 2, 4), Array(1, 2, 1, 2),
+      Array(4.0, 5.0, 2.0, 0.0), isTransposed = true)
+    val smZeros = new SparseMatrix(2, 3, Array(0, 2, 4, 6), Array(0, 1, 0, 1, 0, 1),
+      Array(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+
+    val sm6 = sm1.toSparseColMajor
+    assert(sm6 === sm1)
+    assert(sm6.isColMajor)
+    assert(sm6.values.equals(sm1.values))
+
+    val sm7 = sm2.toSparseColMajor
+    assert(sm7 === sm2)
+    assert(sm7.isColMajor)
+    assert(sm7.values === Array(4.0, 2.0, 5.0))
+
+    val sm16 = sm3.toSparseColMajor
+    assert(sm16 === sm3)
+    assert(sm16.isColMajor)
+    assert(sm16.values === Array(4.0, 2.0, 5.0))
+
+    val sm14 = sm4.toSparseColMajor
+    assert(sm14 === sm4)
+    assert(sm14.values === Array(4.0, 2.0, 5.0))
+    assert(sm14.isColMajor)
+
+    val sm15 = smZeros.toSparseColMajor
+    assert(sm15 === smZeros)
+    assert(sm15.values === Array.empty[Double])
+    assert(sm15.isColMajor)
+
+    val sm5 = sm1.toSparseRowMajor
+    assert(sm5 === sm1)
+    assert(sm5.isRowMajor)
+    assert(sm5.values === Array(4.0, 5.0, 2.0))
+
+    val sm8 = sm2.toSparseRowMajor
+    assert(sm8 === sm2)
+    assert(sm8.isRowMajor)
+    assert(sm8.values.equals(sm2.values))
+
+    val sm10 = sm3.toSparseRowMajor
+    assert(sm10 === sm3)
+    assert(sm10.values === Array(4.0, 5.0, 2.0))
+    assert(sm10.isRowMajor)
+
+    val sm11 = sm4.toSparseRowMajor
+    assert(sm11 === sm4)
+    assert(sm11.values === Array(4.0, 5.0, 2.0))
+    assert(sm11.isRowMajor)
+
+    val sm17 = smZeros.toSparseRowMajor
+    assert(sm17 === smZeros)
+    assert(sm17.values === Array.empty[Double])
+    assert(sm17.isRowMajor)
+
+    val sm9 = sm3.toSparse
+    assert(sm9 === sm3)
+    assert(sm9.values === Array(4.0, 2.0, 5.0))
+    assert(sm9.isColMajor)
+
+    val sm12 = sm4.toSparse
+    assert(sm12 === sm4)
+    assert(sm12.values === Array(4.0, 5.0, 2.0))
+    assert(sm12.isRowMajor)
+
+    val sm13 = smZeros.toSparse
+    assert(sm13 === smZeros)
+    assert(sm13.values === Array.empty[Double])
+    assert(sm13.isColMajor)
+  }
+
+  test("sparse to dense") {
+    /*
+      sm1 = sm2 = 0.0 4.0 5.0
+                  0.0 2.0 0.0
+
+      sm3 = 0.0 0.0 0.0
+            0.0 0.0 0.0
+     */
+    val sm1 = new SparseMatrix(2, 3, Array(0, 0, 2, 3), Array(0, 1, 0), Array(4.0, 2.0, 5.0))
+    val sm2 = new SparseMatrix(2, 3, Array(0, 2, 3), Array(1, 2, 1), Array(4.0, 5.0, 2.0),
+      isTransposed = true)
+    val sm3 = new SparseMatrix(2, 3, Array(0, 0, 0, 0), Array.empty[Int], Array.empty[Double])
+
+    val dm6 = sm1.toDenseColMajor
+    assert(dm6 === sm1)
+    assert(dm6.isColMajor)
+    assert(dm6.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
+
+    val dm7 = sm2.toDenseColMajor
+    assert(dm7 === sm2)
+    assert(dm7.isColMajor)
+    assert(dm7.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
+
+    val dm2 = sm1.toDenseRowMajor
+    assert(dm2 === sm1)
+    assert(dm2.isRowMajor)
+    assert(dm2.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
+
+    val dm4 = sm2.toDenseRowMajor
+    assert(dm4 === sm2)
+    assert(dm4.isRowMajor)
+    assert(dm4.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
+
+    val dm1 = sm1.toDense
+    assert(dm1 === sm1)
+    assert(dm1.isColMajor)
+    assert(dm1.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
+
+    val dm3 = sm2.toDense
+    assert(dm3 === sm2)
+    assert(dm3.isRowMajor)
+    assert(dm3.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
+
+    val dm5 = sm3.toDense
+    assert(dm5 === sm3)
+    assert(dm5.isColMajor)
+    assert(dm5.values === Array.fill(6)(0.0))
+  }
+
+  test("compressed dense") {
+    /*
+      dm1 = 1.0 0.0 0.0 0.0
+            1.0 0.0 0.0 0.0
+            0.0 0.0 0.0 0.0
+
+      dm2 = 1.0 1.0 0.0 0.0
+            0.0 0.0 0.0 0.0
+            0.0 0.0 0.0 0.0
+     */
+    // this should compress to a sparse matrix
+    val dm1 = new DenseMatrix(3, 4, Array.fill(2)(1.0) ++ Array.fill(10)(0.0))
+
+    // optimal compression layout is row major since numRows < numCols
+    val cm1 = dm1.compressed.asInstanceOf[SparseMatrix]
+    assert(cm1 === dm1)
+    assert(cm1.isRowMajor)
+    assert(cm1.getSizeInBytes < dm1.getSizeInBytes)
+
+    // force compressed column major
+    val cm2 = dm1.compressedColMajor.asInstanceOf[SparseMatrix]
+    assert(cm2 === dm1)
+    assert(cm2.isColMajor)
+    assert(cm2.getSizeInBytes < dm1.getSizeInBytes)
+
+    // optimal compression layout for transpose is column major
+    val dm2 = dm1.transpose
+    val cm3 = dm2.compressed.asInstanceOf[SparseMatrix]
+    assert(cm3 === dm2)
+    assert(cm3.isColMajor)
+    assert(cm3.getSizeInBytes < dm2.getSizeInBytes)
+
+    /*
+      dm3 = 1.0 1.0 1.0 0.0
+            1.0 1.0 0.0 0.0
+            1.0 1.0 0.0 0.0
+
+      dm4 = 1.0 1.0 1.0 1.0
+            1.0 1.0 1.0 0.0
+            0.0 0.0 0.0 0.0
+     */
+    // this should compress to a dense matrix
+    val dm3 = new DenseMatrix(3, 4, Array.fill(7)(1.0) ++ Array.fill(5)(0.0))
+    val dm4 = new DenseMatrix(3, 4, Array.fill(7)(1.0) ++ Array.fill(5)(0.0), isTransposed = true)
+
+    val cm4 = dm3.compressed.asInstanceOf[DenseMatrix]
+    assert(cm4 === dm3)
+    assert(cm4.isColMajor)
+    assert(cm4.values.equals(dm3.values))
+    assert(cm4.getSizeInBytes === dm3.getSizeInBytes)
+
+    // force compressed row major
+    val cm5 = dm3.compressedRowMajor.asInstanceOf[DenseMatrix]
+    assert(cm5 === dm3)
+    assert(cm5.isRowMajor)
+    assert(cm5.getSizeInBytes === dm3.getSizeInBytes)
+
+    val cm6 = dm4.compressed.asInstanceOf[DenseMatrix]
+    assert(cm6 === dm4)
+    assert(cm6.isRowMajor)
+    assert(cm6.values.equals(dm4.values))
+    assert(cm6.getSizeInBytes === dm4.getSizeInBytes)
+
+    val cm7 = dm4.compressedColMajor.asInstanceOf[DenseMatrix]
+    assert(cm7 === dm4)
+    assert(cm7.isColMajor)
+    assert(cm7.getSizeInBytes === dm4.getSizeInBytes)
+
+    // this has the same size sparse or dense
+    val dm5 = new DenseMatrix(4, 4, Array.fill(7)(1.0) ++ Array.fill(9)(0.0))
+    // should choose dense to break ties
+    val cm8 = dm5.compressed.asInstanceOf[DenseMatrix]
+    assert(cm8.getSizeInBytes === dm5.toSparseColMajor.getSizeInBytes)
+  }
+
+  test("compressed sparse") {
+    /*
+       sm1 = 0.0 -1.0
+             0.0  0.0
+             0.0  0.0
+             0.0  0.0
+
+       sm2 = 0.0 0.0 0.0 0.0
+            -1.0 0.0 0.0 0.0
+     */
+    // these should compress to sparse matrices
+    val sm1 = new SparseMatrix(4, 2, Array(0, 0, 1), Array(0), Array(-1.0))
+    val sm2 = sm1.transpose
+
+    val cm1 = sm1.compressed.asInstanceOf[SparseMatrix]
+    // optimal is column major
+    assert(cm1 === sm1)
+    assert(cm1.isColMajor)
+    assert(cm1.values.equals(sm1.values))
+    assert(cm1.getSizeInBytes === sm1.getSizeInBytes)
+
+    val cm2 = sm1.compressedRowMajor.asInstanceOf[SparseMatrix]
+    assert(cm2 === sm1)
+    assert(cm2.isRowMajor)
+    // forced to be row major, so we have increased the size
+    assert(cm2.getSizeInBytes > sm1.getSizeInBytes)
+    assert(cm2.getSizeInBytes < sm1.toDense.getSizeInBytes)
+
+    val cm9 = sm1.compressedColMajor.asInstanceOf[SparseMatrix]
+    assert(cm9 === sm1)
+    assert(cm9.values.equals(sm1.values))
+    assert(cm9.getSizeInBytes === sm1.getSizeInBytes)
+
+    val cm3 = sm2.compressed.asInstanceOf[SparseMatrix]
+    assert(cm3 === sm2)
+    assert(cm3.isRowMajor)
+    assert(cm3.values.equals(sm2.values))
+    assert(cm3.getSizeInBytes === sm2.getSizeInBytes)
+
+    val cm8 = sm2.compressedColMajor.asInstanceOf[SparseMatrix]
+    assert(cm8 === sm2)
+    assert(cm8.isColMajor)
+    // forced to be col major, so we have increased the size
+    assert(cm8.getSizeInBytes > sm2.getSizeInBytes)
+    assert(cm8.getSizeInBytes < sm2.toDense.getSizeInBytes)
+
+    val cm10 = sm2.compressedRowMajor.asInstanceOf[SparseMatrix]
+    assert(cm10 === sm2)
+    assert(cm10.isRowMajor)
+    assert(cm10.values.equals(sm2.values))
+    assert(cm10.getSizeInBytes === sm2.getSizeInBytes)
+
+
+    /*
+       sm3 = 0.0 -1.0
+             2.0  3.0
+            -4.0  9.0
+     */
+    // this should compress to a dense matrix
+    val sm3 = new SparseMatrix(3, 2, Array(0, 2, 5), Array(1, 2, 0, 1, 2),
+      Array(2.0, -4.0, -1.0, 3.0, 9.0))
+
+    // dense is optimal, and maintains column major
+    val cm4 = sm3.compressed.asInstanceOf[DenseMatrix]
+    assert(cm4 === sm3)
+    assert(cm4.isColMajor)
+    assert(cm4.getSizeInBytes < sm3.getSizeInBytes)
+
+    val cm5 = sm3.compressedRowMajor.asInstanceOf[DenseMatrix]
+    assert(cm5 === sm3)
+    assert(cm5.isRowMajor)
+    assert(cm5.getSizeInBytes < sm3.getSizeInBytes)
+
+    val cm11 = sm3.compressedColMajor.asInstanceOf[DenseMatrix]
+    assert(cm11 === sm3)
+    assert(cm11.isColMajor)
+    assert(cm11.getSizeInBytes < sm3.getSizeInBytes)
+
+    /*
+      sm4 = 1.0 0.0 0.0 ...
+
+      sm5 = 1.0
+            0.0
+            0.0
+            ...
+     */
+    val sm4 = new SparseMatrix(Int.MaxValue, 1, Array(0, 1), Array(0), Array(1.0))
+    val cm6 = sm4.compressed.asInstanceOf[SparseMatrix]
+    assert(cm6 === sm4)
+    assert(cm6.isColMajor)
+    assert(cm6.getSizeInBytes <= sm4.getSizeInBytes)
+
+    val sm5 = new SparseMatrix(1, Int.MaxValue, Array(0, 1), Array(0), Array(1.0),
+      isTransposed = true)
+    val cm7 = sm5.compressed.asInstanceOf[SparseMatrix]
+    assert(cm7 === sm5)
+    assert(cm7.isRowMajor)
+    assert(cm7.getSizeInBytes <= sm5.getSizeInBytes)
+
+    // this has the same size sparse or dense
+    val sm6 = new SparseMatrix(4, 4, Array(0, 4, 7, 7, 7), Array(0, 1, 2, 3, 0, 1, 2),
+      Array.fill(7)(1.0))
+    // should choose dense to break ties
+    val cm12 = sm6.compressed.asInstanceOf[DenseMatrix]
+    assert(cm12.getSizeInBytes === sm6.getSizeInBytes)
   }
 
   test("map, update") {
@@ -239,22 +633,22 @@ class MatricesSuite extends SparkMLFunSuite {
       dnMap.put((i, j), value)
     }
     assert(dnMap.size === 6)
-    assert(dnMap(0, 0) === 1.0)
-    assert(dnMap(1, 0) === 2.0)
-    assert(dnMap(2, 0) === 0.0)
-    assert(dnMap(0, 1) === 0.0)
-    assert(dnMap(1, 1) === 4.0)
-    assert(dnMap(2, 1) === 5.0)
+    assert(dnMap((0, 0)) === 1.0)
+    assert(dnMap((1, 0)) === 2.0)
+    assert(dnMap((2, 0)) === 0.0)
+    assert(dnMap((0, 1)) === 0.0)
+    assert(dnMap((1, 1)) === 4.0)
+    assert(dnMap((2, 1)) === 5.0)
 
     val spMap = MutableMap[(Int, Int), Double]()
     sp.foreachActive { (i, j, value) =>
       spMap.put((i, j), value)
     }
     assert(spMap.size === 4)
-    assert(spMap(0, 0) === 1.0)
-    assert(spMap(1, 0) === 2.0)
-    assert(spMap(1, 1) === 4.0)
-    assert(spMap(2, 1) === 5.0)
+    assert(spMap((0, 0)) === 1.0)
+    assert(spMap((1, 0)) === 2.0)
+    assert(spMap((1, 1)) === 4.0)
+    assert(spMap((2, 1)) === 5.0)
   }
 
   test("horzcat, vertcat, eye, speye") {

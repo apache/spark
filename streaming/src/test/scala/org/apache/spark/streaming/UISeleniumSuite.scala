@@ -77,7 +77,12 @@ class UISeleniumSuite
     inputStream.foreachRDD { rdd =>
       rdd.foreach(_ => {})
       try {
-        rdd.foreach(_ => throw new RuntimeException("Oops"))
+        rdd.foreach { _ =>
+          // Failing the task with id 15 to ensure only one task fails
+          if (TaskContext.get.taskAttemptId() % 15 == 0) {
+            throw new RuntimeException("Oops")
+          }
+        }
       } catch {
         case e: SparkException if e.getMessage.contains("Oops") =>
       }
@@ -121,11 +126,11 @@ class UISeleniumSuite
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
             "Output Ops: Succeeded/Total", "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
             "Total Delay (?)", "Output Ops: Succeeded/Total")
         }
 
@@ -166,7 +171,7 @@ class UISeleniumSuite
 
         // Check job progress
         findAll(cssSelector(""".progress-cell""")).map(_.text).toList should be (
-          List("4/4", "4/4", "4/4", "0/4 (1 failed)"))
+          List("4/4", "4/4", "4/4", "3/4 (1 failed)"))
 
         // Check stacktrace
         val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.underlying).toSeq

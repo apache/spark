@@ -356,12 +356,13 @@ class StandaloneDynamicAllocationSuite
   test("kill the same executor twice (SPARK-9795)") {
     sc = new SparkContext(appConf)
     val appId = sc.applicationId
+    sc.requestExecutors(2)
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
       assert(apps.size === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
-      assert(apps.head.getExecutorLimit === Int.MaxValue)
+      assert(apps.head.getExecutorLimit === 2)
     }
     // sync executors between the Master and the driver, needed because
     // the driver refuses to kill executors it does not know about
@@ -380,12 +381,13 @@ class StandaloneDynamicAllocationSuite
   test("the pending replacement executors should not be lost (SPARK-10515)") {
     sc = new SparkContext(appConf)
     val appId = sc.applicationId
+    sc.requestExecutors(2)
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
       assert(apps.size === 1)
       assert(apps.head.id === appId)
       assert(apps.head.executors.size === 2)
-      assert(apps.head.getExecutorLimit === Int.MaxValue)
+      assert(apps.head.getExecutorLimit === 2)
     }
     // sync executors between the Master and the driver, needed because
     // the driver refuses to kill executors it does not know about
@@ -456,7 +458,7 @@ class StandaloneDynamicAllocationSuite
     val initialExecutorLimit = 1
     val myConf = appConf
       .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.shuffle.service.enabled", "true")
+      .set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
       .set("spark.dynamicAllocation.initialExecutors", initialExecutorLimit.toString)
     sc = new SparkContext(myConf)
     val appId = sc.applicationId
@@ -571,7 +573,8 @@ class StandaloneDynamicAllocationSuite
     syncExecutors(sc)
     sc.schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(Seq(executorId), replace = false, force)
+        b.killExecutors(Seq(executorId), adjustTargetNumExecutors = true, countFailures = false,
+          force)
       case _ => fail("expected coarse grained scheduler")
     }
   }
@@ -608,7 +611,7 @@ class StandaloneDynamicAllocationSuite
    * we submit a request to kill them. This must be called before each kill request.
    */
   private def syncExecutors(sc: SparkContext): Unit = {
-    val driverExecutors = sc.getExecutorStorageStatus
+    val driverExecutors = sc.env.blockManager.master.getStorageStatus
       .map(_.blockManagerId.executorId)
       .filter { _ != SparkContext.DRIVER_IDENTIFIER}
     val masterExecutors = getExecutorIds(sc)

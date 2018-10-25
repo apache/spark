@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.io.File
+import java.io.{File, FilenameFilter}
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
+import java.util.UUID
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -33,11 +34,9 @@ import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
-import org.apache.hive.service.cli.GetInfoType
+import org.apache.hive.service.cli.{FetchOrientation, FetchType, GetInfoType}
 import org.apache.hive.service.cli.thrift.TCLIService.Client
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
-import org.apache.hive.service.cli.FetchOrientation
-import org.apache.hive.service.cli.FetchType
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
@@ -137,6 +136,22 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
+  test("Support beeline --hiveconf and --hivevar") {
+    withJdbcStatement() { statement =>
+      executeTest(hiveConfList)
+      executeTest(hiveVarList)
+      def executeTest(hiveList: String): Unit = {
+        hiveList.split(";").foreach{ m =>
+          val kv = m.split("=")
+          // select "${a}"; ---> avalue
+          val resultSet = statement.executeQuery("select \"${" + kv(0) + "}\"")
+          resultSet.next()
+          assert(resultSet.getString(1) === kv(1))
+        }
+      }
+    }
+  }
+
   test("JDBC query execution") {
     withJdbcStatement("test") { statement =>
       val queries = Seq(
@@ -160,7 +175,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
+      assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
 
@@ -599,6 +614,36 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       bufferSrc.close()
     }
   }
+
+  test("SPARK-23547 Cleanup the .pipeout file when the Hive Session closed") {
+    def pipeoutFileList(sessionID: UUID): Array[File] = {
+      lScratchDir.listFiles(new FilenameFilter {
+        override def accept(dir: File, name: String): Boolean = {
+          name.startsWith(sessionID.toString) && name.endsWith(".pipeout")
+        }
+      })
+    }
+
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+      val sessionID = sessionHandle.getSessionId
+
+      assert(pipeoutFileList(sessionID).length == 1)
+
+      client.closeSession(sessionHandle)
+
+      assert(pipeoutFileList(sessionID).length == 0)
+    }
+  }
+
+  test("SPARK-24829 Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
@@ -726,7 +771,15 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
+      assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
+    }
+  }
+
+  test("SPARK-24829 Checks cast as float") {
+    withJdbcStatement() { statement =>
+      val resultSet = statement.executeQuery("SELECT CAST('4.56' AS FLOAT)")
+      resultSet.next()
+      assert(resultSet.getString(1) === "4.56")
     }
   }
 }
@@ -742,10 +795,11 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     s"""jdbc:hive2://localhost:$serverPort/
        |default?
        |hive.server2.transport.mode=http;
-       |hive.server2.thrift.http.path=cliservice
+       |hive.server2.thrift.http.path=cliservice;
+       |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
   } else {
-    s"jdbc:hive2://localhost:$serverPort/"
+    s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
   }
 
   def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*) {
@@ -781,15 +835,18 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   private var listeningPort: Int = _
   protected def serverPort: Int = listeningPort
 
+  protected val hiveConfList = "a=avalue;b=bvalue"
+  protected val hiveVarList = "c=cvalue;d=dvalue"
   protected def user = System.getProperty("user.name")
 
   protected var warehousePath: File = _
   protected var metastorePath: File = _
   protected def metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
 
-  private val pidDir: File = Utils.createTempDir("thriftserver-pid")
+  private val pidDir: File = Utils.createTempDir(namePrefix = "thriftserver-pid")
   protected var logPath: File = _
   protected var operationLogPath: File = _
+  protected var lScratchDir: File = _
   private var logTailingProcess: Process = _
   private var diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
 
@@ -827,6 +884,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
+       |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
        |  --hiveconf $portConf=$port
        |  --driver-class-path $driverClassPath
        |  --driver-java-options -Dlog4j.debug
@@ -856,6 +914,8 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     metastorePath.delete()
     operationLogPath = Utils.createTempDir()
     operationLogPath.delete()
+    lScratchDir = Utils.createTempDir()
+    lScratchDir.delete()
     logPath = null
     logTailingProcess = null
 
@@ -938,6 +998,9 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
     operationLogPath.delete()
     operationLogPath = null
+
+    lScratchDir.delete()
+    lScratchDir = null
 
     Option(logPath).foreach(_.delete())
     logPath = null

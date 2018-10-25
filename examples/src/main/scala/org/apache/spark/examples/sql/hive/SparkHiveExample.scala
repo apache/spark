@@ -19,8 +19,7 @@ package org.apache.spark.examples.sql.hive
 // $example on:spark_hive$
 import java.io.File
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 // $example off:spark_hive$
 
 object SparkHiveExample {
@@ -76,7 +75,7 @@ object SparkHiveExample {
     // The results of SQL queries are themselves DataFrames and support all normal functions.
     val sqlDF = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
 
-    // The items in DaraFrames are of type Row, which allows you to access each column by ordinal.
+    // The items in DataFrames are of type Row, which allows you to access each column by ordinal.
     val stringsDS = sqlDF.map {
       case Row(key: Int, value: String) => s"Key: $key, Value: $value"
     }
@@ -102,8 +101,54 @@ object SparkHiveExample {
     // |  4| val_4|  4| val_4|
     // |  5| val_5|  5| val_5|
     // ...
-    // $example off:spark_hive$
+
+    // Create a Hive managed Parquet table, with HQL syntax instead of the Spark SQL native syntax
+    // `USING hive`
+    sql("CREATE TABLE hive_records(key int, value string) STORED AS PARQUET")
+    // Save DataFrame to the Hive managed table
+    val df = spark.table("src")
+    df.write.mode(SaveMode.Overwrite).saveAsTable("hive_records")
+    // After insertion, the Hive managed table has data now
+    sql("SELECT * FROM hive_records").show()
+    // +---+-------+
+    // |key|  value|
+    // +---+-------+
+    // |238|val_238|
+    // | 86| val_86|
+    // |311|val_311|
+    // ...
+
+    // Prepare a Parquet data directory
+    val dataDir = "/tmp/parquet_data"
+    spark.range(10).write.parquet(dataDir)
+    // Create a Hive external Parquet table
+    sql(s"CREATE EXTERNAL TABLE hive_ints(key int) STORED AS PARQUET LOCATION '$dataDir'")
+    // The Hive external table should already have data
+    sql("SELECT * FROM hive_ints").show()
+    // +---+
+    // |key|
+    // +---+
+    // |  0|
+    // |  1|
+    // |  2|
+    // ...
+
+    // Turn on flag for Hive Dynamic Partitioning
+    spark.sqlContext.setConf("hive.exec.dynamic.partition", "true")
+    spark.sqlContext.setConf("hive.exec.dynamic.partition.mode", "nonstrict")
+    // Create a Hive partitioned table using DataFrame API
+    df.write.partitionBy("key").format("hive").saveAsTable("hive_part_tbl")
+    // Partitioned column `key` will be moved to the end of the schema.
+    sql("SELECT * FROM hive_part_tbl").show()
+    // +-------+---+
+    // |  value|key|
+    // +-------+---+
+    // |val_238|238|
+    // | val_86| 86|
+    // |val_311|311|
+    // ...
 
     spark.stop()
+    // $example off:spark_hive$
   }
 }

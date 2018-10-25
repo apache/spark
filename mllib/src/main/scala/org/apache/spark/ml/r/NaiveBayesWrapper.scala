@@ -57,10 +57,15 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
-  def fit(formula: String, data: DataFrame, smoothing: Double): NaiveBayesWrapper = {
+  def fit(
+      formula: String,
+      data: DataFrame,
+      smoothing: Double,
+      handleInvalid: String): NaiveBayesWrapper = {
     val rFormula = new RFormula()
       .setFormula(formula)
       .setForceIndexLabel(true)
+      .setHandleInvalid(handleInvalid)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema

@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
@@ -64,7 +64,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return the approximate quantiles at the given probabilities
    *
    * @note null and NaN values will be removed from the numerical column before calculation. If
-   *   the dataframe is empty or all rows contain null or NaN, null is returned.
+   *   the dataframe is empty or the column only contains null or NaN, an empty array is returned.
    *
    * @since 2.0.0
    */
@@ -72,8 +72,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       col: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    val res = approxQuantile(Array(col), probabilities, relativeError)
-    Option(res).map(_.head).orNull
+    approxQuantile(Array(col), probabilities, relativeError).head
   }
 
   /**
@@ -89,8 +88,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities of each column
    *
-   * @note Rows containing any null or NaN values will be removed before calculation. If
-   *   the dataframe is empty or all rows contain null or NaN, null is returned.
+   * @note null and NaN values will be ignored in numerical columns before calculation. For
+   *   columns only containing null or NaN values, an empty array is returned.
    *
    * @since 2.2.0
    */
@@ -98,13 +97,11 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = {
-    // TODO: Update NaN/null handling to keep consistent with the single-column version
-    try {
-      StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
-        probabilities, relativeError).map(_.toArray).toArray
-    } catch {
-      case e: NoSuchElementException => null
-    }
+    StatFunctions.multipleApproxQuantiles(
+      df.select(cols.map(col): _*),
+      cols,
+      probabilities,
+      relativeError).map(_.toArray).toArray
   }
 
 
@@ -373,15 +370,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.5.0
    */
   def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): DataFrame = {
-    require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
-      s"Fractions must be in [0, 1], but got $fractions.")
-    import org.apache.spark.sql.functions.{rand, udf}
-    val c = Column(col)
-    val r = rand(seed)
-    val f = udf { (stratum: Any, x: Double) =>
-      x < fractions.getOrElse(stratum.asInstanceOf[T], 0.0)
-    }
-    df.filter(f(c, r))
+    sampleBy(Column(col), fractions, seed)
   }
 
   /**
@@ -396,6 +385,61 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 1.5.0
    */
   def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
+    sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
+  }
+
+  /**
+   * Returns a stratified sample without replacement based on the fraction given on each stratum.
+   * @param col column that defines strata
+   * @param fractions sampling fraction for each stratum. If a stratum is not specified, we treat
+   *                  its fraction as zero.
+   * @param seed random seed
+   * @tparam T stratum type
+   * @return a new `DataFrame` that represents the stratified sample
+   *
+   * The stratified sample can be performed over multiple columns:
+   * {{{
+   *    import org.apache.spark.sql.Row
+   *    import org.apache.spark.sql.functions.struct
+   *
+   *    val df = spark.createDataFrame(Seq(("Bob", 17), ("Alice", 10), ("Nico", 8), ("Bob", 17),
+   *      ("Alice", 10))).toDF("name", "age")
+   *    val fractions = Map(Row("Alice", 10) -> 0.3, Row("Nico", 8) -> 1.0)
+   *    df.stat.sampleBy(struct($"name", $"age"), fractions, 36L).show()
+   *    +-----+---+
+   *    | name|age|
+   *    +-----+---+
+   *    | Nico|  8|
+   *    |Alice| 10|
+   *    +-----+---+
+   * }}}
+   *
+   * @since 3.0.0
+   */
+  def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame = {
+    require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
+      s"Fractions must be in [0, 1], but got $fractions.")
+    import org.apache.spark.sql.functions.{rand, udf}
+    val r = rand(seed)
+    val f = udf { (stratum: Any, x: Double) =>
+      x < fractions.getOrElse(stratum.asInstanceOf[T], 0.0)
+    }
+    df.filter(f(col, r))
+  }
+
+  /**
+   * (Java-specific) Returns a stratified sample without replacement based on the fraction given
+   * on each stratum.
+   * @param col column that defines strata
+   * @param fractions sampling fraction for each stratum. If a stratum is not specified, we treat
+   *                  its fraction as zero.
+   * @param seed random seed
+   * @tparam T stratum type
+   * @return a new `DataFrame` that represents the stratified sample
+   *
+   * @since 3.0.0
+   */
+  def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
   }
 
@@ -554,7 +598,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
         )
     }
 
-    singleCol.queryExecution.toRdd.aggregate(zero)(
+    singleCol.queryExecution.toRdd.treeAggregate(zero)(
       (filter: BloomFilter, row: InternalRow) => {
         updater(filter, row)
         filter

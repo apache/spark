@@ -78,9 +78,9 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       eventually(Timeout(streamingTimeout)) {
         require(!q2.isActive)
         require(q2.exception.isDefined)
+        assert(spark.streams.get(q2.id) === null)
+        assert(spark.streams.active.toSet === Set(q3))
       }
-      assert(spark.streams.get(q2.id) === null)
-      assert(spark.streams.active.toSet === Set(q3))
     }
   }
 
@@ -239,16 +239,6 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("SPARK-19268: Adaptive query execution should be disallowed") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      val e = intercept[AnalysisException] {
-        MemoryStream[Int].toDS.writeStream.queryName("test-query").format("memory").start()
-      }
-      assert(e.getMessage.contains(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key) &&
-        e.getMessage.contains("not supported"))
-    }
-  }
-
   /** Run a body of code by defining a query on each dataset */
   private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[StreamingQuery] => Unit): Unit = {
     failAfter(streamingTimeout) {
@@ -299,7 +289,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       }
     }
 
-    AwaitTerminationTester.test(expectedBehavior, awaitTermFunc, testBehaviorFor)
+    AwaitTerminationTester.test(expectedBehavior, () => awaitTermFunc(), testBehaviorFor)
   }
 
   /** Stop a random active query either with `stop()` or with an error */

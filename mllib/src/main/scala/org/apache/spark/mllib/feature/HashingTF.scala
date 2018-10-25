@@ -135,7 +135,7 @@ object HashingTF {
 
   private[HashingTF] val Murmur3: String = "murmur3"
 
-  private val seed = 42
+  private[spark] val seed = 42
 
   /**
    * Calculate a hash code value for the term object using the native Scala implementation.

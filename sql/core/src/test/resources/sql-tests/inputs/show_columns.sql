@@ -2,9 +2,9 @@ CREATE DATABASE showdb;
 
 USE showdb;
 
-CREATE TABLE showcolumn1 (col1 int, `col 2` int) USING parquet;
+CREATE TABLE showcolumn1 (col1 int, `col 2` int) USING json;
 CREATE TABLE showcolumn2 (price int, qty int, year int, month int) USING parquet partitioned by (year, month);
-CREATE TEMPORARY VIEW showColumn3 (col3 int, `col 4` int) USING parquet;
+CREATE TEMPORARY VIEW showColumn3 (col3 int, `col 4` int) USING json;
 CREATE GLOBAL TEMP VIEW showColumn4 AS SELECT 1 as col1, 'abc' as `col 5`;
 
 

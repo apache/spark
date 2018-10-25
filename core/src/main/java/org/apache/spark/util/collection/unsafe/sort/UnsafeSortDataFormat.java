@@ -84,7 +84,7 @@ public final class UnsafeSortDataFormat
 
   @Override
   public LongArray allocate(int length) {
-    assert (length * 2 <= buffer.size()) :
+    assert (length * 2L <= buffer.size()) :
       "the buffer is smaller than required: " + buffer.size() + " < " + (length * 2);
     return buffer;
   }

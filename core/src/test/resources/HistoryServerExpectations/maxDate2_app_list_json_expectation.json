@@ -8,6 +8,7 @@
     "duration" : 8635,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "",
     "endTimeEpoch" : 1422981766912,
     "startTimeEpoch" : 1422981758277,
     "lastUpdatedEpoch" : 0

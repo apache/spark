@@ -30,14 +30,17 @@
 # POSIXct,POSIXlt -> Time
 #
 # list[T] -> Array[T], where T is one of above mentioned types
+# Multi-element vector of any of the above (except raw) -> Array[T]
 # environment -> Map[String, T], where T is a native type
 # jobj -> Object, where jobj is an object created in the backend
 # nolint end
 
 getSerdeType <- function(object) {
   type <- class(object)[[1]]
-  if (type != "list") {
-    type
+  if (is.atomic(object) & !is.raw(object) & length(object) > 1) {
+    "array"
+  } else if (type != "list") {
+     type
   } else {
     # Check if all elements are of same type
     elemType <- unique(sapply(object, function(elem) { getSerdeType(elem) }))
@@ -50,9 +53,7 @@ getSerdeType <- function(object) {
 }
 
 writeObject <- function(con, object, writeType = TRUE) {
-  # NOTE: In R vectors have same type as objects. So we don't support
-  # passing in vectors as arrays and instead require arrays to be passed
-  # as lists.
+  # NOTE: In R vectors have same type as objects
   type <- class(object)[[1]]  # class of POSIXlt is c("POSIXlt", "POSIXt")
   # Checking types is needed here, since 'is.na' only handles atomic vectors,
   # lists and pairlists

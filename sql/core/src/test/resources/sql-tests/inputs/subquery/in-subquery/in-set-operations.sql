@@ -287,7 +287,7 @@ WHERE  t1a IN (SELECT t3a
                        WHERE  t1b > 6) AS t5)
 GROUP BY t1a, t1b, t1c, t1d
 HAVING t1c IS NOT NULL AND t1b IS NOT NULL
-ORDER BY t1c DESC;
+ORDER BY t1c DESC, t1a DESC;
 
 -- TC 01.08
 SELECT t1a,
@@ -351,7 +351,7 @@ WHERE  t1b IN
                             FROM   t1
                             WHERE  t1b > 6) AS t4
               WHERE  t2b = t1b)
-ORDER BY t1c DESC NULLS last;
+ORDER BY t1c DESC NULLS last, t1a DESC;
 
 -- TC 01.11
 SELECT *
@@ -468,5 +468,5 @@ HAVING   t1b NOT IN
                 EXCEPT
                 SELECT t3b
                 FROM   t3)
-ORDER BY t1c DESC NULLS LAST;
+ORDER BY t1c DESC NULLS LAST, t1i;
 

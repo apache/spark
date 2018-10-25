@@ -45,8 +45,8 @@ import org.apache.spark.util.Utils
 object ExpressionEncoder {
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
-    val mirror = typeTag[T].mirror
-    val tpe = typeTag[T].tpe
+    val mirror = ScalaReflection.mirror
+    val tpe = typeTag[T].in(mirror).tpe
 
     if (ScalaReflection.optionOfProductType(tpe)) {
       throw new UnsupportedOperationException(
@@ -128,7 +128,7 @@ object ExpressionEncoder {
         case b: BoundReference if b == originalInputObject => newInputObject
       })
 
-      if (enc.flat) {
+      val serializerExpr = if (enc.flat) {
         newSerializer.head
       } else {
         // For non-flat encoder, the input object is not top level anymore after being combined to
@@ -146,6 +146,7 @@ object ExpressionEncoder {
           Invoke(Literal.fromObject(None), "equals", BooleanType, newInputObject :: Nil))
         If(nullCheck, Literal.create(null, struct.dataType), struct)
       }
+      Alias(serializerExpr, s"_${index + 1}")()
     }
 
     val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>
@@ -208,7 +209,8 @@ object ExpressionEncoder {
 }
 
 /**
- * A generic encoder for JVM objects.
+ * A generic encoder for JVM objects that uses Catalyst Expressions for a `serializer`
+ * and a `deserializer`.
  *
  * @param schema The schema after converting `T` to a Spark SQL row.
  * @param serializer A set of expressions, one for each top-level field that can be used to
@@ -229,13 +231,13 @@ case class ExpressionEncoder[T](
   // serializer expressions are used to encode an object to a row, while the object is usually an
   // intermediate value produced inside an operator, not from the output of the child operator. This
   // is quite different from normal expressions, and `AttributeReference` doesn't work here
-  // (intermediate value is not an attribute). We assume that all serializer expressions use a same
-  // `BoundReference` to refer to the object, and throw exception if they don't.
-  assert(serializer.forall(_.references.isEmpty), "serializer cannot reference to any attributes.")
+  // (intermediate value is not an attribute). We assume that all serializer expressions use the
+  // same `BoundReference` to refer to the object, and throw exception if they don't.
+  assert(serializer.forall(_.references.isEmpty), "serializer cannot reference any attributes.")
   assert(serializer.flatMap { ser =>
     val boundRefs = ser.collect { case b: BoundReference => b }
     assert(boundRefs.nonEmpty,
-      "each serializer expression should contains at least one `BoundReference`")
+      "each serializer expression should contain at least one `BoundReference`")
     boundRefs
   }.distinct.length <= 1, "all serializer expressions must use the same BoundReference.")
 

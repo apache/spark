@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
  *
  */
 public final class ServiceOperations {
-  private static final Log LOG = LogFactory.getLog(AbstractService.class);
+  private static final Log LOG = LogFactory.getLog(ServiceOperations.class);
 
   private ServiceOperations() {
   }
@@ -51,7 +51,7 @@ public final class ServiceOperations {
 
   /**
    * Initialize a service.
-   * <p/>
+   *
    * The service state is checked <i>before</i> the operation begins.
    * This process is <i>not</i> thread safe.
    * @param service a service that must be in the state
@@ -69,7 +69,7 @@ public final class ServiceOperations {
 
   /**
    * Start a service.
-   * <p/>
+   *
    * The service state is checked <i>before</i> the operation begins.
    * This process is <i>not</i> thread safe.
    * @param service a service that must be in the state
@@ -86,7 +86,7 @@ public final class ServiceOperations {
 
   /**
    * Initialize then start a service.
-   * <p/>
+   *
    * The service state is checked <i>before</i> the operation begins.
    * This process is <i>not</i> thread safe.
    * @param service a service that must be in the state
@@ -102,9 +102,9 @@ public final class ServiceOperations {
 
   /**
    * Stop a service.
-   * <p/>Do nothing if the service is null or not
-   * in a state in which it can be/needs to be stopped.
-   * <p/>
+   *
+   * Do nothing if the service is null or not in a state in which it can be/needs to be stopped.
+   *
    * The service state is checked <i>before</i> the operation begins.
    * This process is <i>not</i> thread safe.
    * @param service a service or null

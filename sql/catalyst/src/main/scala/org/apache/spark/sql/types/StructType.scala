@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.json4s.JsonDSL._
 
@@ -26,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.util.Utils
 
 /**
@@ -102,6 +103,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
+
+  /**
+   * Returns all field names in an array. This is an alias of `fieldNames`.
+   *
+   * @since 2.4.0
+   */
+  def names: Array[String] = fieldNames
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
@@ -263,7 +271,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
-      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+      throw new IllegalArgumentException(
+        s"""Field "$name" does not exist.
+           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin))
   }
 
   /**
@@ -276,7 +286,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
       throw new IllegalArgumentException(
-        s"Field ${nonExistFields.mkString(",")} does not exist.")
+        s"""Nonexistent field(s): ${nonExistFields.mkString(", ")}.
+           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin)
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
@@ -289,7 +300,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
-      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+      throw new IllegalArgumentException(
+        s"""Field "$name" does not exist.
+           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {
@@ -346,6 +359,16 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
     s"STRUCT<${fieldTypes.mkString(", ")}>"
   }
+
+  /**
+   * Returns a string containing a schema in DDL format. For example, the following value:
+   * `StructType(Seq(StructField("eventId", IntegerType), StructField("s", StringType)))`
+   * will be converted to `eventId` INT, `s` STRING.
+   * The returned DDL schema can be used in a table creation.
+   *
+   * @since 2.4.0
+   */
+  def toDDL: String = fields.map(_.toDDL).mkString(",")
 
   private[sql] override def simpleString(maxNumberFields: Int): String = {
     val builder = new StringBuilder
@@ -413,9 +436,17 @@ object StructType extends AbstractDataType {
   private[sql] def fromString(raw: String): StructType = {
     Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parse(raw)) match {
       case t: StructType => t
-      case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+      case _ => throw new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
     }
   }
+
+  /**
+   * Creates StructType for a given DDL-formatted string, which is a comma separated list of field
+   * definitions, e.g., a INT, b STRING.
+   *
+   * @since 2.2.0
+   */
+  def fromDDL(ddl: String): StructType = CatalystSqlParser.parseTableSchema(ddl)
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
@@ -461,10 +492,16 @@ object StructType extends AbstractDataType {
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
-              .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-                leftField.copy(
-                  dataType = merge(leftType, rightType),
-                  nullable = leftNullable || rightNullable)
+              .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
+                try {
+                  leftField.copy(
+                    dataType = merge(leftType, rightType),
+                    nullable = leftNullable || rightNullable)
+                } catch {
+                  case NonFatal(e) =>
+                    throw new SparkException(s"Failed to merge fields '$leftName' and " +
+                      s"'$rightName'. " + e.getMessage)
+                }
               }
               .orElse {
                 Some(leftField)
@@ -503,7 +540,8 @@ object StructType extends AbstractDataType {
         leftType
 
       case _ =>
-        throw new SparkException(s"Failed to merge incompatible data types $left and $right")
+        throw new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
+          s" and ${right.catalogString}")
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {

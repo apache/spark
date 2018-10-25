@@ -72,7 +72,10 @@ def _convert_to_vector(l):
         return DenseVector(l)
     elif _have_scipy and scipy.sparse.issparse(l):
         assert l.shape[1] == 1, "Expected column vector"
+        # Make sure the converted csc_matrix has sorted indices.
         csc = l.tocsc()
+        if not csc.has_sorted_indices:
+            csc.sort_indices()
         return SparseVector(l.shape[0], csc.indices, csc.data)
     else:
         raise TypeError("Cannot convert type %s into Vector" % type(l))
@@ -1153,9 +1156,14 @@ class Matrices(object):
 
 def _test():
     import doctest
+    try:
+        # Numpy 1.14+ changed it's string format.
+        np.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

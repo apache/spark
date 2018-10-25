@@ -136,6 +136,25 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
   }
+
+  test("SPARK-24339 verify the result after pruning the unused columns") {
+    val rowsDf = Seq(
+      ("Bob", 16, 176),
+      ("Alice", 32, 164),
+      ("David", 60, 192),
+      ("Amy", 24, 180)).toDF("name", "age", "height")
+
+    checkAnswer(
+      rowsDf,
+      (child: SparkPlan) => new ScriptTransformationExec(
+        input = Seq(rowsDf.col("name").expr),
+        script = "cat",
+        output = Seq(AttributeReference("name", StringType)()),
+        child = child,
+        ioschema = serdeIOSchema
+      ),
+      rowsDf.select("name").collect())
+  }
 }
 
 private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {

@@ -36,6 +36,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
 
@@ -62,18 +63,14 @@ abstract class BaseYarnClusterSuite
   protected var hadoopConfDir: File = _
   private var logConfDir: File = _
 
-  var oldSystemProperties: Properties = null
-
   def newYarnConfig(): YarnConfiguration
 
   override def beforeAll() {
     super.beforeAll()
-    oldSystemProperties = SerializationUtils.clone(System.getProperties)
 
     tempDir = Utils.createTempDir()
     logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
-    System.setProperty("SPARK_YARN_MODE", "true")
 
     val logConfFile = new File(logConfDir, "log4j.properties")
     Files.write(LOG4J_CONF, logConfFile, StandardCharsets.UTF_8)
@@ -124,7 +121,6 @@ abstract class BaseYarnClusterSuite
     try {
       yarnCluster.stop()
     } finally {
-      System.setProperties(oldSystemProperties)
       super.afterAll()
     }
   }
@@ -137,7 +133,8 @@ abstract class BaseYarnClusterSuite
       extraClassPath: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
       extraConf: Map[String, String] = Map(),
-      extraEnv: Map[String, String] = Map()): SparkAppHandle.State = {
+      extraEnv: Map[String, String] = Map(),
+      outFile: Option[File] = None): SparkAppHandle.State = {
     val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
     val env = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv
@@ -165,6 +162,11 @@ abstract class BaseYarnClusterSuite
     }
     extraJars.foreach(launcher.addJar)
 
+    if (outFile.isDefined) {
+      launcher.redirectOutput(outFile.get)
+      launcher.redirectError()
+    }
+
     val handle = launcher.startApplication()
     try {
       eventually(timeout(2 minutes), interval(1 second)) {
@@ -183,17 +185,22 @@ abstract class BaseYarnClusterSuite
    * the tests enforce that something is written to a file after everything is ok to indicate
    * that the job succeeded.
    */
-  protected def checkResult(finalState: SparkAppHandle.State, result: File): Unit = {
-    checkResult(finalState, result, "success")
-  }
-
   protected def checkResult(
       finalState: SparkAppHandle.State,
       result: File,
-      expected: String): Unit = {
-    finalState should be (SparkAppHandle.State.FINISHED)
+      expected: String = "success",
+      outFile: Option[File] = None): Unit = {
+    // the context message is passed to assert as Any instead of a function. to lazily load the
+    // output from the file, this passes an anonymous object that loads it in toString when building
+    // an error message
+    val output = new Object() {
+      override def toString: String = outFile
+          .map(Files.toString(_, StandardCharsets.UTF_8))
+          .getOrElse("(stdout/stderr was not captured)")
+    }
+    assert(finalState === SparkAppHandle.State.FINISHED, output)
     val resultString = Files.toString(result, StandardCharsets.UTF_8)
-    resultString should be (expected)
+    assert(resultString === expected, output)
   }
 
   protected def mainClassName(klass: Class[_]): String = {
@@ -220,6 +227,14 @@ abstract class BaseYarnClusterSuite
     // SPARK-4267: make sure java options are propagated correctly.
     props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")
     props.setProperty("spark.executor.extraJavaOptions", "-Dfoo=\"one two three\"")
+
+    // SPARK-24446: make sure special characters in the library path do not break containers.
+    if (!Utils.isWindows) {
+      val libPath = """/tmp/does not exist:$PWD/tmp:/tmp/quote":/tmp/ampersand&"""
+      props.setProperty(AM_LIBRARY_PATH.key, libPath)
+      props.setProperty(DRIVER_LIBRARY_PATH.key, libPath)
+      props.setProperty(EXECUTOR_LIBRARY_PATH.key, libPath)
+    }
 
     yarnCluster.getConfig().asScala.foreach { e =>
       props.setProperty("spark.hadoop." + e.getKey(), e.getValue())

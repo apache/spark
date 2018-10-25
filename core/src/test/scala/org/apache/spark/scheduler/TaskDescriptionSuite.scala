@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.io.{ByteArrayOutputStream, DataOutputStream, UTFDataFormatException}
 import java.nio.ByteBuffer
 import java.util.Properties
 
@@ -36,6 +37,21 @@ class TaskDescriptionSuite extends SparkFunSuite {
     val originalProperties = new Properties()
     originalProperties.put("property1", "18")
     originalProperties.put("property2", "test value")
+    // SPARK-19796 -- large property values (like a large job description for a long sql query)
+    // can cause problems for DataOutputStream, make sure we handle correctly
+    val sb = new StringBuilder()
+    (0 to 10000).foreach(_ => sb.append("1234567890"))
+    val largeString = sb.toString()
+    originalProperties.put("property3", largeString)
+    // make sure we've got a good test case
+    intercept[UTFDataFormatException] {
+      val out = new DataOutputStream(new ByteArrayOutputStream())
+      try {
+        out.writeUTF(largeString)
+      } finally {
+        out.close()
+      }
+    }
 
     // Create a dummy byte buffer for the task.
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
@@ -46,6 +62,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
       executorId = "testExecutor",
       name = "task for test",
       index = 19,
+      partitionId = 1,
       originalFiles,
       originalJars,
       originalProperties,
@@ -61,6 +78,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
     assert(decodedTaskDescription.executorId === originalTaskDescription.executorId)
     assert(decodedTaskDescription.name === originalTaskDescription.name)
     assert(decodedTaskDescription.index === originalTaskDescription.index)
+    assert(decodedTaskDescription.partitionId === originalTaskDescription.partitionId)
     assert(decodedTaskDescription.addedFiles.equals(originalFiles))
     assert(decodedTaskDescription.addedJars.equals(originalJars))
     assert(decodedTaskDescription.properties.equals(originalTaskDescription.properties))

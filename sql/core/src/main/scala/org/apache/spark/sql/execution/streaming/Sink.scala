@@ -24,7 +24,7 @@ import org.apache.spark.sql.DataFrame
  * exactly once semantics a sink must be idempotent in the face of multiple attempts to add the same
  * batch.
  */
-trait Sink {
+trait Sink extends BaseStreamingSink {
 
   /**
    * Adds a batch of data to this sink. The data for a given `batchId` is deterministic and if

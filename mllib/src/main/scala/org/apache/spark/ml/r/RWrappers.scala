@@ -60,6 +60,10 @@ private[r] object RWrappers extends MLReader[Object] {
         RandomForestRegressorWrapper.load(path)
       case "org.apache.spark.ml.r.RandomForestClassifierWrapper" =>
         RandomForestClassifierWrapper.load(path)
+      case "org.apache.spark.ml.r.DecisionTreeRegressorWrapper" =>
+        DecisionTreeRegressorWrapper.load(path)
+      case "org.apache.spark.ml.r.DecisionTreeClassifierWrapper" =>
+        DecisionTreeClassifierWrapper.load(path)
       case "org.apache.spark.ml.r.GBTRegressorWrapper" =>
         GBTRegressorWrapper.load(path)
       case "org.apache.spark.ml.r.GBTClassifierWrapper" =>
@@ -68,6 +72,8 @@ private[r] object RWrappers extends MLReader[Object] {
         BisectingKMeansWrapper.load(path)
       case "org.apache.spark.ml.r.LinearSVCWrapper" =>
         LinearSVCWrapper.load(path)
+      case "org.apache.spark.ml.r.FPGrowthWrapper" =>
+        FPGrowthWrapper.load(path)
       case _ =>
         throw new SparkException(s"SparkR read.ml does not support load $className")
     }

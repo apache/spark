@@ -21,8 +21,6 @@ import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
-
 
 /**
  * The data type representing `java.sql.Timestamp` values.
@@ -37,7 +35,7 @@ class TimestampType private() extends AtomicType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Long
 
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 

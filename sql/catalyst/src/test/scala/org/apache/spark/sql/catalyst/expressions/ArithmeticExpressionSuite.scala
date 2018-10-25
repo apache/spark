@@ -23,6 +23,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -142,16 +144,25 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
-  // By fixing SPARK-15776, Divide's inputType is required to be DoubleType of DecimalType.
-  // TODO: in future release, we should add a IntegerDivide to support integral types.
-  ignore("/ (Divide) for integral type") {
-    checkEvaluation(Divide(Literal(1.toByte), Literal(2.toByte)), 0.toByte)
-    checkEvaluation(Divide(Literal(1.toShort), Literal(2.toShort)), 0.toShort)
-    checkEvaluation(Divide(Literal(1), Literal(2)), 0)
-    checkEvaluation(Divide(Literal(1.toLong), Literal(2.toLong)), 0.toLong)
-    checkEvaluation(Divide(positiveShortLit, negativeShortLit), 0.toShort)
-    checkEvaluation(Divide(positiveIntLit, negativeIntLit), 0)
-    checkEvaluation(Divide(positiveLongLit, negativeLongLit), 0L)
+  test("/ (Divide) for integral type") {
+    withSQLConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG.key -> "false") {
+      checkEvaluation(IntegralDivide(Literal(1.toByte), Literal(2.toByte)), 0.toByte)
+      checkEvaluation(IntegralDivide(Literal(1.toShort), Literal(2.toShort)), 0.toShort)
+      checkEvaluation(IntegralDivide(Literal(1), Literal(2)), 0)
+      checkEvaluation(IntegralDivide(Literal(1.toLong), Literal(2.toLong)), 0.toLong)
+      checkEvaluation(IntegralDivide(positiveShortLit, negativeShortLit), 0.toShort)
+      checkEvaluation(IntegralDivide(positiveIntLit, negativeIntLit), 0)
+      checkEvaluation(IntegralDivide(positiveLongLit, negativeLongLit), 0L)
+    }
+    withSQLConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG.key -> "true") {
+      checkEvaluation(IntegralDivide(Literal(1.toByte), Literal(2.toByte)), 0L)
+      checkEvaluation(IntegralDivide(Literal(1.toShort), Literal(2.toShort)), 0L)
+      checkEvaluation(IntegralDivide(Literal(1), Literal(2)), 0L)
+      checkEvaluation(IntegralDivide(Literal(1.toLong), Literal(2.toLong)), 0L)
+      checkEvaluation(IntegralDivide(positiveShortLit, negativeShortLit), 0L)
+      checkEvaluation(IntegralDivide(positiveIntLit, negativeIntLit), 0L)
+      checkEvaluation(IntegralDivide(positiveLongLit, negativeLongLit), 0L)
+    }
   }
 
   test("% (Remainder)") {
@@ -214,7 +225,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Pmod(left, right), convert(1))
       checkEvaluation(Pmod(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
-      checkEvaluation(Remainder(left, Literal(convert(0))), null)  // mod by 0
+      checkEvaluation(Pmod(left, Literal(convert(0))), null)  // mod by 0
     }
     checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
     checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
@@ -223,6 +234,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
+
+    // mod by 0
+    checkEvaluation(Pmod(Literal(-7), Literal(0)), null)
+    checkEvaluation(Pmod(Literal(7.2D), Literal(0D)), null)
+    checkEvaluation(Pmod(Literal(7.2F), Literal(0F)), null)
+    checkEvaluation(Pmod(Literal(2.toByte), Literal(0.toByte)), null)
+    checkEvaluation(Pmod(positiveShort, 0.toShort), null)
   }
 
   test("function least") {
@@ -274,6 +292,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Least, dt, 2)
     }
+
+    val least = Least(Seq(
+      Literal.create(Seq(1, 2), ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 3, null), ArrayType(IntegerType, containsNull = true))))
+    assert(least.dataType === ArrayType(IntegerType, containsNull = true))
+    checkEvaluation(least, Seq(1, 2))
   }
 
   test("function greatest") {
@@ -326,5 +350,30 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
     }
+
+    val greatest = Greatest(Seq(
+      Literal.create(Seq(1, 2), ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 3, null), ArrayType(IntegerType, containsNull = true))))
+    assert(greatest.dataType === ArrayType(IntegerType, containsNull = true))
+    checkEvaluation(greatest, Seq(1, 3, null))
+  }
+
+  test("SPARK-22499: Least and greatest should not generate codes beyond 64KB") {
+    val N = 2000
+    val strings = (1 to N).map(x => "s" * x)
+    val inputsExpr = strings.map(Literal.create(_, StringType))
+
+    checkEvaluation(Least(inputsExpr), "s" * 1, EmptyRow)
+    checkEvaluation(Greatest(inputsExpr), "s" * N, EmptyRow)
+  }
+
+  test("SPARK-22704: Least and greatest use less global variables") {
+    val ctx1 = new CodegenContext()
+    Least(Seq(Literal(1), Literal(1))).genCode(ctx1)
+    assert(ctx1.inlinedMutableStates.size == 1)
+
+    val ctx2 = new CodegenContext()
+    Greatest(Seq(Literal(1), Literal(1))).genCode(ctx2)
+    assert(ctx2.inlinedMutableStates.size == 1)
   }
 }

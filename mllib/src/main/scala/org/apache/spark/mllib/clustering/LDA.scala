@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.clustering
 
+import java.util.Locale
+
 import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
@@ -306,7 +308,7 @@ class LDA private (
   @Since("1.4.0")
   def setOptimizer(optimizerName: String): this.type = {
     this.ldaOptimizer =
-      optimizerName.toLowerCase match {
+      optimizerName.toLowerCase(Locale.ROOT) match {
         case "em" => new EMLDAOptimizer
         case "online" => new OnlineLDAOptimizer
         case other =>

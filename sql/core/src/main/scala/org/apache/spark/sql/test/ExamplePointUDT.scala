@@ -34,6 +34,8 @@ private[sql] class ExamplePoint(val x: Double, val y: Double) extends Serializab
     case that: ExamplePoint => this.x == that.x && this.y == that.y
     case _ => false
   }
+
+  override def toString(): String = s"($x, $y)"
 }
 
 /**

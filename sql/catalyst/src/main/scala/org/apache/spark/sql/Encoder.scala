@@ -68,17 +68,17 @@ import org.apache.spark.sql.types._
  */
 @Experimental
 @InterfaceStability.Evolving
-@implicitNotFound("Unable to find encoder for type stored in a Dataset.  Primitive types " +
-  "(Int, String, etc) and Product types (case classes) are supported by importing " +
-  "spark.implicits._  Support for serializing other types will be added in future " +
-  "releases.")
+@implicitNotFound("Unable to find encoder for type ${T}. An implicit Encoder[${T}] is needed to " +
+  "store ${T} instances in a Dataset. Primitive types (Int, String, etc) and Product types (case " +
+  "classes) are supported by importing spark.implicits._  Support for serializing other types " +
+  "will be added in future releases.")
 trait Encoder[T] extends Serializable {
 
   /** Returns the schema of encoding this type of object as a Row. */
   def schema: StructType
 
   /**
-   * A ClassTag that can be used to construct and Array to contain a collection of `T`.
+   * A ClassTag that can be used to construct an Array to contain a collection of `T`.
    */
   def clsTag: ClassTag[T]
 }

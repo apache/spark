@@ -1,5 +1,9 @@
 -- A test suite for not-in-joins in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
+-- List of configuration the test suite is run against:
+--SET spark.sql.autoBroadcastJoinThreshold=10485760
+--SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
+--SET spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
 
 create temporary view t1 as select * from values
   ("val1a", 6S, 8, 10L, float(15.0), 20D, 20E2, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
@@ -85,7 +89,7 @@ AND             t1b != t3b
 AND             t1d = t2d
 GROUP BY        t1a, t1b, t1c, t3a, t3b, t3c
 HAVING          count(distinct(t3a)) >= 1
-ORDER BY        t1a;
+ORDER BY        t1a, t3b;
 
 -- TC 01.03
 SELECT t1a,

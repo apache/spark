@@ -20,47 +20,51 @@
   <thead>
     <tr>
       <th>
-        <span data-toggle="tooltip" data-placement="right" title="ID of the application.">
+        <span data-toggle="tooltip" data-placement="top" title="ID of this application.">
           App ID
         </span>
       </th>
       <th>
-        <span data-toggle="tooltip" data-placement="above" title="Name of the application.">
+        <span data-toggle="tooltip" data-placement="top" title="Name of this application.">
           App Name
         </span>
       </th>
-      <th class="attemptIDSpan">
-        <span data-toggle="tooltip" data-placement="above" title="The attempt ID of this application since one application might be launched several times">
+      {{#hasMultipleAttempts}}
+      <th>
+        <span data-toggle="tooltip" data-placement="top" title="The attempt ID of this application since one application might be launched several times">
           Attempt ID
         </span>
       </th>
+      {{/hasMultipleAttempts}}
       <th>
-        <span data-toggle="tooltip" data-placement="right" title="Started time of this application.">
+        <span data-toggle="tooltip" data-placement="top" title="Started time of this application.">
           Started
         </span>
       </th>
+      {{#showCompletedColumns}}
       <th>
-        <span data-toggle="tooltip" data-placement="above" title="The completed time of this application.">
+        <span data-toggle="tooltip" data-placement="top" title="The completed time of this application.">
           Completed
         </span>
       </th>
       <th>
-        <span data-toggle="tooltip" data-placement="above" title="The duration time of this application.">
+        <span data-toggle="tooltip" data-placement="top" title="The duration time of this application.">
           Duration
         </span>
       </th>
+      {{/showCompletedColumns}}
       <th>
-        <span data-toggle="tooltip" data-placement="right" title="The Spark user of this application">
+        <span data-toggle="tooltip" data-placement="top" title="The Spark user of this application">
           Spark User
         </span>
       </th>
       <th>
-        <span data-toggle="tooltip" data-placement="above" title="The timestamp of the last updating on this application">
+        <span data-toggle="tooltip" data-placement="top" title="The timestamp of the last updating on this application">
           Last Updated
         </span>
       </th>
       <th>
-        <span data-toggle="tooltip" data-placement="above" title="Download the event log for this application">
+        <span data-toggle="tooltip" data-placement="top" title="Download the event log for this application">
           Event Log
         </span>
       </th>
@@ -68,16 +72,20 @@
   <tbody>
   {{#applications}}
     <tr>
-      <td class="rowGroupColumn"><span title="{{id}}"><a href="{{uiroot}}/history/{{id}}/{{num}}/jobs/">{{id}}</a></span></td>
-      <td class="rowGroupColumn">{{name}}</td>
+      <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}><span title="{{id}}"><a href="{{uiroot}}/history/{{id}}/{{num}}/jobs/">{{id}}</a></span></td>
+      <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}>{{name}}</td>
       {{#attempts}}
-      <td class="attemptIDSpan"><a href="{{uiroot}}/history/{{id}}/{{attemptId}}/jobs/">{{attemptId}}</a></td>
+      {{#hasMultipleAttempts}}
+      <td><a href="{{uiroot}}/history/{{id}}/{{attemptId}}/jobs/">{{attemptId}}</a></td>
+      {{/hasMultipleAttempts}}
       <td>{{startTime}}</td>
+      {{#showCompletedColumns}}
       <td>{{endTime}}</td>
-      <td><span title="{{duration}}" class="durationClass">{{duration}}</span></td>
+      <td><span title="{{durationMillisec}}">{{duration}}</span></td>
+      {{/showCompletedColumns}}
       <td>{{sparkUser}}</td>
       <td>{{lastUpdated}}</td>
-      <td><a href="{{uiroot}}/api/v1/applications/{{id}}/{{num}}/logs" class="btn btn-info btn-mini">Download</a></td>
+      <td><a href="{{log}}" class="btn btn-info btn-mini">Download</a></td>
       {{/attempts}}
     </tr>
   {{/applications}}

@@ -1,8 +1,8 @@
 Package: SparkR
 Type: Package
-Version: 2.2.0
+Version: 3.0.0
 Title: R Frontend for Apache Spark
-Description: The SparkR package provides an R Frontend for Apache Spark.
+Description: Provides an R Frontend for Apache Spark.
 Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
                     email = "shivaram@cs.berkeley.edu"),
              person("Xiangrui", "Meng", role = "aut",
@@ -13,6 +13,7 @@ Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
 License: Apache License (== 2.0)
 URL: http://www.apache.org/ http://spark.apache.org/
 BugReports: http://spark.apache.org/contributing.html
+SystemRequirements: Java (== 8)
 Depends:
     R (>= 3.0),
     methods
@@ -35,6 +36,7 @@ Collate:
     'WindowSpec.R'
     'backend.R'
     'broadcast.R'
+    'catalog.R'
     'client.R'
     'context.R'
     'deserialize.R'
@@ -43,6 +45,7 @@ Collate:
     'jvm.R'
     'mllib_classification.R'
     'mllib_clustering.R'
+    'mllib_fpm.R'
     'mllib_recommendation.R'
     'mllib_regression.R'
     'mllib_stat.R'
@@ -51,8 +54,10 @@ Collate:
     'serialize.R'
     'sparkR.R'
     'stats.R'
+    'streaming.R'
     'types.R'
     'utils.R'
     'window.R'
 RoxygenNote: 5.0.1
 VignetteBuilder: knitr
+NeedsCompilation: no

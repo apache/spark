@@ -27,10 +27,10 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
@@ -199,44 +199,33 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     var changed = false
     val remainingNewChildren = newChildren.toBuffer
     val remainingOldChildren = children.toBuffer
+    def mapTreeNode(node: TreeNode[_]): TreeNode[_] = {
+      val newChild = remainingNewChildren.remove(0)
+      val oldChild = remainingOldChildren.remove(0)
+      if (newChild fastEquals oldChild) {
+        oldChild
+      } else {
+        changed = true
+        newChild
+      }
+    }
+    def mapChild(child: Any): Any = child match {
+      case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
+      case nonChild: AnyRef => nonChild
+      case null => null
+    }
     val newArgs = mapProductIterator {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
-      case s: Seq[_] => s.map {
-        case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = remainingNewChildren.remove(0)
-          val oldChild = remainingOldChildren.remove(0)
-          if (newChild fastEquals oldChild) {
-            oldChild
-          } else {
-            changed = true
-            newChild
-          }
-        case nonChild: AnyRef => nonChild
-        case null => null
-      }
-      case m: Map[_, _] => m.mapValues {
-        case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = remainingNewChildren.remove(0)
-          val oldChild = remainingOldChildren.remove(0)
-          if (newChild fastEquals oldChild) {
-            oldChild
-          } else {
-            changed = true
-            newChild
-          }
-        case nonChild: AnyRef => nonChild
-        case null => null
-      }.view.force // `mapValues` is lazy and we need to force it to materialize
-      case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = remainingNewChildren.remove(0)
-        val oldChild = remainingOldChildren.remove(0)
-        if (newChild fastEquals oldChild) {
-          oldChild
-        } else {
-          changed = true
-          newChild
-        }
+      case s: Stream[_] =>
+        // Stream is lazy so we need to force materialization
+        s.map(mapChild).force
+      case s: Seq[_] =>
+        s.map(mapChild)
+      case m: Map[_, _] =>
+        // `mapValues` is lazy and we need to force it to materialize
+        m.mapValues(mapChild).view.force
+      case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
       case nonChild: AnyRef => nonChild
       case null => null
     }
@@ -301,6 +290,37 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def mapChildren(f: BaseType => BaseType): BaseType = {
     if (children.nonEmpty) {
       var changed = false
+      def mapChild(child: Any): Any = child match {
+        case arg: TreeNode[_] if containsChild(arg) =>
+          val newChild = f(arg.asInstanceOf[BaseType])
+          if (!(newChild fastEquals arg)) {
+            changed = true
+            newChild
+          } else {
+            arg
+          }
+        case tuple@(arg1: TreeNode[_], arg2: TreeNode[_]) =>
+          val newChild1 = if (containsChild(arg1)) {
+            f(arg1.asInstanceOf[BaseType])
+          } else {
+            arg1.asInstanceOf[BaseType]
+          }
+
+          val newChild2 = if (containsChild(arg2)) {
+            f(arg2.asInstanceOf[BaseType])
+          } else {
+            arg2.asInstanceOf[BaseType]
+          }
+
+          if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
+            changed = true
+            (newChild1, newChild2)
+          } else {
+            tuple
+          }
+        case other => other
+      }
+
       val newArgs = mapProductIterator {
         case arg: TreeNode[_] if containsChild(arg) =>
           val newChild = f(arg.asInstanceOf[BaseType])
@@ -330,26 +350,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
           case other => other
         }.view.force // `mapValues` is lazy and we need to force it to materialize
         case d: DataType => d // Avoid unpacking Structs
-        case args: Traversable[_] => args.map {
-          case arg: TreeNode[_] if containsChild(arg) =>
-            val newChild = f(arg.asInstanceOf[BaseType])
-            if (!(newChild fastEquals arg)) {
-              changed = true
-              newChild
-            } else {
-              arg
-            }
-          case tuple@(arg1: TreeNode[_], arg2: TreeNode[_]) =>
-            val newChild1 = f(arg1.asInstanceOf[BaseType])
-            val newChild2 = f(arg2.asInstanceOf[BaseType])
-            if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
-              changed = true
-              (newChild1, newChild2)
-            } else {
-              tuple
-            }
-          case other => other
-        }
+        case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
+        case args: Traversable[_] => args.map(mapChild)
         case nonChild: AnyRef => nonChild
         case null => null
       }
@@ -444,6 +446,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case None => Nil
     case Some(null) => Nil
     case Some(any) => any :: Nil
+    case table: CatalogTable =>
+      table.storage.serde match {
+        case Some(serde) => table.identifier :: serde :: Nil
+        case _ => table.identifier :: Nil
+      }
     case other => other :: Nil
   }.mkString(", ")
 
@@ -514,7 +521,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   protected def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
   /**
-   * Appends the string represent of this node and its children to the given StringBuilder.
+   * Appends the string representation of this node and its children to the given StringBuilder.
    *
    * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
    * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and
@@ -673,8 +680,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case id: FunctionIdentifier => true
     case spec: BucketSpec => true
     case catalog: CatalogTable => true
-    case boundary: FrameBoundary => true
-    case frame: WindowFrame => true
     case partition: Partitioning => true
     case resource: FunctionResource => true
     case broadcast: BroadcastMode => true

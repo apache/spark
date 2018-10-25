@@ -55,6 +55,28 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       + "null, null, null, null, null, "
       + "null, null, null, null, null, null, null)"
     ).executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE ts_with_timezone " +
+      "(id integer, tstz TIMESTAMP WITH TIME ZONE, ttz TIME WITH TIME ZONE)")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO ts_with_timezone VALUES " +
+      "(1, TIMESTAMP WITH TIME ZONE '2016-08-12 10:22:31.949271-07', " +
+      "TIME WITH TIME ZONE '17:22:31.949271+00')")
+      .executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE st_with_array (c0 uuid, c1 inet, c2 cidr," +
+      "c3 json, c4 jsonb, c5 uuid[], c6 inet[], c7 cidr[], c8 json[], c9 jsonb[])")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO st_with_array VALUES ( " +
+      "'0a532531-cdf1-45e3-963d-5de90b6a30f1', '172.168.22.1', '192.168.100.128/25', " +
+      """'{"a": "foo", "b": "bar"}', '{"a": 1, "b": 2}', """ +
+      "ARRAY['7be8aaf8-650e-4dbb-8186-0a749840ecf2'," +
+      "'205f9bfc-018c-4452-a605-609c0cfad228']::uuid[], ARRAY['172.16.0.41', " +
+      "'172.16.0.42']::inet[], ARRAY['192.168.0.0/24', '10.1.0.0/16']::cidr[], " +
+      """ARRAY['{"a": "foo", "b": "bar"}', '{"a": 1, "b": 2}']::json[], """ +
+      """ARRAY['{"a": 1, "b": 2, "c": 3}']::jsonb[])"""
+    )
+      .executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -125,5 +147,33 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val schema = sqlContext.read.jdbc(jdbcUrl, "shortfloat", new Properties).schema
     assert(schema(0).dataType == FloatType)
     assert(schema(1).dataType == ShortType)
+  }
+
+  test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
+    "should be recognized") {
+    // When using JDBC to read the columns of TIMESTAMP with TIME ZONE and TIME with TIME ZONE
+    // the actual types are java.sql.Types.TIMESTAMP and java.sql.Types.TIME
+    val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+    val rows = dfRead.collect()
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(1).equals("class java.sql.Timestamp"))
+    assert(types(2).equals("class java.sql.Timestamp"))
+  }
+
+  test("SPARK-22291: Conversion error when transforming array types of " +
+    "uuid, inet and cidr to StingType in PostgreSQL") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "st_with_array", new Properties)
+    val rows = df.collect()
+    assert(rows(0).getString(0) == "0a532531-cdf1-45e3-963d-5de90b6a30f1")
+    assert(rows(0).getString(1) == "172.168.22.1")
+    assert(rows(0).getString(2) == "192.168.100.128/25")
+    assert(rows(0).getString(3) == "{\"a\": \"foo\", \"b\": \"bar\"}")
+    assert(rows(0).getString(4) == "{\"a\": 1, \"b\": 2}")
+    assert(rows(0).getSeq(5) == Seq("7be8aaf8-650e-4dbb-8186-0a749840ecf2",
+      "205f9bfc-018c-4452-a605-609c0cfad228"))
+    assert(rows(0).getSeq(6) == Seq("172.16.0.41", "172.16.0.42"))
+    assert(rows(0).getSeq(7) == Seq("192.168.0.0/24", "10.1.0.0/16"))
+    assert(rows(0).getSeq(8) == Seq("""{"a": "foo", "b": "bar"}""", """{"a": 1, "b": 2}"""))
+    assert(rows(0).getSeq(9) == Seq("""{"a": 1, "b": 2, "c": 3}"""))
   }
 }

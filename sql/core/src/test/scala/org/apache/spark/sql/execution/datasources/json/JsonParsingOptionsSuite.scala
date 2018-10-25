@@ -72,6 +72,21 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     assert(df.first().getString(0) == "Reynold Xin")
   }
 
+  test("allowUnquotedControlChars off") {
+    val str = """{"name": "a\u0001b"}"""
+    val df = spark.read.json(Seq(str).toDS())
+
+    assert(df.schema.head.name == "_corrupt_record")
+  }
+
+  test("allowUnquotedControlChars on") {
+    val str = """{"name": "a\u0001b"}"""
+    val df = spark.read.option("allowUnquotedControlChars", "true").json(Seq(str).toDS())
+
+    assert(df.schema.head.name == "name")
+    assert(df.first().getString(0) == "a\u0001b")
+  }
+
   test("allowNumericLeadingZeros off") {
     val str = """{"age": 0018}"""
     val df = spark.read.json(Seq(str).toDS())

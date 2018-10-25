@@ -23,12 +23,14 @@ import java.net.URI
 import scala.collection.mutable
 import scala.language.reflectiveCalls
 
-import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
 
 class FileIndexSuite extends SharedSQLContext {
 
@@ -57,7 +59,7 @@ class FileIndexSuite extends SharedSQLContext {
       require(!unqualifiedDirPath.toString.contains("file:"))
       require(!unqualifiedFilePath.toString.contains("file:"))
 
-      val fs = unqualifiedDirPath.getFileSystem(sparkContext.hadoopConfiguration)
+      val fs = unqualifiedDirPath.getFileSystem(spark.sessionState.newHadoopConf())
       val qualifiedFilePath = fs.makeQualified(new Path(file.getCanonicalPath))
       require(qualifiedFilePath.toString.startsWith("file:"))
 
@@ -135,15 +137,15 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
-  test("PartitioningAwareFileIndex - file filtering") {
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("abcd"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut(".ab"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_cd"))
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("_metadata"))
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("_common_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_ab_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_cd_common_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("a._COPYING_"))
+  test("InMemoryFileIndex - file filtering") {
+    assert(!InMemoryFileIndex.shouldFilterOut("abcd"))
+    assert(InMemoryFileIndex.shouldFilterOut(".ab"))
+    assert(InMemoryFileIndex.shouldFilterOut("_cd"))
+    assert(!InMemoryFileIndex.shouldFilterOut("_metadata"))
+    assert(!InMemoryFileIndex.shouldFilterOut("_common_metadata"))
+    assert(InMemoryFileIndex.shouldFilterOut("_ab_metadata"))
+    assert(InMemoryFileIndex.shouldFilterOut("_cd_common_metadata"))
+    assert(InMemoryFileIndex.shouldFilterOut("a._COPYING_"))
   }
 
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
@@ -220,6 +222,52 @@ class FileIndexSuite extends SharedSQLContext {
       assert(catalog.leafDirPaths.head == fs.makeQualified(dirPath))
     }
   }
+
+  test("SPARK-20280 - FileStatusCache with a partition with very many files") {
+    /* fake the size, otherwise we need to allocate 2GB of data to trigger this bug */
+    class MyFileStatus extends FileStatus with KnownSizeEstimation {
+      override def estimatedSize: Long = 1000 * 1000 * 1000
+    }
+    /* files * MyFileStatus.estimatedSize should overflow to negative integer
+     * so, make it between 2bn and 4bn
+     */
+    val files = (1 to 3).map { i =>
+      new MyFileStatus()
+    }
+    val fileStatusCache = FileStatusCache.getOrCreate(spark)
+    fileStatusCache.putLeafFiles(new Path("/tmp", "abc"), files.toArray)
+  }
+
+  test("SPARK-20367 - properly unescape column names in inferPartitioning") {
+    withTempPath { path =>
+      val colToUnescape = "Column/#%'?"
+      spark
+        .range(1)
+        .select(col("id").as(colToUnescape), col("id"))
+        .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
+      assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
+    }
+  }
+
+  test("SPARK-25062 - InMemoryFileIndex stores BlockLocation objects no matter what subclass " +
+    "the FS returns") {
+    withSQLConf("fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+      withTempDir { dir =>
+        val file = new File(dir, "text.txt")
+        stringToFile(file, "text")
+
+        val inMemoryFileIndex = new InMemoryFileIndex(
+          spark, Seq(new Path(file.getCanonicalPath)), Map.empty, None) {
+          def leafFileStatuses = leafFiles.values
+        }
+        val blockLocations = inMemoryFileIndex.leafFileStatuses.flatMap(
+          _.asInstanceOf[LocatedFileStatus].getBlockLocations)
+
+        assert(blockLocations.forall(_.getClass == classOf[BlockLocation]))
+      }
+    }
+  }
+
 }
 
 class FakeParentPathFileSystem extends RawLocalFileSystem {
@@ -227,5 +275,22 @@ class FakeParentPathFileSystem extends RawLocalFileSystem {
 
   override def getUri: URI = {
     URI.create("mockFs://some-bucket")
+  }
+}
+
+class SpecialBlockLocationFileSystem extends RawLocalFileSystem {
+
+  class SpecialBlockLocation(
+      names: Array[String],
+      hosts: Array[String],
+      offset: Long,
+      length: Long)
+    extends BlockLocation(names, hosts, offset, length)
+
+  override def getFileBlockLocations(
+      file: FileStatus,
+      start: Long,
+      len: Long): Array[BlockLocation] = {
+    Array(new SpecialBlockLocation(Array("dummy"), Array("dummy"), 0L, file.getLen))
   }
 }

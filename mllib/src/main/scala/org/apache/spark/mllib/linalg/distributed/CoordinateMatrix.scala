@@ -125,6 +125,13 @@ class CoordinateMatrix @Since("1.0.0") (
       s"colsPerBlock needs to be greater than 0. colsPerBlock: $colsPerBlock")
     val m = numRows()
     val n = numCols()
+
+    // Since block matrices require an integer row and col index
+    require(math.ceil(m.toDouble / rowsPerBlock) <= Int.MaxValue,
+      "Number of rows divided by rowsPerBlock cannot exceed maximum integer.")
+    require(math.ceil(n.toDouble / colsPerBlock) <= Int.MaxValue,
+      "Number of cols divided by colsPerBlock cannot exceed maximum integer.")
+
     val numRowBlocks = math.ceil(m.toDouble / rowsPerBlock).toInt
     val numColBlocks = math.ceil(n.toDouble / colsPerBlock).toInt
     val partitioner = GridPartitioner(numRowBlocks, numColBlocks, entries.partitions.length)

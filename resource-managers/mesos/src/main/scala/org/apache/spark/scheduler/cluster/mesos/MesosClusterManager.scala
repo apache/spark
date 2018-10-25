@@ -17,12 +17,12 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 
 /**
- * Cluster Manager for creation of Yarn scheduler and backend
+ * Cluster Manager for creation of Mesos scheduler and backend
  */
 private[spark] class MesosClusterManager extends ExternalClusterManager {
   private val MESOS_REGEX = """mesos://(.*)""".r

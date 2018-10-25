@@ -28,10 +28,9 @@ import org.mockito.Matchers._
 import org.mockito.Matchers.{eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, Matchers}
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}
-import org.apache.spark.util.Utils
 
 /**
  * Suite of Kinesis streaming receiver tests focusing mostly on the KinesisRecordProcessor
@@ -60,28 +59,6 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver[Array[Byte]]]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
-  }
-
-  test("check serializability of credential provider classes") {
-    Utils.deserialize[BasicCredentialsProvider](
-      Utils.serialize(BasicCredentialsProvider(
-        awsAccessKeyId = "x",
-        awsSecretKey = "y")))
-
-    Utils.deserialize[STSCredentialsProvider](
-      Utils.serialize(STSCredentialsProvider(
-        stsRoleArn = "fakeArn",
-        stsSessionName = "fakeSessionName",
-        stsExternalId = Some("fakeExternalId"))))
-
-    Utils.deserialize[STSCredentialsProvider](
-      Utils.serialize(STSCredentialsProvider(
-        stsRoleArn = "fakeArn",
-        stsSessionName = "fakeSessionName",
-        stsExternalId = Some("fakeExternalId"),
-        longLivedCredsProvider = BasicCredentialsProvider(
-          awsAccessKeyId = "x",
-          awsSecretKey = "y"))))
   }
 
   test("process records including store and set checkpointer") {

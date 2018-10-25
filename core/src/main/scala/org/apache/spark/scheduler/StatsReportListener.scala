@@ -79,7 +79,7 @@ class StatsReportListener extends SparkListener with Logging {
       x => info.completionTime.getOrElse(System.currentTimeMillis()) - x
     ).getOrElse("-")
 
-    s"Stage(${info.stageId}, ${info.attemptId}); Name: '${info.name}'; " +
+    s"Stage(${info.stageId}, ${info.attemptNumber}); Name: '${info.name}'; " +
       s"Status: ${info.getStatusString}$failureReason; numTasks: ${info.numTasks}; " +
       s"Took: $timeTaken msec"
   }

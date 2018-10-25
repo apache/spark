@@ -17,11 +17,11 @@
 
 package org.apache.spark.network.util;
 
-import java.io.Closeable;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -88,11 +88,24 @@ public class JavaUtils {
    * @throws IOException if deletion is unsuccessful
    */
   public static void deleteRecursively(File file) throws IOException {
+    deleteRecursively(file, null);
+  }
+
+  /**
+   * Delete a file or directory and its contents recursively.
+   * Don't follow directories if they are symlinks.
+   *
+   * @param file Input file / dir to be deleted
+   * @param filter A filename filter that make sure only files / dirs with the satisfied filenames
+   *               are deleted.
+   * @throws IOException if deletion is unsuccessful
+   */
+  public static void deleteRecursively(File file, FilenameFilter filter) throws IOException {
     if (file == null) { return; }
 
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
-    if (SystemUtils.IS_OS_UNIX) {
+    if (SystemUtils.IS_OS_UNIX && filter == null) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;
@@ -102,15 +115,17 @@ public class JavaUtils {
       }
     }
 
-    deleteRecursivelyUsingJavaIO(file);
+    deleteRecursivelyUsingJavaIO(file, filter);
   }
 
-  private static void deleteRecursivelyUsingJavaIO(File file) throws IOException {
+  private static void deleteRecursivelyUsingJavaIO(
+      File file,
+      FilenameFilter filter) throws IOException {
     if (file.isDirectory() && !isSymlink(file)) {
       IOException savedIOException = null;
-      for (File child : listFilesSafely(file)) {
+      for (File child : listFilesSafely(file, filter)) {
         try {
-          deleteRecursively(child);
+          deleteRecursively(child, filter);
         } catch (IOException e) {
           // In case of multiple exceptions, only last one will be thrown
           savedIOException = e;
@@ -121,10 +136,13 @@ public class JavaUtils {
       }
     }
 
-    boolean deleted = file.delete();
-    // Delete can also fail if the file simply did not exist.
-    if (!deleted && file.exists()) {
-      throw new IOException("Failed to delete: " + file.getAbsolutePath());
+    // Delete file only when it's a normal file or an empty directory.
+    if (file.isFile() || (file.isDirectory() && listFilesSafely(file, null).length == 0)) {
+      boolean deleted = file.delete();
+      // Delete can also fail if the file simply did not exist.
+      if (!deleted && file.exists()) {
+        throw new IOException("Failed to delete: " + file.getAbsolutePath());
+      }
     }
   }
 
@@ -154,9 +172,9 @@ public class JavaUtils {
     }
   }
 
-  private static File[] listFilesSafely(File file) throws IOException {
+  private static File[] listFilesSafely(File file, FilenameFilter filter) throws IOException {
     if (file.exists()) {
-      File[] files = file.listFiles();
+      File[] files = file.listFiles(filter);
       if (files == null) {
         throw new IOException("Failed to list files for dir: " + file);
       }
@@ -208,7 +226,7 @@ public class JavaUtils {
    * The unit is also considered the default if the given string does not specify a unit.
    */
   public static long timeStringAs(String str, TimeUnit unit) {
-    String lower = str.toLowerCase().trim();
+    String lower = str.toLowerCase(Locale.ROOT).trim();
 
     try {
       Matcher m = Pattern.compile("(-?[0-9]+)([a-z]+)?").matcher(lower);
@@ -256,7 +274,7 @@ public class JavaUtils {
    * provided, a direct conversion to the provided unit is attempted.
    */
   public static long byteStringAs(String str, ByteUnit unit) {
-    String lower = str.toLowerCase().trim();
+    String lower = str.toLowerCase(Locale.ROOT).trim();
 
     try {
       Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
@@ -341,6 +359,19 @@ public class JavaUtils {
       byte[] bytes = new byte[buffer.remaining()];
       buffer.get(bytes);
       return bytes;
+    }
+  }
+
+  /**
+   * Fills a buffer with data read from the channel.
+   */
+  public static void readFully(ReadableByteChannel channel, ByteBuffer dst) throws IOException {
+    int expected = dst.remaining();
+    while (dst.hasRemaining()) {
+      if (channel.read(dst) < 0) {
+        throw new EOFException(String.format("Not enough bytes in channel (expected %d).",
+          expected));
+      }
     }
   }
 

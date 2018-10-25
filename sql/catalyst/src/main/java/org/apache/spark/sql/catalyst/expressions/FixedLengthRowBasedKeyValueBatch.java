@@ -62,7 +62,7 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
 
     keyRowId = numRows;
     keyRow.pointTo(base, recordOffset, klen);
-    valueRow.pointTo(base, recordOffset + klen, vlen + 4);
+    valueRow.pointTo(base, recordOffset + klen, vlen);
     numRows++;
     return valueRow;
   }
@@ -95,7 +95,7 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
       getKeyRow(rowId);
     }
     assert(rowId >= 0);
-    valueRow.pointTo(base, keyRow.getBaseOffset() + klen, vlen + 4);
+    valueRow.pointTo(base, keyRow.getBaseOffset() + klen, vlen);
     return valueRow;
   }
 
@@ -131,7 +131,7 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
         }
 
         key.pointTo(base, offsetInPage, klen);
-        value.pointTo(base, offsetInPage + klen, vlen + 4);
+        value.pointTo(base, offsetInPage + klen, vlen);
 
         offsetInPage += recordLength;
         recordsInPage -= 1;

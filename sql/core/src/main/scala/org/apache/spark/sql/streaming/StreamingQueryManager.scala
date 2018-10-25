@@ -24,23 +24,26 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.SparkException
+import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
+import org.apache.spark.sql.sources.v2.StreamingWriteSupportProvider
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
- * :: Experimental ::
- * A class to manage all the [[StreamingQuery]] active on a `SparkSession`.
+ * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
-class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
+class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Logging {
 
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
@@ -53,6 +56,19 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
 
   @GuardedBy("awaitTerminationLock")
   private var lastTerminatedQuery: StreamingQuery = null
+
+  try {
+    sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
+      Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
+        sparkSession.sparkContext.conf).foreach(listener => {
+        addListener(listener)
+        logInfo(s"Registered listener ${listener.getClass.getName}")
+      })
+    }
+  } catch {
+    case e: Exception =>
+      throw new SparkException("Exception when registering StreamingQueryListener", e)
+  }
 
   /**
    * Returns a list of active queries associated with this SQLContext
@@ -189,7 +205,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
       df: DataFrame,
-      sink: Sink,
+      extraOptions: Map[String, String],
+      sink: BaseStreamingSink,
       outputMode: OutputMode,
       useTempCheckpointLocation: Boolean,
       recoverFromCheckpointLocation: Boolean,
@@ -234,21 +251,39 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
     }
 
     if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
-      throw new AnalysisException(
-        s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
-          "is not supported in streaming DataFrames/Datasets")
+      logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
+          "is not supported in streaming DataFrames/Datasets and will be disabled.")
     }
 
-    new StreamingQueryWrapper(new StreamExecution(
-      sparkSession,
-      userSpecifiedName.orNull,
-      checkpointLocation,
-      analyzedPlan,
-      sink,
-      trigger,
-      triggerClock,
-      outputMode,
-      deleteCheckpointOnStop))
+    (sink, trigger) match {
+      case (v2Sink: StreamingWriteSupportProvider, trigger: ContinuousTrigger) =>
+        if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
+          UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
+        }
+        new StreamingQueryWrapper(new ContinuousExecution(
+          sparkSession,
+          userSpecifiedName.orNull,
+          checkpointLocation,
+          analyzedPlan,
+          v2Sink,
+          trigger,
+          triggerClock,
+          outputMode,
+          extraOptions,
+          deleteCheckpointOnStop))
+      case _ =>
+        new StreamingQueryWrapper(new MicroBatchExecution(
+          sparkSession,
+          userSpecifiedName.orNull,
+          checkpointLocation,
+          analyzedPlan,
+          sink,
+          trigger,
+          triggerClock,
+          outputMode,
+          extraOptions,
+          deleteCheckpointOnStop))
+    }
   }
 
   /**
@@ -271,7 +306,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
       df: DataFrame,
-      sink: Sink,
+      extraOptions: Map[String, String],
+      sink: BaseStreamingSink,
       outputMode: OutputMode,
       useTempCheckpointLocation: Boolean = false,
       recoverFromCheckpointLocation: Boolean = true,
@@ -281,6 +317,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       userSpecifiedName,
       userSpecifiedCheckpointLocation,
       df,
+      extraOptions,
       sink,
       outputMode,
       useTempCheckpointLocation,
@@ -334,5 +371,6 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       }
       awaitTerminationLock.notifyAll()
     }
+    stateStoreCoordinator.deactivateInstances(terminatedQuery.runId)
   }
 }

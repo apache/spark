@@ -92,6 +92,9 @@ private[deploy] object RPackageUtils extends Logging {
    * Exposed for testing.
    */
   private[deploy] def checkManifestForR(jar: JarFile): Boolean = {
+    if (jar.getManifest == null) {
+      return false
+    }
     val manifest = jar.getManifest.getMainAttributes
     manifest.getValue(hasRPackage) != null && manifest.getValue(hasRPackage).trim == "true"
   }

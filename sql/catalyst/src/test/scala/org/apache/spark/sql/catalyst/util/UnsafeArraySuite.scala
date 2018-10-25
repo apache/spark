@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -114,7 +114,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     assert(unsafeDate.isInstanceOf[UnsafeArrayData])
     assert(unsafeDate.numElements == dateArray.length)
     dateArray.zipWithIndex.map { case (e, i) =>
-      assert(unsafeDate.get(i, DateType) == e)
+      assert(unsafeDate.get(i, DateType).asInstanceOf[Int] == e)
     }
 
     val unsafeTimestamp = ExpressionEncoder[Array[Long]].resolveAndBind().
@@ -122,7 +122,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     assert(unsafeTimestamp.isInstanceOf[UnsafeArrayData])
     assert(unsafeTimestamp.numElements == timestampArray.length)
     timestampArray.zipWithIndex.map { case (e, i) =>
-      assert(unsafeTimestamp.get(i, TimestampType) == e)
+      assert(unsafeTimestamp.get(i, TimestampType).asInstanceOf[Long] == e)
     }
 
     Seq(decimalArray4_1, decimalArray20_20).map { decimalArray =>

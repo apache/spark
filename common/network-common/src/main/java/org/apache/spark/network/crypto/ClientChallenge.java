@@ -28,7 +28,7 @@ import org.apache.spark.network.protocol.Encoders;
 /**
  * The client challenge message, used to initiate authentication.
  *
- * @see README.md
+ * Please see crypto/README.md for more details of implementation.
  */
 public class ClientChallenge implements Encodable {
   /** Serialization tag used to catch incorrect payloads. */

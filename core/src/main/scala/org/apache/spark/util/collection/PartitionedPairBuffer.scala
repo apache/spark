@@ -19,13 +19,15 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
+import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.collection.WritablePartitionedPairCollection._
 
 /**
  * Append-only buffer of key-value pairs, each with a corresponding partition ID, that keeps track
  * of its estimated size in bytes.
  *
- * The buffer can support up to `1073741823 (2 ^ 30 - 1)` elements.
+ * The buffer can support up to 1073741819 elements.
  */
 private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
   extends WritablePartitionedPairCollection[K, V] with SizeTracker
@@ -59,7 +61,7 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
       throw new IllegalStateException(s"Can't insert more than ${MAXIMUM_CAPACITY} elements")
     }
     val newCapacity =
-      if (capacity * 2 < 0 || capacity * 2 > MAXIMUM_CAPACITY) { // Overflow
+      if (capacity * 2 > MAXIMUM_CAPACITY) { // Overflow
         MAXIMUM_CAPACITY
       } else {
         capacity * 2
@@ -96,5 +98,5 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
 }
 
 private object PartitionedPairBuffer {
-  val MAXIMUM_CAPACITY = Int.MaxValue / 2 // 2 ^ 30 - 1
+  val MAXIMUM_CAPACITY: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 2
 }

@@ -21,17 +21,19 @@ import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFPercentileApprox
 
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.catalyst.expressions.{ExpressionInfo, Literal}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.hive.HiveSessionCatalog
 import org.apache.spark.sql.hive.execution.TestingTypedCount
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
-import org.apache.spark.util.Benchmark
 
-class ObjectHashAggregateExecBenchmark extends BenchmarkBase with TestHiveSingleton {
+class ObjectHashAggregateExecBenchmark extends BenchmarkWithCodegen with TestHiveSingleton {
   ignore("Hive UDAF vs Spark AF") {
     val N = 2 << 15
 
@@ -217,9 +219,9 @@ class ObjectHashAggregateExecBenchmark extends BenchmarkBase with TestHiveSingle
 
   private def registerHiveFunction(functionName: String, clazz: Class[_]): Unit = {
     val sessionCatalog = sparkSession.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
-    val builder = sessionCatalog.makeFunctionBuilder(functionName, clazz.getName)
-    val info = new ExpressionInfo(clazz.getName, functionName)
-    sessionCatalog.createTempFunction(functionName, info, builder, ignoreIfExists = false)
+    val functionIdentifier = FunctionIdentifier(functionName, database = None)
+    val func = CatalogFunction(functionIdentifier, clazz.getName, resources = Nil)
+    sessionCatalog.registerFunction(func, overrideIfExists = false)
   }
 
   private def percentile_approx(

@@ -46,8 +46,13 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
+import org.apache.spark.network.util.MapConfigProvider;
+import org.apache.spark.network.util.TransportConf;
 
 public class OneForOneBlockFetcherSuite {
+
+  private static final TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
+
   @Test
   public void testFetchOne() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
@@ -126,7 +131,7 @@ public class OneForOneBlockFetcherSuite {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
     OneForOneBlockFetcher fetcher =
-      new OneForOneBlockFetcher(client, "app-id", "exec-id", blockIds, listener);
+      new OneForOneBlockFetcher(client, "app-id", "exec-id", blockIds, listener, conf);
 
     // Respond to the "OpenBlocks" message with an appropriate ShuffleStreamHandle with streamId 123
     doAnswer(invocationOnMock -> {

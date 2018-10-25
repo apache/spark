@@ -109,4 +109,28 @@ FROM   t1
 WHERE  t1a NOT IN (SELECT t2a
                    FROM   t2);
 
+-- DDLs
+create temporary view a as select * from values
+  (1, 1), (2, 1), (null, 1), (1, 3), (null, 3), (1, null), (null, 2)
+  as a(a1, a2);
 
+create temporary view b as select * from values
+  (1, 1, 2), (null, 3, 2), (1, null, 2), (1, 2, null)
+  as b(b1, b2, b3);
+
+-- TC 02.01
+SELECT a1, a2
+FROM   a
+WHERE  a1 NOT IN (SELECT b.b1
+                  FROM   b
+                  WHERE  a.a2 = b.b2)
+;
+
+-- TC 02.02
+SELECT a1, a2
+FROM   a
+WHERE  a1 NOT IN (SELECT b.b1
+                  FROM   b
+                  WHERE  a.a2 = b.b2
+                  AND    b.b3 > 1)
+;

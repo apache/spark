@@ -21,8 +21,8 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.serializer.KryoTest._
-import org.apache.spark.util.Benchmark
 
 class KryoBenchmark extends SparkFunSuite {
   val benchmark = new Benchmark("Benchmark Kryo Unsafe vs safe Serialization", 1024 * 1024 * 15, 10)
@@ -78,10 +78,10 @@ class KryoBenchmark extends SparkFunSuite {
         sum
       }
     }
-    basicTypes("Int", Random.nextInt)
-    basicTypes("Long", Random.nextLong)
-    basicTypes("Float", Random.nextFloat)
-    basicTypes("Double", Random.nextDouble)
+    basicTypes("Int", () => Random.nextInt())
+    basicTypes("Long", () => Random.nextLong())
+    basicTypes("Float", () => Random.nextFloat())
+    basicTypes("Double", () => Random.nextDouble())
 
     // Benchmark Array of Primitives
     val arrayCount = 10000
@@ -101,10 +101,10 @@ class KryoBenchmark extends SparkFunSuite {
         sum
       }
     }
-    basicTypeArray("Int", Random.nextInt)
-    basicTypeArray("Long", Random.nextLong)
-    basicTypeArray("Float", Random.nextFloat)
-    basicTypeArray("Double", Random.nextDouble)
+    basicTypeArray("Int", () => Random.nextInt())
+    basicTypeArray("Long", () => Random.nextLong())
+    basicTypeArray("Float", () => Random.nextFloat())
+    basicTypeArray("Double", () => Random.nextDouble())
 
     // Benchmark Maps
     val mapsCount = 1000

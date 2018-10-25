@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Use DataFrames and SQL to count words in UTF8 encoded, '\n' delimited text received from the
  network every second.
 
@@ -48,7 +48,7 @@ def getSparkSessionInstance(sparkConf):
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: sql_network_wordcount.py <hostname> <port> ", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
     host, port = sys.argv[1:]
     sc = SparkContext(appName="PythonSqlNetworkWordCount")
     ssc = StreamingContext(sc, 1)

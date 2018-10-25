@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.Properties
 
 import scala.collection.JavaConverters._
@@ -49,6 +50,7 @@ private[spark] class TaskDescription(
     val executorId: String,
     val name: String,
     val index: Int,    // Index within this task's TaskSet
+    val partitionId: Int,
     val addedFiles: Map[String, Long],
     val addedJars: Map[String, Long],
     val properties: Properties,
@@ -75,6 +77,7 @@ private[spark] object TaskDescription {
     dataOut.writeUTF(taskDescription.executorId)
     dataOut.writeUTF(taskDescription.name)
     dataOut.writeInt(taskDescription.index)
+    dataOut.writeInt(taskDescription.partitionId)
 
     // Write files.
     serializeStringLongMap(taskDescription.addedFiles, dataOut)
@@ -86,7 +89,10 @@ private[spark] object TaskDescription {
     dataOut.writeInt(taskDescription.properties.size())
     taskDescription.properties.asScala.foreach { case (key, value) =>
       dataOut.writeUTF(key)
-      dataOut.writeUTF(value)
+      // SPARK-19796 -- writeUTF doesn't work for long strings, which can happen for property values
+      val bytes = value.getBytes(StandardCharsets.UTF_8)
+      dataOut.writeInt(bytes.length)
+      dataOut.write(bytes)
     }
 
     // Write the task. The task is already serialized, so write it directly to the byte buffer.
@@ -113,6 +119,7 @@ private[spark] object TaskDescription {
     val executorId = dataIn.readUTF()
     val name = dataIn.readUTF()
     val index = dataIn.readInt()
+    val partitionId = dataIn.readInt()
 
     // Read files.
     val taskFiles = deserializeStringLongMap(dataIn)
@@ -124,13 +131,17 @@ private[spark] object TaskDescription {
     val properties = new Properties()
     val numProperties = dataIn.readInt()
     for (i <- 0 until numProperties) {
-      properties.setProperty(dataIn.readUTF(), dataIn.readUTF())
+      val key = dataIn.readUTF()
+      val valueLength = dataIn.readInt()
+      val valueBytes = new Array[Byte](valueLength)
+      dataIn.readFully(valueBytes)
+      properties.setProperty(key, new String(valueBytes, StandardCharsets.UTF_8))
     }
 
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
 
-    new TaskDescription(taskId, attemptNumber, executorId, name, index, taskFiles, taskJars,
-      properties, serializedTask)
+    new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, taskFiles,
+      taskJars, properties, serializedTask)
   }
 }

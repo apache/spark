@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -37,11 +37,11 @@ class PartitionProviderCompatibilitySuite
     spark.range(5).selectExpr("id as fieldOne", "id as partCol").write
       .partitionBy("partCol")
       .mode("overwrite")
-      .parquet(dir.getAbsolutePath)
+      .save(dir.getAbsolutePath)
 
     spark.sql(s"""
       |create table $tableName (fieldOne long, partCol int)
-      |using parquet
+      |using ${spark.sessionState.conf.defaultDataSourceName}
       |options (path "${dir.toURI}")
       |partitioned by (partCol)""".stripMargin)
   }
@@ -316,6 +316,28 @@ class PartitionProviderCompatibilitySuite
         }
       }
     }
+
+    test(s"SPARK-19887 partition value is null - partition management $enabled") {
+      withTable("test") {
+        Seq((1, "p", 1), (2, null, 2)).toDF("a", "b", "c")
+          .write.partitionBy("b", "c").saveAsTable("test")
+        checkAnswer(spark.table("test"),
+          Row(1, "p", 1) :: Row(2, null, 2) :: Nil)
+
+        Seq((3, null: String, 3)).toDF("a", "b", "c")
+          .write.mode("append").partitionBy("b", "c").saveAsTable("test")
+        checkAnswer(spark.table("test"),
+          Row(1, "p", 1) :: Row(2, null, 2) :: Row(3, null, 3) :: Nil)
+        // make sure partition pruning also works.
+        checkAnswer(spark.table("test").filter($"b".isNotNull), Row(1, "p", 1))
+
+        // empty string is an invalid partition value and we treat it as null when read back.
+        Seq((4, "", 4)).toDF("a", "b", "c")
+          .write.mode("append").partitionBy("b", "c").saveAsTable("test")
+        checkAnswer(spark.table("test"),
+          Row(1, "p", 1) :: Row(2, null, 2) :: Row(3, null, 3) :: Row(4, null, 4) :: Nil)
+      }
+    }
   }
 
   /**
@@ -336,7 +358,7 @@ class PartitionProviderCompatibilitySuite
     try {
       spark.sql(s"""
         |create table test (id long, P1 int, P2 int)
-        |using parquet
+        |using ${spark.sessionState.conf.defaultDataSourceName}
         |options (path "${base.toURI}")
         |partitioned by (P1, P2)""".stripMargin)
       spark.sql(s"alter table test add partition (P1=0, P2=0) location '${a.toURI}'")

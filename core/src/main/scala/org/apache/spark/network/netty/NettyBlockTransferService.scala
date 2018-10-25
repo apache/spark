@@ -18,19 +18,23 @@
 package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
+import java.util.{HashMap => JHashMap, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
 
+import com.codahale.metrics.{Metric, MetricSet}
+
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.internal.config
 import org.apache.spark.network._
-import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap, TransportClientFactory}
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
-import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher, RetryingBlockFetcher}
-import org.apache.spark.network.shuffle.protocol.UploadBlock
+import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockFetcher}
+import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
@@ -83,18 +87,33 @@ private[spark] class NettyBlockTransferService(
     Utils.startServiceOnPort(_port, startService, conf, getClass.getName)._1
   }
 
+  override def shuffleMetrics(): MetricSet = {
+    require(server != null && clientFactory != null, "NettyBlockTransferServer is not initialized")
+
+    new MetricSet {
+      val allMetrics = new JHashMap[String, Metric]()
+      override def getMetrics: JMap[String, Metric] = {
+        allMetrics.putAll(clientFactory.getAllMetrics.getMetrics)
+        allMetrics.putAll(server.getAllMetrics.getMetrics)
+        allMetrics
+      }
+    }
+  }
+
   override def fetchBlocks(
       host: String,
       port: Int,
       execId: String,
       blockIds: Array[String],
-      listener: BlockFetchingListener): Unit = {
+      listener: BlockFetchingListener,
+      tempFileManager: DownloadFileManager): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
-          new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray, listener).start()
+          new OneForOneBlockFetcher(client, appId, execId, blockIds, listener,
+            transportConf, tempFileManager).start()
         }
       }
 
@@ -130,20 +149,28 @@ private[spark] class NettyBlockTransferService(
     // Everything else is encoded using our binary protocol.
     val metadata = JavaUtils.bufferToArray(serializer.newInstance().serialize((level, classTag)))
 
-    // Convert or copy nio buffer into array in order to serialize it.
-    val array = JavaUtils.bufferToArray(blockData.nioByteBuffer())
+    val asStream = blockData.size() > conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
+    val callback = new RpcResponseCallback {
+      override def onSuccess(response: ByteBuffer): Unit = {
+        logTrace(s"Successfully uploaded block $blockId${if (asStream) " as stream" else ""}")
+        result.success((): Unit)
+      }
 
-    client.sendRpc(new UploadBlock(appId, execId, blockId.toString, metadata, array).toByteBuffer,
-      new RpcResponseCallback {
-        override def onSuccess(response: ByteBuffer): Unit = {
-          logTrace(s"Successfully uploaded block $blockId")
-          result.success((): Unit)
-        }
-        override def onFailure(e: Throwable): Unit = {
-          logError(s"Error while uploading block $blockId", e)
-          result.failure(e)
-        }
-      })
+      override def onFailure(e: Throwable): Unit = {
+        logError(s"Error while uploading $blockId${if (asStream) " as stream" else ""}", e)
+        result.failure(e)
+      }
+    }
+    if (asStream) {
+      val streamHeader = new UploadBlockStream(blockId.name, metadata).toByteBuffer
+      client.uploadStream(new NioManagedBuffer(streamHeader), blockData, callback)
+    } else {
+      // Convert or copy nio buffer into array in order to serialize it.
+      val array = JavaUtils.bufferToArray(blockData.nioByteBuffer())
+
+      client.sendRpc(new UploadBlock(appId, execId, blockId.name, metadata, array).toByteBuffer,
+        callback)
+    }
 
     result.future
   }

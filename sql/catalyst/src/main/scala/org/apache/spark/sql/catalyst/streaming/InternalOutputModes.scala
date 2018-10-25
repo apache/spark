@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.streaming
 
+import java.util.Locale
+
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -44,4 +46,19 @@ private[sql] object InternalOutputModes {
    * aggregations, it will be equivalent to `Append` mode.
    */
   case object Update extends OutputMode
+
+
+  def apply(outputMode: String): OutputMode = {
+    outputMode.toLowerCase(Locale.ROOT) match {
+      case "append" =>
+        OutputMode.Append
+      case "complete" =>
+        OutputMode.Complete
+      case "update" =>
+        OutputMode.Update
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
+          "Accepted output modes are 'append', 'complete', 'update'")
+    }
+  }
 }

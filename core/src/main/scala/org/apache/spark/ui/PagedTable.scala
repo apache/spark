@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
  *
  * @param pageSize the number of rows in a page
  */
-private[ui] abstract class PagedDataSource[T](val pageSize: Int) {
+private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
 
   if (pageSize <= 0) {
     throw new IllegalArgumentException("Page size must be positive")
@@ -72,7 +72,7 @@ private[ui] case class PageData[T](totalPage: Int, data: Seq[T])
 /**
  * A paged table that will generate a HTML table for a specified page and also the page navigation.
  */
-private[ui] trait PagedTable[T] {
+private[spark] trait PagedTable[T] {
 
   def tableId: String
 
@@ -94,14 +94,16 @@ private[ui] trait PagedTable[T] {
     val _dataSource = dataSource
     try {
       val PageData(totalPages, data) = _dataSource.pageData(page)
+      val pageNavi = pageNavigation(page, _dataSource.pageSize, totalPages)
       <div>
-        {pageNavigation(page, _dataSource.pageSize, totalPages)}
+        {pageNavi}
         <table class={tableCssClass} id={tableId}>
           {headers}
           <tbody>
             {data.map(row)}
           </tbody>
         </table>
+        {pageNavi}
       </div>
     } catch {
       case e: IndexOutOfBoundsException =>

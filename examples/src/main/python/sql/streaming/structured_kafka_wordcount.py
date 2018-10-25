@@ -49,7 +49,7 @@ if __name__ == "__main__":
         print("""
         Usage: structured_kafka_wordcount.py <bootstrap-servers> <subscribe-type> <topics>
         """, file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     bootstrapServers = sys.argv[1]
     subscribeType = sys.argv[2]

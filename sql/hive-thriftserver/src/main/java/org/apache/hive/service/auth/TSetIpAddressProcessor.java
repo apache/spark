@@ -31,12 +31,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * This class is responsible for setting the ipAddress for operations executed via HiveServer2.
- * <p>
- * <ul>
- * <li>IP address is only set for operations that calls listeners with hookContext</li>
- * <li>IP address is only set if the underlying transport mechanism is socket</li>
- * </ul>
- * </p>
+ *
+ * - IP address is only set for operations that calls listeners with hookContext
+ * - IP address is only set if the underlying transport mechanism is socket
  *
  * @see org.apache.hadoop.hive.ql.hooks.ExecuteWithHookContext
  */

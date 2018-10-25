@@ -22,8 +22,8 @@ import java.net.{HttpURLConnection, URI, URL}
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.Arrays
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.{Arrays, Properties}
+import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream}
 import javax.net.ssl._
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
@@ -35,6 +35,7 @@ import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.log4j.PropertyConfigurator
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
@@ -58,8 +59,8 @@ private[spark] object TestUtils {
   def createJarWithClasses(
       classNames: Seq[String],
       toStringValue: String = "",
-      classNamesWithBase: Seq[(String, String)] = Seq(),
-      classpathUrls: Seq[URL] = Seq()): URL = {
+      classNamesWithBase: Seq[(String, String)] = Seq.empty,
+      classpathUrls: Seq[URL] = Seq.empty): URL = {
     val tempDir = Utils.createTempDir()
     val files1 = for (name <- classNames) yield {
       createCompiledClass(name, tempDir, toStringValue, classpathUrls = classpathUrls)
@@ -137,7 +138,7 @@ private[spark] object TestUtils {
     val options = if (classpathUrls.nonEmpty) {
       Seq("-classpath", classpathUrls.map { _.getFile }.mkString(File.pathSeparator))
     } else {
-      Seq()
+      Seq.empty
     }
     compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
 
@@ -160,7 +161,7 @@ private[spark] object TestUtils {
       destDir: File,
       toStringValue: String = "",
       baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq()): File = {
+      classpathUrls: Seq[URL] = Seq.empty): File = {
     val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
     val sourceFile = new JavaSourceFromString(className,
       "public class " + className + extendsText + " implements java.io.Serializable {" +
@@ -171,22 +172,24 @@ private[spark] object TestUtils {
   /**
    * Run some code involving jobs submitted to the given context and assert that the jobs spilled.
    */
-  def assertSpilled[T](sc: SparkContext, identifier: String)(body: => T): Unit = {
-    val spillListener = new SpillListener
-    sc.addSparkListener(spillListener)
-    body
-    assert(spillListener.numSpilledStages > 0, s"expected $identifier to spill, but did not")
+  def assertSpilled(sc: SparkContext, identifier: String)(body: => Unit): Unit = {
+    val listener = new SpillListener
+    withListener(sc, listener) { _ =>
+      body
+    }
+    assert(listener.numSpilledStages > 0, s"expected $identifier to spill, but did not")
   }
 
   /**
    * Run some code involving jobs submitted to the given context and assert that the jobs
    * did not spill.
    */
-  def assertNotSpilled[T](sc: SparkContext, identifier: String)(body: => T): Unit = {
-    val spillListener = new SpillListener
-    sc.addSparkListener(spillListener)
-    body
-    assert(spillListener.numSpilledStages == 0, s"expected $identifier to not spill, but did")
+  def assertNotSpilled(sc: SparkContext, identifier: String)(body: => Unit): Unit = {
+    val listener = new SpillListener
+    withListener(sc, listener) { _ =>
+      body
+    }
+    assert(listener.numSpilledStages == 0, s"expected $identifier to not spill, but did")
   }
 
   /**
@@ -232,6 +235,68 @@ private[spark] object TestUtils {
     }
   }
 
+  /**
+   * Runs some code with the given listener installed in the SparkContext. After the code runs,
+   * this method will wait until all events posted to the listener bus are processed, and then
+   * remove the listener from the bus.
+   */
+  def withListener[L <: SparkListener](sc: SparkContext, listener: L) (body: L => Unit): Unit = {
+    sc.addSparkListener(listener)
+    try {
+      body(listener)
+    } finally {
+      sc.listenerBus.waitUntilEmpty(TimeUnit.SECONDS.toMillis(10))
+      sc.listenerBus.removeListener(listener)
+    }
+  }
+
+  /**
+   * Wait until at least `numExecutors` executors are up, or throw `TimeoutException` if the waiting
+   * time elapsed before `numExecutors` executors up. Exposed for testing.
+   *
+   * @param numExecutors the number of executors to wait at least
+   * @param timeout time to wait in milliseconds
+   */
+  private[spark] def waitUntilExecutorsUp(
+      sc: SparkContext,
+      numExecutors: Int,
+      timeout: Long): Unit = {
+    val finishTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout)
+    while (System.nanoTime() < finishTime) {
+      if (sc.statusTracker.getExecutorInfos.length > numExecutors) {
+        return
+      }
+      // Sleep rather than using wait/notify, because this is used only for testing and wait/notify
+      // add overhead in the general case.
+      Thread.sleep(10)
+    }
+    throw new TimeoutException(
+      s"Can't find $numExecutors executors before $timeout milliseconds elapsed")
+  }
+
+  /**
+   * config a log4j properties used for testsuite
+   */
+  def configTestLog4j(level: String): Unit = {
+    val pro = new Properties()
+    pro.put("log4j.rootLogger", s"$level, console")
+    pro.put("log4j.appender.console", "org.apache.log4j.ConsoleAppender")
+    pro.put("log4j.appender.console.target", "System.err")
+    pro.put("log4j.appender.console.layout", "org.apache.log4j.PatternLayout")
+    pro.put("log4j.appender.console.layout.ConversionPattern",
+      "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
+    PropertyConfigurator.configure(pro)
+  }
+
+  /**
+   * Lists files recursively.
+   */
+  def recursiveList(f: File): Array[File] = {
+    require(f.isDirectory)
+    val current = f.listFiles
+    current ++ current.filter(_.isDirectory).flatMap(recursiveList)
+  }
+
 }
 
 
@@ -241,30 +306,22 @@ private[spark] object TestUtils {
 private class SpillListener extends SparkListener {
   private val stageIdToTaskMetrics = new mutable.HashMap[Int, ArrayBuffer[TaskMetrics]]
   private val spilledStageIds = new mutable.HashSet[Int]
-  private val stagesDone = new CountDownLatch(1)
 
-  def numSpilledStages: Int = {
-    // Long timeout, just in case somehow the job end isn't notified.
-    // Fails if a timeout occurs
-    assert(stagesDone.await(10, TimeUnit.SECONDS))
+  def numSpilledStages: Int = synchronized {
     spilledStageIds.size
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     stageIdToTaskMetrics.getOrElseUpdate(
       taskEnd.stageId, new ArrayBuffer[TaskMetrics]) += taskEnd.taskMetrics
   }
 
-  override def onStageCompleted(stageComplete: SparkListenerStageCompleted): Unit = {
+  override def onStageCompleted(stageComplete: SparkListenerStageCompleted): Unit = synchronized {
     val stageId = stageComplete.stageInfo.stageId
     val metrics = stageIdToTaskMetrics.remove(stageId).toSeq.flatten
     val spilled = metrics.map(_.memoryBytesSpilled).sum > 0
     if (spilled) {
       spilledStageIds += stageId
     }
-  }
-
-  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-    stagesDone.countDown()
   }
 }

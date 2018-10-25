@@ -19,7 +19,6 @@ package org.apache.spark.sql.types
 import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -32,9 +31,7 @@ sealed abstract class HiveStringType extends AtomicType {
 
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized {
-    typeTag[InternalType]
-  }
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 
   override def defaultSize: Int = length
 
@@ -59,14 +56,18 @@ object HiveStringType {
 }
 
 /**
- * Hive char type.
+ * Hive char type. Similar to other HiveStringType's, these datatypes should only used for
+ * parsing, and should NOT be used anywhere else. Any instance of these data types should be
+ * replaced by a [[StringType]] before analysis.
  */
 case class CharType(length: Int) extends HiveStringType {
   override def simpleString: String = s"char($length)"
 }
 
 /**
- * Hive varchar type.
+ * Hive varchar type. Similar to other HiveStringType's, these datatypes should only used for
+ * parsing, and should NOT be used anywhere else. Any instance of these data types should be
+ * replaced by a [[StringType]] before analysis.
  */
 case class VarcharType(length: Int) extends HiveStringType {
   override def simpleString: String = s"varchar($length)"
