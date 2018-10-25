@@ -1570,13 +1570,8 @@ test_that("column functions", {
   result <- collect(select(df, flatten(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, 4L), list(5L, 6L, 7L, 8L)))
 
-  # Test map_entries(), map_keys(), map_values() and element_at()
+  # Test map_keys(), map_values() and element_at()
   df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))
-  result <- collect(select(df, map_entries(df$map)))[[1]]
-  expected_entries <-  list(listToStruct(list(key = "x", value = 1)),
-                            listToStruct(list(key = "y", value = 2)))
-  expect_equal(result, list(expected_entries))
-
   result <- collect(select(df, map_keys(df$map)))[[1]]
   expect_equal(result, list(list("x", "y")))
 
