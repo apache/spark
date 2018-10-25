@@ -126,46 +126,39 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       (null, null, null) :: Nil)
 
   test("basic IN predicate test") {
-    checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType), Seq(Literal(1),
+    checkEvaluation(In(Seq(NonFoldableLiteral.create(null, IntegerType)), Seq(Literal(1),
       Literal(2))), null)
-    checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType),
+    checkEvaluation(In(Seq(NonFoldableLiteral.create(null, IntegerType)),
       Seq(NonFoldableLiteral.create(null, IntegerType))), null)
-    checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType), Seq.empty), null)
-    checkEvaluation(In(Literal(1), Seq.empty), false)
-    checkEvaluation(In(Literal(1), Seq(NonFoldableLiteral.create(null, IntegerType))), null)
-    checkEvaluation(In(Literal(1), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
-      true)
-    checkEvaluation(In(Literal(2), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
-      null)
-    checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))), true)
-    checkEvaluation(In(Literal(2), Seq(Literal(1), Literal(2))), true)
-    checkEvaluation(In(Literal(3), Seq(Literal(1), Literal(2))), false)
+    checkEvaluation(In(Seq(NonFoldableLiteral.create(null, IntegerType)), Seq.empty), null)
+    checkEvaluation(In(Seq(Literal(1)), Seq.empty), false)
+    checkEvaluation(In(Seq(Literal(1)), Seq(NonFoldableLiteral.create(null, IntegerType))), null)
     checkEvaluation(
-      And(In(Literal(1), Seq(Literal(1), Literal(2))), In(Literal(2), Seq(Literal(1),
+      In(Seq(Literal(1)), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
+      true)
+    checkEvaluation(
+      In(Seq(Literal(2)), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
+      null)
+    checkEvaluation(In(Seq(Literal(1)), Seq(Literal(1), Literal(2))), true)
+    checkEvaluation(In(Seq(Literal(2)), Seq(Literal(1), Literal(2))), true)
+    checkEvaluation(In(Seq(Literal(3)), Seq(Literal(1), Literal(2))), false)
+    checkEvaluation(
+      And(In(Seq(Literal(1)), Seq(Literal(1), Literal(2))), In(Seq(Literal(2)), Seq(Literal(1),
         Literal(2)))),
       true)
 
     val ns = NonFoldableLiteral.create(null, StringType)
-    checkEvaluation(In(ns, Seq(Literal("1"), Literal("2"))), null)
-    checkEvaluation(In(ns, Seq(ns)), null)
-    checkEvaluation(In(Literal("a"), Seq(ns)), null)
-    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("^Ba*n"), ns)), true)
-    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
-    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
+    checkEvaluation(In(Seq(ns), Seq(Literal("1"), Literal("2"))), null)
+    checkEvaluation(In(Seq(ns), Seq(ns)), null)
+    checkEvaluation(In(Seq(Literal("a")), Seq(ns)), null)
+    checkEvaluation(In(Seq(Literal("^Ba*n")), Seq(Literal("^Ba*n"), ns)), true)
+    checkEvaluation(In(Seq(Literal("^Ba*n")), Seq(Literal("aa"), Literal("^Ba*n"))), true)
+    checkEvaluation(In(Seq(Literal("^Ba*n")), Seq(Literal("aa"), Literal("^n"))), false)
 
   }
 
   test("IN with different types") {
-    def testWithRandomDataGeneration(dataType: DataType,
-        nullable: Boolean,
-        legacyNullHandling: Boolean = false): Unit = {
-      def isNull(e: Any): Boolean = {
-        if (!legacyNullHandling && dataType.isInstanceOf[StructType]) {
-          e == null || e.asInstanceOf[Row].anyNull
-        } else {
-          e == null
-        }
-      }
+    def testWithRandomDataGeneration(dataType: DataType, nullable: Boolean): Unit = {
       val maybeDataGen = RandomDataGenerator.forType(dataType, nullable = nullable)
       // Actually we won't pass in unsupported data types, this is a safety check.
       val dataGen = maybeDataGen.getOrElse(
@@ -188,16 +181,16 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
       val input = inputData.map(NonFoldableLiteral.create(_, dataType))
-      val expected = if (isNull(inputData.head)) {
+      val expected = if (inputData.head == null) {
         null
       } else if (inputData.slice(1, 10).contains(inputData(0))) {
         true
-      } else if (inputData.slice(1, 10).exists(isNull)) {
+      } else if (inputData.slice(1, 10).contains(null)) {
         null
       } else {
         false
       }
-      checkEvaluation(In(input(0), input.slice(1, 10)), expected)
+      checkEvaluation(In(Seq(input(0)), input.slice(1, 10)), expected)
     }
 
     val atomicTypes = DataTypeTestUtils.atomicTypes.filter { t =>
@@ -231,13 +224,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         nullable <- Seq(true, false)) {
       val structType = StructType(
         StructField("a", colOneType) :: StructField("b", colTwoType) :: Nil)
-      if (nullable) {
-        Seq("true", "false").foreach { legacyNullHandling =>
-          withSQLConf((SQLConf.LEGACY_IN_FALSE_FOR_NULL_FIELD.key, legacyNullHandling)) {
-            testWithRandomDataGeneration(structType, nullable, legacyNullHandling.toBoolean)
-          }
-        }
-      }
+      testWithRandomDataGeneration(structType, nullable)
     }
 
     // Map types: not supported
@@ -262,12 +249,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22501: In should not generate codes beyond 64KB") {
     val N = 3000
     val sets = (1 to N).map(i => Literal(i.toDouble))
-    checkEvaluation(In(Literal(1.0D), sets), true)
+    checkEvaluation(In(Seq(Literal(1.0D)), sets), true)
   }
 
   test("SPARK-22705: In should use less global variables") {
     val ctx = new CodegenContext()
-    In(Literal(1.0D), Seq(Literal(1.0D), Literal(2.0D))).genCode(ctx)
+    In(Seq(Literal(1.0D)), Seq(Literal(1.0D), Literal(2.0D))).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)
   }
 

@@ -440,7 +440,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     val d20170104 = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-04"))
     val d20170105 = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-05"))
     validateEstimatedStats(
-      Filter(In(attrDate, Seq(Literal(d20170103, DateType), Literal(d20170104, DateType),
+      Filter(In(Seq(attrDate), Seq(Literal(d20170103, DateType), Literal(d20170104, DateType),
         Literal(d20170105, DateType))), childStatsTestPlan(Seq(attrDate), 10L)),
       Seq(attrDate -> ColumnStat(distinctCount = Some(3),
         min = Some(d20170103), max = Some(d20170105),

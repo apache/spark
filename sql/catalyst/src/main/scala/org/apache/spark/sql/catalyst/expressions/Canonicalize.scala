@@ -87,7 +87,7 @@ object Canonicalize {
     case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
 
     // order the list in the In operator
-    case In(value, list) if list.length > 1 => In(value, list.sortBy(_.hashCode()))
+    case In(values, list) if list.length > 1 => In(values, list.sortBy(_.hashCode()))
 
     case _ => e
   }

@@ -94,7 +94,10 @@ package object dsl {
           case c: CreateNamedStruct => InSubquery(c.valExprs, l)
           case other => InSubquery(Seq(other), l)
         }
-      case _ => In(expr, list)
+      case _ => expr match {
+        case c: CreateNamedStruct => In(c.valExprs, list)
+        case other => In(Seq(other), list)
+      }
     }
 
     def like(other: Expression): Expression = Like(expr, other)

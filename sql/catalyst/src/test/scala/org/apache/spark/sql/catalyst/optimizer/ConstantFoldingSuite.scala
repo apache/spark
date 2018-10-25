@@ -251,7 +251,7 @@ class ConstantFoldingSuite extends PlanTest {
     val originalQuery =
       testRelation
         .select('a)
-        .where(In(Literal(1), Seq(Literal(1), Literal(2))))
+        .where(In(Seq(Literal(1)), Seq(Literal(1), Literal(2))))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 

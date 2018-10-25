@@ -459,7 +459,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY, localTableScanExec, None,
       LocalRelation(Seq(attribute), Nil))
     val tableScanExec = InMemoryTableScanExec(Seq(attribute),
-      Seq(In(attribute, Nil)), testRelation)
+      Seq(In(Seq(attribute), Nil)), testRelation)
     assert(tableScanExec.partitionFilters.isEmpty)
   }
 

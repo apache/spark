@@ -140,13 +140,12 @@ case class Not(child: Expression)
   override def sql: String = s"(NOT ${child.sql})"
 }
 
-/**
- * Evaluates to `true` if `values` are returned in `query`'s result set.
- */
-case class InSubquery(values: Seq[Expression], query: ListQuery)
-  extends Predicate with Unevaluable {
+abstract class InBase extends Predicate {
+  def values: Seq[Expression]
 
-  @transient private lazy val value: Expression = if (values.length > 1) {
+  @transient protected lazy val isMultiValued = values.length > 1
+
+  @transient lazy val value: Expression = if (isMultiValued) {
     CreateNamedStruct(values.zipWithIndex.flatMap {
       case (v: NamedExpression, _) => Seq(Literal(v.name), v)
       case (v, idx) => Seq(Literal(s"_$idx"), v)
@@ -154,7 +153,13 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   } else {
     values.head
   }
+}
 
+/**
+ * Evaluates to `true` if `values` are returned in `query`'s result set.
+ */
+case class InSubquery(values: Seq[Expression], query: ListQuery)
+  extends InBase with Unevaluable {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (values.length != query.childOutputs.length) {
@@ -225,7 +230,7 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
        true
   """)
 // scalastyle:on line.size.limit
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(values: Seq[Expression], list: Seq[Expression]) extends InBase {
 
   require(list != null, "list should not be null")
 
@@ -240,15 +245,15 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  override def children: Seq[Expression] = value +: list
+  override def children: Seq[Expression] = values ++ list
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
   private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
 
-  override def nullable: Boolean = value.dataType match {
-    case _: StructType if !SQLConf.get.inFalseForNullField =>
-      children.exists(_.nullable) ||
-        children.exists(_.dataType.asInstanceOf[StructType].exists(_.nullable))
-    case _ => children.exists(_.nullable)
+  override def nullable: Boolean = if (isMultiValued && !SQLConf.get.inFalseForNullField) {
+    children.exists(_.nullable) ||
+      children.exists(_.dataType.asInstanceOf[StructType].exists(_.nullable))
+  } else {
+    children.exists(_.nullable)
   }
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -276,16 +281,20 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  @transient lazy val checkNullGenCode: (ExprCode) => Block = value.dataType match {
-    case _: StructType if !SQLConf.get.inFalseForNullField =>
+  @transient lazy val checkNullGenCode: (ExprCode) => Block = {
+    if (isMultiValued && !SQLConf.get.inFalseForNullField) {
       e => code"${e.isNull} || ${e.value}.anyNull()"
-    case _ => e => code"${e.isNull}"
+    } else {
+      e => code"${e.isNull}"
+    }
   }
 
-  @transient lazy val checkNullEval: (Any) => Boolean = value.dataType match {
-    case _: StructType if !SQLConf.get.inFalseForNullField =>
+  @transient lazy val checkNullEval: (Any) => Boolean = {
+    if (isMultiValued && !SQLConf.get.inFalseForNullField) {
       input => input == null || input.asInstanceOf[InternalRow].anyNull
-    case _ => input => input == null
+    } else {
+      input => input == null
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
