@@ -38,7 +38,8 @@ import org.apache.spark.deploy.k8s.integrationtest.kerberos.{KerberizedHadoopClu
 import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesSuite extends SparkFunSuite
-  with BeforeAndAfterAll with BeforeAndAfter
+  with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
+  with PythonTestsSuite with ClientModeTestsSuite
   with KerberosTestSuite
   with Logging with Eventually with Matchers {
 
