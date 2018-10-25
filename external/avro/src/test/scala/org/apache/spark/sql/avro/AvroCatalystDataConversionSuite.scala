@@ -200,10 +200,13 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       StructField("col_3", StringType, true),
       StructField("col_4", DecimalType(38, 38), false)))
 
-    val data = RandomDataGenerator.randomRow(new scala.util.Random, actualSchema)
-    val converter = CatalystTypeConverters.createToCatalystConverter(actualSchema)
-    val input = Literal.create(converter(data), actualSchema)
-    val avroSchema = SchemaConverters.toAvroType(expectedSchema).toString
-    checkUnsupportedRead(input, avroSchema)
+    val seed = scala.util.Random.nextLong()
+    withClue(s"create random record with seed $seed") {
+      val data = RandomDataGenerator.randomRow(new scala.util.Random(seed), actualSchema)
+      val converter = CatalystTypeConverters.createToCatalystConverter(actualSchema)
+      val input = Literal.create(converter(data), actualSchema)
+      val avroSchema = SchemaConverters.toAvroType(expectedSchema).toString
+      checkUnsupportedRead(input, avroSchema)
+    }
   }
 }
