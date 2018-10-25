@@ -29,7 +29,8 @@ import org.apache.spark.internal.Logging
  * pointed to the mounted file directory.
  */
 private[spark] class HadoopConfExecutorFeatureStep(
-    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf],
+    hadoopBootstrapUtil: HadoopBootstrapUtil)
   extends KubernetesFeatureConfigStep with Logging {
 
   override def configurePod(pod: SparkPod): SparkPod = {
@@ -39,7 +40,6 @@ private[spark] class HadoopConfExecutorFeatureStep(
       "Ensure that the env `HADOOP_CONF_DIR` is defined either in the client or " +
         " using pre-existing ConfigMaps")
     logInfo("HADOOP_CONF_DIR defined")
-    val hadoopBootstrapUtil = kubernetesConf.hadoopBootstrapUtil
     hadoopBootstrapUtil.bootstrapHadoopConfDir(None, None, hadoopConfDirCMapName, pod)
   }
 

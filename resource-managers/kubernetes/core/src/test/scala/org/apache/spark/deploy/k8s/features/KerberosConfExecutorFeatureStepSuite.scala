@@ -39,7 +39,6 @@ class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndA
 
   before {
     MockitoAnnotations.initMocks(this)
-    when(kubernetesConf.hadoopBootstrapUtil).thenReturn(hadoopBootstrapUtil)
   }
 
   test("Testing bootstrapKerberosPod") {
@@ -66,7 +65,7 @@ class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndA
         KubernetesFeaturesTestUtils.krbBootPod(invocation.getArgumentAt(6, classOf[SparkPod]))
       }
     })
-    val kConfStep = new KerberosConfExecutorFeatureStep(kubernetesConf)
+    val kConfStep = new KerberosConfExecutorFeatureStep(kubernetesConf, hadoopBootstrapUtil)
     val pod = kConfStep.configurePod(sparkPod)
     assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-kerberos" -> "true")))
     assert(kConfStep.getAdditionalPodSystemProperties() === Map.empty)

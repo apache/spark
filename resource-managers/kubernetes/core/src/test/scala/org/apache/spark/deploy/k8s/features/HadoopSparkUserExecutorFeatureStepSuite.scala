@@ -43,7 +43,6 @@ class HadoopSparkUserExecutorFeatureStepSuite extends SparkFunSuite with BeforeA
     val sparkConf = new SparkConf(false)
       .set(KERBEROS_SPARK_USER_NAME, hadoopSparkUser)
     when(kubernetesConf.sparkConf).thenReturn(sparkConf)
-    when(kubernetesConf.hadoopBootstrapUtil).thenReturn(hadoopBootstrapUtil)
   }
 
   test("Testing bootstrapSparkUserPod") {
@@ -55,7 +54,7 @@ class HadoopSparkUserExecutorFeatureStepSuite extends SparkFunSuite with BeforeA
         KubernetesFeaturesTestUtils.userBootPod(invocation.getArgumentAt(1, classOf[SparkPod]))
       }
     })
-    val sUserStep = new HadoopSparkUserExecutorFeatureStep(kubernetesConf)
+    val sUserStep = new HadoopSparkUserExecutorFeatureStep(kubernetesConf, hadoopBootstrapUtil)
     val pod = sUserStep.configurePod(sparkPod)
     assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-user" -> "true")))
     assert(sUserStep.getAdditionalPodSystemProperties() === Map.empty)

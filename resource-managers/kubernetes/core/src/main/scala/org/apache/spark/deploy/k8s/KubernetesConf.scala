@@ -79,15 +79,6 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
 
   def krbConfigMapName: String = s"$appResourceNamePrefix-krb5-file"
 
-  // For unit-testing purposes
-  def hadoopBootstrapUtil: HadoopBootstrapUtil = new HadoopBootstrapUtil()
-
-  // For unit-testing purposes
-  def hadoopKerberosLogin: HadoopKerberosLogin = new HadoopKerberosLogin()
-
-  def tokenManager(conf: SparkConf, hConf: Configuration): KubernetesHadoopDelegationTokenManager =
-    new KubernetesHadoopDelegationTokenManager(new HadoopDelegationTokenManager(conf, hConf))
-
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
 
   def sparkJars(): Seq[String] = sparkConf

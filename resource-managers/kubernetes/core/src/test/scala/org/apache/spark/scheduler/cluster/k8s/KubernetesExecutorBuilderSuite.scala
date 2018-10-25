@@ -22,6 +22,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 
 class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val BASIC_STEP_TYPE = "basic"
@@ -56,9 +57,9 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     _ => envSecretsStep,
     _ => localDirsStep,
     _ => mountVolumesStep,
-    _ => hadoopConfStep,
-    _ => kerberosConf,
-    _ => hadoopSparkUser)
+    (_: KubernetesConf[KubernetesExecutorSpecificConf], _: HadoopBootstrapUtil) => hadoopConfStep,
+    (_: KubernetesConf[KubernetesExecutorSpecificConf], _: HadoopBootstrapUtil) => kerberosConf,
+    (_: KubernetesConf[KubernetesExecutorSpecificConf], _: HadoopBootstrapUtil) => hadoopSparkUser)
 
   test("Basic steps are consistently applied.") {
     val conf = KubernetesConf(

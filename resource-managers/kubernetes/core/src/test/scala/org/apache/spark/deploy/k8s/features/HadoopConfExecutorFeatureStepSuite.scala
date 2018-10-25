@@ -43,7 +43,6 @@ class HadoopConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAft
     val sparkConf = new SparkConf(false)
       .set(HADOOP_CONFIG_MAP_NAME, hadoopConfMapName)
     when(kubernetesConf.sparkConf).thenReturn(sparkConf)
-    when(kubernetesConf.hadoopBootstrapUtil).thenReturn(hadoopBootstrapUtil)
   }
 
   test("Testing bootstrapHadoopConf") {
@@ -54,10 +53,11 @@ class HadoopConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       Eq(sparkPod)
     )).thenAnswer(new Answer[SparkPod] {
       override def answer(invocation: InvocationOnMock) : SparkPod = {
-        KubernetesFeaturesTestUtils.hConfBootPod(invocation.getArgumentAt(3, classOf[SparkPod]))
+        KubernetesFeaturesTestUtils.hadoopConfBootPod(
+          invocation.getArgumentAt(3, classOf[SparkPod]))
       }
     })
-    val hConfStep = new HadoopConfExecutorFeatureStep(kubernetesConf)
+    val hConfStep = new HadoopConfExecutorFeatureStep(kubernetesConf, hadoopBootstrapUtil)
     val pod = hConfStep.configurePod(sparkPod)
     assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-hconf" -> "true")))
     assert(hConfStep.getAdditionalPodSystemProperties() === Map.empty)

@@ -19,6 +19,7 @@ package org.apache.spark.scheduler.cluster.k8s
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesRoleSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 
 private[spark] class KubernetesExecutorBuilder(
     provideBasicStep: (KubernetesConf [KubernetesExecutorSpecificConf])
@@ -36,18 +37,21 @@ private[spark] class KubernetesExecutorBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
     new MountVolumesFeatureStep(_),
-    provideHadoopConfStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
+    provideHadoopConfStep: ((
+      KubernetesConf[KubernetesExecutorSpecificConf],
+      HadoopBootstrapUtil)
         => HadoopConfExecutorFeatureStep) =
-    new HadoopConfExecutorFeatureStep(_),
-    provideKerberosConfStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
+    new HadoopConfExecutorFeatureStep(_, _),
+    provideKerberosConfStep: ((
+      KubernetesConf[KubernetesExecutorSpecificConf],
+        HadoopBootstrapUtil)
         => KerberosConfExecutorFeatureStep) =
-    new KerberosConfExecutorFeatureStep(_),
-    provideHadoopSparkUserStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
+    new KerberosConfExecutorFeatureStep(_, _),
+    provideHadoopSparkUserStep: ((
+      KubernetesConf[KubernetesExecutorSpecificConf],
+        HadoopBootstrapUtil)
         => HadoopSparkUserExecutorFeatureStep) =
-    new HadoopSparkUserExecutorFeatureStep(_)) {
+    new HadoopSparkUserExecutorFeatureStep(_, _)) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
@@ -68,13 +72,14 @@ private[spark] class KubernetesExecutorBuilder(
     } else Nil
 
     val maybeHadoopConfFeatureSteps = maybeHadoopConfigMap.map { _ =>
+      val hadoopBootstrapUtil = new HadoopBootstrapUtil
       val maybeKerberosStep =
         if (maybeDTSecretName.isDefined && maybeDTDataItem.isDefined) {
-          provideKerberosConfStep(kubernetesConf)
+          provideKerberosConfStep(kubernetesConf, hadoopBootstrapUtil)
         } else {
-          provideHadoopSparkUserStep(kubernetesConf)
+          provideHadoopSparkUserStep(kubernetesConf, hadoopBootstrapUtil)
         }
-      Seq(provideHadoopConfStep(kubernetesConf)) :+
+      Seq(provideHadoopConfStep(kubernetesConf, hadoopBootstrapUtil)) :+
         maybeKerberosStep
     }.getOrElse(Seq.empty[KubernetesFeatureConfigStep])
 

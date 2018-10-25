@@ -16,9 +16,13 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
+import org.apache.spark.deploy.k8s.features.hadooputils._
+import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -52,10 +56,13 @@ private[spark] class KubernetesDriverBuilder(
       KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
     new JavaDriverFeatureStep(_),
-    provideHadoopGlobalStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
+    provideHadoopGlobalStep: ((
+      KubernetesConf[KubernetesDriverSpecificConf],
+      HadoopBootstrapUtil,
+      HadoopKerberosLogin,
+      KubernetesHadoopDelegationTokenManager)
         => KerberosConfDriverFeatureStep) =
-    new KerberosConfDriverFeatureStep(_))  {
+    new KerberosConfDriverFeatureStep(_, _, _, _))  {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
@@ -86,7 +93,13 @@ private[spark] class KubernetesDriverBuilder(
 
     val maybeHadoopConfigStep =
       kubernetesConf.hadoopConfSpec.map { _ =>
-          provideHadoopGlobalStep(kubernetesConf)}
+        val conf = kubernetesConf.sparkConf
+        val hDTManager =
+          new HadoopDelegationTokenManager(conf, SparkHadoopUtil.get.newConfiguration(conf))
+        provideHadoopGlobalStep(kubernetesConf,
+          new HadoopBootstrapUtil,
+          new HadoopKerberosLogin,
+          new KubernetesHadoopDelegationTokenManager(hDTManager))}
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       (baseFeatures :+ bindingsStep) ++

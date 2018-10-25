@@ -28,7 +28,8 @@ import org.apache.spark.internal.Logging
  * This step is responsible for mounting the DT secret for the executors
  */
 private[spark] class KerberosConfExecutorFeatureStep(
-    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf],
+    hadoopBootstrapUtil: HadoopBootstrapUtil)
   extends KubernetesFeatureConfigStep with Logging {
 
   private val sparkConf = kubernetesConf.sparkConf
@@ -37,7 +38,6 @@ private[spark] class KerberosConfExecutorFeatureStep(
 
   override def configurePod(pod: SparkPod): SparkPod = {
     logInfo(s"Mounting Resources for Kerberos")
-    val hadoopBootstrapUtil = kubernetesConf.hadoopBootstrapUtil
     hadoopBootstrapUtil.bootstrapKerberosPod(
       sparkConf.get(KERBEROS_DT_SECRET_NAME),
       sparkConf.get(KERBEROS_DT_SECRET_KEY),

@@ -18,12 +18,12 @@ package org.apache.spark.deploy.k8s.features
 
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesDriverSpecificConf
 import org.apache.spark.deploy.k8s.features.hadooputils._
+import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 
 /**
@@ -31,7 +31,10 @@ import org.apache.spark.internal.Logging
  * HADOOP_CONF_DIR. This runs various bootstrap methods defined in HadoopBootstrapUtil.
  */
 private[spark] class KerberosConfDriverFeatureStep(
-    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
+    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
+    hadoopBootstrapUtil: HadoopBootstrapUtil,
+    hadoopKerberosLogin: HadoopKerberosLogin,
+    kubeTokenManager: KubernetesHadoopDelegationTokenManager)
   extends KubernetesFeatureConfigStep with Logging {
 
   require(kubernetesConf.hadoopConfSpec.isDefined,
@@ -44,14 +47,10 @@ private[spark] class KerberosConfDriverFeatureStep(
   private val existingSecretItemKey = conf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
   private val krb5File = conf.get(KUBERNETES_KERBEROS_KRB5_FILE)
   private val krb5CMap = conf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
-  private val kubeTokenManager = kubernetesConf.tokenManager(conf,
-    SparkHadoopUtil.get.newConfiguration(conf))
   private val isKerberosEnabled =
     (hadoopConfDirSpec.hadoopConfDir.isDefined && kubeTokenManager.isSecurityEnabled) ||
       (hadoopConfDirSpec.hadoopConfigMapName.isDefined &&
         (krb5File.isDefined || krb5CMap.isDefined))
-  private val hadoopBootstrapUtil = kubernetesConf.hadoopBootstrapUtil
-  private val hadoopKerberosLogin = kubernetesConf.hadoopKerberosLogin
 
   require(keytab.isEmpty || isKerberosEnabled,
     "You must enable Kerberos support if you are specifying a Kerberos Keytab")

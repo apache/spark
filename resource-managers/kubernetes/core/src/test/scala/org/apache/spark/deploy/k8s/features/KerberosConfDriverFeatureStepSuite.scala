@@ -83,10 +83,6 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
 
   before {
     MockitoAnnotations.initMocks(this)
-    when(kubernetesConf.hadoopBootstrapUtil).thenReturn(hadoopBootstrapUtil)
-    when(kubernetesConf.hadoopKerberosLogin).thenReturn(hadoopKerberosLogin)
-    when(kubernetesConf.tokenManager(any[SparkConf], any[Configuration]))
-      .thenReturn(tokenManager)
     when(tokenManager.getCurrentUser).thenReturn(ugi)
     when(ugi.getShortUserName).thenReturn(jobUserName)
     when(kubernetesConf.hadoopConfigMapName).thenReturn(newCMapName)
@@ -108,7 +104,8 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       Eq(sparkPod)
     )).thenAnswer(new Answer[SparkPod] {
       override def answer(invocation: InvocationOnMock): SparkPod = {
-        KubernetesFeaturesTestUtils.hConfBootPod(invocation.getArgumentAt(3, classOf[SparkPod]))
+        KubernetesFeaturesTestUtils.hadoopConfBootPod(
+          invocation.getArgumentAt(3, classOf[SparkPod]))
       }
     })
     when(hadoopBootstrapUtil.buildHadoopConfigMap(any[String], Eq(hadoopFiles)))
@@ -122,7 +119,10 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       }
     })
 
-    val kConfStep = new KerberosConfDriverFeatureStep(kubernetesConf)
+    val kConfStep = new KerberosConfDriverFeatureStep(kubernetesConf,
+      hadoopBootstrapUtil,
+      hadoopKerberosLogin,
+      tokenManager)
     val pod = kConfStep.configurePod(sparkPod)
     assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
       Map("bootstrap-hconf" -> "true", "bootstrap-user" -> "true")))
@@ -147,7 +147,8 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       Eq(sparkPod)
     )).thenAnswer(new Answer[SparkPod] {
       override def answer(invocation: InvocationOnMock): SparkPod = {
-        KubernetesFeaturesTestUtils.hConfBootPod(invocation.getArgumentAt(3, classOf[SparkPod]))
+        KubernetesFeaturesTestUtils.hadoopConfBootPod(
+          invocation.getArgumentAt(3, classOf[SparkPod]))
       }
     })
     when(hadoopBootstrapUtil.buildHadoopConfigMap(any[String], Eq(hadoopFiles)))
@@ -175,7 +176,10 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       }
     })
 
-    val kConfStep = new KerberosConfDriverFeatureStep(kubernetesConf)
+    val kConfStep = new KerberosConfDriverFeatureStep(kubernetesConf,
+      hadoopBootstrapUtil,
+      hadoopKerberosLogin,
+      tokenManager)
     val pod = kConfStep.configurePod(sparkPod)
     assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
       Map("bootstrap-hconf" -> "true", "bootstrap-kerberos" -> "true")))
@@ -206,7 +210,8 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       Eq(sparkPod)
     )).thenAnswer(new Answer[SparkPod] {
       override def answer(invocation: InvocationOnMock): SparkPod = {
-        KubernetesFeaturesTestUtils.hConfBootPod(invocation.getArgumentAt(3, classOf[SparkPod]))
+        KubernetesFeaturesTestUtils.hadoopConfBootPod(
+          invocation.getArgumentAt(3, classOf[SparkPod]))
       }
     })
     when(hadoopBootstrapUtil.buildHadoopConfigMap(any[String], Eq(hadoopFiles)))
@@ -232,7 +237,10 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       }
     })
 
-    val kConfStep = new KerberosConfDriverFeatureStep(kubernetesConf)
+    val kConfStep = new KerberosConfDriverFeatureStep(kubernetesConf,
+      hadoopBootstrapUtil,
+      hadoopKerberosLogin,
+      tokenManager)
     val pod = kConfStep.configurePod(sparkPod)
     assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
       Map("bootstrap-hconf" -> "true", "bootstrap-kerberos" -> "true")))
@@ -264,7 +272,8 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       Eq(sparkPod)
     )).thenAnswer(new Answer[SparkPod] {
       override def answer(invocation: InvocationOnMock): SparkPod = {
-        KubernetesFeaturesTestUtils.hConfBootPod(invocation.getArgumentAt(3, classOf[SparkPod]))
+        KubernetesFeaturesTestUtils.hadoopConfBootPod(
+          invocation.getArgumentAt(3, classOf[SparkPod]))
       }
     })
     when(hadoopBootstrapUtil.buildHadoopConfigMap(any[String], Eq(hadoopFiles)))
@@ -290,7 +299,10 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       }
     })
 
-    val kConfStep = new KerberosConfDriverFeatureStep(kubernetesConf)
+    val kConfStep = new KerberosConfDriverFeatureStep(kubernetesConf,
+      hadoopBootstrapUtil,
+      hadoopKerberosLogin,
+      tokenManager)
     val pod = kConfStep.configurePod(sparkPod)
     assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
       Map("bootstrap-hconf" -> "true")))

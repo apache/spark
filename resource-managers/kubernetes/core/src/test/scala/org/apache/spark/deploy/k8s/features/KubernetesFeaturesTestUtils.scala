@@ -71,7 +71,7 @@ object KubernetesFeaturesTestUtils {
   // Kerberos Specific Test utils
 
   // Upon use of bootstrapHadoopConfDir
-  def hConfBootPod(inputPod: SparkPod): SparkPod =
+  def hadoopConfBootPod(inputPod: SparkPod): SparkPod =
     SparkPod(
       new PodBuilder(inputPod.pod)
         .editOrNewMetadata()

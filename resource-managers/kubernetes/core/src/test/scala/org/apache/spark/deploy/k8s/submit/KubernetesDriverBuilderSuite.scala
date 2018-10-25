@@ -20,6 +20,8 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
+import org.apache.spark.deploy.k8s.features.hadooputils.{HadoopBootstrapUtil, HadoopKerberosLogin}
+import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
@@ -80,7 +82,11 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => pythonStep,
       _ => rStep,
       _ => javaStep,
-      _ => hadoopGlobalStep)
+      (_: KubernetesConf[KubernetesDriverSpecificConf],
+        _: HadoopBootstrapUtil,
+        _: HadoopKerberosLogin,
+        _: KubernetesHadoopDelegationTokenManager)
+          => hadoopGlobalStep)
 
   test("Apply fundamental steps all the time.") {
     val conf = KubernetesConf(
