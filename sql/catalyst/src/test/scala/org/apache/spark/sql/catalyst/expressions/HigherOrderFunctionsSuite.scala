@@ -88,11 +88,6 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     ArrayFilter(expr, createLambda(et, cn, f)).bind(validateBinding)
   }
 
-  def transformKeys(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
-    val MapType(kt, vt, vcn) = expr.dataType
-    TransformKeys(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
-  }
-
   def aggregate(
       expr: Expression,
       zero: Expression,
@@ -252,75 +247,6 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       aggregate(aai, 0,
         (acc, array) => coalesce(aggregate(array, acc, (acc, elem) => acc + elem), acc)),
       15)
-  }
-
-  test("TransformKeys") {
-    val ai0 = Literal.create(
-      Map(1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4),
-      MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val ai1 = Literal.create(
-      Map.empty[Int, Int],
-      MapType(IntegerType, IntegerType, valueContainsNull = true))
-    val ai2 = Literal.create(
-      Map(1 -> 1, 2 -> null, 3 -> 3),
-      MapType(IntegerType, IntegerType, valueContainsNull = true))
-    val ai3 = Literal.create(null, MapType(IntegerType, IntegerType, valueContainsNull = false))
-
-    val plusOne: (Expression, Expression) => Expression = (k, v) => k + 1
-    val plusValue: (Expression, Expression) => Expression = (k, v) => k + v
-    val modKey: (Expression, Expression) => Expression = (k, v) => k % 3
-
-    checkEvaluation(transformKeys(ai0, plusOne), Map(2 -> 1, 3 -> 2, 4 -> 3, 5 -> 4))
-    checkEvaluation(transformKeys(ai0, plusValue), Map(2 -> 1, 4 -> 2, 6 -> 3, 8 -> 4))
-    checkEvaluation(
-      transformKeys(transformKeys(ai0, plusOne), plusValue), Map(3 -> 1, 5 -> 2, 7 -> 3, 9 -> 4))
-    checkEvaluation(transformKeys(ai0, modKey),
-      ArrayBasedMapData(Array(1, 2, 0, 1), Array(1, 2, 3, 4)))
-    checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
-    checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
-    checkEvaluation(
-      transformKeys(transformKeys(ai1, plusOne), plusValue), Map.empty[Int, Int])
-    checkEvaluation(transformKeys(ai2, plusOne), Map(2 -> 1, 3 -> null, 4 -> 3))
-    checkEvaluation(
-      transformKeys(transformKeys(ai2, plusOne), plusOne), Map(3 -> 1, 4 -> null, 5 -> 3))
-    checkEvaluation(transformKeys(ai3, plusOne), null)
-
-    val as0 = Literal.create(
-      Map("a" -> "xy", "bb" -> "yz", "ccc" -> "zx"),
-      MapType(StringType, StringType, valueContainsNull = false))
-    val as1 = Literal.create(
-      Map("a" -> "xy", "bb" -> "yz", "ccc" -> null),
-      MapType(StringType, StringType, valueContainsNull = true))
-    val as2 = Literal.create(null,
-      MapType(StringType, StringType, valueContainsNull = false))
-    val as3 = Literal.create(Map.empty[StringType, StringType],
-      MapType(StringType, StringType, valueContainsNull = true))
-
-    val concatValue: (Expression, Expression) => Expression = (k, v) => Concat(Seq(k, v))
-    val convertKeyToKeyLength: (Expression, Expression) => Expression =
-      (k, v) => Length(k) + 1
-
-    checkEvaluation(
-      transformKeys(as0, concatValue), Map("axy" -> "xy", "bbyz" -> "yz", "ccczx" -> "zx"))
-    checkEvaluation(
-      transformKeys(transformKeys(as0, concatValue), concatValue),
-      Map("axyxy" -> "xy", "bbyzyz" -> "yz", "ccczxzx" -> "zx"))
-    checkEvaluation(transformKeys(as3, concatValue), Map.empty[String, String])
-    checkEvaluation(
-      transformKeys(transformKeys(as3, concatValue), convertKeyToKeyLength),
-      Map.empty[Int, String])
-    checkEvaluation(transformKeys(as0, convertKeyToKeyLength),
-      Map(2 -> "xy", 3 -> "yz", 4 -> "zx"))
-    checkEvaluation(transformKeys(as1, convertKeyToKeyLength),
-      Map(2 -> "xy", 3 -> "yz", 4 -> null))
-    checkEvaluation(transformKeys(as2, convertKeyToKeyLength), null)
-    checkEvaluation(transformKeys(as3, convertKeyToKeyLength), Map.empty[Int, String])
-
-    val ax0 = Literal.create(
-      Map(1 -> "x", 2 -> "y", 3 -> "z"),
-      MapType(IntegerType, StringType, valueContainsNull = false))
-
-    checkEvaluation(transformKeys(ax0, plusOne), Map(2 -> "x", 3 -> "y", 4 -> "z"))
   }
 
   test("MapZipWith") {
