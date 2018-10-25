@@ -162,8 +162,8 @@ object ScalaReflection extends ScalaReflection {
     val Schema(dataType, nullable) = schemaFor(tpe)
 
     // Assumes we are deserializing the first column of a row.
-    val input = upCastToExpectedType(GetColumnByOrdinal(0, dataType), dataType,
-      walkedTypePath)
+    val input = upCastToExpectedType(
+      GetColumnByOrdinal(0, dataType), dataType, walkedTypePath)
 
     val expr = deserializerFor(tpe, input, walkedTypePath)
     if (nullable) {
@@ -430,8 +430,8 @@ object ScalaReflection extends ScalaReflection {
     val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
 
     // The input object to `ExpressionEncoder` is located at first column of an row.
-    val inputObject = BoundReference(0, dataTypeFor(tpe),
-      nullable = !tpe.typeSymbol.asClass.isPrimitive)
+    val isPrimitive = tpe.typeSymbol.asClass.isPrimitive
+    val inputObject = BoundReference(0, dataTypeFor(tpe), nullable = !isPrimitive)
 
     serializerFor(inputObject, tpe, walkedTypePath)
   }
