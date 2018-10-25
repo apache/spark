@@ -56,8 +56,7 @@ private[spark] class MountVolumesFeatureStep(
 
       val volumeBuilder = spec.volumeConf match {
         case KubernetesHostPathVolumeConf(hostPath) =>
-          // TODO: Backwards compatibility allows for empty string, but specify
-          // hostPath type here
+          /* "" means that no checks will be performed before mounting the hostPath volume */
           new VolumeBuilder()
             .withHostPath(new HostPathVolumeSource(hostPath, ""))
 

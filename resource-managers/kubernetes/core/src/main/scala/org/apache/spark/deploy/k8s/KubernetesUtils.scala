@@ -158,9 +158,7 @@ private[spark] object KubernetesUtils {
   }
 
   def formatTime(time: String): String = {
-    time match {
-      case null => "N/A"
-      case _ => time
-    }
+    // TODO: Investigate form `time` comes in
+    if (time != null) time else "N/A"
   }
 }
