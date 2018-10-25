@@ -47,7 +47,7 @@ package object avro {
    * @param jsonFormatSchema the avro schema in JSON string format.
    * @param options options to control how the Avro record is parsed.
    *
-   * @since 2.4.0
+   * @since 3.0.0
    */
   @Experimental
   def from_avro(

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.avro
 
+import scala.util.control.NonFatal
+
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericDatumReader
 import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
@@ -95,7 +97,7 @@ case class AvroDataToCatalyst(
       // There could be multiple possible exceptions here, e.g. java.io.IOException,
       // AvroRuntimeException, ArrayIndexOutOfBoundsException, etc.
       // To make it simple, catch all the exceptions here.
-      case e: Exception => parseMode match {
+      case NonFatal(e) => parseMode match {
         case PermissiveMode => nullResultRow
         case FailFastMode =>
           throw new SparkException("Malformed records are detected in record parsing. " +
@@ -117,10 +119,10 @@ case class AvroDataToCatalyst(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
     nullSafeCodeGen(ctx, ev, eval => {
-      val result = ctx.freshName("tempResult")
+      val result = ctx.freshName("result")
+      val dt = CodeGenerator.boxedType(dataType)
       s"""
-        ${CodeGenerator.boxedType(dataType)} $result =
-          (${CodeGenerator.boxedType(dataType)})$expr.nullSafeEval($eval);
+        dt $result = (dt) $expr.nullSafeEval($eval);
         if ($result == null) {
           ${ev.isNull} = true;
         } else {

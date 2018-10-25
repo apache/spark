@@ -37,11 +37,9 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
   }
 
   private def checkResult(data: Literal, schema: String, expected: Any): Unit = {
-    Seq("FAILFAST", "PERMISSIVE").foreach { mode =>
-      checkEvaluation(
-        AvroDataToCatalyst(CatalystDataToAvro(data), schema, Map("mode" -> mode)),
-        prepareExpectedResult(expected))
-    }
+    checkEvaluation(
+      AvroDataToCatalyst(CatalystDataToAvro(data), schema, Map.empty),
+      prepareExpectedResult(expected))
   }
 
   protected def checkUnsupportedRead(data: Literal, schema: String): Unit = {

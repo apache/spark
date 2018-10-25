@@ -81,14 +81,8 @@ class AvroOptions(
     parameters.get("compression").getOrElse(SQLConf.get.avroCompressionCodec)
   }
 
-  @transient private val acceptableParseMode = Seq(PermissiveMode, FailFastMode)
-
-  val parseMode: ParseMode = {
-    val mode = parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
-    assert(acceptableParseMode.contains(mode),
-      s"Acceptable modes are ${acceptableParseMode.map(_.name).mkString(",")}.")
-    mode
-  }
+  val parseMode: ParseMode =
+    parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
 }
 
 object AvroOptions {
