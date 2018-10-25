@@ -60,6 +60,130 @@ class MergingSortWithSessionWindowLinkedListStateIterator(
     }
   }
 
+  private var lastKey: UnsafeRow = _
+  private var currentRow: SessionRowInformation = _
+  private var lastCheckpointOnStateRows: Option[Long] = _
+  private var stateRowWaitForEmit: SessionRowInformation = _
+
+  private val keyOrdering: Ordering[UnsafeRow] = TypeUtils.getInterpretedOrdering(
+    groupWithoutSessionExpressions.toStructType).asInstanceOf[Ordering[UnsafeRow]]
+
+  override def hasNext: Boolean = {
+    currentRow != null || iter.hasNext || stateRowWaitForEmit != null
+  }
+
+  override def next(): InternalRow = {
+    if (currentRow == null) {
+      mayFillCurrentRow()
+    }
+
+    if (currentRow == null && stateRowWaitForEmit == null) {
+      throw new IllegalStateException("No Row to provide in next() which should not happen!")
+    }
+
+    // early return on input rows vs state row waiting for emitting
+    val returnCurrentRow = if (currentRow == null) {
+      false
+    } else if (stateRowWaitForEmit == null) {
+      true
+    } else {
+      // compare between current row and state row waiting for emitting
+      if (!keyOrdering.equiv(currentRow.keys, stateRowWaitForEmit.keys)) {
+        // state row cannot advance to row in input, so state row should be lower
+        false
+      } else {
+        currentRow.sessionStart < stateRowWaitForEmit.sessionStart
+      }
+    }
+
+    // if state row should be emitted, do emit
+    if (!returnCurrentRow) {
+      val stateRow = stateRowWaitForEmit
+      stateRowWaitForEmit = null
+      return stateRow.row
+    }
+
+    if (lastKey == null || !keyOrdering.equiv(lastKey, currentRow.keys)) {
+      // new key
+      stateRowWaitForEmit = null
+      lastCheckpointOnStateRows = None
+      lastKey = currentRow.keys
+    }
+
+    // we don't need to check against sessions which are already candidate to emit
+    // so we apply checkpoint to skip some sessions
+    val stateSessionsEnclosingCurrentRow = findSessionPointerEnclosingEvent(currentRow,
+      startPointer = lastCheckpointOnStateRows)
+
+    var prevSessionToEmit: Option[SessionRowInformation] = None
+    stateSessionsEnclosingCurrentRow match {
+      case None =>
+      case Some(x) =>
+        x._1 match {
+          case Some(prev) =>
+            val prevSession = SessionRowInformation.of(state.get(currentRow.keys, prev))
+
+            val sessionLaterThanCheckpoint = lastCheckpointOnStateRows match {
+              case Some(lastCheckpoint) => lastCheckpoint < prevSession.sessionStart
+              case None => true
+            }
+
+            if (sessionLaterThanCheckpoint) {
+              // based on definition of session window and the fact that events are sorted,
+              // if the state session is not matched to this event, it will not be matched with
+              // later events as well
+              lastCheckpointOnStateRows = Some(prevSession.sessionStart)
+
+              if (isSessionsOverlap(currentRow, prevSession)) {
+                prevSessionToEmit = Some(prevSession)
+              }
+            }
+
+          case None =>
+        }
+
+        x._2 match {
+          case Some(next) =>
+            val nextSession = SessionRowInformation.of(state.get(currentRow.keys, next))
+
+            val sessionLaterThanCheckpoint = lastCheckpointOnStateRows match {
+              case Some(lastCheckpoint) => lastCheckpoint < nextSession.sessionStart
+              case None => true
+            }
+
+            if (sessionLaterThanCheckpoint) {
+              // next session could be matched to latter events even it doesn't match to
+              // current event, so unless it is added to rows to emit, don't add to checked set
+              if (isSessionsOverlap(currentRow, nextSession)) {
+                stateRowWaitForEmit = nextSession
+                lastCheckpointOnStateRows = Some(nextSession.sessionStart)
+              }
+            }
+
+          case None =>
+        }
+    }
+
+    // emitting sessions always follows the pattern:
+    // previous sessions if any -> current event -> (later events) -> next sessions
+    prevSessionToEmit match {
+      case Some(prevSession) => prevSession.row
+      case None => emitCurrentRow()
+    }
+  }
+
+  private def emitCurrentRow(): InternalRow = {
+    val ret = currentRow
+    currentRow = null
+    ret.row
+  }
+
+  private def mayFillCurrentRow(): Unit = {
+    if (iter.hasNext) {
+      currentRow = SessionRowInformation.of(iter.next())
+    }
+  }
+
   private def findSessionPointerEnclosingEvent(row: SessionRowInformation,
                                                startPointer: Option[Long])
     : Option[(Option[Long], Option[Long])] = {
@@ -115,198 +239,6 @@ class MergingSortWithSessionWindowLinkedListStateIterator(
   private def isSessionsOverlap(s1: SessionRowInformation, s2: SessionRowInformation): Boolean = {
     (s1.sessionStart >= s2.sessionStart && s1.sessionStart <= s2.sessionEnd) ||
       (s2.sessionStart >= s1.sessionStart && s2.sessionStart <= s1.sessionEnd)
-  }
-
-  private var lastKey: UnsafeRow = _
-  private var currentRow: SessionRowInformation = _
-
-  private val stateRowsToEmit: scala.collection.mutable.ListBuffer[SessionRowInformation] =
-    new scala.collection.mutable.ListBuffer[SessionRowInformation]()
-  private val stateRowsChecked: scala.collection.mutable.HashSet[SessionRowInformation] =
-    new scala.collection.mutable.HashSet[SessionRowInformation]()
-
-  private var lastEmittedStateSessionKey: UnsafeRow = _
-  private var lastEmittedStateSessionStartOption: Option[Long] = None
-  private var stateRowWaitForEmit: SessionRowInformation = _
-
-  private val keyOrdering: Ordering[UnsafeRow] = TypeUtils.getInterpretedOrdering(
-    groupWithoutSessionExpressions.toStructType).asInstanceOf[Ordering[UnsafeRow]]
-
-  override def hasNext: Boolean = {
-    currentRow != null || iter.hasNext || stateRowsToEmit.nonEmpty
-  }
-
-  override def next(): InternalRow = {
-    if (currentRow == null) {
-      mayFillCurrentRow()
-    }
-
-    if (currentRow == null && stateRowsToEmit.isEmpty) {
-      throw new IllegalStateException("No Row to provide in next() which should not happen!")
-    }
-
-    // early return on input rows vs state row waiting for emitting
-    val returnCurrentRow = if (currentRow == null) {
-      false
-    } else if (stateRowsToEmit.isEmpty) {
-      true
-    } else {
-      // compare between current row and state row waiting for emitting
-      val stateRow = stateRowsToEmit.head
-      if (!keyOrdering.equiv(currentRow.keys, stateRow.keys)) {
-        // state row cannot advance to row in input, so state row should be lower
-        false
-      } else {
-        currentRow.sessionStart < stateRow.sessionStart
-      }
-    }
-
-    // if state row should be emitted, do emit
-    if (!returnCurrentRow) {
-      val stateRow = stateRowsToEmit.head
-      stateRowsToEmit.remove(0)
-      return stateRow.row
-    }
-
-    if (lastKey == null || !keyOrdering.equiv(lastKey, currentRow.keys)) {
-      // new key
-      stateRowsToEmit.clear()
-      stateRowsChecked.clear()
-      lastKey = currentRow.keys
-    }
-
-    // FIXME: how to provide start pointer to avoid reiterating?
-    val stateSessionsEnclosingCurrentRow = findSessionPointerEnclosingEvent(currentRow,
-      startPointer = None)
-
-    stateSessionsEnclosingCurrentRow match {
-      case None =>
-      case Some(x) =>
-        x._1 match {
-          case Some(prev) =>
-            val prevSession = SessionRowInformation.of(state.get(currentRow.keys, prev))
-
-            if (!stateRowsChecked.contains(prevSession)) {
-              // based on definition of session window and the fact that events are sorted,
-              // if the state session is not matched to this event, it will not be matched with
-              // later events as well
-              stateRowsChecked += prevSession
-
-              if (isSessionsOverlap(currentRow, prevSession)) {
-                stateRowsToEmit += prevSession
-              }
-            }
-
-          case None =>
-        }
-
-        x._2 match {
-          case Some(next) =>
-            val nextSession = SessionRowInformation.of(state.get(currentRow.keys, next))
-
-            if (!stateRowsChecked.contains(nextSession)) {
-              // next session could be matched to latter events even it doesn't match to
-              // current event, so unless it is added to rows to emit, don't add to checked set
-              if (isSessionsOverlap(currentRow, nextSession)) {
-                stateRowsToEmit += nextSession
-                stateRowsChecked += nextSession
-              }
-            }
-
-          case None =>
-        }
-    }
-
-    if (stateRowsToEmit.isEmpty) {
-      emitCurrentRow()
-    } else if (currentRow.sessionStart < stateRowsToEmit.head.sessionStart) {
-      emitCurrentRow()
-    } else {
-      val stateRow = stateRowsToEmit.head
-      stateRowsToEmit.remove(0)
-      stateRow.row
-    }
-  }
-
-  private def emitCurrentRow(): InternalRow = {
-    val ret = currentRow
-    currentRow = null
-    ret.row
-  }
-
-  private def emitStateRowForWaiting(): InternalRow = {
-    val ret = stateRowWaitForEmit
-    stateRowWaitForEmit = null
-    recordStateRowToEmit(ret)
-    ret.row
-  }
-
-  private def recordStateRowToEmit(stateRow: SessionRowInformation) = {
-    lastEmittedStateSessionStartOption = Some(stateRow.sessionStart)
-    lastEmittedStateSessionKey = stateRow.keys
-  }
-
-  private def mayFillCurrentRow(): Unit = {
-    if (iter.hasNext) {
-      currentRow = SessionRowInformation.of(iter.next())
-    }
-  }
-
-  private def currentRowIsSmallerThanWaitingStateRow(): Boolean = {
-    // compare between current row and state row waiting for emitting
-    if (!keyOrdering.equiv(currentRow.keys, stateRowWaitForEmit.keys)) {
-      // state row cannot advance to row in input, so state row should be lower
-      false
-    } else {
-      currentRow.sessionStart < stateRowWaitForEmit.sessionStart
-    }
-  }
-
-  private def getEnclosingStatesForEvent(row: SessionRowInformation)
-  : (Option[SessionRowInformation], Option[SessionRowInformation]) = {
-    // find two state sessions wrapping current row
-
-    if (lastEmittedStateSessionKey != null) {
-      mayInvalidateLastEmittedStateSession()
-    }
-
-    val nextStateSessionStart: Option[Long] = lastEmittedStateSessionStartOption match {
-      case Some(lastEmittedStateSessionStart) =>
-        state.findFirstSessionStartEnsurePredicate(currentRow.keys,
-          _ >= currentRow.sessionEnd, lastEmittedStateSessionStart)
-      case None =>
-        state.findFirstSessionStartEnsurePredicate(currentRow.keys,
-          _ >= currentRow.sessionEnd)
-    }
-
-    val prevStateSessionStart: Option[Long] = nextStateSessionStart match {
-      case Some(next) => state.getPrevSessionStart(currentRow.keys, next)
-      case None => state.getLastSessionStart(currentRow.keys)
-    }
-
-    // only return sessions which overlap with current row
-    val pSession = if (prevStateSessionStart.isDefined) {
-      Some(SessionRowInformation.of(state.get(currentRow.keys, prevStateSessionStart.get)))
-    } else {
-      None
-    }
-
-    val nSession = if (nextStateSessionStart.isDefined) {
-      Some(SessionRowInformation.of(state.get(currentRow.keys, nextStateSessionStart.get)))
-    } else {
-      None
-    }
-
-    (pSession, nSession)
-  }
-
-  private def mayInvalidateLastEmittedStateSession(): Unit = {
-    // invalidate last emitted state session key as well as session start
-    // if keys are changed
-    if (!keyOrdering.equiv(lastEmittedStateSessionKey, currentRow.keys)) {
-      lastEmittedStateSessionKey = null
-      lastEmittedStateSessionStartOption = None
-    }
   }
 
 }
