@@ -112,8 +112,8 @@ private[spark] class ExecutorPodsLifecycleManager(
       execId: Long,
       schedulerBackend: KubernetesClusterSchedulerBackend,
       execIdsRemovedInRound: mutable.Set[Long]): Unit = {
-    removeExecutorFromK8s(podState.pod)
     removeExecutorFromSpark(schedulerBackend, podState, execId)
+    removeExecutorFromK8s(podState.pod)
     execIdsRemovedInRound += execId
   }
 

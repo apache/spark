@@ -742,7 +742,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val nullLit = Literal.create(null, NullType)
     val floatNullLit = Literal.create(null, FloatType)
     val floatLit = Literal.create(1.0f, FloatType)
-    val timestampLit = Literal.create("2017-04-12", TimestampType)
+    val timestampLit = Literal.create(Timestamp.valueOf("2017-04-12 00:00:00"), TimestampType)
     val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
     val tsArrayLit = Literal(Array(new Timestamp(System.currentTimeMillis())))
     val strArrayLit = Literal(Array("c"))
@@ -793,11 +793,11 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateArray(Literal(1.0)
         :: Literal(1)
-        :: Literal.create(1.0, FloatType)
+        :: Literal.create(1.0f, FloatType)
         :: Nil),
       CreateArray(Literal(1.0)
         :: Cast(Literal(1), DoubleType)
-        :: Cast(Literal.create(1.0, FloatType), DoubleType)
+        :: Cast(Literal.create(1.0f, FloatType), DoubleType)
         :: Nil))
 
     ruleTest(TypeCoercion.FunctionArgumentConversion,
@@ -834,23 +834,23 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal(1)
         :: Literal("a")
-        :: Literal.create(2.0, FloatType)
+        :: Literal.create(2.0f, FloatType)
         :: Literal("b")
         :: Nil),
       CreateMap(Cast(Literal(1), FloatType)
         :: Literal("a")
-        :: Literal.create(2.0, FloatType)
+        :: Literal.create(2.0f, FloatType)
         :: Literal("b")
         :: Nil))
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal.create(null, DecimalType(5, 3))
         :: Literal("a")
-        :: Literal.create(2.0, FloatType)
+        :: Literal.create(2.0f, FloatType)
         :: Literal("b")
         :: Nil),
       CreateMap(Literal.create(null, DecimalType(5, 3)).cast(DoubleType)
         :: Literal("a")
-        :: Literal.create(2.0, FloatType).cast(DoubleType)
+        :: Literal.create(2.0f, FloatType).cast(DoubleType)
         :: Literal("b")
         :: Nil))
     // type coercion for map values
@@ -895,11 +895,11 @@ class TypeCoercionSuite extends AnalysisTest {
       ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal(1.0)
           :: Literal(1)
-          :: Literal.create(1.0, FloatType)
+          :: Literal.create(1.0f, FloatType)
           :: Nil),
         operator(Literal(1.0)
           :: Cast(Literal(1), DoubleType)
-          :: Cast(Literal.create(1.0, FloatType), DoubleType)
+          :: Cast(Literal.create(1.0f, FloatType), DoubleType)
           :: Nil))
       ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal(1L)
@@ -966,7 +966,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val falseLit = Literal.create(false, BooleanType)
     val stringLit = Literal.create("c", StringType)
     val floatLit = Literal.create(1.0f, FloatType)
-    val timestampLit = Literal.create("2017-04-12", TimestampType)
+    val timestampLit = Literal.create(Timestamp.valueOf("2017-04-12 00:00:00"), TimestampType)
     val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
 
     ruleTest(rule,
@@ -1016,14 +1016,16 @@ class TypeCoercionSuite extends AnalysisTest {
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
     )
     ruleTest(TypeCoercion.CaseWhenCoercion,
-      CaseWhen(Seq((Literal(true), Literal(1.2))), Literal.create(1, DecimalType(7, 2))),
       CaseWhen(Seq((Literal(true), Literal(1.2))),
-        Cast(Literal.create(1, DecimalType(7, 2)), DoubleType))
+        Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Literal(1.2))),
+        Cast(Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2)), DoubleType))
     )
     ruleTest(TypeCoercion.CaseWhenCoercion,
-      CaseWhen(Seq((Literal(true), Literal(100L))), Literal.create(1, DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Literal(100L))),
+        Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2))),
       CaseWhen(Seq((Literal(true), Cast(Literal(100L), DecimalType(22, 2)))),
-        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2)))
+        Cast(Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2)), DecimalType(22, 2)))
     )
   }
 

@@ -984,6 +984,10 @@ setGeneric("format_string", function(format, x, ...) { standardGeneric("format_s
 #' @name NULL
 setGeneric("from_json", function(x, schema, ...) { standardGeneric("from_json") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("from_csv", function(x, schema, ...) { standardGeneric("from_csv") })
+
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
@@ -1452,6 +1456,10 @@ setGeneric("spark.freqItemsets", function(object) { standardGeneric("spark.freqI
 
 #' @rdname spark.fpGrowth
 setGeneric("spark.associationRules", function(object) { standardGeneric("spark.associationRules") })
+
+#' @rdname spark.prefixSpan
+setGeneric("spark.findFrequentSequentialPatterns",
+            function(data, ...) { standardGeneric("spark.findFrequentSequentialPatterns") })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.

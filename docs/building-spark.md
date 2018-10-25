@@ -12,7 +12,7 @@ redirect_from: "building-with-maven.html"
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.3.9 or newer and Java 8+.
+Building Spark using Maven requires Maven 3.5.4 and Java 8.
 Note that support for Java 7 was removed as of Spark 2.2.0.
 
 ### Setting up Maven's Memory Usage
@@ -89,15 +89,6 @@ like ZooKeeper and Hadoop itself.
 ## Building with Kubernetes support
 
     ./build/mvn -Pkubernetes -DskipTests clean package
-    
-## Building with Kafka 0.8 support
-
-Kafka 0.8 support must be explicitly enabled with the `kafka-0-8` profile.
-Note: Kafka 0.8 support is deprecated as of Spark 2.3.0.
-
-    ./build/mvn -Pkafka-0-8 -DskipTests clean package
-
-Kafka 0.10 support is still automatically built.
 
 ## Building submodules individually
 
