@@ -23,6 +23,8 @@ DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 IMAGE_TAG="N/A"
 SPARK_TGZ="N/A"
+HADOOP_TGZ="N/A"
+HADOOP_VERSION="N/A"
 
 # Parse arguments
 while (( "$#" )); do
@@ -51,6 +53,14 @@ while (( "$#" )); do
       SPARK_TGZ="$2"
       shift
       ;;
+    --hadoop-tgz)
+      HADOOP_TGZ="$2"
+      shift
+      ;;
+    --hadoop-version)
+      HADOOP_VERSION="$2"
+      shift
+      ;;
     *)
       break
       ;;
@@ -63,6 +73,16 @@ then
   echo "Must specify a Spark tarball to build Docker images against with --spark-tgz." && exit 1;
 fi
 
+if [[ $HADOOP_TGZ == "N/A" ]];
+then
+  echo "Must specify a Hadoop tarball to build hadoop Docker images against with --hadoop-tgz." && exit 1;
+fi
+
+if [[ $HADOOP_VERSION == "N/A" ]];
+then
+  echo "Must specify a Hadoop version with --hadoop-version." && exit 1;
+fi
+
 rm -rf $UNPACKED_SPARK_TGZ
 mkdir -p $UNPACKED_SPARK_TGZ
 tar -xzvf $SPARK_TGZ --strip-components=1 -C $UNPACKED_SPARK_TGZ;
@@ -71,6 +91,7 @@ if [[ $IMAGE_TAG == "N/A" ]];
 then
   IMAGE_TAG=$(uuidgen);
   cd $UNPACKED_SPARK_TGZ
+  cp $HADOOP_TGZ $UNPACKED_SPARK_TGZ/
   if [[ $DEPLOY_MODE == cloud ]] ;
   then
     $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG build
@@ -84,7 +105,7 @@ then
     # -m option for minikube.
     $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG build
     chmod +x $UNPACKED_SPARK_TGZ/kubernetes/scripts/setup-krb-integration-test-env.sh
-    $UNPACKED_SPARK_TGZ/kubernetes/scripts/setup-krb-integration-test-env.sh -r $IMAGE_REPO -t $IMAGE_TAG
+    $UNPACKED_SPARK_TGZ/kubernetes/scripts/setup-krb-integration-test-env.sh -r $IMAGE_REPO -t $IMAGE_TAG -v $HADOOP_VERSION
   fi
   cd -
 fi

@@ -30,10 +30,9 @@ spec:
         job: kerberostest
     spec:
       containers:
-      - command:
-        - /start-kdc.sh
+      - command: ["sh"]
+        args: ["/start-kdc.sh"]
         name: kerberos
-        image: ifilonenko/hadoop-base:latest
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - mountPath: /var/keytabs

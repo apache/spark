@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -14,31 +15,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: data-populator
-spec:
-  replicas: 1
-  template:
-    metadata:
-      annotations:
-        pod.beta.kubernetes.io/hostname: data-populator
-      labels:
-        name: hdfs-data-populator
-        kerberosService: data-populator
-        job: kerberostest
-    spec:
-      containers:
-      - command: ["sh"]
-        args: ["/populate-data.sh"]
-        name: data-populator
-        imagePullPolicy: IfNotPresent
-        volumeMounts:
-        - mountPath: /var/keytabs
-          name: data-populator-keytab
-      restartPolicy: Always
-      volumes:
-      - name: data-populator-keytab
-        persistentVolumeClaim:
-          claimName: server-keytab
+export JAVA_HOME=/usr/lib/jvm/jre-1.8.0-openjdk
+export PATH=/hadoop/bin:$PATH
+export HADOOP_CONF_DIR=/hadoop/etc/hadoop
+mkdir -p /hadoop/etc/data
+cp ${TMP_KRB_LOC} /etc/krb5.conf
+cp ${TMP_CORE_LOC} /hadoop/etc/hadoop/core-site.xml
+cp ${TMP_HDFS_LOC} /hadoop/etc/hadoop/hdfs-site.xml
+
+until kinit -kt /var/keytabs/hdfs.keytab hdfs/nn.${NAMESPACE}.svc.cluster.local; do sleep 15; done
+
+echo "KDC is up and ready to go... starting up"
+
+kdestroy
+
+hdfs datanode

@@ -35,7 +35,6 @@ function image_ref {
 }
 
 function build {
-  local BUILD_ARGS
   local IMG_PATH="kubernetes/src"
 
   if [ ! -d "$IMG_PATH" ]; then
@@ -46,9 +45,16 @@ function build {
     --build-arg
     base_img=$(image_ref spark)
   )
-  local KDOCKERFILE=${KDOCKERFILE:-"$IMG_PATH/test/dockerfiles/spark/kerberos/Dockerfile"}
+  local HADOOP_BUILD_ARGS=(
+    --build-arg
+    hadoop_version="$HVERSION"
+  )
+  local HDOCKERFILE="$IMG_PATH/test/dockerfiles/hadoop/Dockerfile"
+  local KDOCKERFILE="$IMG_PATH/test/dockerfiles/spark/kerberos/Dockerfile"
 
-  docker pull ifilonenko/hadoop-base:latest
+    docker build $NOCACHEARG "${HADOOP_BUILD_ARGS[@]}" \
+    -t $(image_ref hadoop-base) \
+    -f "$HDOCKERFILE" .
 
   docker build $NOCACHEARG "${KRB_BUILD_ARGS[@]}" \
     -t $(image_ref spark-kerberos) \
@@ -58,12 +64,14 @@ function build {
 REPO=
 TAG=
 NOCACHEARG=
-while getopts r:t:n: option
+HVERSION=
+while getopts r:t:v:n: option
 do
  case "${option}"
  in
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
+ v) HVERSION=${OPTARG};;
  n) NOCACHEARG="--no-cache";;
  esac
 done

@@ -38,8 +38,7 @@ import org.apache.spark.deploy.k8s.integrationtest.kerberos.{KerberizedHadoopClu
 import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesSuite extends SparkFunSuite
-  with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite
+  with BeforeAndAfterAll with BeforeAndAfter
   with KerberosTestSuite
   with Logging with Eventually with Matchers {
 
@@ -48,6 +47,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   private var sparkHomeDir: Path = _
   private var pyImage: String = _
   private var rImage: String = _
+  private var hImage: String = _
   private var kImage: String = _
 
   protected var image: String = _
@@ -93,6 +93,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     image = s"$imageRepo/spark:$imageTag"
     pyImage = s"$imageRepo/spark-py:$imageTag"
     rImage = s"$imageRepo/spark-r:$imageTag"
+    hImage = s"$imageRepo/hadoop-base:$imageTag"
     kImage = s"$imageRepo/spark-kerberos:$imageTag"
 
     val sparkDistroExamplesJarFile: File = sparkHomeDir.resolve(Paths.get("examples", "jars"))
@@ -109,6 +110,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       kubernetesTestComponents.namespace)
     kerberosUtils = new KerberosUtils(
       image,
+      hImage,
       kImage,
       kubernetesTestComponents.serviceAccountName,
       kubernetesTestComponents.kubernetesClient,

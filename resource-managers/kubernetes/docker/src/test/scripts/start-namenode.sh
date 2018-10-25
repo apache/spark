@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -14,28 +15,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-includedir /etc/krb5.conf.d/
+export JAVA_HOME=/usr/lib/jvm/jre-1.8.0-openjdk
+export PATH=/hadoop/bin:$PATH
+export HADOOP_CONF_DIR=/hadoop/etc/hadoop
+mkdir -p /hadoop/etc/data
+cp ${TMP_KRB_LOC} /etc/krb5.conf
+cp ${TMP_CORE_LOC} /hadoop/etc/hadoop/core-site.xml
+cp ${TMP_HDFS_LOC} /hadoop/etc/hadoop/hdfs-site.xml
 
-[logging]
-default = FILE:/var/log/krb5libs.log
-kdc = FILE:/var/log/krb5kdc.log
-admin_server = FILE:/var/log/kadmind.log
+until kinit -kt /var/keytabs/hdfs.keytab hdfs/nn.${NAMESPACE}.svc.cluster.local; do sleep 15; done
 
-[libdefaults]
-dns_lookup_realm = false
-ticket_lifetime = 24h
-renew_lifetime = 7d
-forwardable = true
-rdns = false
-default_realm = CLUSTER.LOCAL
-# default_ccache_name = MEMORY
+echo "KDC is up and ready to go... starting up"
 
-[realms]
-CLUSTER.LOCAL = {
-  kdc = kerberos.REPLACE_ME.svc.cluster.local
-  admin_server = kerberos.REPLACE_ME.svc.cluster.local
-}
+kdestroy
 
-[domain_realm]
-.cluster.local = CLUSTER.LOCAL
-cluster.local = CLUSTER.LOCAL
+hdfs namenode -format
+hdfs namenode

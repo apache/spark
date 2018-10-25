@@ -30,12 +30,11 @@ spec:
         job: kerberostest
     spec:
       containers:
-      - command:
-        - /start-namenode.sh
+      - command: ["sh"]
+        args: ["/start-namenode.sh"]
         name: nn
         ports:
         - containerPort: 9000
-        image: ifilonenko/hadoop-base:latest
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - mountPath: /var/keytabs

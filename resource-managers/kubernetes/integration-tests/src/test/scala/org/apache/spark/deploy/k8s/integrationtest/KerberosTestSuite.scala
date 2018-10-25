@@ -45,7 +45,7 @@ private[spark] trait KerberosTestSuite { k8sSuite: KubernetesSuite =>
 
     val expectedLogOnCompletion = Seq(
       "File contents: [Michael,",
-      "Returned length(s) of: 3")
+      "Returned length(s) of: 3.0")
     val driverPod = kubernetesClient
       .pods()
       .inNamespace(kubernetesTestComponents.namespace)

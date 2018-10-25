@@ -30,10 +30,9 @@ spec:
         job: kerberostest
     spec:
       containers:
-      - command:
-        - /start-datanode.sh
+      - command: ["sh"]
+        args: ["/start-datanode.sh"]
         name: dn1
-        image: ifilonenko/hadoop-base:latest
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - mountPath: /var/keytabs
