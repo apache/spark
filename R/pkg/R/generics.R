@@ -1078,10 +1078,6 @@ setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
 
 #' @rdname column_collection_functions
 #' @name NULL
-setGeneric("map_entries", function(x) { standardGeneric("map_entries") })
-
-#' @rdname column_collection_functions
-#' @name NULL
 setGeneric("map_from_arrays", function(x, y) { standardGeneric("map_from_arrays") })
 
 #' @rdname column_collection_functions

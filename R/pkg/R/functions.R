@@ -219,7 +219,7 @@ NULL
 #' head(select(tmp, sort_array(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
-#' head(select(tmp3, map_entries(tmp3$v3), map_keys(tmp3$v3), map_values(tmp3$v3)))
+#' head(select(tmp3, map_keys(tmp3$v3), map_values(tmp3$v3)))
 #' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
 #' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$cyl, df$hp))
 #' head(select(tmp4, concat(tmp4$v4, tmp4$v5), arrays_overlap(tmp4$v4, tmp4$v5)))
@@ -3251,19 +3251,6 @@ setMethod("flatten",
             jc <- callJStatic("org.apache.spark.sql.functions", "flatten", x@jc)
             column(jc)
           })
-
-#' @details
-#' \code{map_entries}: Returns an unordered array of all entries in the given map.
-#'
-#' @rdname column_collection_functions
-#' @aliases map_entries map_entries,Column-method
-#' @note map_entries since 2.4.0
-setMethod("map_entries",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "map_entries", x@jc)
-            column(jc)
-         })
 
 #' @details
 #' \code{map_from_arrays}: Creates a new map column. The array in the first column is used for
