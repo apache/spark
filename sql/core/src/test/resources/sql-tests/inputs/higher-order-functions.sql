@@ -60,8 +60,3 @@ select zip_with(array('a', 'b', 'c'), array('d', 'e', 'f'), (x, y) -> concat(x, 
 
 -- Zip with array coalesce
 select zip_with(array('a'), array('d', null, 'f'), (x, y) -> coalesce(x, y)) as v;
-
-create or replace temporary view nested as values
-  (1, map(1, 1, 2, 2, 3, 3)),
-  (2, map(4, 4, 5, 5, 6, 6))
-  as t(x, ys);
