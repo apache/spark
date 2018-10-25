@@ -1388,8 +1388,8 @@ private[spark] class DAGScheduler(
                     try {
                       // killAllTaskAttempts will fail if a SchedulerBackend does not implement
                       // killTask.
-                      logInfo(s"Job ${job.jobId} is finished. Killing potential speculative or " +
-                        s"zombie tasks for this job")
+                      logInfo(s"Job ${job.jobId} is finished. Cancelling potential speculative " +
+                        "or zombie tasks for this job")
                       // ResultStage is only used by this job. It's safe to kill speculative or
                       // zombie tasks in this stage.
                       taskScheduler.killAllTaskAttempts(
