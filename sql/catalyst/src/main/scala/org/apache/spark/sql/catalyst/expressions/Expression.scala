@@ -289,7 +289,7 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
  * with other databases. For example, we use this to support every, any/some aggregates by rewriting
  * them with Min and Max respectively.
  */
-trait UnevaluableAggrgate extends DeclarativeAggregate {
+trait UnevaluableAggregate extends DeclarativeAggregate {
 
   override def nullable: Boolean = true
 

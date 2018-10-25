@@ -57,34 +57,3 @@ case class Max(child: Expression) extends DeclarativeAggregate {
 
   override lazy val evaluateExpression: AttributeReference = max
 }
-
-abstract class AnyAggBase(arg: Expression)
-  extends UnevaluableAggrgate with ImplicitCastInputTypes {
-
-  override def children: Seq[Expression] = arg :: Nil
-
-  override def dataType: DataType = BooleanType
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    arg.dataType match {
-      case dt if dt != BooleanType =>
-        TypeCheckResult.TypeCheckFailure(s"Input to function '$prettyName' should have been " +
-          s"${BooleanType.simpleString}, but it's [${arg.dataType.catalogString}].")
-      case _ => TypeCheckResult.TypeCheckSuccess
-    }
-  }
-}
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns true if at least one value of `expr` is true.")
-case class AnyAgg(arg: Expression) extends AnyAggBase(arg) {
-  override def nodeName: String = "Any"
-}
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns true if at least one value of `expr` is true.")
-case class SomeAgg(arg: Expression) extends AnyAggBase(arg) {
-  override def nodeName: String = "Some"
-}

@@ -304,7 +304,6 @@ object FunctionRegistry {
     expression[AnyAgg]("any"),
     expression[SomeAgg]("some"),
 
-
     // string functions
     expression[Ascii]("ascii"),
     expression[Chr]("char"),

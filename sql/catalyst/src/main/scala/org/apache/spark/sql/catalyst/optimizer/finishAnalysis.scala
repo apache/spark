@@ -32,9 +32,9 @@ import org.apache.spark.sql.types._
  * Finds all the expressions that are unevaluable and replace/rewrite them with semantically
  * equivalent expressions that can be evaluated. Currently we replace two kinds of expressions :
  * 1) [[RuntimeReplaceable]] expressions
- * 2) [[UnevaluableAggrgate]] expressions such as Every, Some, Any
+ * 2) [[UnevaluableAggregate]] expressions such as Every, Some, Any
  * This is mainly used to provide compatibility with other databases.
- * Few examples are :
+ * Few examples are:
  *   we use this to support "nvl" by replacing it with "coalesce".
  *   we use this to replace Every and Any with Min and Max respectively.
  */
@@ -46,6 +46,7 @@ object ReplaceExpressions extends Rule[LogicalPlan] {
     case EveryAgg(arg) => Min(arg)
   }
 }
+
 
 /**
  * Computes the current date and time to make sure we return the same result in a single query.

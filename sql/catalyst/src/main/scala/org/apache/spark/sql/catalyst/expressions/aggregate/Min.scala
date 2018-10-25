@@ -57,27 +57,3 @@ case class Min(child: Expression) extends DeclarativeAggregate {
 
   override lazy val evaluateExpression: AttributeReference = min
 }
-
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns true if all values of `expr` are true.")
-case class EveryAgg(arg: Expression)
-  extends UnevaluableAggrgate with ImplicitCastInputTypes {
-
-  override def nodeName: String = "Every"
-
-  override def children: Seq[Expression] = arg :: Nil
-
-  override def dataType: DataType = BooleanType
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    arg.dataType match {
-      case dt if dt != BooleanType =>
-        TypeCheckResult.TypeCheckFailure(s"Input to function '$prettyName' should have been " +
-          s"${BooleanType.simpleString}, but it's [${arg.dataType.catalogString}].")
-      case _ => TypeCheckResult.TypeCheckSuccess
-    }
-  }
-}
-
