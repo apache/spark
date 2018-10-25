@@ -2656,7 +2656,8 @@
       <id>kubernetes</id>
       <modules>
         <module>resource-managers/kubernetes/core</module>
-        <module>resource-managers/kubernetes/integration-tests</module>
+        <!-- for now, don't automatically build and run the integration tests -->
+        <!-- <module>resource-managers/kubernetes/integration-tests</module> -->
       </modules>
     </profile>
 
