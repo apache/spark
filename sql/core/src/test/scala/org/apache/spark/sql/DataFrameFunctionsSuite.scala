@@ -509,58 +509,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("map_entries") {
-    // Primitive-type elements
-    val idf = Seq(
-      Map[Int, Int](1 -> 100, 2 -> 200, 3 -> 300),
-      Map[Int, Int](),
-      null
-    ).toDF("m")
-    val iExpected = Seq(
-      Row(Seq(Row(1, 100), Row(2, 200), Row(3, 300))),
-      Row(Seq.empty),
-      Row(null)
-    )
-
-    def testPrimitiveType(): Unit = {
-      checkAnswer(idf.select(map_entries('m)), iExpected)
-      checkAnswer(idf.selectExpr("map_entries(m)"), iExpected)
-      checkAnswer(idf.selectExpr("map_entries(map(1, null, 2, null))"),
-        Seq.fill(iExpected.length)(Row(Seq(Row(1, null), Row(2, null)))))
-    }
-
-    // Test with local relation, the Project will be evaluated without codegen
-    testPrimitiveType()
-    // Test with cached relation, the Project will be evaluated with codegen
-    idf.cache()
-    testPrimitiveType()
-
-    // Non-primitive-type elements
-    val sdf = Seq(
-      Map[String, String]("a" -> "f", "b" -> "o", "c" -> "o"),
-      Map[String, String]("a" -> null, "b" -> null),
-      Map[String, String](),
-      null
-    ).toDF("m")
-    val sExpected = Seq(
-      Row(Seq(Row("a", "f"), Row("b", "o"), Row("c", "o"))),
-      Row(Seq(Row("a", null), Row("b", null))),
-      Row(Seq.empty),
-      Row(null)
-    )
-
-    def testNonPrimitiveType(): Unit = {
-      checkAnswer(sdf.select(map_entries('m)), sExpected)
-      checkAnswer(sdf.selectExpr("map_entries(m)"), sExpected)
-    }
-
-    // Test with local relation, the Project will be evaluated without codegen
-    testNonPrimitiveType()
-    // Test with cached relation, the Project will be evaluated with codegen
-    sdf.cache()
-    testNonPrimitiveType()
-  }
-
   test("map_concat function") {
     val df1 = Seq(
       (Map[Int, Int](1 -> 100, 2 -> 200), Map[Int, Int](3 -> 300, 4 -> 400)),
