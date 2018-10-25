@@ -170,8 +170,6 @@ class NaiveBayesModel private[spark] (
     val data = NaiveBayesModel.SaveLoadV2_0.Data(labels, pi, theta, modelType)
     NaiveBayesModel.SaveLoadV2_0.save(sc, path, data)
   }
-
-  override protected def formatVersion: String = "2.0"
 }
 
 @Since("1.3.0")

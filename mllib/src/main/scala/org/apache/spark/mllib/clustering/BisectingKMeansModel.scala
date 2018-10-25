@@ -111,8 +111,6 @@ class BisectingKMeansModel private[clustering] (
   override def save(sc: SparkContext, path: String): Unit = {
     BisectingKMeansModel.SaveLoadV1_0.save(sc, this, path)
   }
-
-  override protected def formatVersion: String = "1.0"
 }
 
 @Since("2.0.0")

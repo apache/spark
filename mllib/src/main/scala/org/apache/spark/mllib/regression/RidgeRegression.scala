@@ -52,8 +52,6 @@ class RidgeRegressionModel @Since("1.1.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     GLMRegressionModel.SaveLoadV1_0.save(sc, path, this.getClass.getName, weights, intercept)
   }
-
-  override protected def formatVersion: String = "1.0"
 }
 
 @Since("1.3.0")
