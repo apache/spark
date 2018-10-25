@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
 
 /**
  * Finds all the expressions that are unevaluable and replace/rewrite them with semantically
- * equivalent expressions that can be evaluated. Currently we replace two kinds of expressions :
+ * equivalent expressions that can be evaluated. Currently we replace two kinds of expressions:
  * 1) [[RuntimeReplaceable]] expressions
  * 2) [[UnevaluableAggregate]] expressions such as Every, Some, Any
  * This is mainly used to provide compatibility with other databases.
