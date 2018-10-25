@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.{List => JList, Map => JMap, UUID}
+import java.util.{List => JList, UUID}
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
 
@@ -32,13 +32,23 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 
+/**
+ * Spark's own GetTablesOperation
+ *
+ * @param sqlContext SQLContext to use
+ * @param parentSession a HiveSession from SessionManager
+ * @param catalogName catalog name. null if not applicable
+ * @param schemaName database name, null or a concrete database name
+ * @param tableName table name pattern
+ * @param tableTypes list of allowed table types, e.g. "TABLE", "VIEW"
+ */
 private[hive] class SparkGetTablesOperation(
+    sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
     tableName: String,
     tableTypes: JList[String])
-    (sqlContext: SQLContext, sessionToActivePool: JMap[SessionHandle, String])
   extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
   with Logging {
 
