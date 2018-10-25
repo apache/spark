@@ -112,7 +112,7 @@ class BisectingKMeansModel private[clustering] (
     BisectingKMeansModel.SaveLoadV2_0.save(sc, this, path)
   }
 
-  override protected def formatVersion: String = "1.0"
+  override protected def formatVersion: String = "2.0"
 }
 
 @Since("2.0.0")
