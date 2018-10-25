@@ -388,6 +388,7 @@ read.orc <- function(path, ...) {
 #' Loads a Parquet file, returning the result as a SparkDataFrame.
 #'
 #' @param path path of file to read. A vector of multiple paths is allowed.
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.parquet
 #' @name read.parquet
