@@ -56,8 +56,10 @@ private[spark] class MountVolumesFeatureStep(
 
       val volumeBuilder = spec.volumeConf match {
         case KubernetesHostPathVolumeConf(hostPath) =>
+          // TODO: Backwards compatibility allows for empty string, but specify
+          // hostPath type here
           new VolumeBuilder()
-            .withHostPath(new HostPathVolumeSource(hostPath))
+            .withHostPath(new HostPathVolumeSource(hostPath, ""))
 
         case KubernetesPVCVolumeConf(claimName) =>
           new VolumeBuilder()
