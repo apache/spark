@@ -2579,10 +2579,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-25816 ResolveReferences works bottom-up on expressions") {
+  test("SPARK-25816 ResolveReferences works with nested extractors") {
     val df0 = Seq((1, Map(1 -> "a")), (2, Map(2 -> "b"))).toDF("1", "2")
     val df1 = df0.select($"1".as("2"), $"2".as("1"))
-    val df2 = df1.filter($"1"(Column(MapKeys($"1".expr))(0)) > "a")
+    val df2 = df1.filter($"1"(map_keys($"1")(0)) > "a")
 
     checkAnswer(df2, Row(2, Map(2 -> "b")))
   }
