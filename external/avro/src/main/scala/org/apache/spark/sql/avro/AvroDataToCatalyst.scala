@@ -122,7 +122,7 @@ case class AvroDataToCatalyst(
       val result = ctx.freshName("result")
       val dt = CodeGenerator.boxedType(dataType)
       s"""
-        dt $result = (dt) $expr.nullSafeEval($eval);
+        $dt $result = ($dt) $expr.nullSafeEval($eval);
         if ($result == null) {
           ${ev.isNull} = true;
         } else {
