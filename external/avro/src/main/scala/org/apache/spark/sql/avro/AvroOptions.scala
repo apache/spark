@@ -21,7 +21,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -82,7 +82,7 @@ class AvroOptions(
   }
 
   val parseMode: ParseMode =
-    parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
+    parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
 }
 
 object AvroOptions {

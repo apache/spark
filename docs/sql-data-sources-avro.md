@@ -182,13 +182,13 @@ Data source options of Avro can be set via:
   </tr>
   <tr>
     <td><code>mode</code></td>
-    <td>PERMISSIVE</td>
+    <td>FAILFAST</td>
     <td>The <code>mode</code> option allows to specify parse mode for function <code>from_avro</code>.<br>
       Currently supported modes are:
       <ul>
+        <li><code>FAILFAST</code>: Throws an exception on processing corrupted record.</li>
         <li><code>PERMISSIVE</code>: Corrupt records are processed as null result. To implement this, the
         data schema is forced to be fully nullable, which might be different from the one user provided.</li>
-        <li><code>FAILFAST</code>: Throws an exception on processing corrupted record.</li>
       </ul>
     </td>
     <td>function <code>from_avro</code></td>

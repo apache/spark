@@ -101,7 +101,8 @@ case class AvroDataToCatalyst(
         case PermissiveMode => nullResultRow
         case FailFastMode =>
           throw new SparkException("Malformed records are detected in record parsing. " +
-            s"Parse Mode: ${FailFastMode.name}.", e.getCause)
+            s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
+            "result, try setting the option 'mode' as 'PERMISSIVE'.", e.getCause)
         case _ =>
           throw new AnalysisException(unacceptableModeMessage(parseMode.name))
       }
