@@ -1,0 +1,60 @@
+================================================================================================
+Parquet writer benchmark
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+Parquet writer benchmark:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Output Single Int Column                      2049 / 2120          7.7         130.2       1.0X
+Output Single Double Column                   2194 / 2203          7.2         139.5       0.9X
+Output Int and String Column                  5704 / 5715          2.8         362.7       0.4X
+Output Partitions                             3727 / 3856          4.2         237.0       0.5X
+Output Buckets                                5119 / 5361          3.1         325.4       0.4X
+
+
+================================================================================================
+ORC writer benchmark
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+ORC writer benchmark:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Output Single Int Column                      1109 / 1116         14.2          70.5       1.0X
+Output Single Double Column                   1366 / 1378         11.5          86.8       0.8X
+Output Int and String Column                  5303 / 5318          3.0         337.2       0.2X
+Output Partitions                             3078 / 3472          5.1         195.7       0.4X
+Output Buckets                                4374 / 4398          3.6         278.1       0.3X
+
+
+================================================================================================
+JSON writer benchmark
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+JSON writer benchmark:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Output Single Int Column                      1806 / 1813          8.7         114.8       1.0X
+Output Single Double Column                   2530 / 2538          6.2         160.8       0.7X
+Output Int and String Column                  5311 / 5344          3.0         337.6       0.3X
+Output Partitions                             3524 / 3580          4.5         224.1       0.5X
+Output Buckets                                4661 / 4723          3.4         296.3       0.4X
+
+
+================================================================================================
+CSV writer benchmark
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+CSV writer benchmark:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Output Single Int Column                      2863 / 2896          5.5         182.0       1.0X
+Output Single Double Column                   3233 / 3238          4.9         205.6       0.9X
+Output Int and String Column                  6805 / 6822          2.3         432.6       0.4X
+Output Partitions                             4873 / 4886          3.2         309.8       0.6X
+Output Buckets                                6733 / 6757          2.3         428.1       0.4X
+
+
