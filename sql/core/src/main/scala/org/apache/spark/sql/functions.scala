@@ -830,30 +830,30 @@ object functions {
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
   /**
-   * Window function: returns the special frame boundary that represents the first row in the
-   * window partition.
+   * This function has been deprecated in Spark 2.4. See SPARK-25842 for more information.
    *
    * @group window_funcs
    * @since 2.3.0
    */
+  @deprecated("Use Window.unboundedPreceding", "2.4.0")
   def unboundedPreceding(): Column = Column(UnboundedPreceding)
 
   /**
-   * Window function: returns the special frame boundary that represents the last row in the
-   * window partition.
+   * This function has been deprecated in Spark 2.4. See SPARK-25842 for more information.
    *
    * @group window_funcs
    * @since 2.3.0
    */
+  @deprecated("Use Window.unboundedFollowing", "2.4.0")
   def unboundedFollowing(): Column = Column(UnboundedFollowing)
 
   /**
-   * Window function: returns the special frame boundary that represents the current row in the
-   * window partition.
+   * This function has been deprecated in Spark 2.4. See SPARK-25842 for more information.
    *
    * @group window_funcs
    * @since 2.3.0
    */
+  @deprecated("Use Window.currentRow", "2.4.0")
   def currentRow(): Column = Column(CurrentRow)
 
   /**
