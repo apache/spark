@@ -171,6 +171,6 @@ MVN_RETCODE=$?
 # Try to shut down zinc explicitly if the server is still running.  if it's not running,
 # it's timed out and we'll still need to exit the script w/a 0 to keep the build from
 # failing.
-"${ZINC_BIN}" -shutdown -port ${ZINC_PORT} || true
+"${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
 
 exit $MVN_RETCODE
