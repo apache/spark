@@ -73,10 +73,9 @@ private[spark] class HadoopDelegationTokenManager(
   private val principal = sparkConf.get(PRINCIPAL).orNull
   private val keytab = sparkConf.get(KEYTAB).orNull
 
-  if (principal != null) {
-    require(keytab != null, "Kerberos principal specified without a keytab.")
-    require(new File(keytab).isFile(), s"Cannot find keytab at $keytab.")
-  }
+  require((principal == null) == (keytab == null),
+    "Both principal and keytab must be defined, or neither.")
+  require(keytab == null || new File(keytab).isFile(), s"Cannot find keytab at $keytab.")
 
   private val delegationTokenProviders = loadProviders()
   logDebug("Using the following builtin delegation token providers: " +
@@ -101,12 +100,13 @@ private[spark] class HadoopDelegationTokenManager(
    * those tokens to the driver. No future tokens will be generated, so when that initial set
    * expires, the app will stop working.
    *
-   * @param driver If provided, the driver where to send the newly generated tokens.
-   *               The same ref will also receive future token updates unless overridden later.
+   * @param driverEndpoint If provided, the driver where to send the newly generated tokens.
+   *                       The same ref will also receive future token updates unless overridden
+   *                       later.
    * @return The newly logged in user, or null if a principal is not configured.
    */
-  def start(driver: Option[RpcEndpointRef] = None): UserGroupInformation = {
-    driver.foreach(setDriverRef)
+  def start(driverEndpoint: Option[RpcEndpointRef] = None): UserGroupInformation = {
+    driverEndpoint.foreach(setDriverRef)
 
     if (principal != null) {
       renewalExecutor =
@@ -142,14 +142,14 @@ private[spark] class HadoopDelegationTokenManager(
       ugi.addCredentials(existing)
       ugi
     } else {
-      driver.foreach { ref =>
+      driverEndpoint.foreach { driver =>
         logInfo("Using ticket cache for Kerberos authentication, no token renewal.")
         val creds = new Credentials()
         obtainDelegationTokens(creds)
         UserGroupInformation.getCurrentUser.addCredentials(creds)
 
         val tokens = SparkHadoopUtil.get.serialize(creds)
-        ref.send(UpdateDelegationTokens(tokens))
+        driver.send(UpdateDelegationTokens(tokens))
       }
       null
     }
@@ -272,9 +272,8 @@ private[spark] class HadoopDelegationTokenManager(
         // ratio.
         val now = System.currentTimeMillis
         val ratio = sparkConf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
-        val adjustedNextRenewal = (now + (ratio * (nextRenewal - now))).toLong
-
-        scheduleRenewal(adjustedNextRenewal - now)
+        val delay = (ratio * (nextRenewal - now)).toLong
+        scheduleRenewal(delay)
         creds
       }
     })

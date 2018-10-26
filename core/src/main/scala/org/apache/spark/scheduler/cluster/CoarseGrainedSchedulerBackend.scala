@@ -27,6 +27,7 @@ import scala.concurrent.Future
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
@@ -161,6 +162,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       case UpdateDelegationTokens(newDelegationTokens) =>
+        SparkHadoopUtil.get.addDelegationTokens(newDelegationTokens, conf)
         delegationTokens.set(newDelegationTokens)
         executorDataMap.values.foreach { ed =>
           ed.executorEndpoint.send(UpdateDelegationTokens(newDelegationTokens))
