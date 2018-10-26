@@ -109,7 +109,7 @@ class BisectingKMeansModel private[clustering] (
 
   @Since("2.0.0")
   override def save(sc: SparkContext, path: String): Unit = {
-    BisectingKMeansModel.SaveLoadV1_0.save(sc, this, path)
+    BisectingKMeansModel.SaveLoadV2_0.save(sc, this, path)
   }
 }
 
@@ -124,7 +124,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
         val model = SaveLoadV1_0.load(sc, path)
         model
       case (SaveLoadV2_0.thisClassName, SaveLoadV2_0.thisFormatVersion) =>
-        val model = SaveLoadV1_0.load(sc, path)
+        val model = SaveLoadV2_0.load(sc, path)
         model
       case _ => throw new Exception(
         s"BisectingKMeansModel.load did not recognize model with (className, format version):" +
