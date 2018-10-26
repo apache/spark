@@ -2656,6 +2656,13 @@
       <id>kubernetes</id>
       <modules>
         <module>resource-managers/kubernetes/core</module>
+      </modules>
+    </profile>
+
+    <!-- generally not enabled for automated builds, but will run k8s tests -->
+    <profile>
+      <id>kubernetes-integration-tests</id>
+      <modules>
         <module>resource-managers/kubernetes/integration-tests</module>
       </modules>
     </profile>
