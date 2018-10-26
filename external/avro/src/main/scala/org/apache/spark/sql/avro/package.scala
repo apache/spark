@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
 
 package object avro {
@@ -53,10 +55,9 @@ package object avro {
   def from_avro(
       data: Column,
       jsonFormatSchema: String,
-      options: Map[String, String]): Column = {
-    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, options))
+      options: java.util.Map[String, String]): Column = {
+    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, options.asScala.toMap))
   }
-
 
   /**
    * Converts a column into binary of avro format.

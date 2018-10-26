@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.avro
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.functions.struct
@@ -76,13 +78,15 @@ class AvroFunctionsSuite extends QueryTest with SharedSQLContext with SQLTestUti
     """.stripMargin
 
     intercept[SparkException] {
-      avroStructDF.select(from_avro('avro, avroTypeStruct, Map("mode" -> "FAILFAST"))).collect()
+      avroStructDF.select(
+        from_avro('avro, avroTypeStruct, Map("mode" -> "FAILFAST").asJava)).collect()
     }
 
     // For PERMISSIVE mode, the result should be row of null columns.
     val expected = (0 until count).map(_ => Row(Row(null, null)))
     checkAnswer(
-      avroStructDF.select(from_avro('avro, avroTypeStruct, Map("mode" -> "PERMISSIVE"))), expected)
+      avroStructDF.select(from_avro('avro, avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
+      expected)
   }
 
   test("roundtrip in to_avro and from_avro - array with null") {
