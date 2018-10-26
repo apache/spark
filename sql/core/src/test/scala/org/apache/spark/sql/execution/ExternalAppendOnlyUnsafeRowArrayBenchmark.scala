@@ -20,13 +20,27 @@ package org.apache.spark.sql.execution
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskContext}
-import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.internal.config
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
-object ExternalAppendOnlyUnsafeRowArrayBenchmark {
+/**
+  * Synthetic Benchmark for ArrayBuffer and UnsafeRowArray
+  * To run this benchmark:
+  * {{{
+  *   1. without sbt:
+  *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
+  *   2. build/sbt "catalyst/test:runMain <this class>"
+  *   3. generate result:
+  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "catalyst/test:runMain <this class>"
+  *      Results will be written to
+  *      "benchmarks/ExternalAppendOnlyUnsafeRowArrayBenchmark-results.txt".
+  * }}}
+  */
+
+object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
 
   def testAgainstRawArrayBuffer(numSpillThreshold: Int, numRows: Int, iterations: Int): Unit = {
     val random = new java.util.Random()
@@ -37,7 +51,8 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
       row
     })
 
-    val benchmark = new Benchmark(s"Array with $numRows rows", iterations * numRows)
+    val benchmark =
+      new Benchmark(s"Array with $numRows rows", iterations * numRows, output = output)
 
     // Internally, `ExternalAppendOnlyUnsafeRowArray` will create an
     // in-memory buffer of size `numSpillThreshold`. This will mimic that
@@ -108,7 +123,8 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
       row
     })
 
-    val benchmark = new Benchmark(s"Spilling with $numRows rows", iterations * numRows)
+    val benchmark =
+      new Benchmark(s"Spilling with $numRows rows", iterations * numRows, output = output)
 
     benchmark.addCase("UnsafeExternalSorter") { _: Int =>
       var sum = 0L
@@ -171,67 +187,15 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
     sc.stop()
   }
 
-  def main(args: Array[String]): Unit = {
-
-    // ========================================================================================= //
-    // WITHOUT SPILL
-    // ========================================================================================= //
-
-    val spillThreshold = 100 * 1000
-
-    /*
-    Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
-
-    Array with 1000 rows:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    ArrayBuffer                                   7821 / 7941         33.5          29.8       1.0X
-    ExternalAppendOnlyUnsafeRowArray              8798 / 8819         29.8          33.6       0.9X
-    */
-    testAgainstRawArrayBuffer(spillThreshold, 1000, 1 << 18)
-
-    /*
-    Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
-
-    Array with 30000 rows:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    ArrayBuffer                                 19200 / 19206         25.6          39.1       1.0X
-    ExternalAppendOnlyUnsafeRowArray            19558 / 19562         25.1          39.8       1.0X
-    */
-    testAgainstRawArrayBuffer(spillThreshold, 30 * 1000, 1 << 14)
-
-    /*
-    Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
-
-    Array with 100000 rows:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    ArrayBuffer                                   5949 / 6028         17.2          58.1       1.0X
-    ExternalAppendOnlyUnsafeRowArray              6078 / 6138         16.8          59.4       1.0X
-    */
-    testAgainstRawArrayBuffer(spillThreshold, 100 * 1000, 1 << 10)
-
-    // ========================================================================================= //
-    // WITH SPILL
-    // ========================================================================================= //
-
-    /*
-    Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
-
-    Spilling with 1000 rows:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    UnsafeExternalSorter                          9239 / 9470         28.4          35.2       1.0X
-    ExternalAppendOnlyUnsafeRowArray              8857 / 8909         29.6          33.8       1.0X
-    */
-    testAgainstRawUnsafeExternalSorter(100 * 1000, 1000, 1 << 18)
-
-    /*
-    Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
-
-    Spilling with 10000 rows:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    UnsafeExternalSorter                             4 /    5         39.3          25.5       1.0X
-    ExternalAppendOnlyUnsafeRowArray                 5 /    6         29.8          33.5       0.8X
-    */
-    testAgainstRawUnsafeExternalSorter(
-      config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get, 10 * 1000, 1 << 4)
+  override def runBenchmarkSuite(): Unit = {
+    runBenchmark("Benchmark for ArrayBuffer and UnsafeRowArray") {
+      val spillThreshold = 100 * 1000
+      testAgainstRawArrayBuffer(spillThreshold, 1000, 1 << 18)
+      testAgainstRawArrayBuffer(spillThreshold, 30 * 1000, 1 << 14)
+      testAgainstRawArrayBuffer(spillThreshold, 100 * 1000, 1 << 10)
+      testAgainstRawUnsafeExternalSorter(100 * 1000, 1000, 1 << 18)
+      testAgainstRawUnsafeExternalSorter(
+        config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get, 10 * 1000, 1 << 4)
+    }
   }
 }

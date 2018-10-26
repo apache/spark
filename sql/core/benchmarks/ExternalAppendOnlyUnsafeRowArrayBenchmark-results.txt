@@ -1,0 +1,39 @@
+================================================================================================
+Benchmark for ArrayBuffer and UnsafeRowArray
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_163-b01 on Windows 7 6.1
+Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+Array with 1000 rows:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+ArrayBuffer                                   8694 / 8743         30.2          33.2       1.0X
+ExternalAppendOnlyUnsafeRowArray            19827 / 19946         13.2          75.6       0.4X
+
+OpenJDK 64-Bit Server VM 1.8.0_163-b01 on Windows 7 6.1
+Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+Array with 30000 rows:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+ArrayBuffer                                 24793 / 27135         19.8          50.4       1.0X
+ExternalAppendOnlyUnsafeRowArray            24877 / 24963         19.8          50.6       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_163-b01 on Windows 7 6.1
+Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+Array with 100000 rows:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+ArrayBuffer                                   6255 / 6263         16.4          61.1       1.0X
+ExternalAppendOnlyUnsafeRowArray              5608 / 6170         18.3          54.8       1.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_163-b01 on Windows 7 6.1
+Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+Spilling with 1000 rows:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+UnsafeExternalSorter                        15767 / 15790         16.6          60.1       1.0X
+ExternalAppendOnlyUnsafeRowArray            10013 / 10036         26.2          38.2       1.6X
+
+OpenJDK 64-Bit Server VM 1.8.0_163-b01 on Windows 7 6.1
+Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+Spilling with 10000 rows:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+UnsafeExternalSorter                             5 /    6         29.2          34.3       1.0X
+ExternalAppendOnlyUnsafeRowArray                 6 /    7         26.2          38.1       0.9X
+
