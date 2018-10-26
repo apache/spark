@@ -3906,7 +3906,6 @@ object functions {
    */
   def schema_of_csv(csv: String): Column = schema_of_csv(lit(csv))
 
-
   /**
    * Parses a CSV string and infers its schema in DDL format.
    *
