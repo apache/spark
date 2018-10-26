@@ -157,7 +157,7 @@ private[spark] class ExecutorPodsAllocator(
           " executors to begin running before requesting for more executors. # of executors in" +
           " pending status in the cluster: {currentPendingExecutors}. # of executors that we have" +
           " created but we have not observed as being present in the cluster yet:" +
-          " ${newlyCreatedExecutors}.",
+          " {newlyCreatedExecutors}.",
           SafeArg.of("currentWaitingExecutors",
             newlyCreatedExecutors.size + currentPendingExecutors),
           SafeArg.of("currentPendingExecutors", currentPendingExecutors),
