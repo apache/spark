@@ -158,8 +158,6 @@ private[spark] object KubernetesUtils {
   }
 
   def formatTime(time: String): String = {
-    // TODO: Investigate form `time` comes in as there was a DataType
-    // change from Time to String
     if (time != null) time else "N/A"
   }
 }
