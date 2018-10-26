@@ -812,6 +812,17 @@ object SQLConf {
     .intConf
     .createWithDefault(65535)
 
+  val CODEGEN_METHOD_SPLIT_THRESHOLD = buildConf("spark.sql.codegen.methodSplitThreshold")
+    .internal()
+    .doc("The maximum source code length of a single Java function by codegen. When the " +
+      "generated Java function source code exceeds this threshold, it will be split into " +
+      "multiple small functions, each function length is spark.sql.codegen.methodSplitThreshold." +
+      " A function's bytecode should not go beyond 8KB, otherwise it will not be JITted, should " +
+      "also not be too small, or we will have many function calls. We can't know how many " +
+      "bytecode will be generated, so use the length of source code as metric.")
+    .intConf
+    .createWithDefault(1024)
+
   val WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR =
     buildConf("spark.sql.codegen.splitConsumeFuncByOperator")
       .internal()
@@ -1732,6 +1743,8 @@ class SQLConf extends Serializable with Logging {
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
+
+  def methodSplitThreshold: Int = getConf(CODEGEN_METHOD_SPLIT_THRESHOLD)
 
   def wholeStageSplitConsumeFuncByOperator: Boolean =
     getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
