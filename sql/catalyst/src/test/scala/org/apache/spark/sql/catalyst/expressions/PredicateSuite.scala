@@ -265,13 +265,13 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val two = Literal(2)
     val three = Literal(3)
     val nl = Literal(null)
-    checkEvaluation(InSet(one, hS), true)
-    checkEvaluation(InSet(two, hS), true)
-    checkEvaluation(InSet(two, nS), true)
-    checkEvaluation(InSet(three, hS), false)
-    checkEvaluation(InSet(three, nS), null)
-    checkEvaluation(InSet(nl, hS), null)
-    checkEvaluation(InSet(nl, nS), null)
+    checkEvaluation(InSet(Seq(one), hS), true)
+    checkEvaluation(InSet(Seq(two), hS), true)
+    checkEvaluation(InSet(Seq(two), nS), true)
+    checkEvaluation(InSet(Seq(three), hS), false)
+    checkEvaluation(InSet(Seq(three), nS), null)
+    checkEvaluation(InSet(Seq(nl), hS), null)
+    checkEvaluation(InSet(Seq(nl), nS), null)
 
     val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
       LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
@@ -295,7 +295,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       } else {
         false
       }
-      checkEvaluation(InSet(input(0), inputData.slice(1, 10).toSet), expected)
+      checkEvaluation(InSet(Seq(input(0)), inputData.slice(1, 10).toSet), expected)
     }
   }
 
@@ -445,7 +445,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-22693: InSet should not use global variables") {
     val ctx = new CodegenContext
-    InSet(Literal(1), Set(1, 2, 3, 4)).genCode(ctx)
+    InSet(Seq(Literal(1)), Set(1, 2, 3, 4)).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)
   }
 

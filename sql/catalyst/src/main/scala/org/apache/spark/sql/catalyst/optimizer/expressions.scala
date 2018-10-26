@@ -213,16 +213,23 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
  *    the value is not nullable.
  * 2. Removes literal repetitions.
  * 3. Replaces [[In (values, seq[Literal])]] with optimized version
- *    [[InSet (value, HashSet[Literal])]] which is much faster.
+ *    [[InSet (values, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case i @ In(_, list) if list.isEmpty =>
-        // When v is not nullable, the following expression will be optimized
+      case i @ In(values, list) if list.isEmpty =>
+        // When values are not nullable, the following expression will be optimized
         // to FalseLiteral which is tested in OptimizeInSuite.scala
-        If(IsNotNull(i.value), FalseLiteral, Literal(null, BooleanType))
-      case expr @ In(_, list) if expr.inSetConvertible =>
+        val isNotNull = if (SQLConf.get.inFalseForNullField) {
+          IsNotNull(i.value)
+        } else {
+          val valuesNotNull: Seq[Expression] = values.map(IsNotNull)
+          valuesNotNull.tail.foldLeft(valuesNotNull.head)(And)
+        }
+        If(isNotNull, FalseLiteral, Literal(null, BooleanType))
+      case expr @ In(values, list) if expr.inSetConvertible =>
+        // if we have more than one element in the values, we have to skip this optimization
         val newList = ExpressionSet(list).toSeq
         if (newList.length == 1
           // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
@@ -232,7 +239,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
           EqualTo(expr.value, newList.head)
         } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
-          InSet(expr.value, HashSet() ++ hSet)
+          InSet(values, HashSet() ++ hSet)
         } else if (newList.length < list.length) {
           expr.copy(list = newList)
         } else { // newList.length == list.length && newList.length > 1

@@ -140,7 +140,7 @@ case class Not(child: Expression)
   override def sql: String = s"(NOT ${child.sql})"
 }
 
-abstract class InBase extends Predicate {
+trait InBase extends Predicate {
   def values: Seq[Expression]
 
   @transient protected lazy val isMultiValued = values.length > 1
@@ -152,6 +152,22 @@ abstract class InBase extends Predicate {
     })
   } else {
     values.head
+  }
+
+  @transient lazy val checkNullGenCode: (ExprCode) => Block = {
+    if (isMultiValued && !SQLConf.get.inFalseForNullField) {
+      e => code"${e.isNull} || ${e.value}.anyNull()"
+    } else {
+      e => code"${e.isNull}"
+    }
+  }
+
+  @transient lazy val checkNullEval: (Any) => Boolean = {
+    if (isMultiValued && !SQLConf.get.inFalseForNullField) {
+      input => input == null || input.asInstanceOf[InternalRow].anyNull
+    } else {
+      input => input == null
+    }
   }
 }
 
@@ -251,9 +267,9 @@ case class In(values: Seq[Expression], list: Seq[Expression]) extends InBase {
 
   override def nullable: Boolean = if (isMultiValued && !SQLConf.get.inFalseForNullField) {
     children.exists(_.nullable) ||
-      children.exists(_.dataType.asInstanceOf[StructType].exists(_.nullable))
+      list.exists(_.dataType.asInstanceOf[StructType].exists(_.nullable))
   } else {
-    children.exists(_.nullable)
+    value.nullable || list.exists(_.nullable)
   }
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -278,22 +294,6 @@ case class In(values: Seq[Expression], list: Seq[Expression]) extends InBase {
       } else {
         false
       }
-    }
-  }
-
-  @transient lazy val checkNullGenCode: (ExprCode) => Block = {
-    if (isMultiValued && !SQLConf.get.inFalseForNullField) {
-      e => code"${e.isNull} || ${e.value}.anyNull()"
-    } else {
-      e => code"${e.isNull}"
-    }
-  }
-
-  @transient lazy val checkNullEval: (Any) => Boolean = {
-    if (isMultiValued && !SQLConf.get.inFalseForNullField) {
-      input => input == null || input.asInstanceOf[InternalRow].anyNull
-    } else {
-      input => input == null
     }
   }
 
@@ -371,37 +371,57 @@ case class In(values: Seq[Expression], list: Seq[Expression]) extends InBase {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
+case class InSet(values: Seq[Expression], hset: Set[Any]) extends InBase {
 
   require(hset != null, "hset could not be null")
 
-  override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
+  override def toString: String = s"$value INSET ${hset.mkString("(", ",", ")")}"
 
-  @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
+  override def children: Seq[Expression] = values
 
-  override def nullable: Boolean = child.nullable || hasNull
-
-  protected override def nullSafeEval(value: Any): Any = {
-    if (set.contains(value)) {
-      true
-    } else if (hasNull) {
-      null
+  @transient private[this] lazy val hasNull: Boolean = {
+    if (isMultiValued && !SQLConf.get.inFalseForNullField) {
+      hset.exists(checkNullEval)
     } else {
-      false
+      hset.contains(null)
     }
   }
 
-  @transient lazy val set: Set[Any] = child.dataType match {
+  override def nullable: Boolean = {
+    val isValueNullable = if (isMultiValued && !SQLConf.get.inFalseForNullField) {
+      values.exists(_.nullable)
+    } else {
+      value.nullable
+    }
+    isValueNullable || hasNull
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val inputValue = value.eval(input)
+    if (checkNullEval(inputValue)) {
+      if (set.contains(inputValue)) {
+        true
+      } else if (hasNull) {
+        null
+      } else {
+        false
+      }
+    } else {
+      null
+    }
+  }
+
+  @transient lazy val set: Set[Any] = value.dataType match {
     case _: AtomicType => hset
     case _: NullType => hset
     case _ =>
       // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ hset
+      TreeSet.empty(TypeUtils.getInterpretedOrdering(value.dataType)) ++ hset
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val setTerm = ctx.addReferenceObj("set", set)
-    val childGen = child.genCode(ctx)
+    val childGen = value.genCode(ctx)
     val setIsNull = if (hasNull) {
       s"${ev.isNull} = !${ev.value};"
     } else {
@@ -410,7 +430,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     ev.copy(code =
       code"""
          |${childGen.code}
-         |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${childGen.isNull};
+         |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${checkNullGenCode(childGen)};
          |${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
          |if (!${ev.isNull}) {
          |  ${ev.value} = $setTerm.contains(${childGen.value});
@@ -420,7 +440,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   override def sql: String = {
-    val valueSQL = child.sql
+    val valueSQL = value.sql
     val listSQL = hset.toSeq.map(Literal(_).sql).mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }

@@ -689,7 +689,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case InSet(ExtractAttribute(NonVarcharAttribute(name)), ExtractableValues(values))
+      case InSet(Seq(ExtractAttribute(NonVarcharAttribute(name))), ExtractableValues(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
 

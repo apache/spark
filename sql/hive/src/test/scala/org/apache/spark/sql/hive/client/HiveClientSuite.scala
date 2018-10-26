@@ -192,8 +192,8 @@ class HiveClientSuite(version: String)
       20170102 to 20170103,
       0 to 4,
       "aa" :: "ab" :: "ba" :: "bb" :: Nil, {
-        case expr @ In(_, list) if expr.inSetConvertible =>
-          InSet(expr.value, list.map(_.eval(EmptyRow)).toSet)
+        case expr @ In(v, list) if expr.inSetConvertible =>
+          InSet(v, list.map(_.eval(EmptyRow)).toSet)
       })
   }
 
@@ -204,8 +204,8 @@ class HiveClientSuite(version: String)
       20170102 to 20170103,
       0 to 4,
       "aa" :: "ab" :: "ba" :: "bb" :: Nil, {
-        case expr @ In(_, list) if expr.inSetConvertible =>
-          InSet(expr.value, list.map(_.eval(EmptyRow)).toSet)
+        case expr @ In(v, list) if expr.inSetConvertible =>
+          InSet(v, list.map(_.eval(EmptyRow)).toSet)
       })
   }
 
@@ -223,8 +223,8 @@ class HiveClientSuite(version: String)
       20170101 to 20170103,
       0 to 4,
       "ab" :: "ba" :: Nil, {
-        case expr @ In(_, list) if expr.inSetConvertible =>
-          InSet(expr.value, list.map(_.eval(EmptyRow)).toSet)
+        case expr @ In(v, list) if expr.inSetConvertible =>
+          InSet(v, list.map(_.eval(EmptyRow)).toSet)
       })
   }
 

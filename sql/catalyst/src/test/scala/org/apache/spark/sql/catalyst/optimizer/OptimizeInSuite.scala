@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -24,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD
 import org.apache.spark.sql.types._
 
@@ -85,7 +87,7 @@ class OptimizeInSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .where(InSet(UnresolvedAttribute("a"), (1 to 11).toSet))
+        .where(InSet(Seq(UnresolvedAttribute("a")), (1 to 11).toSet))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -136,6 +138,49 @@ class OptimizeInSuite extends PlanTest {
         .where(Literal.create(null, BooleanType))
         .analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("OptimizedIn test: (notNull, NULL) IN (expr1, ..., exprN) transformed to Filter(null)") {
+    Seq(("true", false), ("false", null)).foreach { case (legacyInFalseForNull, expected) =>
+      withSQLConf(SQLConf.LEGACY_IN_FALSE_FOR_NULL_FIELD.key -> legacyInFalseForNull) {
+        val originalQuery =
+          testRelation
+            .where(In(Seq(Literal.create(null, IntegerType), Literal(1)),
+              Seq(Literal.create(
+                InternalRow.fromSeq(Seq(1, 2)),
+                StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType)))))))
+        val optimized = Optimize.execute(originalQuery.analyze)
+        val correctAnswer =
+          testRelation
+            .where(Literal.create(expected, BooleanType))
+            .analyze
+
+        comparePlans(optimized, correctAnswer)
+      }
+    }
+  }
+
+  test("OptimizedIn test: (notNull, NULL) IN () transformed to IsNotNull filters") {
+    val legacyExpected = If(
+      Literal(true, BooleanType), Literal(false, BooleanType), Literal(null, BooleanType))
+    val newExpected = If(
+      Literal(false, BooleanType), Literal(false, BooleanType), Literal(null, BooleanType))
+    Seq(("true", legacyExpected), ("false", newExpected)).foreach {
+      case (legacyInFalseForNull, expected) =>
+        withSQLConf(SQLConf.LEGACY_IN_FALSE_FOR_NULL_FIELD.key -> legacyInFalseForNull) {
+          val originalQuery =
+            testRelation
+              .where(In(
+                Seq(Literal.create(null, IntegerType), UnresolvedAttribute("b")), Seq.empty))
+          val optimized = Optimize.execute(originalQuery.analyze)
+          val correctAnswer =
+            testRelation
+              .where(expected)
+              .analyze
+
+          comparePlans(optimized, correctAnswer)
+        }
+    }
   }
 
   test("OptimizedIn test: Inset optimization disabled as " +

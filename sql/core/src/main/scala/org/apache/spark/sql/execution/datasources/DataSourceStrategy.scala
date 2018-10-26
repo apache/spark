@@ -468,7 +468,7 @@ object DataSourceStrategy {
       case expressions.LessThanOrEqual(Literal(v, t), a: Attribute) =>
         Some(sources.GreaterThanOrEqual(a.name, convertToScala(v, t)))
 
-      case expressions.InSet(a: Attribute, set) =>
+      case expressions.InSet(Seq(a: Attribute), set) =>
         val toScala = CatalystTypeConverters.createToScalaConverter(a.dataType)
         Some(sources.In(a.name, set.toArray.map(toScala)))
 

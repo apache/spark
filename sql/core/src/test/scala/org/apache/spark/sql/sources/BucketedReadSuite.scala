@@ -171,7 +171,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         df)
 
       // Case 4: InSet
-      val inSetExpr = expressions.InSet($"j".expr,
+      val inSetExpr = expressions.InSet(Seq($"j".expr),
         Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3).map(lit(_).expr))
       checkPrunedAnswers(
         bucketSpec,

@@ -49,7 +49,8 @@ class DataSourceStrategySuite extends PlanTest with SharedSQLContext {
     testTranslateFilter(LessThanOrEqual(attrInt, 1), Some(sources.LessThanOrEqual("cint", 1)))
     testTranslateFilter(LessThanOrEqual(1, attrInt), Some(sources.GreaterThanOrEqual("cint", 1)))
 
-    testTranslateFilter(InSet(attrInt, Set(1, 2, 3)), Some(sources.In("cint", Array(1, 2, 3))))
+    testTranslateFilter(
+      InSet(Seq(attrInt), Set(1, 2, 3)), Some(sources.In("cint", Array(1, 2, 3))))
 
     testTranslateFilter(In(Seq(attrInt), Seq(1, 2, 3)), Some(sources.In("cint", Array(1, 2, 3))))
 

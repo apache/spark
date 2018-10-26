@@ -1564,10 +1564,10 @@ object SQLConf {
   val LEGACY_IN_FALSE_FOR_NULL_FIELD =
     buildConf("spark.sql.legacy.inOperator.falseForNullField")
       .internal()
-      .doc("When set to true (default), the IN operator returns false when comparing literal " +
-        "structs containing a null field. When set to false, it returns null, instead. This is " +
+      .doc("When set to true (default), the IN operator returns false when comparing multiple " +
+        "values containing a null. When set to false, it returns null, instead. This is " +
         "important especially when using NOT IN as in the second case, it filters out the rows " +
-        "when a null is present in a filed; while in the first one, those rows are returned.")
+        "when a null is present in a field; while in the first one, those rows are returned.")
       .booleanConf
       .createWithDefault(true)
 
