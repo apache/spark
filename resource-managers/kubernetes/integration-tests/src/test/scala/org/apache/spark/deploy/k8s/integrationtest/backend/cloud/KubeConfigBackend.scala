@@ -31,7 +31,7 @@ private[spark] class KubeConfigBackend(var context: String)
     context = System.getProperty(TestConstants.CONFIG_KEY_KUBE_CONFIG_CONTEXT)
   }
   logInfo(s"K8S Integration tests will run against " +
-    s"${if (context != null) s"context ${context}" else "default context"} " +
+    s"${if (context != null) s"context ${context}" else "default context"}" +
     s" from users K8S config file")
 
   private var defaultClient: DefaultKubernetesClient = _
