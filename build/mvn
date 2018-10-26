@@ -166,16 +166,7 @@ echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 # call the `mvn` command as usual
 "${MVN_BIN}" -DzincPort=${ZINC_PORT} "$@"
 
-# check to see if zinc server is still running post-build
-"${ZINC_BIN}" -status -port ${ZINC_PORT} &> /dev/null
-ZINC_STATUS=$?
-
-# Try to shut down zinc explicitly if the server is still running
-if [ $ZINC_STATUS -eq 0 ]; then
-  # zinc is still running!
-  "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
-  exit 0
-else
-  # zinc is not running!  exit cleanly
-  exit 0
-fi
+# Try to shut down zinc explicitly if the server is still running.  if it's not running,
+# it's timed out and we'll still need to exit the script w/a 0 to keep the build from
+# failing.
+"${ZINC_BIN}" -shutdown -port ${ZINC_PORT} || true
