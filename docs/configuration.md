@@ -1053,6 +1053,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryo.pool</code></td>
+  <td>false</td>
+  <td>
+    Whether to use new KryoPool based implentation nside KryoSerializer.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryoserializer.buffer.max</code></td>
   <td>64m</td>
   <td>

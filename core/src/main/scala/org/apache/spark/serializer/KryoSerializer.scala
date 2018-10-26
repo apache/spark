@@ -85,6 +85,7 @@ class KryoSerializer(conf: SparkConf)
   private val avroSchemas = conf.getAvroSchema
   // whether to use unsafe based IO for serialization
   private val useUnsafe = conf.getBoolean("spark.kryo.unsafe", false)
+  private val usePool = conf.getBoolean("spark.kryo.pool", false)
 
   def newKryoOutput(): KryoOutput =
     if (useUnsafe) {
@@ -93,8 +94,7 @@ class KryoSerializer(conf: SparkConf)
       new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
     }
 
-  import com.esotericsoftware.kryo.Kryo
-  import com.esotericsoftware.kryo.pool.KryoFactory
+
 
   @transient
   private lazy val factory: KryoFactory = new KryoFactory() {
@@ -229,7 +229,7 @@ class KryoSerializer(conf: SparkConf)
   }
 
   override def newInstance(): SerializerInstance = {
-    new KryoSerializerInstance(this, useUnsafe)
+    new KryoSerializerInstance(this, useUnsafe, usePool)
   }
 
   private[spark] override lazy val supportsRelocationOfSerializedObjects: Boolean = {
@@ -312,7 +312,8 @@ class KryoDeserializationStream(
   }
 }
 
-private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boolean)
+private[spark] class KryoSerializerInstance(
+   ks: KryoSerializer, useUnsafe: Boolean, usePool: Boolean)
   extends SerializerInstance {
   /**
    * A re-used [[Kryo]] instance. Methods will borrow this instance by calling `borrowKryo()`, do
@@ -320,14 +321,32 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boole
    * pool of size one. SerializerInstances are not thread-safe, hence accesses to this field are
    * not synchronized.
    */
-  // @Nullable private[this] var cachedKryo: Kryo = borrowKryo()
+  @Nullable private[this] var cachedKryo: Kryo = if (usePool) null else borrowKryo()
 
   /**
    * Borrows a [[Kryo]] instance. If possible, this tries to re-use a cached Kryo instance;
    * otherwise, it allocates a new instance.
    */
   private[serializer] def borrowKryo(): Kryo = {
-    ks.pool.borrow()
+    if (usePool) {
+      val kryo = ks.pool.borrow()
+      kryo.reset()
+      kryo
+    } else {
+      if (cachedKryo != null) {
+        val kryo = cachedKryo
+        /**
+        * As a defensive measure, call reset() to clear any Kryo state that might have
+        * been modified by the last operation to borrow this instance
+        * (see SPARK-7766 for discussion of this issue)
+        */
+        kryo.reset()
+        cachedKryo = null
+        kryo
+      } else {
+        ks.newKryo()
+      }
+    }
   }
 
   /**
@@ -336,7 +355,13 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boole
    * re-use.
    */
   private[serializer] def releaseKryo(kryo: Kryo): Unit = {
-    ks.pool.release(kryo)
+    if (usePool) {
+      ks.pool.release(kryo)
+    } else {
+      if (cachedKryo == null) {
+        cachedKryo = kryo
+      }
+    }
   }
 
   // Make these lazy vals to avoid creating a buffer unless we use them.

@@ -33,6 +33,7 @@ import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
+
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   conf.set("spark.kryo.registrator", classOf[MyRegistrator].getName)
@@ -431,9 +432,11 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     ser.deserialize[HashMap[Int, List[String]]](serializedMap)
   }
 
-  private def testSerializerInstanceReuse(autoReset: Boolean, referenceTracking: Boolean): Unit = {
+  private def testSerializerInstanceReuse(
+     autoReset: Boolean, referenceTracking: Boolean, usePool: Boolean): Unit = {
     val conf = new SparkConf(loadDefaults = false)
       .set("spark.kryo.referenceTracking", referenceTracking.toString)
+      .set("spark.kryo.pool", usePool.toString)
     if (!autoReset) {
       conf.set("spark.kryo.registrator", classOf[RegistratorWithoutAutoReset].getName)
     }
@@ -456,9 +459,63 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
   // Regression test for SPARK-7766, an issue where disabling auto-reset and enabling
   // reference-tracking would lead to corrupted output when serializer instances are re-used
-  for (referenceTracking <- Set(true, false); autoReset <- Set(true, false)) {
-    test(s"instance reuse with autoReset = $autoReset, referenceTracking = $referenceTracking") {
-      testSerializerInstanceReuse(autoReset = autoReset, referenceTracking = referenceTracking)
+  for {
+    referenceTracking <- Set(true, false)
+    autoReset <- Set(true, false)
+    usePool <- Set(true, false)
+  } {
+    test(s"instance reuse with autoReset = $autoReset, referenceTracking = $referenceTracking" +
+      s", usePool = $usePool") {
+      testSerializerInstanceReuse(
+        autoReset = autoReset, referenceTracking = referenceTracking, usePool = usePool)
+    }
+  }
+
+  test("SPARK-25839 KryoPool implementation works correctly in multi-threaded environment") {
+    import java.util.concurrent.Executors
+    import scala.concurrent.{Future, ExecutionContext}
+    import scala.concurrent.duration._
+    import org.apache.spark.util.ThreadUtils
+
+    implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(
+      Executors.newFixedThreadPool(4))
+
+    val ser = new KryoSerializer(conf.clone.set("spark.kryo.pool", "true"))
+
+    val tests = mutable.ListBuffer[Future[Boolean]]()
+
+    def check[T: ClassTag](t: T) {
+      tests += Future {
+        val serializerInstance = ser.newInstance()
+        serializerInstance.deserialize[T](serializerInstance.serialize(t)) === t
+      }
+    }
+
+    check((1, 3))
+    check(Array((1, 3)))
+    check(List((1, 3)))
+    check(List[Int]())
+    check(List[Int](1, 2, 3))
+    check(List[String]())
+    check(List[String]("x", "y", "z"))
+    check(None)
+    check(Some(1))
+    check(Some("hi"))
+    check(1 -> 1)
+    check(mutable.ArrayBuffer(1, 2, 3))
+    check(mutable.ArrayBuffer("1", "2", "3"))
+    check(mutable.Map())
+    check(mutable.Map(1 -> "one", 2 -> "two"))
+    check(mutable.Map("one" -> 1, "two" -> 2))
+    check(mutable.HashMap(1 -> "one", 2 -> "two"))
+    check(mutable.HashMap("one" -> 1, "two" -> 2))
+    check(List(Some(mutable.HashMap(1 -> 1, 2 -> 2)), None, Some(mutable.HashMap(3 -> 4))))
+    check(List(
+      mutable.HashMap("one" -> 1, "two" -> 2),
+      mutable.HashMap(1 -> "one", 2 -> "two", 3 -> "three")))
+
+    tests.foreach { f =>
+      assert(ThreadUtils.awaitResult(f, 10.seconds))
     }
   }
 }
