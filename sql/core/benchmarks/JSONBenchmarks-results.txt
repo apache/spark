@@ -1,0 +1,33 @@
+================================================================================================
+Benchmark for performance of JSON parsing
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_163-b01 on Windows 7 6.1
+Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+JSON schema inferring:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 48088 / 48180          2.1         480.9       1.0X
+UTF-8 is set                                71881 / 71992          1.4         718.8       0.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_163-b01 on Windows 7 6.1
+Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+JSON per-line parsing:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 12107 / 12246          8.3         121.1       1.0X
+UTF-8 is set                                12375 / 12475          8.1         123.8       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_163-b01 on Windows 7 6.1
+Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+JSON parsing of wide lines:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                               168172 / 199309          0.1       16817.2       1.0X
+UTF-8 is set                              167959 / 211007          0.1       16795.9       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_163-b01 on Windows 7 6.1
+Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+Count a dataset with 10 columns:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Select 10 columns + count()                 11828 / 12138          0.8        1182.8       1.0X
+Select 1 column + count()                   10049 / 10056          1.0        1004.9       1.2X
+count()                                       2611 / 2617          3.8         261.1       4.5X
+
