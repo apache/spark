@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
+import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
@@ -26,11 +27,12 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
@@ -471,4 +473,42 @@ object SparkHadoopUtil {
       hadoopConf.set(key.substring("spark.hadoop.".length), value)
     }
   }
+
+
+  lazy val builderReflection: Option[(Class[_], Method, Method)] = Try {
+    val cls = Utils.classForName(
+      "org.apache.hadoop.hdfs.DistributedFileSystem.HdfsDataOutputStreamBuilder")
+    (cls, cls.getMethod("replicate"), cls.getMethod("build"))
+  }.toOption
+
+  // scalastyle:off line.size.limit
+  /**
+   * Create a path that uses replication instead of erasure coding, regardless of the default
+   * configuration in hdfs for the given path.  This can be helpful as hdfs ec doesn't support
+   * hflush(), hsync(), or append()
+   * https://hadoop.apache.org/docs/r3.0.0/hadoop-project-dist/hadoop-hdfs/HDFSErasureCoding.html#Limitations
+   */
+  // scalastyle:on line.size.limit
+  def createNonECFile(fs: FileSystem, path: Path): FSDataOutputStream = {
+    try {
+      // Use reflection as this uses apis only avialable in hadoop 3
+      val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
+      val builder = builderMethod.invoke(fs, path)
+      builderReflection match {
+        case Some((clz, replicate, buildMethod)) if clz.isAssignableFrom(builder.getClass()) =>
+          val b2 = replicate.invoke(builder)
+          buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
+        case _ =>
+          // builder wasn't HdfsDataOutputStreamBuilder, so just create regular file
+          fs.create(path)
+      }
+    } catch {
+      case  _: NoSuchMethodException =>
+        // No createFile() method, we're using an older hdfs client, which doesn't give us control
+        // over EC vs. replication.  Older hdfs doesn't have EC anyway, so just create a file with
+        // old apis.
+        fs.create(path)
+    }
+  }
+
 }

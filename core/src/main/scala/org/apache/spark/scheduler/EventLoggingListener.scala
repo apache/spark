@@ -119,7 +119,8 @@ private[spark] class EventLoggingListener(
       if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
         new FileOutputStream(uri.getPath)
       } else {
-        hadoopDataStream = Some(fileSystem.create(path))
+        // currently hdfs erasure coded files  don't support hflush(), so always use replication.
+        hadoopDataStream = Some(SparkHadoopUtil.createNonECFile(fileSystem, path))
         hadoopDataStream.get
       }
 
