@@ -32,15 +32,17 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, InsertIntoDir}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.streaming.{SQLStreamingSink, StreamingRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * Replaces generic operations with specific variants that are designed to work with Spark
@@ -221,6 +223,10 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
  * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  private val sqlConf = sparkSession.sqlContext.conf
+  private val WATERMARK_COLUMN = "watermark.column"
+  private val WATERMARK_DEALY = "watermark.delay"
+
   private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
@@ -239,9 +245,40 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
             options = table.storage.properties ++ pathOption,
             catalogTable = Some(table))
 
-        LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
+        if (table.isStreaming && sqlConf.sqlStreamQueryEnable) {
+          val relation =
+            StreamingRelation(dataSource, table.provider.get, table.schema.toAttributes)
+          withWatermark(relation, table)
+        } else {
+          LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
+        }
       }
     })
+  }
+
+  /**
+   * Check watermark enable. If true, add watermark to relation.
+   * @param relation the basic streaming relation
+   * @param metadata table meta
+   * @return
+   */
+  private def withWatermark(relation: LogicalPlan, metadata: CatalogTable): LogicalPlan = {
+    if (sqlConf.sqlStreamWaterMarkEnable) {
+      logInfo("Using watermark in sqlstreaming")
+      val options = metadata.storage.properties
+      val column = options.getOrElse(WATERMARK_COLUMN,
+        throw new IllegalArgumentException(s"$WATERMARK_COLUMN is empty"))
+      val delay = options.getOrElse(WATERMARK_DEALY,
+        throw new IllegalArgumentException(s"$WATERMARK_DEALY is empty"))
+      EventTimeWatermark(
+        UnresolvedAttribute(column),
+        CalendarInterval.fromString(s"interval $delay"),
+        relation
+      )
+    } else {
+      logInfo("None watermark found in sqlstreaming")
+      relation
+    }
   }
 
   private def readHiveTable(table: CatalogTable): LogicalPlan = {
@@ -253,6 +290,10 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, child, _, _)
+        if DDLUtils.isStreamingTable(tableMeta) && sqlConf.sqlStreamQueryEnable =>
+      SQLStreamingSink(sparkSession, tableMeta, child)
+
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta))

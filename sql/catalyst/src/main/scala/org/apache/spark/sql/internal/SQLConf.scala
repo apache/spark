@@ -636,11 +636,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val SQLSTREAM_CONSOLESINK_ENABLE = buildConf("spark.sqlstreaming.consoleSink.enable")
-    .doc("Whether use console sink when user does not define insert into table.")
-    .booleanConf
-    .createWithDefault(false)
-
   val SQLSTREAM_OUTPUTMODE = buildConf("spark.sqlstreaming.outputMode")
     .doc("The output mode used in sqlstreaming")
     .stringConf
@@ -657,11 +652,6 @@ object SQLConf {
       "spark.sqlstreaming.queryName to ensure the unique checkpointLocation")
     .stringConf
     .createOptional
-
-  val SQLSTREAM_CONSOLE_OUTPUT_ROWS = buildConf("spark.sqlstreaming.console.numRows")
-    .doc("The num of rows showed to console sink in sqlstreaming")
-    .stringConf
-    .createWithDefault("20")
 
   val SQLSTREAM_QUERY_ENABLE = buildConf("spark.sqlstreaming.query.enable")
     .doc("Whether to enable use sqlstreaming in spark")
@@ -1852,15 +1842,11 @@ class SQLConf extends Serializable with Logging {
 
   def sqlStreamWaterMarkEnable: Boolean = getConf(SQLSTREAM_WATERMARK_ENABLE)
 
-  def sqlStreamConsoleSinkEnable: Boolean = getConf(SQLSTREAM_CONSOLESINK_ENABLE)
-
   def sqlStreamOutputMode: String = getConf(SQLSTREAM_OUTPUTMODE)
 
   def sqlStreamTrigger: String = getConf(SQLSTREAM_TRIGGER)
 
   def sqlStreamQueryName: Option[String] = getConf(SQLSTREAM_QUERY_NAME)
-
-  def sqlStreamConsoleOutputRows: String = getConf(SQLSTREAM_CONSOLE_OUTPUT_ROWS)
 
   def sqlStreamQueryEnable: Boolean = getConf(SQLSTREAM_QUERY_ENABLE)
 

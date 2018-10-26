@@ -15,33 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.StreamingWriteSupportProvider
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.Utils
 
 /**
  * The basic RunnableCommand for SQLStreaming, using Command.run to start a streaming query.
+ *
  * @param sparkSession
  * @param extraOptions
  * @param partitionColumnNames
  * @param child
  */
 case class SQLStreamingSink(sparkSession: SparkSession,
-                            extraOptions: Map[String, String],
-                            partitionColumnNames: Seq[String],
-                            child: LogicalPlan)
+    table: CatalogTable,
+    child: LogicalPlan)
   extends RunnableCommand {
 
   private val sqlConf = sparkSession.sqlContext.conf
@@ -77,27 +76,25 @@ case class SQLStreamingSink(sparkSession: SparkSession,
     // Builder pattern config options
     ///////////////////////////////////////////////////////////////////////////////////////
     val df = Dataset.ofRows(sparkSession, child)
-//    val df = Dataset.ofRows(sparkSession, child)
-    val source = extraOptions("source")
     val outputMode = InternalOutputModes(sqlConf.sqlStreamOutputMode)
-    val normalizedParCols = partitionColumnNames.map {
+    val normalizedParCols = table.partitionColumnNames.map {
       normalize(df, _, "Partition")
     }
 
-    val ds = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
+    val ds = DataSource.lookupDataSource(table.provider.get, sparkSession.sessionState.conf)
     val disabledSources = sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
-    var options = extraOptions
+    var options = table.storage.properties
     val sink = ds.newInstance() match {
       case w: StreamingWriteSupportProvider
         if !disabledSources.contains(w.getClass.getCanonicalName) =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           w, df.sparkSession.sessionState.conf)
-        options = sessionOptions ++ extraOptions
+        options = sessionOptions ++ options
         w
       case _ =>
         val ds = DataSource(
           df.sparkSession,
-          className = source,
+          className = table.provider.get,
           options = options,
           partitionColumns = normalizedParCols)
         ds.createSink(outputMode)
@@ -107,7 +104,7 @@ case class SQLStreamingSink(sparkSession: SparkSession,
       sqlConf.sqlStreamQueryName,
       None,
       df,
-      extraOptions,
+      table.storage.properties,
       sink,
       outputMode,
       trigger = parseTrigger()

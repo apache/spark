@@ -820,6 +820,10 @@ object DDLUtils {
     table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) != HIVE_PROVIDER
   }
 
+  def isStreamingTable(table: CatalogTable): Boolean = {
+    table.isStreaming && table.provider.get.toLowerCase(Locale.ROOT) != HIVE_PROVIDER
+  }
+
   /**
    * Throws a standard error for actions that require partitionProvider = hive.
    */

@@ -26,7 +26,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedRelation, UnresolvedStreamRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
@@ -41,67 +41,12 @@ import org.apache.spark.sql.types.StructType
  * Concrete parser for Spark SQL statements.
  */
 class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
-  val astBuilder = new SparkSqlAstBuilderExt(conf)
+  val astBuilder = new SparkSqlAstBuilder(conf)
 
   private val substitutor = new VariableSubstitution(conf)
 
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     super.parse(substitutor.substitute(command))(toResult)
-  }
-}
-
-/**
- * Inheriting from SparkSqlAstBuilder.
- * visitQuerySpecification and visitTableName are rewritten to
- * handle syntax parsing of sqlstreaming.
- */
-class SparkSqlAstBuilderExt(conf: SQLConf) extends SparkSqlAstBuilder(conf) {
-
-  import ParserUtils._
-
-  /**
-   * Mark if current sql contain stream query. This field should be set before visit table name,
-   * so that table will be parse to UnResolvedStreamRelation in Stream Query case.
-   */
-  private var isStreamQuery = false
-
-  /**
-   * Create a logical plan using a query specification.
-   * Add WithStreamDefinition plan if isStreamQuery is true
-   * @param ctx the parse tree
-   */
-  override def visitQuerySpecification(ctx: QuerySpecificationContext): LogicalPlan = {
-    isStreamQuery = isStreamQuery || (ctx.STREAM() != null)
-
-    val result = super.visitQuerySpecification(ctx)
-
-    // With Stream
-    withStreams(ctx, result)
-  }
-
-  /**
-   * Create an aliased table reference. This is typically used in FROM clauses.
-   * Define UnresolvedStreamRelation if isStreamQuery is true
-   * @param ctx the parse tree
-   */
-  override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
-
-    val relaion = if (isStreamQuery) {
-      UnresolvedStreamRelation(visitTableIdentifier(ctx.tableIdentifier))
-    } else {
-      UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier))
-    }
-
-    val table = mayApplyAliasPlan(ctx.tableAlias, relaion)
-    table.optionalMap(ctx.sample)(withSample)
-  }
-
-  private def withStreams(ctx: QuerySpecificationContext, query: LogicalPlan): LogicalPlan = {
-    if (isStreamQuery) {
-      WithStreamDefinition(query)
-    } else {
-      query
-    }
   }
 }
 

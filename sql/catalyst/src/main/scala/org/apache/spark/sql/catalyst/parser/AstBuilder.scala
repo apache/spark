@@ -724,7 +724,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * are defined as a number between 0 and 100.
    * - TABLESAMPLE(BUCKET x OUT OF y): Sample the table down to a 'x' divided by 'y' fraction.
    */
-  protected def withSample(ctx: SampleContext, query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+  private def withSample(ctx: SampleContext, query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Create a sampled plan if we need one.
     def sample(fraction: Double): Sample = {
       // The range of fraction accepted by Sample is [0, 1]. Because Hive's block sampling
@@ -889,7 +889,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * If aliases specified in a FROM clause, create a subquery alias ([[SubqueryAlias]]) and
    * column aliases for a [[LogicalPlan]].
    */
-  protected def mayApplyAliasPlan(tableAlias: TableAliasContext, plan: LogicalPlan): LogicalPlan = {
+  private def mayApplyAliasPlan(tableAlias: TableAliasContext, plan: LogicalPlan): LogicalPlan = {
     if (tableAlias.strictIdentifier != null) {
       val subquery = SubqueryAlias(tableAlias.strictIdentifier.getText, plan)
       if (tableAlias.identifierList != null) {
