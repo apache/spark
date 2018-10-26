@@ -56,3 +56,8 @@ select from_json('[{"a": 1}, 2]', 'array<map<string,int>>');
 select to_json(array('1', '2', '3'));
 select to_json(array(array(1, 2, 3), array(4)));
 
+select schema_of_json(null);
+CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a');
+SELECT schema_of_json(jsonField) FROM jsonTable;
+-- Clean up
+DROP VIEW IF EXISTS jsonTable;

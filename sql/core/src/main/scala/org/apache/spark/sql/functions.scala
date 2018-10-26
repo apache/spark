@@ -3602,14 +3602,24 @@ object functions {
   }
 
   /**
-   * Parses a column containing a JSON string and infers its schema.
+   * Parses a JSON string and infers its schema in DDL format.
    *
-   * @param e a string column containing JSON data.
+   * @param json a JSON string.
    *
    * @group collection_funcs
    * @since 2.4.0
    */
-  def schema_of_json(e: Column): Column = withExpr(new SchemaOfJson(e.expr))
+  def schema_of_json(json: String): Column = schema_of_json(lit(json))
+
+  /**
+   * Parses a JSON string and infers its schema in DDL format.
+   *
+   * @param json a string literal containing a JSON string.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def schema_of_json(json: Column): Column = withExpr(new SchemaOfJson(json.expr))
 
   /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` or
