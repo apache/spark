@@ -2640,7 +2640,7 @@ test_that("read/write Parquet files", {
     expect_is(df2, "SparkDataFrame")
     expect_equal(count(df2), 3)
 
-    # Test write.parquet/saveAsParquetFile and read.parquet/parquetFile
+    # Test write.parquet/saveAsParquetFile and read.parquet
     parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
     write.parquet(df, parquetPath2)
     parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
