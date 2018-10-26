@@ -106,15 +106,6 @@ if (is_windows()) {
   Sys.setenv(TZ = "GMT")
 }
 
-test_that("calling sparkRSQL.init returns existing SQL context", {
-  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
-  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sqlContext)
-})
-
-test_that("calling sparkRSQL.init returns existing SparkSession", {
-  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sparkSession)
-})
-
 test_that("calling sparkR.session returns existing SparkSession", {
   expect_equal(sparkR.session(), sparkSession)
 })
@@ -665,10 +656,10 @@ test_that("test tableNames and tables", {
   expect_true("tableName" %in% colnames(tables()))
   expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
 
-  suppressWarnings(registerTempTable(df, "table2"))
+  createOrReplaceTempView(df, "table2")
   tables <- listTables()
   expect_equal(count(tables), count + 2)
-  suppressWarnings(dropTempTable("table1"))
+  dropTempView("table1")
   expect_true(dropTempView("table2"))
 
   tables <- listTables()
@@ -2461,7 +2452,7 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
   expect_is(unioned, "SparkDataFrame")
   expect_equal(count(unioned), 6)
   expect_equal(first(unioned)$name, "Michael")
-  expect_equal(count(arrange(suppressWarnings(unionAll(df, df2)), df$age)), 6)
+  expect_equal(count(arrange(suppressWarnings(union(df, df2)), df$age)), 6)
 
   df1 <- select(df2, "age", "name")
   unioned1 <- arrange(unionByName(df1, df), df1$age)
@@ -2640,11 +2631,11 @@ test_that("read/write Parquet files", {
     expect_is(df2, "SparkDataFrame")
     expect_equal(count(df2), 3)
 
-    # Test write.parquet/saveAsParquetFile and read.parquet
+    # Test write.parquet and read.parquet
     parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
     write.parquet(df, parquetPath2)
     parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
-    suppressWarnings(saveAsParquetFile(df, parquetPath3))
+    write.parquet(df, parquetPath3)
     parquetDF <- read.parquet(c(parquetPath2, parquetPath3))
     expect_is(parquetDF, "SparkDataFrame")
     expect_equal(count(parquetDF), count(df) * 2)
@@ -3454,39 +3445,6 @@ test_that("Window functions on a DataFrame", {
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
-})
-
-test_that("createDataFrame sqlContext parameter backward compatibility", {
-  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
-  a <- 1:3
-  b <- c("a", "b", "c")
-  ldf <- data.frame(a, b)
-  # Call function with namespace :: operator - SPARK-16538
-  df <- suppressWarnings(SparkR::createDataFrame(sqlContext, ldf))
-  expect_equal(columns(df), c("a", "b"))
-  expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
-  expect_equal(count(df), 3)
-  ldf2 <- collect(df)
-  expect_equal(ldf$a, ldf2$a)
-
-  df2 <- suppressWarnings(createDataFrame(sqlContext, iris))
-  expect_equal(count(df2), 150)
-  expect_equal(ncol(df2), 5)
-
-  df3 <- suppressWarnings(read.df(sqlContext, jsonPath, "json"))
-  expect_is(df3, "SparkDataFrame")
-  expect_equal(count(df3), 3)
-
-  before <- suppressWarnings(createDataFrame(sqlContext, iris))
-  after <- suppressWarnings(createDataFrame(iris))
-  expect_equal(collect(before), collect(after))
-
-  # more tests for SPARK-16538
-  createOrReplaceTempView(df, "table")
-  SparkR::listTables()
-  SparkR::sql("SELECT 1")
-  suppressWarnings(SparkR::sql(sqlContext, "SELECT * FROM table"))
-  suppressWarnings(SparkR::dropTempTable(sqlContext, "table"))
 })
 
 test_that("randomSplit", {
