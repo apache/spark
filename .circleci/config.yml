@@ -45,6 +45,10 @@ step_templates:
         - v7-ivy-dependency-cache-{{ .Branch }}-
         - v7-ivy-dependency-cache-master-{{ checksum "pom.xml" }}
         - v7-ivy-dependency-cache-master-
+  restore-gradle-wrapper-cache: &restore-gradle-wrapper-cache
+    restore_cache: { key: 'gradle-wrapper-v2-{{ checksum "gradle/wrapper/gradle-wrapper.properties" }}' }
+  restore-gradle-cache: &restore-gradle-cache
+    restore_cache: { key: 'gradle-cache-v2-{{ checksum "versions.props" }}-{{ checksum "build.gradle" }}' }
   restore-home-sbt-cache: &restore-home-sbt-cache
     restore_cache:
       keys:
@@ -167,7 +171,15 @@ jobs:
     <<: *defaults
     steps:
       - *checkout-code
+      - *restore-gradle-wrapper-cache
+      - *restore-gradle-cache
       - run: ./gradlew --info --stacktrace check -x test
+      - save_cache:
+          key: 'gradle-wrapper-v2-{{ checksum "gradle/wrapper/gradle-wrapper.properties" }}'
+          paths: [ ~/.gradle/wrapper ]
+      - save_cache:
+          key: 'gradle-cache-v2-{{ checksum "versions.props" }}-{{ checksum "build.gradle" }}'
+          paths: [ ~/.gradle/caches ]
 
   run-style-tests:
     # depends only on build-maven
@@ -262,7 +274,9 @@ jobs:
     resource_class: medium
     steps:
       - *checkout-code
-      - setup_remote_docker
+      - *restore-gradle-wrapper-cache
+      - *restore-gradle-cache
+      - setup_remote_docker: { docker_layer_caching: true }
       - run: |
           ./gradlew --info --stacktrace test | tee /tmp/run-spark-docker-gradle-plugin-tests.log
 
@@ -442,6 +456,17 @@ jobs:
           key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
           paths: ~/.m2
 
+  deploy-gradle:
+    <<: *defaults
+    docker:
+      - image: palantirtechnologies/circle-spark-r
+    steps:
+      - *checkout-code
+      - *restore-gradle-wrapper-cache
+      - *restore-gradle-cache
+      - deploy:
+          command: ./gradlew --parallel --continue --stacktrace --no-daemon bintrayUpload
+
   deploy:
     <<: *defaults
     # Some part of the maven setup fails if there's no R, so we need to use the R image here
@@ -511,6 +536,10 @@ workflows:
           requires:
             - build-maven
           <<: *all-branches-and-tags
+      - deploy-gradle:
+          requires:
+            - run-spark-docker-gradle-plugin-tests
+          <<: *deployable-branches-and-tags
       - deploy:
           requires:
             - build-maven
