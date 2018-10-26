@@ -326,7 +326,7 @@ select schema_of_json(null)
 struct<>
 -- !query 38 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'schema_of_json(CAST(NULL AS STRING))' due to data type mismatch: The input json should be a string literal and not null; however, got CAST(NULL AS STRING).; line 1 pos 7
+cannot resolve 'schema_of_json(NULL)' due to data type mismatch: The input json should be a string literal and not null; however, got NULL.; line 1 pos 7
 
 
 -- !query 39
