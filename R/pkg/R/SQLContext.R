@@ -402,7 +402,7 @@ read.text <- function(path, ...) {
 #' }
 #' @name sql
 #' @note sql since 1.4.0
-sql.default <- function(sqlQuery) {
+sql <- function(sqlQuery) {
   sparkSession <- getSparkSession()
   sdf <- callJMethod(sparkSession, "sql", sqlQuery)
   dataFrame(sdf)
