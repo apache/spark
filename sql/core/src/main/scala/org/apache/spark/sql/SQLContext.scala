@@ -54,7 +54,6 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
-@deprecated("Use SparkSession instead", "3.0.0")
 @InterfaceStability.Stable
 class SQLContext private[sql](val sparkSession: SparkSession)
   extends Logging with Serializable {
