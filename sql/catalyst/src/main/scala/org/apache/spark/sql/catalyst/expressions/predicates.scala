@@ -399,6 +399,8 @@ case class InSet(values: Seq[Expression], hset: Set[Any]) extends InBase {
   override def eval(input: InternalRow): Any = {
     val inputValue = value.eval(input)
     if (checkNullEval(inputValue)) {
+      null
+    } else {
       if (set.contains(inputValue)) {
         true
       } else if (hasNull) {
@@ -406,8 +408,6 @@ case class InSet(values: Seq[Expression], hset: Set[Any]) extends InBase {
       } else {
         false
       }
-    } else {
-      null
     }
   }
 
