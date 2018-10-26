@@ -12,7 +12,7 @@ Security in Spark is OFF by default. This could mean you are vulnerable to attac
 Spark supports multiple deployments types and each one supports different levels of security. Not
 all deployment types will be secure in all environments and none are secure by default. Be
 sure to evaluate your environment, what Spark supports, and take the appropriate measure to secure
-your Spark deployment
+your Spark deployment.
 
 There are many different types of security concerns. Spark does not necessarily protect against
 all things. Listed below are some of the things Spark supports. Also check the deployment
