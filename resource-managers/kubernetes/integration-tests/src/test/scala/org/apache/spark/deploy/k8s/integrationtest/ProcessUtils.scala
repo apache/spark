@@ -41,7 +41,7 @@ object ProcessUtils extends Logging {
     assert(proc.waitFor(timeout, TimeUnit.SECONDS),
       s"Timed out while executing ${fullCommand.mkString(" ")}")
     assert(proc.exitValue == 0,
-      s"Failed to execute ${fullCommand.mkString(" ")}${if (dumpErrors) outputLines.mkString("\n")}")
+      s"Failed to execute ${fullCommand.mkString(" ")}${if (dumpErrors) "\n" + outputLines.mkString("\n")}")
     outputLines
   }
 }

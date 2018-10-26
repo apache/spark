@@ -20,7 +20,6 @@ object TestConstants {
   val BACKEND_MINIKUBE = "minikube"
   val BACKEND_DOCKER_FOR_DESKTOP = "docker-for-desktop"
   val BACKEND_CLOUD = "cloud"
-  val BACKEND_CLOUD_URL = "cloud-url"
 
   val CONFIG_KEY_DEPLOY_MODE = "spark.kubernetes.test.deployMode"
   val CONFIG_KEY_KUBE_CONFIG_CONTEXT = "spark.kubernetes.test.kubeConfigContext"

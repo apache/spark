@@ -18,18 +18,16 @@ package org.apache.spark.deploy.k8s.integrationtest.backend.cloud
 
 import java.nio.file.Paths
 
+import io.fabric8.kubernetes.client.utils.Utils
 import io.fabric8.kubernetes.client.{Config, DefaultKubernetesClient}
+import org.apache.commons.lang3.StringUtils
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants
 import org.apache.spark.deploy.k8s.integrationtest.backend.IntegrationTestBackend
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils.checkAndGetK8sMasterUrl
 
 private[spark] class KubeConfigBackend(var context: String)
   extends IntegrationTestBackend with Logging {
-  // If no context supplied see if one was specified in the system properties supplied
-  // to the tests
-  if (context == null) {
-    context = System.getProperty(TestConstants.CONFIG_KEY_KUBE_CONFIG_CONTEXT)
-  }
   logInfo(s"K8S Integration tests will run against " +
     s"${if (context != null) s"context ${context}" else "default context"}" +
     s" from users K8S config file")
@@ -38,12 +36,26 @@ private[spark] class KubeConfigBackend(var context: String)
 
   override def initialize(): Unit = {
     // Auto-configure K8S client from K8S config file
-    System.setProperty(Config.KUBERNETES_AUTH_TRYKUBECONFIG_SYSTEM_PROPERTY, "true");
-    val userHome = System.getProperty("user.home")
-    System.setProperty(Config.KUBERNETES_KUBECONFIG_FILE,
-      Option(System.getenv("KUBECONFIG"))
-        .getOrElse(Paths.get(userHome, ".kube", "config").toFile.getAbsolutePath))
+    if (Utils.getSystemPropertyOrEnvVar(Config.KUBERNETES_KUBECONFIG_FILE, null: String) == null) {
+      // Fabric 8 client will automatically assume a default location in this case
+      logWarning(s"No explicit KUBECONFIG specified, will assume .kube/config under your home directory")
+    }
     val config = Config.autoConfigure(context)
+
+    // If an explicit master URL was specified then override that detected from the
+    // K8S config if it is different
+    var masterUrl = Option(System.getProperty(TestConstants.CONFIG_KEY_KUBE_MASTER_URL))
+      .getOrElse(null)
+    if (StringUtils.isNotBlank(masterUrl)) {
+      // Clean up master URL which would have been specified in Spark format into a normal
+      // K8S master URL
+      masterUrl = checkAndGetK8sMasterUrl(masterUrl).replaceFirst("k8s://", "")
+      if (!StringUtils.equals(config.getMasterUrl, masterUrl)) {
+        logInfo(s"Overriding K8S master URL ${config.getMasterUrl} from K8S config file " +
+          s"with user specified master URL ${masterUrl}")
+        config.setMasterUrl(masterUrl)
+      }
+    }
 
     defaultClient = new DefaultKubernetesClient(config)
   }

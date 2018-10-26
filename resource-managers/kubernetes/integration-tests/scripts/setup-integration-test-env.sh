@@ -73,7 +73,7 @@ then
   cd $UNPACKED_SPARK_TGZ
 
   case $DEPLOY_MODE in
-    cloud|cloud-url)
+    cloud)
       # Build images
       $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG build
 
@@ -86,18 +86,18 @@ then
       fi
       ;;
 
-     docker-for-desktop)
+    docker-for-desktop)
        # Only need to build as this will place it in our local Docker repo which is all
        # we need for Docker for Desktop to work so no need to also push
        $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG build
        ;;
 
-     minikube)
+    minikube)
        # Only need to build and if we do this with the -m option for minikube we will
        # build the images directly using the minikube Docker daemon so no need to push
        $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG build
        ;;
-     *)
+    *)
        echo "Unrecognized deploy mode $DEPLOY_MODE" && exit 1
        ;;
   esac
