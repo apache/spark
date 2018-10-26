@@ -75,7 +75,7 @@ class CSVInferSchemaSuite extends SparkFunSuite {
   }
 
   test("Boolean field types are inferred correctly from custom value") {
-    val options = new CSVOptions(Map("trueValue" -> "yes"), "GMT")
+    val options = new CSVOptions(Map("trueValue" -> "yes"), false, "GMT")
     assert(CSVInferSchema.inferField(BooleanType, "yES", options) == BooleanType)
     assert(CSVInferSchema.inferField(BooleanType, "faLSe", options) == BooleanType)
   }

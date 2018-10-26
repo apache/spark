@@ -99,7 +99,7 @@ class UnivocityParserSuite extends SparkFunSuite {
 
   test("Throws exception for invalid boolean value") {
     val exception = intercept[IllegalArgumentException] {
-      val options = new CSVOptions(Map.empty[String, String], "GMT")
+      val options = new CSVOptions(Map.empty[String, String], false, "GMT")
       assert(parser.makeConverter("_1", BooleanType, nullable = true, options).apply("yes") == true)
     }
     assert(exception.getMessage.contains("For input string: \"yes\""))
@@ -115,10 +115,10 @@ class UnivocityParserSuite extends SparkFunSuite {
     assert(parser.makeConverter("_1", DoubleType, options = options).apply("1.00") == 1.0)
     assert(parser.makeConverter("_1", BooleanType, options = options).apply("true") == true)
 
-    val trueValueOptions = new CSVOptions(Map("trueValue" -> "yes"), "GMT")
+    val trueValueOptions = new CSVOptions(Map("trueValue" -> "yes"), false, "GMT")
     assert(parser.makeConverter("_1", BooleanType, nullable = true, trueValueOptions)
       .apply("yes") == true)
-    val falseValueOptions = new CSVOptions(Map("falseValue" -> "no"), "GMT")
+    val falseValueOptions = new CSVOptions(Map("falseValue" -> "no"), false, "GMT")
     assert(parser.makeConverter("_1", BooleanType, nullable = true, falseValueOptions)
       .apply("no") == false)
 
