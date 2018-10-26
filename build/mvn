@@ -164,13 +164,11 @@ export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
 echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
 # call the `mvn` command as usual
+# SPARK-25854
 "${MVN_BIN}" -DzincPort=${ZINC_PORT} "$@"
 MVN_RETCODE=$?
 
-# SPARK-25854
-# Try to shut down zinc explicitly if the server is still running.  if it's not running,
-# it's timed out and we'll still need to exit the script w/a 0 to keep the build from
-# failing.
+# Try to shut down zinc explicitly if the server is still running.
 "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
 
 exit $MVN_RETCODE
