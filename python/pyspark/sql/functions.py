@@ -2366,11 +2366,11 @@ def schema_of_json(json, options={}):
 
 @ignore_unicode_prefix
 @since(3.0)
-def schema_of_csv(col, options={}):
+def schema_of_csv(csv, options={}):
     """
-    Parses a column containing a CSV string and infers its schema in DDL format.
+    Parses a CSV string and infers its schema in DDL format.
 
-    :param col: string column in CSV format
+    :param col: a CSV string or a string literal containing a CSV string.
     :param options: options to control parsing. accepts the same options as the CSV datasource
 
     >>> df = spark.range(1)
@@ -2379,10 +2379,10 @@ def schema_of_csv(col, options={}):
     >>> df.select(schema_of_csv('1|a', {'sep':'|'}).alias("csv")).collect()
     [Row(csv=u'struct<_c0:int,_c1:string>')]
     """
-    if isinstance(col, basestring):
-        col = _create_column_from_literal(col)
-    elif isinstance(col, Column):
-        col = _to_java_column(col)
+    if isinstance(csv, basestring):
+        col = _create_column_from_literal(csv)
+    elif isinstance(csv, Column):
+        col = _to_java_column(csv)
     else:
         raise TypeError("schema argument should be a column or string")
 

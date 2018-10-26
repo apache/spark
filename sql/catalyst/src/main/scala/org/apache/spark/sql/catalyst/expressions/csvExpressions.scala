@@ -138,7 +138,7 @@ case class CsvToStructs(
 case class SchemaOfCsv(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends UnaryExpression with CodegenFallback {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -147,8 +147,6 @@ case class SchemaOfCsv(
     options = ExprUtils.convertToMapData(options))
 
   override def dataType: DataType = StringType
-
-  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def nullable: Boolean = false
 
@@ -161,7 +159,7 @@ case class SchemaOfCsv(
       s"The input csv should be a string literal and not null; however, got ${child.sql}.")
   }
 
-  override def eval(v: InternalRow = EmptyRow): Any = {
+  override def eval(v: InternalRow): Any = {
     val parsedOptions = new CSVOptions(options, true, "UTC")
     val parser = new CsvParser(parsedOptions.asParserSettings)
     val row = parser.parseLine(csv.toString)

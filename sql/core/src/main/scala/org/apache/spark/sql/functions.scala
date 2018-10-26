@@ -3897,19 +3897,30 @@ object functions {
   }
 
   /**
-   * Parses a column containing a CSV string and infers its schema.
+   * Parses a CSV string and infers its schema in DDL format.
    *
-   * @param e a string column containing CSV data.
+   * @param csv a CSV string.
    *
    * @group collection_funcs
    * @since 3.0.0
    */
-  def schema_of_csv(e: Column): Column = withExpr(new SchemaOfCsv(e.expr))
+  def schema_of_csv(csv: String): Column = schema_of_csv(lit(csv))
+
 
   /**
-   * Parses a column containing a CSV string and infers its schema using options.
+   * Parses a CSV string and infers its schema in DDL format.
    *
-   * @param e a string column containing CSV data.
+   * @param csv a string literal containing a CSV string.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def schema_of_csv(csv: Column): Column = withExpr(new SchemaOfCsv(csv.expr))
+
+  /**
+   * Parses a CSV string and infers its schema in DDL format using options.
+   *
+   * @param csv a string literal containing a CSV string.
    * @param options options to control how the CSV is parsed. accepts the same options and the
    *                json data source. See [[DataFrameReader#csv]].
    * @return a column with string literal containing schema in DDL format.
@@ -3917,8 +3928,8 @@ object functions {
    * @group collection_funcs
    * @since 3.0.0
    */
-  def schema_of_csv(e: Column, options: java.util.Map[String, String]): Column = {
-    withExpr(SchemaOfCsv(e.expr, options.asScala.toMap))
+  def schema_of_csv(csv: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(SchemaOfCsv(csv.expr, options.asScala.toMap))
   }
 
   // scalastyle:off line.size.limit
