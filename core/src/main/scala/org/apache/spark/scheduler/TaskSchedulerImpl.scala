@@ -422,9 +422,7 @@ private[spark] class TaskSchedulerImpl(
         }
 
         if (!launchedAnyTask) {
-          taskSet.getCompletelyBlacklistedTaskIfAny(hostToExecutors) match {
-            case Some(taskIndex) => // Returns the taskIndex which was unschedulable
-
+          taskSet.getCompletelyBlacklistedTaskIfAny(hostToExecutors).foreach { taskIndex =>
               // If the taskSet is unschedulable we try to find an existing idle blacklisted
               // executor. If we cannot find one, we abort immediately. Else we kill the idle
               // executor and kick off an abortTimer which if it doesn't schedule a task within the
@@ -454,7 +452,6 @@ private[spark] class TaskSchedulerImpl(
                     s" executors can be found to kill. Aborting $taskSet." )
                   taskSet.abortSinceCompletelyBlacklisted(taskIndex)
               }
-            case _ => // Do nothing if no tasks completely blacklisted.
           }
         } else {
           // We want to defer killing any taskSets as long as we have a non blacklisted executor
