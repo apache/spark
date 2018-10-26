@@ -24,7 +24,15 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.")
+  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC(col) FROM VALUES (1), (2), (3) AS tab(col);
+       2.0
+      > SELECT _FUNC(col) FROM VALUES (1), (2), (NULL) AS tab(col);
+       1.5
+  """,
+  since = "1.3.0")
 case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def prettyName: String = "avg"
