@@ -187,11 +187,12 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val points = (1 until 8).map(i => Vectors.dense(i))
     val data = sc.parallelize(points, 2)
-    val model = new BisectingKMeans().run(data)
+    val model = new BisectingKMeans().setDistanceMeasure(DistanceMeasure.COSINE).run(data)
     try {
       model.save(sc, path)
       val sameModel = BisectingKMeansModel.load(sc, path)
       assert(model.k === sameModel.k)
+      assert(model.distanceMeasure === sameModel.distanceMeasure)
       model.clusterCenters.zip(sameModel.clusterCenters).foreach(c => c._1 === c._2)
     } finally {
       Utils.deleteRecursively(tempDir)
