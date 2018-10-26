@@ -21,9 +21,8 @@ import java.io.{File, FileInputStream}
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.api.model.extensions.{Deployment, DeploymentBuilder}
+import io.fabric8.kubernetes.api.model.apps.{Deployment, DeploymentBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.openshift.api.model.{ClusterRoleBinding, ClusterRoleBindingBuilder}
 import org.apache.commons.io.FileUtils.readFileToString
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.KERBEROS_LABEL
@@ -75,8 +74,7 @@ private[spark] class KerberosUtils(
         .withStorageClassName(name)
         .withCapacity(Map("storage" -> new Quantity("1Gi")).asJava)
         .withAccessModes("ReadWriteMany")
-        .withHostPath(
-          new HostPathVolumeSource(s"$KRB_FILE_DIR/$namespace/$pathType"))
+        .withHostPath(new HostPathVolumeSource(s"$KRB_FILE_DIR/$namespace/$pathType", ""))
         .endSpec()
       .build()
   private def createPVCTemplate(name: String) : PersistentVolumeClaim =

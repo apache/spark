@@ -153,7 +153,7 @@ if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`"${ZINC_BIN}" -status -port ${ZINC_PORT}`
   export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
   "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
   "${ZINC_BIN}" -start -port ${ZINC_PORT} \
-    -server 127.0.0.1 -idle-timeout 30m \
+    -server 127.0.0.1 -idle-timeout 3h \
     -scala-compiler "${SCALA_COMPILER}" \
     -scala-library "${SCALA_LIBRARY}" &>/dev/null
 fi
@@ -163,8 +163,12 @@ export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
 
 echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
-# Last, call the `mvn` command as usual
+# call the `mvn` command as usual
+# SPARK-25854
 "${MVN_BIN}" -DzincPort=${ZINC_PORT} "$@"
+MVN_RETCODE=$?
 
-# Try to shut down zinc explicitly
+# Try to shut down zinc explicitly if the server is still running.
 "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
+
+exit $MVN_RETCODE

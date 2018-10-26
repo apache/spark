@@ -65,7 +65,7 @@ private[spark] class KerberosDriverWatcherCache(
   override def check(name: String): Boolean = podCache.get(name).contains("Running")
 
   override def deploy(storage: DeploymentStorage) : Unit = {
-    kubernetesClient.extensions().deployments().inNamespace(namespace).create(storage.resource)
+    kubernetesClient.apps().deployments().inNamespace(namespace).create(storage.resource)
     Eventually.eventually(TIMEOUT, INTERVAL) {
       check(driverName) should be (true)
     }

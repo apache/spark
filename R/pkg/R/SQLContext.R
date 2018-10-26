@@ -343,7 +343,6 @@ setMethod("toDF", signature(x = "RDD"),
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' df <- read.json(path, multiLine = TRUE)
-#' df <- jsonFile(path)
 #' }
 #' @name read.json
 #' @method read.json default
@@ -361,51 +360,6 @@ read.json.default <- function(path, ...) {
 
 read.json <- function(x, ...) {
   dispatchFunc("read.json(path)", x, ...)
-}
-
-#' @rdname read.json
-#' @name jsonFile
-#' @method jsonFile default
-#' @note jsonFile since 1.4.0
-jsonFile.default <- function(path) {
-  .Deprecated("read.json")
-  read.json(path)
-}
-
-jsonFile <- function(x, ...) {
-  dispatchFunc("jsonFile(path)", x, ...)
-}
-
-#' JSON RDD
-#'
-#' Loads an RDD storing one JSON object per string as a SparkDataFrame.
-#'
-#' @param sqlContext SQLContext to use
-#' @param rdd An RDD of JSON string
-#' @param schema A StructType object to use as schema
-#' @param samplingRatio The ratio of simpling used to infer the schema
-#' @return A SparkDataFrame
-#' @noRd
-#' @examples
-#'\dontrun{
-#' sparkR.session()
-#' rdd <- texFile(sc, "path/to/json")
-#' df <- jsonRDD(sqlContext, rdd)
-#'}
-
-# TODO: remove - this method is no longer exported
-# TODO: support schema
-jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
-  .Deprecated("read.json")
-  rdd <- serializeToString(rdd)
-  if (is.null(schema)) {
-    read <- callJMethod(sqlContext, "read")
-    # samplingRatio is deprecated
-    sdf <- callJMethod(read, "json", callJMethod(getJRDD(rdd), "rdd"))
-    dataFrame(sdf)
-  } else {
-    stop("not implemented")
-  }
 }
 
 #' Create a SparkDataFrame from an ORC file.
@@ -434,6 +388,7 @@ read.orc <- function(path, ...) {
 #' Loads a Parquet file, returning the result as a SparkDataFrame.
 #'
 #' @param path path of file to read. A vector of multiple paths is allowed.
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.parquet
 #' @name read.parquet
@@ -452,20 +407,6 @@ read.parquet.default <- function(path, ...) {
 
 read.parquet <- function(x, ...) {
   dispatchFunc("read.parquet(...)", x, ...)
-}
-
-#' @param ... argument(s) passed to the method.
-#' @rdname read.parquet
-#' @name parquetFile
-#' @method parquetFile default
-#' @note parquetFile since 1.4.0
-parquetFile.default <- function(...) {
-  .Deprecated("read.parquet")
-  read.parquet(unlist(list(...)))
-}
-
-parquetFile <- function(x, ...) {
-  dispatchFunc("parquetFile(...)", x, ...)
 }
 
 #' Create a SparkDataFrame from a text file.

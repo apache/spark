@@ -105,7 +105,7 @@ private[spark] class KerberosPodWatcherCache(
   override def deploy(srvc: ServiceStorage) : Unit = {
     logInfo("Launching the Deployment")
     kubernetesClient
-      .extensions().deployments().inNamespace(namespace).create(srvc.podDeployment)
+      .apps().deployments().inNamespace(namespace).create(srvc.podDeployment)
     // Making sure Pod is running
     Eventually.eventually(TIMEOUT, INTERVAL) {
       (podCache(srvc.name) == "Running") should be (true)
