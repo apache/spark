@@ -3646,7 +3646,7 @@ object functions {
   def schema_of_json(json: Column): Column = withExpr(new SchemaOfJson(json.expr))
 
   /**
-   * Parses a column containing a JSON string and infers its schema using options.
+   * Parses a JSON string and infers its schema in DDL format using options.
    *
    * @param json a string column containing JSON data.
    * @param options options to control how the json is parsed. accepts the same options and the
