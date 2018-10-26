@@ -2365,11 +2365,11 @@ def to_json(col, options={}):
 
 @ignore_unicode_prefix
 @since(2.4)
-def schema_of_json(col, options={}):
+def schema_of_json(json, options={}):
     """
-    Parses a column containing a JSON string and infers its schema in DDL format.
+    Parses a JSON string and infers its schema in DDL format.
 
-    :param col: string column in json format
+    :param json: a JSON string or a string literal containing a JSON string.
     :param options: options to control parsing. accepts the same options as the JSON datasource
 
     .. versionchanged:: 3.0
@@ -2382,10 +2382,10 @@ def schema_of_json(col, options={}):
     >>> df.select(schema.alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
     """
-    if isinstance(col, basestring):
-        col = _create_column_from_literal(col)
-    elif isinstance(col, Column):
-        col = _to_java_column(col)
+    if isinstance(json, basestring):
+        col = _create_column_from_literal(json)
+    elif isinstance(json, Column):
+        col = _to_java_column(json)
     else:
         raise TypeError("schema argument should be a column or string")
 

@@ -752,7 +752,7 @@ case class StructsToJson(
 case class SchemaOfJson(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends UnaryExpression with CodegenFallback {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -761,8 +761,6 @@ case class SchemaOfJson(
       options = ExprUtils.convertToMapData(options))
 
   override def dataType: DataType = StringType
-
-  override def inputTypes: Seq[DataType] = Seq(StringType)
 
   override def nullable: Boolean = false
 
@@ -785,7 +783,7 @@ case class SchemaOfJson(
       s"The input json should be a string literal and not null; however, got ${child.sql}.")
   }
 
-  override def eval(v: InternalRow = EmptyRow): Any = {
+  override def eval(v: InternalRow): Any = {
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       parser.nextToken()
       inferField(parser, jsonOptions)
@@ -801,7 +799,7 @@ object JsonExprUtils {
   def evalSchemaExpr(exp: Expression): DataType = exp match {
     case Literal(s, StringType) => DataType.fromDDL(s.toString)
     case e @ SchemaOfJson(_: Literal, _) =>
-      val ddlSchema = e.eval().asInstanceOf[UTF8String]
+      val ddlSchema = e.eval(EmptyRow).asInstanceOf[UTF8String]
       DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
       "Schema should be specified in DDL format as a string literal" +
