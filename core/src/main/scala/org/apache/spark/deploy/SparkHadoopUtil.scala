@@ -477,7 +477,7 @@ object SparkHadoopUtil {
 
   lazy val builderReflection: Option[(Class[_], Method, Method)] = Try {
     val cls = Utils.classForName(
-      "org.apache.hadoop.hdfs.DistributedFileSystem.HdfsDataOutputStreamBuilder")
+      "org.apache.hadoop.hdfs.DistributedFileSystem$HdfsDataOutputStreamBuilder")
     (cls, cls.getMethod("replicate"), cls.getMethod("build"))
   }.toOption
 
