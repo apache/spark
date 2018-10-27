@@ -2326,7 +2326,7 @@ def schema_of_json(json):
     >>> df.select(schema_of_json('{"a": 0}').alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
     """
-    if isinstance(json, basestring):
+    if isinstance(json, str):
         col = _create_column_from_literal(json)
     elif isinstance(json, Column):
         col = _to_java_column(json)
