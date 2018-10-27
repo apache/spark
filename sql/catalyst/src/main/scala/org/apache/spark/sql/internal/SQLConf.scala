@@ -818,8 +818,8 @@ object SQLConf {
       "Each function's code length (without comments) is larger than but near to this value, " +
       "except that the last one may be smaller. We can't know how many bytecode will be " +
       "generated, so use the code length as split metric. A function's bytecode should not go " +
-      "beyond 8KB, otherwise it will not be JITed, should also not be too small, or we will " +
-      "have many function calls. ")
+      "beyond 8KB, otherwise it will not be JITted; it also should not be too small, otherwise " +
+      "there will be many function calls. ")
     .intConf
     .createWithDefault(1024)
 
