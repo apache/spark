@@ -212,7 +212,7 @@ test_that("structField type strings", {
 
 test_that("create DataFrame from RDD", {
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
-  df <- createDataFrame(rdd, list("a", "b"))
+  df <- SparkR::createDataFrame(rdd, list("a", "b"))
   dfAsDF <- as.DataFrame(rdd, list("a", "b"))
   expect_is(df, "SparkDataFrame")
   expect_is(dfAsDF, "SparkDataFrame")
@@ -278,7 +278,7 @@ test_that("create DataFrame from RDD", {
 
   df <- as.DataFrame(cars, numPartitions = 2)
   expect_equal(getNumPartitions(df), 2)
-  df <- createDataFrame(cars, numPartitions = 3)
+  df <- SparkR::createDataFrame(cars, numPartitions = 3)
   expect_equal(getNumPartitions(df), 3)
   # validate limit by num of rows
   df <- createDataFrame(cars, numPartitions = 60)
@@ -299,7 +299,7 @@ test_that("create DataFrame from RDD", {
   sql("CREATE TABLE people (name string, age double, height float)")
   df <- read.df(jsonPathNa, "json", schema)
   insertInto(df, "people")
-  expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age,
+  expect_equal(collect(SparkR::sql("SELECT age from people WHERE name = 'Bob'"))$age,
                c(16))
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
                c(176.5))
@@ -3633,7 +3633,7 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
 
   createOrReplaceTempView(as.DataFrame(cars), "cars")
 
-  tb <- listTables()
+  tb <- SparkR::listTables()
   expect_equal(nrow(tb), count + 1)
   tbs <- collect(tb)
   expect_true(nrow(tbs[tbs$name == "cars", ]) > 0)
