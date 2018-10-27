@@ -22,7 +22,7 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- * Information about an [[org.apache.spark.Accumulable]] modified during a task or stage.
+ * Information about an [[org.apache.spark.util.AccumulatorV2]] modified during a task or stage.
  *
  * @param id accumulator ID
  * @param name accumulator name

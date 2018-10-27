@@ -45,7 +45,8 @@ logs and remains in "completed" state in the Kubernetes API until it's eventuall
 
 Note that in the completed state, the driver pod does *not* use any computational or memory resources.
 
-The driver and executor pod scheduling is handled by Kubernetes. It is possible to schedule the
+The driver and executor pod scheduling is handled by Kubernetes. Communication to the Kubernetes API is done via fabric8, and we are 
+currently running <code>kubernetes-client</code> version <code>4.1.0</code>. Make sure that when you are making infrastructure additions that you are aware of said version. It is possible to schedule the
 driver and executor pods on a subset of available nodes through a [node selector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
 using the configuration property for it. It will be possible to use more advanced
 scheduling hints like [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) in a future release.
@@ -816,9 +817,50 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
-  <td><code>"2"</code></td>
+  <td><code>"3"</code></td>
   <td>
    This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.krb5.path</code></td>
+  <td><code>(none)</code></td>
+  <td>
+   Specify the local location of the krb5.conf file to be mounted on the driver and executors for Kerberos interaction.
+   It is important to note that the KDC defined needs to be visible from inside the containers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.krb5.configMapName</code></td>
+  <td><code>(none)</code></td>
+  <td>
+   Specify the name of the ConfigMap, containing the krb5.conf file, to be mounted on the driver and executors
+   for Kerberos interaction. The KDC defined needs to be visible from inside the containers. The ConfigMap must also
+   be in the same namespace of the driver and executor pods.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.hadoop.configMapName</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, to be mounted on the driver 
+    and executors for custom Hadoop configuration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokenSecret.name</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the name of the secret where your existing delegation tokens are stored. This removes the need for the job user
+    to provide any kerberos credentials for launching a job. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokenSecret.itemKey</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the item key of the data where your existing delegation tokens are stored. This removes the need for the job user 
+    to provide any kerberos credentials for launching a job.
   </td>
 </tr>
 </table>

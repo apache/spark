@@ -23,10 +23,8 @@ ERRORS=$(echo -e "q\n" \
     | build/sbt \
         -Pkinesis-asl \
         -Pmesos \
-        -Pkafka-0-8 \
         -Pkubernetes \
         -Pyarn \
-        -Pflume \
         -Phive \
         -Phive-thriftserver \
         checkstyle test:checkstyle \

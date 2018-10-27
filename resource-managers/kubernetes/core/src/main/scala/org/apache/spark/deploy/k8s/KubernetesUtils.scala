@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, Time}
+import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.util.Utils
@@ -39,8 +39,27 @@ private[spark] object KubernetesUtils {
     sparkConf.getAllWithPrefix(prefix).toMap
   }
 
+  def requireBothOrNeitherDefined(
+      opt1: Option[_],
+      opt2: Option[_],
+      errMessageWhenFirstIsMissing: String,
+      errMessageWhenSecondIsMissing: String): Unit = {
+    requireSecondIfFirstIsDefined(opt1, opt2, errMessageWhenSecondIsMissing)
+    requireSecondIfFirstIsDefined(opt2, opt1, errMessageWhenFirstIsMissing)
+  }
+
+  def requireSecondIfFirstIsDefined(
+      opt1: Option[_],
+      opt2: Option[_],
+      errMessageWhenSecondIsMissing: String): Unit = {
+    opt1.foreach { _ =>
+      require(opt2.isDefined, errMessageWhenSecondIsMissing)
+    }
+  }
+
   def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {
     opt1.foreach { _ => require(opt2.isEmpty, errMessage) }
+    opt2.foreach { _ => require(opt1.isEmpty, errMessage) }
   }
 
   /**
@@ -138,7 +157,7 @@ private[spark] object KubernetesUtils {
       }.getOrElse(Seq(("container state", "N/A")))
   }
 
-  def formatTime(time: Time): String = {
-    if (time != null) time.getTime else "N/A"
+  def formatTime(time: String): String = {
+    if (time != null) time else "N/A"
   }
 }

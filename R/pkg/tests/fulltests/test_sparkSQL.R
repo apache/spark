@@ -628,14 +628,10 @@ test_that("read/write json files", {
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
     write.json(df, jsonPath3)
 
-    # Test read.json()/jsonFile() works with multiple input paths
+    # Test read.json() works with multiple input paths
     jsonDF1 <- read.json(c(jsonPath2, jsonPath3))
     expect_is(jsonDF1, "SparkDataFrame")
     expect_equal(count(jsonDF1), 6)
-    # Suppress warnings because jsonFile is deprecated
-    jsonDF2 <- suppressWarnings(jsonFile(c(jsonPath2, jsonPath3)))
-    expect_is(jsonDF2, "SparkDataFrame")
-    expect_equal(count(jsonDF2), 6)
 
     unlink(jsonPath2)
     unlink(jsonPath3)
@@ -653,20 +649,6 @@ test_that("read/write json files - compression option", {
   expect_true(length(list.files(jsonPath, pattern = ".gz")) > 0)
 
   unlink(jsonPath)
-})
-
-test_that("jsonRDD() on a RDD with json string", {
-  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
-  rdd <- parallelize(sc, mockLines)
-  expect_equal(countRDD(rdd), 3)
-  df <- suppressWarnings(jsonRDD(sqlContext, rdd))
-  expect_is(df, "SparkDataFrame")
-  expect_equal(count(df), 3)
-
-  rdd2 <- flatMap(rdd, function(x) c(x, x))
-  df <- suppressWarnings(jsonRDD(sqlContext, rdd2))
-  expect_is(df, "SparkDataFrame")
-  expect_equal(count(df), 6)
 })
 
 test_that("test tableNames and tables", {
@@ -1647,6 +1629,13 @@ test_that("column functions", {
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 
+  # Test from_csv()
+  df <- as.DataFrame(list(list("col" = "1")))
+  c <- collect(select(df, alias(from_csv(df$col, "a INT"), "csv")))
+  expect_equal(c[[1]][[1]]$a, 1)
+  c <- collect(select(df, alias(from_csv(df$col, lit("a INT")), "csv")))
+  expect_equal(c[[1]][[1]]$a, 1)
+
   # Test to_json(), from_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
   j <- collect(select(df, alias(to_json(df$people), "json")))
@@ -1687,7 +1676,7 @@ test_that("column functions", {
   df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
   schema2 <- structType(structField("date", "date"))
   s <- collect(select(df, from_json(df$col, schema2)))
-  expect_equal(s[[1]][[1]], NA)
+  expect_equal(s[[1]][[1]]$date, NA)
   s <- collect(select(df, from_json(df$col, schema2, dateFormat = "dd/MM/yyyy")))
   expect_is(s[[1]][[1]]$date, "Date")
   expect_equal(as.character(s[[1]][[1]]$date), "2014-10-21")
@@ -1818,6 +1807,14 @@ test_that("string operators", {
   expect_equal(
     collect(select(df4, split_string(df4$a, "\\\\")))[1, 1],
     list(list("a.b@c.d   1", "b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "\\.", 2)))[1, 1],
+    list(list("a", "b@c.d   1\\b"))
+  )
+  expect_equal(
+    collect(select(df4, split_string(df4$a, "b", 0)))[1, 1],
+    list(list("a.", "@c.d   1\\", ""))
   )
 
   l5 <- list(list(a = "abc"))
@@ -2643,7 +2640,7 @@ test_that("read/write Parquet files", {
     expect_is(df2, "SparkDataFrame")
     expect_equal(count(df2), 3)
 
-    # Test write.parquet/saveAsParquetFile and read.parquet/parquetFile
+    # Test write.parquet/saveAsParquetFile and read.parquet
     parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
     write.parquet(df, parquetPath2)
     parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
@@ -2651,9 +2648,6 @@ test_that("read/write Parquet files", {
     parquetDF <- read.parquet(c(parquetPath2, parquetPath3))
     expect_is(parquetDF, "SparkDataFrame")
     expect_equal(count(parquetDF), count(df) * 2)
-    parquetDF2 <- suppressWarnings(parquetFile(parquetPath2, parquetPath3))
-    expect_is(parquetDF2, "SparkDataFrame")
-    expect_equal(count(parquetDF2), count(df) * 2)
 
     # Test if varargs works with variables
     saveMode <- "overwrite"
