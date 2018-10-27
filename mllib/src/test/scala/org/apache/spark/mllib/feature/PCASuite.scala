@@ -57,19 +57,23 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("number of features more than 65535") {
-    val rows = 10
-    val columns = 100000
-    val k = 5
-    val randomRDD = RandomRDDs.normalVectorRDD(sc, rows, columns, 0, 0)
-    val pca = new PCA(k).fit(randomRDD)
-    assert(pca.explainedVariance.size === 5)
-    assert(pca.pc.numRows === 100000 && pca.pc.numCols === 5)
+    val data1 = sc.parallelize(Array(
+      Vectors.dense((1 to 100000).map(_ => 2.0).to[scala.Vector].toArray),
+      Vectors.dense((1 to 100000).map(_ => 0.0).to[scala.Vector].toArray)
+    ), 2)
+
+    val pca = new PCA(2).fit(data1)
     // Eigen values should not be negative
     assert(pca.explainedVariance.values.forall(_ >= 0))
-
     // Norm of the principal component should be 1.0
-    val colIndex = scala.util.Random.nextInt(k)
-    assert(Math.sqrt(pca.pc.values.slice(colIndex * 100000, (colIndex + 1) * 100000)
+    assert(Math.sqrt(pca.pc.values.slice(0, 100000)
       .map(Math.pow(_, 2)).sum) ~== 1.0 relTol 1e-8)
+    // Leading explainedVariance is 1.0
+    assert(pca.explainedVariance(0) ~== 1.0 relTol 1e-12)
+
+    // Leading principal component is '1' vector
+    val firstValue = pca.pc.values(0)
+    pca.pc.values.slice(0, 100000).map(values =>
+      assert(values ~== firstValue relTol 1e-12))
   }
 }
