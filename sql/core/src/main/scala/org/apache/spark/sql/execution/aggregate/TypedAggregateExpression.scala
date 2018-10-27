@@ -19,14 +19,14 @@ package org.apache.spark.sql.execution.aggregate
 
 import scala.language.existentials
 
-import org.apache.spark.sql.{AnalysisException, Encoder}
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedDeserializer}
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance, WrapOption}
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -76,7 +76,7 @@ object TypedAggregateExpression {
         None,
         bufferSerializer,
         bufferEncoder.resolveAndBind().deserializer,
-        outputEncoder.serializer,
+        outputEncoder.objSerializer,
         outputType,
         outputEncoder.objSerializer.nullable)
     }
@@ -213,7 +213,7 @@ case class ComplexTypedAggregateExpression(
     inputSchema: Option[StructType],
     bufferSerializer: Seq[NamedExpression],
     bufferDeserializer: Expression,
-    outputSerializer: Seq[Expression],
+    outputSerializer: Expression,
     dataType: DataType,
     nullable: Boolean,
     mutableAggBufferOffset: Int = 0,
@@ -245,13 +245,7 @@ case class ComplexTypedAggregateExpression(
     aggregator.merge(buffer, input)
   }
 
-  private lazy val resultObjToRow = dataType match {
-    case _: StructType =>
-      UnsafeProjection.create(CreateStruct(outputSerializer))
-    case _ =>
-      assert(outputSerializer.length == 1)
-      UnsafeProjection.create(outputSerializer.head)
-  }
+  private lazy val resultObjToRow = UnsafeProjection.create(outputSerializer)
 
   override def eval(buffer: Any): Any = {
     val resultObj = aggregator.finish(buffer)

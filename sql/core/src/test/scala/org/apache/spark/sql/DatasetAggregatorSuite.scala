@@ -431,7 +431,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     assert(grouped.schema == df.schema)
     checkDataset(grouped.as[OptionBooleanData], OptionBooleanData("bob", Some(true)))
   }
-  /*
+
   test("SPARK-24762: Aggregator should be able to use Option of Product encoder") {
     val df = Seq(
       OptionBooleanIntData("bob", Some((true, 1))),
@@ -445,5 +445,4 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(group, Row("bob", Row(true, 3)) :: Nil)
     checkDataset(group.as[OptionBooleanIntData], OptionBooleanIntData("bob", Some((true, 3))))
   }
-  */
 }
