@@ -814,12 +814,12 @@ object SQLConf {
 
   val CODEGEN_METHOD_SPLIT_THRESHOLD = buildConf("spark.sql.codegen.methodSplitThreshold")
     .internal()
-    .doc("The maximum source code length of a single Java function by codegen. When the " +
-      "generated Java function source code exceeds this threshold, it will be split into " +
-      "multiple small functions, each function length is spark.sql.codegen.methodSplitThreshold." +
-      " A function's bytecode should not go beyond 8KB, otherwise it will not be JITted, should " +
-      "also not be too small, or we will have many function calls. We can't know how many " +
-      "bytecode will be generated, so use the length of source code as metric.")
+    .doc("Splits the generated code of expressions into multiple functions by this threshold." +
+      "Each function's code length (without comments) is larger than but near to this value, " +
+      "except that the last one may be smaller. We can't know how many bytecode will be " +
+      "generated, so use the code length as split metric. A function's bytecode should not go " +
+      "beyond 8KB, otherwise it will not be JITed, should also not be too small, or we will " +
+      "have many function calls. ")
     .intConf
     .createWithDefault(1024)
 
