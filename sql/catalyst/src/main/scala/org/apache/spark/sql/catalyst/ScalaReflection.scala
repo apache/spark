@@ -132,10 +132,9 @@ object ScalaReflection extends ScalaReflection {
     tpe.typeSymbol.asClass.isDerivedValueClass
   }
 
-  /** Returns the underlying type of value class `cls`. */
-  def getUnderlyingTypeOf(cls: `Type`): `Type` = {
-    val (_, underlyingType) = getConstructorParameters(cls).head
-    underlyingType
+  /** Returns the name and type of the underlying parameter of value class `tpe`. */
+  def getUnderlyingParameterOf(tpe: `Type`): (String, Type) = {
+    getConstructorParameters(tpe).head
   }
 
   /**
@@ -384,7 +383,7 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
 
       case t if isValueClass(t) =>
-        val underlyingType = getUnderlyingTypeOf(t)
+        val (_, underlyingType) = getUnderlyingParameterOf(t)
         val underlyingClsName = getClassNameFromType(underlyingType)
         val clsName = getUnerasedClassNameFromType(t)
         val newTypePath = s"""- Scala value class: $clsName($underlyingClsName)""" +:
@@ -650,7 +649,7 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "serialize", udt, inputObject :: Nil)
 
       case t if isValueClass(t) =>
-        val (name, underlyingType) = getConstructorParameters(t).head
+        val (name, underlyingType) = getUnderlyingParameterOf(t)
         val underlyingClsName = getClassNameFromType(underlyingType)
         val clsName = getUnerasedClassNameFromType(t)
         val newPath = s"""- Scala value class: $clsName($underlyingClsName)""" +: walkedTypePath
@@ -671,8 +670,12 @@ object ScalaReflection extends ScalaReflection {
           }
 
           // as a field, value class is represented by its underlying type
-          val trueFieldType =
-            if (isValueClass(fieldType)) getUnderlyingTypeOf(fieldType) else fieldType
+          val trueFieldType = if (isValueClass(fieldType)) {
+            val (_, underlyingType) = getUnderlyingParameterOf(fieldType)
+            underlyingType
+          } else {
+            fieldType
+          }
 
           val fieldValue = Invoke(
             AssertNotNull(inputObject, walkedTypePath), fieldName, dataTypeFor(trueFieldType),
@@ -817,7 +820,9 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< definitions.ShortTpe => Schema(ShortType, nullable = false)
       case t if t <:< definitions.ByteTpe => Schema(ByteType, nullable = false)
       case t if t <:< definitions.BooleanTpe => Schema(BooleanType, nullable = false)
-      case t if isValueClass(t) => schemaFor(getUnderlyingTypeOf(t))
+      case t if isValueClass(t) =>
+        val (_, underlyingType) = getUnderlyingParameterOf(t)
+        schemaFor(underlyingType)
       case t if definedByConstructorParams(t) =>
         val params = getConstructorParameters(t)
         Schema(StructType(
