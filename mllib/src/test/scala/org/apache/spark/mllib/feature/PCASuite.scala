@@ -65,10 +65,10 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(pca.explainedVariance.size === 5)
     assert(pca.pc.numRows === 100000 && pca.pc.numCols === 5)
     // Eigen values should not be negative
-    assert(!pca.explainedVariance.values.exists(_ < 0))
+    assert(pca.explainedVariance.values.forall(_ >= 0))
 
-    // Norm of the principle component should be 1.0
-    val colIndex = scala.util.Random.nextInt(k) - 1
+    // Norm of the principal component should be 1.0
+    val colIndex = scala.util.Random.nextInt(k)
     assert(Math.sqrt(pca.pc.values.slice(colIndex * 100000, (colIndex + 1) * 100000)
       .map(Math.pow(_, 2)).sum) ~== 1.0 relTol 1e-8)
   }

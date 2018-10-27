@@ -53,7 +53,7 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
     val mat = if (numFeatures > 65535) {
       val meanVector = Statistics.colStats(sources).mean
       val meanCentredRdd = sources.map { rowVector =>
-        Vectors.dense((rowVector.toArray, meanVector.toArray).zipped.map(_ - _))
+        Vectors.fromBreeze(rowVector.asBreeze - meanVector.asBreeze)
       }
       new RowMatrix(meanCentredRdd)
     } else {
