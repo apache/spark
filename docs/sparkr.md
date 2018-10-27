@@ -487,7 +487,7 @@ df2
 ##+-------+-----+
 ##only showing top 10 rows
 
-{% endhighlight %} 
+{% endhighlight %}
 </div>
 
 Note that to enable eager execution in `sparkR` shell, add `spark.sql.repl.eagerEval.enabled=true` configuration property to the `--conf` option.
@@ -717,4 +717,5 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 
 ## Upgrading to SparkR 3.0.0
 
- - The deprecated methods `parquetFile`, `jsonRDD` and `jsonFile` in `SQLContext` have been removed. Use `read.parquet` and `read.json`.
+ - The deprecated methods `sparkR.init`, `sparkRSQL.init`, `sparkRHive.init` have been removed. Use `sparkR.session` instead.
+ - The deprecated methods `parquetFile`, `saveAsParquetFile`, `jsonFile`, `registerTempTable`, `createExternalTable`, `dropTempTable`, `unionAll` have been removed. Use `read.parquet`, `write.parquet`, `read.json`, `createOrReplaceTempView`, `createTable`, `dropTempView`, `union` instead.
