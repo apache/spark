@@ -85,3 +85,49 @@ Refer to the [R API docs](api/R/spark.fpGrowth.html) for more details.
 </div>
 
 </div>
+
+## PrefixSpan
+
+PrefixSpan is a sequential pattern mining algorithm described in
+[Pei et al., Mining Sequential Patterns by Pattern-Growth: The
+PrefixSpan Approach](http://dx.doi.org/10.1109%2FTKDE.2004.77). We refer
+the reader to the referenced paper for formalizing the sequential
+pattern mining problem.
+
+`spark.ml`'s PrefixSpan implementation takes the following parameters:
+
+* `minSupport`: the minimum support required to be considered a frequent
+  sequential pattern.
+* `maxPatternLength`: the maximum length of a frequent sequential
+  pattern. Any frequent pattern exceeding this length will not be
+  included in the results.
+* `maxLocalProjDBSize`: the maximum number of items allowed in a
+  prefix-projected database before local iterative processing of the
+  projected database begins. This parameter should be tuned with respect
+  to the size of your executors.
+* `sequenceCol`: the name of the sequence column in dataset (default "sequence"), rows with
+  nulls in this column are ignored.
+
+**Examples**
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.fpm.PrefixSpan) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/PrefixSpanExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/PrefixSpan.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaPrefixSpanExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.fpm.PrefixSpan) for more details.
+
+{% include_example python/ml/prefixspan_example.py %}
+</div>
+
+</div>
