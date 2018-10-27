@@ -37,6 +37,9 @@ import org.apache.spark.sql.types._
  * Few examples are:
  *   we use this to support "nvl" by replacing it with "coalesce".
  *   we use this to replace Every and Any with Min and Max respectively.
+ *
+ * TODO: In future, explore an option to replace aggregate functions similar to
+ * how RruntimeReplaceable does.
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
