@@ -47,7 +47,7 @@ object ExprUtils {
   def evalTypeExpr(exp: Expression): DataType = exp match {
     case Literal(s, StringType) => DataType.fromDDL(s.toString)
     case e @ SchemaOfJson(_: Literal, _) =>
-      val ddlSchema = e.eval().asInstanceOf[UTF8String]
+      val ddlSchema = e.eval(EmptyRow).asInstanceOf[UTF8String]
       DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
       "Schema should be specified in DDL format as a string literal or output of " +

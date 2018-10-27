@@ -157,7 +157,7 @@ select from_json()
 struct<>
 -- !query 17 output
 org.apache.spark.sql.AnalysisException
-Schema should be specified in DDL format as a string literal or output of the schema_of_json function instead of 1;; line 1 pos 7
+Invalid number of arguments for function from_json. Expected: one of 2 and 3; Found: 0; line 1 pos 7
 
 
 -- !query 18
