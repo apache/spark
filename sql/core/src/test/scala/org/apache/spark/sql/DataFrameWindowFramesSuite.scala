@@ -267,7 +267,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("range between should accept interval values as left boundary") {
+  test("range between should accept interval values as both boundaries") {
     def ts(timestamp: Long): Timestamp = new Timestamp(timestamp * 1000)
 
     val df = Seq((ts(1501545600), "1"), (ts(1501545600), "1"), (ts(1609372800), "1"),
