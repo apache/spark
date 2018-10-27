@@ -22,9 +22,9 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
+import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, GetStructField, If, IsNull, SpecificInternalRow, UpCast}
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance, WrapOption}
 import org.apache.spark.sql.types._
 
 case class PrimitiveData(
@@ -363,14 +363,15 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
   }
 
-  /*
   test("SPARK-24762: serializer for Option of Product") {
-    val optionOfProduct = Some((1, "a"))
-    val serializer = serializerFor[Option[(Int, String)]](BoundReference(
-      0, ObjectType(optionOfProduct.getClass), nullable = true))
+    val serializer = serializerFor[Option[(Int, String)]]
+    val datatype = StructType(Seq(
+      StructField("_1", IntegerType, nullable = false),
+      StructField("_2", StringType, nullable = true)))
+    assert(serializer.dataType == datatype)
 
     serializer match {
-      case CreateNamedStruct(Seq(_: Literal, If(_, _, encoder: CreateNamedStruct))) =>
+      case If(_, _, encoder: CreateNamedStruct) =>
         val fields = encoder.flatten
         assert(fields.length == 2)
         assert(fields(0).dataType == IntegerType)
@@ -384,11 +385,15 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val deserializer = deserializerFor[Option[(Int, String)]]
 
     deserializer match {
-      case WrapOption(If(IsNull(GetColumnByOrdinal(0, _)), _, n: NewInstance), _) =>
+      case WrapOption(If(IsNull(g @ GetColumnByOrdinal(0, _)), _, n: NewInstance), _) =>
         assert(n.cls == classOf[Tuple2[Int, String]])
+        val arguments = n.arguments.flatMap(_.collect {
+          case g: GetStructField => g
+        })
+        assert(arguments(0) == GetStructField(g, 0))
+        assert(arguments(1) == GetStructField(g, 1))
       case _ =>
-        fail("top-level Option of Product should be decoded from a single struct column.")
+        fail("Incorrect deserializer of Option of Product")
     }
   }
-  */
 }

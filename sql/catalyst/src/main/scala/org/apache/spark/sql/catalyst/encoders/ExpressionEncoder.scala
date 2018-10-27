@@ -198,7 +198,7 @@ case class ExpressionEncoder[T](
   val serializer: Seq[NamedExpression] = {
     val clsName = Utils.getSimpleName(clsTag.runtimeClass)
 
-    if (isSerializedAsStruct) {
+    if (isSerializedAsStruct && !classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)) {
       val nullSafeSerializer = objSerializer.transformUp {
         case r: BoundReference =>
           // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
@@ -214,6 +214,9 @@ case class ExpressionEncoder[T](
     } else {
       // For other input objects like primitive, array, map, etc., we construct a struct to wrap
       // the serializer which is a column of an row.
+      //
+      // Note: Because Spark SQL doesn't allow top-level row to be null, to encode
+      // top-level Option[Product] type, we make it as a top-level struct column.
       CreateNamedStruct(Literal("value") :: objSerializer :: Nil)
     }
   }.flatten
@@ -227,7 +230,7 @@ case class ExpressionEncoder[T](
    * `GetColumnByOrdinal` with corresponding ordinal.
    */
   val deserializer: Expression = {
-    if (isSerializedAsStruct) {
+    if (isSerializedAsStruct && !classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)) {
       // We serialized this kind of objects to root-level row. The input of general deserializer
       // is a `GetColumnByOrdinal(0)` expression to extract first column of a row. We need to
       // transform attributes accessors.
