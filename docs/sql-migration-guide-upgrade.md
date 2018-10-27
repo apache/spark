@@ -17,6 +17,8 @@ displayTitle: Spark SQL Upgrading Guide
 
   - The `ADD JAR` command previously returned a result set with the single value 0. It now returns an empty result set.
 
+  - In Spark version 2.4 and earlier, `Dataset` doesn't support to encode `Option[Product]` at top-level row, because in Spark SQL entire top-level row can't be null. Since Spark 3.0, `Option[Product]` at top-level is encoded as a row with single struct column. Then with this support, `Aggregator` can also use use `Option[Product]` as buffer and output column types.
+
 ## Upgrading From Spark SQL 2.3 to 2.4
 
   - In Spark version 2.3 and earlier, the second parameter to array_contains function is implicitly promoted to the element type of first array type parameter. This type promotion can be lossy and may cause `array_contains` function to return wrong result. This problem has been addressed in 2.4 by employing a safer type promotion mechanism. This can cause some change in behavior and are illustrated in the table below.
