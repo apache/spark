@@ -114,8 +114,6 @@ class SessionWindowLinkedListState(
 
   def addBefore(key: UnsafeRow, sessionStart: Long, value: UnsafeRow,
                 targetSessionStart: Long): Unit = {
-    require(sessionStart < targetSessionStart)
-
     val targetPointer = keyAndSessionStartToPointerStore.get(key, targetSessionStart)
     assertValidPointer(targetPointer)
 
@@ -138,8 +136,6 @@ class SessionWindowLinkedListState(
 
   def addAfter(key: UnsafeRow, sessionStart: Long, value: UnsafeRow,
                targetSessionStart: Long): Unit = {
-    require(sessionStart > targetSessionStart)
-
     val targetPointer = keyAndSessionStartToPointerStore.get(key, targetSessionStart)
     assertValidPointer(targetPointer)
 
@@ -431,7 +427,6 @@ class SessionWindowLinkedListState(
     keyAndSessionStartToValueStore.abortIfNeeded()
   }
 
-
   /** Get the combined metrics of all the state stores */
   def metrics: StateStoreMetrics = {
     val keyToHeadSessionStartMetrics = keyToHeadSessionStartStore.metrics
@@ -457,6 +452,18 @@ class SessionWindowLinkedListState(
             s"Unknown state store custom metric is found at metrics: $s")
       }
     )
+  }
+
+  private[state] def getIteratorOfHeadPointers: Iterator[KeyAndHeadSessionStart] = {
+    keyToHeadSessionStartStore.iterator
+  }
+
+  private[state] def getIteratorOfRawPointers: Iterator[KeyWithSessionStartAndPointers] = {
+    keyAndSessionStartToPointerStore.iterator
+  }
+
+  private[state] def getIteratorOfRawValues: Iterator[KeyWithSessionStartAndValue] = {
+    keyAndSessionStartToValueStore.iterator
   }
 
   /*
@@ -515,10 +522,11 @@ class SessionWindowLinkedListState(
   }
 
   /**
-    * Helper class for representing data returned by [[KeyToHeadSessionStartStore]].
-    * Designed for object reuse.
-    */
-  private case class KeyAndHeadSessionStart(var key: UnsafeRow = null, var sessionStart: Long = 0) {
+   * Helper class for representing data returned by [[KeyToHeadSessionStartStore]].
+   * Designed for object reuse.
+   */
+  private[state] case class KeyAndHeadSessionStart(var key: UnsafeRow = null,
+                                                   var sessionStart: Long = 0) {
     def withNew(newKey: UnsafeRow, newSessionStart: Long): this.type = {
       this.key = newKey
       this.sessionStart = newSessionStart
@@ -530,7 +538,7 @@ class SessionWindowLinkedListState(
    * Helper class for representing data returned by [[KeyAndSessionStartToPointerStore]].
    * Designed for object reuse.
    */
-  private case class KeyWithSessionStartAndPointers(
+  private[state] case class KeyWithSessionStartAndPointers(
       var key: UnsafeRow = null,
       var sessionStart: Long = 0,
       var prevSessionStart: Option[Long] = None,
@@ -549,7 +557,7 @@ class SessionWindowLinkedListState(
    * Helper class for representing data returned by [[KeyAndSessionStartToValueStore]].
    * Designed for object reuse.
    */
-  private case class KeyWithSessionStartAndValue(
+  private[state] case class KeyWithSessionStartAndValue(
       var key: UnsafeRow = null,
       var sessionStart: Long = 0,
       var value: UnsafeRow = null) {
@@ -645,7 +653,7 @@ class SessionWindowLinkedListState(
 
     def updateNext(key: UnsafeRow, sessionStart: Long, nextSessionStart: Option[Long]): Unit = {
       val actualKeyRow = keyWithSessionStartRow(key, sessionStart)
-      val row = stateStore.get(actualKeyRow)
+      val row = stateStore.get(actualKeyRow).copy()
       setNextSessionStart(row, nextSessionStart)
       stateStore.put(actualKeyRow, row)
     }
@@ -721,10 +729,20 @@ class SessionWindowLinkedListState(
     }
 
     /**
-      * Remove key and value at given session start.
-      */
+     * Remove key and value at given session start.
+     */
     def remove(key: UnsafeRow, sessionStart: Long): Unit = {
       stateStore.remove(keyWithSessionStartRow(key, sessionStart))
+    }
+
+    def iterator: Iterator[KeyWithSessionStartAndValue] = {
+      val keyWithSessionStartAndValue = KeyWithSessionStartAndValue()
+      stateStore.getRange(None, None).map { pair =>
+        val keyPart = keyRowGenerator(pair.key)
+        val sessionStart = pair.key.getLong(indexOrdinalInKeyWithSessionStartRow)
+        val value = pair.value
+        keyWithSessionStartAndValue.withNew(keyPart, sessionStart, value)
+      }
     }
   }
 }

@@ -19,7 +19,10 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
 
+import scala.util.Random
+
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
@@ -212,6 +215,200 @@ class SessionWindowLinkedListStateSuite extends StreamTest {
 
   test("remove by watermark - stop on condition mismatch == false") {
     removeByWatermarkTest(stopOnConditionMismatch = false)
+  }
+
+  test("run chaos monkey") {
+
+    // FIXME: too many args
+    def printFailureInformation(
+        ex: TestFailedException,
+        state: SessionWindowLinkedListState,
+        operation: Int,
+        addBefore: Boolean,
+        opIdx: Int,
+        targetIdx: Int,
+        key: UnsafeRow,
+        headPointersBeforeOp: List[(Int, Long)],
+        rawPointersBeforeOp: List[(Int, Long, Option[Long], Option[Long])],
+        pointersBeforeOp: List[Long],
+        valuesBeforeOp: List[(Int, Int)],
+        refListBeforeOp: java.util.LinkedList[String],
+        refList: java.util.LinkedList[String]): Unit = {
+      logError("Assertion failure!", ex)
+
+      logError("===== Operation information =====")
+      val opString = operation match {
+        case 0 => "Append"
+        case 1 => "Remove"
+        case 2 => "RemoveValuesByCondition"
+        case _ => throw new IllegalStateException(s"Unknown operation $operation")
+      }
+      val addPositionString = if (addBefore) "AddBefore" else "AddAfter"
+      logError(s"Operation Index: $opIdx")
+      logError(s"Operation: $opString")
+      logError(s"Position to add: $addPositionString")
+      logError(s"Target index: $targetIdx")
+
+      logError("===== Before applying operation =====")
+      logError(s"Head pointers in state: $headPointersBeforeOp")
+      logError(s"Raw pointers in state: $rawPointersBeforeOp")
+      logError(s"Pointers in state via iteratePointers: $pointersBeforeOp")
+      logError(s"Values in state: $valuesBeforeOp")
+      logError(s"Values in reference list: $refListBeforeOp")
+
+      logError("===== After applying operation =====")
+
+      val headPointers = state.getIteratorOfHeadPointers.map { pair =>
+        (toKeyInt(pair.key), pair.sessionStart)
+      }.toList
+      val pointers = state.iteratePointers(key).map(_._1).toList
+      val rawPointers = state.getIteratorOfRawPointers.map { pointer =>
+        (toKeyInt(pointer.key), pointer.sessionStart, pointer.prevSessionStart,
+          pointer.nextSessionStart)
+      }.toList
+      val values = state.getIteratorOfRawValues.map { value =>
+        (toKeyInt(value.key), toValueInt(value.value))
+      }.toList
+
+      logError(s"Head pointers in state: $headPointers")
+      logError(s"Raw pointers in state: $rawPointers")
+      logError(s"Pointers in state via iteratePointers: $pointers")
+      logError(s"Values in state: $values")
+      logError(s"Values in reference list: $refList")
+    }
+
+    withSessionWindowLinkedListState(inputValueAttribs, keyExprs) { state =>
+      implicit val st = state
+
+      assert(numRows === 0)
+
+      val rand = new Random()
+
+      val keys = (0 to 2).map(id => toKeyRow(id).copy())
+      // using String type to avoid confusion in remove(int) vs remove(Object)
+      // which LinkedList[Integer] will be remove(int) vs remove(Integer)
+      val refLists = keys.map(_ => new java.util.LinkedList[String]())
+
+      val maxOperations = 100000
+      (0 until maxOperations).foreach { opIdx =>
+
+        val selectedKeyIdx = rand.nextInt(keys.length)
+        val selectedKey = keys(selectedKeyIdx)
+        val selectedRefList = refLists(selectedKeyIdx)
+
+        // 0: append, 1: remove, 2: removeValueByCondition
+        val operation = rand.nextInt(3)
+        val addBefore = rand.nextBoolean()
+        val targetIdx = if (selectedRefList.isEmpty) -1 else rand.nextInt(selectedRefList.size())
+
+        val headPointersBeforeOp = state.getIteratorOfHeadPointers.map { pair =>
+          (toKeyInt(pair.key), pair.sessionStart)
+        }.toList
+        val pointersBeforeOp = state.iteratePointers(selectedKey).map(_._1).toList
+        val rawPointersBeforeOp = state.getIteratorOfRawPointers.map { pointer =>
+          (toKeyInt(pointer.key), pointer.sessionStart, pointer.prevSessionStart,
+            pointer.nextSessionStart)
+        }.toList
+        val valuesBeforeOp = state.getIteratorOfRawValues.map { value =>
+          (toKeyInt(value.key), toValueInt(value.value))
+        }.toList
+
+        val refListBeforeOp = new java.util.LinkedList[String](refLists(selectedKeyIdx))
+
+        operation match {
+          case 0 =>
+            if (selectedRefList.isEmpty) {
+              assert(state.isEmpty(selectedKey))
+              state.setHead(selectedKey, opIdx, toInputValue(opIdx))
+              selectedRefList.addFirst(String.valueOf(opIdx))
+            } else {
+              val addBefore = rand.nextBoolean()
+              if (addBefore) {
+                val idxToAddBefore = selectedRefList.get(targetIdx)
+                selectedRefList.add(targetIdx, String.valueOf(opIdx))
+                state.addBefore(selectedKey, opIdx, toInputValue(opIdx), idxToAddBefore.toInt)
+              } else {
+                val idxToAddAfter = selectedRefList.get(targetIdx)
+                selectedRefList.add(targetIdx + 1, String.valueOf(opIdx))
+                state.addAfter(selectedKey, opIdx, toInputValue(opIdx), idxToAddAfter.toInt)
+              }
+            }
+
+          case 1 =>
+            if (selectedRefList.isEmpty) {
+              assert(state.isEmpty(selectedKey))
+              // skip removing
+            } else {
+              val pointerToRemove = selectedRefList.get(targetIdx)
+              selectedRefList.remove(targetIdx)
+              state.remove(selectedKey, pointerToRemove.toInt)
+            }
+
+          case 2 =>
+            if (selectedRefList.isEmpty) {
+              assert(state.isEmpty(selectedKey))
+              // skip removing
+            } else {
+              val pointerToRemove = selectedRefList.get(targetIdx)
+              val removedIter = state.removeByValueCondition { r =>
+                toValueInt(r) <= pointerToRemove.toInt
+              }
+
+              val valuesFromRef = new scala.collection.mutable.MutableList[Int]()
+              refLists.foreach { refList =>
+                val refIter = refList.iterator()
+                while (refIter.hasNext) {
+                  val ref = refIter.next()
+                  if (ref.toInt <= pointerToRemove.toInt) {
+                    valuesFromRef += ref.toInt
+                    refIter.remove()
+                  }
+                }
+              }
+
+              try {
+                assert(removedIter.map(pair => toValueInt(pair.value)).toSet ==
+                  valuesFromRef.toSet)
+              } catch {
+                case ex: TestFailedException =>
+                  printFailureInformation(ex, state, operation, addBefore, opIdx, targetIdx,
+                    selectedKey, headPointersBeforeOp, rawPointersBeforeOp, pointersBeforeOp,
+                    valuesBeforeOp, refListBeforeOp, selectedRefList)
+
+                  throw ex
+              }
+            }
+        }
+
+        keys.indices.foreach { index =>
+          val key = keys(index)
+          val refList = refLists(index)
+
+          try {
+            if (refList.isEmpty) {
+              assert(state.isEmpty(key), s"Reference list is empty but " +
+                s"state list for $key is not empty")
+            } else {
+              import scala.collection.JavaConverters._
+              val statePointers = state.iteratePointers(key).map(_._1).toList
+              assert(refList.asScala.map(_.toInt) === statePointers,
+                s"State pointers for $key is expected to be $refList but $statePointers")
+
+              val stateValues = state.get(key).map(toValueInt).toList
+              assert(refList.asScala.map(_.toInt) ===
+                stateValues, s"State list for $key is expected to be $refList but $stateValues")
+            }
+          } catch {
+            case ex: TestFailedException =>
+              printFailureInformation(ex, state, operation, addBefore, opIdx, targetIdx,
+                selectedKey, headPointersBeforeOp, rawPointersBeforeOp, pointersBeforeOp,
+                valuesBeforeOp, refListBeforeOp, selectedRefList)
+
+              throw ex
+          }
+        }
+      }
+    }
   }
 
   private def removeByWatermarkTest(stopOnConditionMismatch: Boolean): Unit = {
