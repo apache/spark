@@ -314,6 +314,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     ReferenceValueClass(ReferenceValueClass.Container(1)), "reference value class")
   encodeDecodeTest(StringWrapper("a"), "string value class")
   encodeDecodeTest(ValueContainer(1, StringWrapper("b")), "nested value class")
+  encodeDecodeTest(ValueContainer(1, StringWrapper(null)), "nested value class with null")
   encodeDecodeTest(
     ComplexValueClassContainer(1, ValueContainer(2, StringWrapper("b")), new IntWrapper(3)),
     "complex value class")
