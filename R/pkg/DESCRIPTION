@@ -30,7 +30,6 @@ Collate:
     'column.R'
     'group.R'
     'RDD.R'
-    'pairRDD.R'
     'DataFrame.R'
     'SQLContext.R'
     'WindowSpec.R'
