@@ -30,7 +30,7 @@ test_that("using broadcast variable", {
   randomMatBr <- broadcastRDD(sc, randomMat)
 
   useBroadcast <- function(x) {
-    sum(SparkR:::value(randomMatBr) * x)
+    sum(get(randomMatBr@id, envir = .broadcastValues) * x)
   }
   actual <- collectRDD(lapply(rrdd, useBroadcast))
   expected <- list(sum(randomMat) * 1, sum(randomMat) * 2)

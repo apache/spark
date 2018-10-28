@@ -78,7 +78,6 @@ setMethod("cov",
 
 #' Calculates the correlation of two columns of a SparkDataFrame.
 #' Currently only supports the Pearson Correlation Coefficient.
-#' For Spearman Correlation, consider using RDD methods found in MLlib's Statistics.
 #'
 #' @param colName1 the name of the first column
 #' @param colName2 the name of the second column

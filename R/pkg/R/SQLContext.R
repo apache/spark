@@ -208,8 +208,6 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
     } else {
       rdd <- parallelize(sc, data, numSlices = 1)
     }
-  } else if (inherits(data, "RDD")) {
-    rdd <- data
   } else {
     stop(paste("unexpected type:", class(data)))
   }
@@ -259,26 +257,6 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
 as.DataFrame <- function(data, schema = NULL, samplingRatio = 1.0, numPartitions = NULL) {
   createDataFrame(data, schema, samplingRatio, numPartitions)
 }
-
-#' toDF
-#'
-#' Converts an RDD to a SparkDataFrame by infer the types.
-#'
-#' @param x An RDD
-#' @rdname SparkDataFrame
-#' @noRd
-#' @examples
-#'\dontrun{
-#' sparkR.session()
-#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
-#' df <- toDF(rdd)
-#'}
-setGeneric("toDF", function(x, ...) { standardGeneric("toDF") })
-
-setMethod("toDF", signature(x = "RDD"),
-          function(x, ...) {
-            createDataFrame(x, ...)
-          })
 
 #' Create a SparkDataFrame from a JSON file.
 #'

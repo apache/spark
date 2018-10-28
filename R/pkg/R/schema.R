@@ -21,7 +21,7 @@
 #' structType
 #'
 #' Create a structType object that contains the metadata for a SparkDataFrame. Intended for
-#' use with createDataFrame and toDF.
+#' use with createDataFrame.
 #'
 #' @param x a structField object (created with the \code{structField} method). Since Spark 2.3,
 #'          this can be a DDL-formatted string, which is a comma separated list of field

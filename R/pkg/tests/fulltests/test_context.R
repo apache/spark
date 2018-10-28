@@ -81,8 +81,6 @@ test_that("rdd GC across sparkR.stop", {
   rm(rdd2)
   gc()
 
-  countRDD(rdd3)
-  countRDD(rdd4)
   sparkR.session.stop()
 })
 

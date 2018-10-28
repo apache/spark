@@ -17,7 +17,7 @@
 
 # DataFrame.R - SparkDataFrame class and methods implemented in S4 OO classes
 
-#' @include generics.R jobj.R schema.R RDD.R pairRDD.R column.R group.R
+#' @include generics.R jobj.R schema.R column.R group.R
 NULL
 
 setOldClass("jobj")
@@ -1331,32 +1331,6 @@ setMethod("first",
             take(x, 1)
           })
 
-#' toRDD
-#'
-#' Converts a SparkDataFrame to an RDD while preserving column names.
-#'
-#' @param x A SparkDataFrame
-#'
-#' @noRd
-#' @examples
-#'\dontrun{
-#' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' rdd <- toRDD(df)
-#'}
-setMethod("toRDD",
-          signature(x = "SparkDataFrame"),
-          function(x) {
-            jrdd <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToRowRDD", x@sdf)
-            colNames <- callJMethod(x@sdf, "columns")
-            rdd <- RDD(jrdd, serializedMode = "row")
-            lapply(rdd, function(row) {
-              names(row) <- colNames
-              row
-            })
-          })
-
 #' GroupBy
 #'
 #' Groups the SparkDataFrame using the specified columns, so we can run aggregation on them.
@@ -1742,74 +1716,6 @@ setMethod("gapplyCollect",
             grouped <- do.call("groupBy", c(x, cols))
             gapplyCollect(grouped, func)
           })
-
-############################## RDD Map Functions ##################################
-# All of the following functions mirror the existing RDD map functions,           #
-# but allow for use with DataFrames by first converting to an RRDD before calling #
-# the requested map function.                                                     #
-###################################################################################
-
-#' @rdname lapply
-#' @noRd
-setMethod("lapply",
-          signature(X = "SparkDataFrame", FUN = "function"),
-          function(X, FUN) {
-            rdd <- toRDD(X)
-            lapply(rdd, FUN)
-          })
-
-#' @rdname lapply
-#' @noRd
-setMethod("map",
-          signature(X = "SparkDataFrame", FUN = "function"),
-          function(X, FUN) {
-            lapply(X, FUN)
-          })
-
-#' @rdname flatMap
-#' @noRd
-setMethod("flatMap",
-          signature(X = "SparkDataFrame", FUN = "function"),
-          function(X, FUN) {
-            rdd <- toRDD(X)
-            flatMap(rdd, FUN)
-          })
-
-#' @rdname lapplyPartition
-#' @noRd
-setMethod("lapplyPartition",
-          signature(X = "SparkDataFrame", FUN = "function"),
-          function(X, FUN) {
-            rdd <- toRDD(X)
-            lapplyPartition(rdd, FUN)
-          })
-
-#' @rdname lapplyPartition
-#' @noRd
-setMethod("mapPartitions",
-          signature(X = "SparkDataFrame", FUN = "function"),
-          function(X, FUN) {
-            lapplyPartition(X, FUN)
-          })
-
-#' @rdname foreach
-#' @noRd
-setMethod("foreach",
-          signature(x = "SparkDataFrame", func = "function"),
-          function(x, func) {
-            rdd <- toRDD(x)
-            foreach(rdd, func)
-          })
-
-#' @rdname foreach
-#' @noRd
-setMethod("foreachPartition",
-          signature(x = "SparkDataFrame", func = "function"),
-          function(x, func) {
-            rdd <- toRDD(x)
-            foreachPartition(rdd, func)
-          })
-
 
 ############################## SELECT ##################################
 

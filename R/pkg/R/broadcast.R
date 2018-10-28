@@ -45,22 +45,6 @@ Broadcast <- function(id, value, jBroadcastRef, objName) {
   new("Broadcast", id = id)
 }
 
-# @description
-# \code{value} can be used to get the value of a broadcast variable inside
-# a distributed function.
-#
-# @param bcast The broadcast variable to get
-# @rdname broadcast
-setMethod("value",
-          signature(bcast = "Broadcast"),
-          function(bcast) {
-            if (exists(bcast@id, envir = .broadcastValues)) {
-              get(bcast@id, envir = .broadcastValues)
-            } else {
-              NULL
-            }
-          })
-
 # Internal function to set values of a broadcast variable.
 #
 # This function is used internally by Spark to set the value of a broadcast

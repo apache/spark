@@ -210,59 +210,10 @@ test_that("structField type strings", {
   }
 })
 
-test_that("create DataFrame from RDD", {
-  rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
-  df <- SparkR::createDataFrame(rdd, list("a", "b"))
-  dfAsDF <- as.DataFrame(rdd, list("a", "b"))
-  expect_is(df, "SparkDataFrame")
-  expect_is(dfAsDF, "SparkDataFrame")
-  expect_equal(count(df), 10)
-  expect_equal(count(dfAsDF), 10)
-  expect_equal(nrow(df), 10)
-  expect_equal(nrow(dfAsDF), 10)
-  expect_equal(ncol(df), 2)
-  expect_equal(ncol(dfAsDF), 2)
-  expect_equal(dim(df), c(10, 2))
-  expect_equal(dim(dfAsDF), c(10, 2))
-  expect_equal(columns(df), c("a", "b"))
-  expect_equal(columns(dfAsDF), c("a", "b"))
-  expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
-  expect_equal(dtypes(dfAsDF), list(c("a", "int"), c("b", "string")))
-
-  df <- createDataFrame(rdd)
-  dfAsDF <- as.DataFrame(rdd)
-  expect_is(df, "SparkDataFrame")
-  expect_is(dfAsDF, "SparkDataFrame")
-  expect_equal(columns(df), c("_1", "_2"))
-  expect_equal(columns(dfAsDF), c("_1", "_2"))
-
-  schema <- structType(structField(x = "a", type = "integer", nullable = TRUE),
-                        structField(x = "b", type = "string", nullable = TRUE))
-  df <- createDataFrame(rdd, schema)
-  expect_is(df, "SparkDataFrame")
-  expect_equal(columns(df), c("a", "b"))
-  expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
-
-  rdd <- lapply(parallelize(sc, 1:10), function(x) { list(a = x, b = as.character(x)) })
-  df <- createDataFrame(rdd)
-  expect_is(df, "SparkDataFrame")
-  expect_equal(count(df), 10)
-  expect_equal(columns(df), c("a", "b"))
-  expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
-
+test_that("create DataFrame", {
   schema <- structType(structField("name", "string"), structField("age", "integer"),
                        structField("height", "float"))
   df <- read.df(jsonPathNa, "json", schema)
-  df2 <- createDataFrame(toRDD(df), schema)
-  df2AsDF <- as.DataFrame(toRDD(df), schema)
-  expect_equal(columns(df2), c("name", "age", "height"))
-  expect_equal(columns(df2AsDF), c("name", "age", "height"))
-  expect_equal(dtypes(df2), list(c("name", "string"), c("age", "int"), c("height", "float")))
-  expect_equal(dtypes(df2AsDF), list(c("name", "string"), c("age", "int"), c("height", "float")))
-  expect_equal(as.list(collect(where(df2, df2$name == "Bob"))),
-               list(name = "Bob", age = 16, height = 176.5))
-  expect_equal(as.list(collect(where(df2AsDF, df2AsDF$name == "Bob"))),
-               list(name = "Bob", age = 16, height = 176.5))
 
   localDF <- data.frame(name = c("John", "Smith", "Sarah"),
                         age = c(19L, 23L, 18L),
@@ -375,20 +326,10 @@ test_that("Support other types for options", {
 })
 
 test_that("convert NAs to null type in DataFrames", {
-  rdd <- parallelize(sc, list(list(1L, 2L), list(NA, 4L)))
-  df <- createDataFrame(rdd, list("a", "b"))
-  expect_true(is.na(collect(df)[2, "a"]))
-  expect_equal(collect(df)[2, "b"], 4L)
-
   l <- data.frame(x = 1L, y = c(1L, NA_integer_, 3L))
   df <- createDataFrame(l)
   expect_equal(collect(df)[2, "x"], 1L)
   expect_true(is.na(collect(df)[2, "y"]))
-
-  rdd <- parallelize(sc, list(list(1, 2), list(NA, 4)))
-  df <- createDataFrame(rdd, list("a", "b"))
-  expect_true(is.na(collect(df)[2, "a"]))
-  expect_equal(collect(df)[2, "b"], 4)
 
   l <- data.frame(x = 1, y = c(1, NA_real_, 3))
   df <- createDataFrame(l)
@@ -409,33 +350,6 @@ test_that("convert NAs to null type in DataFrames", {
   df <- createDataFrame(l)
   expect_true(is.na(collect(df)[3, "_1"]))
   expect_equal(collect(df)[4, "_1"], TRUE)
-})
-
-test_that("toDF", {
-  rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
-  df <- toDF(rdd, list("a", "b"))
-  expect_is(df, "SparkDataFrame")
-  expect_equal(count(df), 10)
-  expect_equal(columns(df), c("a", "b"))
-  expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
-
-  df <- toDF(rdd)
-  expect_is(df, "SparkDataFrame")
-  expect_equal(columns(df), c("_1", "_2"))
-
-  schema <- structType(structField(x = "a", type = "integer", nullable = TRUE),
-                        structField(x = "b", type = "string", nullable = TRUE))
-  df <- toDF(rdd, schema)
-  expect_is(df, "SparkDataFrame")
-  expect_equal(columns(df), c("a", "b"))
-  expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
-
-  rdd <- lapply(parallelize(sc, 1:10), function(x) { list(a = x, b = as.character(x)) })
-  df <- toDF(rdd)
-  expect_is(df, "SparkDataFrame")
-  expect_equal(count(df), 10)
-  expect_equal(columns(df), c("a", "b"))
-  expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
 })
 
 test_that("create DataFrame from list or data.frame", {
@@ -742,76 +656,6 @@ test_that("tableToDF() returns a new DataFrame", {
   expect_true(dropTempView("table1"))
 })
 
-test_that("toRDD() returns an RRDD", {
-  df <- read.json(jsonPath)
-  testRDD <- toRDD(df)
-  expect_is(testRDD, "RDD")
-  expect_equal(countRDD(testRDD), 3)
-})
-
-test_that("union on two RDDs created from DataFrames returns an RRDD", {
-  df <- read.json(jsonPath)
-  RDD1 <- toRDD(df)
-  RDD2 <- toRDD(df)
-  unioned <- unionRDD(RDD1, RDD2)
-  expect_is(unioned, "RDD")
-  expect_equal(getSerializedMode(unioned), "byte")
-  expect_equal(collectRDD(unioned)[[2]]$name, "Andy")
-})
-
-test_that("union on mixed serialization types correctly returns a byte RRDD", {
-  # Byte RDD
-  nums <- 1:10
-  rdd <- parallelize(sc, nums, 2L)
-
-  # String RDD
-  textLines <- c("Michael",
-                 "Andy, 30",
-                 "Justin, 19")
-  textPath <- tempfile(pattern = "sparkr-textLines", fileext = ".tmp")
-  writeLines(textLines, textPath)
-  textRDD <- textFile(sc, textPath)
-
-  df <- read.json(jsonPath)
-  dfRDD <- toRDD(df)
-
-  unionByte <- unionRDD(rdd, dfRDD)
-  expect_is(unionByte, "RDD")
-  expect_equal(getSerializedMode(unionByte), "byte")
-  expect_equal(collectRDD(unionByte)[[1]], 1)
-  expect_equal(collectRDD(unionByte)[[12]]$name, "Andy")
-
-  unionString <- unionRDD(textRDD, dfRDD)
-  expect_is(unionString, "RDD")
-  expect_equal(getSerializedMode(unionString), "byte")
-  expect_equal(collectRDD(unionString)[[1]], "Michael")
-  expect_equal(collectRDD(unionString)[[5]]$name, "Andy")
-})
-
-test_that("objectFile() works with row serialization", {
-  objectPath <- tempfile(pattern = "spark-test", fileext = ".tmp")
-  df <- read.json(jsonPath)
-  dfRDD <- toRDD(df)
-  saveAsObjectFile(coalesceRDD(dfRDD, 1L), objectPath)
-  objectIn <- objectFile(sc, objectPath)
-
-  expect_is(objectIn, "RDD")
-  expect_equal(getSerializedMode(objectIn), "byte")
-  expect_equal(collectRDD(objectIn)[[2]]$age, 30)
-})
-
-test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
-  df <- read.json(jsonPath)
-  testRDD <- lapply(df, function(row) {
-    row$newCol <- row$age + 5
-    row
-    })
-  expect_is(testRDD, "RDD")
-  collected <- collectRDD(testRDD)
-  expect_equal(collected[[1]]$name, "Michael")
-  expect_equal(collected[[2]]$newCol, 35)
-})
-
 test_that("collect() returns a data.frame", {
   df <- read.json(jsonPath)
   rdf <- collect(df)
@@ -866,23 +710,6 @@ test_that("collect() support Unicode characters", {
 
   df1 <- createDataFrame(rdf)
   expect_equal(collect(where(df1, df1$name == markUtf8("您好")))$name, markUtf8("您好"))
-})
-
-test_that("multiple pipeline transformations result in an RDD with the correct values", {
-  df <- read.json(jsonPath)
-  first <- lapply(df, function(row) {
-    row$age <- row$age + 5
-    row
-  })
-  second <- lapply(first, function(row) {
-    row$testCol <- if (row$age == 35 && !is.na(row$age)) TRUE else FALSE
-    row
-  })
-  expect_is(second, "RDD")
-  expect_equal(countRDD(second), 3)
-  expect_equal(collectRDD(second)[[2]]$age, 35)
-  expect_true(collectRDD(second)[[2]]$testCol)
-  expect_false(collectRDD(second)[[3]]$testCol)
 })
 
 test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", {
@@ -2864,10 +2691,8 @@ test_that("fillna() on a DataFrame", {
 })
 
 test_that("crosstab() on a DataFrame", {
-  rdd <- lapply(parallelize(sc, 0:3), function(x) {
-    list(paste0("a", x %% 3), paste0("b", x %% 2))
-  })
-  df <- toDF(rdd, list("a", "b"))
+  d <- data.frame("a" = c("a0", "a1", "a2", "a0"), "b" = c("b0", "b1", "b0", "b1"))
+  df <- createDataFrame(d, c("a", "b"))
   ct <- crosstab(df, "a", "b")
   ordered <- ct[order(ct$a_b), ]
   row.names(ordered) <- NULL

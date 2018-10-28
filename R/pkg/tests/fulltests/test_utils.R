@@ -39,21 +39,6 @@ test_that("convertJListToRList() gives back (deserializes) the original JLists
   expect_equal(rList, strs)
 })
 
-test_that("serializeToBytes on RDD", {
-  # File content
-  mockFile <- c("Spark is pretty.", "Spark is awesome.")
-  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
-  writeLines(mockFile, fileName)
-
-  text.rdd <- textFile(sc, fileName)
-  expect_equal(getSerializedMode(text.rdd), "string")
-  ser.rdd <- serializeToBytes(text.rdd)
-  expect_equal(collectRDD(ser.rdd), as.list(mockFile))
-  expect_equal(getSerializedMode(ser.rdd), "byte")
-
-  unlink(fileName)
-})
-
 test_that("cleanClosure on R functions", {
   y <- c(1, 2, 3)
   g <- function(x) { x + 1 }
@@ -166,10 +151,6 @@ test_that("captureJVMException", {
                           captureJVMException(e, method)
                         }),
                "parse error - .*DataType unknown.*not supported.")
-})
-
-test_that("hashCode", {
-  expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
 })
 
 test_that("overrideEnvs", {
