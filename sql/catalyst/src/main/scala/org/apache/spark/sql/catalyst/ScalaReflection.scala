@@ -308,7 +308,7 @@ object ScalaReflection extends ScalaReflection {
         val arrayData = UnresolvedMapObjects(mapFunction, path)
         val arrayCls = arrayClassFor(elementType)
 
-        if (elementNullable) {
+        if (elementNullable || isValueClass(elementType)) {
           Invoke(arrayData, "array", arrayCls, returnNullable = false)
         } else {
           val primitiveMethod = elementType match {
@@ -392,16 +392,17 @@ object ScalaReflection extends ScalaReflection {
         // Nested value class is treated as its underlying type
         // because the compiler will convert value class in the schema to
         // its underlying type.
-        // However, for top-level value class, if it is used as another type
-        // (e.g. as its parent trait or generic), the compiler keeps the class
-        // so we must provide an instance of the class too. In other cases,
-        // the compiler will handle wrapping/unwrapping for us automatically.
+        // However, for value class that is top-level or array element,
+        // if it is used as another type (e.g. as its parent trait or generic),
+        // the compiler keeps the class so we must provide an instance of the
+        // class too. In other cases, the compiler will handle wrapping/unwrapping
+        // for us automatically.
         val arg = deserializerFor(underlyingType, path, newTypePath)
-        if (walkedTypePath.length > 1) {
-          arg
-        } else {
+        if (walkedTypePath.length == 1 || walkedTypePath.head.contains("array element")) {
           val cls = getClassFromType(t)
           NewInstance(cls, Seq(arg), ObjectType(cls), propagateNull = false)
+        } else {
+          arg
         }
 
       case t if definedByConstructorParams(t) =>

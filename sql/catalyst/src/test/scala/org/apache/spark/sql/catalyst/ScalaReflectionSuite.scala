@@ -388,4 +388,11 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("wrappedStr", StringType, nullable = true))),
       nullable = true))
   }
+
+  test("schema for array of value class") {
+    val schema = schemaFor[Array[TestingValueClass.IntWrapper]]
+    assert(schema === Schema(
+      ArrayType(IntegerType, containsNull = false),
+      nullable = true))
+  }
 }
