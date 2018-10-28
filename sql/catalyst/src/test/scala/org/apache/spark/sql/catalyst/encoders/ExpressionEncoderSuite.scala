@@ -321,11 +321,11 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(
     Array(new IntWrapper(1), new IntWrapper(2), new IntWrapper(3)),
     "array of value class")
-  encodeDecodeTest(Array.empty[StringWrapper], "empty array of value class")
+  encodeDecodeTest(Array.empty[IntWrapper], "empty array of value class")
   encodeDecodeTest(
     Seq(new IntWrapper(1), new IntWrapper(2), new IntWrapper(3)),
     "seq of value class")
-  encodeDecodeTest(Seq.empty[StringWrapper], "empty seq of value class")
+  encodeDecodeTest(Seq.empty[IntWrapper], "empty seq of value class")
 
   encodeDecodeTest(Option(31), "option of int")
   encodeDecodeTest(Option.empty[Int], "empty option of int")
