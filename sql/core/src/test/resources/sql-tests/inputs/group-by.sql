@@ -80,3 +80,69 @@ SELECT 1 FROM range(10) HAVING true;
 SELECT 1 FROM range(10) HAVING MAX(id) > 0;
 
 SELECT id FROM range(10) HAVING id > 0;
+
+-- Test data
+CREATE OR REPLACE TEMPORARY VIEW test_agg AS SELECT * FROM VALUES
+  (1, true), (1, false),
+  (2, true),
+  (3, false), (3, null),
+  (4, null), (4, null),
+  (5, null), (5, true), (5, false) AS test_agg(k, v);
+
+-- empty table
+SELECT every(v), some(v), any(v) FROM test_agg WHERE 1 = 0;
+
+-- all null values
+SELECT every(v), some(v), any(v) FROM test_agg WHERE k = 4;
+
+-- aggregates are null Filtering
+SELECT every(v), some(v), any(v) FROM test_agg WHERE k = 5;
+
+-- group by
+SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k;
+
+-- having
+SELECT k, every(v) FROM test_agg GROUP BY k HAVING every(v) = false;
+SELECT k, every(v) FROM test_agg GROUP BY k HAVING every(v) IS NULL;
+
+-- basic subquery path to make sure rewrite happens in both parent and child plans.
+SELECT k,
+       Every(v) AS every
+FROM   test_agg
+WHERE  k = 2
+       AND v IN (SELECT Any(v)
+                 FROM   test_agg
+                 WHERE  k = 1)
+GROUP  BY k;
+
+-- basic subquery path to make sure rewrite happens in both parent and child plans.
+SELECT k,
+       Every(v) AS every
+FROM   test_agg
+WHERE  k = 2
+       AND v IN (SELECT Every(v)
+                 FROM   test_agg
+                 WHERE  k = 1)
+GROUP  BY k;
+
+-- input type checking Int
+SELECT every(1);
+
+-- input type checking Short
+SELECT some(1S);
+
+-- input type checking Long
+SELECT any(1L);
+
+-- input type checking String
+SELECT every("true");
+
+-- every/some/any aggregates are supported as windows expression.
+SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
+SELECT k, v, some(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
+SELECT k, v, any(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;
+
+-- simple explain of queries having every/some/any agregates. Optimized
+-- plan should show the rewritten aggregate expression.
+EXPLAIN EXTENDED SELECT k, every(v), some(v), any(v) FROM test_agg GROUP BY k;
+
