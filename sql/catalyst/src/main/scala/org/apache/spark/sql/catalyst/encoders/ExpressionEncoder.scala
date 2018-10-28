@@ -119,10 +119,9 @@ object ExpressionEncoder {
     }
 
     val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>
-      val getColumnsByOrdinals = enc.objDeserializer.collect { case c: GetColumnByOrdinal => c }
-        .distinct
-      assert(getColumnsByOrdinals.size == 1, "object deserializer should have only one " +
-        s"`GetColumnByOrdinal`, but there are ${getColumnsByOrdinals.size}")
+      val getColExprs = enc.objDeserializer.collect { case c: GetColumnByOrdinal => c }.distinct
+      assert(getColExprs.size == 1, "object deserializer should have only one " +
+        s"`GetColumnByOrdinal`, but there are ${getColExprs.size}")
 
       val input = GetStructField(GetColumnByOrdinal(0, schema), index)
       val newDeserializer = enc.objDeserializer.transformUp {
@@ -216,7 +215,6 @@ case class ExpressionEncoder[T](
       }
       nullSafeSerializer match {
         case If(_: IsNull, _, s: CreateNamedStruct) => s
-        case s: CreateNamedStruct => s
         case _ =>
           throw new RuntimeException(s"class $clsName has unexpected serializer: $objSerializer")
       }

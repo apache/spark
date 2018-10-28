@@ -164,6 +164,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(ClassData("a", 2))))
   }
 
+  test("as map of case class - reorder fields by name") {
+    val df = spark.range(3).select(map(lit(1), struct($"id".cast("int").as("b"), lit("a").as("a"))))
+    val ds = df.as[Map[Int, ClassData]]
+    assert(ds.collect() === Array(
+      Map(1 -> ClassData("a", 0)),
+      Map(1 -> ClassData("a", 1)),
+      Map(1 -> ClassData("a", 2))))
+  }
+
   test("map") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDataset(
