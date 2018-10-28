@@ -242,8 +242,12 @@ case class SpecifiedWindowFrame(
     case e: Expression => e.sql + " FOLLOWING"
   }
 
-  private def isGreaterThan(l: Expression, r: Expression): Boolean = {
-    GreaterThan(l, r).eval().asInstanceOf[Boolean]
+  // Check whether the left boundary value is greater than the right boundary value. It's required
+  // that the both expressions have the same data type.
+  // Since CalendarIntervalType is not comparable, we only compare expressions that are AtomicType.
+  private def isGreaterThan(l: Expression, r: Expression): Boolean = l.dataType match {
+    case _: AtomicType => GreaterThan(l, r).eval().asInstanceOf[Boolean]
+    case _ => false
   }
 
   private def checkBoundary(b: Expression, location: String): TypeCheckResult = b match {
