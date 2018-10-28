@@ -16,7 +16,15 @@
 #
 
 # The jrdd accessor function.
+setGeneric("collectRDD", function(x, ...) { standardGeneric("collectRDD") })
+
+setGeneric("firstRDD", function(x, ...) { standardGeneric("firstRDD") })
+
 setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
+
+setGeneric("getNumPartitionsRDD", function(x) { standardGeneric("getNumPartitionsRDD") })
+
+setGeneric("takeRDD", function(x, num) { standardGeneric("takeRDD") })
 
 # @rdname crosstab
 setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
