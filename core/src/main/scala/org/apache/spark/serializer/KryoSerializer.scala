@@ -94,8 +94,6 @@ class KryoSerializer(conf: SparkConf)
       new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
     }
 
-
-
   @transient
   private lazy val factory: KryoFactory = new KryoFactory() {
     override def create: Kryo = {
