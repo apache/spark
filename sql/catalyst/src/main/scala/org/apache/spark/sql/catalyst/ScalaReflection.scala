@@ -397,7 +397,7 @@ object ScalaReflection extends ScalaReflection {
         // so we must provide an instance of the class too. In other cases,
         // the compiler will handle wrapping/unwrapping for us automatically.
         val arg = deserializerFor(underlyingType, path, newTypePath)
-        if (path.isDefined) {
+        if (walkedTypePath.length > 1) {
           arg
         } else {
           val cls = getClassFromType(t)
