@@ -25,6 +25,9 @@ import warnings
 if sys.version < "3":
     from itertools import imap as map
 
+if sys.version >= '3':
+    basestring = str
+
 from pyspark import since, SparkContext
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq, _create_column_from_literal
@@ -2326,7 +2329,7 @@ def schema_of_json(json):
     >>> df.select(schema_of_json('{"a": 0}').alias("json")).collect()
     [Row(json=u'struct<a:bigint>')]
     """
-    if isinstance(json, str):
+    if isinstance(json, basestring):
         col = _create_column_from_literal(json)
     elif isinstance(json, Column):
         col = _to_java_column(json)
