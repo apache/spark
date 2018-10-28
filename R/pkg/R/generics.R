@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 
+# The jrdd accessor function.
+setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
+
 # @rdname crosstab
 setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 
