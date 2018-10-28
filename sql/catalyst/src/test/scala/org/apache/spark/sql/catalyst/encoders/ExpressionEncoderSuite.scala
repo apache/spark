@@ -312,11 +312,11 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     PrimitiveValueClass(42), "primitive value class")
   encodeDecodeTest(
     ReferenceValueClass(ReferenceValueClass.Container(1)), "reference value class")
-  encodeDecodeTest(StringWrapper("a"), "value class string")
-  encodeDecodeTest(ValueContainer(1, StringWrapper("b")), "value class nested")
+  encodeDecodeTest(StringWrapper("a"), "string value class")
+  encodeDecodeTest(ValueContainer(1, StringWrapper("b")), "nested value class")
   encodeDecodeTest(
     ComplexValueClassContainer(1, ValueContainer(2, StringWrapper("b")), new IntWrapper(3)),
-    "value class complex")
+    "complex value class")
 
   encodeDecodeTest(Option(31), "option of int")
   encodeDecodeTest(Option.empty[Int], "empty option of int")
