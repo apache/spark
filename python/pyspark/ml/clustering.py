@@ -713,7 +713,7 @@ class BisectingKMeansSummary(ClusteringSummary):
     """
 
     @property
-    @since("2.4.0")
+    @since("3.0.0")
     def trainingCost(self):
         """
         Sum of squared distances to the nearest centroid for all points in the training dataset.

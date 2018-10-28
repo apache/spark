@@ -318,5 +318,5 @@ class BisectingKMeansSummary private[clustering] (
     featuresCol: String,
     k: Int,
     numIter: Int,
-    @Since("2.4.0") val trainingCost: Double)
+    @Since("3.0.0") val trainingCost: Double)
   extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)
