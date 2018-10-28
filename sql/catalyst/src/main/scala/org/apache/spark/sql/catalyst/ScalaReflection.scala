@@ -143,8 +143,7 @@ object ScalaReflection extends ScalaReflection {
       walkedTypePath: Seq[String]): Expression = expected match {
     case _: StructType => expr
     case _: ArrayType => expr
-    // TODO: ideally we should also skip MapType, but nested StructType inside MapType is rare and
-    // it's not trivial to support by-name resolution for StructType inside MapType.
+    case _: MapType => expr
     case _ => UpCast(expr, expected, walkedTypePath)
   }
 
@@ -163,8 +162,8 @@ object ScalaReflection extends ScalaReflection {
     val Schema(dataType, nullable) = schemaFor(tpe)
 
     // Assumes we are deserializing the first column of a row.
-    val input = upCastToExpectedType(GetColumnByOrdinal(0, dataType), dataType,
-      walkedTypePath)
+    val input = upCastToExpectedType(
+      GetColumnByOrdinal(0, dataType), dataType, walkedTypePath)
 
     val expr = deserializerFor(tpe, input, walkedTypePath)
     if (nullable) {
@@ -350,10 +349,10 @@ object ScalaReflection extends ScalaReflection {
         // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
-        CatalystToExternalMap(
+        UnresolvedCatalystToExternalMap(
+          path,
           p => deserializerFor(keyType, p, walkedTypePath),
           p => deserializerFor(valueType, p, walkedTypePath),
-          path,
           mirror.runtimeClass(t.typeSymbol.asClass)
         )
 
@@ -431,8 +430,8 @@ object ScalaReflection extends ScalaReflection {
     val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
 
     // The input object to `ExpressionEncoder` is located at first column of an row.
-    val inputObject = BoundReference(0, dataTypeFor(tpe),
-      nullable = !tpe.typeSymbol.asClass.isPrimitive)
+    val isPrimitive = tpe.typeSymbol.asClass.isPrimitive
+    val inputObject = BoundReference(0, dataTypeFor(tpe), nullable = !isPrimitive)
 
     serializerFor(inputObject, tpe, walkedTypePath)
   }
