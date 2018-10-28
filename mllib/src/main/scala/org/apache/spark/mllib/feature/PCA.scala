@@ -45,11 +45,6 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
     require(k <= numFeatures,
       s"source vector size $numFeatures must be no less than k=$k")
 
-    require(PCAUtil.memoryCost(k, numFeatures) < Int.MaxValue,
-      "The param k and numFeatures is too large for SVD computation. " +
-      "Try reducing the parameter k for PCA, or reduce the input feature " +
-      "vector dimension to make this tractable.")
-
     val mat = if (numFeatures > 65535) {
       val meanVector = Statistics.colStats(sources).mean
       val meanCentredRdd = sources.map { rowVector =>
@@ -57,6 +52,11 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       }
       new RowMatrix(meanCentredRdd)
     } else {
+      require(PCAUtil.memoryCost(k, numFeatures) < Int.MaxValue,
+        "The param k and numFeatures is too large for SVD computation. " +
+          "Try reducing the parameter k for PCA, or reduce the input feature " +
+          "vector dimension to make this tractable.")
+
       new RowMatrix(sources)
     }
 

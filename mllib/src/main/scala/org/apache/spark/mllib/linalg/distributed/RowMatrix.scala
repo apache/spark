@@ -370,14 +370,13 @@ class RowMatrix @Since("1.0.0") (
    * Each column corresponds for one principal component,
    * and the columns are in descending order of component variance.
    * The row data do not need to be "centered" first; it is not necessary for
-   * the mean of each column to be 0.
+   * the mean of each column to be 0. But, if the number of columns more than
+   * 65535, then the data need to be "centered".
    *
    * @param k number of top principal components.
    * @return a matrix of size n-by-k, whose columns are principal components, and
    * a vector of values which indicate how much variance each principal component
    * explains
-   *
-   * @note This cannot be computed on matrices with more than 65535 columns.
    */
   @Since("1.6.0")
   def computePrincipalComponentsAndExplainedVariance(k: Int): (Matrix, Vector) = {
