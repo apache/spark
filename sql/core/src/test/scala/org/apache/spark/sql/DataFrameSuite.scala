@@ -2580,10 +2580,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25816 ResolveReferences works with nested extractors") {
-    val df0 = Seq((1, Map(1 -> "a")), (2, Map(2 -> "b"))).toDF("1", "2")
-    val df1 = df0.select($"1".as("2"), $"2".as("1"))
-    val df2 = df1.filter($"1"(map_keys($"1")(0)) > "a")
+    val df = Seq((1, Map(1 -> "a")), (2, Map(2 -> "b"))).toDF("key", "map")
+    val swappedDf = df.select($"key".as("map"), $"map".as("key"))
 
-    checkAnswer(df2, Row(2, Map(2 -> "b")))
+    checkAnswer(swappedDf.filter($"key"($"map") > "a"), Row(2, Map(2 -> "b")))
   }
 }
