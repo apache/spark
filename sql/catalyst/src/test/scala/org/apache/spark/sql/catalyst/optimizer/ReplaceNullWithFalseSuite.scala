@@ -42,12 +42,12 @@ class ReplaceNullWithFalseSuite extends PlanTest {
   private val testRelation = LocalRelation('i.int, 'b.boolean)
   private val anotherTestRelation = LocalRelation('d.int)
 
-  test("successful replacement of null literals in filter and join conditions (1)") {
+  test("replace null inside filter and join conditions") {
     testFilter(originalCond = Literal(null), expectedCond = FalseLiteral)
     testJoin(originalCond = Literal(null), expectedCond = FalseLiteral)
   }
 
-  test("successful replacement of null literals in filter and join conditions (2)") {
+  test("replace null in branches of If") {
     val originalCond = If(
       UnresolvedAttribute("i") > Literal(10),
       FalseLiteral,
@@ -56,7 +56,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond = FalseLiteral)
   }
 
-  test("successful replacement of null literals in filter and join conditions (3)") {
+  test("replace nulls in nested expressions in branches of If") {
     val originalCond = If(
       UnresolvedAttribute("i") > Literal(10),
       TrueLiteral && Literal(null, BooleanType),
@@ -65,7 +65,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond = FalseLiteral)
   }
 
-  test("successful replacement of null literals in filter and join conditions (4)") {
+  test("replace null in elseValue of CaseWhen") {
     val branches = Seq(
       (UnresolvedAttribute("i") < Literal(10)) -> TrueLiteral,
       (UnresolvedAttribute("i") > Literal(40)) -> FalseLiteral)
@@ -75,7 +75,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond)
   }
 
-  test("successful replacement of null literals in filter and join conditions (5)") {
+  test("replace null in branch values of CaseWhen") {
     val branches = Seq(
       (UnresolvedAttribute("i") < Literal(10)) -> Literal(null, BooleanType),
       (UnresolvedAttribute("i") > Literal(40)) -> FalseLiteral)
@@ -84,7 +84,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond = FalseLiteral)
   }
 
-  test("successful replacement of null literals in filter and join conditions (6)") {
+  test("replace null in branches of If inside CaseWhen") {
     val originalBranches = Seq(
       (UnresolvedAttribute("i") < Literal(10)) ->
         If(UnresolvedAttribute("i") < Literal(20), Literal(null, BooleanType), FalseLiteral),
@@ -100,7 +100,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond)
   }
 
-  test("successful replacement of null literals in filter and join conditions (7)") {
+  test("replace null in complex CaseWhen expressions") {
     val originalBranches = Seq(
       (UnresolvedAttribute("i") < Literal(10)) -> TrueLiteral,
       (Literal(6) <= Literal(1)) -> FalseLiteral,
@@ -119,20 +119,20 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond)
   }
 
-  test("successful replacement of null literals in filter and join conditions (8)") {
+  test("replace null in Or") {
     val originalCond = Or(UnresolvedAttribute("b"), Literal(null))
     val expectedCond = UnresolvedAttribute("b")
     testFilter(originalCond, expectedCond)
     testJoin(originalCond, expectedCond)
   }
 
-  test("successful replacement of null literals in filter and join conditions (9)") {
+  test("replace null in And") {
     val originalCond = And(UnresolvedAttribute("b"), Literal(null))
     testFilter(originalCond, expectedCond = FalseLiteral)
     testJoin(originalCond, expectedCond = FalseLiteral)
   }
 
-  test("successful replacement of null literals in filter and join conditions (10)") {
+  test("replace nulls in nested And/Or expressions") {
     val originalCond = And(
       And(UnresolvedAttribute("b"), Literal(null)),
       Or(Literal(null), And(Literal(null), And(UnresolvedAttribute("b"), Literal(null)))))
@@ -140,7 +140,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond = FalseLiteral)
   }
 
-  test("successful replacement of null literals in filter and join conditions (11)") {
+  test("replace null in And inside branches of If") {
     val originalCond = If(
       UnresolvedAttribute("i") > Literal(10),
       FalseLiteral,
@@ -149,7 +149,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond = FalseLiteral)
   }
 
-  test("successful replacement of null literals in filter and join conditions (12)") {
+  test("replace null in branches of If inside And") {
     val originalCond = And(
       UnresolvedAttribute("b"),
       If(
@@ -160,7 +160,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond = FalseLiteral)
   }
 
-  test("successful replacement of null literals in filter and join conditions (13)") {
+  test("replace null in branches of If inside another If") {
     val originalCond = If(
       If(UnresolvedAttribute("b"), Literal(null), FalseLiteral),
       TrueLiteral,
@@ -169,14 +169,14 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond = FalseLiteral)
   }
 
-  test("successful replacement of null literals in filter and join conditions (14)") {
+  test("replace null in CaseWhen inside another CaseWhen") {
     val nestedCaseWhen = CaseWhen(Seq(UnresolvedAttribute("b") -> FalseLiteral), Literal(null))
     val originalCond = CaseWhen(Seq(nestedCaseWhen -> TrueLiteral), Literal(null))
     testFilter(originalCond, expectedCond = FalseLiteral)
     testJoin(originalCond, expectedCond = FalseLiteral)
   }
 
-  test("inability to replace null literals in filter and join conditions (1)") {
+  test("inability to replace null in non-boolean branches of If") {
     val condition = If(
       UnresolvedAttribute("i") > Literal(10),
       Literal(5) > If(
@@ -188,7 +188,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond = condition, expectedCond = condition)
   }
 
-  test("inability to replace null literals in filter and join conditions (2)") {
+  test("inability to replace null in non-boolean values of CaseWhen") {
     val nestedCaseWhen = CaseWhen(
       Seq((UnresolvedAttribute("i") > Literal(20)) -> Literal(2)),
       Literal(null, IntegerType))
@@ -202,7 +202,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond = condition, expectedCond = condition)
   }
 
-  test("inability to replace null literals in filter and join conditions (3)") {
+  test("inability to replace null in non-boolean branches of If inside another If") {
     val condition = If(
       Literal(5) > If(
         UnresolvedAttribute("i") === Literal(15),
@@ -214,7 +214,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond = condition, expectedCond = condition)
   }
 
-  test("successful replacement of null literals in join conditions (1)") {
+  test("replace null in If used as a join condition") {
     // this test is only for joins as the condition involves columns from different relations
     val originalCond = If(
       UnresolvedAttribute("d") > UnresolvedAttribute("i"),
@@ -223,7 +223,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond, expectedCond = FalseLiteral)
   }
 
-  test("successful replacement of null literals in join conditions (2)") {
+  test("replace null in CaseWhen used as a join condition") {
     // this test is only for joins as the condition involves columns from different relations
     val originalBranches = Seq(
       (UnresolvedAttribute("d") > UnresolvedAttribute("i")) -> Literal(null),
@@ -238,7 +238,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
       expectedCond = CaseWhen(expectedBranches, FalseLiteral))
   }
 
-  test("inability to replace null literals in join conditions (1)") {
+  test("inability to replace null in CaseWhen inside EqualTo used as a join condition") {
     // this test is only for joins as the condition involves columns from different relations
     val branches = Seq(
       (UnresolvedAttribute("d") > UnresolvedAttribute("i")) -> Literal(null, BooleanType),
@@ -247,14 +247,14 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testJoin(originalCond = condition, expectedCond = condition)
   }
 
-  test("successful replacement of null literals in if predicates (1)") {
+  test("replace null in predicates of If") {
     val predicate = And(GreaterThan(UnresolvedAttribute("i"), Literal(0.5)), Literal(null))
     testProjection(
       originalExpr = If(predicate, Literal(5), Literal(1)).as("out"),
       expectedExpr = Literal(1).as("out"))
   }
 
-  test("successful replacement of null literals in if predicates (2)") {
+  test("replace null in predicates of If inside another If") {
     val predicate = If(
       And(GreaterThan(UnresolvedAttribute("i"), Literal(0.5)), Literal(null)),
       TrueLiteral,
@@ -264,7 +264,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
       expectedExpr = Literal(1).as("out"))
   }
 
-  test("inability to replace null literals in if predicates") {
+  test("inability to replace null in non-boolean expressions inside If predicates") {
     val predicate = GreaterThan(
       UnresolvedAttribute("i"),
       If(UnresolvedAttribute("b"), Literal(null, IntegerType), Literal(4)))
@@ -272,7 +272,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testProjection(originalExpr = column, expectedExpr = column)
   }
 
-  test("successful replacement of null literals in branches of case when (1)") {
+  test("replace null in conditions of CaseWhen") {
     val branches = Seq(
       And(GreaterThan(UnresolvedAttribute("i"), Literal(0.5)), Literal(null)) -> Literal(5))
     testProjection(
@@ -280,7 +280,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
       expectedExpr = Literal(2).as("out"))
   }
 
-  test("successful replacement of null literals in branches of case when (2)") {
+  test("replace null in conditions of CaseWhen inside another CaseWhen") {
     val nestedCaseWhen = CaseWhen(
       Seq(And(UnresolvedAttribute("b"), Literal(null)) -> Literal(5)),
       Literal(2))
@@ -290,7 +290,7 @@ class ReplaceNullWithFalseSuite extends PlanTest {
       expectedExpr = Literal(1).as("out"))
   }
 
-  test("inability to replace null literals in branches of case when") {
+  test("inability to replace null in non-boolean exprs inside CaseWhen conditions") {
     val condition = GreaterThan(
       UnresolvedAttribute("i"),
       If(UnresolvedAttribute("b"), Literal(null, IntegerType), Literal(4)))
@@ -320,5 +320,4 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     val expectedPlan = func(testRelation, expectedExpr).analyze
     comparePlans(optimizedPlan, expectedPlan)
   }
-
 }
