@@ -73,7 +73,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
@@ -92,7 +91,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map("secret-name" -> "secret-key"),
       Map.empty,
       Nil,
-      Seq.empty[String],
       None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -120,7 +118,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       volumeSpec :: Nil,
-      Seq.empty[String],
       None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -149,7 +146,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Some(HadoopConfSpec(Some("/var/hadoop-conf"), None)))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -177,7 +173,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Some(HadoopConfSpec(None, Some("pre-defined-onfigMapName"))))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),

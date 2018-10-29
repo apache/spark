@@ -69,17 +69,14 @@ private[spark] object Constants {
   val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
 
   // BINDINGS
-  val ENV_PYSPARK_PRIMARY = "PYSPARK_PRIMARY"
   val ENV_PYSPARK_FILES = "PYSPARK_FILES"
-  val ENV_PYSPARK_ARGS = "PYSPARK_APP_ARGS"
   val ENV_PYSPARK_MAJOR_PYTHON_VERSION = "PYSPARK_MAJOR_PYTHON_VERSION"
-  val ENV_R_PRIMARY = "R_PRIMARY"
-  val ENV_R_ARGS = "R_APP_ARGS"
 
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
   val MEMORY_OVERHEAD_MIN_MIB = 384L
+  val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
 
   // Hadoop Configuration
   val HADOOP_FILE_VOLUME = "hadoop-properties"
