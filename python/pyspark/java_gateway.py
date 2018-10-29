@@ -42,7 +42,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
     launch jvm gateway
     :param conf: spark configuration passed to spark-submit
     :param popen_kwargs: Dictionary of kwargs to pass to Popen when spawning
-        the py4j JVM. This is a developer feature intended for useful in
+        the py4j JVM. This is a developer feature intended for use in
         customizing how pyspark interacts with the py4j JVM (e.g., capturing
         stdout/stderr).
     :return:
