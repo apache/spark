@@ -45,7 +45,8 @@ logs and remains in "completed" state in the Kubernetes API until it's eventuall
 
 Note that in the completed state, the driver pod does *not* use any computational or memory resources.
 
-The driver and executor pod scheduling is handled by Kubernetes. It is possible to schedule the
+The driver and executor pod scheduling is handled by Kubernetes. Communication to the Kubernetes API is done via fabric8, and we are 
+currently running <code>kubernetes-client</code> version <code>4.1.0</code>. Make sure that when you are making infrastructure additions that you are aware of said version. It is possible to schedule the
 driver and executor pods on a subset of available nodes through a [node selector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
 using the configuration property for it. It will be possible to use more advanced
 scheduling hints like [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) in a future release.
@@ -230,6 +231,19 @@ spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.options.clai
 ```
 
 The configuration properties for mounting volumes into the executor pods use prefix `spark.kubernetes.executor.` instead of `spark.kubernetes.driver.`. For a complete list of available options for each supported type of volumes, please refer to the [Spark Properties](#spark-properties) section below. 
+
+## Local Storage
+
+Spark uses temporary scratch space to spill data to disk during shuffles and other operations.  When using Kubernetes as the resource manager the pods will be created with an [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) volume mounted for each directory listed in `SPARK_LOCAL_DIRS`.  If no directories are explicitly specified then a default directory is created and configured appropriately.
+
+`emptyDir` volumes use the ephemeral storage feature of Kubernetes and do not persist beyond the life of the pod.
+
+### Using RAM for local storage
+
+`emptyDir` volumes use the nodes backing storage for ephemeral storage by default, this behaviour may not be appropriate for some compute environments.  For example if you have diskless nodes with remote storage mounted over a network, having lots of executors doing IO to this remote storage may actually degrade performance.
+
+In this case it may be desirable to set `spark.kubernetes.local.dirs.tmpfs=true` in your configuration which will cause the `emptyDir` volumes to be configured as `tmpfs` i.e. RAM backed volumes.  When configured like this Sparks local storage usage will count towards your pods memory usage therefore you may wish to increase your memory requests by increasing the value of `spark.kubernetes.memoryOverheadFactor` as appropriate.
+
 
 ## Introspection and Debugging
 
@@ -683,23 +697,24 @@ specific to Spark on Kubernetes.
   <td><code>spark.kubernetes.driver.limit.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify a hard cpu [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for the driver pod.
+    Specify a hard cpu <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">limit</a> for the driver pod.
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.request.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify the cpu request for each executor pod. Values conform to the Kubernetes [convention](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu). 
-    Example values include 0.1, 500m, 1.5, 5, etc., with the definition of cpu units documented in [CPU units](https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#cpu-units).   
+    Specify the cpu request for each executor pod. Values conform to the Kubernetes <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu">convention</a>.
+    Example values include 0.1, 500m, 1.5, 5, etc., with the definition of cpu units documented in <a href="https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#cpu-units">CPU units</a>.
     This is distinct from <code>spark.executor.cores</code>: it is only used and takes precedence over <code>spark.executor.cores</code> for specifying the executor pod cpu request if set. Task 
     parallelism, e.g., number of tasks an executor can run concurrently is not affected by this.
+  </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.limit.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify a hard cpu [limit](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) for each executor pod launched for the Spark Application.
+    Specify a hard cpu <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container">limit</a> for each executor pod launched for the Spark Application.
   </td>
 </tr>
 <tr>
@@ -801,6 +816,14 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.local.dirs.tmpfs</code></td>
+  <td><code>false</code></td>
+  <td>
+   Configure the <code>emptyDir</code> volumes used to back <code>SPARK_LOCAL_DIRS</code> within the Spark driver and executor pods to use <code>tmpfs</code> backing i.e. RAM.  See <a href="#local-storage">Local Storage</a> earlier on this page
+   for more discussion of this.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.memoryOverheadFactor</code></td>
   <td><code>0.1</code></td>
   <td>
@@ -810,9 +833,50 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
-  <td><code>"2"</code></td>
+  <td><code>"3"</code></td>
   <td>
    This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.krb5.path</code></td>
+  <td><code>(none)</code></td>
+  <td>
+   Specify the local location of the krb5.conf file to be mounted on the driver and executors for Kerberos interaction.
+   It is important to note that the KDC defined needs to be visible from inside the containers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.krb5.configMapName</code></td>
+  <td><code>(none)</code></td>
+  <td>
+   Specify the name of the ConfigMap, containing the krb5.conf file, to be mounted on the driver and executors
+   for Kerberos interaction. The KDC defined needs to be visible from inside the containers. The ConfigMap must also
+   be in the same namespace of the driver and executor pods.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.hadoop.configMapName</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, to be mounted on the driver 
+    and executors for custom Hadoop configuration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokenSecret.name</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the name of the secret where your existing delegation tokens are stored. This removes the need for the job user
+    to provide any kerberos credentials for launching a job. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokenSecret.itemKey</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the item key of the data where your existing delegation tokens are stored. This removes the need for the job user 
+    to provide any kerberos credentials for launching a job.
   </td>
 </tr>
 <tr>

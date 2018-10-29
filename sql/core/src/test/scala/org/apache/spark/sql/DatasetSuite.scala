@@ -164,6 +164,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(ClassData("a", 2))))
   }
 
+  test("as map of case class - reorder fields by name") {
+    val df = spark.range(3).select(map(lit(1), struct($"id".cast("int").as("b"), lit("a").as("a"))))
+    val ds = df.as[Map[Int, ClassData]]
+    assert(ds.collect() === Array(
+      Map(1 -> ClassData("a", 0)),
+      Map(1 -> ClassData("a", 1)),
+      Map(1 -> ClassData("a", 2))))
+  }
+
   test("map") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDataset(
@@ -611,7 +620,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     ).toDF("id", "stringData")
     val sampleDF = df.sample(false, 0.7, 50)
     // After sampling, sampleDF doesn't contain id=1.
-    assert(!sampleDF.select("id").collect.contains(1))
+    assert(!sampleDF.select("id").as[Int].collect.contains(1))
     // simpleUdf should not encounter id=1.
     checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count.toInt)(Row(1)))
   }
@@ -969,6 +978,55 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkShowString(ds, expected)
   }
 
+  test("SPARK-25108 Fix the show method to display the full width character alignment problem") {
+    // scalastyle:off nonascii
+    val df = Seq(
+      (0, null, 1),
+      (0, "", 1),
+      (0, "ab c", 1),
+      (0, "1098", 1),
+      (0, "mø", 1),
+      (0, "γύρ", 1),
+      (0, "pê", 1),
+      (0, "ー", 1),
+      (0, "测", 1),
+      (0, "か", 1),
+      (0, "걸", 1),
+      (0, "à", 1),
+      (0, "焼", 1),
+      (0, "羍む", 1),
+      (0, "뺭ᾘ", 1),
+      (0, "\u0967\u0968\u0969", 1)
+    ).toDF("b", "a", "c")
+    // scalastyle:on nonascii
+    val ds = df.as[ClassData]
+    val expected =
+      // scalastyle:off nonascii
+      """+---+----+---+
+        ||  b|   a|  c|
+        |+---+----+---+
+        ||  0|null|  1|
+        ||  0|    |  1|
+        ||  0|ab c|  1|
+        ||  0|1098|  1|
+        ||  0|  mø|  1|
+        ||  0| γύρ|  1|
+        ||  0|  pê|  1|
+        ||  0|  ー|  1|
+        ||  0|  测|  1|
+        ||  0|  か|  1|
+        ||  0|  걸|  1|
+        ||  0|   à|  1|
+        ||  0|  焼|  1|
+        ||  0|羍む|  1|
+        ||  0| 뺭ᾘ|  1|
+        ||  0| १२३|  1|
+        |+---+----+---+
+        |""".stripMargin
+    // scalastyle:on nonascii
+    checkShowString(ds, expected)
+  }
+
   test(
     "SPARK-15112: EmbedDeserializerInFilter should not optimize plan fragment that changes schema"
   ) {
@@ -1016,7 +1074,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Dataset should throw RuntimeException if top-level product input object is null") {
     val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
     assert(e.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getMessage.contains("top level Product input object"))
+    assert(e.getMessage.contains("top level Product or row object"))
   }
 
   test("dropDuplicates") {
@@ -1497,16 +1555,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.where($"city".contains(new java.lang.Character('A'))),
       Seq(Row("Amsterdam")))
-  }
-
-  test("SPARK-23034 show rdd names in RDD scan nodes") {
-    val rddWithName = spark.sparkContext.parallelize(SingleData(1) :: Nil).setName("testRdd")
-    val df = spark.createDataFrame(rddWithName)
-    val output = new java.io.ByteArrayOutputStream()
-    Console.withOut(output) {
-      df.explain(extended = false)
-    }
-    assert(output.toString.contains("Scan testRdd"))
   }
 }
 

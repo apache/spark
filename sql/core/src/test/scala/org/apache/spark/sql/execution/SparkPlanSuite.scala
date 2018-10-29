@@ -50,4 +50,12 @@ class SparkPlanSuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-25357 SparkPlanInfo of FileScan contains nonEmpty metadata") {
+    withTempPath { path =>
+      spark.range(5).write.parquet(path.getAbsolutePath)
+      val f = spark.read.parquet(path.getAbsolutePath)
+      assert(SparkPlanInfo.fromSparkPlan(f.queryExecution.sparkPlan).metadata.nonEmpty)
+    }
+  }
 }

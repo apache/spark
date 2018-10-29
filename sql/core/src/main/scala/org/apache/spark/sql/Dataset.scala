@@ -306,16 +306,16 @@ class Dataset[T] private[sql](
       // Compute the width of each column
       for (row <- rows) {
         for ((cell, i) <- row.zipWithIndex) {
-          colWidths(i) = math.max(colWidths(i), cell.length)
+          colWidths(i) = math.max(colWidths(i), Utils.stringHalfWidth(cell))
         }
       }
 
       val paddedRows = rows.map { row =>
         row.zipWithIndex.map { case (cell, i) =>
           if (truncate > 0) {
-            StringUtils.leftPad(cell, colWidths(i))
+            StringUtils.leftPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
           } else {
-            StringUtils.rightPad(cell, colWidths(i))
+            StringUtils.rightPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
           }
         }
       }
@@ -337,12 +337,10 @@ class Dataset[T] private[sql](
 
       // Compute the width of field name and data columns
       val fieldNameColWidth = fieldNames.foldLeft(minimumColWidth) { case (curMax, fieldName) =>
-        math.max(curMax, fieldName.length)
+        math.max(curMax, Utils.stringHalfWidth(fieldName))
       }
       val dataColWidth = dataRows.foldLeft(minimumColWidth) { case (curMax, row) =>
-        math.max(curMax, row.map(_.length).reduceLeftOption[Int] { case (cellMax, cell) =>
-          math.max(cellMax, cell)
-        }.getOrElse(0))
+        math.max(curMax, row.map(cell => Utils.stringHalfWidth(cell)).max)
       }
 
       dataRows.zipWithIndex.foreach { case (row, i) =>
@@ -351,8 +349,10 @@ class Dataset[T] private[sql](
           s"-RECORD $i", fieldNameColWidth + dataColWidth + 5, "-")
         sb.append(rowHeader).append("\n")
         row.zipWithIndex.map { case (cell, j) =>
-          val fieldName = StringUtils.rightPad(fieldNames(j), fieldNameColWidth)
-          val data = StringUtils.rightPad(cell, dataColWidth)
+          val fieldName = StringUtils.rightPad(fieldNames(j),
+            fieldNameColWidth - Utils.stringHalfWidth(fieldNames(j)) + fieldNames(j).length)
+          val data = StringUtils.rightPad(cell,
+            dataColWidth - Utils.stringHalfWidth(cell) + cell.length)
           s" $fieldName | $data "
         }.addString(sb, "", "\n", "\n")
       }
@@ -1087,7 +1087,7 @@ class Dataset[T] private[sql](
     // Note that we do this before joining them, to enable the join operator to return null for one
     // side, in cases like outer-join.
     val left = {
-      val combined = if (this.exprEnc.flat) {
+      val combined = if (!this.exprEnc.isSerializedAsStruct) {
         assert(joined.left.output.length == 1)
         Alias(joined.left.output.head, "_1")()
       } else {
@@ -1097,7 +1097,7 @@ class Dataset[T] private[sql](
     }
 
     val right = {
-      val combined = if (other.exprEnc.flat) {
+      val combined = if (!other.exprEnc.isSerializedAsStruct) {
         assert(joined.right.output.length == 1)
         Alias(joined.right.output.head, "_2")()
       } else {
@@ -1110,14 +1110,14 @@ class Dataset[T] private[sql](
     // combine the outputs of each join side.
     val conditionExpr = joined.condition.get transformUp {
       case a: Attribute if joined.left.outputSet.contains(a) =>
-        if (this.exprEnc.flat) {
+        if (!this.exprEnc.isSerializedAsStruct) {
           left.output.head
         } else {
           val index = joined.left.output.indexWhere(_.exprId == a.exprId)
           GetStructField(left.output.head, index)
         }
       case a: Attribute if joined.right.outputSet.contains(a) =>
-        if (other.exprEnc.flat) {
+        if (!other.exprEnc.isSerializedAsStruct) {
           right.output.head
         } else {
           val index = joined.right.output.indexWhere(_.exprId == a.exprId)
@@ -1390,7 +1390,7 @@ class Dataset[T] private[sql](
     implicit val encoder = c1.encoder
     val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil, logicalPlan)
 
-    if (encoder.flat) {
+    if (!encoder.isSerializedAsStruct) {
       new Dataset[U1](sparkSession, project, encoder)
     } else {
       // Flattens inner fields of U1
@@ -3356,21 +3356,11 @@ class Dataset[T] private[sql](
    * user-registered callback functions.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
-    try {
+    SQLExecution.withNewExecutionId(sparkSession, qe, Some(name)) {
       qe.executedPlan.foreach { plan =>
         plan.resetMetrics()
       }
-      val start = System.nanoTime()
-      val result = SQLExecution.withNewExecutionId(sparkSession, qe) {
-        action(qe.executedPlan)
-      }
-      val end = System.nanoTime()
-      sparkSession.listenerManager.onSuccess(name, qe, end - start)
-      result
-    } catch {
-      case e: Exception =>
-        sparkSession.listenerManager.onFailure(name, qe, e)
-        throw e
+      action(qe.executedPlan)
     }
   }
 

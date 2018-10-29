@@ -21,9 +21,14 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 # Exclude auto-generated configuration file.
 PATHS_TO_CHECK="$( cd "$SPARK_ROOT_DIR" && find . -name "*.py" )"
+DOC_PATHS_TO_CHECK="$( cd "$SPARK_ROOT_DIR" && find . -name "*.py" | grep -vF 'functions.py' )"
 PYCODESTYLE_REPORT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-report.txt"
+PYDOCSTYLE_REPORT_PATH="$SPARK_ROOT_DIR/dev/pydocstyle-report.txt"
 PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
 PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
+PYDOCSTYLEBUILD="pydocstyle"
+EXPECTED_PYDOCSTYLEVERSION="3.0.0"
+PYDOCSTYLEVERSION=$(python -c 'import pkg_resources; print(pkg_resources.get_distribution("pydocstyle").version)' 2> /dev/null)
 SPHINXBUILD=${SPHINXBUILD:=sphinx-build}
 SPHINX_REPORT_PATH="$SPARK_ROOT_DIR/dev/sphinx-report.txt"
 
@@ -36,7 +41,7 @@ compile_status="${PIPESTATUS[0]}"
 # Get pycodestyle at runtime so that we don't rely on it being installed on the build server.
 # See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
 # Updated to the latest official version of pep8. pep8 is formally renamed to pycodestyle.
-PYCODESTYLE_VERSION="2.3.1"
+PYCODESTYLE_VERSION="2.4.0"
 PYCODESTYLE_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-$PYCODESTYLE_VERSION.py"
 PYCODESTYLE_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/PyCQA/pycodestyle/$PYCODESTYLE_VERSION/pycodestyle.py"
 
@@ -80,6 +85,46 @@ if [ "$lint_status" -ne 0 ]; then
 else
     echo "pycodestyle checks passed."
     rm "$PYCODESTYLE_REPORT_PATH"
+fi
+
+# stop the build if there are Python syntax errors or undefined names
+flake8 . --count --select=E901,E999,F821,F822,F823 --max-line-length=100 --show-source --statistics
+flake8_status="${PIPESTATUS[0]}"
+
+if [ "$flake8_status" -eq 0 ]; then
+    lint_status=0
+else
+    lint_status=1
+fi
+
+if [ "$lint_status" -ne 0 ]; then
+    echo "flake8 checks failed."
+    exit "$lint_status"
+else
+    echo "flake8 checks passed."
+fi
+
+# Check python document style, skip check if pydocstyle is not installed.
+if hash "$PYDOCSTYLEBUILD" 2> /dev/null; then
+    if [[ "$PYDOCSTYLEVERSION" == "$EXPECTED_PYDOCSTYLEVERSION" ]]; then
+        pydocstyle --config=dev/tox.ini $DOC_PATHS_TO_CHECK >> "$PYDOCSTYLE_REPORT_PATH"
+        pydocstyle_status="${PIPESTATUS[0]}"
+
+        if [ "$compile_status" -eq 0 -a "$pydocstyle_status" -eq 0 ]; then
+            echo "pydocstyle checks passed."
+            rm "$PYDOCSTYLE_REPORT_PATH"
+        else
+            echo "pydocstyle checks failed."
+            cat "$PYDOCSTYLE_REPORT_PATH"
+            rm "$PYDOCSTYLE_REPORT_PATH"
+            exit 1
+        fi
+
+    else
+        echo "The pydocstyle version needs to be latest 3.0.0. Skipping pydoc checks for now"
+    fi
+else
+  echo >&2 "The pydocstyle command was not found. Skipping pydoc checks for now"
 fi
 
 # Check that the documentation builds acceptably, skip check if sphinx is not installed.

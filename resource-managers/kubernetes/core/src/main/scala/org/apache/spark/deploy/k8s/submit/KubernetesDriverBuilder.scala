@@ -21,8 +21,8 @@ import java.io.File
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s.{Config, KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils, SparkPod}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep, MountVolumesFeatureStep, PodTemplateConfigMapStep}
+import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 
 private[spark] class KubernetesDriverBuilder(
@@ -57,6 +57,10 @@ private[spark] class KubernetesDriverBuilder(
       KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
     new JavaDriverFeatureStep(_),
+    provideHadoopGlobalStep: (
+      KubernetesConf[KubernetesDriverSpecificConf]
+        => KerberosConfDriverFeatureStep) =
+    new KerberosConfDriverFeatureStep(_),
     providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => PodTemplateConfigMapStep) =
     new PodTemplateConfigMapStep(_),
@@ -93,8 +97,14 @@ private[spark] class KubernetesDriverBuilder(
           provideRStep(kubernetesConf)}
       .getOrElse(provideJavaStep(kubernetesConf))
 
-    val allFeatures = (baseFeatures :+ bindingsStep) ++
-      secretFeature ++ envSecretFeature ++ volumesFeature ++ podTemplateFeature
+    val maybeHadoopConfigStep =
+      kubernetesConf.hadoopConfSpec.map { _ =>
+        provideHadoopGlobalStep(kubernetesConf)}
+
+    val allFeatures: Seq[KubernetesFeatureConfigStep] =
+      (baseFeatures :+ bindingsStep) ++
+        secretFeature ++ envSecretFeature ++ volumesFeature ++
+        maybeHadoopConfigStep.toSeq ++ podTemplateFeature
 
     var spec = KubernetesDriverSpec(
       provideInitialPod(),

@@ -181,42 +181,43 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     // around this, we pass a dummy no-op serializer.
     final SerializerInstance ser = DummySerializerInstance.INSTANCE;
 
-    final DiskBlockObjectWriter writer =
-      blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
-
     int currentPartition = -1;
-    final int uaoSize = UnsafeAlignedOffset.getUaoSize();
-    while (sortedRecords.hasNext()) {
-      sortedRecords.loadNext();
-      final int partition = sortedRecords.packedRecordPointer.getPartitionId();
-      assert (partition >= currentPartition);
-      if (partition != currentPartition) {
-        // Switch to the new partition
-        if (currentPartition != -1) {
-          final FileSegment fileSegment = writer.commitAndGet();
-          spillInfo.partitionLengths[currentPartition] = fileSegment.length();
+    final FileSegment committedSegment;
+    try (DiskBlockObjectWriter writer =
+        blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse)) {
+
+      final int uaoSize = UnsafeAlignedOffset.getUaoSize();
+      while (sortedRecords.hasNext()) {
+        sortedRecords.loadNext();
+        final int partition = sortedRecords.packedRecordPointer.getPartitionId();
+        assert (partition >= currentPartition);
+        if (partition != currentPartition) {
+          // Switch to the new partition
+          if (currentPartition != -1) {
+            final FileSegment fileSegment = writer.commitAndGet();
+            spillInfo.partitionLengths[currentPartition] = fileSegment.length();
+          }
+          currentPartition = partition;
         }
-        currentPartition = partition;
+
+        final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
+        final Object recordPage = taskMemoryManager.getPage(recordPointer);
+        final long recordOffsetInPage = taskMemoryManager.getOffsetInPage(recordPointer);
+        int dataRemaining = UnsafeAlignedOffset.getSize(recordPage, recordOffsetInPage);
+        long recordReadPosition = recordOffsetInPage + uaoSize; // skip over record length
+        while (dataRemaining > 0) {
+          final int toTransfer = Math.min(diskWriteBufferSize, dataRemaining);
+          Platform.copyMemory(
+            recordPage, recordReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
+          writer.write(writeBuffer, 0, toTransfer);
+          recordReadPosition += toTransfer;
+          dataRemaining -= toTransfer;
+        }
+        writer.recordWritten();
       }
 
-      final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
-      final Object recordPage = taskMemoryManager.getPage(recordPointer);
-      final long recordOffsetInPage = taskMemoryManager.getOffsetInPage(recordPointer);
-      int dataRemaining = UnsafeAlignedOffset.getSize(recordPage, recordOffsetInPage);
-      long recordReadPosition = recordOffsetInPage + uaoSize; // skip over record length
-      while (dataRemaining > 0) {
-        final int toTransfer = Math.min(diskWriteBufferSize, dataRemaining);
-        Platform.copyMemory(
-          recordPage, recordReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
-        writer.write(writeBuffer, 0, toTransfer);
-        recordReadPosition += toTransfer;
-        dataRemaining -= toTransfer;
-      }
-      writer.recordWritten();
+      committedSegment = writer.commitAndGet();
     }
-
-    final FileSegment committedSegment = writer.commitAndGet();
-    writer.close();
     // If `writeSortedFile()` was called from `closeAndGetSpills()` and no records were inserted,
     // then the file might be empty. Note that it might be better to avoid calling
     // writeSortedFile() in that case.

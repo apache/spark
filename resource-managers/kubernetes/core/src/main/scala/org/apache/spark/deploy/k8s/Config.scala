@@ -223,7 +223,60 @@ private[spark] object Config extends Logging {
       .stringConf
       .checkValue(pv => List("2", "3").contains(pv),
         "Ensure that major Python version is either Python2 or Python3")
-      .createWithDefault("2")
+      .createWithDefault("3")
+
+  val KUBERNETES_KERBEROS_KRB5_FILE =
+    ConfigBuilder("spark.kubernetes.kerberos.krb5.path")
+      .doc("Specify the local location of the krb5.conf file to be mounted on the driver " +
+        "and executors for Kerberos. Note: The KDC defined needs to be " +
+        "visible from inside the containers ")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_KRB5_CONFIG_MAP =
+    ConfigBuilder("spark.kubernetes.kerberos.krb5.configMapName")
+      .doc("Specify the name of the ConfigMap, containing the krb5.conf file, to be mounted " +
+        "on the driver and executors for Kerberos. Note: The KDC defined" +
+        "needs to be visible from inside the containers ")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_HADOOP_CONF_CONFIG_MAP =
+    ConfigBuilder("spark.kubernetes.hadoop.configMapName")
+      .doc("Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, " +
+        "to be mounted on the driver and executors for custom Hadoop configuration.")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_DT_SECRET_NAME =
+    ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.name")
+      .doc("Specify the name of the secret where your existing delegation tokens are stored. " +
+        "This removes the need for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY =
+    ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.itemKey")
+      .doc("Specify the item key of the data where your existing delegation tokens are stored. " +
+        "This removes the need for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
+
+  val APP_RESOURCE_TYPE =
+    ConfigBuilder("spark.kubernetes.resource.type")
+      .doc("This sets the resource type internally")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_LOCAL_DIRS_TMPFS =
+    ConfigBuilder("spark.kubernetes.local.dirs.tmpfs")
+      .doc("If set to true then emptyDir volumes created to back SPARK_LOCAL_DIRS will have " +
+        "their medium set to Memory so that they will be created as tmpfs (i.e. RAM) backed " +
+        "volumes. This may improve performance but scratch space usage will count towards " +
+        "your pods memory limit so you may wish to request more memory.")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_DRIVER_PODTEMPLATE_FILE =
     ConfigBuilder("spark.kubernetes.driver.podTemplateFile")

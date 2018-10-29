@@ -63,25 +63,4 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
 
     assert(sink.allData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7, 11, 22, 33))
   }
-
-  test("writer metrics") {
-    val sink = new MemorySinkV2
-    val schema = new StructType().add("i", "int")
-    val writeSupport = new MemoryStreamingWriteSupport(
-      sink, OutputMode.Append(), schema)
-    // batch 0
-    writeSupport.commit(0,
-      Array(
-        MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
-        MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
-        MemoryWriterCommitMessage(2, Seq(Row(5), Row(6)))
-      ))
-    assert(writeSupport.getCustomMetrics.json() == "{\"numRows\":6}")
-    // batch 1
-    writeSupport.commit(1,
-      Array(
-        MemoryWriterCommitMessage(0, Seq(Row(7), Row(8)))
-      ))
-    assert(writeSupport.getCustomMetrics.json() == "{\"numRows\":8}")
-  }
 }

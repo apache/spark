@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, HasMetadata}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.Config.APP_RESOURCE_TYPE
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 
@@ -30,11 +31,12 @@ private[spark] class RDriverFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = {
     val roleConf = kubernetesConf.roleSpecificConf
     require(roleConf.mainAppResource.isDefined, "R Main Resource must be defined")
+    // Delineation is done by " " because that is input into RRunner
     val maybeRArgs = Option(roleConf.appArgs).filter(_.nonEmpty).map(
       rArgs =>
         new EnvVarBuilder()
           .withName(ENV_R_ARGS)
-          .withValue(rArgs.mkString(","))
+          .withValue(rArgs.mkString(" "))
           .build())
     val envSeq =
       Seq(new EnvVarBuilder()
@@ -53,7 +55,8 @@ private[spark] class RDriverFeatureStep(
 
     SparkPod(pod.pod, withRPrimaryContainer)
   }
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
+  override def getAdditionalPodSystemProperties(): Map[String, String] =
+    Map(APP_RESOURCE_TYPE.key -> "r")
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

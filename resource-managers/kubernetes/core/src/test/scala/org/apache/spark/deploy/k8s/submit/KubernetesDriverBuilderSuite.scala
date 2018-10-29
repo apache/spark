@@ -23,7 +23,7 @@ import org.mockito.Mockito._
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config.{CONTAINER_IMAGE, KUBERNETES_DRIVER_PODTEMPLATE_FILE, KUBERNETES_EXECUTOR_PODTEMPLATE_FILE}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, EnvSecretsFeatureStep, KubernetesFeaturesTestUtils, LocalDirsFeatureStep, MountSecretsFeatureStep, _}
+import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
@@ -34,9 +34,10 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
   private val SECRETS_STEP_TYPE = "mount-secrets"
   private val JAVA_STEP_TYPE = "java-bindings"
-  private val PYSPARK_STEP_TYPE = "pyspark-bindings"
   private val R_STEP_TYPE = "r-bindings"
+  private val PYSPARK_STEP_TYPE = "pyspark-bindings"
   private val ENV_SECRETS_STEP_TYPE = "env-secrets"
+  private val HADOOP_GLOBAL_STEP_TYPE = "hadoop-global"
   private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
   private val TEMPLATE_VOLUME_STEP_TYPE = "template-volume"
 
@@ -67,6 +68,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
 
+  private val hadoopGlobalStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    HADOOP_GLOBAL_STEP_TYPE, classOf[KerberosConfDriverFeatureStep])
+
   private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
 
@@ -86,6 +90,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => pythonStep,
       _ => rStep,
       _ => javaStep,
+      _ => hadoopGlobalStep,
       _ => templateVolumeStep)
 
   test("Apply fundamental steps all the time.") {
@@ -104,7 +109,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -130,7 +136,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map("EnvName" -> "SecretName:secretKey"),
       Map.empty,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -158,7 +165,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -184,7 +192,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -215,7 +224,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       volumeSpec :: Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -242,7 +252,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -271,7 +282,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      Option.empty)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -282,8 +294,70 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       TEMPLATE_VOLUME_STEP_TYPE)
   }
 
+  test("Apply HadoopSteps if HADOOP_CONF_DIR is defined.") {
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        None,
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String],
+      hadoopConfSpec = Some(
+        HadoopConfSpec(
+          Some("/var/hadoop-conf"),
+          None)))
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      JAVA_STEP_TYPE,
+      HADOOP_GLOBAL_STEP_TYPE)
+  }
+
+  test("Apply HadoopSteps if HADOOP_CONF ConfigMap is defined.") {
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        None,
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Seq.empty[String],
+      hadoopConfSpec = Some(
+        HadoopConfSpec(
+          None,
+          Some("pre-defined-configMapName"))))
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      JAVA_STEP_TYPE,
+      HADOOP_GLOBAL_STEP_TYPE)
+  }
+
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)
-    : Unit = {
+  : Unit = {
     assert(resolvedSpec.systemProperties.size === stepTypes.size)
     stepTypes.foreach { stepType =>
       assert(resolvedSpec.pod.pod.getMetadata.getLabels.get(stepType) === stepType)
@@ -319,7 +393,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      Option.empty)
     val driverSpec = KubernetesDriverBuilder
       .apply(kubernetesClient, sparkConf)
       .buildFromFeatures(kubernetesConf)
@@ -351,7 +426,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      Option.empty)
     val exception = intercept[SparkException] {
       KubernetesDriverBuilder
         .apply(kubernetesClient, sparkConf)

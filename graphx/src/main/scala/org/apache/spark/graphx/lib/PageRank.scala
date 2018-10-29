@@ -198,9 +198,11 @@ object PageRank extends Logging {
 
     val zero = Vectors.sparse(sources.size, List()).asBreeze
     // map of vid -> vector where for each vid, the _position of vid in source_ is set to 1.0
-    val sourcesInitMap = sources.zipWithIndex.toMap.mapValues { i =>
-      Vectors.sparse(sources.size, Array(i), Array(1.0)).asBreeze
-    }
+    val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
+      val v = Vectors.sparse(sources.size, Array(i), Array(1.0)).asBreeze
+      (vid, v)
+    }.toMap
+
     val sc = graph.vertices.sparkContext
     val sourcesInitMapBC = sc.broadcast(sourcesInitMap)
     // Initialize the PageRank graph with each edge attribute having

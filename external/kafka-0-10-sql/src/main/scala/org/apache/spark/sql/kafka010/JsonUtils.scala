@@ -29,11 +29,6 @@ import org.json4s.jackson.Serialization
  */
 private object JsonUtils {
   private implicit val formats = Serialization.formats(NoTypeHints)
-  implicit val ordering = new Ordering[TopicPartition] {
-    override def compare(x: TopicPartition, y: TopicPartition): Int = {
-      Ordering.Tuple2[String, Int].compare((x.topic, x.partition), (y.topic, y.partition))
-    }
-  }
 
   /**
    * Read TopicPartitions from json string
@@ -56,7 +51,7 @@ private object JsonUtils {
    * Write TopicPartitions as json string
    */
   def partitions(partitions: Iterable[TopicPartition]): String = {
-    val result = HashMap.empty[String, List[Int]]
+    val result = new HashMap[String, List[Int]]
     partitions.foreach { tp =>
       val parts: List[Int] = result.getOrElse(tp.topic, Nil)
       result += tp.topic -> (tp.partition::parts)
@@ -85,31 +80,19 @@ private object JsonUtils {
    * Write per-TopicPartition offsets as json string
    */
   def partitionOffsets(partitionOffsets: Map[TopicPartition, Long]): String = {
-    val result = HashMap.empty[String, HashMap[Int, Long]]
+    val result = new HashMap[String, HashMap[Int, Long]]()
+    implicit val ordering = new Ordering[TopicPartition] {
+      override def compare(x: TopicPartition, y: TopicPartition): Int = {
+        Ordering.Tuple2[String, Int].compare((x.topic, x.partition), (y.topic, y.partition))
+      }
+    }
     val partitions = partitionOffsets.keySet.toSeq.sorted  // sort for more determinism
     partitions.foreach { tp =>
         val off = partitionOffsets(tp)
-        val parts = result.getOrElse(tp.topic, HashMap.empty[Int, Long])
+        val parts = result.getOrElse(tp.topic, new HashMap[Int, Long])
         parts += tp.partition -> off
         result += tp.topic -> parts
     }
     Serialization.write(result)
-  }
-
-  /**
-   * Write per-topic partition lag as json string
-   */
-  def partitionLags(
-      latestOffsets: Map[TopicPartition, Long],
-      processedOffsets: Map[TopicPartition, Long]): String = {
-    val result = HashMap.empty[String, HashMap[Int, Long]]
-    val partitions = latestOffsets.keySet.toSeq.sorted
-    partitions.foreach { tp =>
-      val lag = latestOffsets(tp) - processedOffsets.getOrElse(tp, 0L)
-      val parts = result.getOrElse(tp.topic, HashMap.empty[Int, Long])
-      parts += tp.partition -> lag
-      result += tp.topic -> parts
-    }
-    Serialization.write(Map("lag" -> result))
   }
 }
