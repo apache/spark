@@ -24,7 +24,6 @@ import java.io.{File, FileOutputStream, OutputStream}
  */
 abstract class BenchmarkBase {
   var output: Option[OutputStream] = None
-  var mainArgs: Array[String] = _
 
   /**
    * Main process of the whole benchmark.
@@ -42,7 +41,6 @@ abstract class BenchmarkBase {
   }
 
   def main(args: Array[String]): Unit = {
-    mainArgs = args
     val regenerateBenchmarkFiles: Boolean = System.getenv("SPARK_GENERATE_BENCHMARK_FILES") == "1"
     if (regenerateBenchmarkFiles) {
       val resultFileName = s"${this.getClass.getSimpleName.replace("$", "")}-results.txt"
