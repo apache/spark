@@ -39,7 +39,6 @@ private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
         assert(driverPod.getMetadata.getLabels.get(LABEL_KEY) === "driver-template-label-value")
       },
       executorPodChecker = (executorPod: Pod) => {
-        assert(executorPod.getMetadata.getName === "template-pod")
         assert(executorPod.getSpec.getContainers.get(0).getImage === image)
         assert(executorPod.getSpec.getContainers.get(0).getName === "test-executor-container")
         assert(executorPod.getMetadata.getLabels.containsKey(LABEL_KEY))
