@@ -108,7 +108,7 @@ private[spark] class KubernetesDriverBuilder(
 
     var spec = KubernetesDriverSpec(
       provideInitialPod(),
-      Seq.empty,
+      driverKubernetesResources = Seq.empty,
       kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
       val configuredPod = feature.configurePod(spec.pod)

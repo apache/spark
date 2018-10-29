@@ -78,7 +78,7 @@ private[spark] object Constants {
 
   // Pod spec templates
   val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "pod-spec-template.yml"
-  val EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH = "/opt/spark/pod-template"
+  val EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH = "/opt/spark/pod-template"
   val POD_TEMPLATE_VOLUME = "podspec-volume"
   val POD_TEMPLATE_CONFIGMAP = "podspec-configmap"
   val POD_TEMPLATE_KEY = "podspec-configmap-key"
