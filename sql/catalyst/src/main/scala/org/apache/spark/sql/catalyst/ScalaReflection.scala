@@ -189,7 +189,10 @@ object ScalaReflection extends ScalaReflection {
    * @param tpe The `Type` of deserialized object.
    * @param path The expression which can be used to extract serialized value.
    * @param walkedTypePath The paths from top to bottom to access current field when deserializing.
-   * @param instantiateValueClass If `true`, create an instance for Scala value class
+   * @param instantiateValueClass If `true`, create an instance for Scala value class.
+   *                              This is needed in case value class is top-level or it is
+   *                              the type of collection elements. Please refer to the comment in
+   *                              value class case for more details.
    */
   private def deserializerFor(
       tpe: `Type`,
