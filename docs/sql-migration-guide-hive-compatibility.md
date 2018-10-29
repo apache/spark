@@ -53,7 +53,20 @@ Spark SQL supports the vast majority of Hive features, such as:
 * View
   * If column aliases are not specified in view definition queries, both Spark and Hive will
     generate alias names, but in different ways. In order for Spark to be able to read views created
-    by Hive, users should explicitly specify column aliases in view definition queries.
+    by Hive, users should explicitly specify column aliases in view definition queries. As an
+    example, Spark cannot read `v1` created as below by Hive.
+
+    ```
+    CREATE TABLE t1 (c1 INT, c2 STRING);
+    CREATE VIEW v1 AS SELECT * FROM (SELECT c1 + 1, upper(c2) FROM t1) t2;
+    ```
+
+    Instead, you should create `v1` as below with column aliases explicitly specified.
+
+    ```
+    CREATE VIEW v1 AS SELECT * FROM (SELECT c1 + 1 AS inc_c1, upper(c2) AS upper_c2 FROM t1) t2;
+    ```
+
 * All Hive DDL Functions, including:
   * `CREATE TABLE`
   * `CREATE TABLE AS SELECT`
