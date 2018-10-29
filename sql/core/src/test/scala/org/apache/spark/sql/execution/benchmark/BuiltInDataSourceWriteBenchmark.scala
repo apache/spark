@@ -38,7 +38,7 @@ package org.apache.spark.sql.execution.benchmark
  *
  */
 object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val formats: Seq[String] = if (mainArgs.isEmpty) {
       Seq("Parquet", "ORC", "JSON", "CSV")
     } else {

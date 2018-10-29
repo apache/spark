@@ -28,7 +28,7 @@ package org.apache.spark.sql.execution.benchmark
  *  }}}
  */
 object AvroWriteBenchmark extends DataSourceWriteBenchmark {
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runDataSourceBenchmark("Avro")
   }
 }
