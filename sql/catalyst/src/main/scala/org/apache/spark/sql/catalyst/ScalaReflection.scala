@@ -174,7 +174,7 @@ object ScalaReflection extends ScalaReflection {
     val input = upCastToExpectedType(
       GetColumnByOrdinal(0, dataType), dataType, walkedTypePath)
 
-    val expr = deserializerFor(tpe, input, walkedTypePath)
+    val expr = deserializerFor(tpe, input, walkedTypePath, instantiateValueClass = true)
     if (nullable) {
       expr
     } else {
@@ -189,11 +189,13 @@ object ScalaReflection extends ScalaReflection {
    * @param tpe The `Type` of deserialized object.
    * @param path The expression which can be used to extract serialized value.
    * @param walkedTypePath The paths from top to bottom to access current field when deserializing.
+   * @param instantiateValueClass If `true`, create an instance for Scala value class
    */
   private def deserializerFor(
       tpe: `Type`,
       path: Expression,
-      walkedTypePath: Seq[String]): Expression = cleanUpReflectionObjects {
+      walkedTypePath: Seq[String],
+      instantiateValueClass: Boolean = false): Expression = cleanUpReflectionObjects {
 
     /** Returns the current path with a sub-field extracted. */
     def addToPath(part: String, dataType: DataType, walkedTypePath: Seq[String]): Expression = {
@@ -297,7 +299,8 @@ object ScalaReflection extends ScalaReflection {
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
           val casted = upCastToExpectedType(element, dataType, newTypePath)
-          val converter = deserializerFor(elementType, casted, newTypePath)
+          val converter = deserializerFor(elementType, casted, newTypePath,
+            instantiateValueClass = true)
           if (elementNullable) {
             converter
           } else {
@@ -337,7 +340,8 @@ object ScalaReflection extends ScalaReflection {
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
           val casted = upCastToExpectedType(element, dataType, newTypePath)
-          val converter = deserializerFor(elementType, casted, newTypePath)
+          val converter = deserializerFor(elementType, casted, newTypePath,
+            instantiateValueClass = true)
           if (elementNullable) {
             converter
           } else {
@@ -398,7 +402,7 @@ object ScalaReflection extends ScalaReflection {
         // class too. In other cases, the compiler will handle wrapping/unwrapping
         // for us automatically.
         val arg = deserializerFor(underlyingType, path, newTypePath)
-        if (walkedTypePath.length == 1 || walkedTypePath.head.contains("array element")) {
+        if (instantiateValueClass) {
           val cls = getClassFromType(t)
           NewInstance(cls, Seq(arg), ObjectType(cls), propagateNull = false)
         } else {
