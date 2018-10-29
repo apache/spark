@@ -102,27 +102,29 @@ private[spark] object KubernetesUtils extends Logging {
   }
 
   def selectSparkContainer(pod: Pod, containerName: Option[String]): SparkPod = {
+    def selectNamedContainer(
+      containers: List[Container], name: String): Option[(Container, List[Container])] =
+      containers.partition(_.getName == name) match {
+        case (sparkContainer :: Nil, rest) => Some((sparkContainer, rest))
+        case _ =>
+          logWarning(
+            s"specified container ${name} not found on pod template, " +
+              s"falling back to taking the first container")
+          Option.empty
+      }
     val containers = pod.getSpec.getContainers.asScala.toList
-    containerName.flatMap(name => containers.partition(_.getName == name) match {
-      case (sparkContainer :: Nil, rest) => Some((sparkContainer, rest))
-      case _ =>
-        logWarning(
-          s"specified container ${name} not found on pod template, " +
-            s"falling back to taking the first container")
-        Option.empty
-    }).orElse(containers match {
-      case first :: rest => Some((first, rest))
-      case _ => Option.empty
-    }).map {
-      case (sparkContainer: Container, rest: List[Container]) => SparkPod(
-        new PodBuilder(pod)
-          .editSpec()
-          .withContainers(rest.asJava)
-          .endSpec()
-          .build(),
-        sparkContainer)
-      case _ => SparkPod(pod, new ContainerBuilder().build())
-    }.getOrElse(SparkPod(pod, new ContainerBuilder().build()))
+    containerName
+      .flatMap(selectNamedContainer(containers, _))
+      .orElse(containers.headOption.map((_, containers.tail)))
+      .map {
+        case (sparkContainer: Container, rest: List[Container]) => SparkPod(
+          new PodBuilder(pod)
+            .editSpec()
+            .withContainers(rest.asJava)
+            .endSpec()
+            .build(),
+          sparkContainer)
+      }.getOrElse(SparkPod(pod, new ContainerBuilder().build()))
   }
 
   def parseMasterUrl(url: String): String = url.substring("k8s://".length)
