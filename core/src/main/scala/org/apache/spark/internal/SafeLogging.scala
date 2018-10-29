@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.logging
+package org.apache.spark.internal
 
 import com.palantir.logsafe.Arg
 import org.slf4j.LoggerFactory
@@ -63,3 +63,4 @@ trait SafeLogging {
     if (log_.isErrorEnabled) log_.error(message, args :+ error: _*)
   }
 }
+

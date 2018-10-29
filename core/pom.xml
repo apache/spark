@@ -365,6 +365,7 @@
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
 
+
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-launcher_${scala.binary.version}</artifactId>
@@ -414,6 +415,15 @@
       <groupId>org.apache.thrift</groupId>
       <artifactId>libfb303</artifactId>
       <scope>provided</scope>
+    </dependency>
+
+    <!--
+      The following dependency is used for safe logging
+    -->
+    <dependency>
+      <groupId>com.palantir.safe-logging</groupId>
+      <artifactId>safe-logging</artifactId>
+      <version>1.5.1</version>
     </dependency>
 
   </dependencies>

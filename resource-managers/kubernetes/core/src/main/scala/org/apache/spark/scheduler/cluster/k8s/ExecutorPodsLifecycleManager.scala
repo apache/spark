@@ -26,7 +26,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
-import org.apache.spark.logging.SafeLogging
+import org.apache.spark.internal.SafeLogging
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 
