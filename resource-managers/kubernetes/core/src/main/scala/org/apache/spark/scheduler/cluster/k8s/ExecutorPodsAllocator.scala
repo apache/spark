@@ -118,7 +118,7 @@ private[spark] class ExecutorPodsAllocator(
       }
       val currentTotalExpectedExecutors = totalExpectedExecutors.get
       safeLogDebug("Currently have running executors and" +
-        " pending executors. Newly created executors executors" +
+        " pending executors. Newly created executors" +
         " have been requested but are pending appearance in the cluster.",
         SafeArg.of("numCurrentRunningExecutors", currentRunningExecutors),
         SafeArg.of("numCurrentPendingExecutors", currentPendingExecutors),
@@ -157,7 +157,7 @@ private[spark] class ExecutorPodsAllocator(
           " executors to begin running before requesting for more executors, including executors" +
           " in pending status in the cluster, and executors that we have" +
           " created but we have not observed as being present in the cluster yet.",
-          SafeArg.of("numCurrentWaitingExecutors",
+          SafeArg.of("numTotalCurrentWaitingExecutors",
             newlyCreatedExecutors.size + currentPendingExecutors),
           SafeArg.of("numCurrentPendingExecutors", currentPendingExecutors),
           SafeArg.of("numNewlyCreatedExecutors", newlyCreatedExecutors.size))
