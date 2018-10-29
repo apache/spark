@@ -157,7 +157,6 @@ class SessionWindowLinkedListState(
   def update(key: UnsafeRow, sessionStart: Long, newValue: UnsafeRow): Unit = {
     val targetPointer = keyAndSessionStartToPointerStore.get(key, sessionStart)
     assertValidPointer(targetPointer)
-
     keyAndSessionStartToValueStore.put(key, sessionStart, newValue)
   }
 
@@ -243,6 +242,9 @@ class SessionWindowLinkedListState(
     val prevOption = targetPointer._1
     val nextOption = targetPointer._2
 
+    keyAndSessionStartToPointerStore.remove(key, sessionStart)
+    keyAndSessionStartToValueStore.remove(key, sessionStart)
+
     targetPointer match {
       case (Some(prev), Some(next)) =>
         keyAndSessionStartToPointerStore.updateNext(key, prev, nextOption)
@@ -260,11 +262,10 @@ class SessionWindowLinkedListState(
           throw new IllegalStateException("The element has pointer information for head, " +
             "but the list has different head.")
         }
-        keyAndSessionStartToPointerStore.remove(key, sessionStart)
+
         keyToHeadSessionStartStore.remove(key)
     }
 
-    keyAndSessionStartToValueStore.remove(key, sessionStart)
   }
 
   def removeByValueCondition(removalCondition: UnsafeRow => Boolean,
@@ -454,15 +455,15 @@ class SessionWindowLinkedListState(
     )
   }
 
-  private[state] def getIteratorOfHeadPointers: Iterator[KeyAndHeadSessionStart] = {
+  private[sql] def getIteratorOfHeadPointers: Iterator[KeyAndHeadSessionStart] = {
     keyToHeadSessionStartStore.iterator
   }
 
-  private[state] def getIteratorOfRawPointers: Iterator[KeyWithSessionStartAndPointers] = {
+  private[sql] def getIteratorOfRawPointers: Iterator[KeyWithSessionStartAndPointers] = {
     keyAndSessionStartToPointerStore.iterator
   }
 
-  private[state] def getIteratorOfRawValues: Iterator[KeyWithSessionStartAndValue] = {
+  private[sql] def getIteratorOfRawValues: Iterator[KeyWithSessionStartAndValue] = {
     keyAndSessionStartToValueStore.iterator
   }
 
@@ -646,7 +647,7 @@ class SessionWindowLinkedListState(
 
     def updatePrev(key: UnsafeRow, sessionStart: Long, prevSessionStart: Option[Long]): Unit = {
       val actualKeyRow = keyWithSessionStartRow(key, sessionStart)
-      val row = stateStore.get(actualKeyRow)
+      val row = stateStore.get(actualKeyRow).copy()
       setPrevSessionStart(row, prevSessionStart)
       stateStore.put(actualKeyRow, row)
     }

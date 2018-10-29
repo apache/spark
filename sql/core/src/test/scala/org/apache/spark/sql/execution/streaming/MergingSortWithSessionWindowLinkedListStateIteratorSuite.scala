@@ -395,7 +395,6 @@ class MergingSortWithSessionWindowLinkedListStateIteratorSuite extends SharedSQL
   }
 
   private def assertRowsEquals(expectedRow: InternalRow, retRow: InternalRow): Unit = {
-    
     val tupleFromExpectedRow = getTupleFromRow(expectedRow)
     val tupleFromInternalRow = getTupleFromRow(retRow)
     try {

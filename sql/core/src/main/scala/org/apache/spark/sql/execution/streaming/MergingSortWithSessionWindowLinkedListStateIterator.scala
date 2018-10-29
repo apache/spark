@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution.streaming.state.SessionWindowLinkedListState
@@ -115,30 +115,13 @@ class MergingSortWithSessionWindowLinkedListStateIterator(
     val stateSessionsEnclosingCurrentRow = findSessionPointerEnclosingEvent(currentRow,
       startPointer = lastCheckpointOnStateRows)
 
-    // FIXME: debugging...
-    def loadSession(
-        keys: UnsafeRow,
-        sessionStart: Long,
-        stateSessionsEnclosingCurrentRow: Option[(Option[Long], Option[Long])])
-      : UnsafeRow = {
-      val sessionState = state.get(currentRow.keys, sessionStart)
-      require(sessionState != null,
-        s"Session must be presented in state: it may represent dangling pointer - " +
-          s"$sessionStart / key: $keys / currentRow: $currentRow" +
-          s"sessionsEnclosingCurrentRow: $stateSessionsEnclosingCurrentRow" +
-          s"Pointers: ${state.iteratePointers(currentRow.keys).toList}" +
-          s"Values: ${state.get(currentRow.keys).toList}")
-      sessionState
-    }
-
     var prevSessionToEmit: Option[SessionRowInformation] = None
     stateSessionsEnclosingCurrentRow match {
       case None =>
       case Some(x) =>
         x._1 match {
           case Some(prev) =>
-            val prevSession = SessionRowInformation.of(
-              loadSession(currentRow.keys, prev, stateSessionsEnclosingCurrentRow))
+            val prevSession = SessionRowInformation.of(state.get(currentRow.keys, prev))
 
             val sessionLaterThanCheckpoint = lastCheckpointOnStateRows match {
               case Some(lastCheckpoint) => lastCheckpoint < prevSession.sessionStart
@@ -161,8 +144,7 @@ class MergingSortWithSessionWindowLinkedListStateIterator(
 
         x._2 match {
           case Some(next) =>
-            val nextSession = SessionRowInformation.of(
-              loadSession(currentRow.keys, next, stateSessionsEnclosingCurrentRow))
+            val nextSession = SessionRowInformation.of(state.get(currentRow.keys, next))
 
             val sessionLaterThanCheckpoint = lastCheckpointOnStateRows match {
               case Some(lastCheckpoint) => lastCheckpoint < nextSession.sessionStart
