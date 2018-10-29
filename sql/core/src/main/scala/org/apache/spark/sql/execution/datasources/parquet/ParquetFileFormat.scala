@@ -352,17 +352,14 @@ class ParquetFileFormat
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
-      val fileSplit =
-        new FileSplit(new Path(new URI(file.filePath)), file.start, file.length, Array.empty)
-      val filePath = fileSplit.getPath
-
+      val filePath = new Path(new URI(file.filePath))
       val split =
         new org.apache.parquet.hadoop.ParquetInputSplit(
           filePath,
-          fileSplit.getStart,
-          fileSplit.getStart + fileSplit.getLength,
-          fileSplit.getLength,
-          fileSplit.getLocations,
+          file.start,
+          file.start + file.length,
+          file.length,
+          Array.empty,
           null)
 
       val sharedConf = broadcastedHadoopConf.value.value
