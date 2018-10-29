@@ -267,6 +267,25 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("range between should accept interval values as both boundaries") {
+    def ts(timestamp: Long): Timestamp = new Timestamp(timestamp * 1000)
+
+    val df = Seq((ts(1501545600), "1"), (ts(1501545600), "1"), (ts(1609372800), "1"),
+      (ts(1503000000), "2"), (ts(1502000000), "1"), (ts(1609372800), "2"))
+      .toDF("key", "value")
+    val window = Window.partitionBy($"value").orderBy($"key")
+      .rangeBetween(lit(CalendarInterval.fromString("interval 3 hours")),
+        lit(CalendarInterval.fromString("interval 23 days 4 hours")))
+
+    checkAnswer(
+      df.select(
+        $"key",
+        count("key").over(window)),
+      Seq(Row(ts(1501545600), 1), Row(ts(1501545600), 1), Row(ts(1609372800), 0),
+        Row(ts(1503000000), 0), Row(ts(1502000000), 0), Row(ts(1609372800), 0))
+    )
+  }
+
   test("unbounded rows/range between with aggregation") {
     val df = Seq(("one", 1), ("two", 2), ("one", 3), ("two", 4)).toDF("key", "value")
     val window = Window.partitionBy($"key").orderBy($"value")

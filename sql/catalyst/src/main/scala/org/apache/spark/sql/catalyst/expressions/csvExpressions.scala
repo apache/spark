@@ -117,4 +117,6 @@ case class CsvToStructs(
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+
+  override def prettyName: String = "from_csv"
 }

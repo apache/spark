@@ -256,6 +256,6 @@ NULL
 -- !query 31
 select from_json(a, 'a INT') from t
 -- !query 31 schema
-struct<jsontostructs(a):struct<a:int>>
+struct<from_json(a):struct<a:int>>
 -- !query 31 output
-NULL
+{"a":null}

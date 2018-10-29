@@ -142,7 +142,10 @@ StreamingQuery query = output
 
 ## Data Source Option
 
-Data source options of Avro can be set using the `.option` method on `DataFrameReader` or `DataFrameWriter`.
+Data source options of Avro can be set via:
+ * the `.option` method on `DataFrameReader` or `DataFrameWriter`.
+ * the `options` parameter in function `from_avro`.
+
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
@@ -176,6 +179,19 @@ Data source options of Avro can be set using the `.option` method on `DataFrameR
     <td>The <code>compression</code> option allows to specify a compression codec used in write.<br>
   Currently supported codecs are <code>uncompressed</code>, <code>snappy</code>, <code>deflate</code>, <code>bzip2</code> and <code>xz</code>.<br> If the option is not set, the configuration <code>spark.sql.avro.compression.codec</code> config is taken into account.</td>
     <td>write</td>
+  </tr>
+  <tr>
+    <td><code>mode</code></td>
+    <td>FAILFAST</td>
+    <td>The <code>mode</code> option allows to specify parse mode for function <code>from_avro</code>.<br>
+      Currently supported modes are:
+      <ul>
+        <li><code>FAILFAST</code>: Throws an exception on processing corrupted record.</li>
+        <li><code>PERMISSIVE</code>: Corrupt records are processed as null result. Therefore, the
+        data schema is forced to be fully nullable, which might be different from the one user provided.</li>
+      </ul>
+    </td>
+    <td>function <code>from_avro</code></td>
   </tr>
 </table>
 

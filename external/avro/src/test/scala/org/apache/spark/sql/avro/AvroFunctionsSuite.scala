@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.avro
 
-import org.apache.avro.Schema
+import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.functions.struct
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
-class AvroFunctionsSuite extends QueryTest with SharedSQLContext {
+class AvroFunctionsSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   import testImplicits._
 
   test("roundtrip in to_avro and from_avro - int and string") {
@@ -59,6 +60,33 @@ class AvroFunctionsSuite extends QueryTest with SharedSQLContext {
       |}
     """.stripMargin
     checkAnswer(avroStructDF.select(from_avro('avro, avroTypeStruct)), df)
+  }
+
+  test("handle invalid input in from_avro") {
+    val count = 10
+    val df = spark.range(count).select(struct('id, 'id.as("id2")).as("struct"))
+    val avroStructDF = df.select(to_avro('struct).as("avro"))
+    val avroTypeStruct = s"""
+      |{
+      |  "type": "record",
+      |  "name": "struct",
+      |  "fields": [
+      |    {"name": "col1", "type": "long"},
+      |    {"name": "col2", "type": "double"}
+      |  ]
+      |}
+    """.stripMargin
+
+    intercept[SparkException] {
+      avroStructDF.select(
+        from_avro('avro, avroTypeStruct, Map("mode" -> "FAILFAST").asJava)).collect()
+    }
+
+    // For PERMISSIVE mode, the result should be row of null columns.
+    val expected = (0 until count).map(_ => Row(Row(null, null)))
+    checkAnswer(
+      avroStructDF.select(from_avro('avro, avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
+      expected)
   }
 
   test("roundtrip in to_avro and from_avro - array with null") {

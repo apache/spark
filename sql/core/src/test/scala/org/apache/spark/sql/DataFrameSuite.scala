@@ -2537,6 +2537,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
       val df = spark.read.json(path.getCanonicalPath)
       assert(df.columns === Array("i", "p"))
+      spark.sparkContext.listenerBus.waitUntilEmpty(10000)
       assert(numJobs == 1)
     }
   }
@@ -2576,5 +2577,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         df.filter("col1 = 'abc' OR (col1 != 'abc' AND col2 == 3)"),
         Row ("abc", 1))
     }
+  }
+
+  test("SPARK-25816 ResolveReferences works with nested extractors") {
+    val df = Seq((1, Map(1 -> "a")), (2, Map(2 -> "b"))).toDF("key", "map")
+    val swappedDf = df.select($"key".as("map"), $"map".as("key"))
+
+    checkAnswer(swappedDf.filter($"key"($"map") > "a"), Row(2, Map(2 -> "b")))
   }
 }
