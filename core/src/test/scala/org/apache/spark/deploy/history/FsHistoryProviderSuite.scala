@@ -933,16 +933,19 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     when(dfsIn.getFileLength).thenReturn(200)
     // FileStatus.getLen is more than logInfo fileSize
     var fileStatus = new FileStatus(200, false, 0, 0, 0, path)
-    var logInfo = new LogInfo(path.toString, 0, Some("appId"), Some("attemptId"), 100)
+    var logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100)
     assert(mockedProvider.shouldReloadLog(logInfo, fileStatus))
 
     fileStatus = new FileStatus()
     fileStatus.setPath(path)
     // DFSInputStream.getFileLength is more than logInfo fileSize
-    logInfo = new LogInfo(path.toString, 0, Some("appId"), Some("attemptId"), 100)
+    logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100)
     assert(mockedProvider.shouldReloadLog(logInfo, fileStatus))
     // DFSInputStream.getFileLength is equal to logInfo fileSize
-    logInfo = new LogInfo(path.toString, 0, Some("appId"), Some("attemptId"), 200)
+    logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 200)
     assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
     // in.getWrappedStream returns other than DFSInputStream
     val bin = mock(classOf[BufferedInputStream])

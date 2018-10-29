@@ -865,8 +865,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         } catch {
           case e: NoSuchElementException =>
             // For every new driver log file discovered, create a new entry in listing
-            listing.write(LogInfo(f.getPath().toString(), currentTime, LogType.DriverLogs, None, None,
-              f.getLen()))
+            listing.write(LogInfo(f.getPath().toString(), currentTime, LogType.DriverLogs, None,
+              None, f.getLen()))
           false
         }
       if (deleteFile) {
