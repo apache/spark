@@ -19,16 +19,18 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.File
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
-import org.apache.spark.util.{Benchmark, Utils}
+import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.types._
 
 /**
  * The benchmarks aims to measure performance of JSON parsing when encoding is set and isn't.
  * To run this:
  *  spark-submit --class <this class> --jars <spark sql test jar>
  */
-object JSONBenchmarks {
+object JSONBenchmarks extends SQLHelper {
   val conf = new SparkConf()
 
   val spark = SparkSession.builder
@@ -37,13 +39,6 @@ object JSONBenchmarks {
     .config(conf)
     .getOrCreate()
   import spark.implicits._
-
-  def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
-  }
-
 
   def schemaInferring(rowsNum: Int): Unit = {
     val benchmark = new Benchmark("JSON schema inferring", rowsNum)
@@ -71,12 +66,13 @@ object JSONBenchmarks {
       }
 
       /*
-      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_172-b11 on Mac OS X 10.13.5
+      Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
-      JSON schema inferring:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      --------------------------------------------------------------------------------------------
-      No encoding                             38902 / 39282          2.6         389.0       1.0X
-      UTF-8 is set                            56959 / 57261          1.8         569.6       0.7X
+      JSON schema inferring:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      No encoding                              45908 / 46480          2.2         459.1       1.0X
+      UTF-8 is set                             68469 / 69762          1.5         684.7       0.7X
       */
       benchmark.run()
     }
@@ -112,12 +108,13 @@ object JSONBenchmarks {
       }
 
       /*
-      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_172-b11 on Mac OS X 10.13.5
+      Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
-      JSON per-line parsing:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      --------------------------------------------------------------------------------------------
-      No encoding                             25947 / 26188          3.9         259.5       1.0X
-      UTF-8 is set                            46319 / 46417          2.2         463.2       0.6X
+      JSON per-line parsing:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      No encoding                               9982 / 10237         10.0          99.8       1.0X
+      UTF-8 is set                             16373 / 16806          6.1         163.7       0.6X
       */
       benchmark.run()
     }
@@ -160,12 +157,52 @@ object JSONBenchmarks {
       }
 
       /*
-      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_172-b11 on Mac OS X 10.13.5
+      Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 
-      JSON parsing of wide lines:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      --------------------------------------------------------------------------------------------
-      No encoding                             45543 / 45660          0.2        4554.3       1.0X
-      UTF-8 is set                            65737 / 65957          0.2        6573.7       0.7X
+      JSON parsing of wide lines:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      No encoding                              26038 / 26386          0.4        2603.8       1.0X
+      UTF-8 is set                             28343 / 28557          0.4        2834.3       0.9X
+      */
+      benchmark.run()
+    }
+  }
+
+  def countBenchmark(rowsNum: Int): Unit = {
+    val colsNum = 10
+    val benchmark = new Benchmark(s"Count a dataset with $colsNum columns", rowsNum)
+
+    withTempPath { path =>
+      val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
+      val schema = StructType(fields)
+      val columnNames = schema.fieldNames
+
+      spark.range(rowsNum)
+        .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
+        .write
+        .json(path.getAbsolutePath)
+
+      val ds = spark.read.schema(schema).json(path.getAbsolutePath)
+
+      benchmark.addCase(s"Select $colsNum columns + count()", 3) { _ =>
+        ds.select("*").filter((_: Row) => true).count()
+      }
+      benchmark.addCase(s"Select 1 column + count()", 3) { _ =>
+        ds.select($"col1").filter((_: Row) => true).count()
+      }
+      benchmark.addCase(s"count()", 3) { _ =>
+        ds.count()
+      }
+
+      /*
+      Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz
+
+      Count a dataset with 10 columns:      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ---------------------------------------------------------------------------------------------
+      Select 10 columns + count()               9961 / 10006          1.0         996.1       1.0X
+      Select 1 column + count()                  8355 / 8470          1.2         835.5       1.2X
+      count()                                    2104 / 2156          4.8         210.4       4.7X
       */
       benchmark.run()
     }
@@ -175,5 +212,6 @@ object JSONBenchmarks {
     schemaInferring(100 * 1000 * 1000)
     perlineParsing(100 * 1000 * 1000)
     perlineParsingOfWideColumn(10 * 1000 * 1000)
+    countBenchmark(10 * 1000 * 1000)
   }
 }

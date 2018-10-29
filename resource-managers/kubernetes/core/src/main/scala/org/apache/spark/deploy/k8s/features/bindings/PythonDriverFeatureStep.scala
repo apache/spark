@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, HasMetadata}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.Config.APP_RESOURCE_TYPE
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 
@@ -30,11 +31,12 @@ private[spark] class PythonDriverFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = {
     val roleConf = kubernetesConf.roleSpecificConf
     require(roleConf.mainAppResource.isDefined, "PySpark Main Resource must be defined")
+    // Delineation is done by " " because that is input into PythonRunner
     val maybePythonArgs = Option(roleConf.appArgs).filter(_.nonEmpty).map(
       pyArgs =>
         new EnvVarBuilder()
           .withName(ENV_PYSPARK_ARGS)
-          .withValue(pyArgs.mkString(","))
+          .withValue(pyArgs.mkString(" "))
           .build())
     val maybePythonFiles = kubernetesConf.pyFiles().map(
       // Dilineation by ":" is to append the PySpark Files to the PYTHONPATH
@@ -67,7 +69,8 @@ private[spark] class PythonDriverFeatureStep(
 
     SparkPod(pod.pod, withPythonPrimaryContainer)
   }
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
+  override def getAdditionalPodSystemProperties(): Map[String, String] =
+    Map(APP_RESOURCE_TYPE.key -> "python")
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

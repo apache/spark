@@ -28,6 +28,7 @@ import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
@@ -115,8 +116,10 @@ class RandomForestClassifier @Since("1.4.0") (
   override def setFeatureSubsetStrategy(value: String): this.type =
     set(featureSubsetStrategy, value)
 
-  override protected def train(dataset: Dataset[_]): RandomForestClassificationModel = {
-    val instr = Instrumentation.create(this, dataset)
+  override protected def train(
+      dataset: Dataset[_]): RandomForestClassificationModel = instrumented { instr =>
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val numClasses: Int = getNumClasses(dataset)
@@ -131,7 +134,7 @@ class RandomForestClassifier @Since("1.4.0") (
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
 
-    instr.logParams(labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
+    instr.logParams(this, labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
       impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
 
@@ -140,11 +143,9 @@ class RandomForestClassifier @Since("1.4.0") (
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
 
     val numFeatures = oldDataset.first().features.size
-    val m = new RandomForestClassificationModel(uid, trees, numFeatures, numClasses)
     instr.logNumClasses(numClasses)
     instr.logNumFeatures(numFeatures)
-    instr.logSuccess(m)
-    m
+    new RandomForestClassificationModel(uid, trees, numFeatures, numClasses)
   }
 
   @Since("1.4.1")
@@ -312,15 +313,15 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
     override def load(path: String): RandomForestClassificationModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], _) =
-        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName, true)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 
       val trees: Array[DecisionTreeClassificationModel] = treesData.map {
         case (treeMetadata, root) =>
-          val tree = new DecisionTreeClassificationModel(treeMetadata.uid,
-            root.asInstanceOf[ClassificationNode], numFeatures, numClasses)
+          val tree =
+            new DecisionTreeClassificationModel(treeMetadata.uid, root, numFeatures, numClasses)
           treeMetadata.getAndSetParams(tree)
           tree
       }

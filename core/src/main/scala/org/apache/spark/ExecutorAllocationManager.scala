@@ -25,7 +25,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
@@ -212,7 +212,7 @@ private[spark] class ExecutorAllocationManager(
     }
     // Require external shuffle service for dynamic allocation
     // Otherwise, we may lose shuffle files when killing executors
-    if (!conf.getBoolean("spark.shuffle.service.enabled", false) && !testing) {
+    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !testing) {
       throw new SparkException("Dynamic allocation of executors requires the external " +
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
@@ -488,9 +488,15 @@ private[spark] class ExecutorAllocationManager(
     newExecutorTotal = numExistingExecutors
     if (testing || executorsRemoved.nonEmpty) {
       executorsRemoved.foreach { removedExecutorId =>
+        // If it is a cached block, it uses cachedExecutorIdleTimeoutS for timeout
+        val idleTimeout = if (blockManagerMaster.hasCachedBlocks(removedExecutorId)) {
+          cachedExecutorIdleTimeoutS
+        } else {
+          executorIdleTimeoutS
+        }
         newExecutorTotal -= 1
         logInfo(s"Removing executor $removedExecutorId because it has been idle for " +
-          s"$executorIdleTimeoutS seconds (new desired total will be $newExecutorTotal)")
+          s"$idleTimeout seconds (new desired total will be $newExecutorTotal)")
         executorsPendingToRemove.add(removedExecutorId)
       }
       executorsRemoved

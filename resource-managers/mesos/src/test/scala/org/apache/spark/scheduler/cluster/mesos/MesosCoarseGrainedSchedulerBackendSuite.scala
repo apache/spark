@@ -262,7 +262,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
   test("mesos doesn't register twice with the same shuffle service") {
-    setBackend(Map("spark.shuffle.service.enabled" -> "true"))
+    setBackend(Map(SHUFFLE_SERVICE_ENABLED.key -> "true"))
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 
     val offer1 = createOffer("o1", "s1", mem, cpu)

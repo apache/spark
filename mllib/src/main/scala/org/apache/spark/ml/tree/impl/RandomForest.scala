@@ -77,7 +77,7 @@ import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
  * the heaviest part of the computation.  In general, this implementation is bound by either
  * the cost of statistics computation on workers or by communicating the sufficient statistics.
  */
-private[spark] object RandomForest extends Logging {
+private[spark] object RandomForest extends Logging with Serializable {
 
   /**
    * Train a random forest.
@@ -91,7 +91,7 @@ private[spark] object RandomForest extends Logging {
       numTrees: Int,
       featureSubsetStrategy: String,
       seed: Long,
-      instr: Option[Instrumentation[_]],
+      instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
 
@@ -226,23 +226,23 @@ private[spark] object RandomForest extends Logging {
       case Some(uid) =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(uid, rootNode.toClassificationNode(prune),
-              numFeatures, strategy.getNumClasses)
+            new DecisionTreeClassificationModel(uid, rootNode.toNode(prune), numFeatures,
+              strategy.getNumClasses)
           }
         } else {
           topNodes.map { rootNode =>
-            new DecisionTreeRegressionModel(uid, rootNode.toRegressionNode(prune), numFeatures)
+            new DecisionTreeRegressionModel(uid, rootNode.toNode(prune), numFeatures)
           }
         }
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(rootNode.toClassificationNode(prune), numFeatures,
+            new DecisionTreeClassificationModel(rootNode.toNode(prune), numFeatures,
               strategy.getNumClasses)
           }
         } else {
           topNodes.map(rootNode =>
-            new DecisionTreeRegressionModel(rootNode.toRegressionNode(prune), numFeatures))
+            new DecisionTreeRegressionModel(rootNode.toNode(prune), numFeatures))
         }
     }
   }
@@ -407,7 +407,7 @@ private[spark] object RandomForest extends Logging {
       metadata.isMulticlassWithCategoricalFeatures)
     logDebug("using nodeIdCache = " + nodeIdCache.nonEmpty.toString)
 
-    /**
+    /*
      * Performs a sequential aggregation over a partition for a particular tree and node.
      *
      * For each feature, the aggregate sufficient statistics are updated for the relevant
@@ -438,7 +438,7 @@ private[spark] object RandomForest extends Logging {
       }
     }
 
-    /**
+    /*
      * Performs a sequential aggregation over a partition.
      *
      * Each data point contributes to one node. For each feature,

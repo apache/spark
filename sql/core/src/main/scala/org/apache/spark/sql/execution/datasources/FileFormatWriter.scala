@@ -96,9 +96,11 @@ object FileFormatWriter extends Logging {
 
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
+    val dataSchema = dataColumns.toStructType
+    DataSourceUtils.verifyWriteSchema(fileFormat, dataSchema)
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
-      fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataColumns.toStructType)
+      fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
 
     val description = new WriteJobDescription(
       uuid = UUID.randomUUID().toString,
@@ -181,15 +183,15 @@ object FileFormatWriter extends Logging {
       val commitMsgs = ret.map(_.commitMsg)
 
       committer.commitJob(job, commitMsgs)
-      logInfo(s"Job ${job.getJobID} committed.")
+      logInfo(s"Write Job ${description.uuid} committed.")
 
       processStats(description.statsTrackers, ret.map(_.summary.stats))
-      logInfo(s"Finished processing stats for job ${job.getJobID}.")
+      logInfo(s"Finished processing stats for write job ${description.uuid}.")
 
       // return a set of all the partition paths that were updated during this job
       ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
     } catch { case cause: Throwable =>
-      logError(s"Aborting job ${job.getJobID}.", cause)
+      logError(s"Aborting job ${description.uuid}.", cause)
       committer.abortJob(job)
       throw new SparkException("Job aborted.", cause)
     }

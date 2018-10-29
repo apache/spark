@@ -227,7 +227,7 @@ class StreamingKMeans @Since("1.2.0") (
     require(centers.size == k,
       s"Number of initial centers must be ${k} but got ${centers.size}")
     require(weights.forall(_ >= 0),
-      s"Weight for each inital center must be nonnegative but got [${weights.mkString(" ")}]")
+      s"Weight for each initial center must be nonnegative but got [${weights.mkString(" ")}]")
     model = new StreamingKMeansModel(centers, weights)
     this
   }

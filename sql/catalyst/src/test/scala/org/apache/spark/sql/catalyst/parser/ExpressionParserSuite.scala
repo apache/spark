@@ -154,7 +154,19 @@ class ExpressionParserSuite extends PlanTest {
   test("in sub-query") {
     assertEqual(
       "a in (select b from c)",
-      In('a, Seq(ListQuery(table("c").select('b)))))
+      InSubquery(Seq('a), ListQuery(table("c").select('b))))
+
+    assertEqual(
+      "(a, b, c) in (select d, e, f from g)",
+      InSubquery(Seq('a, 'b, 'c), ListQuery(table("g").select('d, 'e, 'f))))
+
+    assertEqual(
+      "(a, b) in (select c from d)",
+      InSubquery(Seq('a, 'b), ListQuery(table("d").select('c))))
+
+    assertEqual(
+      "(a) in (select b from c)",
+      InSubquery(Seq('a), ListQuery(table("c").select('b))))
   }
 
   test("like expressions") {
@@ -191,7 +203,7 @@ class ExpressionParserSuite extends PlanTest {
     // Simple operations
     assertEqual("a * b", 'a * 'b)
     assertEqual("a / b", 'a / 'b)
-    assertEqual("a DIV b", ('a / 'b).cast(LongType))
+    assertEqual("a DIV b", 'a div 'b)
     assertEqual("a % b", 'a % 'b)
     assertEqual("a + b", 'a + 'b)
     assertEqual("a - b", 'a - 'b)
@@ -202,7 +214,7 @@ class ExpressionParserSuite extends PlanTest {
     // Check precedences
     assertEqual(
       "a * t | b ^ c & d - e + f % g DIV h / i * k",
-      'a * 't | ('b ^ ('c & ('d - 'e + (('f % 'g / 'h).cast(LongType) / 'i * 'k)))))
+      'a * 't | ('b ^ ('c & ('d - 'e + (('f % 'g div 'h) / 'i * 'k)))))
   }
 
   test("unary arithmetic expressions") {
@@ -232,6 +244,11 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
     assertEqual("`select`(all a, b)", 'select.function('a, 'b))
     intercept("foo(a x)", "extraneous input 'x'")
+  }
+
+  test("lambda functions") {
+    assertEqual("x -> x + 1", LambdaFunction('x + 1, Seq('x.attr)))
+    assertEqual("(x, y) -> x + y", LambdaFunction('x + 'y, Seq('x.attr, 'y.attr)))
   }
 
   test("window function expressions") {
@@ -469,7 +486,7 @@ class ExpressionParserSuite extends PlanTest {
       Literal(BigDecimal("90912830918230182310293801923652346786").underlying()))
     assertEqual("123.0E-28BD", Literal(BigDecimal("123.0E-28").underlying()))
     assertEqual("123.08BD", Literal(BigDecimal("123.08").underlying()))
-    intercept("1.20E-38BD", "DecimalType can only support precision up to 38")
+    intercept("1.20E-38BD", "decimal can only support precision up to 38")
   }
 
   test("strings") {

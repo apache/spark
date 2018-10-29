@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -85,7 +86,7 @@ abstract class Expression extends TreeNode[Expression] {
 
   def nullable: Boolean
 
-  def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
+  def references: AttributeSet = AttributeSet.fromAttributeSets(children.map(_.references))
 
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: InternalRow = null): Any
@@ -282,6 +283,31 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override lazy val canonicalized: Expression = child.canonicalized
 }
 
+/**
+ * An aggregate expression that gets rewritten (currently by the optimizer) into a
+ * different aggregate expression for evaluation. This is mainly used to provide compatibility
+ * with other databases. For example, we use this to support every, any/some aggregates by rewriting
+ * them with Min and Max respectively.
+ */
+trait UnevaluableAggregate extends DeclarativeAggregate {
+
+  override def nullable: Boolean = true
+
+  override lazy val aggBufferAttributes =
+    throw new UnsupportedOperationException(s"Cannot evaluate aggBufferAttributes: $this")
+
+  override lazy val initialValues: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate initialValues: $this")
+
+  override lazy val updateExpressions: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate updateExpressions: $this")
+
+  override lazy val mergeExpressions: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate mergeExpressions: $this")
+
+  override lazy val evaluateExpression: Expression =
+    throw new UnsupportedOperationException(s"Cannot evaluate evaluateExpression: $this")
+}
 
 /**
  * Expressions that don't have SQL representation should extend this trait.  Examples are
@@ -580,10 +606,10 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
     // First check whether left and right have the same type, then check if the type is acceptable.
     if (!left.dataType.sameType(right.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
-        s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
+        s"(${left.dataType.catalogString} and ${right.dataType.catalogString}).")
     } else if (!inputType.acceptsType(left.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"'$sql' requires ${inputType.simpleString} type," +
-        s" not ${left.dataType.simpleString}")
+        s" not ${left.dataType.catalogString}")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -692,6 +718,36 @@ abstract class TernaryExpression extends Expression {
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
+  }
+}
+
+/**
+ * A trait resolving nullable, containsNull, valueContainsNull flags of the output date type.
+ * This logic is usually utilized by expressions combining data from multiple child expressions
+ * of non-primitive types (e.g. [[CaseWhen]]).
+ */
+trait ComplexTypeMergingExpression extends Expression {
+
+  /**
+   * A collection of data types used for resolution the output type of the expression. By default,
+   * data types of all child expressions. The collection must not be empty.
+   */
+  @transient
+  lazy val inputTypesForMerging: Seq[DataType] = children.map(_.dataType)
+
+  def dataTypeCheck: Unit = {
+    require(
+      inputTypesForMerging.nonEmpty,
+      "The collection of input data types must not be empty.")
+    require(
+      TypeCoercion.haveSameType(inputTypesForMerging),
+      "All input types must be the same except nullable, containsNull, valueContainsNull flags." +
+        s" The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}")
+  }
+
+  override def dataType: DataType = {
+    dataTypeCheck
+    inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
 }
 

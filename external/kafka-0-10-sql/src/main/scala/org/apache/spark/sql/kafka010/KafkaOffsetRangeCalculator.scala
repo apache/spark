@@ -29,7 +29,6 @@ import org.apache.spark.sql.sources.v2.DataSourceOptions
 private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int]) {
   require(minPartitions.isEmpty || minPartitions.get > 0)
 
-  import KafkaOffsetRangeCalculator._
   /**
    * Calculate the offset ranges that we are going to process this batch. If `minPartitions`
    * is not set or is set less than or equal the number of `topicPartitions` that we're going to

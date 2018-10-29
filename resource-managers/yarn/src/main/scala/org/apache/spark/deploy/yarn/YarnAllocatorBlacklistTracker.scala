@@ -28,7 +28,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.BlacklistTracker
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * YarnAllocatorBlacklistTracker is responsible for tracking the blacklisted nodes

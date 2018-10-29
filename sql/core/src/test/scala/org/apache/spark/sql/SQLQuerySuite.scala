@@ -27,6 +27,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.datasources.FilePartition
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1690,22 +1691,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("Hive built-in ORC data source must be used with Hive support"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `com.databricks.spark.avro`.`file_path`")
-    }
-    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro."))
-
-    // data source type is case insensitive
-    e = intercept[AnalysisException] {
-      sql(s"select id from Avro.`file_path`")
-    }
-    assert(e.message.contains("Failed to find data source: avro."))
-
-    e = intercept[AnalysisException] {
-      sql(s"select id from avro.`file_path`")
-    }
-    assert(e.message.contains("Failed to find data source: avro."))
-
-    e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
     assert(e.message.contains("Table or view not found: " +
@@ -2704,7 +2689,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         val m = intercept[AnalysisException] {
           sql("SELECT * FROM t, S WHERE c = C")
         }.message
-        assert(m.contains("cannot resolve '(t.`c` = S.`C`)' due to data type mismatch"))
+        assert(
+          m.contains("cannot resolve '(default.t.`c` = default.S.`C`)' due to data type mismatch"))
       }
     }
   }
@@ -2792,4 +2778,84 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-24696 ColumnPruning rule fails to remove extra Project") {
+    withTable("fact_stats", "dim_stats") {
+      val factData = Seq((1, 1, 99, 1), (2, 2, 99, 2), (3, 1, 99, 3), (4, 2, 99, 4))
+      val storeData = Seq((1, "BW", "DE"), (2, "AZ", "US"))
+      spark.udf.register("filterND", udf((value: Int) => value > 2).asNondeterministic)
+      factData.toDF("date_id", "store_id", "product_id", "units_sold")
+        .write.mode("overwrite").partitionBy("store_id").format("parquet").saveAsTable("fact_stats")
+      storeData.toDF("store_id", "state_province", "country")
+        .write.mode("overwrite").format("parquet").saveAsTable("dim_stats")
+      val df = sql(
+        """
+          |SELECT f.date_id, f.product_id, f.store_id FROM
+          |(SELECT date_id, product_id, store_id
+          |   FROM fact_stats WHERE filterND(date_id)) AS f
+          |JOIN dim_stats s
+          |ON f.store_id = s.store_id WHERE s.country = 'DE'
+        """.stripMargin)
+      checkAnswer(df, Seq(Row(3, 99, 1)))
+    }
+  }
+
+
+  test("SPARK-24940: coalesce and repartition hint") {
+    withTempView("nums1") {
+      val numPartitionsSrc = 10
+      spark.range(0, 100, 1, numPartitionsSrc).createOrReplaceTempView("nums1")
+      assert(spark.table("nums1").rdd.getNumPartitions == numPartitionsSrc)
+
+      withTable("nums") {
+        sql("CREATE TABLE nums (id INT) USING parquet")
+
+        Seq(5, 20, 2).foreach { numPartitions =>
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE nums
+               |SELECT /*+ REPARTITION($numPartitions) */ *
+               |FROM nums1
+             """.stripMargin)
+          assert(spark.table("nums").inputFiles.length == numPartitions)
+
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE nums
+               |SELECT /*+ COALESCE($numPartitions) */ *
+               |FROM nums1
+             """.stripMargin)
+          // Coalesce can not increase the number of partitions
+          assert(spark.table("nums").inputFiles.length == Seq(numPartitions, numPartitionsSrc).min)
+        }
+      }
+    }
+  }
+
+  test("SPARK-25084: 'distribute by' on multiple columns may lead to codegen issue") {
+    withView("spark_25084") {
+      val count = 1000
+      val df = spark.range(count)
+      val columns = (0 until 400).map{ i => s"id as id$i" }
+      val distributeExprs = (0 until 100).map(c => s"id$c").mkString(",")
+      df.selectExpr(columns : _*).createTempView("spark_25084")
+      assert(
+        spark.sql(s"select * from spark_25084 distribute by ($distributeExprs)").count === count)
+    }
+  }
+
+  test("SPARK-25144 'distinct' causes memory leak") {
+    val ds = List(Foo(Some("bar"))).toDS
+    val result = ds.flatMap(_.bar).distinct
+    result.rdd.isEmpty
+  }
+
+  test("SPARK-25454: decimal division with negative scale") {
+    // TODO: completely fix this issue even when LITERAL_PRECISE_PRECISION is true.
+    withSQLConf(SQLConf.LITERAL_PICK_MINIMUM_PRECISION.key -> "false") {
+      checkAnswer(sql("select 26393499451 / (1e6 * 1000)"), Row(BigDecimal("26.3934994510000")))
+    }
+  }
 }
+
+case class Foo(bar: Option[String])

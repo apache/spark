@@ -49,7 +49,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private implicit val kExprEnc = encoderFor(kEncoder)
   private implicit val vExprEnc = encoderFor(vEncoder)
 
-  private def logicalPlan = AnalysisBarrier(queryExecution.analyzed)
+  private def logicalPlan = queryExecution.analyzed
   private def sparkSession = queryExecution.sparkSession
 
   /**
@@ -457,7 +457,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(_.withInputType(vExprEnc, dataAttributes).named)
-    val keyColumn = if (kExprEnc.flat) {
+    val keyColumn = if (!kExprEnc.isSerializedAsStruct) {
       assert(groupingAttributes.length == 1)
       groupingAttributes.head
     } else {

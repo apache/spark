@@ -50,6 +50,7 @@ private[spark] class TaskDescription(
     val executorId: String,
     val name: String,
     val index: Int,    // Index within this task's TaskSet
+    val partitionId: Int,
     val addedFiles: Map[String, Long],
     val addedJars: Map[String, Long],
     val properties: Properties,
@@ -76,6 +77,7 @@ private[spark] object TaskDescription {
     dataOut.writeUTF(taskDescription.executorId)
     dataOut.writeUTF(taskDescription.name)
     dataOut.writeInt(taskDescription.index)
+    dataOut.writeInt(taskDescription.partitionId)
 
     // Write files.
     serializeStringLongMap(taskDescription.addedFiles, dataOut)
@@ -117,6 +119,7 @@ private[spark] object TaskDescription {
     val executorId = dataIn.readUTF()
     val name = dataIn.readUTF()
     val index = dataIn.readInt()
+    val partitionId = dataIn.readInt()
 
     // Read files.
     val taskFiles = deserializeStringLongMap(dataIn)
@@ -138,7 +141,7 @@ private[spark] object TaskDescription {
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
 
-    new TaskDescription(taskId, attemptNumber, executorId, name, index, taskFiles, taskJars,
-      properties, serializedTask)
+    new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, taskFiles,
+      taskJars, properties, serializedTask)
   }
 }

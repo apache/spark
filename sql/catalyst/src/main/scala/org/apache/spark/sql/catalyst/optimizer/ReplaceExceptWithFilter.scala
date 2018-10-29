@@ -46,7 +46,7 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     }
 
     plan.transform {
-      case e @ Except(left, right) if isEligible(left, right) =>
+      case e @ Except(left, right, false) if isEligible(left, right) =>
         val newCondition = transformCondition(left, skipProject(right))
         newCondition.map { c =>
           Distinct(Filter(Not(c), left))

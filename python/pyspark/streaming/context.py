@@ -222,7 +222,7 @@ class StreamingContext(object):
         Set each DStreams in this context to remember RDDs it generated
         in the last given duration. DStreams remember RDDs only for a
         limited duration of time and releases them for garbage collection.
-        This method allows the developer to specify how to long to remember
+        This method allows the developer to specify how long to remember
         the RDDs (if the developer wishes to query old data outside the
         DStream computation).
 
@@ -287,7 +287,7 @@ class StreamingContext(object):
 
     def queueStream(self, rdds, oneAtATime=True, default=None):
         """
-        Create an input stream from an queue of RDDs or list. In each batch,
+        Create an input stream from a queue of RDDs or list. In each batch,
         it will process either one or all of the RDDs returned by the queue.
 
         .. note:: Changes to the queue after the stream is created will not be recognized.
@@ -343,9 +343,11 @@ class StreamingContext(object):
             raise ValueError("All DStreams should have same serializer")
         if len(set(s._slideDuration for s in dstreams)) > 1:
             raise ValueError("All DStreams should have same slide duration")
-        first = dstreams[0]
-        jrest = [d._jdstream for d in dstreams[1:]]
-        return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)
+        cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaDStream
+        jdstreams = SparkContext._gateway.new_array(cls, len(dstreams))
+        for i in range(0, len(dstreams)):
+            jdstreams[i] = dstreams[i]._jdstream
+        return DStream(self._jssc.union(jdstreams), self, dstreams[0]._jrdd_deserializer)
 
     def addStreamingListener(self, streamingListener):
         """

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogT
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -55,14 +56,14 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex],
-    outputColumns: Seq[Attribute])
+    outputColumnNames: Seq[String])
   extends DataWritingCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
-    SchemaUtils.checkSchemaColumnNameDuplication(
-      query.schema,
+    SchemaUtils.checkColumnNameDuplication(
+      outputColumnNames,
       s"when inserting into $outputPath",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
@@ -91,8 +92,14 @@ case class InsertIntoHadoopFsRelationCommand(
 
     val pathExists = fs.exists(qualifiedOutputPath)
 
-    val enableDynamicOverwrite =
-      sparkSession.sessionState.conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
+    val parameters = CaseInsensitiveMap(options)
+
+    val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
+      // scalastyle:off caselocale
+      .map(mode => PartitionOverwriteMode.withName(mode.toUpperCase))
+      // scalastyle:on caselocale
+      .getOrElse(sparkSession.sessionState.conf.partitionOverwriteMode)
+    val enableDynamicOverwrite = partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
     // This config only makes sense when we are overwriting a partitioned dataset with dynamic
     // partition columns.
     val dynamicPartitionOverwrite = enableDynamicOverwrite && mode == SaveMode.Overwrite &&
@@ -166,7 +173,15 @@ case class InsertIntoHadoopFsRelationCommand(
 
 
       // update metastore partition metadata
-      refreshUpdatedPartitions(updatedPartitionPaths)
+      if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty
+        && partitionColumns.length == staticPartitions.size) {
+        // Avoid empty static partition can't loaded to datasource table.
+        val staticPathFragment =
+          PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
+        refreshUpdatedPartitions(Set(staticPathFragment))
+      } else {
+        refreshUpdatedPartitions(updatedPartitionPaths)
+      }
 
       // refresh cached files in FileIndex
       fileIndex.foreach(_.refresh())

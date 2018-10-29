@@ -207,8 +207,8 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     distance space. The output will be vectors of configurable dimension. Hash values in the same
     dimension are calculated by the same hash function.
 
-    .. seealso:: `Stable Distributions \
-    <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
+    .. seealso:: `Stable Distributions
+        <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
     .. seealso:: `Hashing for Similarity Search: A Survey <https://arxiv.org/abs/1408.2927>`_
 
     >>> from pyspark.ml.linalg import Vectors
@@ -303,7 +303,7 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
 
 
 class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
-    """
+    r"""
     .. note:: Experimental
 
     Model fitted by :py:class:`BucketedRandomProjectionLSH`, where multiple random vectors are
@@ -653,8 +653,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
     The return vector is scaled such that the transform matrix is
     unitary (aka scaled DCT-II).
 
-    .. seealso:: `More information on Wikipedia \
-    <https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia>`_.
+    .. seealso:: `More information on Wikipedia
+        <https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia>`_.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df1 = spark.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
@@ -1294,14 +1294,14 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     >>> mh = MinHashLSH(inputCol="features", outputCol="hashes", seed=12345)
     >>> model = mh.fit(df)
     >>> model.transform(df).head()
-    Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([-1638925...
+    Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([6179668...
     >>> data2 = [(3, Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
     ...          (4, Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
     ...          (5, Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df2 = spark.createDataFrame(data2, ["id", "features"])
     >>> key = Vectors.sparse(6, [1, 2], [1.0, 1.0])
     >>> model.approxNearestNeighbors(df2, key, 1).collect()
-    [Row(id=5, features=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), hashes=[DenseVector([-163892...
+    [Row(id=5, features=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), hashes=[DenseVector([6179668...
     >>> model.approxSimilarityJoin(df, df2, 0.6, distCol="JaccardDistance").select(
     ...     col("datasetA.id").alias("idA"),
     ...     col("datasetB.id").alias("idB"),
@@ -1309,8 +1309,8 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     +---+---+---------------+
     |idA|idB|JaccardDistance|
     +---+---+---------------+
-    |  1|  4|            0.5|
     |  0|  5|            0.5|
+    |  1|  4|            0.5|
     +---+---+---------------+
     ...
     >>> mhPath = temp_path + "/mh"
@@ -1353,7 +1353,7 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
 
 
 class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
-    """
+    r"""
     .. note:: Experimental
 
     Model produced by :py:class:`MinHashLSH`, where where multiple hash functions are stored. Each
@@ -1362,8 +1362,8 @@ class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
     :math:`h_i(x) = ((x \cdot a_i + b_i) \mod prime)` This hash family is approximately min-wise
     independent according to the reference.
 
-    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear \
-    permutations." Electronic Journal of Combinatorics 7 (2000): R26.
+    .. seealso:: Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear
+        permutations." Electronic Journal of Combinatorics 7 (2000): R26.
 
     .. versionadded:: 2.2.0
     """
@@ -3843,12 +3843,12 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
     @since("2.3.0")
     def getSize(self):
         """ Gets size param, the size of vectors in `inputCol`."""
-        self.getOrDefault(self.size)
+        return self.getOrDefault(self.size)
 
     @since("2.3.0")
     def setSize(self, value):
         """ Sets size param, the size of vectors in `inputCol`."""
-        self._set(size=value)
+        return self._set(size=value)
 
 
 if __name__ == "__main__":

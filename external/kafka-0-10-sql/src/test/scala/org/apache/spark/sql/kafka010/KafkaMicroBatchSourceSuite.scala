@@ -20,36 +20,33 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
-import java.util.{Locale, Optional, Properties}
+import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.io.Source
 import scala.util.Random
 
-import org.apache.kafka.clients.producer.RecordMetadata
+import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.test.SharedSQLContext
 
-abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
+abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
 
@@ -117,14 +114,16 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
         query.nonEmpty,
         "Cannot add data when there is no query for finding the active kafka source")
 
-      val sources = {
+      val sources: Seq[BaseStreamingSource] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
-          case StreamingExecutionRelation(source: KafkaMicroBatchReader, _) => source
+          case StreamingExecutionRelation(source: KafkaMicroBatchReadSupport, _) => source
         } ++ (query.get.lastExecution match {
           case null => Seq()
           case e => e.logical.collect {
-            case StreamingDataSourceV2Relation(_, _, _, reader: KafkaContinuousReader) => reader
+            case r: StreamingDataSourceV2Relation
+                if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
+              r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
           }
         })
       }.distinct
@@ -158,6 +157,23 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
     override def toString: String =
       s"AddKafkaData(topics = $topics, data = $data, message = $message)"
+  }
+
+  object WithOffsetSync {
+    /**
+     * Run `func` to write some Kafka messages and wait until the latest offset of the given
+     * `TopicPartition` is not less than `expectedOffset`.
+     */
+    def apply(
+        topicPartition: TopicPartition,
+        expectedOffset: Long)(func: () => Unit): StreamAction = {
+      Execute("Run Kafka Producer")(_ => {
+        func()
+        // This is a hack for the race condition that the committed message may be not visible to
+        // consumer for a short time.
+        testUtils.waitUntilOffsetAppears(topicPartition, expectedOffset)
+      })
+    }
   }
 
   private val topicId = new AtomicInteger(0)
@@ -290,6 +306,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", s"$topicPrefix-.*")
       .option("failOnDataLoss", "false")
 
@@ -467,6 +484,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribe", topic)
       // If a topic is deleted and we try to poll data starting from offset 0,
       // the Kafka consumer will just block until timeout and return an empty result.
@@ -582,18 +600,331 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val join = values.join(values, "key")
 
-    testStream(join)(
-      makeSureGetOffsetCalled,
-      AddKafkaData(Set(topic), 1, 2),
-      CheckAnswer((1, 1, 1), (2, 2, 2)),
-      AddKafkaData(Set(topic), 6, 3),
-      CheckAnswer((1, 1, 1), (2, 2, 2), (3, 3, 3), (1, 6, 1), (1, 1, 6), (1, 6, 6)),
-      AssertOnQuery { q =>
+    def checkQuery(check: AssertOnQuery): Unit = {
+      testStream(join)(
+        makeSureGetOffsetCalled,
+        AddKafkaData(Set(topic), 1, 2),
+        CheckAnswer((1, 1, 1), (2, 2, 2)),
+        AddKafkaData(Set(topic), 6, 3),
+        CheckAnswer((1, 1, 1), (2, 2, 2), (3, 3, 3), (1, 6, 1), (1, 1, 6), (1, 6, 6)),
+        check
+      )
+    }
+
+    withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      checkQuery(AssertOnQuery { q =>
         assert(q.availableOffsets.iterator.size == 1)
+        // The kafka source is scanned twice because of self-join
+        assert(q.recentProgress.map(_.numInputRows).sum == 8)
+        true
+      })
+    }
+
+    withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+      checkQuery(AssertOnQuery { q =>
+        assert(q.availableOffsets.iterator.size == 1)
+        assert(q.lastExecution.executedPlan.collect {
+          case r: ReusedExchangeExec => r
+        }.length == 1)
+        // The kafka source is scanned only once because of exchange reuse.
         assert(q.recentProgress.map(_.numInputRows).sum == 4)
         true
+      })
+    }
+  }
+
+  test("read Kafka transactional messages: read_committed") {
+    // This test will cover the following cases:
+    // 1. the whole batch contains no data messages
+    // 2. the first offset in a batch is not a committed data message
+    // 3. the last offset in a batch is not a committed data message
+    // 4. there is a gap in the middle of a batch
+
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.isolation.level", "read_committed")
+      .option("maxOffsetsPerTrigger", 3)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      // Set a short timeout to make the test fast. When a batch doesn't contain any visible data
+      // messages, "poll" will wait until timeout.
+      .option("kafkaConsumer.pollTimeoutMs", 5000)
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    val clock = new StreamManualClock
+
+    // Wait until the manual clock is waiting on further instructions to move forward. Then we can
+    // ensure all batches we are waiting for have been processed.
+    val waitUntilBatchProcessed = Execute { q =>
+      eventually(Timeout(streamingTimeout)) {
+        if (!q.exception.isDefined) {
+          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+        }
       }
-    )
+      if (q.exception.isDefined) {
+        throw q.exception.get
+      }
+    }
+
+    val topicPartition = new TopicPartition(topic, 0)
+    // The message values are the same as their offsets to make the test easy to follow
+    testUtils.withTranscationalProducer { producer =>
+      testStream(mapped)(
+        StartStream(ProcessingTime(100), clock),
+        waitUntilBatchProcessed,
+        CheckAnswer(),
+        WithOffsetSync(topicPartition, expectedOffset = 5) { () =>
+          // Send 5 messages. They should be visible only after being committed.
+          producer.beginTransaction()
+          (0 to 4).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        // Should not see any uncommitted messages
+        CheckNewAnswer(),
+        WithOffsetSync(topicPartition, expectedOffset = 6) { () =>
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(0, 1, 2), // offset 0, 1, 2
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(3, 4), // offset: 3, 4, 5* [* means it's not a committed data message]
+        WithOffsetSync(topicPartition, expectedOffset = 12) { () =>
+          // Send 5 messages and abort the transaction. They should not be read.
+          producer.beginTransaction()
+          (6 to 10).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.abortTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(), // offset: 6*, 7*, 8*
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(), // offset: 9*, 10*, 11*
+        WithOffsetSync(topicPartition, expectedOffset = 18) { () =>
+          // Send 5 messages again. The consumer should skip the above aborted messages and read
+          // them.
+          producer.beginTransaction()
+          (12 to 16).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(12, 13, 14), // offset: 12, 13, 14
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(15, 16),  // offset: 15, 16, 17*
+        WithOffsetSync(topicPartition, expectedOffset = 25) { () =>
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "18")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "20")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "22")).get()
+          producer.send(new ProducerRecord[String, String](topic, "23")).get()
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(18, 20), // offset: 18, 19*, 20
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(22, 23), // offset: 21*, 22, 23
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer() // offset: 24*
+      )
+    }
+  }
+
+  test("read Kafka transactional messages: read_uncommitted") {
+    // This test will cover the following cases:
+    // 1. the whole batch contains no data messages
+    // 2. the first offset in a batch is not a committed data message
+    // 3. the last offset in a batch is not a committed data message
+    // 4. there is a gap in the middle of a batch
+
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.isolation.level", "read_uncommitted")
+      .option("maxOffsetsPerTrigger", 3)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      // Set a short timeout to make the test fast. When a batch doesn't contain any visible data
+      // messages, "poll" will wait until timeout.
+      .option("kafkaConsumer.pollTimeoutMs", 5000)
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    val clock = new StreamManualClock
+
+    // Wait until the manual clock is waiting on further instructions to move forward. Then we can
+    // ensure all batches we are waiting for have been processed.
+    val waitUntilBatchProcessed = Execute { q =>
+      eventually(Timeout(streamingTimeout)) {
+        if (!q.exception.isDefined) {
+          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+        }
+      }
+      if (q.exception.isDefined) {
+        throw q.exception.get
+      }
+    }
+
+    val topicPartition = new TopicPartition(topic, 0)
+    // The message values are the same as their offsets to make the test easy to follow
+    testUtils.withTranscationalProducer { producer =>
+      testStream(mapped)(
+        StartStream(ProcessingTime(100), clock),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(),
+        WithOffsetSync(topicPartition, expectedOffset = 5) { () =>
+          // Send 5 messages. They should be visible only after being committed.
+          producer.beginTransaction()
+          (0 to 4).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(0, 1, 2), // offset 0, 1, 2
+        WithOffsetSync(topicPartition, expectedOffset = 6) { () =>
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(3, 4), // offset: 3, 4, 5* [* means it's not a committed data message]
+        WithOffsetSync(topicPartition, expectedOffset = 12) { () =>
+          // Send 5 messages and abort the transaction. They should not be read.
+          producer.beginTransaction()
+          (6 to 10).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.abortTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(6, 7, 8), // offset: 6, 7, 8
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(9, 10), // offset: 9, 10, 11*
+        WithOffsetSync(topicPartition, expectedOffset = 18) { () =>
+          // Send 5 messages again. The consumer should skip the above aborted messages and read
+          // them.
+          producer.beginTransaction()
+          (12 to 16).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(12, 13, 14), // offset: 12, 13, 14
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(15, 16),  // offset: 15, 16, 17*
+        WithOffsetSync(topicPartition, expectedOffset = 25) { () =>
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "18")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "20")).get()
+          producer.commitTransaction()
+          producer.beginTransaction()
+          producer.send(new ProducerRecord[String, String](topic, "22")).get()
+          producer.send(new ProducerRecord[String, String](topic, "23")).get()
+          producer.commitTransaction()
+        },
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(18, 20), // offset: 18, 19*, 20
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer(22, 23), // offset: 21*, 22, 23
+        AdvanceManualClock(100),
+        waitUntilBatchProcessed,
+        CheckNewAnswer() // offset: 24*
+      )
+    }
+  }
+
+  test("SPARK-25495: FetchedData.reset should reset all fields") {
+    val topic = newTopic()
+    val topicPartition = new TopicPartition(topic, 0)
+    testUtils.createTopic(topic, partitions = 1)
+
+    val ds = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.isolation.level", "read_committed")
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+      .select($"value".as[String])
+
+    testUtils.withTranscationalProducer { producer =>
+      producer.beginTransaction()
+      (0 to 3).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.commitTransaction()
+    }
+    testUtils.waitUntilOffsetAppears(topicPartition, 5)
+
+    val q = ds.writeStream.foreachBatch { (ds: Dataset[String], epochId: Long) =>
+      if (epochId == 0) {
+        // Send more message before the tasks of the current batch start reading the current batch
+        // data, so that the executors will prefetch messages in the next batch and drop them. In
+        // this case, if we forget to reset `FetchedData._nextOffsetInFetchedData` or
+        // `FetchedData._offsetAfterPoll` (See SPARK-25495), the next batch will see incorrect
+        // values and return wrong results hence fail the test.
+        testUtils.withTranscationalProducer { producer =>
+          producer.beginTransaction()
+          (4 to 7).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.commitTransaction()
+        }
+        testUtils.waitUntilOffsetAppears(topicPartition, 10)
+        checkDatasetUnorderly(ds, (0 to 3).map(_.toString): _*)
+      } else {
+        checkDatasetUnorderly(ds, (4 to 7).map(_.toString): _*)
+      }
+    }.start()
+    try {
+      q.processAllAvailable()
+    } finally {
+      q.stop()
+    }
   }
 }
 
@@ -647,7 +978,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
         query.logicalPlan.collect {
-          case StreamingExecutionRelation(_: KafkaMicroBatchReader, _) => true
+          case StreamingExecutionRelation(_: KafkaMicroBatchReadSupport, _) => true
         }.nonEmpty
       }
     )
@@ -672,17 +1003,16 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "kafka.bootstrap.servers" -> testUtils.brokerAddress,
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
-        val reader = provider.createMicroBatchReader(
-          Optional.empty[StructType], dir.getAbsolutePath, new DataSourceOptions(options.asJava))
-        reader.setOffsetRange(
-          Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 0L))),
-          Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 100L)))
-        )
-        val factories = reader.planUnsafeInputPartitions().asScala
+        val readSupport = provider.createMicroBatchReadSupport(
+          dir.getAbsolutePath, new DataSourceOptions(options.asJava))
+        val config = readSupport.newScanConfigBuilder(
+          KafkaSourceOffset(Map(tp -> 0L)),
+          KafkaSourceOffset(Map(tp -> 100L))).build()
+        val inputPartitions = readSupport.planInputPartitions(config)
           .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
-        withClue(s"minPartitions = $minPartitions generated factories $factories\n\t") {
-          assert(factories.size == numPartitionsGenerated)
-          factories.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
+        withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
+          assert(inputPartitions.size == numPartitionsGenerated)
+          inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
         }
       }
     }
@@ -933,7 +1263,8 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       makeSureGetOffsetCalled,
       Execute { q =>
         // wait to reach the last offset in every partition
-        q.awaitOffset(0, KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L)))
+        q.awaitOffset(
+          0, KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L)), streamingTimeout.toMillis)
       },
       CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22),
       StopStream,
@@ -1103,6 +1434,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
         .option("kafka.metadata.max.age.ms", "1")
         .option("subscribePattern", "stress.*")
         .option("failOnDataLoss", "false")
+        .option("kafka.default.api.timeout.ms", "3000")
         .load()
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
         .as[(String, String)]
@@ -1146,134 +1478,5 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
         }
       },
       iterations = 50)
-  }
-}
-
-class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with SharedSQLContext {
-
-  import testImplicits._
-
-  private var testUtils: KafkaTestUtils = _
-
-  private val topicId = new AtomicInteger(0)
-
-  private def newTopic(): String = s"failOnDataLoss-${topicId.getAndIncrement()}"
-
-  override def createSparkSession(): TestSparkSession = {
-    // Set maxRetries to 3 to handle NPE from `poll` when deleting a topic
-    new TestSparkSession(new SparkContext("local[2,3]", "test-sql-context", sparkConf))
-  }
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    testUtils = new KafkaTestUtils {
-      override def brokerConfiguration: Properties = {
-        val props = super.brokerConfiguration
-        // Try to make Kafka clean up messages as fast as possible. However, there is a hard-code
-        // 30 seconds delay (kafka.log.LogManager.InitialTaskDelayMs) so this test should run at
-        // least 30 seconds.
-        props.put("log.cleaner.backoff.ms", "100")
-        props.put("log.segment.bytes", "40")
-        props.put("log.retention.bytes", "40")
-        props.put("log.retention.check.interval.ms", "100")
-        props.put("delete.retention.ms", "10")
-        props.put("log.flush.scheduler.interval.ms", "10")
-        props
-      }
-    }
-    testUtils.setup()
-  }
-
-  override def afterAll(): Unit = {
-    if (testUtils != null) {
-      testUtils.teardown()
-      testUtils = null
-      super.afterAll()
-    }
-  }
-
-  protected def startStream(ds: Dataset[Int]) = {
-    ds.writeStream.foreach(new ForeachWriter[Int] {
-
-      override def open(partitionId: Long, version: Long): Boolean = {
-        true
-      }
-
-      override def process(value: Int): Unit = {
-        // Slow down the processing speed so that messages may be aged out.
-        Thread.sleep(Random.nextInt(500))
-      }
-
-      override def close(errorOrNull: Throwable): Unit = {
-      }
-    }).start()
-  }
-
-  test("stress test for failOnDataLoss=false") {
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-      .option("subscribePattern", "failOnDataLoss.*")
-      .option("startingOffsets", "earliest")
-      .option("failOnDataLoss", "false")
-      .option("fetchOffset.retryIntervalMs", "3000")
-    val kafka = reader.load()
-      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
-    val query = startStream(kafka.map(kv => kv._2.toInt))
-
-    val testTime = 1.minutes
-    val startTime = System.currentTimeMillis()
-    // Track the current existing topics
-    val topics = mutable.ArrayBuffer[String]()
-    // Track topics that have been deleted
-    val deletedTopics = mutable.Set[String]()
-    while (System.currentTimeMillis() - testTime.toMillis < startTime) {
-      Random.nextInt(10) match {
-        case 0 => // Create a new topic
-          val topic = newTopic()
-          topics += topic
-          // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
-          // chance that a topic will be recreated after deletion due to the asynchronous update.
-          // Hence, always overwrite to handle this race condition.
-          testUtils.createTopic(topic, partitions = 1, overwrite = true)
-          logInfo(s"Create topic $topic")
-        case 1 if topics.nonEmpty => // Delete an existing topic
-          val topic = topics.remove(Random.nextInt(topics.size))
-          testUtils.deleteTopic(topic)
-          logInfo(s"Delete topic $topic")
-          deletedTopics += topic
-        case 2 if deletedTopics.nonEmpty => // Recreate a topic that was deleted.
-          val topic = deletedTopics.toSeq(Random.nextInt(deletedTopics.size))
-          deletedTopics -= topic
-          topics += topic
-          // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
-          // chance that a topic will be recreated after deletion due to the asynchronous update.
-          // Hence, always overwrite to handle this race condition.
-          testUtils.createTopic(topic, partitions = 1, overwrite = true)
-          logInfo(s"Create topic $topic")
-        case 3 =>
-          Thread.sleep(1000)
-        case _ => // Push random messages
-          for (topic <- topics) {
-            val size = Random.nextInt(10)
-            for (_ <- 0 until size) {
-              testUtils.sendMessages(topic, Array(Random.nextInt(10).toString))
-            }
-          }
-      }
-      // `failOnDataLoss` is `false`, we should not fail the query
-      if (query.exception.nonEmpty) {
-        throw query.exception.get
-      }
-    }
-
-    query.stop()
-    // `failOnDataLoss` is `false`, we should not fail the query
-    if (query.exception.nonEmpty) {
-      throw query.exception.get
-    }
   }
 }

@@ -54,15 +54,6 @@ test_that("Check masked functions", {
                sort(namesOfMaskedCompletely, na.last = TRUE))
 })
 
-test_that("repeatedly starting and stopping SparkR", {
-  for (i in 1:4) {
-    sc <- suppressWarnings(sparkR.init(master = sparkRTestMaster))
-    rdd <- parallelize(sc, 1:20, 2L)
-    expect_equal(countRDD(rdd), 20)
-    suppressWarnings(sparkR.stop())
-  }
-})
-
 test_that("repeatedly starting and stopping SparkSession", {
   for (i in 1:4) {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
@@ -101,9 +92,6 @@ test_that("job group functions can be called", {
   cancelJobGroup("groupId")
   clearJobGroup()
 
-  suppressWarnings(setJobGroup(sc, "groupId", "job description", TRUE))
-  suppressWarnings(cancelJobGroup(sc, "groupId"))
-  suppressWarnings(clearJobGroup(sc))
   sparkR.session.stop()
 })
 
@@ -238,5 +226,12 @@ test_that("add and get file to be downloaded with Spark job on every node", {
   download_path2 <- spark.getSparkFiles(paste0(dir_name, "/", "sub_hello/sub_hello.txt"))
   expect_equal(readLines(download_path2), sub_words)
   unlink(path, recursive = TRUE)
+  sparkR.session.stop()
+})
+
+test_that("SPARK-25234: parallelize should not have integer overflow", {
+  sc <- sparkR.sparkContext(master = sparkRTestMaster)
+  # 47000 * 47000 exceeds integer range
+  parallelize(sc, 1:47000, 47000)
   sparkR.session.stop()
 })

@@ -85,16 +85,8 @@ class FileScanRDD(
       // If we do a coalesce, however, we are likely to compute multiple partitions in the same
       // task and in the same thread, in which case we need to avoid override values written by
       // previous partitions (SPARK-13071).
-      private def updateBytesRead(): Unit = {
+      private def incTaskInputMetricsBytesRead(): Unit = {
         inputMetrics.setBytesRead(existingBytesRead + getBytesReadCallback())
-      }
-
-      // If we can't get the bytes read from the FS stats, fall back to the file size,
-      // which may be inaccurate.
-      private def updateBytesReadWithFileSize(): Unit = {
-        if (currentFile != null) {
-          inputMetrics.incBytesRead(currentFile.length)
-        }
       }
 
       private[this] val files = split.asInstanceOf[FilePartition].files.toIterator
@@ -112,13 +104,17 @@ class FileScanRDD(
         val nextElement = currentIterator.next()
         // TODO: we should have a better separation of row based and batch based scan, so that we
         // don't need to run this `if` for every record.
+        val preNumRecordsRead = inputMetrics.recordsRead
         if (nextElement.isInstanceOf[ColumnarBatch]) {
+          incTaskInputMetricsBytesRead()
           inputMetrics.incRecordsRead(nextElement.asInstanceOf[ColumnarBatch].numRows())
         } else {
+          // too costly to update every record
+          if (inputMetrics.recordsRead %
+              SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+            incTaskInputMetricsBytesRead()
+          }
           inputMetrics.incRecordsRead(1)
-        }
-        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
-          updateBytesRead()
         }
         nextElement
       }
@@ -139,7 +135,6 @@ class FileScanRDD(
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
-        updateBytesReadWithFileSize()
         if (files.hasNext) {
           currentFile = files.next()
           logInfo(s"Reading File $currentFile")
@@ -207,14 +202,13 @@ class FileScanRDD(
       }
 
       override def close(): Unit = {
-        updateBytesRead()
-        updateBytesReadWithFileSize()
+        incTaskInputMetricsBytesRead()
         InputFileBlockHolder.unset()
       }
     }
 
     // Register an on-task-completion callback to close the input stream.
-    context.addTaskCompletionListener(_ => iterator.close())
+    context.addTaskCompletionListener[Unit](_ => iterator.close())
 
     iterator.asInstanceOf[Iterator[InternalRow]] // This is an erasure hack.
   }

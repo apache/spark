@@ -45,7 +45,7 @@ case class HashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport {
+  extends UnaryExecNode with BlockingOperatorWithCodegen {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -150,14 +150,6 @@ case class HashAggregateExec(
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
-
-  // The result rows come from the aggregate buffer, or a single row(no grouping keys), so this
-  // operator doesn't need to copy its result even if its child does.
-  override def needCopyResult: Boolean = false
-
-  // Aggregate operator always consumes all the input rows before outputting any result, so we
-  // don't need a stop check before aggregating.
-  override def needStopCheck: Boolean = false
 
   protected override def doProduce(ctx: CodegenContext): String = {
     if (groupingExpressions.isEmpty) {
@@ -328,7 +320,7 @@ case class HashAggregateExec(
       initialBuffer,
       bufferSchema,
       groupingKeySchema,
-      TaskContext.get().taskMemoryManager(),
+      TaskContext.get(),
       1024 * 16, // initial capacity
       TaskContext.get().taskMemoryManager().pageSizeBytes
     )
@@ -579,6 +571,7 @@ case class HashAggregateExec(
         case _ =>
       }
     }
+    val bitMaxCapacity = sqlContext.conf.fastHashAggregateRowMaxCapacityBit
 
     val thisPlan = ctx.addReferenceObj("plan", this)
 
@@ -588,7 +581,7 @@ case class HashAggregateExec(
       val fastHashMapClassName = ctx.freshName("FastHashMap")
       if (isVectorizedHashMapEnabled) {
         val generatedMap = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
-          fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
+          fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
         ctx.addInnerClass(generatedMap)
 
         // Inline mutable state since not many aggregation operations in a task
@@ -598,7 +591,7 @@ case class HashAggregateExec(
           forceInline = true)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,
-          fastHashMapClassName, groupingKeySchema, bufferSchema).generate()
+          fastHashMapClassName, groupingKeySchema, bufferSchema, bitMaxCapacity).generate()
         ctx.addInnerClass(generatedMap)
 
         // Inline mutable state since not many aggregation operations in a task
@@ -704,12 +697,15 @@ case class HashAggregateExec(
 
     def outputFromRegularHashMap: String = {
       s"""
-         |while ($iterTerm.next()) {
+         |while ($limitNotReachedCond $iterTerm.next()) {
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);
-         |
          |  if (shouldStop()) return;
+         |}
+         |$iterTerm.close();
+         |if ($sorterTerm == null) {
+         |  $hashMapTerm.free();
          |}
        """.stripMargin
     }
@@ -727,11 +723,6 @@ case class HashAggregateExec(
      // output the result
      $outputFromFastHashMap
      $outputFromRegularHashMap
-
-     $iterTerm.close();
-     if ($sorterTerm == null) {
-       $hashMapTerm.free();
-     }
      """
   }
 

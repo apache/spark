@@ -47,11 +47,13 @@ object ArrowUtils {
     case DateType => new ArrowType.Date(DateUnit.DAY)
     case TimestampType =>
       if (timeZoneId == null) {
-        throw new UnsupportedOperationException("TimestampType must supply timeZoneId parameter")
+        throw new UnsupportedOperationException(
+          s"${TimestampType.catalogString} must supply timeZoneId parameter")
       } else {
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       }
-    case _ => throw new UnsupportedOperationException(s"Unsupported data type: ${dt.simpleString}")
+    case _ =>
+      throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
   }
 
   def fromArrowType(dt: ArrowType): DataType = dt match {
@@ -129,11 +131,8 @@ object ArrowUtils {
     } else {
       Nil
     }
-    val pandasColsByPosition = if (conf.pandasGroupedMapAssignColumnssByPosition) {
-      Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_POSITION.key -> "true")
-    } else {
-      Nil
-    }
-    Map(timeZoneConf ++ pandasColsByPosition: _*)
+    val pandasColsByName = Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key ->
+      conf.pandasGroupedMapAssignColumnsByName.toString)
+    Map(timeZoneConf ++ pandasColsByName: _*)
   }
 }

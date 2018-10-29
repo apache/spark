@@ -71,7 +71,7 @@ class HadoopTableReader(
 
   // Hadoop honors "mapreduce.job.maps" as hint,
   // but will ignore when mapreduce.jobtracker.address is "local".
-  // https://hadoop.apache.org/docs/r2.6.5/hadoop-mapreduce-client/hadoop-mapreduce-client-core/
+  // https://hadoop.apache.org/docs/r2.7.6/hadoop-mapreduce-client/hadoop-mapreduce-client-core/
   // mapred-default.xml
   //
   // In order keep consistency with Hive, we will let it be 0 in local mode also.
@@ -110,8 +110,9 @@ class HadoopTableReader(
       deserializerClass: Class[_ <: Deserializer],
       filterOpt: Option[PathFilter]): RDD[InternalRow] = {
 
-    assert(!hiveTable.isPartitioned, """makeRDDForTable() cannot be called on a partitioned table,
-      since input formats may differ across partitions. Use makeRDDForTablePartitions() instead.""")
+    assert(!hiveTable.isPartitioned,
+      "makeRDDForTable() cannot be called on a partitioned table, since input formats may " +
+      "differ across partitions. Use makeRDDForPartitionedTable() instead.")
 
     // Create local references to member variables, so that the entire `this` object won't be
     // serialized in the closure below.

@@ -95,6 +95,18 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(!deserial.toString().isEmpty())
   }
 
+  test("distinct with known partitioner preserves partitioning") {
+    val rdd = sc.parallelize(1.to(100), 10).map(x => (x % 10, x % 10)).sortByKey()
+    val initialPartitioner = rdd.partitioner
+    val distinctRdd = rdd.distinct()
+    val resultingPartitioner = distinctRdd.partitioner
+    assert(initialPartitioner === resultingPartitioner)
+    val distinctRddDifferent = rdd.distinct(5)
+    val distinctRddDifferentPartitioner = distinctRddDifferent.partitioner
+    assert(initialPartitioner != distinctRddDifferentPartitioner)
+    assert(distinctRdd.collect().sorted === distinctRddDifferent.collect().sorted)
+  }
+
   test("countApproxDistinct") {
 
     def error(est: Long, size: Long): Double = math.abs(est - size) / size.toDouble
@@ -443,7 +455,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       map{x => List(x)}.toList, "Tried coalescing 9 partitions to 20 but didn't get 9 back")
   }
 
- test("coalesced RDDs with partial locality") {
+  test("coalesced RDDs with partial locality") {
     // Make an RDD that has some locality preferences and some without. This can happen
     // with UnionRDD
     val data = sc.makeRDD((1 to 9).map(i => {
@@ -844,6 +856,28 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     val partitions = repartitioned.glom().collect()
     assert(partitions(0) === Seq((0, 5), (0, 8), (2, 6)))
     assert(partitions(1) === Seq((1, 3), (3, 8), (3, 8)))
+  }
+
+  test("cartesian on empty RDD") {
+    val a = sc.emptyRDD[Int]
+    val b = sc.parallelize(1 to 3)
+    val cartesian_result = Array.empty[(Int, Int)]
+    assert(a.cartesian(a).collect().toList === cartesian_result)
+    assert(a.cartesian(b).collect().toList === cartesian_result)
+    assert(b.cartesian(a).collect().toList === cartesian_result)
+  }
+
+  test("cartesian on non-empty RDDs") {
+    val a = sc.parallelize(1 to 3)
+    val b = sc.parallelize(2 to 4)
+    val c = sc.parallelize(1 to 1)
+    val a_cartesian_b =
+      Array((1, 2), (1, 3), (1, 4), (2, 2), (2, 3), (2, 4), (3, 2), (3, 3), (3, 4))
+    val a_cartesian_c = Array((1, 1), (2, 1), (3, 1))
+    val c_cartesian_a = Array((1, 1), (1, 2), (1, 3))
+    assert(a.cartesian[Int](b).collect().toList.sorted === a_cartesian_b)
+    assert(a.cartesian[Int](c).collect().toList.sorted === a_cartesian_c)
+    assert(c.cartesian[Int](a).collect().toList.sorted === c_cartesian_a)
   }
 
   test("intersection") {

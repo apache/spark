@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -42,13 +43,6 @@ import org.apache.spark.sql.types._
  *    condition.
  */
 object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
-  private def getValueExpression(e: Expression): Seq[Expression] = {
-    e match {
-      case cns : CreateNamedStruct => cns.valExprs
-      case expr => Seq(expr)
-    }
-  }
-
   private def dedupJoin(joinPlan: LogicalPlan): LogicalPlan = joinPlan match {
     // SPARK-21835: It is possibly that the two sides of the join have conflicting attributes,
     // the produced join then becomes unresolved and break structural integrity. We should
@@ -97,19 +91,19 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
           // Deduplicate conflicting attributes if any.
           dedupJoin(Join(outerPlan, sub, LeftAnti, joinCond))
-        case (p, In(value, Seq(ListQuery(sub, conditions, _, _)))) =>
-          val inConditions = getValueExpression(value).zip(sub.output).map(EqualTo.tupled)
+        case (p, InSubquery(values, ListQuery(sub, conditions, _, _))) =>
+          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
           // Deduplicate conflicting attributes if any.
           dedupJoin(Join(outerPlan, sub, LeftSemi, joinCond))
-        case (p, Not(In(value, Seq(ListQuery(sub, conditions, _, _))))) =>
+        case (p, Not(InSubquery(values, ListQuery(sub, conditions, _, _)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
 
           // Note that will almost certainly be planned as a Broadcast Nested Loop join.
           // Use EXISTS if performance matters to you.
-          val inConditions = getValueExpression(value).zip(sub.output).map(EqualTo.tupled)
+          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions, p)
           // Expand the NOT IN expression with the NULL-aware semantic
           // to its full form. That is from:
@@ -150,9 +144,9 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           newPlan = dedupJoin(
             Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And)))
           exists
-        case In(value, Seq(ListQuery(sub, conditions, _, _))) =>
+        case InSubquery(values, ListQuery(sub, conditions, _, _)) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          val inConditions = getValueExpression(value).zip(sub.output).map(EqualTo.tupled)
+          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
           val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
           // Deduplicate conflicting attributes if any.
           newPlan = dedupJoin(Join(newPlan, sub, ExistenceJoin(exists), newConditions))

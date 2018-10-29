@@ -31,9 +31,9 @@ import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 
@@ -152,7 +152,8 @@ class GBTClassifier @Since("1.4.0") (
     set(validationIndicatorCol, value)
   }
 
-  override protected def train(dataset: Dataset[_]): GBTClassificationModel = {
+  override protected def train(
+      dataset: Dataset[_]): GBTClassificationModel = instrumented { instr =>
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
 
@@ -189,8 +190,9 @@ class GBTClassifier @Since("1.4.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, predictionCol, impurity, lossType,
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, featuresCol, predictionCol, impurity, lossType,
       maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
       seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy,
       validationIndicatorCol)
@@ -204,9 +206,7 @@ class GBTClassifier @Since("1.4.0") (
       GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy))
     }
 
-    val m = new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
-    instr.logSuccess(m)
-    m
+    new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }
 
   @Since("1.4.1")
@@ -412,14 +412,14 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
     override def load(path: String): GBTClassificationModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
-        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName, false)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
       val numFeatures = (metadata.metadata \ numFeaturesKey).extract[Int]
       val numTrees = (metadata.metadata \ numTreesKey).extract[Int]
 
       val trees: Array[DecisionTreeRegressionModel] = treesData.map {
         case (treeMetadata, root) =>
-          val tree = new DecisionTreeRegressionModel(treeMetadata.uid,
-            root.asInstanceOf[RegressionNode], numFeatures)
+          val tree =
+            new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
           treeMetadata.getAndSetParams(tree)
           tree
       }
