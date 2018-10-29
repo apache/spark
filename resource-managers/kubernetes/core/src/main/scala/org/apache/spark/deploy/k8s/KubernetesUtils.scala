@@ -88,25 +88,41 @@ private[spark] object KubernetesUtils extends Logging {
 
   def loadPodFromTemplate(
       kubernetesClient: KubernetesClient,
-      templateFile: File): SparkPod = {
+      templateFile: File,
+      containerName: Option[String]): SparkPod = {
     try {
       val pod = kubernetesClient.pods().load(templateFile).get()
-      pod.getSpec.getContainers.asScala.toList match {
-        case first :: rest => SparkPod(
-          new PodBuilder(pod)
-            .editSpec()
-              .withContainers(rest.asJava)
-              .endSpec()
-            .build(),
-          first)
-        case Nil => SparkPod(pod, new ContainerBuilder().build())
-      }
+      selectSparkContainer(pod, containerName)
     } catch {
       case e: Exception =>
         logError(
           s"Encountered exception while attempting to load initial pod spec from file", e)
         throw new SparkException("Could not load pod from template file.", e)
     }
+  }
+
+  def selectSparkContainer(pod: Pod, containerName: Option[String]): SparkPod = {
+    val containers = pod.getSpec.getContainers.asScala.toList
+    containerName.flatMap(name => containers.partition(_.getName == name) match {
+      case (sparkContainer :: Nil, rest) => Some((sparkContainer, rest))
+      case _ =>
+        logWarning(
+          s"specified container ${name} not found on pod template, " +
+            s"falling back to taking the first container")
+        Option.empty
+    }).orElse(containers match {
+      case first :: rest => Some((first, rest))
+      case _ => Option.empty
+    }).map {
+      case (sparkContainer: Container, rest: List[Container]) => SparkPod(
+        new PodBuilder(pod)
+          .editSpec()
+          .withContainers(rest.asJava)
+          .endSpec()
+          .build(),
+        sparkContainer)
+      case _ => SparkPod(pod, new ContainerBuilder().build())
+    }.getOrElse(SparkPod(pod, new ContainerBuilder().build()))
   }
 
   def parseMasterUrl(url: String): String = url.substring("k8s://".length)

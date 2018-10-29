@@ -128,7 +128,10 @@ private[spark] object KubernetesDriverBuilder {
     conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
       .map(new File(_))
       .map(file => new KubernetesDriverBuilder(provideInitialPod = () =>
-        KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
+        KubernetesUtils.loadPodFromTemplate(
+          kubernetesClient,
+          file,
+          conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME))
       ))
       .getOrElse(new KubernetesDriverBuilder())
   }
