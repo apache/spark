@@ -59,22 +59,22 @@ private[spark] class ExecutorPodsLifecycleManager(
         state match {
           case deleted@PodDeleted(_) =>
             safeLogDebug(
-              "Snapshot reported deleted executor with id {execId} and pod name {podName}",
-              SafeArg.of("execId", execId),
+              "Snapshot reported deleted executor",
+              SafeArg.of("executorId", execId),
               SafeArg.of("podName", state.pod.getMetadata.getName))
             removeExecutorFromSpark(schedulerBackend, deleted, execId)
             execIdsRemovedInThisRound += execId
           case failed@PodFailed(_) =>
             safeLogDebug(
-              "Snapshot reported failed executor with id {execId} and pod name {podName}",
-              SafeArg.of("execId", execId),
+              "Snapshot reported failed executor",
+              SafeArg.of("executorId", execId),
               SafeArg.of("podName", state.pod.getMetadata.getName))
             onFinalNonDeletedState(failed, execId, schedulerBackend, execIdsRemovedInThisRound)
           case succeeded@PodSucceeded(_) =>
             safeLogDebug(
-              "Snapshot reported succeeded executor with id {execId} and pod name {podName}." +
+              "Snapshot reported succeeded executor." +
               " Note that unusual unless Spark specifically informed the executor to exit.",
-              SafeArg.of("execId", execId),
+              SafeArg.of("executorId", execId),
               SafeArg.of("podName", state.pod.getMetadata.getName))
             onFinalNonDeletedState(succeeded, execId, schedulerBackend, execIdsRemovedInThisRound)
           case _ =>
@@ -96,7 +96,7 @@ private[spark] class ExecutorPodsLifecycleManager(
           val exitReasonMessage = s"The executor with ID $missingExecutorId was not found in the" +
             s" cluster but we didn't get a reason why. Marking the executor as failed. The" +
             s" executor may have been deleted but the driver missed the deletion event."
-          safeLogDebug("The executor with ID {missingExecutorId} was not found in the" +
+          safeLogDebug("The executor was not found in the" +
             " cluster but we didn't get a reason why. Marking the executor as failed. The" +
             " executor may have been deleted but the driver missed the deletion event.",
             SafeArg.of("missingExecutorId", missingExecutorId))
@@ -111,9 +111,9 @@ private[spark] class ExecutorPodsLifecycleManager(
     }
 
     if (execIdsRemovedInThisRound.nonEmpty) {
-      safeLogDebug("Removed executors with ids {execIdsRemovedInThisRound}" +
+      safeLogDebug("Removed executors" +
         " from Spark that were either found to be deleted or non-existent in the cluster.",
-        SafeArg.of("execIdsRemovedInThisRound", execIdsRemovedInThisRound.mkString(",")))
+        SafeArg.of("executorIdsRemovedInThisRound", execIdsRemovedInThisRound.mkString(",")))
     }
   }
 
