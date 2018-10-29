@@ -2578,4 +2578,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         Row ("abc", 1))
     }
   }
+
+  test("SPARK-25816 ResolveReferences works with nested extractors") {
+    val df = Seq((1, Map(1 -> "a")), (2, Map(2 -> "b"))).toDF("key", "map")
+    val swappedDf = df.select($"key".as("map"), $"map".as("key"))
+
+    checkAnswer(swappedDf.filter($"key"($"map") > "a"), Row(2, Map(2 -> "b")))
+  }
 }
