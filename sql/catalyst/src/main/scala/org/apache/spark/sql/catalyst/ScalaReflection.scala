@@ -174,7 +174,7 @@ object ScalaReflection extends ScalaReflection {
     val input = upCastToExpectedType(
       GetColumnByOrdinal(0, dataType), dataType, walkedTypePath)
 
-    val expr = deserializerFor(tpe, input, walkedTypePath, lastType = None)
+    val expr = deserializerFor(tpe, input, walkedTypePath)
     if (nullable) {
       expr
     } else {
@@ -193,8 +193,7 @@ object ScalaReflection extends ScalaReflection {
   private def deserializerFor(
       tpe: `Type`,
       path: Expression,
-      walkedTypePath: Seq[String],
-      lastType: Option[Type]): Expression = cleanUpReflectionObjects {
+      walkedTypePath: Seq[String]): Expression = cleanUpReflectionObjects {
 
     /** Returns the current path with a sub-field extracted. */
     def addToPath(part: String, dataType: DataType, walkedTypePath: Seq[String]): Expression = {
@@ -218,7 +217,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(optType)) = t
         val className = getClassNameFromType(optType)
         val newTypePath = s"""- option value class: "$className"""" +: walkedTypePath
-        WrapOption(deserializerFor(optType, path, newTypePath, Some(t)), dataTypeFor(optType))
+        WrapOption(deserializerFor(optType, path, newTypePath), dataTypeFor(optType))
 
       case t if t <:< localTypeOf[java.lang.Integer] =>
         val boxedType = classOf[java.lang.Integer]
@@ -298,7 +297,7 @@ object ScalaReflection extends ScalaReflection {
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
           val casted = upCastToExpectedType(element, dataType, newTypePath)
-          val converter = deserializerFor(elementType, casted, newTypePath, Some(t))
+          val converter = deserializerFor(elementType, casted, newTypePath)
           if (elementNullable) {
             converter
           } else {
@@ -338,7 +337,7 @@ object ScalaReflection extends ScalaReflection {
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
           val casted = upCastToExpectedType(element, dataType, newTypePath)
-          val converter = deserializerFor(elementType, casted, newTypePath, Some(t))
+          val converter = deserializerFor(elementType, casted, newTypePath)
           if (elementNullable) {
             converter
           } else {
@@ -361,8 +360,8 @@ object ScalaReflection extends ScalaReflection {
 
         UnresolvedCatalystToExternalMap(
           path,
-          p => deserializerFor(keyType, p, walkedTypePath, Some(t)),
-          p => deserializerFor(valueType, p, walkedTypePath, Some(t)),
+          p => deserializerFor(keyType, p, walkedTypePath),
+          p => deserializerFor(valueType, p, walkedTypePath),
           mirror.runtimeClass(t.typeSymbol.asClass)
         )
 
@@ -398,11 +397,8 @@ object ScalaReflection extends ScalaReflection {
         // the compiler keeps the class so we must provide an instance of the
         // class too. In other cases, the compiler will handle wrapping/unwrapping
         // for us automatically.
-        val arg = deserializerFor(underlyingType, path, newTypePath, Some(t))
-        val isCollectionElement = lastType.exists { lt =>
-          lt <:< localTypeOf[Array[_]] || lt <:< localTypeOf[Seq[_]]
-        }
-        if (lastType.isEmpty || isCollectionElement) {
+        val arg = deserializerFor(underlyingType, path, newTypePath)
+        if (walkedTypePath.length == 1 || walkedTypePath.head.contains("array element")) {
           val cls = getClassFromType(t)
           NewInstance(cls, Seq(arg), ObjectType(cls), propagateNull = false)
         } else {
@@ -423,14 +419,12 @@ object ScalaReflection extends ScalaReflection {
             deserializerFor(
               fieldType,
               addToPathOrdinal(i, dataType, newTypePath),
-              newTypePath,
-              Some(t))
+              newTypePath)
           } else {
             deserializerFor(
               fieldType,
               addToPath(fieldName, dataType, newTypePath),
-              newTypePath,
-              Some(t))
+              newTypePath)
           }
 
           if (!nullable) {
