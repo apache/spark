@@ -164,7 +164,7 @@ object JoinBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Join Benchmark") {
       broadcastHashJoinLongKey()
       broadcastHashJoinLongKeyWithDuplicates()

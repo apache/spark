@@ -30,7 +30,7 @@ abstract class BenchmarkBase {
    * Implementations of this method are supposed to use the wrapper method `runBenchmark`
    * for each benchmark scenario.
    */
-  def runBenchmarkSuite(): Unit
+  def runBenchmarkSuite(mainArgs: Array[String]): Unit
 
   final def runBenchmark(benchmarkName: String)(func: => Any): Unit = {
     val separator = "=" * 96
@@ -51,7 +51,7 @@ abstract class BenchmarkBase {
       output = Some(new FileOutputStream(file))
     }
 
-    runBenchmarkSuite()
+    runBenchmarkSuite(args)
 
     output.foreach { o =>
       if (o != null) {
