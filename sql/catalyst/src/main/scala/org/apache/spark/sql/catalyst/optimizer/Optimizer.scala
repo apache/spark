@@ -174,6 +174,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       ColumnPruning,
+      InferFiltersFromConstraints,
+      PushDownPredicate,
       CollapseProject,
       RemoveRedundantProject) :+
     Batch("UpdateAttributeReferences", Once,
