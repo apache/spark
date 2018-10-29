@@ -176,6 +176,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ColumnPruning,
       InferFiltersFromConstraints,
       PushDownPredicate,
+      CombineFilters,
       CollapseProject,
       RemoveRedundantProject) :+
     Batch("UpdateAttributeReferences", Once,
