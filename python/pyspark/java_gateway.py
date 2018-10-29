@@ -82,15 +82,20 @@ def launch_gateway(conf=None, popen_kwargs=None):
             env["_PYSPARK_DRIVER_CONN_INFO_PATH"] = conn_info_file
 
             # Launch the Java gateway.
+            popen_kwargs = {} if popen_kwargs is None else popen_kwargs
             # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
+            popen_kwargs['stdin'] = PIPE
+            # We always set the necessary environment variables.
+            popen_kwargs['env'] = env
             if not on_windows:
                 # Don't send ctrl-c / SIGINT to the Java gateway:
                 def preexec_func():
                     signal.signal(signal.SIGINT, signal.SIG_IGN)
-                proc = Popen(command, stdin=PIPE, preexec_fn=preexec_func, env=env)
+                popen_kwargs['preexec_fn'] = preexec_func
+                proc = Popen(command, **popen_kwargs)
             else:
                 # preexec_fn not supported on Windows
-                proc = Popen(command, stdin=PIPE, env=env)
+                proc = Popen(command, **popen_kwargs)
 
             # Wait for the file to appear, or for the process to exit, whichever happens first.
             while not proc.poll() and not os.path.isfile(conn_info_file):
