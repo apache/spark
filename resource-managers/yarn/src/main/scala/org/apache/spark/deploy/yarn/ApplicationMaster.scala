@@ -293,6 +293,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         }
 
         if (!unregistered) {
+          logInfo("Waiting for " + sparkConf.get("spark.yarn.report.interval", "1000").toInt +"ms to unregister am," +
+            " so the client can have the right diagnostics msg!")
+          Thread.sleep(sparkConf.get("spark.yarn.report.interval", "1000").toInt)
           // we only want to unregister if we don't want the RM to retry
           if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
             unregister(finalStatus, finalMsg)
