@@ -284,13 +284,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           getRunner(() => cleanLogs()), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
       }
 
-      conf.get(DRIVER_LOG_DFS_DIR).foreach { _ =>
-        if (conf.get(DRIVER_LOG_CLEANER_ENABLED)) {
-          pool.scheduleWithFixedDelay(getRunner(() => cleanDriverLogs()),
-            0,
-            conf.get(DRIVER_LOG_CLEANER_INTERVAL),
-            TimeUnit.SECONDS)
-        }
+      if (conf.get(DRIVER_LOG_DFS_DIR).isDefined && conf.get(DRIVER_LOG_CLEANER_ENABLED)) {
+        pool.scheduleWithFixedDelay(getRunner(() => cleanDriverLogs()),
+          0,
+          conf.get(DRIVER_LOG_CLEANER_INTERVAL),
+          TimeUnit.SECONDS)
       }
     } else {
       logDebug("Background update thread disabled for testing")
@@ -479,8 +477,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // If the file is currently not being tracked by the SHS, add an entry for it and try
               // to parse it. This will allow the cleaner code to detect the file as stale later on
               // if it was not possible to parse it.
-              listing.write(LogInfo(entry.getPath().toString(), newLastScanTime, None, None,
-                entry.getLen()))
+              listing.write(LogInfo(entry.getPath().toString(), newLastScanTime, LogType.EventLogs,
+                None, None, entry.getLen()))
               entry.getLen() > 0
           }
         }
@@ -737,7 +735,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // listing data is good.
         invalidateUI(app.info.id, app.attempts.head.info.attemptId)
         addListing(app)
-        listing.write(LogInfo(logPath.toString(), scanTime, Some(app.info.id),
+        listing.write(LogInfo(logPath.toString(), scanTime, LogType.EventLogs, Some(app.info.id),
           app.attempts.head.info.attemptId, fileStatus.getLen()))
 
         // For a finished log, remove the corresponding "in progress" entry from the listing DB if
@@ -766,7 +764,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         // If the app hasn't written down its app ID to the logs, still record the entry in the
         // listing db, with an empty ID. This will make the log eligible for deletion if the app
         // does not make progress after the configured max log age.
-        listing.write(LogInfo(logPath.toString(), scanTime, None, None, fileStatus.getLen()))
+        listing.write(
+          LogInfo(logPath.toString(), scanTime, LogType.EventLogs, None, None, fileStatus.getLen()))
     }
   }
 
@@ -825,11 +824,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .reverse()
       .first(maxTime)
       .asScala
+      .filter(l => l.logType == LogType.EventLogs)
       .toList
     stale.foreach { log =>
-      if (log.appId.isEmpty &&
-          (!conf.get(DRIVER_LOG_DFS_DIR).isDefined ||
-          !log.logPath.startsWith(new Path(conf.get(DRIVER_LOG_DFS_DIR).get).toString()))) {
+      if (log.appId.isEmpty) {
         logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
         deleteLog(fs, new Path(log.logPath))
         listing.delete(classOf[LogInfo], log.logPath)
@@ -856,7 +854,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val info = listing.read(classOf[LogInfo], f.getPath().toString())
           // Update the lastprocessedtime of file if it's length or modification time has changed
           if (info.fileSize < f.getLen() || info.lastProcessed < f.getModificationTime()) {
-            listing.write(info.copy(f.getPath().toString(), currentTime, None, None, f.getLen()))
+            listing.write(
+              info.copy(lastProcessed = currentTime, fileSize = f.getLen()))
             false
           } else if (info.lastProcessed > maxTime) {
             false
@@ -866,7 +865,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         } catch {
           case e: NoSuchElementException =>
             // For every new driver log file discovered, create a new entry in listing
-            listing.write(LogInfo(f.getPath().toString(), currentTime, None, None,
+            listing.write(LogInfo(f.getPath().toString(), currentTime, LogType.DriverLogs, None, None,
               f.getLen()))
           false
         }
@@ -875,6 +874,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         listing.delete(classOf[LogInfo], f.getPath().toString())
         deleteLog(driverLogFs, f.getPath())
       }
+    }
+
+    // Delete driver log file entries that exceed the configured max age and
+    // may have been deleted on filesystem externally.
+    val stale = listing.view(classOf[LogInfo])
+      .index("lastProcessed")
+      .reverse()
+      .first(maxTime)
+      .asScala
+      .filter(i => i.logType == LogType.DriverLogs)
+      .toList
+    stale.foreach { log =>
+      logInfo(s"Deleting invalid driver log ${log.logPath}")
+      listing.delete(classOf[LogInfo], log.logPath)
+      deleteLog(driverLogFs, new Path(log.logPath))
     }
   }
 
@@ -1079,6 +1093,10 @@ private[history] case class FsHistoryProviderMetadata(
     uiVersion: Long,
     logDir: String)
 
+private[history] object LogType extends Enumeration {
+  val DriverLogs, EventLogs = Value
+}
+
 /**
  * Tracking info for event logs detected in the configured log directory. Tracks both valid and
  * invalid logs (e.g. unparseable logs, recorded as logs with no app ID) so that the cleaner
@@ -1087,6 +1105,7 @@ private[history] case class FsHistoryProviderMetadata(
 private[history] case class LogInfo(
     @KVIndexParam logPath: String,
     @KVIndexParam("lastProcessed") lastProcessed: Long,
+    logType: LogType.Value,
     appId: Option[String],
     attemptId: Option[String],
     fileSize: Long)

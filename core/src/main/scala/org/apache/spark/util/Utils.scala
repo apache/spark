@@ -2330,11 +2330,9 @@ private[spark] object Utils extends Logging {
   def setLogLevel(l: org.apache.log4j.Level) {
     val rootLogger = org.apache.log4j.Logger.getRootLogger()
     rootLogger.setLevel(l)
-    rootLogger.getAllAppenders().asScala.foreach { tmp =>
-      tmp match {
-        case ca: org.apache.log4j.ConsoleAppender => ca.setThreshold(l)
-        case _ => // no-op
-      }
+    rootLogger.getAllAppenders().asScala.foreach {
+      case ca: org.apache.log4j.ConsoleAppender => ca.setThreshold(l)
+      case _ => // no-op
     }
   }
 

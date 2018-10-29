@@ -18,7 +18,7 @@
 package org.apache.spark.util.logging
 
 import java.io._
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
@@ -94,37 +94,40 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       with Logging {
 
     private var streamClosed = false
-    private var fileSystem: FileSystem = _
-    private val dfsLogFile: String = {
+    private var inStream: InputStream = null
+    private var outputStream: FSDataOutputStream = null
+    private val tmpBuffer = new Array[Byte](UPLOAD_CHUNK_SIZE)
+    private var threadpool: ScheduledExecutorService = _
+    init()
+
+    private def init(): Unit = {
       val rootDir = conf.get(DRIVER_LOG_DFS_DIR).get
-      fileSystem = new Path(rootDir).getFileSystem(hadoopConf)
+      val fileSystem: FileSystem = new Path(rootDir).getFileSystem(hadoopConf)
       if (!fileSystem.exists(new Path(rootDir))) {
         throw new RuntimeException(s"${rootDir} does not exist." +
           s" Please create this dir in order to persist driver logs")
       }
-      FileUtils.getFile(rootDir, appId + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()
+      val dfsLogFile: String = FileUtils.getFile(rootDir, appId
+        + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()
+      try {
+        inStream = new BufferedInputStream(new FileInputStream(localLogFile))
+        outputStream = fileSystem.create(new Path(dfsLogFile), true)
+        fileSystem.setPermission(new Path(dfsLogFile), LOG_FILE_PERMISSIONS)
+      } catch {
+        case e: Exception =>
+          if (inStream != null) {
+            Utils.tryLogNonFatalError(inStream.close())
+          }
+          if (outputStream != null) {
+            Utils.tryLogNonFatalError(outputStream.close())
+          }
+          throw e
+      }
+      threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("dfsSyncThread")
+      threadpool.scheduleWithFixedDelay(this, UPLOAD_INTERVAL_IN_SECS, UPLOAD_INTERVAL_IN_SECS,
+        TimeUnit.SECONDS)
+      logInfo(s"Started driver log file sync to: ${dfsLogFile}")
     }
-    private var inStream: InputStream = null
-    private var outputStream: FSDataOutputStream = null
-    try {
-      inStream = new BufferedInputStream(new FileInputStream(localLogFile))
-      outputStream = fileSystem.create(new Path(dfsLogFile), true)
-      fileSystem.setPermission(new Path(dfsLogFile), LOG_FILE_PERMISSIONS)
-    } catch {
-      case e: Exception =>
-        if (inStream != null) {
-          Utils.tryLogNonFatalError(inStream.close())
-        }
-        if (outputStream != null) {
-          Utils.tryLogNonFatalError(outputStream.close())
-        }
-        throw e
-    }
-    private val tmpBuffer = new Array[Byte](UPLOAD_CHUNK_SIZE)
-    private val threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("dfsSyncThread")
-    threadpool.scheduleWithFixedDelay(this, UPLOAD_INTERVAL_IN_SECS, UPLOAD_INTERVAL_IN_SECS,
-      TimeUnit.SECONDS)
-    logInfo(s"Started driver log file sync to: ${dfsLogFile}")
 
     def run(): Unit = {
       if (streamClosed) {
