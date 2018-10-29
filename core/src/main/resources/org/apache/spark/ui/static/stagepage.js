@@ -247,7 +247,7 @@ function reselectCheckboxesBasedOnTaskTableState() {
     var allChecked = true;
     var task_summary_metrics_table_current_filtered_array = task_summary_metrics_table_current_state_array.slice();
     if (typeof taskTableSelector !== 'undefined' && task_summary_metrics_table_current_state_array.length > 0) {
-        for(k = 0; k < optionalColumns.length; k++) {
+        for (k = 0; k < optionalColumns.length; k++) {
             if (taskTableSelector.column(optionalColumns[k]).visible()) {
                 $("#box-"+optionalColumns[k]).prop('checked', true);
                 task_summary_metrics_table_current_state_array.push(task_summary_metrics_table_array.filter(row => (row.checkboxId).toString() == optionalColumns[k])[0]);
@@ -261,6 +261,15 @@ function reselectCheckboxesBasedOnTaskTableState() {
         }
         createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_current_filtered_array);
     }
+}
+
+function getStageAttemptId() {
+  var words = document.baseURI.split('?');
+  var attemptIdStr = words[1].split('&')[1];
+  var digitsRegex = /[0-9]+/;
+  var stgAttemptId = words[1].split("&").filter(
+      word => word.includes("attempt="))[0].split("=")[1].match(digitsRegex);
+  return stgAttemptId;
 }
 
 var task_summary_metrics_table_array = [];
@@ -337,8 +346,14 @@ $(document).ready(function () {
             dataToShow.showBytesSpilledData =
                 (responseBody.diskBytesSpilled > 0 || responseBody.memoryBytesSpilled > 0);
 
+            if (!dataToShow.showShuffleReadData) {
+                $('#shuffle_read_blocked_time').remove();
+                $('#shuffle_remote_reads').remove();
+                optionalColumns.splice(2, 2);
+            }
+
             // prepare data for executor summary table
-            indices = Object.keys(responseBody.executorSummary);
+            stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
             $.getJSON(createRESTEndPointForExecutorsPage(appId),
               function(executorSummaryResponse, status, jqXHR) {
                 var executorSummaryMap = new Map();
@@ -346,7 +361,7 @@ $(document).ready(function () {
                     executorSummaryMap.set(executorSummaryResponse[i].id, executorSummaryResponse[i]);
                 }
                 var executor_summary_table = [];
-                indices.forEach(function (columnKeyIndex) {
+                stageExecutorSummaryInfoKeys.forEach(function (columnKeyIndex) {
                     responseBody.executorSummary[columnKeyIndex].id = columnKeyIndex;
                     if ("executorLogs" in executorSummaryMap.get(columnKeyIndex.toString()) &&
                       executorSummaryMap.get(columnKeyIndex.toString()).executorLogs != null) {
@@ -496,9 +511,9 @@ $(document).ready(function () {
                                     "Shuffle Remote Reads", taskMetricsResponse[columnKey], 14);
                                 if (dataToShow.showShuffleReadData) {
                                     task_summary_metrics_table_array.push(row1);
+                                    task_summary_metrics_table_array.push(row2);
+                                    task_summary_metrics_table_array.push(row3);
                                 }
-                                task_summary_metrics_table_array.push(row2);
-                                task_summary_metrics_table_array.push(row3);
                                 break;
 
                             case "schedulerDelay":
