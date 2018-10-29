@@ -816,10 +816,10 @@ object SQLConf {
     .internal()
     .doc("The threshold of source code length without comment of a single Java function by " +
       "codegen to be split. When the generated Java function source code exceeds this threshold" +
-      ", it will be split into multiple small functions. We can't know how many bytecode will " +
-      "be generated, so use the code length as metric. A function's bytecode should not go " +
-      "beyond 8KB, otherwise it will not be JITted; it also should not be too small, otherwise " +
-      "there will be many function calls.")
+      ", it will be split into multiple small functions. We cannot know how many bytecode will " +
+      "be generated, so use the code length as metric. When running on HotSpot, a function's " +
+      "bytecode should not go beyond 8KB, otherwise it will not be JITted; it also should not " +
+      "be too small, otherwise there will be many function calls.")
     .intConf
     .createWithDefault(1024)
 
