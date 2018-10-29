@@ -39,7 +39,7 @@ import org.apache.spark.serializer.KryoTest._
 object KryoBenchmark extends BenchmarkBase {
 
   val N = 1000000
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val name = "Benchmark Kryo Unsafe vs safe Serialization"
     runBenchmark(name) {
       val benchmark = new Benchmark(name, N, 10, output = output)
