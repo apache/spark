@@ -46,9 +46,9 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       s"source vector size $numFeatures must be no less than k=$k")
 
     val mat = if (numFeatures > 65535) {
-      val meanVector = Statistics.colStats(sources).mean
+      val meanVector = Statistics.colStats(sources).mean.asBreeze
       val meanCentredRdd = sources.map { rowVector =>
-        Vectors.fromBreeze(rowVector.asBreeze - meanVector.asBreeze)
+        Vectors.fromBreeze(rowVector.asBreeze - meanVector)
       }
       new RowMatrix(meanCentredRdd)
     } else {

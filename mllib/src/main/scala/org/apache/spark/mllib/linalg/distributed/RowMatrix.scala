@@ -370,7 +370,7 @@ class RowMatrix @Since("1.0.0") (
    * Each column corresponds for one principal component,
    * and the columns are in descending order of component variance.
    * The row data do not need to be "centered" first; it is not necessary for
-   * the mean of each column to be 0. But, if the number of columns more than
+   * the mean of each column to be 0. But, if the number of columns are more than
    * 65535, then the data need to be "centered".
    *
    * @param k number of top principal components.
