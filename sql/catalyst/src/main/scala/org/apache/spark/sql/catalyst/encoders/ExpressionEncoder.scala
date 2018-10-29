@@ -24,8 +24,8 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
 import org.apache.spark.sql.internal.SQLConf
@@ -237,6 +237,7 @@ case class ExpressionEncoder[T](
           GetColumnByOrdinal(ordinal, dt)
         case If(IsNull(GetColumnByOrdinal(0, _)), _, n: NewInstance) => n
         case If(IsNull(GetColumnByOrdinal(0, _)), _, i: InitializeJavaBean) => i
+        case If(IsNull(GetColumnByOrdinal(0, _)), _, i: InitializeAvroObject) => i
       }
     } else {
       // For other input objects like primitive, array, map, etc., we deserialize the first column

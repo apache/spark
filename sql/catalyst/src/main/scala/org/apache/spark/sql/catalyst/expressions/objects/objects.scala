@@ -1582,6 +1582,58 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
 }
 
 /**
+ * Initializes an Avro Record instance (that implements the IndexedRecord interface) by calling
+ * the `put` method on a the Record instance with the provided position and value arguments
+ *
+ * @param objectInstance an expression that will evaluate to the Record instance
+ * @param args a sequence of expression pairs that will respectively evaluate to the index of
+ *             the record in which to insert, and the argument value to insert
+ */
+case class InitializeAvroObject(
+    objectInstance: Expression,
+    args: List[(Expression, Expression)]) extends Expression with NonSQLExpression {
+
+  override def nullable: Boolean = objectInstance.nullable
+  override def children: Seq[Expression] = objectInstance +: args.map { case (_, v) => v }
+  override def dataType: DataType = objectInstance.dataType
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val instanceGen = objectInstance.genCode(ctx)
+
+    val avroInstance = ctx.freshName("avroObject")
+    val avroInstanceJavaType =
+      CodeGenerator.javaType(objectInstance.dataType)
+    ctx.addMutableState(
+      avroInstanceJavaType, avroInstance, forceInline = true, useFreshName = false)
+
+    val initialize = args.map {
+      case (posExpr, argExpr) =>
+        val posGen = posExpr.genCode(ctx)
+        val argGen = argExpr.genCode(ctx)
+        s"""
+            ${posGen.code}
+            ${argGen.code}
+            $avroInstance.put(${posGen.value}, ${argGen.value});
+          """
+    }
+    val initExpressions =
+      ctx.splitExpressionsWithCurrentInputs(initialize)
+    val code =
+      code"""
+          ${instanceGen.code}
+          $avroInstance = ${instanceGen.value};
+          if (!${instanceGen.isNull}) {
+            $initExpressions
+          }
+        """
+    ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
+  }
+}
+
+/**
  * Asserts that input values of a non-nullable child expression are not null.
  *
  * Note that there are cases where `child.nullable == true`, while we still need to add this
