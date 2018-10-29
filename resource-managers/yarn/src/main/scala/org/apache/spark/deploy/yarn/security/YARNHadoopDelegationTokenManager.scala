@@ -68,9 +68,6 @@ private[yarn] class YARNHadoopDelegationTokenManager(
     }.foldLeft(superInterval)(math.min)
   }
 
-  // Override the parent method just to make it public.
-  override def setDriverRef(ref: RpcEndpointRef): Unit = super.setDriverRef(ref)
-
   // For testing.
   override def isProviderLoaded(serviceName: String): Boolean = {
     credentialProviders.contains(serviceName) || super.isProviderLoaded(serviceName)

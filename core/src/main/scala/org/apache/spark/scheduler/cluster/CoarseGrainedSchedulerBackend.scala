@@ -405,7 +405,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     if (UserGroupInformation.isSecurityEnabled()) {
       delegationTokenManager = createTokenManager()
-      delegationTokenManager.foreach(_.start(Some(driverEndpoint)))
+      delegationTokenManager.foreach { dtm =>
+        dtm.setDriverRef(driverEndpoint)
+        val creds = if (dtm.renewalEnabled) {
+          dtm.start().getCredentials()
+        } else {
+          val creds = UserGroupInformation.getCurrentUser().getCredentials()
+          dtm.obtainDelegationTokens(creds)
+          creds
+        }
+        delegationTokens.set(SparkHadoopUtil.get.serialize(creds))
+      }
     }
   }
 
