@@ -334,9 +334,9 @@ object TPCDSQueryOptimizerTracker extends SqlBasedBenchmark {
   }
 
   def runTpcdsQueries(
-                       queryLocation: String,
-                       queries: Seq[String],
-                       nameSuffix: String = ""): Unit = {
+      queryLocation: String,
+      queries: Seq[String],
+      nameSuffix: String = ""): Unit = {
     queries.foreach { name =>
       runBenchmark(name) {
         val sql = resourceToString(s"$queryLocation/$name.sql",
