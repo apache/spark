@@ -416,9 +416,6 @@
       <scope>provided</scope>
     </dependency>
 
-    <!--
-      The following dependency is used for safe logging
-    -->
     <dependency>
       <groupId>com.palantir.safe-logging</groupId>
       <artifactId>safe-logging</artifactId>
