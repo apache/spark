@@ -611,10 +611,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
       val batches = Batch("View", Once, AliasViewChild(conf), EliminateView) :: Nil
     }
-    def intNotNullableAttr(name: String): Attribute = {
-      AttributeReference(name, IntegerType, nullable = false)()
-    }
-    val relation = LocalRelation(intNotNullableAttr("a"), 'b.string)
+    val relation = LocalRelation('a.int.notNull, 'b.string)
     val view = View(CatalogTable(
         identifier = TableIdentifier("v1"),
         tableType = CatalogTableType.VIEW,
@@ -624,7 +621,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       child = relation)
     val tz = Option(conf.sessionLocalTimeZone)
     val expected = Project(Seq(
-        Alias(Cast(intNotNullableAttr("a"), IntegerType, tz), "a")(),
+        Alias(Cast('a.int.notNull, IntegerType, tz), "a")(),
         Alias(Cast('b.string, StringType, tz), "b")()),
       relation)
     val res = ViewAnalyzer.execute(view)
