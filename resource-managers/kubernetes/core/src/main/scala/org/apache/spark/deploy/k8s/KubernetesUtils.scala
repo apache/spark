@@ -20,7 +20,7 @@ import java.io.File
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model._
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SparkConf, SparkException}
