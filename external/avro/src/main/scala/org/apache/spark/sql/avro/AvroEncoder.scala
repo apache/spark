@@ -20,6 +20,7 @@ import java.io._
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
+import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.avro.Schema
@@ -32,7 +33,7 @@ import org.apache.avro.specific.SpecificRecord
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.avro.SchemaConverters._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
