@@ -183,7 +183,7 @@ private[parquet] class ParquetRowConverter(
   // Converters for each field.
   private val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
     parquetType.getFields.asScala.map {
-      case parquetField =>
+      parquetField =>
         val fieldIndex = catalystType.fieldIndex(parquetField.getName)
         val catalystField = catalystType(fieldIndex)
         // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
