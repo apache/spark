@@ -84,7 +84,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val basePod = SparkPod.initialPod()
     val configuredPod = featureStep.configurePod(basePod)
 
-    assert(configuredPod.container.getName === DRIVER_CONTAINER_NAME)
+    assert(configuredPod.container.getName === DEFAULT_DRIVER_CONTAINER_NAME)
     assert(configuredPod.container.getImage === "spark-driver:latest")
     assert(configuredPod.container.getImagePullPolicy === CONTAINER_IMAGE_PULL_POLICY)
 

@@ -278,6 +278,30 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_DRIVER_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.driver.podTemplateFile")
+      .doc("File containing a template pod spec for the driver")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.executor.podTemplateFile")
+      .doc("File containing a template pod spec for executors")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.driver.podTemplateContainerName")
+      .doc("container name to be used as a basis for the driver in the given pod template")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.executor.podTemplateContainerName")
+      .doc("container name to be used as a basis for executors in the given pod template")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 

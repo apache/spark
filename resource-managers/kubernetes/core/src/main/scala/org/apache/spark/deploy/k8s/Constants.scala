@@ -76,9 +76,17 @@ private[spark] object Constants {
   val ENV_R_PRIMARY = "R_PRIMARY"
   val ENV_R_ARGS = "R_APP_ARGS"
 
+  // Pod spec templates
+  val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "pod-spec-template.yml"
+  val EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH = "/opt/spark/pod-template"
+  val POD_TEMPLATE_VOLUME = "pod-template-volume"
+  val POD_TEMPLATE_CONFIGMAP = "podspec-configmap"
+  val POD_TEMPLATE_KEY = "podspec-configmap-key"
+
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
-  val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
+  val DEFAULT_DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
+  val DEFAULT_EXECUTOR_CONTAINER_NAME = "spark-kubernetes-executor"
   val MEMORY_OVERHEAD_MIN_MIB = 384L
 
   // Hadoop Configuration
