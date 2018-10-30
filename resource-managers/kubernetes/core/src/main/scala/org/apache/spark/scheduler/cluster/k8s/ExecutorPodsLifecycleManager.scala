@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import com.google.common.cache.Cache
+import com.palantir.logsafe.SafeArg
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
@@ -25,7 +26,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.SafeLogging
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.Utils
 
@@ -37,7 +38,7 @@ private[spark] class ExecutorPodsLifecycleManager(
     // job-breaking if we remove executors more than once but it's ideal if we make an attempt
     // to avoid doing so. Expire cache entries so that this data structure doesn't grow beyond
     // bounds.
-    removedExecutorsCache: Cache[java.lang.Long, java.lang.Long]) extends Logging {
+    removedExecutorsCache: Cache[java.lang.Long, java.lang.Long]) extends SafeLogging {
 
   import ExecutorPodsLifecycleManager._
 
@@ -57,18 +58,24 @@ private[spark] class ExecutorPodsLifecycleManager(
       snapshot.executorPods.foreach { case (execId, state) =>
         state match {
           case deleted@PodDeleted(_) =>
-            logDebug(s"Snapshot reported deleted executor with id $execId," +
-              s" pod name ${state.pod.getMetadata.getName}")
+            safeLogDebug(
+              "Snapshot reported deleted executor",
+              SafeArg.of("executorId", execId),
+              SafeArg.of("podName", state.pod.getMetadata.getName))
             removeExecutorFromSpark(schedulerBackend, deleted, execId)
             execIdsRemovedInThisRound += execId
           case failed@PodFailed(_) =>
-            logDebug(s"Snapshot reported failed executor with id $execId," +
-              s" pod name ${state.pod.getMetadata.getName}")
+            safeLogDebug(
+              "Snapshot reported failed executor",
+              SafeArg.of("executorId", execId),
+              SafeArg.of("podName", state.pod.getMetadata.getName))
             onFinalNonDeletedState(failed, execId, schedulerBackend, execIdsRemovedInThisRound)
           case succeeded@PodSucceeded(_) =>
-            logDebug(s"Snapshot reported succeeded executor with id $execId," +
-              s" pod name ${state.pod.getMetadata.getName}. Note that succeeded executors are" +
-              s" unusual unless Spark specifically informed the executor to exit.")
+            safeLogDebug(
+              "Snapshot reported succeeded executor." +
+              " Note that unusual unless Spark specifically informed the executor to exit.",
+              SafeArg.of("executorId", execId),
+              SafeArg.of("podName", state.pod.getMetadata.getName))
             onFinalNonDeletedState(succeeded, execId, schedulerBackend, execIdsRemovedInThisRound)
           case _ =>
         }
@@ -89,7 +96,10 @@ private[spark] class ExecutorPodsLifecycleManager(
           val exitReasonMessage = s"The executor with ID $missingExecutorId was not found in the" +
             s" cluster but we didn't get a reason why. Marking the executor as failed. The" +
             s" executor may have been deleted but the driver missed the deletion event."
-          logDebug(exitReasonMessage)
+          safeLogDebug("The executor was not found in the" +
+            " cluster but we didn't get a reason why. Marking the executor as failed. The" +
+            " executor may have been deleted but the driver missed the deletion event.",
+            SafeArg.of("missingExecutorId", missingExecutorId))
           val exitReason = ExecutorExited(
             UNKNOWN_EXIT_CODE,
             exitCausedByApp = false,
@@ -101,8 +111,9 @@ private[spark] class ExecutorPodsLifecycleManager(
     }
 
     if (execIdsRemovedInThisRound.nonEmpty) {
-      logDebug(s"Removed executors with ids ${execIdsRemovedInThisRound.mkString(",")}" +
-        s" from Spark that were either found to be deleted or non-existent in the cluster.")
+      safeLogDebug("Removed executors" +
+        " from Spark that were either found to be deleted or non-existent in the cluster.",
+        SafeArg.of("executorIdsRemovedInThisRound", execIdsRemovedInThisRound.mkString(",")))
     }
   }
 
