@@ -884,6 +884,31 @@ class Dataset[T] private[sql](
   }
 
   /**
+    * Equi-join with another `DataFrame` using the given column.
+    *
+    * Different from other join functions, the join column will only appear once in the output,
+    * i.e. similar to SQL's `JOIN USING` syntax.
+    *
+    * {{{
+    *   // Left join of df1 and df2 using the column "user_id"
+    *   df1.join(df2, "user_id", "left")
+    * }}}
+    *
+    * @param right Right side of the join operation.
+    * @param usingColumn Name of the column to join on. This column must exist on both sides.
+    * @param joinType Type of join to perform. Default `inner`. Must be one of:
+    *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
+    *                 `right`, `right_outer`, `left_semi`, `left_anti`.
+    * @note If you perform a self-join using this function without aliasing the input
+    * `DataFrame`s, you will NOT be able to reference any columns after the join, since
+    * there is no way to disambiguate which side of the join you would like to reference.
+    * @group untypedrel
+    */
+  def join(right: Dataset[_], usingColumn: String, joinType: String): DataFrame = {
+    join(right, Seq(usingColumn), joinType)
+  }
+
+  /**
    * Inner equi-join with another `DataFrame` using the given columns.
    *
    * Different from other join functions, the join columns will only appear once in the output,
