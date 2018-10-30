@@ -367,8 +367,8 @@ object ScalaReflection extends ScalaReflection {
 
         UnresolvedCatalystToExternalMap(
           path,
-          p => deserializerFor(keyType, p, walkedTypePath),
-          p => deserializerFor(valueType, p, walkedTypePath),
+          p => deserializerFor(keyType, p, walkedTypePath, instantiateValueClass = true),
+          p => deserializerFor(valueType, p, walkedTypePath, instantiateValueClass = true),
           mirror.runtimeClass(t.typeSymbol.asClass)
         )
 

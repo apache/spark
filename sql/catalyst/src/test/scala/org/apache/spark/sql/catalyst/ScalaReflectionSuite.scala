@@ -122,6 +122,7 @@ object TestingValueClass {
 
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
+  import TestingValueClass._
 
   // A helper method used to test `ScalaReflection.serializerForType`.
   private def serializerFor[T: TypeTag]: Expression =
@@ -374,12 +375,12 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("schema for case class that is a value class") {
-    val schema = schemaFor[TestingValueClass.IntWrapper]
+    val schema = schemaFor[IntWrapper]
     assert(schema === Schema(IntegerType, nullable = false))
   }
 
   test("schema for case class that contains value class fields") {
-    val schema = schemaFor[TestingValueClass.ValueClassData]
+    val schema = schemaFor[ValueClassData]
     assert(schema === Schema(
       StructType(Seq(
         StructField("intField", IntegerType, nullable = false),
@@ -390,9 +391,16 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("schema for array of value class") {
-    val schema = schemaFor[Array[TestingValueClass.IntWrapper]]
+    val schema = schemaFor[Array[IntWrapper]]
     assert(schema === Schema(
       ArrayType(IntegerType, containsNull = false),
+      nullable = true))
+  }
+
+  test("schema for map of value class") {
+    val schema = schemaFor[Map[IntWrapper, StrWrapper]]
+    assert(schema === Schema(
+      MapType(IntegerType, StringType, valueContainsNull = true),
       nullable = true))
   }
 }
