@@ -55,7 +55,6 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
 
   val episodesAvro = testFile("episodes.avro")
   val testAvro = testFile("test.avro")
-  val testAvsc = testFile("test.avsc")
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
