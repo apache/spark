@@ -101,7 +101,10 @@ class SparkHadoopUtil extends Logging {
       // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
       conf.getAll.foreach { case (key, value) =>
         if (key.startsWith("spark.hadoop.")) {
-          hadoopConf.set(key.substring("spark.hadoop.".length), value)
+          val hadoopKey = key.substring("spark.hadoop.".length)
+          if (hadoopConf.get(hadoopKey) == null) {
+            hadoopConf.set(hadoopKey, value)
+          }
         }
       }
       val bufferSize = conf.get("spark.buffer.size", "65536")
