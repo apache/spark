@@ -399,7 +399,7 @@ object ScalaReflection extends ScalaReflection {
         // Nested value class is treated as its underlying type
         // because the compiler will convert value class in the schema to
         // its underlying type.
-        // However, for value class that is top-level or array element,
+        // However, for value class that is top-level or collection element or
         // if it is used as another type (e.g. as its parent trait or generic),
         // the compiler keeps the class so we must provide an instance of the
         // class too. In other cases, the compiler will handle wrapping/unwrapping
