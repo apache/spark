@@ -32,11 +32,11 @@ import org.apache.spark.sql.types._
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *      Results will be written to "benchmarks/JSONBenchmarks-results.txt".
+ *      Results will be written to "benchmarks/JSONBenchmark-results.txt".
  * }}}
  */
 
-object JSONBenchmarks extends SqlBasedBenchmark {
+object JSONBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
   def schemaInferring(rowsNum: Int): Unit = {
