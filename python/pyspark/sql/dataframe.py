@@ -2226,6 +2226,8 @@ def _to_corrected_pandas_type(dt):
         return np.int32
     elif type(dt) == FloatType:
         return np.float32
+    elif type(dt) == DecimalType:
+        return np.float64
     else:
         return None
 
