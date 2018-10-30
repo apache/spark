@@ -256,7 +256,7 @@ object DatasetBenchmark extends SqlBasedBenchmark {
       .getOrCreate()
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numRows = 100000000
     val numChains = 10
     runBenchmark("Dataset Benchmark") {
