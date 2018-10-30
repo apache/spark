@@ -552,20 +552,38 @@ case class SessionWindowStateStoreSaveExec(
           return true
         }
 
-        val existing = state.get(key, sessionStart)
-        if (existing != null && valueOrdering.equiv(existing, row)) {
-          // session already exist and do not need to update
-          return false
+        // need to find sessions which could be replaced with new session
+        // new session should enclose previous session(s) if it overlaps,
+        // since session always expands
+
+        val nearestSessions = state.getSessionStartOnNearest(key, sessionStart)
+        if (nearestSessions != null) {
+          // there's rare chance that existing session and row is equivalent
+          // because in MergingSortWithSessionWindowLinkedListStateIterator,
+          // we emit existing sessions only when it overlaps with input row
+          // so unless aggregation make no difference, it will not happen
+          // always replace instead of comparing with actual value
+
+          // if the old session can be replaced with new session,
+          // (condition: 1:1 match, no change on "session start")
+          // just replace it to avoid overhead on manipulating linked list
+
+          nearestSessions._2 match {
+            case Some(next) if next > sessionEnd =>
+              state.update(key, sessionStart, row)
+              return true
+            case None =>
+              state.update(key, sessionStart, row)
+              return true
+
+            case _ =>
+          }
         }
 
         if (stateFetchedKey == null || keyOrdering.equiv(stateFetchedKey, key)) {
           stateFetchedKey = key
           lastSearchedSessionStartOption = None
         }
-
-        // need to find sessions which could be replaced with new session
-        // new session should enclose previous session(s) if it overlaps,
-        // since session always expands
 
         // find the first state session which is enclosed by new session
         val firstStateSessionEnclosedByNewSession = lastSearchedSessionStartOption match {

@@ -197,6 +197,10 @@ class SessionWindowLinkedListState(
     findFirstSessionStartEnsurePredicate(key, predicate, head.get)
   }
 
+  def getSessionStartOnNearest(key: UnsafeRow, sessionStart: Long): (Option[Long], Option[Long]) = {
+    keyAndSessionStartToPointerStore.get(key, sessionStart)
+  }
+
   def getPrevSessionStart(key: UnsafeRow, sessionStart: Long): Option[Long] = {
     val pointers = keyAndSessionStartToPointerStore.get(key, sessionStart)
     assertValidPointer(pointers)
