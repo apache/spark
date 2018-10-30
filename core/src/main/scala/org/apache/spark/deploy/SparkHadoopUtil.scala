@@ -27,7 +27,6 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
@@ -474,16 +473,9 @@ object SparkHadoopUtil {
     }
   }
 
-
-  lazy val builderReflection: Option[(Class[_], Method, Method)] = Try {
-    val cls = Utils.classForName(
-      "org.apache.hadoop.hdfs.DistributedFileSystem$HdfsDataOutputStreamBuilder")
-    (cls, cls.getMethod("replicate"), cls.getMethod("build"))
-  }.toOption
-
   // scalastyle:off line.size.limit
   /**
-   * Create a path that uses replication instead of erasure coding, regardless of the default
+   * Create a path that uses replication instead of erasure coding (ec), regardless of the default
    * configuration in hdfs for the given path.  This can be helpful as hdfs ec doesn't support
    * hflush(), hsync(), or append()
    * https://hadoop.apache.org/docs/r3.0.0/hadoop-project-dist/hadoop-hdfs/HDFSErasureCoding.html#Limitations
@@ -494,14 +486,12 @@ object SparkHadoopUtil {
       // Use reflection as this uses apis only avialable in hadoop 3
       val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
       val builder = builderMethod.invoke(fs, path)
-      builderReflection match {
-        case Some((clz, replicate, buildMethod)) if clz.isAssignableFrom(builder.getClass()) =>
-          val b2 = replicate.invoke(builder)
-          buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
-        case _ =>
-          // builder wasn't HdfsDataOutputStreamBuilder, so just create regular file
-          fs.create(path)
-      }
+      val builderCls = builder.getClass()
+      // this may throw a NoSuchMethodException if the path is not on hdfs
+      val replicateMethod = builderCls.getMethod("replicate")
+      val buildMethod = builderCls.getMethod("build")
+      val b2 = replicateMethod.invoke(builder)
+      buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
     } catch {
       case  _: NoSuchMethodException =>
         // No createFile() method, we're using an older hdfs client, which doesn't give us control
