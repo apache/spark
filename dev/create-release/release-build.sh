@@ -326,7 +326,7 @@ if [[ "$1" == "package" ]]; then
     svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
     cd svn-spark
-    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION"
+    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION" --no-auth-cache
     cd ..
     rm -rf svn-spark
   fi
@@ -354,7 +354,7 @@ if [[ "$1" == "docs" ]]; then
     svn add "svn-spark/${DEST_DIR_NAME}-docs"
 
     cd svn-spark
-    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION docs"
+    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION docs" --no-auth-cache
     cd ..
     rm -rf svn-spark
   fi
