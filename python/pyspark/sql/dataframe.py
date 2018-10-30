@@ -2062,7 +2062,7 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)
-    def toPandas(self):
+    def toPandas(self, coerce_float=False):
         """
         Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
@@ -2146,7 +2146,7 @@ class DataFrame(object):
                     raise
 
         # Below is toPandas without Arrow optimization.
-        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns, coerce_float=coerce_float)
 
         dtype = {}
         for field in self.schema:
