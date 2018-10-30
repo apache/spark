@@ -2125,7 +2125,6 @@ class DataFrame(object):
                     from pyspark.sql.types import _check_dataframe_convert_date, \
                         _check_dataframe_localize_timestamps
                     import pyarrow
-
                     batches = self._collectAsArrow()
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
