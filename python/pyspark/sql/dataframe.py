@@ -2064,6 +2064,7 @@ class DataFrame(object):
     @since(1.3)
     def toPandas(self, coerce_float=False):
         """
+        :param coerce_float: default False, if Ture, will handle decimal type to np.float64 instand of type object.
         Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
         This is only available if Pandas is installed and available.
