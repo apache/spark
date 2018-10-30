@@ -29,8 +29,8 @@ import warnings
 
 from pyspark import copy_func, since, _NoValue
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import ArrowStreamSerializer, BatchedSerializer, BatchOrderSerializer, \
-    PickleSerializer, UTF8Deserializer
+from pyspark.serializers import ArrowCollectSerializer, BatchedSerializer, PickleSerializer, \
+    UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
@@ -2119,11 +2119,9 @@ class DataFrame(object):
                         _check_dataframe_localize_timestamps
                     import pyarrow
 
-                    # Collect un-ordered list of batches, and list of correct order indices
-                    batches, batch_order = self._collectAsArrow()
+                    batches = self._collectAsArrow()
                     if len(batches) > 0:
-                        # Re-order the batch list with correct order to build a table
-                        table = pyarrow.Table.from_batches([batches[i] for i in batch_order])
+                        table = pyarrow.Table.from_batches(batches)
                         pdf = table.to_pandas()
                         pdf = _check_dataframe_convert_date(pdf, self.schema)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
@@ -2172,15 +2170,21 @@ class DataFrame(object):
 
     def _collectAsArrow(self):
         """
-        Returns all records as a list of ArrowRecordBatches and batch order as a list of indices,
-        pyarrow must be installed and available on driver and worker Python environments.
+        Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
+        and available on driver and worker Python environments.
 
         .. note:: Experimental.
         """
-        ser = BatchOrderSerializer(ArrowStreamSerializer())
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(sock_info, ser)), ser.get_batch_order_and_reset()
+
+        # Collect list of un-ordered batches where last element is a list of correct order indices
+        results = list(_load_from_socket(sock_info, ArrowCollectSerializer()))
+        batches = results[:-1]
+        batch_order = results[-1]
+
+        # Re-order the batch list using the correct order
+        return [batches[i] for i in batch_order]
 
     ##########################################################################################
     # Pandas compatibility

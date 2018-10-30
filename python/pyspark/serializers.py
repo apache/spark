@@ -185,39 +185,37 @@ class FramedSerializer(Serializer):
         raise NotImplementedError
 
 
-class BatchOrderSerializer(Serializer):
+class ArrowCollectSerializer(Serializer):
     """
     Deserialize a stream of batches followed by batch order information.
     """
 
-    def __init__(self, serializer):
-        self.serializer = serializer
-        self.batch_order = None
+    def __init__(self):
+        self.serializer = ArrowStreamSerializer()
 
     def dump_stream(self, iterator, stream):
         return self.serializer.dump_stream(iterator, stream)
 
     def load_stream(self, stream):
+        """
+        Load a stream of un-ordered Arrow RecordBatches, where the last
+        iteration will yield a list of indices to put the RecordBatches in
+        the correct order.
+        """
+        # load the batches
         for batch in self.serializer.load_stream(stream):
             yield batch
+
+        # load the batch order indices
         num = read_int(stream)
-        self.batch_order = []
+        batch_order = []
         for i in xrange(num):
             index = read_int(stream)
-            self.batch_order.append(index)
-
-    def get_batch_order_and_reset(self):
-        """
-        Returns a list of indices to put batches read from load_stream in the correct order.
-        This must be called after load_stream and will clear the batch order after calling.
-        """
-        assert self.batch_order is not None, "Must call load_stream first to read batch order"
-        batch_order = self.batch_order
-        self.batch_order = None
-        return batch_order
+            batch_order.append(index)
+        yield batch_order
 
     def __repr__(self):
-        return "BatchOrderSerializer(%s)" % self.serializer
+        return "ArrowCollectSerializer(%s)" % self.serializer
 
 
 class ArrowStreamSerializer(Serializer):

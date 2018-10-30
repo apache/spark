@@ -3286,26 +3286,30 @@ class Dataset[T] private[sql](
         val arrowBatchRdd = toArrowBatchRdd(plan)
         val numPartitions = arrowBatchRdd.partitions.length
 
-        // Batches ordered by (index of partition, batch # in partition) tuple
+        // Batches ordered by (index of partition, batch index in that partition) tuple
         val batchOrder = new ArrayBuffer[(Int, Int)]()
         var partitionCount = 0
 
         // Handler to eagerly write batches to Python out of order
         def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
           if (arrowBatches.nonEmpty) {
+            // Write all batches (can be more than 1) in the partition, store the batch order tuple
             batchWriter.writeBatches(arrowBatches.iterator)
-            arrowBatches.indices.foreach { i => batchOrder.append((index, i)) }
+            arrowBatches.indices.foreach {
+              partition_batch_index => batchOrder.append((index, partition_batch_index))
+            }
           }
           partitionCount += 1
 
-          // After last batch, end the stream and write batch order
+          // After last batch, end the stream and write batch order indices
           if (partitionCount == numPartitions) {
             batchWriter.end()
             out.writeInt(batchOrder.length)
-            // Batch order indices are from 0 to N-1 batches, sorted by order they arrived.
-            // Re-order batches according to these indices to build a table.
-            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, i) =>
-              out.writeInt(i)
+            // Sort by (index of partition, batch index in that partition) tuple to get the
+            // overall_batch_index from 0 to N-1 batches, which can be used to put the
+            // transferred batches in the correct order
+            batchOrder.zipWithIndex.sortBy(_._1).foreach { case (_, overall_batch_index) =>
+              out.writeInt(overall_batch_index)
             }
             out.flush()
           }
