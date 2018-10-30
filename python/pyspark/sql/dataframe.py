@@ -2062,7 +2062,7 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)
-    def toPandas(self, coerce_float=False):
+    def toPandas(self):
         """
         :param coerce_float: default False, if Ture, will handle decimal type to np.float64 instand of type object.
         Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
@@ -2147,7 +2147,7 @@ class DataFrame(object):
                     raise
 
         # Below is toPandas without Arrow optimization.
-        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns, coerce_float=coerce_float)
+        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
         dtype = {}
         for field in self.schema:
