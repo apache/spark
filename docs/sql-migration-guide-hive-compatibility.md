@@ -57,14 +57,13 @@ Spark SQL supports the vast majority of Hive features, such as:
     example, Spark cannot read `v1` created as below by Hive.
 
     ```
-    CREATE TABLE t1 (c1 INT, c2 STRING);
-    CREATE VIEW v1 AS SELECT * FROM (SELECT c1 + 1, upper(c2) FROM t1) t2;
+    CREATE VIEW v1 AS SELECT * FROM (SELECT c + 1 FROM (SELECT 1 c) t1) t2;
     ```
 
     Instead, you should create `v1` as below with column aliases explicitly specified.
 
     ```
-    CREATE VIEW v1 AS SELECT * FROM (SELECT c1 + 1 AS inc_c1, upper(c2) AS upper_c2 FROM t1) t2;
+    CREATE VIEW v1 AS SELECT * FROM (SELECT c + 1 AS inc_c FROM (SELECT 1 c) t1) t2;
     ```
 
 * All Hive DDL Functions, including:
