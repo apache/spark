@@ -8,7 +8,8 @@ title: Spark on Kubernetes Integration Tests
 Note that the integration test framework is currently being heavily revised and
 is subject to change. Note that currently the integration tests only run with Java 8.
 
-The simplest way to run the integration tests is to install and run Minikube, then run the following:
+The simplest way to run the integration tests is to install and run Minikube, then run the following from this
+directory:
 
     dev/dev-run-integration-tests.sh
 
@@ -105,7 +106,8 @@ If you prefer to run just the integration tests directly, then you can customise
 properties to Maven.  For example:
 
     mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.11 \
-                            -Pkubernetes -Phadoop-2.7 -Dhadoop.version=2.7.3 \
+                            -Pkubernetes -Pkubernetes-integration-tests \ 
+                            -Phadoop-2.7 -Dhadoop.version=2.7.3 \
                             -Dspark.kubernetes.test.sparkTgz=spark-3.0.0-SNAPSHOT-bin-example.tgz \
                             -Dspark.kubernetes.test.imageTag=sometag \
                             -Dspark.kubernetes.test.imageRepo=docker.io/somerepo \
