@@ -2856,21 +2856,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql("select 26393499451 / (1e6 * 1000)"), Row(BigDecimal("26.3934994510000")))
     }
   }
-
-  test("SPARK-25769 escape nested columns") {
-    import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-    val sql1 = $"a.b".expr.asInstanceOf[UnresolvedAttribute].sql
-    assert(sql1 === "`a`.`b`")
-
-    val sql2 = $"`a.b`".expr.asInstanceOf[UnresolvedAttribute].sql
-    assert(sql2 === "`a.b`")
-
-    val sql3 = $"`a`.b".expr.asInstanceOf[UnresolvedAttribute].sql
-    assert(sql3 === "`a`.`b`")
-
-    val sql4 = $"`a.b`.c".expr.asInstanceOf[UnresolvedAttribute].sql
-    assert(sql4 === "`a.b`.`c`")
-  }
 }
 
 case class Foo(bar: Option[String])

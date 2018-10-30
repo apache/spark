@@ -25,6 +25,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
@@ -112,6 +113,16 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(expr("a.`name.with.dot`")),
       Row("a") :: Nil)
+  }
+
+  test("SPARK-25769 escape nested columns by backtick each of the column name") {
+    Seq(
+      ($"a.b", "`a`.`b`"),
+      ($"`a.b`", "`a.b`"),
+      ($"`a`.b", "`a`.`b`"),
+      ($"`a.b`.c", "`a.b`.`c`")).foreach { case (columnName, sqlString) =>
+      assert(columnName.expr.sql === sqlString)
+    }
   }
 
   test("alias and name") {
