@@ -256,4 +256,9 @@ class VectorAssemblerSuite
     assert(runWithMetadata("keep", additional_filter = "id1 > 2").count() == 4)
   }
 
+  test("SPARK-25371: VectorAssembler with empty inputCols") {
+    val vectorAssembler = new VectorAssembler().setInputCols(Array()).setOutputCol("a")
+    val output = vectorAssembler.transform(dfWithNullsAndNaNs)
+    assert(output.select("a").limit(1).collect().head == Row(Vectors.sparse(0, Seq.empty)))
+  }
 }

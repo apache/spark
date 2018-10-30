@@ -2158,8 +2158,8 @@ class FPGrowthTests(SparkSessionTestCase):
         fpm = fp.fit(self.data)
 
         expected_association_rules = self.spark.createDataFrame(
-            [([3], [1], 1.0), ([2], [1], 1.0)],
-            ["antecedent", "consequent", "confidence"]
+            [([3], [1], 1.0, 1.0), ([2], [1], 1.0, 1.0)],
+            ["antecedent", "consequent", "confidence", "lift"]
         )
         actual_association_rules = fpm.associationRules
 
@@ -2186,7 +2186,7 @@ class FPGrowthTests(SparkSessionTestCase):
 class ImageReaderTest(SparkSessionTestCase):
 
     def test_read_images(self):
-        data_path = 'data/mllib/images/kittens'
+        data_path = 'data/mllib/images/origin/kittens'
         df = ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
         self.assertEqual(df.count(), 4)
         first_row = df.take(1)[0][0]
@@ -2253,7 +2253,7 @@ class ImageReaderTest2(PySparkTestCase):
     def test_read_images_multiple_times(self):
         # This test case is to check if `ImageSchema.readImages` tries to
         # initiate Hive client multiple times. See SPARK-22651.
-        data_path = 'data/mllib/images/kittens'
+        data_path = 'data/mllib/images/origin/kittens'
         ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
         ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
 

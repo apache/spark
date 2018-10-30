@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.{util => ju}
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.{Calendar, Date}
+import java.util.{Calendar, Date, Locale}
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfter, Matchers}
@@ -698,7 +698,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       val e = intercept[IllegalArgumentException] {
         spark.conf.set(SQLConf.STREAMING_MULTIPLE_WATERMARK_POLICY.key, value)
       }
-      assert(e.getMessage.toLowerCase.contains("valid values are 'min' and 'max'"))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains("valid values are 'min' and 'max'"))
     }
   }
 

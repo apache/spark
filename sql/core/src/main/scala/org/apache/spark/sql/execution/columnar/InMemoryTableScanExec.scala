@@ -69,8 +69,6 @@ case class InMemoryTableScanExec(
   // TODO: revisit this. Shall we always turn off whole stage codegen if the output data are rows?
   override def supportCodegen: Boolean = supportsBatch
 
-  override protected def needsUnsafeRowConversion: Boolean = false
-
   private val columnIndices =
     attributes.map(a => relation.output.map(o => o.exprId).indexOf(a.exprId)).toArray
 

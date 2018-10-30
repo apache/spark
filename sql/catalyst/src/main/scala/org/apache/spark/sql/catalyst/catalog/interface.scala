@@ -178,8 +178,8 @@ case class BucketSpec(
 
   if (numBuckets <= 0 || numBuckets > conf.bucketingMaxBuckets) {
     throw new AnalysisException(
-      s"Number of buckets should be greater than 0 but less than bucketing.maxBuckets " +
-        s"(`${conf.bucketingMaxBuckets}`). Got `$numBuckets`")
+      s"Number of buckets should be greater than 0 but less than or equal to " +
+        s"bucketing.maxBuckets (`${conf.bucketingMaxBuckets}`). Got `$numBuckets`")
   }
 
   override def toString: String = {
@@ -244,7 +244,8 @@ case class CatalogTable(
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
-    ignoredProperties: Map[String, String] = Map.empty) {
+    ignoredProperties: Map[String, String] = Map.empty,
+    viewOriginalText: Option[String] = None) {
 
   import CatalogTable._
 
@@ -331,6 +332,7 @@ case class CatalogTable(
     comment.foreach(map.put("Comment", _))
     if (tableType == CatalogTableType.VIEW) {
       viewText.foreach(map.put("View Text", _))
+      viewOriginalText.foreach(map.put("View Original Text", _))
       viewDefaultDatabase.foreach(map.put("View Default Database", _))
       if (viewQueryColumnNames.nonEmpty) {
         map.put("View Query Output Columns", viewQueryColumnNames.mkString("[", ", ", "]"))

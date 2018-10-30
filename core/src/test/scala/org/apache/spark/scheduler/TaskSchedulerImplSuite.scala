@@ -248,7 +248,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.submitTasks(attempt2)
     val taskDescriptions3 = taskScheduler.resourceOffers(workerOffers).flatten
     assert(1 === taskDescriptions3.length)
-    val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescriptions3(0).taskId).get
+    val mgr = Option(taskScheduler.taskIdToTaskSetManager.get(taskDescriptions3(0).taskId)).get
     assert(mgr.taskSet.stageAttemptId === 1)
     assert(!failedTaskSet)
   }
@@ -286,7 +286,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(10 === taskDescriptions3.length)
 
     taskDescriptions3.foreach { task =>
-      val mgr = taskScheduler.taskIdToTaskSetManager.get(task.taskId).get
+      val mgr = Option(taskScheduler.taskIdToTaskSetManager.get(task.taskId)).get
       assert(mgr.taskSet.stageAttemptId === 1)
     }
     assert(!failedTaskSet)
@@ -724,7 +724,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // only schedule one task because of locality
     assert(taskDescs.size === 1)
 
-    val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescs(0).taskId).get
+    val mgr = Option(taskScheduler.taskIdToTaskSetManager.get(taskDescs(0).taskId)).get
     assert(mgr.myLocalityLevels.toSet === Set(TaskLocality.NODE_LOCAL, TaskLocality.ANY))
     // we should know about both executors, even though we only scheduled tasks on one of them
     assert(taskScheduler.getExecutorsAliveOnHost("host0") === Some(Set("executor0")))

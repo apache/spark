@@ -231,11 +231,6 @@ object ShuffleExchangeExec {
           override def numPartitions: Int = 1
           override def getPartition(key: Any): Int = 0
         }
-      case l: LocalPartitioning =>
-        new Partitioner {
-          override def numPartitions: Int = l.numPartitions
-          override def getPartition(key: Any): Int = key.asInstanceOf[Int]
-        }
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
@@ -252,11 +247,11 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
       case RangePartitioning(_, _) | SinglePartition => identity
-      case _: LocalPartitioning =>
-        val partitionId = TaskContext.get().partitionId()
-        _ => partitionId
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }
+
+    val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&
+      newPartitioning.numPartitions > 1
 
     val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
       // [SPARK-23207] Have to make sure the generated RoundRobinPartitioning is deterministic,
@@ -267,9 +262,7 @@ object ShuffleExchangeExec {
       //
       // Note that we don't perform local sort if the new partitioning has only 1 partition, under
       // that case all output rows go to the same partition.
-      val newRdd = if (SQLConf.get.sortBeforeRepartition &&
-          newPartitioning.numPartitions > 1 &&
-          newPartitioning.isInstanceOf[RoundRobinPartitioning]) {
+      val newRdd = if (isRoundRobin && SQLConf.get.sortBeforeRepartition) {
         rdd.mapPartitionsInternal { iter =>
           val recordComparatorSupplier = new Supplier[RecordComparator] {
             override def get: RecordComparator = new RecordBinaryComparator()
@@ -305,17 +298,19 @@ object ShuffleExchangeExec {
         rdd
       }
 
+      // round-robin function is order sensitive if we don't sort the input.
+      val isOrderSensitive = isRoundRobin && !SQLConf.get.sortBeforeRepartition
       if (needToCopyObjectsBeforeShuffle(part)) {
-        newRdd.mapPartitionsInternal { iter =>
+        newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
           iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
-        }
+        }, isOrderSensitive = isOrderSensitive)
       } else {
-        newRdd.mapPartitionsInternal { iter =>
+        newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
           val mutablePair = new MutablePair[Int, InternalRow]()
           iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
-        }
+        }, isOrderSensitive = isOrderSensitive)
       }
     }
 

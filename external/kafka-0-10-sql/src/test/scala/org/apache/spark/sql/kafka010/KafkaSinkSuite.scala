@@ -48,9 +48,12 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
   }
 
   override def afterAll(): Unit = {
-    if (testUtils != null) {
-      testUtils.teardown()
-      testUtils = null
+    try {
+      if (testUtils != null) {
+        testUtils.teardown()
+        testUtils = null
+      }
+    } finally {
       super.afterAll()
     }
   }
@@ -424,6 +427,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
         .format("kafka")
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.max.block.ms", "5000")
         .queryName("kafkaStream")
       withTopic.foreach(stream.option("topic", _))
       withOutputMode.foreach(stream.outputMode(_))

@@ -88,6 +88,10 @@ a.kill-link {
   float: right;
 }
 
+a.name-link {
+  word-wrap: break-word;
+}
+
 span.expand-details {
   font-size: 10pt;
   cursor: pointer;
@@ -251,4 +255,9 @@ a.expandbutton {
 
 .table-cell-width-limited td {
   max-width: 600px;
+}
+
+.paginate_button.active > a {
+    color: #999999;
+    text-decoration: underline;
 }

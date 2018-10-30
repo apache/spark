@@ -439,6 +439,16 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     }
   }
 
+  /**
+   * Wait until the latest offset of the given `TopicPartition` is not less than `offset`.
+   */
+  def waitUntilOffsetAppears(topicPartition: TopicPartition, offset: Long): Unit = {
+    eventually(timeout(60.seconds)) {
+      val currentOffset = getLatestOffsets(Set(topicPartition.topic)).get(topicPartition)
+      assert(currentOffset.nonEmpty && currentOffset.get >= offset)
+    }
+  }
+
   private class EmbeddedZookeeper(val zkConnect: String) {
     val snapshotDir = Utils.createTempDir()
     val logDir = Utils.createTempDir()

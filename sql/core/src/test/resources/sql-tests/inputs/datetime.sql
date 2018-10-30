@@ -27,36 +27,3 @@ select current_date = current_date(), current_timestamp = current_timestamp(), a
 select a, b from ttf2 order by a, current_date;
 
 select weekday('2007-02-03'), weekday('2009-07-30'), weekday('2017-05-27'), weekday(null), weekday('1582-10-15 13:10:15');
-
-select from_utc_timestamp('2015-07-24 00:00:00', 'PST');
-
-select from_utc_timestamp('2015-01-24 00:00:00', 'PST');
-
-select from_utc_timestamp(null, 'PST');
-
-select from_utc_timestamp('2015-07-24 00:00:00', null);
-
-select from_utc_timestamp(null, null);
-
-select from_utc_timestamp(cast(0 as timestamp), 'PST');
-
-select from_utc_timestamp(cast('2015-01-24' as date), 'PST');
-
-select to_utc_timestamp('2015-07-24 00:00:00', 'PST');
-
-select to_utc_timestamp('2015-01-24 00:00:00', 'PST');
-
-select to_utc_timestamp(null, 'PST');
-
-select to_utc_timestamp('2015-07-24 00:00:00', null);
-
-select to_utc_timestamp(null, null);
-
-select to_utc_timestamp(cast(0 as timestamp), 'PST');
-
-select to_utc_timestamp(cast('2015-01-24' as date), 'PST');
-
--- SPARK-23715: the input of to/from_utc_timestamp can not have timezone
-select from_utc_timestamp('2000-10-10 00:00:00+00:00', 'PST');
-
-select to_utc_timestamp('2000-10-10 00:00:00+00:00', 'PST');

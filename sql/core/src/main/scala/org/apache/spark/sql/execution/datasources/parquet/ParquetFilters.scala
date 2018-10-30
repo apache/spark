@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.lang.{Boolean => JBoolean, Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
+import java.util.Locale
 
 import scala.collection.JavaConverters.asScalaBufferConverter
 
@@ -31,7 +32,7 @@ import org.apache.parquet.schema.OriginalType._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,7 +45,18 @@ private[parquet] class ParquetFilters(
     pushDownTimestamp: Boolean,
     pushDownDecimal: Boolean,
     pushDownStartWith: Boolean,
-    pushDownInFilterThreshold: Int) {
+    pushDownInFilterThreshold: Int,
+    caseSensitive: Boolean) {
+
+  /**
+   * Holds a single field information stored in the underlying parquet file.
+   *
+   * @param fieldName field name in parquet file
+   * @param fieldType field type related info in parquet file
+   */
+  private case class ParquetField(
+      fieldName: String,
+      fieldType: ParquetSchemaType)
 
   private case class ParquetSchemaType(
       originalType: OriginalType,
@@ -350,26 +362,54 @@ private[parquet] class ParquetFilters(
   }
 
   /**
-   * Returns a map from name of the column to the data type, if predicate push down applies.
+   * Returns a map, which contains parquet field name and data type, if predicate push down applies.
    */
-  private def getFieldMap(dataType: MessageType): Map[String, ParquetSchemaType] = dataType match {
-    case m: MessageType =>
-      // Here we don't flatten the fields in the nested schema but just look up through
-      // root fields. Currently, accessing to nested fields does not push down filters
-      // and it does not support to create filters for them.
-      m.getFields.asScala.filter(_.isPrimitive).map(_.asPrimitiveType()).map { f =>
-        f.getName -> ParquetSchemaType(
-          f.getOriginalType, f.getPrimitiveTypeName, f.getTypeLength, f.getDecimalMetadata)
-      }.toMap
-    case _ => Map.empty[String, ParquetSchemaType]
+  private def getFieldMap(dataType: MessageType): Map[String, ParquetField] = {
+    // Here we don't flatten the fields in the nested schema but just look up through
+    // root fields. Currently, accessing to nested fields does not push down filters
+    // and it does not support to create filters for them.
+    val primitiveFields =
+      dataType.getFields.asScala.filter(_.isPrimitive).map(_.asPrimitiveType()).map { f =>
+        f.getName -> ParquetField(f.getName,
+          ParquetSchemaType(f.getOriginalType,
+            f.getPrimitiveTypeName, f.getTypeLength, f.getDecimalMetadata))
+      }
+    if (caseSensitive) {
+      primitiveFields.toMap
+    } else {
+      // Don't consider ambiguity here, i.e. more than one field is matched in case insensitive
+      // mode, just skip pushdown for these fields, they will trigger Exception when reading,
+      // See: SPARK-25132.
+      val dedupPrimitiveFields =
+        primitiveFields
+          .groupBy(_._1.toLowerCase(Locale.ROOT))
+          .filter(_._2.size == 1)
+          .mapValues(_.head._2)
+      CaseInsensitiveMap(dedupPrimitiveFields)
+    }
   }
 
   /**
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: MessageType, predicate: sources.Filter): Option[FilterPredicate] = {
-    val nameToType = getFieldMap(schema)
+    val nameToParquetField = getFieldMap(schema)
+    createFilterHelper(nameToParquetField, predicate, canPartialPushDownConjuncts = true)
+  }
 
+  /**
+   * @param nameToParquetField a map from the field name to its field name and data type.
+   *                           This only includes the root fields whose types are primitive types.
+   * @param predicate the input filter predicates. Not all the predicates can be pushed down.
+   * @param canPartialPushDownConjuncts whether a subset of conjuncts of predicates can be pushed
+   *                                    down safely. Pushing ONLY one side of AND down is safe to
+   *                                    do at the top level or none of its ancestors is NOT and OR.
+   * @return the Parquet-native filter predicates that are eligible for pushdown.
+   */
+  private def createFilterHelper(
+      nameToParquetField: Map[String, ParquetField],
+      predicate: sources.Filter,
+      canPartialPushDownConjuncts: Boolean): Option[FilterPredicate] = {
     // Decimal type must make sure that filter value's scale matched the file.
     // If doesn't matched, which would cause data corruption.
     def isDecimalMatched(value: Any, decimalMeta: DecimalMetadata): Boolean = value match {
@@ -381,7 +421,7 @@ private[parquet] class ParquetFilters(
     // Parquet's type in the given file should be matched to the value's type
     // in the pushed filter in order to push down the filter to Parquet.
     def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
-      value == null || (nameToType(name) match {
+      value == null || (nameToParquetField(name).fieldType match {
         case ParquetBooleanType => value.isInstanceOf[JBoolean]
         case ParquetByteType | ParquetShortType | ParquetIntegerType => value.isInstanceOf[Number]
         case ParquetLongType => value.isInstanceOf[JLong]
@@ -408,7 +448,7 @@ private[parquet] class ParquetFilters(
     // filters for the column having dots in the names. Thus, we do not push down such filters.
     // See SPARK-20364.
     def canMakeFilterOn(name: String, value: Any): Boolean = {
-      nameToType.contains(name) && !name.contains(".") && valueCanMakeFilterOn(name, value)
+      nameToParquetField.contains(name) && !name.contains(".") && valueCanMakeFilterOn(name, value)
     }
 
     // NOTE:
@@ -428,56 +468,81 @@ private[parquet] class ParquetFilters(
 
     predicate match {
       case sources.IsNull(name) if canMakeFilterOn(name, null) =>
-        makeEq.lift(nameToType(name)).map(_(name, null))
+        makeEq.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, null))
       case sources.IsNotNull(name) if canMakeFilterOn(name, null) =>
-        makeNotEq.lift(nameToType(name)).map(_(name, null))
+        makeNotEq.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, null))
 
       case sources.EqualTo(name, value) if canMakeFilterOn(name, value) =>
-        makeEq.lift(nameToType(name)).map(_(name, value))
+        makeEq.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, value))
       case sources.Not(sources.EqualTo(name, value)) if canMakeFilterOn(name, value) =>
-        makeNotEq.lift(nameToType(name)).map(_(name, value))
+        makeNotEq.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.EqualNullSafe(name, value) if canMakeFilterOn(name, value) =>
-        makeEq.lift(nameToType(name)).map(_(name, value))
+        makeEq.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, value))
       case sources.Not(sources.EqualNullSafe(name, value)) if canMakeFilterOn(name, value) =>
-        makeNotEq.lift(nameToType(name)).map(_(name, value))
+        makeNotEq.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.LessThan(name, value) if canMakeFilterOn(name, value) =>
-        makeLt.lift(nameToType(name)).map(_(name, value))
+        makeLt.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, value))
       case sources.LessThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
-        makeLtEq.lift(nameToType(name)).map(_(name, value))
+        makeLtEq.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.GreaterThan(name, value) if canMakeFilterOn(name, value) =>
-        makeGt.lift(nameToType(name)).map(_(name, value))
+        makeGt.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, value))
       case sources.GreaterThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
-        makeGtEq.lift(nameToType(name)).map(_(name, value))
+        makeGtEq.lift(nameToParquetField(name).fieldType)
+          .map(_(nameToParquetField(name).fieldName, value))
 
       case sources.And(lhs, rhs) =>
-        // At here, it is not safe to just convert one side if we do not understand the
-        // other side. Here is an example used to explain the reason.
+        // At here, it is not safe to just convert one side and remove the other side
+        // if we do not understand what the parent filters are.
+        //
+        // Here is an example used to explain the reason.
         // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
         // convert b in ('1'). If we only convert a = 2, we will end up with a filter
         // NOT(a = 2), which will generate wrong results.
-        // Pushing one side of AND down is only safe to do at the top level.
-        // You can see ParquetRelation's initializeLocalJobFunc method as an example.
-        for {
-          lhsFilter <- createFilter(schema, lhs)
-          rhsFilter <- createFilter(schema, rhs)
-        } yield FilterApi.and(lhsFilter, rhsFilter)
+        //
+        // Pushing one side of AND down is only safe to do at the top level or in the child
+        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
+        // can be safely removed.
+        val lhsFilterOption =
+          createFilterHelper(nameToParquetField, lhs, canPartialPushDownConjuncts)
+        val rhsFilterOption =
+          createFilterHelper(nameToParquetField, rhs, canPartialPushDownConjuncts)
+
+        (lhsFilterOption, rhsFilterOption) match {
+          case (Some(lhsFilter), Some(rhsFilter)) => Some(FilterApi.and(lhsFilter, rhsFilter))
+          case (Some(lhsFilter), None) if canPartialPushDownConjuncts => Some(lhsFilter)
+          case (None, Some(rhsFilter)) if canPartialPushDownConjuncts => Some(rhsFilter)
+          case _ => None
+        }
 
       case sources.Or(lhs, rhs) =>
         for {
-          lhsFilter <- createFilter(schema, lhs)
-          rhsFilter <- createFilter(schema, rhs)
+          lhsFilter <-
+            createFilterHelper(nameToParquetField, lhs, canPartialPushDownConjuncts = false)
+          rhsFilter <-
+            createFilterHelper(nameToParquetField, rhs, canPartialPushDownConjuncts = false)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>
-        createFilter(schema, pred).map(FilterApi.not)
+        createFilterHelper(nameToParquetField, pred, canPartialPushDownConjuncts = false)
+          .map(FilterApi.not)
 
       case sources.In(name, values) if canMakeFilterOn(name, values.head)
         && values.distinct.length <= pushDownInFilterThreshold =>
         values.distinct.flatMap { v =>
-          makeEq.lift(nameToType(name)).map(_(name, v))
+          makeEq.lift(nameToParquetField(name).fieldType)
+            .map(_(nameToParquetField(name).fieldName, v))
         }.reduceLeftOption(FilterApi.or)
 
       case sources.StringStartsWith(name, prefix)
