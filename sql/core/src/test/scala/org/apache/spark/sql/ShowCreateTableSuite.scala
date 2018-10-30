@@ -105,6 +105,34 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("data source table with a comment") {
+    withTable("ddl_test") {
+      sql(
+        s"""CREATE TABLE ddl_test
+           |USING json
+           |COMMENT 'This is a comment'
+           |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
+         """.stripMargin
+      )
+
+      checkCreateTable("ddl_test")
+    }
+  }
+
+  test("data source table with table properties") {
+    withTable("ddl_test") {
+      sql(
+        s"""CREATE TABLE ddl_test
+           |USING json
+           |TBLPROPERTIES ('a' = '1')
+           |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
+         """.stripMargin
+      )
+
+      checkCreateTable("ddl_test")
+    }
+  }
+
   test("data source table using Dataset API") {
     withTable("ddl_test") {
       spark
