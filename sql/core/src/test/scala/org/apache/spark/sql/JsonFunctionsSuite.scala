@@ -567,6 +567,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
         df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
       }.getMessage
       assert(exception1.contains(
+        "com.fasterxml.jackson.core.JsonParseException: Unexpected character"))
+      assert(exception1.contains(
         "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
 
       val exception2 = intercept[SparkException] {
