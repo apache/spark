@@ -14,41 +14,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: nn
+  name: data-populator
 spec:
-  replicas: 1
+  manualSelector: true
+  backoffLimit: 4
   selector:
     matchLabels:
-      name: hdfs-nn
-      kerberosService: nn
+      name: hdfs-data-populator
+      kerberosService: data-populator
       job: kerberostest
   template:
     metadata:
       annotations:
-        pod.beta.kubernetes.io/hostname: nn
+        pod.beta.kubernetes.io/hostname: data-populator
       labels:
-        name: hdfs-nn
-        kerberosService: nn
+        name: hdfs-data-populator
+        kerberosService: data-populator
         job: kerberostest
     spec:
       containers:
       - command: ["sh"]
-        args: ["/start-namenode.sh"]
-        name: nn
-        ports:
-        - containerPort: 9000
+        args: ["/populate-data.sh"]
+        name: data-populator
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - mountPath: /var/keytabs
-          name: nn-keytab
-      restartPolicy: Always
+          name: data-populator-keytab
+      restartPolicy: OnFailure
       volumes:
-      - name: nn-keytab
+      - name: data-populator-keytab
         persistentVolumeClaim:
           claimName: server-keytab
-      - name: nn-hadoop
-        persistentVolumeClaim:
-          claimName: nn-hadoop

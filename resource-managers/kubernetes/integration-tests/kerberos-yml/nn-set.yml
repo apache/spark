@@ -15,35 +15,40 @@
 # limitations under the License.
 #
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  name: data-populator
+  name: nn
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: hdfs-data-populator
-      kerberosService: data-populator
+      name: hdfs-nn
+      kerberosService: nn
       job: kerberostest
   template:
     metadata:
       annotations:
-        pod.beta.kubernetes.io/hostname: data-populator
+        pod.beta.kubernetes.io/hostname: nn
       labels:
-        name: hdfs-data-populator
-        kerberosService: data-populator
+        name: hdfs-nn
+        kerberosService: nn
         job: kerberostest
     spec:
       containers:
       - command: ["sh"]
-        args: ["/populate-data.sh"]
-        name: data-populator
+        args: ["/start-namenode.sh"]
+        name: nn
+        ports:
+        - containerPort: 9000
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - mountPath: /var/keytabs
-          name: data-populator-keytab
+          name: nn-keytab
       restartPolicy: Always
       volumes:
-      - name: data-populator-keytab
+      - name: nn-keytab
         persistentVolumeClaim:
           claimName: server-keytab
+      - name: nn-hadoop
+        persistentVolumeClaim:
+          claimName: nn-hadoop

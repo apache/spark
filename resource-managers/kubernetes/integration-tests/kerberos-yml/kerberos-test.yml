@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: Job
 metadata:
   name: kerberos-test
 spec:
-  replicas: 1
+  manualSelector: true
+  backoffLimit: 1
   selector:
     matchLabels:
       name: kerberos-test
@@ -36,7 +37,7 @@ spec:
         volumeMounts:
         - mountPath: /var/keytabs
           name: kerberos-test-keytab
-      restartPolicy: Always
+      restartPolicy: OnFailure
       volumes:
       - name: kerberos-test-keytab
         persistentVolumeClaim:

@@ -17,7 +17,8 @@
 package org.apache.spark.deploy.k8s.integrationtest.kerberos
 
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.api.model.apps.Deployment
+import io.fabric8.kubernetes.api.model.apps.StatefulSet
+import io.fabric8.kubernetes.api.model.batch.Job
 
 private[spark] sealed trait KerberosStorage
 
@@ -29,12 +30,12 @@ private[spark] case class PVStorage(
 
 private[spark] case class ServiceStorage(
     name: String,
-    podDeployment: Deployment,
+    podSet: StatefulSet,
     service: Service)
   extends KerberosStorage
 
-private[spark] case class DeploymentStorage(
-    resource: Deployment)
+private[spark] case class JobStorage(
+    resource: Job)
   extends KerberosStorage
 
 private[spark] case class ConfigMapStorage(

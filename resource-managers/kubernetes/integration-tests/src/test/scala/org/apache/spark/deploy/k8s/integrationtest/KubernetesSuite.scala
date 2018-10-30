@@ -143,6 +143,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       kubernetesTestComponents.deleteNamespace()
     }
     deleteDriverPod()
+    deleteKubernetesPVs()
   }
 
   protected def runSparkPiAndVerifyCompletion(
@@ -361,6 +362,26 @@ private[spark] class KubernetesSuite extends SparkFunSuite
         .pods()
         .withName(driverPodName)
         .get() == null)
+    }
+  }
+
+  private def deleteKubernetesPVs(): Unit = {
+    // Temporary hack until client library for fabric8 is updated to get around
+    // the NPE that comes about when I do .list().getItems().asScala
+    try {
+      val pvList = kubernetesTestComponents.kubernetesClient
+        .persistentVolumes().withLabels(KERBEROS_LABEL.asJava)
+        .list().getItems.asScala
+      if (pvList.nonEmpty) {
+        kubernetesTestComponents.kubernetesClient
+          .persistentVolumes().withLabels(KERBEROS_LABEL.asJava).delete()
+      }
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        kubernetesTestComponents.kubernetesClient
+          .persistentVolumes().withLabels(KERBEROS_LABEL.asJava)
+          .list().getItems.asScala.isEmpty should be (true) }
+    } catch {
+      case ex: java.lang.NullPointerException =>
     }
   }
 }

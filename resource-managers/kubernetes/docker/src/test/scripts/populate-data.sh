@@ -32,11 +32,8 @@ until (echo > /dev/tcp/nn.${NAMESPACE}.svc.cluster.local/9000) >/dev/null 2>&1; 
 hdfs dfsadmin -safemode wait
 
 
-hdfs dfs -mkdir -p /user/ifilonenko/
-hdfs dfs -copyFromLocal /people.txt /user/ifilonenko
+hdfs dfs -mkdir -p /user/userone/
+hdfs dfs -copyFromLocal /people.txt /user/userone
 
-hdfs dfs -chmod -R 755 /user/ifilonenko
-hdfs dfs -chown -R ifilonenko /user/ifilonenko
-
-
-sleep 60
+hdfs dfs -chmod -R 755 /user/userone
+hdfs dfs -chown -R ifilonenko /user/userone

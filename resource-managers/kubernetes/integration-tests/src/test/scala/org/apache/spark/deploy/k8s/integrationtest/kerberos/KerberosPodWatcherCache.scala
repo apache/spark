@@ -44,7 +44,6 @@ private[spark] class KerberosPodWatcherCache(
   private var kdcName: String = _
   private var nnName: String = _
   private var dnName: String = _
-  private var dpName: String = _
   private val podWatcher: Watch = kubernetesClient
     .pods()
     .withLabels(labels.asJava)
@@ -64,7 +63,6 @@ private[spark] class KerberosPodWatcherCache(
             if (keyName == "kerberos") { kdcName = name }
             if (keyName == "nn") { nnName = name }
             if (keyName == "dn1") { dnName = name }
-            if (keyName == "data-populator") { dpName = name }
             podCache(keyName) = phase
         }
       }
@@ -92,7 +90,6 @@ private[spark] class KerberosPodWatcherCache(
       case "kerberos" => hasInLogs(kdcName, "krb5kdc: starting")
       case "nn" => hasInLogs(nnName, "createNameNode")
       case "dn1" => hasInLogs(dnName, "Got finalize command for block pool")
-      case "data-populator" => hasInLogs(dpName, "Entered Krb5Context.initSecContext")
     }
   }
 
@@ -105,7 +102,7 @@ private[spark] class KerberosPodWatcherCache(
   override def deploy(srvc: ServiceStorage) : Unit = {
     logInfo("Launching the Deployment")
     kubernetesClient
-      .apps().deployments().inNamespace(namespace).create(srvc.podDeployment)
+      .apps().statefulSets().inNamespace(namespace).create(srvc.podSet)
     // Making sure Pod is running
     Eventually.eventually(TIMEOUT, INTERVAL) {
       (podCache(srvc.name) == "Running") should be (true)
@@ -127,7 +124,6 @@ private[spark] class KerberosPodWatcherCache(
       case _ if name.startsWith("kerberos") => "kerberos"
       case _ if name.startsWith("nn") => "nn"
       case _ if name.startsWith("dn1") => "dn1"
-      case _ if name.startsWith("data-populator") => "data-populator"
     }
   }
 

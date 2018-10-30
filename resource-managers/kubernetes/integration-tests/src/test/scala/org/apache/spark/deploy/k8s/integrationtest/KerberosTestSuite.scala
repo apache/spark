@@ -31,9 +31,10 @@ private[spark] trait KerberosTestSuite { k8sSuite: KubernetesSuite =>
     kerberizedHadoopClusterLauncher.launchKerberizedCluster(kerberosUtils)
 
     // Launches Kerberos test
-    val driverWatcherCache = new KerberosDriverWatcherCache(
+    val driverWatcherCache = new KerberosJobWatcherCache(
       kerberosUtils,
       Map("spark-app-locator" -> appLocator))
+
     driverWatcherCache.deploy(
       kerberosUtils.getKerberosTest(
         containerLocalSparkDistroExamplesJar,
@@ -67,5 +68,5 @@ private[spark] trait KerberosTestSuite { k8sSuite: KubernetesSuite =>
 
 private[spark] object KerberosTestSuite {
   val HDFS_TEST_CLASS = "org.apache.spark.examples.HdfsTest"
-  val KERB_YAML_LOCATION = "kerberos-yml/kerberos-test.yml"
+  val KERB_YAML_LOCATION = "kerberos-test"
 }

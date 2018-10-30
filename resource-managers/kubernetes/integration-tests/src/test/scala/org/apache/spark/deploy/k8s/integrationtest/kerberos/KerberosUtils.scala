@@ -21,7 +21,8 @@ import java.io.{File, FileInputStream}
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.api.model.apps.{Deployment, DeploymentBuilder}
+import io.fabric8.kubernetes.api.model.apps.{StatefulSet, StatefulSetBuilder}
+import io.fabric8.kubernetes.api.model.batch.{Job, JobBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.io.FileUtils.readFileToString
 
@@ -72,7 +73,7 @@ private[spark] class KerberosUtils(
         .endMetadata()
       .withNewSpec()
         .withStorageClassName(name)
-        .withCapacity(Map("storage" -> new Quantity("1Gi")).asJava)
+        .withCapacity(Map("storage" -> new Quantity("200Mi")).asJava)
         .withAccessModes("ReadWriteMany")
         .withHostPath(new HostPathVolumeSource(s"$KRB_FILE_DIR/$namespace/$pathType", ""))
         .endSpec()
@@ -89,7 +90,7 @@ private[spark] class KerberosUtils(
           .withVolumeName(name)
           .withAccessModes("ReadWriteMany")
           .withNewResources()
-            .withRequests(Map("storage" -> new Quantity("1Gi")).asJava)
+            .withRequests(Map("storage" -> new Quantity("200Mi")).asJava)
           .endResources()
         .endSpec()
       .build()
@@ -98,9 +99,11 @@ private[spark] class KerberosUtils(
   private val persistentVolumeMap: Map[String, PersistentVolume] = Map(
     pvNN -> createPVTemplate(pvNN, "nn"),
     pvKT -> createPVTemplate(pvKT, "keytab"))
+
   private def buildKerberosPV(pvType: String) = {
     PVStorage(pvType, createPVCTemplate(pvType), persistentVolumeMap(pvType))
   }
+
   def getNNStorage: PVStorage = buildKerberosPV(pvNN)
   def getKTStorage: PVStorage = buildKerberosPV(pvKT)
   def getLabels: Map[String, String] = KERBEROS_LABEL
@@ -114,52 +117,60 @@ private[spark] class KerberosUtils(
         .addToData(kerberosConfTupList.toMap.asJava)
         .build()
     )
-  private val kdcNode = Seq("kerberos-deployment", "kerberos-service")
-  private val nnNode = Seq("nn-deployment", "nn-service")
-  private val dnNode = Seq("dn1-deployment", "dn1-service")
-  private val dataPopulator = Seq("data-populator-deployment", "data-populator-service")
+  private val kdcNode = Seq("kerberos-set", "kerberos-service")
+  private val nnNode = Seq("nn-set", "nn-service")
+  private val dnNode = Seq("dn1-set", "dn1-service")
+  private val dataPopulator = "data-populator-job"
+  private val hadoopContainerEnvs = Seq(
+    new EnvVarBuilder()
+      .withName("NAMESPACE")
+      .withValue(namespace)
+      .build(),
+    new EnvVarBuilder()
+      .withName("TMP_KRB_LOC")
+      .withValue(s"$KRB_FILE_DIR/${kerberosFiles.head}")
+      .build(),
+    new EnvVarBuilder()
+      .withName("TMP_KRB_DP_LOC")
+      .withValue(s"$KRB_FILE_DIR/krb5-dp.conf")
+      .build(),
+    new EnvVarBuilder()
+      .withName("TMP_CORE_LOC")
+      .withValue(s"$KRB_FILE_DIR/${kerberosFiles(1)}")
+      .build(),
+    new EnvVarBuilder()
+      .withName("TMP_HDFS_LOC")
+      .withValue(s"$KRB_FILE_DIR/${kerberosFiles(2)}")
+      .build()
+  ).asJava
+  private val krbVolume =
+    new VolumeBuilder()
+      .withName(KRB_VOLUME)
+      .withNewConfigMap()
+        .withName(KRB_CONFIG_MAP_NAME)
+        .withItems(keyPaths.asJava)
+        .endConfigMap()
+      .build()
+  private val krbVolumeMount =
+    new VolumeMountBuilder()
+      .withName(KRB_VOLUME)
+      .withMountPath(KRB_FILE_DIR)
+      .build()
+
   private def buildHadoopClusterDeployment(name: String, seqPair: Seq[String]) = {
-    val deployment =
-      kubernetesClient.load(loadFromYaml(seqPair.head)).get().get(0).asInstanceOf[Deployment]
+    val statefulSet =
+      kubernetesClient.load(loadFromYaml(seqPair.head)).get().get(0).asInstanceOf[StatefulSet]
     ServiceStorage(
       name,
-      new DeploymentBuilder(deployment)
+      new StatefulSetBuilder(statefulSet)
         .editSpec()
           .editTemplate()
             .editSpec()
-              .addNewVolume()
-                .withName(KRB_VOLUME)
-                .withNewConfigMap()
-                  .withName(KRB_CONFIG_MAP_NAME)
-                  .withItems(keyPaths.asJava)
-                  .endConfigMap()
-                .endVolume()
+              .addNewVolumeLike(krbVolume).endVolume()
             .editMatchingContainer(new ContainerNameEqualityPredicate(
-              deployment.getMetadata.getName))
-              .addNewEnv()
-                .withName("NAMESPACE")
-                .withValue(namespace)
-                .endEnv()
-              .addNewEnv()
-                .withName("TMP_KRB_LOC")
-                .withValue(s"$KRB_FILE_DIR/${kerberosFiles.head}")
-                .endEnv()
-              .addNewEnv()
-                .withName("TMP_KRB_DP_LOC")
-                .withValue(s"$KRB_FILE_DIR/krb5-dp.conf")
-                .endEnv()
-              .addNewEnv()
-                .withName("TMP_CORE_LOC")
-                .withValue(s"$KRB_FILE_DIR/${kerberosFiles(1)}")
-                .endEnv()
-              .addNewEnv()
-                .withName("TMP_HDFS_LOC")
-                .withValue(s"$KRB_FILE_DIR/${kerberosFiles(2)}")
-                .endEnv()
-              .addNewVolumeMount()
-                .withName(KRB_VOLUME)
-                .withMountPath(KRB_FILE_DIR)
-                .endVolumeMount()
+              statefulSet.getMetadata.getName))
+              .addAllToEnv(hadoopContainerEnvs)
+              .addNewVolumeMountLike(krbVolumeMount).endVolumeMount()
               .withImage(hadoopImage)
               .endContainer()
             .endSpec()
@@ -168,10 +179,30 @@ private[spark] class KerberosUtils(
       .build(),
       kubernetesClient.load(loadFromYaml(seqPair(1))).get().get(0).asInstanceOf[Service] )
   }
+  private def buildDP(yamlLocation: String): JobStorage = {
+    val job = kubernetesClient.load(loadFromYaml(yamlLocation)).get().get(0).asInstanceOf[Job]
+    JobStorage(
+      new JobBuilder(job)
+        .editSpec()
+            .editTemplate()
+              .editSpec()
+                .addNewVolumeLike(krbVolume).endVolume()
+              .editMatchingContainer(new ContainerNameEqualityPredicate(
+                job.getMetadata.getName))
+                .addAllToEnv(hadoopContainerEnvs)
+                .addNewVolumeMountLike(krbVolumeMount).endVolumeMount()
+                .withImage(hadoopImage)
+                .endContainer()
+              .endSpec()
+            .endTemplate()
+          .endSpec()
+        .build()
+    )
+  }
   def getKDC: ServiceStorage = buildHadoopClusterDeployment("kerberos", kdcNode)
   def getNN: ServiceStorage = buildHadoopClusterDeployment("nn", nnNode)
   def getDN: ServiceStorage = buildHadoopClusterDeployment("dn1", dnNode)
-  def getDP: ServiceStorage = buildHadoopClusterDeployment("data-populator", dataPopulator)
+  def getDP: JobStorage = buildDP(dataPopulator)
   private val HADOOP_CONF_DIR_PATH = "/opt/spark/hconf"
   private val krb5TestkeyPaths =
     kerberosFiles.map { file =>
@@ -180,86 +211,84 @@ private[spark] class KerberosUtils(
       .withPath(file)
       .build()
     }.toList
+
   def getKerberosTest(
     resource: String,
     className: String,
     appLabel: String,
-    yamlLocation: String): DeploymentStorage = {
-    kubernetesClient.load(new FileInputStream(new File(yamlLocation)))
-      .get().get(0) match {
-      case deployment: Deployment =>
-        DeploymentStorage(
-          new DeploymentBuilder(deployment)
+    yamlLocation: String): JobStorage = {
+    val job = kubernetesClient.load(loadFromYaml(yamlLocation)).get().get(0).asInstanceOf[Job]
+    JobStorage(
+      new JobBuilder(job)
+        .editSpec()
+          .editTemplate()
+            .editOrNewMetadata()
+              .addToLabels(Map("name" -> "kerberos-test").asJava)
+              .endMetadata()
             .editSpec()
-              .editTemplate()
-                .editOrNewMetadata()
-                  .addToLabels(Map("name" -> "kerberos-test").asJava)
-                  .endMetadata()
-                .editSpec()
-                  .withServiceAccountName(serviceAccountName)
-                  .addNewVolume()
+              .withServiceAccountName(serviceAccountName)
+              .addNewVolume()
+              .withName(KRB_VOLUME)
+              .withNewConfigMap()
+                .withName(KRB_CONFIG_MAP_NAME)
+                .withItems(krb5TestkeyPaths.asJava)
+                .endConfigMap()
+              .endVolume()
+              .editMatchingContainer(new ContainerNameEqualityPredicate(
+                job.getMetadata.getName))
+                .addNewEnv()
+                  .withName("NAMESPACE")
+                  .withValue(namespace)
+                  .endEnv()
+                .addNewEnv()
+                  .withName("MASTER_URL")
+                  .withValue(kubernetesClient.getMasterUrl.toString)
+                  .endEnv()
+                .addNewEnv()
+                  .withName("SUBMIT_RESOURCE")
+                  .withValue(resource)
+                  .endEnv()
+                .addNewEnv()
+                  .withName("CLASS_NAME")
+                  .withValue(className)
+                  .endEnv()
+                .addNewEnv()
+                  .withName("HADOOP_CONF_DIR")
+                  .withValue(HADOOP_CONF_DIR_PATH)
+                  .endEnv()
+                .addNewEnv()
+                  .withName("APP_LOCATOR_LABEL")
+                  .withValue(appLabel)
+                  .endEnv()
+                .addNewEnv()
+                  .withName("SPARK_PRINT_LAUNCH_COMMAND")
+                  .withValue("true")
+                  .endEnv()
+                .addNewEnv()
+                  .withName("TMP_KRB_LOC")
+                  .withValue(s"$KRB_FILE_DIR/${kerberosFiles.head}")
+                  .endEnv()
+                .addNewEnv()
+                  .withName("TMP_CORE_LOC")
+                  .withValue(s"$KRB_FILE_DIR/${kerberosFiles(1)}")
+                  .endEnv()
+                .addNewEnv()
+                  .withName("TMP_HDFS_LOC")
+                  .withValue(s"$KRB_FILE_DIR/${kerberosFiles(2)}")
+                  .endEnv()
+                .addNewEnv()
+                  .withName("BASE_SPARK_IMAGE")
+                  .withValue(sparkImage)
+                  .endEnv()
+                .addNewVolumeMount()
                   .withName(KRB_VOLUME)
-                  .withNewConfigMap()
-                    .withName(KRB_CONFIG_MAP_NAME)
-                    .withItems(krb5TestkeyPaths.asJava)
-                    .endConfigMap()
-                  .endVolume()
-                  .editMatchingContainer(new ContainerNameEqualityPredicate(
-                    deployment.getMetadata.getName))
-                    .addNewEnv()
-                      .withName("NAMESPACE")
-                      .withValue(namespace)
-                      .endEnv()
-                    .addNewEnv()
-                      .withName("MASTER_URL")
-                      .withValue(kubernetesClient.getMasterUrl.toString)
-                      .endEnv()
-                    .addNewEnv()
-                      .withName("SUBMIT_RESOURCE")
-                      .withValue(resource)
-                      .endEnv()
-                    .addNewEnv()
-                      .withName("CLASS_NAME")
-                      .withValue(className)
-                      .endEnv()
-                    .addNewEnv()
-                      .withName("HADOOP_CONF_DIR")
-                      .withValue(HADOOP_CONF_DIR_PATH)
-                      .endEnv()
-                    .addNewEnv()
-                      .withName("APP_LOCATOR_LABEL")
-                      .withValue(appLabel)
-                      .endEnv()
-                    .addNewEnv()
-                      .withName("SPARK_PRINT_LAUNCH_COMMAND")
-                      .withValue("true")
-                      .endEnv()
-                    .addNewEnv()
-                      .withName("TMP_KRB_LOC")
-                      .withValue(s"$KRB_FILE_DIR/${kerberosFiles.head}")
-                      .endEnv()
-                    .addNewEnv()
-                      .withName("TMP_CORE_LOC")
-                      .withValue(s"$KRB_FILE_DIR/${kerberosFiles(1)}")
-                      .endEnv()
-                    .addNewEnv()
-                      .withName("TMP_HDFS_LOC")
-                      .withValue(s"$KRB_FILE_DIR/${kerberosFiles(2)}")
-                      .endEnv()
-                    .addNewEnv()
-                      .withName("BASE_SPARK_IMAGE")
-                      .withValue(sparkImage)
-                      .endEnv()
-                    .addNewVolumeMount()
-                      .withName(KRB_VOLUME)
-                      .withMountPath(KRB_FILE_DIR)
-                      .endVolumeMount()
-                    .withImage(kerberosImage)
-                  .endContainer()
-                  .endSpec()
-                .endTemplate()
+                  .withMountPath(KRB_FILE_DIR)
+                  .endVolumeMount()
+                .withImage(kerberosImage)
+              .endContainer()
               .endSpec()
-            .build())
-    }
+            .endTemplate()
+          .endSpec()
+        .build())
   }
 }

@@ -37,4 +37,4 @@ mkdir -p /etc/krb5.conf.d
       --conf spark.kerberos.principal=hdfs/nn.${NAMESPACE}.svc.cluster.local@CLUSTER.LOCAL \
       --conf spark.kubernetes.driver.label.spark-app-locator=${APP_LOCATOR_LABEL} \
       ${SUBMIT_RESOURCE} \
-      hdfs://nn.${NAMESPACE}.svc.cluster.local:9000/user/ifilonenko/people.txt
+      hdfs://nn.${NAMESPACE}.svc.cluster.local:9000/user/userone/people.txt

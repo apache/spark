@@ -47,12 +47,16 @@ private[spark] class KerberizedHadoopClusterLauncher(
     cmWatcherCache.deploy(kerberosUtils.getConfigMap)
     cmWatcherCache.stopWatch()
 
-    // Launches the Hadoop cluster pods: KDC --> NN --> DN1 --> Data-Populator
+    // Launches the Hadoop cluster pods: KDC --> NN --> DN1
     val podWatcherCache = new KerberosPodWatcherCache(kerberosUtils, labels)
     podWatcherCache.deploy(kerberosUtils.getKDC)
     podWatcherCache.deploy(kerberosUtils.getNN)
     podWatcherCache.deploy(kerberosUtils.getDN)
-    podWatcherCache.deploy(kerberosUtils.getDP)
     podWatcherCache.stopWatch()
+
+    // Launch the Data populator pod to populate HDFS
+    val jobWatcherCache = new KerberosJobWatcherCache(kerberosUtils, labels)
+    jobWatcherCache.deploy(kerberosUtils.getDP)
+    jobWatcherCache.stopWatch()
    }
 }

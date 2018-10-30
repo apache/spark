@@ -31,20 +31,20 @@ import org.apache.spark.internal.Logging
  * This class is responsible for ensuring that the driver-pod launched by the KerberosTestPod
  * is running before trying to grab its logs for the sake of monitoring success of completition.
  */
-private[spark] class KerberosDriverWatcherCache(
+private[spark] class KerberosJobWatcherCache(
     kerberosUtils: KerberosUtils,
     labels: Map[String, String])
-  extends WatcherCacheConfiguration[DeploymentStorage] with Logging with Eventually with Matchers {
+  extends WatcherCacheConfiguration[JobStorage] with Logging with Eventually with Matchers {
   private val kubernetesClient = kerberosUtils.getClient
   private val namespace = kerberosUtils.getNamespace
-  private var driverName: String = ""
+  private var jobName: String = ""
   private val podCache = scala.collection.mutable.Map[String, String]()
   private val watcher: Watch = kubernetesClient
     .pods()
     .withLabels(labels.asJava)
     .watch(new Watcher[Pod] {
       override def onClose(cause: KubernetesClientException): Unit =
-        logInfo("Ending the watch of Driver pod")
+        logInfo("Ending the watch of Job pod")
       override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
         val name = resource.getMetadata.getName
         action match {
@@ -55,24 +55,36 @@ private[spark] class KerberosDriverWatcherCache(
           val phase = resource.getStatus.getPhase
           logInfo(s"$name is as $phase")
           podCache(name) = phase
-          if (name.contains("driver")) {
-            driverName = name
-          }
+          jobName = name
         }
       }
     })
 
-  override def check(name: String): Boolean = podCache.get(name).contains("Running")
+  private def additionalCheck(name: String): Boolean = {
+    name match {
+      case _ if name.startsWith("data-populator")
+      => hasInLogs(name, "Entered Krb5Context.initSecContext")
+      case _ => true
+    }
+  }
 
-  override def deploy(storage: DeploymentStorage) : Unit = {
-    kubernetesClient.apps().deployments().inNamespace(namespace).create(storage.resource)
+  override def check(name: String): Boolean =
+    podCache.get(name).contains("Succeeded") &&
+    additionalCheck(name)
+
+  override def deploy(storage: JobStorage) : Unit = {
+    kubernetesClient.batch().jobs().inNamespace(namespace).create(storage.resource)
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      check(driverName) should be (true)
+      check(jobName) should be (true)
     }
   }
 
   override def stopWatch(): Unit = {
     // Closing Watch
     watcher.close()
+  }
+
+  def hasInLogs(name: String, expectation: String): Boolean = {
+    kubernetesClient.pods().withName(name).getLog().contains(expectation)
   }
 }

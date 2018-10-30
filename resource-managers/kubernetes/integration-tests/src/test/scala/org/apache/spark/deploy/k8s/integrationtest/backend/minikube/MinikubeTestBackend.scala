@@ -38,28 +38,10 @@ private[spark] object MinikubeTestBackend
   }
 
   override def cleanUp(): Unit = {
-    deleteKubernetesPVs()
     super.cleanUp()
   }
 
   override def getKubernetesClient: DefaultKubernetesClient = {
     defaultClient
-  }
-
-  private def deleteKubernetesPVs(): Unit = {
-    // Temporary hack until client library for fabric8 is updated to get around
-    // the NPE that comes about when I do .list().getItems().asScala
-    try {
-      val pvList = defaultClient.persistentVolumes().withLabels(KERBEROS_LABEL.asJava)
-        .list().getItems.asScala
-      if (pvList.nonEmpty) {
-        defaultClient.persistentVolumes().delete()
-      }
-      Eventually.eventually(TIMEOUT, INTERVAL) {
-        defaultClient.persistentVolumes().withLabels(KERBEROS_LABEL.asJava)
-          .list().getItems.asScala.isEmpty should be (true) }
-    } catch {
-      case ex: java.lang.NullPointerException =>
-    }
   }
 }

@@ -27,8 +27,8 @@ cp ${TMP_HDFS_LOC} /hadoop/etc/hadoop/hdfs-site.xml
 
 
 ## password only user
-/usr/sbin/kadmin.local -q "addprinc  -randkey ifilonenko"
-/usr/sbin/kadmin.local -q "ktadd -k /var/keytabs/ifilonenko.keytab ifilonenko"
+/usr/sbin/kadmin.local -q "addprinc  -randkey userone"
+/usr/sbin/kadmin.local -q "ktadd -k /var/keytabs/userone.keytab userone"
 
 /usr/sbin/kadmin.local -q "addprinc -randkey HTTP/server.${NAMESPACE}.svc.cluster.local"
 /usr/sbin/kadmin.local -q "ktadd -k /var/keytabs/server.keytab HTTP/server.${NAMESPACE}.svc.cluster.local"
