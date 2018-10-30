@@ -463,29 +463,26 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     assert(tableScanExec.partitionFilters.isEmpty)
   }
 
-  test("SPARK-22348: table cache should do partition batch pruning") {
-    Seq("true", "false").foreach { enabled =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enabled) {
-        val df1 = Seq((1, 1), (1, 1), (2, 2)).toDF("x", "y")
-        df1.unpersist()
-        df1.cache()
+  testWithWholeStageCodegenOnAndOff("SPARK-22348: table cache " +
+    "should do partition batch pruning") { codegenEnabled =>
+    val df1 = Seq((1, 1), (1, 1), (2, 2)).toDF("x", "y")
+    df1.unpersist()
+    df1.cache()
 
-        // Push predicate to the cached table.
-        val df2 = df1.where("y = 3")
+    // Push predicate to the cached table.
+    val df2 = df1.where("y = 3")
 
-        val planBeforeFilter = df2.queryExecution.executedPlan.collect {
-          case f: FilterExec => f.child
-        }
-        assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
-
-        val execPlan = if (enabled == "true") {
-          WholeStageCodegenExec(planBeforeFilter.head)(codegenStageId = 0)
-        } else {
-          planBeforeFilter.head
-        }
-        assert(execPlan.executeCollectPublic().length == 0)
-      }
+    val planBeforeFilter = df2.queryExecution.executedPlan.collect {
+      case f: FilterExec => f.child
     }
+    assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
+
+    val execPlan = if (codegenEnabled == "true") {
+      WholeStageCodegenExec(planBeforeFilter.head)(codegenStageId = 0)
+    } else {
+      planBeforeFilter.head
+    }
+    assert(execPlan.executeCollectPublic().length == 0)
   }
 
   test("SPARK-25727 - otherCopyArgs in InMemoryRelation does not include outputOrdering") {
