@@ -37,17 +37,18 @@ class RewriteSubquerySuite extends PlanTest {
         InferFiltersFromConstraints,
         PushDownPredicate,
         CollapseProject,
+        CombineFilters,
         RemoveRedundantProject) :: Nil
   }
 
+  val relation = LocalRelation('a.int, 'b.int)
+  val relInSubquery = LocalRelation('x.int, 'y.int, 'z.int)
+
   test("Column pruning after rewriting predicate subquery") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
-      val relation = LocalRelation('a.int, 'b.int)
-      val relInSubquery = LocalRelation('x.int, 'y.int, 'z.int)
-
       val query = relation.where('a.in(ListQuery(relInSubquery.select('x)))).select('a)
-
       val optimized = Optimize.execute(query.analyze)
+
       val correctAnswer = relation
         .select('a)
         .join(relInSubquery.select('x), LeftSemi, Some('a === 'x))
@@ -59,12 +60,9 @@ class RewriteSubquerySuite extends PlanTest {
 
   test("Infer filters and push down predicate after rewriting predicate subquery") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
-      val relation = LocalRelation('a.int, 'b.int)
-      val relInSubquery = LocalRelation('x.int, 'y.int, 'z.int)
-
       val query = relation.where('a.in(ListQuery(relInSubquery.select('x)))).select('a)
-
       val optimized = Optimize.execute(query.analyze)
+
       val correctAnswer = relation
         .where(IsNotNull('a)).select('a)
         .join(relInSubquery.where(IsNotNull('x)).select('x), LeftSemi, Some('a === 'x))
@@ -72,6 +70,19 @@ class RewriteSubquerySuite extends PlanTest {
 
       comparePlans(optimized, correctAnswer)
     }
+  }
+
+  test("combine filters after rewriting predicate subquery") {
+    val query = relation.where('a.in(ListQuery(relInSubquery.select('x).where('y > 1)))).select('a)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = relation
+      .where(IsNotNull('a)).select('a)
+      .join(relInSubquery.where(IsNotNull('x) && IsNotNull('y) && 'y > 1).select('x),
+        LeftSemi, Some('a === 'x))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
 }
