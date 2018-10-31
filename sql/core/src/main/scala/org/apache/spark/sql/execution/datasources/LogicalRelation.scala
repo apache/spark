@@ -63,7 +63,7 @@ case class LogicalRelation(
     case _ =>  // Do nothing.
   }
 
-  override def simpleString: String = s"Relation[${Utils.truncatedString(output, ",")}] $relation"
+  override def simpleString: String = s"$nodeName[${Utils.truncatedString(output, ",")}] $relation"
 }
 
 object LogicalRelation {

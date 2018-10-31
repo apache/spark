@@ -180,6 +180,6 @@ case class TakeOrderedAndProjectExec(
     val orderByString = Utils.truncatedString(sortOrder, "[", ",", "]")
     val outputString = Utils.truncatedString(output, "[", ",", "]")
 
-    s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
+    s"$nodeName(limit=$limit, orderBy=$orderByString, output=$outputString)"
   }
 }

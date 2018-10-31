@@ -558,7 +558,7 @@ case class Range(
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
   override def simpleString: String = {
-    s"Range ($start, $end, step=$step, splits=$numSlices)"
+    s"$nodeName ($start, $end, step=$step, splits=$numSlices)"
   }
 
   override def computeStats(): Statistics = {

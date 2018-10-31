@@ -932,12 +932,12 @@ case class HashAggregateExec(
         val functionString = Utils.truncatedString(allAggregateExpressions, "[", ", ", "]")
         val outputString = Utils.truncatedString(output, "[", ", ", "]")
         if (verbose) {
-          s"HashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
+          s"$nodeName(keys=$keyString, functions=$functionString, output=$outputString)"
         } else {
-          s"HashAggregate(keys=$keyString, functions=$functionString)"
+          s"$nodeName(keys=$keyString, functions=$functionString)"
         }
       case Some(fallbackStartsAt) =>
-        s"HashAggregateWithControlledFallback $groupingExpressions " +
+        s"${nodeName}WithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
   }

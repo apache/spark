@@ -50,6 +50,6 @@ case class SaveIntoDataSourceCommand(
 
   override def simpleString: String = {
     val redacted = SQLConf.get.redactOptions(options)
-    s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
+    s"$nodeName ${dataSource}, ${redacted}, ${mode}"
   }
 }

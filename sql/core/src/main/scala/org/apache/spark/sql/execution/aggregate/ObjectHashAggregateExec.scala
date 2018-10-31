@@ -147,9 +147,9 @@ case class ObjectHashAggregateExec(
     val functionString = Utils.truncatedString(allAggregateExpressions, "[", ", ", "]")
     val outputString = Utils.truncatedString(output, "[", ", ", "]")
     if (verbose) {
-      s"ObjectHashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
+      s"$nodeName(keys=$keyString, functions=$functionString, output=$outputString)"
     } else {
-      s"ObjectHashAggregate(keys=$keyString, functions=$functionString)"
+      s"$nodeName(keys=$keyString, functions=$functionString)"
     }
   }
 }

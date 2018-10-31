@@ -209,5 +209,5 @@ case class InMemoryRelation(
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(statsOfPlanToCache)
 
   override def simpleString: String =
-    s"InMemoryRelation [${Utils.truncatedString(output, ", ")}], ${cacheBuilder.storageLevel}"
+    s"$nodeName [${Utils.truncatedString(output, ", ")}], ${cacheBuilder.storageLevel}"
 }

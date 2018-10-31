@@ -586,7 +586,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       }
   }
 
-  override def simpleString: String = s"Range ($start, $end, step=$step, splits=$numSlices)"
+  override def simpleString: String = s"$nodeName ($start, $end, step=$step, splits=$numSlices)"
 }
 
 /**

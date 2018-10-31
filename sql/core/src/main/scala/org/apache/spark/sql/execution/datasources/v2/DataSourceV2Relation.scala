@@ -56,7 +56,7 @@ case class DataSourceV2Relation(
 
   override def pushedFilters: Seq[Expression] = Seq.empty
 
-  override def simpleString: String = "RelationV2 " + metadataString
+  override def simpleString: String = s"$nodeName " + metadataString
 
   def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options, schema)
 
