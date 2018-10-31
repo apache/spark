@@ -58,6 +58,11 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_ALLOW_EC =
+    ConfigBuilder("spark.eventLog.allowErasureCoding")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EVENT_LOG_TESTING =
     ConfigBuilder("spark.eventLog.testing")
       .internal()
