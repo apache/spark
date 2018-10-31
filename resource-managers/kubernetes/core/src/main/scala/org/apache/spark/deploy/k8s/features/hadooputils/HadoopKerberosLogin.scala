@@ -38,16 +38,14 @@ private[spark] object HadoopKerberosLogin {
       submissionSparkConf: SparkConf,
       kubernetesResourceNamePrefix: String,
       tokenManager: KubernetesHadoopDelegationTokenManager): KerberosConfigSpec = {
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(submissionSparkConf)
     // The JobUserUGI will be taken fom the Local Ticket Cache or via keytab+principal
     // The login happens in the SparkSubmit so login logic is not necessary to include
     val jobUserUGI = tokenManager.getCurrentUser
     val originalCredentials = jobUserUGI.getCredentials
-    val (tokenData, renewalInterval) = tokenManager.getDelegationTokens(
-      originalCredentials,
-      submissionSparkConf,
-      hadoopConf)
-    require(tokenData.nonEmpty, "Did not obtain any delegation tokens")
+    tokenManager.obtainDelegationTokens(originalCredentials)
+
+    val tokenData = SparkHadoopUtil.get.serialize(originalCredentials)
+
     val initialTokenDataKeyName = KERBEROS_SECRET_KEY
     val newSecretName = s"$kubernetesResourceNamePrefix-$KERBEROS_DELEGEGATION_TOKEN_SECRET_NAME"
     val secretDT =
