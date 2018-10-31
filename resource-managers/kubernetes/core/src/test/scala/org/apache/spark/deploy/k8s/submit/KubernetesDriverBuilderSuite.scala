@@ -187,7 +187,6 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Option.empty)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -195,7 +194,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
-      JAVA_STEP_TYPE,
+      DRIVER_CMD_STEP_TYPE,
       TEMPLATE_VOLUME_STEP_TYPE)
   }
 
@@ -296,7 +295,6 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Option.empty)
     val driverSpec = KubernetesDriverBuilder
       .apply(kubernetesClient, sparkConf)
@@ -329,7 +327,6 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Option.empty)
     val exception = intercept[SparkException] {
       KubernetesDriverBuilder

@@ -220,7 +220,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Option.empty)
     val sparkPod = KubernetesExecutorBuilder
       .apply(kubernetesClient, sparkConf)
