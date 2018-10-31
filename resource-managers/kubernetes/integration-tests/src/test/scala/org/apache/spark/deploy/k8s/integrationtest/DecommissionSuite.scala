@@ -22,6 +22,7 @@ import org.apache.spark.deploy.k8s.integrationtest.TestConfig.{getTestImageRepo,
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
   import DecommissionSuite._
+  import KubernetesSuite.k8sTestTag
 
   private val pySparkDockerImage =
     s"${getTestImageRepo}/spark-py:${getTestImageTag}"
