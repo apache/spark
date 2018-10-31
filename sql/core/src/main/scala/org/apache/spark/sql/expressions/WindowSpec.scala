@@ -210,18 +210,6 @@ class WindowSpec private[sql](
   }
 
   /**
-   * This function has been deprecated in Spark 2.4. See SPARK-25842 for more information.
-   * @since 2.3.0
-   */
-  @deprecated("Use the version with Long parameter types", "2.4.0")
-  def rangeBetween(start: Column, end: Column): WindowSpec = {
-    new WindowSpec(
-      partitionSpec,
-      orderSpec,
-      SpecifiedWindowFrame(RangeFrame, start.expr, end.expr))
-  }
-
-  /**
    * Converts this [[WindowSpec]] into a [[Column]] with an aggregate expression.
    */
   private[sql] def withAggregate(aggregate: Column): Column = {

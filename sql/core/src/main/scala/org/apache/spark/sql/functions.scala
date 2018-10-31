@@ -829,32 +829,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
-  /**
-   * This function has been deprecated in Spark 2.4. See SPARK-25842 for more information.
-   *
-   * @group window_funcs
-   * @since 2.3.0
-   */
-  @deprecated("Use Window.unboundedPreceding", "2.4.0")
-  def unboundedPreceding(): Column = Column(UnboundedPreceding)
-
-  /**
-   * This function has been deprecated in Spark 2.4. See SPARK-25842 for more information.
-   *
-   * @group window_funcs
-   * @since 2.3.0
-   */
-  @deprecated("Use Window.unboundedFollowing", "2.4.0")
-  def unboundedFollowing(): Column = Column(UnboundedFollowing)
-
-  /**
-   * This function has been deprecated in Spark 2.4. See SPARK-25842 for more information.
-   *
-   * @group window_funcs
-   * @since 2.3.0
-   */
-  @deprecated("Use Window.currentRow", "2.4.0")
-  def currentRow(): Column = Column(CurrentRow)
 
   /**
    * Window function: returns the cumulative distribution of values within a window partition,
