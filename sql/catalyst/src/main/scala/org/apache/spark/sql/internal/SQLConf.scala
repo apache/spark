@@ -815,7 +815,7 @@ object SQLConf {
   val CODEGEN_METHOD_SPLIT_THRESHOLD = buildConf("spark.sql.codegen.methodSplitThreshold")
     .internal()
     .doc("The threshold of source-code splitting in the codegen. When the number of characters " +
-      "in a single JAVA function (without comment) exceeds the threshold, the function will be " +
+      "in a single Java function (without comment) exceeds the threshold, the function will be " +
       "automatically split to multiple smaller ones. We cannot know how many bytecode will be " +
       "generated, so use the code length as metric. When running on HotSpot, a function's " +
       "bytecode should not go beyond 8KB, otherwise it will not be JITted; it also should not " +
