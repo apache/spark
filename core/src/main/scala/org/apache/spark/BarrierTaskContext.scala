@@ -114,7 +114,7 @@ class BarrierTaskContext private[spark] (
       }
     }
     // Log the update of global sync every 60 seconds.
-    timer.schedule(timerTask, 1000, 1000)
+    timer.schedule(timerTask, 60000, 60000)
 
     try {
       barrierCoordinator.askSync[Unit](
