@@ -1,0 +1,37 @@
+================================================================================================
+Benchmark for performance of JSON parsing
+================================================================================================
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+JSON schema inferring:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 62946 / 63310          1.6         629.5       1.0X
+UTF-8 is set                              112814 / 112866          0.9        1128.1       0.6X
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+JSON per-line parsing:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 16468 / 16553          6.1         164.7       1.0X
+UTF-8 is set                                16420 / 16441          6.1         164.2       1.0X
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+JSON parsing of wide lines:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 39789 / 40053          0.3        3978.9       1.0X
+UTF-8 is set                                39505 / 39584          0.3        3950.5       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Count a dataset with 10 columns:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Select 10 columns + count()                 15997 / 16015          0.6        1599.7       1.0X
+Select 1 column + count()                   13280 / 13326          0.8        1328.0       1.2X
+count()                                       3006 / 3021          3.3         300.6       5.3X
+
+
