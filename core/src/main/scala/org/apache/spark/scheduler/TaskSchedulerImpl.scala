@@ -447,7 +447,7 @@ private[spark] class TaskSchedulerImpl(
                     abortTimer.schedule(
                       createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
                   }
-                case _ => // Abort Immediately
+                case None => // Abort Immediately
                   logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
                     s" executors can be found to kill. Aborting $taskSet." )
                   taskSet.abortSinceCompletelyBlacklisted(taskIndex)
@@ -456,8 +456,10 @@ private[spark] class TaskSchedulerImpl(
         } else {
           // We want to defer killing any taskSets as long as we have a non blacklisted executor
           // which can be used to schedule a task from any active taskSets. This ensures that the
-          // job can make progress and if we encounter a flawed taskSet it will eventually either
-          // fail or abort due to being completely blacklisted.
+          // job can make progress.
+          // Note: It is theoretically possible that a taskSet never gets scheduled on a
+          // non-blacklisted executor and the abort timer doesn't kick in because of a constant
+          // submission of new TaskSets. See the PR for more details.
           if (unschedulableTaskSetToExpiryTime.nonEmpty) {
             logInfo("Clearing the expiry times for all unschedulable taskSets as a task was " +
               "recently scheduled.")
