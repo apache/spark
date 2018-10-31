@@ -43,7 +43,7 @@ private[spark] object SparkKubernetesClientFactory {
       defaultServiceAccountToken: Option[File],
       defaultServiceAccountCaCert: Option[File]): KubernetesClient = {
 
-    // TODO Support configurable context
+    // TODO [SPARK-25887] Support configurable context
 
     val oauthTokenFileConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_FILE_CONF_SUFFIX"
     val oauthTokenConf = s"$kubernetesAuthConfPrefix.$OAUTH_TOKEN_CONF_SUFFIX"
@@ -67,7 +67,7 @@ private[spark] object SparkKubernetesClientFactory {
     val dispatcher = new Dispatcher(
       ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
 
-    // TODO Create builder in a way that respects configurable context
+    // TODO [SPARK-25887] Create builder in a way that respects configurable context
     val config = new ConfigBuilder()
       .withApiVersion("v1")
       .withMasterUrl(master)
