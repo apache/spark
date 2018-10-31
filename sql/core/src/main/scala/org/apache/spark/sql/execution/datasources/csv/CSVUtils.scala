@@ -127,5 +127,5 @@ object CSVUtils {
   }
 
   def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] =
-    CSVExprUtils.filterCommentAndEmpty(iter, options)
+    CSVUtils.filterCommentAndEmpty(iter, options)
 }
