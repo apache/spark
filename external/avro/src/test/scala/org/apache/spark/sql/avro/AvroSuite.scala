@@ -1529,6 +1529,8 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       SchemaBuilder.record("simple_record").fields()
         .name("nested1").`type`("int").withDefault(0)
         .name("nested2").`type`("string").withDefault("string").endRecord()
+    val mapDefault = new java.util.HashMap[String, String]()
+    mapDefault.put("a", "A")
     val schema = SchemaBuilder.record("record").fields()
       .name("boolean").`type`("boolean").withDefault(false)
       .name("int").`type`("int").withDefault(0)
@@ -1539,54 +1541,55 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       .name("bytes").`type`("bytes").withDefault(java.nio.ByteBuffer.wrap("bytes".getBytes))
       .name("nested").`type`(nested).withDefault(new GenericRecordBuilder(nested).build)
       .name("enum").`type`(
-      SchemaBuilder.enumeration("simple_enums")
-        .symbols("SPADES", "HEARTS", "CLUBS", "DIAMONDS"))
-      .withDefault("SPADES")
+        SchemaBuilder.enumeration("simple_enums")
+          .symbols("SPADES", "HEARTS", "CLUBS", "DIAMONDS")).withDefault("SPADES")
       .name("int_array").`type`(
-      SchemaBuilder.array().items().`type`("int"))
-      .withDefault(java.util.Arrays.asList(1, 2, 3))
+        SchemaBuilder.array().items().`type`("int")).withDefault(java.util.Arrays.asList(1, 2, 3))
       .name("string_array").`type`(
       SchemaBuilder.array().items().`type`("string"))
-      .withDefault(java.util.Arrays.asList("a", "b", "c"))
+        .withDefault(java.util.Arrays.asList("a", "b", "c"))
       .name("record_array").`type`(
-      SchemaBuilder.array.items.`type`(nested))
-      .withDefault(java.util.Arrays.asList(
-        new GenericRecordBuilder(nested).build,
-        new GenericRecordBuilder(nested).build))
+        SchemaBuilder.array.items.`type`(nested))
+        .withDefault(java.util.Arrays.asList(
+          new GenericRecordBuilder(nested).build,
+          new GenericRecordBuilder(nested).build))
       .name("enum_array").`type`(
-      SchemaBuilder.array.items.`type`(
-        SchemaBuilder.enumeration("simple_enums")
-          .symbols("SPADES", "HEARTS", "CLUBS", "DIAMONDS")))
-      .withDefault(java.util.Arrays.asList("SPADES", "HEARTS", "SPADES"))
+        SchemaBuilder.array.items.`type`(
+          SchemaBuilder.enumeration("simple_enums")
+            .symbols("SPADES", "HEARTS", "CLUBS", "DIAMONDS")))
+        .withDefault(java.util.Arrays.asList("SPADES", "HEARTS", "SPADES"))
       .name("fixed_array").`type`(
-      SchemaBuilder.array.items().`type`(
-        SchemaBuilder.fixed("simple_fixed").size(3)))
-      .withDefault(java.util.Arrays.asList("foo", "bar", "baz"))
+        SchemaBuilder.array.items().`type`(
+          SchemaBuilder.fixed("simple_fixed").size(3)))
+        .withDefault(java.util.Arrays.asList("foo", "bar", "baz"))
       .name("fixed").`type`(SchemaBuilder.fixed("simple_fixed").size(16))
-      .withDefault("string_length_16")
+        .withDefault("string_length_16")
+      .name("map").`type`(
+        SchemaBuilder.map().values().`type`("string"))
+        .withDefault(mapDefault)
       .endRecord()
     val encoder = AvroEncoder.of[GenericData.Record](schema)
     val expressionEncoder = encoder.asInstanceOf[ExpressionEncoder[GenericData.Record]]
     val record = new GenericRecordBuilder(schema).build
     val row = expressionEncoder.toRow(record)
     val recordFromRow = expressionEncoder.resolveAndBind().fromRow(row)
-    assert(record == recordFromRow)
+    assert(record.toString == recordFromRow.toString)
   }
 
   test("encoder resolves union types to rows") {
     val schema = SchemaBuilder.record("record").fields()
       .name("int_null_union").`type`(
-      SchemaBuilder.unionOf.`type`("null").and.`type`("int").endUnion)
-      .withDefault(null)
+        SchemaBuilder.unionOf.`type`("null").and.`type`("int").endUnion)
+        .withDefault(null)
       .name("string_null_union").`type`(
-      SchemaBuilder.unionOf.`type`("null").and.`type`("string").endUnion)
-      .withDefault(null)
+        SchemaBuilder.unionOf.`type`("null").and.`type`("string").endUnion)
+        .withDefault(null)
       .name("int_long_union").`type`(
-      SchemaBuilder.unionOf.`type`("int").and.`type`("long").endUnion)
-      .withDefault(0)
+        SchemaBuilder.unionOf.`type`("int").and.`type`("long").endUnion)
+        .withDefault(0)
       .name("float_double_union").`type`(
-      SchemaBuilder.unionOf.`type`("float").and.`type`("double").endUnion)
-      .withDefault(0.0)
+        SchemaBuilder.unionOf.`type`("float").and.`type`("double").endUnion)
+        .withDefault(0.0)
       .endRecord
     val encoder = AvroEncoder.of[GenericData.Record](schema)
     val expressionEncoder = encoder.asInstanceOf[ExpressionEncoder[GenericData.Record]]

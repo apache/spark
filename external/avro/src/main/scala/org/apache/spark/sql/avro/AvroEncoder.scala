@@ -411,7 +411,6 @@ private object AvroTypeInference {
         valueNullable = true)
     }
 
-
     if (!inputObject.dataType.isInstanceOf[ObjectType]) {
       inputObject
     } else {
