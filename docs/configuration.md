@@ -762,6 +762,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.eventLog.allowErasureCoding</code></td>
+  <td>false</td>
+  <td>
+    Whether to allow event logs to use erasure coding, or turn erasure coding off, regardless of
+    filesystem defaults.  On HDFS, erasure coded files will not update as quickly as regular
+    replicated files, so the application updates will take longer to appear in the History Server.
+    Note that even if this is true, Spark will still not force the file to use erasure coding, it
+    will simply use filesystem defaults.
+  </td>
+</tr>
+<tr>
   <td><code>spark.eventLog.dir</code></td>
   <td>file:///tmp/spark-events</td>
   <td>

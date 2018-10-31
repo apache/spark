@@ -67,6 +67,7 @@ private[spark] class EventLoggingListener(
   private val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS)
   private val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
   private val shouldLogBlockUpdates = sparkConf.get(EVENT_LOG_BLOCK_UPDATES)
+  private val shouldAllowECLogs = sparkConf.get(EVENT_LOG_ALLOW_EC)
   private val shouldLogStageExecutorMetrics = sparkConf.get(EVENT_LOG_STAGE_EXECUTOR_METRICS)
   private val testing = sparkConf.get(EVENT_LOG_TESTING)
   private val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
@@ -119,7 +120,11 @@ private[spark] class EventLoggingListener(
       if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
         new FileOutputStream(uri.getPath)
       } else {
-        hadoopDataStream = Some(fileSystem.create(path))
+        hadoopDataStream = Some(if (shouldAllowECLogs) {
+          fileSystem.create(path)
+        } else {
+          SparkHadoopUtil.createNonECFile(fileSystem, path)
+        })
         hadoopDataStream.get
       }
 
