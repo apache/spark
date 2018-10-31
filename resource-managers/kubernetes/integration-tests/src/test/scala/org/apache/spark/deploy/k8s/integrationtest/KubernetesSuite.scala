@@ -22,7 +22,7 @@ import java.util.UUID
 import java.util.regex.Pattern
 
 import com.google.common.io.PatternFilenameFilter
-import io.fabric8.kubernetes.api.model.{ContainerStateRunning, Pod}
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
@@ -247,11 +247,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite
               if (decomissioningTest) {
                 // Wait for all the containers in the pod to be running
                 Eventually.eventually(TIMEOUT, INTERVAL) {
-                  val containerStatuses = p.getStatus.getContainerStatuses.asScala
-                  val runningContainers = containerStatuses.filter(_ ==  ContainerStateRunning)
-                  val nonRunningContainers = containerStatuses.filter(_ !=  ContainerStateRunning)
-
-                  runningContainers > 0 && nonRunningContainers == 0
+                  resource.getStatus.getConditions().asScala
+                    .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
+                    .headOption.getOrElse(false)
                 }
                 // Sleep a small interval to ensure everything is registered.
                 Thread.sleep(500)
