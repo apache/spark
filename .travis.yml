@@ -39,7 +39,7 @@ cache:
 
 # 4. Turn off notifications.
 notifications:
-  email: yaooqinn@hotmail.com
+  email: sparker.bdms@list.nie.netease.com
 
 before_install:
   - unset SBT_OPTS JVM_OPTS
