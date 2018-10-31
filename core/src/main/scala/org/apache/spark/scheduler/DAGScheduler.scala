@@ -1355,14 +1355,18 @@ private[spark] class DAGScheduler(
             val resultStage = stage.asInstanceOf[ResultStage]
             resultStage.activeJob match {
               case Some(job) =>
-                // Only update the accumulator once for each result task.
+                // Only update the accumulator once for each successful result task.
                 if (!job.finished(rt.outputId)) {
                   updateAccumulators(event)
                 }
               case None => // Ignore update if task's job has finished.
             }
-          case _ =>
-            updateAccumulators(event)
+          case smt: ShuffleMapTask =>
+            val shuffleMapStage = stage.asInstanceOf[ShuffleMapStage]
+            // Only update the accumulator once for each successful shuffle map task.
+            if (shuffleMapStage.pendingPartitions.contains(smt.partitionId)) {
+              updateAccumulators(event)
+            }
         }
       case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
       case _ =>
