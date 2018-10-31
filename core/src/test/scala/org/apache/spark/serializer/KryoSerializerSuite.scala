@@ -18,9 +18,12 @@
 package org.apache.spark.serializer
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, FileOutputStream}
+import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.{Kryo, KryoException}
@@ -31,7 +34,7 @@ import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -459,23 +462,18 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   // Regression test for SPARK-7766, an issue where disabling auto-reset and enabling
   // reference-tracking would lead to corrupted output when serializer instances are re-used
   for {
-    referenceTracking <- Set(true, false)
-    autoReset <- Set(true, false)
-    usePool <- Set(true, false)
+    referenceTracking <- Seq(true, false)
+    autoReset <- Seq(true, false)
+    usePool <- Seq(true, false)
   } {
     test(s"instance reuse with autoReset = $autoReset, referenceTracking = $referenceTracking" +
       s", usePool = $usePool") {
       testSerializerInstanceReuse(
-        autoReset = autoReset, referenceTracking = referenceTracking, usePool = usePool)
+        autoReset, referenceTracking, usePool)
     }
   }
 
   test("SPARK-25839 KryoPool implementation works correctly in multi-threaded environment") {
-    import java.util.concurrent.Executors
-    import scala.concurrent.{Future, ExecutionContext}
-    import scala.concurrent.duration._
-    import org.apache.spark.util.ThreadUtils
-
     implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(
       Executors.newFixedThreadPool(4))
 

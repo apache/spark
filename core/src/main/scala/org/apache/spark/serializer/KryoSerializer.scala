@@ -30,7 +30,7 @@ import scala.util.control.NonFatal
 import com.esotericsoftware.kryo.{Kryo, KryoException, Serializer => KryoClassSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import com.esotericsoftware.kryo.io.{UnsafeInput => KryoUnsafeInput, UnsafeOutput => KryoUnsafeOutput}
-import com.esotericsoftware.kryo.pool._
+import com.esotericsoftware.kryo.pool.{KryoFactory, KryoPool}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
 import org.apache.avro.generic.{GenericData, GenericRecord}
@@ -94,7 +94,6 @@ class KryoSerializer(conf: SparkConf)
       new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
     }
 
-  @transient
   private lazy val factory: KryoFactory = new KryoFactory() {
     override def create: Kryo = {
       newKryo()
