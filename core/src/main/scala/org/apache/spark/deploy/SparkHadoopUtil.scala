@@ -414,20 +414,6 @@ object SparkHadoopUtil {
   def get: SparkHadoopUtil = instance
 
   /**
-   * Given an expiration date for the current set of credentials, calculate the time when new
-   * credentials should be created.
-   *
-   * @param expirationDate Drop-dead expiration date
-   * @param conf Spark configuration
-   * @return Timestamp when new credentials should be created.
-   */
-  private[spark] def nextCredentialRenewalTime(expirationDate: Long, conf: SparkConf): Long = {
-    val ct = System.currentTimeMillis
-    val ratio = conf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
-    (ct + (ratio * (expirationDate - ct))).toLong
-  }
-
-  /**
    * Returns a Configuration object with Spark configuration applied on top. Unlike
    * the instance method, this will always return a Configuration instance, and not a
    * cluster manager-specific type.

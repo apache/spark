@@ -731,7 +731,9 @@ private[spark] object SparkConf extends Logging {
     KEYTAB.key -> Seq(
       AlternateConfig("spark.yarn.keytab", "3.0")),
     PRINCIPAL.key -> Seq(
-      AlternateConfig("spark.yarn.principal", "3.0"))
+      AlternateConfig("spark.yarn.principal", "3.0")),
+    KERBEROS_RELOGIN_PERIOD.key -> Seq(
+      AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0"))
   )
 
   /**
