@@ -55,6 +55,7 @@ import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 class ParquetFileFormat
   extends FileFormat
+  with ColumnarFileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
@@ -71,6 +72,12 @@ class ParquetFileFormat
   override def hashCode(): Int = getClass.hashCode()
 
   override def equals(other: Any): Boolean = other.isInstanceOf[ParquetFileFormat]
+
+  override def columnCountForSchema(conf: SQLConf, schema: StructType): Int = {
+    val converter = new SparkToParquetSchemaConverter(conf)
+    val parquetSchema = converter.convert(schema)
+    parquetSchema.getPaths.size
+  }
 
   override def prepareWrite(
       sparkSession: SparkSession,

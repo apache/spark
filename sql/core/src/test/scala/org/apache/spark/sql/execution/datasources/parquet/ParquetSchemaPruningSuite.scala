@@ -217,6 +217,19 @@ class ParquetSchemaPruningSuite
       Row("Y.") :: Nil)
   }
 
+  test("ColumnCount metadata value for pruned query should equal the number of columns read") {
+    withContacts {
+      val query = sql("select name.middle from contacts")
+      val fileSourceScans =
+        query.queryExecution.executedPlan.collect {
+          case scan: FileSourceScanExec => scan
+        }
+      assert(fileSourceScans.size === 1)
+      val contactsFileScan = fileSourceScans(0)
+      assert(contactsFileScan.metadata("ColumnCount") === "1")
+    }
+  }
+
   private def testSchemaPruning(testName: String)(testThunk: => Unit) {
     test(s"Spark vectorized reader - without partition data column - $testName") {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {

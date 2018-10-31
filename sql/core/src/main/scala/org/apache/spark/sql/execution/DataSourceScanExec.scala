@@ -306,7 +306,15 @@ case class FileSourceScanExec(
       withOptPartitionCount
     }
 
-    withSelectedBucketsCount
+    val withOptColumnCount = relation.fileFormat match {
+      case columnar: ColumnarFileFormat =>
+        val sqlConf = relation.sparkSession.sessionState.conf
+        val columnCount = columnar.columnCountForSchema(sqlConf, requiredSchema)
+        withSelectedBucketsCount + ("ColumnCount" -> columnCount.toString)
+      case _ => withSelectedBucketsCount
+    }
+
+    withOptColumnCount
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
