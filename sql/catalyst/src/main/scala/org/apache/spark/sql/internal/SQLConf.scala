@@ -821,6 +821,7 @@ object SQLConf {
       "bytecode should not go beyond 8KB, otherwise it will not be JITted; it also should not " +
       "be too small, otherwise there will be many function calls.")
     .intConf
+    .checkValue(threshold => threshold > 0, "The threshold must be a positive integer.")
     .createWithDefault(1024)
 
   val WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR =
