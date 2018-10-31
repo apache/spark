@@ -224,8 +224,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
         val isNotNull = if (SQLConf.get.inFalseForNullField) {
           IsNotNull(i.value)
         } else {
-          val valuesNotNull: Seq[Expression] = values.map(IsNotNull)
-          valuesNotNull.tail.foldLeft(valuesNotNull.head)(And)
+          values.map(IsNotNull).reduce(And)
         }
         If(isNotNull, FalseLiteral, Literal(null, BooleanType))
       case expr @ In(values, list) if expr.inSetConvertible =>

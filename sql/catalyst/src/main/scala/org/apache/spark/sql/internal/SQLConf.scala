@@ -1564,12 +1564,12 @@ object SQLConf {
   val LEGACY_IN_FALSE_FOR_NULL_FIELD =
     buildConf("spark.sql.legacy.inOperator.falseForNullField")
       .internal()
-      .doc("When set to true (default), the IN operator returns false when comparing multiple " +
-        "values containing a null. When set to false, it returns null, instead. This is " +
+      .doc("When set to true, the IN operator returns false when comparing multiple values " +
+        "containing a null. When set to false (default), it returns null, instead. This is " +
         "important especially when using NOT IN as in the second case, it filters out the rows " +
         "when a null is present in a field; while in the first one, those rows are returned.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val LEGACY_INTEGRALDIVIDE_RETURN_LONG = buildConf("spark.sql.legacy.integralDivide.returnBigint")
     .doc("If it is set to true, the div operator returns always a bigint. This behavior was " +
