@@ -829,32 +829,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
-  /**
-   * Window function: returns the special frame boundary that represents the first row in the
-   * window partition.
-   *
-   * @group window_funcs
-   * @since 2.3.0
-   */
-  def unboundedPreceding(): Column = Column(UnboundedPreceding)
-
-  /**
-   * Window function: returns the special frame boundary that represents the last row in the
-   * window partition.
-   *
-   * @group window_funcs
-   * @since 2.3.0
-   */
-  def unboundedFollowing(): Column = Column(UnboundedFollowing)
-
-  /**
-   * Window function: returns the special frame boundary that represents the current row in the
-   * window partition.
-   *
-   * @group window_funcs
-   * @since 2.3.0
-   */
-  def currentRow(): Column = Column(CurrentRow)
 
   /**
    * Window function: returns the cumulative distribution of values within a window partition,
@@ -3626,19 +3600,29 @@ object functions {
   }
 
   /**
-   * Parses a column containing a JSON string and infers its schema.
+   * Parses a JSON string and infers its schema in DDL format.
    *
-   * @param e a string column containing JSON data.
+   * @param json a JSON string.
    *
    * @group collection_funcs
    * @since 2.4.0
    */
-  def schema_of_json(e: Column): Column = withExpr(new SchemaOfJson(e.expr))
+  def schema_of_json(json: String): Column = schema_of_json(lit(json))
 
   /**
-   * Parses a column containing a JSON string and infers its schema using options.
+   * Parses a JSON string and infers its schema in DDL format.
    *
-   * @param e a string column containing JSON data.
+   * @param json a string literal containing a JSON string.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def schema_of_json(json: Column): Column = withExpr(new SchemaOfJson(json.expr))
+
+  /**
+   * Parses a JSON string and infers its schema in DDL format using options.
+   *
+   * @param json a string column containing JSON data.
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source. See [[DataFrameReader#json]].
    * @return a column with string literal containing schema in DDL format.
@@ -3646,8 +3630,8 @@ object functions {
    * @group collection_funcs
    * @since 3.0.0
    */
-  def schema_of_json(e: Column, options: java.util.Map[String, String]): Column = {
-    withExpr(SchemaOfJson(e.expr, options.asScala.toMap))
+  def schema_of_json(json: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(SchemaOfJson(json.expr, options.asScala.toMap))
   }
 
   /**
