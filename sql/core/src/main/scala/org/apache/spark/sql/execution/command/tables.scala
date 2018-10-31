@@ -960,6 +960,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       showTableComment(metadata, builder)
       showHiveTableNonDataColumns(metadata, builder)
       showHiveTableStorageInfo(metadata, builder)
+      showTableLocation(metadata, builder)
       showTableProperties(metadata, builder)
     }
 
@@ -1018,10 +1019,12 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         builder ++= s"  OUTPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
       }
     }
+  }
 
+  private def showTableLocation(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.tableType == EXTERNAL) {
-      storage.locationUri.foreach { uri =>
-        builder ++= s"LOCATION '$uri'\n"
+      metadata.storage.locationUri.foreach { location =>
+        builder ++= s"LOCATION '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'\n"
       }
     }
   }
@@ -1051,6 +1054,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     showDataSourceTableOptions(metadata, builder)
     showDataSourceTableNonDataColumns(metadata, builder)
     showTableComment(metadata, builder)
+    showTableLocation(metadata, builder)
     showTableProperties(metadata, builder)
 
     builder.toString()
@@ -1073,12 +1077,6 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       builder ++= "OPTIONS (\n"
       builder ++= dataSourceOptions.mkString("  ", ",\n  ", "\n")
       builder ++= ")\n"
-    }
-
-    if (metadata.tableType == EXTERNAL) {
-      metadata.storage.locationUri.foreach { location =>
-        builder ++= s"LOCATION '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'\n"
-      }
     }
   }
 
