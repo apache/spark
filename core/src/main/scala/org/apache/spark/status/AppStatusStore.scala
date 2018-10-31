@@ -505,10 +505,11 @@ private[spark] object AppStatusStore {
   /**
    * Create an in-memory store for a live application.
    */
-  def createLiveStore(conf: SparkConf): AppStatusStore = {
+  def createLiveStore(
+      conf: SparkConf,
+      appStatusSource: Option[AppStatusSource] = None): AppStatusStore = {
     val store = new ElementTrackingStore(new InMemoryStore(), conf)
-    val listener = new AppStatusListener(store, conf, true)
+    val listener = new AppStatusListener(store, conf, true, appStatusSource)
     new AppStatusStore(store, listener = Some(listener))
   }
-
 }

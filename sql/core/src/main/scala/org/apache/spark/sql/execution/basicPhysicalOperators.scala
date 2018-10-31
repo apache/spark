@@ -452,8 +452,15 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")
-    val shouldStop = if (parent.needStopCheck) {
-      s"if (shouldStop()) { $nextIndex = $value + ${step}L; return; }"
+    val stopCheck = if (parent.needStopCheck) {
+      s"""
+         |if (shouldStop()) {
+         |  $nextIndex = $value + ${step}L;
+         |  $numOutput.add($localIdx + 1);
+         |  $inputMetrics.incRecordsRead($localIdx + 1);
+         |  return;
+         |}
+       """.stripMargin
     } else {
       "// shouldStop check is eliminated"
     }
@@ -506,8 +513,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |       $numElementsTodo = 0;
       |       if ($nextBatchTodo == 0) break;
       |     }
-      |     $numOutput.add($nextBatchTodo);
-      |     $inputMetrics.incRecordsRead($nextBatchTodo);
       |     $batchEnd += $nextBatchTodo * ${step}L;
       |   }
       |
@@ -515,9 +520,11 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |   for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
       |     long $value = ((long)$localIdx * ${step}L) + $nextIndex;
       |     ${consume(ctx, Seq(ev))}
-      |     $shouldStop
+      |     $stopCheck
       |   }
       |   $nextIndex = $batchEnd;
+      |   $numOutput.add($localEnd);
+      |   $inputMetrics.incRecordsRead($localEnd);
       |   $taskContext.killTaskIfInterrupted();
       | }
      """.stripMargin

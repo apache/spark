@@ -232,11 +232,14 @@ class PercentileSuite extends SparkFunSuite {
       BooleanType, StringType, DateType, TimestampType, CalendarIntervalType, NullType)
 
     invalidDataTypes.foreach { dataType =>
-      val percentage = Literal(0.5, dataType)
+      val percentage = Literal.default(dataType)
       val percentile4 = new Percentile(child, percentage)
-      assertEqual(percentile4.checkInputDataTypes(),
-        TypeCheckFailure(s"argument 2 requires double type, however, " +
-          s"'0.5' is of ${dataType.simpleString} type."))
+      val checkResult = percentile4.checkInputDataTypes()
+      assert(checkResult.isFailure)
+      Seq("argument 2 requires double type, however, ",
+          s"is of ${dataType.simpleString} type.").foreach { errMsg =>
+        assert(checkResult.asInstanceOf[TypeCheckFailure].message.contains(errMsg))
+      }
     }
   }
 

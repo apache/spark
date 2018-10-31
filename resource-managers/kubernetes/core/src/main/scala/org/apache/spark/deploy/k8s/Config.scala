@@ -223,7 +223,44 @@ private[spark] object Config extends Logging {
       .stringConf
       .checkValue(pv => List("2", "3").contains(pv),
         "Ensure that major Python version is either Python2 or Python3")
-      .createWithDefault("2")
+      .createWithDefault("3")
+
+  val KUBERNETES_KERBEROS_KRB5_FILE =
+    ConfigBuilder("spark.kubernetes.kerberos.krb5.path")
+      .doc("Specify the local location of the krb5.conf file to be mounted on the driver " +
+        "and executors for Kerberos. Note: The KDC defined needs to be " +
+        "visible from inside the containers ")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_KRB5_CONFIG_MAP =
+    ConfigBuilder("spark.kubernetes.kerberos.krb5.configMapName")
+      .doc("Specify the name of the ConfigMap, containing the krb5.conf file, to be mounted " +
+        "on the driver and executors for Kerberos. Note: The KDC defined" +
+        "needs to be visible from inside the containers ")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_HADOOP_CONF_CONFIG_MAP =
+    ConfigBuilder("spark.kubernetes.hadoop.configMapName")
+      .doc("Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, " +
+        "to be mounted on the driver and executors for custom Hadoop configuration.")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_DT_SECRET_NAME =
+    ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.name")
+      .doc("Specify the name of the secret where your existing delegation tokens are stored. " +
+        "This removes the need for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY =
+    ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.itemKey")
+      .doc("Specify the item key of the data where your existing delegation tokens are stored. " +
+        "This removes the need for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
 
   val APP_RESOURCE_TYPE =
     ConfigBuilder("spark.kubernetes.resource.type")
@@ -240,6 +277,30 @@ private[spark] object Config extends Logging {
         "your pods memory limit so you may wish to request more memory.")
       .booleanConf
       .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.driver.podTemplateFile")
+      .doc("File containing a template pod spec for the driver")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.executor.podTemplateFile")
+      .doc("File containing a template pod spec for executors")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.driver.podTemplateContainerName")
+      .doc("container name to be used as a basis for the driver in the given pod template")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.executor.podTemplateContainerName")
+      .doc("container name to be used as a basis for executors in the given pod template")
+      .stringConf
+      .createOptional
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"

@@ -18,6 +18,7 @@
 FROM openjdk:8-alpine
 
 ARG spark_jars=jars
+ARG example_jars=examples/jars
 ARG img_path=kubernetes/dockerfiles
 ARG k8s_tests=kubernetes/tests
 
@@ -30,8 +31,9 @@ ARG k8s_tests=kubernetes/tests
 
 RUN set -ex && \
     apk upgrade --no-cache && \
-    apk add --no-cache bash tini libc6-compat linux-pam && \
+    apk add --no-cache bash tini libc6-compat linux-pam krb5 krb5-libs && \
     mkdir -p /opt/spark && \
+    mkdir -p /opt/spark/examples && \
     mkdir -p /opt/spark/work-dir && \
     touch /opt/spark/RELEASE && \
     rm /bin/sh && \
@@ -43,7 +45,8 @@ COPY ${spark_jars} /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY ${img_path}/spark/entrypoint.sh /opt/
-COPY examples /opt/spark/examples
+COPY ${example_jars} /opt/spark/examples/jars
+COPY examples/src /opt/spark/examples/src
 COPY ${k8s_tests} /opt/spark/tests
 COPY data /opt/spark/data
 
