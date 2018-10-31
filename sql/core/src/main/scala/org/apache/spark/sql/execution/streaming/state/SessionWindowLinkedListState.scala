@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.state
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
@@ -769,5 +768,11 @@ object SessionWindowLinkedListState {
 
   def getStateStoreName(storeNamePrefix: String, storeType: StateStoreType): String = {
     s"$storeNamePrefix-$storeType"
+  }
+
+  def getAllStateStoreName(storeNamePrefix: String): Seq[String] = {
+    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyToHeadSessionStartType,
+      KeyAndSessionStartToPointerType, KeyAndSessionStartToValueType)
+    allStateStoreTypes.map(getStateStoreName(storeNamePrefix, _))
   }
 }

@@ -542,4 +542,9 @@ object MultiValuesStateManager {
   def getStateStoreName(storeNamePrefix: String, storeType: StateStoreType): String = {
     s"$storeNamePrefix-$storeType"
   }
+
+  def getAllStateStoreName(storeNamePrefix: String): Seq[String] = {
+    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyToNumValuesType, KeyWithIndexToValueType)
+    allStateStoreTypes.map(getStateStoreName(storeNamePrefix, _))
+  }
 }

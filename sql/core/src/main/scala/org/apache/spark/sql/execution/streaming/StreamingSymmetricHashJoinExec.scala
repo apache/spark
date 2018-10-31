@@ -507,9 +507,6 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   private def allStateStoreNames(joinSides: JoinSide*): Seq[String] = {
-    val allStateStoreTypes: Seq[StateStoreType] = Seq(KeyToNumValuesType, KeyWithIndexToValueType)
-    for (joinSide <- joinSides; stateStoreType <- allStateStoreTypes) yield {
-      getStateStoreName(joinSide.toString, stateStoreType)
-    }
+    joinSides.flatMap(j => MultiValuesStateManager.getAllStateStoreName(j.toString))
   }
 }

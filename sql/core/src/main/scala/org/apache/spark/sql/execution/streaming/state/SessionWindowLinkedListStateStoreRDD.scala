@@ -45,6 +45,8 @@ class SessionWindowLinkedListStateStoreRDD[T: ClassTag, U: ClassTag](
   private val hadoopConfBroadcast = dataRDD.context.broadcast(
     new SerializableConfiguration(sessionState.newHadoopConf()))
 
+  private val stateStorePrefix: String = s"sessionwindow-${stateInfo.operatorId}"
+
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   /**
@@ -52,10 +54,10 @@ class SessionWindowLinkedListStateStoreRDD[T: ClassTag, U: ClassTag](
    * [[StateStoreProvider]] already loaded.
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
-    val stateStoreProviderId = StateStoreProviderId(
-      StateStoreId(stateInfo.checkpointLocation, stateInfo.operatorId, partition.index),
-      stateInfo.queryRunId)
-    storeCoordinator.flatMap(_.getLocation(stateStoreProviderId)).toSeq
+    SessionWindowLinkedListState.getAllStateStoreName(stateStorePrefix).flatMap { storeName =>
+      val stateStoreProviderId = StateStoreProviderId(stateInfo, partition.index, storeName)
+      storeCoordinator.flatMap(_.getLocation(stateStoreProviderId))
+    }.distinct
   }
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
@@ -68,7 +70,7 @@ class SessionWindowLinkedListStateStoreRDD[T: ClassTag, U: ClassTag](
 
     val modifiedStateInfo = stateInfo.copy(storeVersion = currentVersion)
 
-    val state = new SessionWindowLinkedListState(s"session-${stateInfo.operatorId}-",
+    val state = new SessionWindowLinkedListState(stateStorePrefix,
       valueSchema.toAttributes, keySchema.toAttributes, Some(modifiedStateInfo), storeConf,
       hadoopConfBroadcast.value.value)
 
