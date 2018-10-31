@@ -335,7 +335,8 @@ private[spark] class SparkSubmit extends Logging {
     val targetDir = Utils.createTempDir()
 
     // assure a keytab is available from any place in a JVM
-    if (clusterManager == YARN || clusterManager == LOCAL || isMesosClient || isKubernetesCluster) {
+    if (clusterManager == YARN || clusterManager == LOCAL ||
+      clusterManager == KUBERNETES || isMesosClient) {
       if (args.principal != null) {
         if (args.keytab != null) {
           require(new File(args.keytab).exists(), s"Keytab file: ${args.keytab} does not exist")

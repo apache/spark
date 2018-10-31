@@ -706,22 +706,6 @@ The following options provides finer-grained control for this feature:
 </tr>
 </table>
 
-## Long-Running Applications
-
-Long-running applications may run into issues if their run time exceeds the maximum delegation
-token lifetime configured in services it needs to access.
-
-Spark supports automatically creating new tokens for these applications when running in YARN mode.
-Kerberos credentials need to be provided to the Spark application via the `spark-submit` command,
-using the `--principal` and `--keytab` parameters.
-
-The provided keytab will be copied over to the machine running the Application Master via the Hadoop
-Distributed Cache. For this reason, it's strongly recommended that both YARN and HDFS be secured
-with encryption, at least.
-
-The Kerberos login will be periodically renewed using the provided credentials, and new delegation
-tokens for supported will be created.
-
 ## Secure Interaction with Kubernetes
 
 When talking to Hadoop-based services behind Kerberos, it was noted that Spark needs to obtain delegation tokens
@@ -798,6 +782,50 @@ achieved by setting `spark.kubernetes.hadoop.configMapName` to a pre-existing Co
     local:///opt/spark/examples/jars/spark-examples_<VERSION>.jar \
     <HDFS_FILE_LOCATION>
 ```
+
+## Long-Running Applications
+
+Long-running applications may run into issues if their run time exceeds the maximum delegation
+token lifetime configured in services it needs to access.
+
+Spark supports automatically creating new tokens for these applications when running in YARN, Mesos, and Kubernetes modes.
+If one wishes to launch the renewal thread in the Driver, Kerberos credentials need to be provided to the Spark application
+via the `spark-submit` command, using the `--principal` and `--keytab` parameters.
+
+The provided keytab will be copied over to the machine running the Application Master via the Hadoop
+Distributed Cache. For this reason, it's strongly recommended that both YARN and HDFS be secured
+with encryption, at least.
+
+The Kerberos login will be periodically renewed using the provided credentials, and new delegation
+tokens for supported will be created.
+
+#### Long-Running Kerberos in Kubernetes
+
+This section addresses the additional feature added uniquely to Kubernetes. If you are running an external token service
+that updates the secrets containing the Delegation Token for both the Driver and Executors to use, the ability for the 
+executors to be updated with the secrets will be handled via a Watcher thread setup by the Driver. This Watcher thread 
+will be launched only when you enable the `spark.kubernetes.kerberos.tokenSecret.renewal` config. This Watcher thread will
+be responsible for detecting updates that happen to the secret,defined at `spark.kubernetes.kerberos.tokenSecret.name`. 
+
+The contract that an external token service must have with this secret, is that the secret must be defined with the following
+specifications:
+
+```yaml
+kind: Secret
+metadata:
+  name: YOUR_SECRET_NAME
+  namespace: YOUR_NAMESPACE
+type: Opaque
+data:
+    spark.kubernetes.dt-CREATION_TIME-RENEWAL_TIME: YOUR_TOKEN_DATA
+```
+
+where `YOUR_SECRET_NAME` is the value of `spark.kubernetes.kerberos.tokenSecret.name`, `YOUR_NAMESPACE` is the namespace
+in which the Driver and Executor are running, `CREATION_TIME` and `RENEWAL_TIME` are times related to UNIX timestamps
+defined by the time when the secrets are created and when the next time it should be renewed, respectively, and 
+`YOUR_TOKEN_DATA` is Base.64() data containing your delegation token. The Driver Watcher thread will automatically pick up
+the data given these specifications and find the most recent token based on the `CREATION_TIME`.
+
 # Event Logging
 
 If your applications are using event logging, the directory where the event logs go

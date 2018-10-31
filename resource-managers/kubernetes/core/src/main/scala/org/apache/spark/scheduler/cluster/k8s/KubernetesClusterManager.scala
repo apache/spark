@@ -110,7 +110,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     new KubernetesClusterSchedulerBackend(
       scheduler.asInstanceOf[TaskSchedulerImpl],
-      sc.env.rpcEnv,
+      sc,
       kubernetesClient,
       requestExecutorsService,
       snapshotsStore,

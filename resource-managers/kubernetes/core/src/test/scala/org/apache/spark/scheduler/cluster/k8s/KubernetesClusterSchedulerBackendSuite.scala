@@ -23,7 +23,7 @@ import org.mockito.Matchers.{eq => mockitoEq}
 import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
@@ -43,6 +43,9 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   @Mock
   private var rpcEnv: RpcEnv = _
+
+  @Mock
+  private var scEnv: SparkEnv = _
 
   @Mock
   private var driverEndpointRef: RpcEndpointRef = _
@@ -82,13 +85,15 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(taskScheduler.sc).thenReturn(sc)
     when(sc.conf).thenReturn(sparkConf)
     driverEndpoint = ArgumentCaptor.forClass(classOf[RpcEndpoint])
+    when(sc.env).thenReturn(scEnv)
+    when(scEnv.rpcEnv).thenReturn(rpcEnv)
     when(rpcEnv.setupEndpoint(
       mockitoEq(CoarseGrainedSchedulerBackend.ENDPOINT_NAME), driverEndpoint.capture()))
       .thenReturn(driverEndpointRef)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
       taskScheduler,
-      rpcEnv,
+      sc,
       kubernetesClient,
       requestExecutorsService,
       eventQueue,

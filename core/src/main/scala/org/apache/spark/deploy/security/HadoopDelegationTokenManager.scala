@@ -70,8 +70,8 @@ private[spark] class HadoopDelegationTokenManager(
     "spark.yarn.security.credentials.%s.enabled")
   private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
 
-  private val principal = sparkConf.get(PRINCIPAL).orNull
-  private val keytab = sparkConf.get(KEYTAB).orNull
+  protected val principal = sparkConf.get(PRINCIPAL).orNull
+  protected val keytab = sparkConf.get(KEYTAB).orNull
 
   require((principal == null) == (keytab == null),
     "Both principal and keytab must be defined, or neither.")
@@ -81,8 +81,8 @@ private[spark] class HadoopDelegationTokenManager(
   logDebug("Using the following builtin delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
-  private var renewalExecutor: ScheduledExecutorService = _
-  private val driverRef = new AtomicReference[RpcEndpointRef]()
+  protected var renewalExecutor: ScheduledExecutorService = _
+  protected val driverRef = new AtomicReference[RpcEndpointRef]()
 
   /** Set the endpoint used to send tokens to the driver. */
   def setDriverRef(ref: RpcEndpointRef): Unit = {

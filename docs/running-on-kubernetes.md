@@ -884,7 +884,7 @@ specific to Spark on Kubernetes.
   <td>(none)</td>
   <td>
    Specify the local file that contains the driver [pod template](#pod-template). For example
-   <code>spark.kubernetes.driver.podTemplateFile=/path/to/driver-pod-template.yaml`</code>
+   <code>spark.kubernetes.driver.podTemplateFile=/path/to/driver-pod-template.yaml</code>
   </td>
 </tr>
 <tr>
@@ -892,7 +892,16 @@ specific to Spark on Kubernetes.
   <td>(none)</td>
   <td>
    Specify the local file that contains the executor [pod template](#pod-template). For example
-   <code>spark.kubernetes.executor.podTemplateFile=/path/to/executor-pod-template.yaml`</code>
+   <code>spark.kubernetes.executor.podTemplateFile=/path/to/executor-pod-template.yaml</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokenSecret.renewal</code></td>
+  <td>false</td>
+  <td>
+    Enabling the driver to watch the secret specified at
+    <code>spark.kubernetes.kerberos.tokenSecret.name</code> for updates so that the tokens can be 
+    propagated to the executors.
   </td>
 </tr>
 </table>

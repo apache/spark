@@ -21,7 +21,10 @@ import java.util.concurrent.ExecutorService
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.concurrent.{ExecutionContext, Future}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
@@ -29,7 +32,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
-    rpcEnv: RpcEnv,
+    sc: SparkContext,
     kubernetesClient: KubernetesClient,
     requestExecutorsService: ExecutorService,
     snapshotsStore: ExecutorPodsSnapshotsStore,
@@ -37,7 +40,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
-  extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
     requestExecutorsService)
@@ -123,7 +126,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
-    new KubernetesDriverEndpoint(rpcEnv, properties)
+    new KubernetesDriverEndpoint(sc.env.rpcEnv, properties)
+  }
+
+  override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
+    Some(new KubernetesHadoopDelegationTokenManager(conf,
+      sc.hadoopConfiguration,
+      Some(kubernetesClient)))
   }
 
   private class KubernetesDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
