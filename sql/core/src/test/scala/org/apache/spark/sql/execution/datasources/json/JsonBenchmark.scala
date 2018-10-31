@@ -16,32 +16,31 @@
  */
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.File
-
-import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
 /**
  * The benchmarks aims to measure performance of JSON parsing when encoding is set and isn't.
- * To run this:
- *  spark-submit --class <this class> --jars <spark sql test jar>
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar>,
+ *        <spark catalyst test jar> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/JSONBenchmark-results.txt".
+ * }}}
  */
-object JSONBenchmarks extends SQLHelper {
-  val conf = new SparkConf()
 
-  val spark = SparkSession.builder
-    .master("local[1]")
-    .appName("benchmark-json-datasource")
-    .config(conf)
-    .getOrCreate()
+object JSONBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
   def schemaInferring(rowsNum: Int): Unit = {
-    val benchmark = new Benchmark("JSON schema inferring", rowsNum)
+    val benchmark = new Benchmark("JSON schema inferring", rowsNum, output = output)
 
     withTempPath { path =>
       // scalastyle:off println
@@ -65,21 +64,12 @@ object JSONBenchmarks extends SQLHelper {
           .json(path.getAbsolutePath)
       }
 
-      /*
-      Java HotSpot(TM) 64-Bit Server VM 1.8.0_172-b11 on Mac OS X 10.13.5
-      Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
-      JSON schema inferring:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      ---------------------------------------------------------------------------------------------
-      No encoding                              45908 / 46480          2.2         459.1       1.0X
-      UTF-8 is set                             68469 / 69762          1.5         684.7       0.7X
-      */
       benchmark.run()
     }
   }
 
   def perlineParsing(rowsNum: Int): Unit = {
-    val benchmark = new Benchmark("JSON per-line parsing", rowsNum)
+    val benchmark = new Benchmark("JSON per-line parsing", rowsNum, output = output)
 
     withTempPath { path =>
       // scalastyle:off println
@@ -107,21 +97,12 @@ object JSONBenchmarks extends SQLHelper {
           .count()
       }
 
-      /*
-      Java HotSpot(TM) 64-Bit Server VM 1.8.0_172-b11 on Mac OS X 10.13.5
-      Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
-      JSON per-line parsing:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      ---------------------------------------------------------------------------------------------
-      No encoding                               9982 / 10237         10.0          99.8       1.0X
-      UTF-8 is set                             16373 / 16806          6.1         163.7       0.6X
-      */
       benchmark.run()
     }
   }
 
   def perlineParsingOfWideColumn(rowsNum: Int): Unit = {
-    val benchmark = new Benchmark("JSON parsing of wide lines", rowsNum)
+    val benchmark = new Benchmark("JSON parsing of wide lines", rowsNum, output = output)
 
     withTempPath { path =>
       // scalastyle:off println
@@ -156,22 +137,14 @@ object JSONBenchmarks extends SQLHelper {
           .count()
       }
 
-      /*
-      Java HotSpot(TM) 64-Bit Server VM 1.8.0_172-b11 on Mac OS X 10.13.5
-      Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
-
-      JSON parsing of wide lines:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      ---------------------------------------------------------------------------------------------
-      No encoding                              26038 / 26386          0.4        2603.8       1.0X
-      UTF-8 is set                             28343 / 28557          0.4        2834.3       0.9X
-      */
       benchmark.run()
     }
   }
 
   def countBenchmark(rowsNum: Int): Unit = {
     val colsNum = 10
-    val benchmark = new Benchmark(s"Count a dataset with $colsNum columns", rowsNum)
+    val benchmark =
+      new Benchmark(s"Count a dataset with $colsNum columns", rowsNum, output = output)
 
     withTempPath { path =>
       val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
@@ -195,23 +168,16 @@ object JSONBenchmarks extends SQLHelper {
         ds.count()
       }
 
-      /*
-      Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz
-
-      Count a dataset with 10 columns:      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      ---------------------------------------------------------------------------------------------
-      Select 10 columns + count()               9961 / 10006          1.0         996.1       1.0X
-      Select 1 column + count()                  8355 / 8470          1.2         835.5       1.2X
-      count()                                    2104 / 2156          4.8         210.4       4.7X
-      */
       benchmark.run()
     }
   }
 
-  def main(args: Array[String]): Unit = {
-    schemaInferring(100 * 1000 * 1000)
-    perlineParsing(100 * 1000 * 1000)
-    perlineParsingOfWideColumn(10 * 1000 * 1000)
-    countBenchmark(10 * 1000 * 1000)
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    runBenchmark("Benchmark for performance of JSON parsing") {
+      schemaInferring(100 * 1000 * 1000)
+      perlineParsing(100 * 1000 * 1000)
+      perlineParsingOfWideColumn(10 * 1000 * 1000)
+      countBenchmark(10 * 1000 * 1000)
+    }
   }
 }
