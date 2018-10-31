@@ -1098,7 +1098,7 @@ private[spark] class AppStatusListener(
 
     // Delete tasks for all stages in one pass, as deleting them for each stage individually is slow
     val tasks = kvstore.view(classOf[TaskDataWrapper]).asScala
-    val keys = stages.map(s => (s.info.stageId, s.info.attemptId)).toSet
+    val keys = stages.map { s => (s.info.stageId, s.info.attemptId) }.toSet
     tasks.foreach { t =>
       if (keys.contains((t.stageId, t.stageAttemptId))) {
         kvstore.delete(t.getClass(), t.taskId)
