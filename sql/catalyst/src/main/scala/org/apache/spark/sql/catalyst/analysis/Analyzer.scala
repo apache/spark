@@ -883,23 +883,6 @@ class Analyzer(
       }
     }
 
-    private def resolve(e: Expression, q: LogicalPlan): Expression = e match {
-      case f: LambdaFunction if !f.bound => f
-      case u @ UnresolvedAttribute(nameParts) =>
-        // Leave unchanged if resolution fails. Hopefully will be resolved next round.
-        val result =
-          withPosition(u) {
-            q.resolveChildren(nameParts, resolver)
-              .orElse(resolveLiteralFunction(nameParts, u, q))
-              .getOrElse(u)
-          }
-        logDebug(s"Resolving $u to $result")
-        result
-      case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
-        ExtractValue(child, fieldExpr, resolver)
-      case _ => e.mapChildren(resolve(_, q))
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan if !p.childrenResolved => p
 
@@ -963,7 +946,7 @@ class Analyzer(
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q.mapExpressions(resolve(_, q))
+        q.mapExpressions(resolveExpression(_, q, throws = true, resolvedFromChildAttributes = true))
     }
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
@@ -1060,30 +1043,65 @@ class Analyzer(
     func.map(wrapper)
   }
 
+
+  /**
+   * Resolves the attribute, column ordinal and extract value expressions(s) by traversing the
+   * input expression in bottom up manner. This routine skips over the unbound lambda function
+   * expressions as the lambda variables are resolved in separate rule [[ResolveLambdaVariables]].
+   */
   protected[sql] def resolveExpression(
       expr: Expression,
       plan: LogicalPlan,
-      throws: Boolean = false): Expression = {
-    if (expr.resolved) return expr
-    // Resolve expression in one round.
-    // If throws == false or the desired attribute doesn't exist
-    // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
-    // Else, throw exception.
-    try {
-      expr transformUp {
+      throws: Boolean = false,
+      resolvedFromChildAttributes: Boolean = false): Expression = {
+
+    def resolveExpression(
+      expr: Expression,
+      plan: LogicalPlan,
+      resolveFromChildAttributes: Boolean): Expression = {
+      expr match {
         case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
-        case u @ UnresolvedAttribute(nameParts) =>
-          withPosition(u) {
-            plan.resolve(nameParts, resolver)
-              .orElse(resolveLiteralFunction(nameParts, u, plan))
-              .getOrElse(u)
-          }
+        case u @ UnresolvedAttribute(nameParts) if resolveFromChildAttributes =>
+          // Leave unchanged if resolution fails. Hopefully will be resolved next round.
+          val result =
+            withPosition(u) {
+              plan.resolveChildren(nameParts, resolver)
+                .orElse(resolveLiteralFunction(nameParts, u, plan))
+                .getOrElse(u)
+            }
+          logDebug(s"Resolving $u to $result")
+          result
+        case u @ UnresolvedAttribute(nameParts) if !resolveFromChildAttributes =>
+          // Leave unchanged if resolution fails. Hopefully will be resolved next round.
+          val result =
+            withPosition(u) {
+              plan.resolve(nameParts, resolver)
+                .orElse(resolveLiteralFunction(nameParts, u, plan))
+                .getOrElse(u)
+            }
+          logDebug(s"Resolving $u to $result")
+          result
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
           ExtractValue(child, fieldName, resolver)
+        case other => other
       }
-    } catch {
-      case a: AnalysisException if !throws => expr
     }
+
+    def resolveExpressionBottomUp(expr: Expression): Expression = {
+      if (expr.resolved) return expr
+      try {
+        expr match {
+          case f: LambdaFunction if !f.bound => f
+          case other =>
+            val result = other.mapChildren(resolveExpressionBottomUp)
+            resolveExpression(result, plan, resolvedFromChildAttributes)
+        }
+      } catch {
+        case a: AnalysisException if !throws => expr
+      }
+    }
+
+    resolveExpressionBottomUp(expr)
   }
 
   /**
