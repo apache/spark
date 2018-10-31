@@ -946,7 +946,7 @@ class Analyzer(
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q.mapExpressions(resolveExpression(_, q, throws = true, resolvedFromChildAttributes = true))
+        q.mapExpressions(resolveExpression(_, q, throws = true, resolveFromChildren = true))
     }
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
@@ -1053,7 +1053,10 @@ class Analyzer(
       expr: Expression,
       plan: LogicalPlan,
       throws: Boolean = false,
-      resolvedFromChildAttributes: Boolean = false): Expression = {
+      resolveFromChildren: Boolean = false): Expression = {
+
+    val inputAttrs: AttributeSeq =
+      if (resolveFromChildren) plan.childAttributes else plan.outputAttributes
 
     def resolveExpression(
       expr: Expression,
@@ -1061,21 +1064,11 @@ class Analyzer(
       resolveFromChildAttributes: Boolean): Expression = {
       expr match {
         case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
-        case u @ UnresolvedAttribute(nameParts) if resolveFromChildAttributes =>
+        case u @ UnresolvedAttribute(nameParts) =>
           // Leave unchanged if resolution fails. Hopefully will be resolved next round.
           val result =
             withPosition(u) {
-              plan.resolveChildren(nameParts, resolver)
-                .orElse(resolveLiteralFunction(nameParts, u, plan))
-                .getOrElse(u)
-            }
-          logDebug(s"Resolving $u to $result")
-          result
-        case u @ UnresolvedAttribute(nameParts) if !resolveFromChildAttributes =>
-          // Leave unchanged if resolution fails. Hopefully will be resolved next round.
-          val result =
-            withPosition(u) {
-              plan.resolve(nameParts, resolver)
+              inputAttrs.resolve(nameParts, resolver)
                 .orElse(resolveLiteralFunction(nameParts, u, plan))
                 .getOrElse(u)
             }
@@ -1094,7 +1087,7 @@ class Analyzer(
           case f: LambdaFunction if !f.bound => f
           case other =>
             val result = other.mapChildren(resolveExpressionBottomUp)
-            resolveExpression(result, plan, resolvedFromChildAttributes)
+            resolveExpression(result, plan, resolveFromChildren)
         }
       } catch {
         case a: AnalysisException if !throws => expr

@@ -86,9 +86,9 @@ abstract class LogicalPlan
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
+  lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
 
-  private[this] lazy val outputAttributes = AttributeSeq(output)
+  lazy val outputAttributes = AttributeSeq(output)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
