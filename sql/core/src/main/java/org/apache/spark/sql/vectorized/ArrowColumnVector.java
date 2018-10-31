@@ -156,6 +156,8 @@ public final class ArrowColumnVector extends ColumnVector {
       accessor = new BinaryAccessor((VarBinaryVector) vector);
     } else if (vector instanceof DateDayVector) {
       accessor = new DateAccessor((DateDayVector) vector);
+    } else if (vector instanceof DateMilliVector) {
+      accessor = new DateMilliAccessor((DateMilliVector) vector);
     } else if (vector instanceof TimeStampMicroTZVector) {
       accessor = new TimestampAccessor((TimeStampMicroTZVector) vector);
     } else if (vector instanceof ListVector) {
@@ -411,6 +413,21 @@ public final class ArrowColumnVector extends ColumnVector {
     @Override
     final int getInt(int rowId) {
       return accessor.get(rowId);
+    }
+  }
+
+  private static class DateMilliAccessor extends ArrowVectorAccessor {
+
+    private final DateMilliVector accessor;
+
+    DateMilliAccessor(DateMilliVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final long getLong(int rowId) {
+      return 1000 * accessor.get(rowId);
     }
   }
 

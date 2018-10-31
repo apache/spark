@@ -71,6 +71,7 @@ object ArrowUtils {
     case d: ArrowType.Decimal => DecimalType(d.getPrecision, d.getScale)
     case date: ArrowType.Date if date.getUnit == DateUnit.DAY => DateType
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
+    case date: ArrowType.Date if date.getUnit == DateUnit.MILLISECOND => TimestampType
     case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dt")
   }
 
