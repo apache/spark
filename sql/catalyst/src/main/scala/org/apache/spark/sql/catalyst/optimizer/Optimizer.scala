@@ -178,6 +178,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PushDownPredicate,
       CollapseProject,
       CombineFilters,
+      PruneFilters,
       RemoveRedundantProject) :+
     Batch("UpdateAttributeReferences", Once,
       UpdateNullabilityInAttributeReferences)
