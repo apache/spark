@@ -28,7 +28,6 @@ import org.apache.spark.deploy.k8s.features.hadooputils.{HadoopBootstrapUtil, Ha
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientApplication._
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.ConfigEntry
 
 

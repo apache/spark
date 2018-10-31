@@ -107,12 +107,13 @@ private[spark] class KubernetesDriverBuilder(
     val maybeHadoopConfigStep =
       kubernetesConf.hadoopConfSpec.map { _ =>
         val conf = kubernetesConf.sparkConf
-        val hDTManager =
-          new HadoopDelegationTokenManager(conf, SparkHadoopUtil.get.newConfiguration(conf))
         provideHadoopGlobalStep(kubernetesConf,
           new HadoopBootstrapUtil,
           new HadoopKerberosLogin,
-          new KubernetesHadoopDelegationTokenManager(hDTManager))}
+          new KubernetesHadoopDelegationTokenManager(
+            conf, SparkHadoopUtil.get.newConfiguration(conf))
+        )
+      }
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       (baseFeatures :+ bindingsStep) ++
