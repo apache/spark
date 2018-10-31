@@ -72,12 +72,7 @@ class FailureSafeParser[IN](
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>
-          val msg = if (e.getMessage != null) {
-            e.getMessage + "\n"
-          } else {
-            ""
-          }
-          throw new SparkException(msg + "Malformed records are detected in record parsing. " +
+          throw new SparkException("Malformed records are detected in record parsing. " +
             s"Parse Mode: ${FailFastMode.name}. To process malformed records as null " +
             "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
       }
