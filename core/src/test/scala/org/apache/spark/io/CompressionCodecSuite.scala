@@ -18,12 +18,14 @@
 package org.apache.spark.io
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.util.Arrays
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.status.api.v1.StageStatus
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 
-class CompressionCodecSuite extends SparkFunSuite {
+class CompressionCodecSuite extends SparkFunSuite with LocalSparkContext{
   val conf = new SparkConf(false)
 
   def testCodec(codec: CompressionCodec) {
@@ -126,6 +128,69 @@ class CompressionCodecSuite extends SparkFunSuite {
     intercept[IllegalArgumentException] {
       CompressionCodec.createCodec(conf, "foobar")
     }
+  }
+
+  test("SPARK-25895 Zstd shuffle Read/Write/spill comparison w.r.t lz4") {
+    val spillThreshold = 200000
+    val confLz4 = createSparkConf
+      .set("spark.shuffle.spill.compress", "true")
+      .set("spark.shuffle.compress", "true")
+      .set("spark.io.compression.codec", "lz4")
+      .set("spark.memory.fraction", "0.01")
+      .set("spark.testing.memory", "500000000")
+    sc = new SparkContext("local", "tetst", confLz4)
+    sc.parallelize(0 until spillThreshold).map { i => (i, i) }.reduceByKey(_ + _).count()
+
+    val spillLz4 = sc.statusStore.
+      stageList(Arrays.asList(StageStatus.COMPLETE)).
+      map(data => data.diskBytesSpilled).
+      sum
+    val shuffleReadLz4 = sc.statusStore.
+      stageList(Arrays.asList(StageStatus.COMPLETE)).
+      map(data => data.shuffleReadBytes).
+      sum
+    val shuffleWriteLz4 = sc.statusStore.
+      stageList(Arrays.asList(StageStatus.COMPLETE)).
+      map(data => data.shuffleWriteBytes).
+      sum
+    sc.stop()
+
+    val confZstd = createSparkConf
+      .set("spark.shuffle.spill.compress", "true")
+      .set("spark.shuffle.compress", "true")
+      .set("spark.io.compression.codec", "zstd")
+      .set("spark.memory.fraction", "0.01")
+      .set("spark.testing.memory", "500000000")
+    sc = new SparkContext("local", "tetst", confZstd)
+    sc.parallelize(0 until spillThreshold).map { i => (i, i) }.reduceByKey(_ + _).count()
+
+    val spillZstd = sc.statusStore.
+      stageList(Arrays.asList(StageStatus.COMPLETE)).
+      map(data => data.diskBytesSpilled).
+      sum
+    val shuffleReadZstd = sc.statusStore.
+      stageList(Arrays.asList(StageStatus.COMPLETE)).
+      map(data => data.shuffleReadBytes).
+      sum
+    val shuffleWriteZstd = sc.statusStore.
+      stageList(Arrays.asList(StageStatus.COMPLETE)).
+      map(data => data.shuffleWriteBytes).
+      sum
+    sc.stop()
+    assert(spillLz4 > spillZstd)
+    assert(shuffleReadLz4 > shuffleReadZstd)
+    assert(shuffleWriteLz4 > shuffleWriteZstd)
+  }
+
+  private def createSparkConf(): SparkConf = {
+    val conf = new SparkConf()
+    // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
+    // for a bug we had with bytes written past the last object in a batch (SPARK-2792)
+    conf.set("spark.serializer.objectStreamReset", "1")
+    conf.set("spark.serializer", "org.apache.spark.serializer.JavaSerializer")
+    // Ensure that we actually have multiple batches per spill file
+    conf.set("spark.shuffle.spill.batchSize", "10")
+    conf
   }
 
   private def testConcatenationOfSerializedStreams(codec: CompressionCodec): Unit = {
