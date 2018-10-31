@@ -403,7 +403,7 @@ private object AvroTypeInference {
       val valueType = inferExternalType(valueSchema)
       ExternalMapToCatalyst(
         inputObject,
-        ObjectType(classOf[org.apache.avro.util.Utf8]),
+        ObjectType(classOf[java.lang.CharSequence]),
         serializerFor(_, Schema.create(STRING)),
         keyNullable = true,
         valueType,
