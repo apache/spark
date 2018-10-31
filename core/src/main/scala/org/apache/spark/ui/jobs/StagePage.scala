@@ -99,8 +99,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     }.getOrElse("Index")
     val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
     val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
-    val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)
-
     val stageId = parameterId.toInt
     val stageAttemptId = parameterAttempt.toInt
 
@@ -278,15 +276,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       accumulableRow,
       stageData.accumulatorUpdates.toSeq)
 
-    val page: Int = {
-      // If the user has changed to a larger page size, then go to page 1 in order to avoid
-      // IndexOutOfBoundsException.
-      if (taskPageSize <= taskPrevPageSize) {
-        taskPage
-      } else {
-        1
-      }
-    }
     val currentTime = System.currentTimeMillis()
     val (taskTable, taskTableHTML) = try {
       val _taskTable = new TaskPagedTable(
@@ -299,7 +288,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         desc = taskSortDesc,
         store = parent.store
       )
-      (_taskTable, _taskTable.table(page))
+      (_taskTable, _taskTable.table(taskPage))
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
         val errorMessage =
