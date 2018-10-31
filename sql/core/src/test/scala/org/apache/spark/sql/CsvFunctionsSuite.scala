@@ -17,11 +17,47 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
+
+  test("from_csv with empty options") {
+    val df = Seq("1").toDS()
+    val schema = "a int"
+
+    checkAnswer(
+      df.select(from_csv($"value", lit(schema), Map[String, String]().asJava)),
+      Row(Row(1)) :: Nil)
+  }
+
+  test("from_csv with option") {
+    val df = Seq("26/08/2015 18:00").toDS()
+    val schema = new StructType().add("time", TimestampType)
+    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+
+    checkAnswer(
+      df.select(from_csv($"value", schema, options)),
+      Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+  }
+
+  test("checking the columnNameOfCorruptRecord option") {
+    val columnNameOfCorruptRecord = "_unparsed"
+    val df = Seq("0,2013-111-11 12:13:14", "1,1983-08-04").toDS()
+    val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+    val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
+    val df2 = df
+      .select(from_csv($"value", schemaWithCorrField1, Map(
+        "mode" -> "Permissive", "columnNameOfCorruptRecord" -> columnNameOfCorruptRecord)))
+
+    checkAnswer(df2, Seq(
+      Row(Row(null, null, "0,2013-111-11 12:13:14")),
+      Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
+  }
 
   test("to_csv - struct") {
     val df = Seq(Tuple1(Tuple1(1))).toDF("a")

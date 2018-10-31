@@ -335,7 +335,7 @@ private[spark] class SparkSubmit extends Logging {
     val targetDir = Utils.createTempDir()
 
     // assure a keytab is available from any place in a JVM
-    if (clusterManager == YARN || clusterManager == LOCAL || isMesosClient) {
+    if (clusterManager == YARN || clusterManager == LOCAL || isMesosClient || isKubernetesCluster) {
       if (args.principal != null) {
         if (args.keytab != null) {
           require(new File(args.keytab).exists(), s"Keytab file: ${args.keytab} does not exist")
@@ -646,7 +646,8 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    if (clusterManager == MESOS && UserGroupInformation.isSecurityEnabled) {
+    if ((clusterManager == MESOS || clusterManager == KUBERNETES)
+       && UserGroupInformation.isSecurityEnabled) {
       setRMPrincipal(sparkConf)
     }
 
@@ -762,8 +763,8 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
-  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos mode, we
-  // must trick it into thinking we're YARN.
+  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos or Kubernetes
+  // mode, we must trick it into thinking we're YARN.
   private def setRMPrincipal(sparkConf: SparkConf): Unit = {
     val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
     val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
@@ -927,8 +928,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
         } catch {
           case e: SparkUserAppException =>
             exitFn(e.exitCode)
-          case e: SparkException =>
-            printErrorAndExit(e.getMessage())
         }
       }
 
@@ -993,9 +992,9 @@ private[spark] object SparkSubmitUtils {
 
   // Exposed for testing.
   // These components are used to make the default exclusion rules for Spark dependencies.
-  // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
-  // other spark-streaming utility components. Underscore is there to differentiate between
-  // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
+  // We need to specify each component explicitly, otherwise we miss
+  // spark-streaming utility components. Underscore is there to differentiate between
+  // spark-streaming_2.1x and spark-streaming-kafka-0-10-assembly_2.1x
   val IVY_DEFAULT_EXCLUDES = Seq("catalyst_", "core_", "graphx_", "kvstore_", "launcher_", "mllib_",
     "mllib-local_", "network-common_", "network-shuffle_", "repl_", "sketch_", "sql_", "streaming_",
     "tags_", "unsafe_")

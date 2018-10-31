@@ -83,7 +83,7 @@ class CSVOptions(
     }
   }
 
-  val delimiter = CSVUtils.toChar(
+  val delimiter = CSVExprUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
@@ -212,6 +212,8 @@ class CSVOptions(
     settings.setEmptyValue(emptyValueInRead)
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
+    settings.setLineSeparatorDetectionEnabled(multiLine == true)
+
     settings
   }
 }
