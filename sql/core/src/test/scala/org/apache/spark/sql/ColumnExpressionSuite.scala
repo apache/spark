@@ -115,7 +115,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row("a") :: Nil)
   }
 
-  test("SPARK-25769 escape nested columns by backtick each of the column name") {
+  test("SPARK-25769 make UnresolvedAttribute.sql escape nested columns correctly") {
     Seq(
       ($"a.b", "a.b"),
       ($"`a.b`", "`a.b`"),
