@@ -2850,6 +2850,8 @@ class DAGSchedulerSuite extends SparkFunSuite
   }
 
   test("SPARK-25910: accumulator updates from previous stage attempt") {
+    AccumulatorContext.clear()
+
     val rddA = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(rddA, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
@@ -2888,11 +2890,7 @@ class DAGSchedulerSuite extends SparkFunSuite
     // Clear this set so that old stage info can be GCed.
     sparkListener.submittedStageInfos.clear()
 
-    // Before the fix of SPARK-25910, each stage attempt has its own `TaskMetrics`. The old stage
-    // attempts will be GCed evetually, as well as their `TaskMetrics` (and corresponding
-    // accumulators). Here we wait until the GC really happens, to trigger the bug.
-    // After the fix, all the attempts of a stage share the same `TaskMetrics`, and we will pass
-    // this check right away.
+    // Wait until all the accumulators of the previous stage attempt are GCed.
     eventually(timeout(10 seconds)) {
       System.gc()
       assert(AccumulatorContext.numAccums == numAccumsInTaskMetrics)

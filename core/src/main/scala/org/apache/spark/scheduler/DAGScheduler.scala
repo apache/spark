@@ -1246,6 +1246,13 @@ private[spark] class DAGScheduler(
     val task = event.task
     val stage = stageIdToStage(task.stageId)
 
+    // SPARK-25910: If the task belongs to a previous stage attempt, don't update accumulators.
+    // The `Stage` only keeps the `StageInfo` of the latest attempt. The accumulator of a previous
+    // stage attempt is not tracked any more, since its associated `StageInfo` may be GCed.
+    if (task.stageAttemptId != stage.latestInfo.attemptId) {
+      return
+    }
+
     event.accumUpdates.foreach { updates =>
       val id = updates.id
       try {
