@@ -33,6 +33,7 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 import org.apache.spark.{SPARK_VERSION, SparkFunSuite}
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
 import org.apache.spark.internal.Logging
 
@@ -71,20 +72,19 @@ class KubernetesSuite extends SparkFunSuite
    * test configuration.
    */
   private def testImageRef(name: String): String = {
-    val tag = sys.props.get("spark.kubernetes.test.imageTagFile")
+    val tag = sys.props.get(CONFIG_KEY_IMAGE_TAG_FILE)
       .map { path =>
         val tagFile = new File(path)
         require(tagFile.isFile,
           s"No file found for image tag at ${tagFile.getAbsolutePath}.")
         Files.toString(tagFile, Charsets.UTF_8).trim
       }
-      .orElse(sys.props.get("spark.kubernetes.test.imageTag"))
+      .orElse(sys.props.get(CONFIG_KEY_IMAGE_TAG))
       .getOrElse {
         throw new IllegalArgumentException(
-          "One of spark.kubernetes.test.imageTagFile or " +
-          "spark.kubernetes.test.imageTag is required.")
+          s"One of $CONFIG_KEY_IMAGE_TAG_FILE or $CONFIG_KEY_IMAGE_TAG is required.")
       }
-    val repo = sys.props.get("spark.kubernetes.test.imageRepo")
+    val repo = sys.props.get(CONFIG_KEY_IMAGE_REPO)
       .map { _ + "/" }
       .getOrElse("")
 
@@ -102,7 +102,7 @@ class KubernetesSuite extends SparkFunSuite
       System.clearProperty(key)
     }
 
-    val sparkDirProp = System.getProperty("spark.kubernetes.test.unpackSparkDir")
+    val sparkDirProp = System.getProperty(CONFIG_KEY_UNPACK_DIR)
     require(sparkDirProp != null, "Spark home directory must be provided in system properties.")
     sparkHomeDir = Paths.get(sparkDirProp)
     require(sparkHomeDir.toFile.isDirectory,

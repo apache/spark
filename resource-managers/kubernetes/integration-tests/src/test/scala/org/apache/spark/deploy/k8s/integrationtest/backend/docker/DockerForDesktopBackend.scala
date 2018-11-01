@@ -14,24 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.deploy.k8s.integrationtest.backend.docker
 
-package org.apache.spark.deploy.k8s.security
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants
+import org.apache.spark.deploy.k8s.integrationtest.backend.cloud.KubeConfigBackend
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.security.UserGroupInformation
-
-import org.apache.spark.SparkConf
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-
-/**
- * Adds Kubernetes-specific functionality to HadoopDelegationTokenManager.
- */
-private[spark] class KubernetesHadoopDelegationTokenManager(
-    _sparkConf: SparkConf,
-    _hadoopConf: Configuration)
-  extends HadoopDelegationTokenManager(_sparkConf, _hadoopConf) {
-
-  def getCurrentUser: UserGroupInformation = UserGroupInformation.getCurrentUser
-  def isSecurityEnabled: Boolean = UserGroupInformation.isSecurityEnabled
+private[spark] object DockerForDesktopBackend
+  extends KubeConfigBackend(TestConstants.BACKEND_DOCKER_FOR_DESKTOP) {
 
 }
