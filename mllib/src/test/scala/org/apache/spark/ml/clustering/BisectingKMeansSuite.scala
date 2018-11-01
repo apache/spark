@@ -207,7 +207,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("prediction on single instance") {
-    val bikm = new BisectingKMeans()
+    val bikm = new BisectingKMeans().setSeed(123L)
     val model = bikm.fit(dataset)
     testClusteringModelSinglePrediction(model, model.predict, dataset,
       model.getFeaturesCol, model.getPredictionCol)
