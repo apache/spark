@@ -33,6 +33,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.TestConfig._
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
 import org.apache.spark.internal.Logging
 
@@ -77,7 +78,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       System.clearProperty(key)
     }
 
-    val sparkDirProp = System.getProperty("spark.kubernetes.test.unpackSparkDir")
+    val sparkDirProp = System.getProperty(CONFIG_KEY_UNPACK_DIR)
     require(sparkDirProp != null, "Spark home directory must be provided in system properties.")
     sparkHomeDir = Paths.get(sparkDirProp)
     require(sparkHomeDir.toFile.isDirectory,

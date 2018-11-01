@@ -33,11 +33,20 @@
     <scala-maven-plugin.version>3.2.2</scala-maven-plugin.version>
     <scalatest-maven-plugin.version>1.0</scalatest-maven-plugin.version>
     <sbt.project.name>kubernetes-integration-tests</sbt.project.name>
+
+    <!-- Integration Test Configuration Properties -->
+    <!-- Please see README.md in this directory for explanation of these -->
+    <spark.kubernetes.test.sparkTgz></spark.kubernetes.test.sparkTgz>
     <spark.kubernetes.test.unpackSparkDir>${project.build.directory}/spark-dist-unpacked</spark.kubernetes.test.unpackSparkDir>
     <spark.kubernetes.test.imageTag>N/A</spark.kubernetes.test.imageTag>
     <spark.kubernetes.test.imageTagFile>${project.build.directory}/imageTag.txt</spark.kubernetes.test.imageTagFile>
     <spark.kubernetes.test.deployMode>minikube</spark.kubernetes.test.deployMode>
     <spark.kubernetes.test.imageRepo>docker.io/kubespark</spark.kubernetes.test.imageRepo>
+    <spark.kubernetes.test.kubeConfigContext></spark.kubernetes.test.kubeConfigContext>
+    <spark.kubernetes.test.master></spark.kubernetes.test.master>
+    <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
+    <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
+
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
   </properties>
@@ -135,6 +144,7 @@
             <spark.kubernetes.test.unpackSparkDir>${spark.kubernetes.test.unpackSparkDir}</spark.kubernetes.test.unpackSparkDir>
             <spark.kubernetes.test.imageRepo>${spark.kubernetes.test.imageRepo}</spark.kubernetes.test.imageRepo>
             <spark.kubernetes.test.deployMode>${spark.kubernetes.test.deployMode}</spark.kubernetes.test.deployMode>
+            <spark.kubernetes.test.kubeConfigContext>${spark.kubernetes.test.kubeConfigContext}</spark.kubernetes.test.kubeConfigContext>
             <spark.kubernetes.test.master>${spark.kubernetes.test.master}</spark.kubernetes.test.master>
             <spark.kubernetes.test.namespace>${spark.kubernetes.test.namespace}</spark.kubernetes.test.namespace>
             <spark.kubernetes.test.serviceAccountName>${spark.kubernetes.test.serviceAccountName}</spark.kubernetes.test.serviceAccountName>

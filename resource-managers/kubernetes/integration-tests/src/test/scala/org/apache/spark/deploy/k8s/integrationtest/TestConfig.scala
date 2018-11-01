@@ -21,9 +21,11 @@ import java.io.File
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
+
 object TestConfig {
   def getTestImageTag: String = {
-    val imageTagFileProp = System.getProperty("spark.kubernetes.test.imageTagFile")
+    val imageTagFileProp = System.getProperty(CONFIG_KEY_IMAGE_TAG_FILE)
     require(imageTagFileProp != null, "Image tag file must be provided in system properties.")
     val imageTagFile = new File(imageTagFileProp)
     require(imageTagFile.isFile, s"No file found for image tag at ${imageTagFile.getAbsolutePath}.")
@@ -31,7 +33,7 @@ object TestConfig {
   }
 
   def getTestImageRepo: String = {
-    val imageRepo = System.getProperty("spark.kubernetes.test.imageRepo")
+    val imageRepo = System.getProperty(CONFIG_KEY_IMAGE_REPO)
     require(imageRepo != null, "Image repo must be provided in system properties.")
     imageRepo
   }
