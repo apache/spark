@@ -39,30 +39,27 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesConf[KubernetesDri
 
   override def configurePod(pod: SparkPod): SparkPod = {
     driverConf.mainAppResource match {
-      case Some(JavaMainAppResource(_)) | None =>
+      case JavaMainAppResource(_) =>
         configureForJava(pod)
 
-      case Some(PythonMainAppResource(res)) =>
+      case PythonMainAppResource(res) =>
         configureForPython(pod, res)
 
-      case Some(RMainAppResource(res)) =>
+      case RMainAppResource(res) =>
         configureForR(pod, res)
     }
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
     driverConf.mainAppResource match {
-      case Some(JavaMainAppResource(res)) =>
-        additionalJavaProperties(res)
+      case JavaMainAppResource(res) =>
+        res.map(additionalJavaProperties).getOrElse(Map.empty)
 
-      case Some(PythonMainAppResource(res)) =>
+      case PythonMainAppResource(res) =>
         additionalPythonProperties(res)
 
-      case Some(RMainAppResource(res)) =>
+      case RMainAppResource(res) =>
         additionalRProperties(res)
-
-      case None =>
-        Map.empty
     }
   }
 

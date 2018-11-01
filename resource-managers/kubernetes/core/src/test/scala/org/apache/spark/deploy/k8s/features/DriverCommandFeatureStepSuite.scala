@@ -43,7 +43,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
   test("java resource") {
     val mainResource = "local:///main.jar"
     val spec = applyFeatureStep(
-      resource = Some(JavaMainAppResource(mainResource)),
+      resource = JavaMainAppResource(Some(mainResource)),
       appArgs = Array("5", "7"))
     assert(spec.pod.container.getArgs.asScala === List(
       "driver",
@@ -62,7 +62,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
 
     val spec = applyFeatureStep(
       conf = sparkConf,
-      resource = Some(PythonMainAppResource(mainResource)))
+      resource = PythonMainAppResource(mainResource))
     assert(spec.pod.container.getArgs.asScala === List(
       "driver",
       "--properties-file", SPARK_CONF_PATH,
@@ -90,7 +90,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       .set(PYSPARK_MAJOR_PYTHON_VERSION, "2")
     val spec = applyFeatureStep(
       conf = sparkConf,
-      resource = Some(PythonMainAppResource(mainResource)),
+      resource = PythonMainAppResource(mainResource),
       appArgs = Array("5", "7", "9"),
       pyFiles = pyFiles)
 
@@ -117,7 +117,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
     val mainResource = s"local://$expectedMainResource"
 
     val spec = applyFeatureStep(
-      resource = Some(RMainAppResource(mainResource)),
+      resource = RMainAppResource(mainResource),
       appArgs = Array("5", "7", "9"))
 
     assert(spec.pod.container.getArgs.asScala === List(
@@ -129,7 +129,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
 
   private def applyFeatureStep(
       conf: SparkConf = new SparkConf(false),
-      resource: Option[MainAppResource] = None,
+      resource: MainAppResource = JavaMainAppResource(None),
       appArgs: Array[String] = Array(),
       pyFiles: Seq[String] = Nil): KubernetesDriverSpec = {
     val driverConf = new KubernetesDriverSpecificConf(

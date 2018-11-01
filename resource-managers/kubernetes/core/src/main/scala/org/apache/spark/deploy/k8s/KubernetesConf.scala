@@ -38,11 +38,15 @@ private[spark] sealed trait KubernetesRoleSpecificConf
  * Structure containing metadata for Kubernetes logic that builds a Spark driver.
  */
 private[spark] case class KubernetesDriverSpecificConf(
-    mainAppResource: Option[MainAppResource],
+    mainAppResource: MainAppResource,
     mainClass: String,
     appName: String,
     appArgs: Seq[String],
-    pyFiles: Seq[String] = Nil) extends KubernetesRoleSpecificConf
+    pyFiles: Seq[String] = Nil) extends KubernetesRoleSpecificConf {
+
+  require(mainAppResource != null, "Main resource must be provided.")
+
+}
 
 /*
  * Structure containing metadata for Kubernetes logic that builds a Spark executor.
@@ -115,7 +119,7 @@ private[spark] object KubernetesConf {
       appName: String,
       appResourceNamePrefix: String,
       appId: String,
-      mainAppResource: Option[MainAppResource],
+      mainAppResource: MainAppResource,
       mainClass: String,
       appArgs: Array[String],
       maybePyFiles: Option[String],

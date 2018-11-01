@@ -56,7 +56,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      mainAppResource = None,
+      mainAppResource = JavaMainAppResource(None),
       MAIN_CLASS,
       APP_ARGS,
       maybePyFiles = None,
@@ -65,7 +65,6 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.sparkConf.getAll.toMap === sparkConf.getAll.toMap)
     assert(conf.appResourceNamePrefix === RESOURCE_NAME_PREFIX)
     assert(conf.roleSpecificConf.appName === APP_NAME)
-    assert(conf.roleSpecificConf.mainAppResource.isEmpty)
     assert(conf.roleSpecificConf.mainClass === MAIN_CLASS)
     assert(conf.roleSpecificConf.appArgs === APP_ARGS)
   }
@@ -94,7 +93,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      mainAppResource = None,
+      mainAppResource = JavaMainAppResource(None),
       MAIN_CLASS,
       APP_ARGS,
       maybePyFiles = None,

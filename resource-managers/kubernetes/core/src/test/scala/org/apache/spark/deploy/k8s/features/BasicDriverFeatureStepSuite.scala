@@ -52,7 +52,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       new LocalObjectReferenceBuilder().withName(secret).build()
     }
   private val emptyDriverSpecificConf = KubernetesDriverSpecificConf(
-    None,
+    JavaMainAppResource(None),
     APP_NAME,
     MAIN_CLASS,
     APP_ARGS)
@@ -144,7 +144,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val javaKubernetesConf = KubernetesConf(
       javaSparkConf,
       KubernetesDriverSpecificConf(
-        Some(JavaMainAppResource("")),
+        JavaMainAppResource(None),
         APP_NAME,
         PY_MAIN_CLASS,
         APP_ARGS),
@@ -161,7 +161,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val pythonKubernetesConf = KubernetesConf(
       pythonSparkConf,
       KubernetesDriverSpecificConf(
-        Some(PythonMainAppResource("")),
+        PythonMainAppResource(""),
         APP_NAME,
         PY_MAIN_CLASS,
         APP_ARGS),
@@ -220,12 +220,10 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   // Memory overhead tests. Tuples are:
   //   test name, main resource, overhead factor, expected factor
   Seq(
-    ("java w/o resource", None, None, MEMORY_OVERHEAD_FACTOR.defaultValue.get),
-    ("java w/ resource", Some(JavaMainAppResource(null)), None,
-      MEMORY_OVERHEAD_FACTOR.defaultValue.get),
-    ("python default", Some(PythonMainAppResource(null)), None, NON_JVM_MEMORY_OVERHEAD_FACTOR),
-    ("python w/ override", Some(PythonMainAppResource(null)), Some(0.9d), 0.9d),
-    ("r default", Some(RMainAppResource(null)), None, NON_JVM_MEMORY_OVERHEAD_FACTOR)
+    ("java", JavaMainAppResource(None), None, MEMORY_OVERHEAD_FACTOR.defaultValue.get),
+    ("python default", PythonMainAppResource(null), None, NON_JVM_MEMORY_OVERHEAD_FACTOR),
+    ("python w/ override", PythonMainAppResource(null), Some(0.9d), 0.9d),
+    ("r default", RMainAppResource(null), None, NON_JVM_MEMORY_OVERHEAD_FACTOR)
   ).foreach { case (name, resource, factor, expectedFactor) =>
     test(s"memory overhead factor: $name") {
       // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB

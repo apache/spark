@@ -18,13 +18,14 @@ package org.apache.spark.deploy.k8s.features
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 
 class MountVolumesFeatureStepSuite extends SparkFunSuite {
   private val sparkConf = new SparkConf(false)
   private val emptyKubernetesConf = KubernetesConf(
     sparkConf = sparkConf,
     roleSpecificConf = KubernetesDriverSpecificConf(
-      None,
+      JavaMainAppResource(None),
       "app-name",
       "main",
       Seq.empty),

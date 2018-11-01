@@ -51,17 +51,16 @@ private[spark] class BasicDriverFeatureStep(
 
   // The memory overhead factor to use. If the user has not set it, then use a different
   // value for non-JVM apps. This value is propagated to executors.
-  private val overheadFactor = conf.roleSpecificConf.mainAppResource match {
-    case Some(_: NonJVMResource) =>
+  private val overheadFactor =
+    if (conf.roleSpecificConf.mainAppResource.isInstanceOf[NonJVMResource]) {
       if (conf.sparkConf.contains(MEMORY_OVERHEAD_FACTOR)) {
         conf.get(MEMORY_OVERHEAD_FACTOR)
       } else {
         NON_JVM_MEMORY_OVERHEAD_FACTOR
       }
-
-    case _ =>
+    } else {
       conf.get(MEMORY_OVERHEAD_FACTOR)
-  }
+    }
 
   private val memoryOverheadMiB = conf
     .get(DRIVER_MEMORY_OVERHEAD)

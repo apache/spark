@@ -86,7 +86,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesDriverSpecificConf(
-        Some(JavaMainAppResource("example.jar")),
+        JavaMainAppResource(Some("example.jar")),
         "test-app",
         "main",
         Seq.empty),
@@ -112,7 +112,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesDriverSpecificConf(
-        None,
+        JavaMainAppResource(None),
         "test-app",
         "main",
         Seq.empty),
@@ -145,7 +145,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesDriverSpecificConf(
-        None,
+        JavaMainAppResource(None),
         "test-app",
         "main",
         Seq.empty),
@@ -175,7 +175,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val conf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
-        Some(JavaMainAppResource("example.jar")),
+        JavaMainAppResource(Some("example.jar")),
         "test-app",
         "main",
         Seq.empty),
@@ -202,7 +202,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesDriverSpecificConf(
-        None,
+        JavaMainAppResource(None),
         "test-app",
         "main",
         Seq.empty),
@@ -232,7 +232,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesDriverSpecificConf(
-        None,
+        JavaMainAppResource(None),
         "test-app",
         "main",
         Seq.empty),
@@ -283,7 +283,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val kubernetesConf = new KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
-        Some(JavaMainAppResource("example.jar")),
+        JavaMainAppResource(Some("example.jar")),
         "test-app",
         "main",
         Seq.empty),
@@ -315,7 +315,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val kubernetesConf = new KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
-        Some(JavaMainAppResource("example.jar")),
+        JavaMainAppResource(Some("example.jar")),
         "test-app",
         "main",
         Seq.empty),
