@@ -193,9 +193,9 @@ case class SchemaOfCsv(
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class StructsToCsv(
-                         options: Map[String, String],
-                         child: Expression,
-                         timeZoneId: Option[String] = None)
+     options: Map[String, String],
+     child: Expression,
+     timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
 
