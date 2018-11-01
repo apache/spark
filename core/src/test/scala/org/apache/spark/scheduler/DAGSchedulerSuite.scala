@@ -21,16 +21,19 @@ import java.util.Properties
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.annotation.meta.param
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.language.reflectiveCalls
 import scala.util.control.NonFatal
 
-import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.apache.log4j.{AppenderSkeleton, LogManager}
+import org.apache.log4j.spi.LoggingEvent
+import org.scalatest.concurrent.{Eventually, Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
-import org.apache.spark.executor.ExecutorMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
@@ -119,7 +122,8 @@ class MyRDD(
 
 class DAGSchedulerSuiteDummyException extends Exception
 
-class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLimits {
+class DAGSchedulerSuite extends SparkFunSuite
+  with LocalSparkContext with TimeLimits with Eventually {
 
   import DAGSchedulerSuite._
 
@@ -2843,6 +2847,90 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
     shuffleMapRdd.checkpoint()
     assertResultStageFailToRollback(shuffleMapRdd)
+  }
+
+  test("SPARK-25910: accumulator updates from previous stage attempt") {
+    val rddA = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(rddA, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+
+    val rddB = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    submit(rddB, Array(0, 1))
+
+    // The first shuffle map stage is submitted.
+    assert(taskSets.length == 1)
+
+    val numAccumsInTaskMetrics = TaskMetrics.empty.internalAccums.length
+    // The first shuffle map stage will register all the accumulators of its `TaskMetrics`.
+    assert(AccumulatorContext.numAccums == numAccumsInTaskMetrics)
+
+    // Issue the task start events, so that the `AppStatusListener` can clean up stage data and
+    // make them GC-able.
+    runEvent(BeginEvent(taskSets(0).tasks(0), createFakeTaskInfo()))
+    runEvent(BeginEvent(taskSets(0).tasks(1), createFakeTaskInfo()))
+
+    // The first task of the shuffle success
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(0),
+      Success,
+      makeMapStatus("hostA", 2)))
+
+    // The second task of the shuffle map stage failed with FetchFailed, causes a new stage attempt.
+    runEvent(makeCompletionEvent(
+      taskSets(0).tasks(1),
+      FetchFailed(makeBlockManagerId("hostB"), shuffleId, 0, 0, "ignored"),
+      null))
+
+    // A new stage attempt is submitted.
+    scheduler.resubmitFailedStages()
+    assert(taskSets.length == 2)
+
+    // Clear this set so that old stage info can be GCed.
+    sparkListener.submittedStageInfos.clear()
+
+    // Before the fix of SPARK-25910, each stage attempt has its own `TaskMetrics`. The old stage
+    // attempts will be GCed evetually, as well as their `TaskMetrics` (and corresponding
+    // accumulators). Here we wait until the GC really happens, to trigger the bug.
+    // After the fix, all the attempts of a stage share the same `TaskMetrics`, and we will pass
+    // this check right away.
+    eventually(timeout(10 seconds)) {
+      System.gc()
+      assert(AccumulatorContext.numAccums == numAccumsInTaskMetrics)
+    }
+
+    object TestAppender extends AppenderSkeleton {
+      var events = new java.util.ArrayList[LoggingEvent]
+      override def close(): Unit = {}
+      override def requiresLayout: Boolean = false
+      protected def append(event: LoggingEvent): Unit = events.add(event)
+    }
+    LogManager.getRootLogger.addAppender(TestAppender)
+
+    try {
+      // The second task (speculative task) of the previous stage attempt successes.
+      runEvent(makeCompletionEvent(
+        taskSets(0).tasks(1),
+        Success,
+        makeMapStatus("hostA", 2)))
+    } finally {
+      LogManager.getRootLogger.removeAppender(TestAppender)
+    }
+    // The task of previous stage attempt should not fail to update the accumulators.
+    assert(!TestAppender.events.asScala.exists {
+      msg => msg.getRenderedMessage.contains("Failed to update accumulator")
+    })
+
+    // The first task of the current stage attempt successes.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      Success,
+      makeMapStatus("hostA", 2)))
+
+    // The shuffle map stage finishes and the final result stage is submitted.
+    assert(taskSets.length == 3)
+
+    complete(taskSets(2), Seq((Success, 42), (Success, 42)))
+    assertDataStructuresEmpty()
   }
 
   /**

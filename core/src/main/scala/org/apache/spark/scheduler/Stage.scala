@@ -97,8 +97,19 @@ private[scheduler] abstract class Stage(
   def makeNewStageAttempt(
       numPartitionsToCompute: Int,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty): Unit = {
-    val metrics = new TaskMetrics
-    metrics.register(rdd.sparkContext)
+    val metrics = if (_latestInfo.taskMetrics == null) {
+      // If this is the first stage attempt, create a fresh `TaskMetrics` and register it.
+      val freshMetrics = new TaskMetrics
+      freshMetrics.register(rdd.sparkContext)
+      freshMetrics
+    } else {
+      // If this is not the first stage attempt, reuse the `TaskMetrics` from the previous stage
+      // attempt and reset it. This is necessary, as the previous stage attempt may still have tasks
+      // in progress and success later. We should accept accumulator updates from these tasks.
+      val existingMetrics = _latestInfo.taskMetrics
+      existingMetrics.reset()
+      existingMetrics
+    }
     _latestInfo = StageInfo.fromStage(
       this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences)
     nextAttemptId += 1

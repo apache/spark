@@ -263,6 +263,11 @@ class TaskMetrics private[spark] () extends Serializable {
     // value will be updated at driver side.
     internalAccums.filter(a => !a.isZero || a == _resultSize)
   }
+
+  private[spark] def reset(): Unit = {
+    externalAccums.clear()
+    internalAccums.foreach(_.reset())
+  }
 }
 
 
