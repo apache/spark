@@ -21,7 +21,7 @@ import java.util.Date
 
 import scala.xml.{NodeSeq, Text}
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.{JsonIgnoreProperties, JsonInclude}
 import com.fasterxml.jackson.core.{JsonGenerator, JsonParser}
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer, JsonSerializer, SerializerProvider}
@@ -102,6 +102,7 @@ class ExecutorSummary private[spark](
     val removeTime: Option[Date],
     val removeReason: Option[String],
     val executorLogs: Map[String, String],
+    @JsonInclude(JsonInclude.Include.NON_ABSENT)
     val memoryMetrics: Option[MemoryMetrics],
     val blacklistedInStages: Set[Int],
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
