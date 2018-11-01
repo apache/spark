@@ -42,6 +42,7 @@ import org.fusesource.leveldbjni.internal.NativeDB
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.History._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
@@ -86,7 +87,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     this(conf, new SystemClock())
   }
 
-  import config._
   import FsHistoryProvider._
 
   // Interval between safemode checks.
