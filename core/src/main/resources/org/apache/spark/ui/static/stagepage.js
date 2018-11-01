@@ -176,14 +176,14 @@ function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
     }
 }
 
-function createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table) {
+function createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTable) {
     var taskMetricsTable = "#summary-metrics-table";
     if ($.fn.dataTable.isDataTable(taskMetricsTable)) {
         taskSummaryMetricsDataTable.clear().draw();
-        taskSummaryMetricsDataTable.rows.add(task_summary_metrics_table).draw();
+        taskSummaryMetricsDataTable.rows.add(taskSummaryMetricsTable).draw();
     } else {
-        var task_conf = {
-            "data": task_summary_metrics_table,
+        var taskConf = {
+            "data": taskSummaryMetricsTable,
             "columns": [
                 {data : 'metric'},
                 // Min
@@ -227,11 +227,12 @@ function createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table) {
             "paging": false,
             "searching": false,
             "order": [[0, "asc"]],
-            "bSort": false
+            "bSort": false,
+            "bAutoWidth": false
         };
-        taskSummaryMetricsDataTable = $(taskMetricsTable).DataTable(task_conf);
+        taskSummaryMetricsDataTable = $(taskMetricsTable).DataTable(taskConf);
     }
-    task_summary_metrics_table_current_state_array = task_summary_metrics_table.slice();
+    taskSummaryMetricsTableCurrentStateArray = taskSummaryMetricsTable.slice();
 }
 
 function createRowMetadataForColumn(columnName, data, checkboxId) {
@@ -245,13 +246,13 @@ function createRowMetadataForColumn(columnName, data, checkboxId) {
 
 function reselectCheckboxesBasedOnTaskTableState() {
     var allChecked = true;
-    var task_summary_metrics_table_current_filtered_array = task_summary_metrics_table_current_state_array.slice();
-    if (typeof taskTableSelector !== 'undefined' && task_summary_metrics_table_current_state_array.length > 0) {
+    var taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
+    if (typeof taskTableSelector !== 'undefined' && taskSummaryMetricsTableCurrentStateArray.length > 0) {
         for (k = 0; k < optionalColumns.length; k++) {
             if (taskTableSelector.column(optionalColumns[k]).visible()) {
                 $("#box-"+optionalColumns[k]).prop('checked', true);
-                task_summary_metrics_table_current_state_array.push(task_summary_metrics_table_array.filter(row => (row.checkboxId).toString() == optionalColumns[k])[0]);
-                task_summary_metrics_table_current_filtered_array = task_summary_metrics_table_current_state_array.slice();
+                taskSummaryMetricsTableCurrentStateArray.push(taskSummaryMetricsTableArray.filter(row => (row.checkboxId).toString() == optionalColumns[k])[0]);
+                taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
             } else {
                 allChecked = false;
             }
@@ -259,7 +260,7 @@ function reselectCheckboxesBasedOnTaskTableState() {
         if (allChecked) {
             $("#box-0").prop('checked', true);
         }
-        createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_current_filtered_array);
+        createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableCurrentFilteredArray);
     }
 }
 
@@ -267,13 +268,15 @@ function getStageAttemptId() {
   var words = document.baseURI.split('?');
   var attemptIdStr = words[1].split('&')[1];
   var digitsRegex = /[0-9]+/;
+  // We are using regex here to extract the stage attempt id as there might be certain url's with format
+  // like /proxy/application_1539986433979_27115/stages/stage/?id=0&attempt=0#tasksTitle
   var stgAttemptId = words[1].split("&").filter(
       word => word.includes("attempt="))[0].split("=")[1].match(digitsRegex);
   return stgAttemptId;
 }
 
-var task_summary_metrics_table_array = [];
-var task_summary_metrics_table_current_state_array = [];
+var taskSummaryMetricsTableArray = [];
+var taskSummaryMetricsTableCurrentStateArray = [];
 var taskSummaryMetricsDataTable;
 var optionalColumns = [11, 12, 13, 14, 15, 16, 17];
 var taskTableSelector;
@@ -356,33 +359,31 @@ $(document).ready(function () {
             stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
             $.getJSON(createRESTEndPointForExecutorsPage(appId),
               function(executorSummaryResponse, status, jqXHR) {
-                var executorSummaryMap = new Map();
+                var executorSummaryMap = {};
                 for (var i = 0; i < executorSummaryResponse.length; i++) {
-                    executorSummaryMap.set(executorSummaryResponse[i].id, executorSummaryResponse[i]);
+                    executorSummaryMap[executorSummaryResponse[i].id] = executorSummaryResponse[i];
                 }
-                var executor_summary_table = [];
+                var executorSummaryTable = [];
                 stageExecutorSummaryInfoKeys.forEach(function (columnKeyIndex) {
                     responseBody.executorSummary[columnKeyIndex].id = columnKeyIndex;
-                    if ("executorLogs" in executorSummaryMap.get(columnKeyIndex.toString()) &&
-                      executorSummaryMap.get(columnKeyIndex.toString()).executorLogs != null) {
+                    var executorDetail = executorSummaryMap[columnKeyIndex.toString()];
+                    if ("executorLogs" in executorDetail && executorDetail.executorLogs != null) {
                         responseBody.executorSummary[columnKeyIndex].executorLogs =
-                          executorSummaryMap.get(columnKeyIndex.toString()).executorLogs;
+                          executorDetail.executorLogs;
                     } else {
                         responseBody.executorSummary[columnKeyIndex].executorLogs = {};
                     }
-                    if ("hostPort" in executorSummaryMap.get(columnKeyIndex.toString()) &&
-                      executorSummaryMap.get(columnKeyIndex.toString()).hostPort != null) {
+                    if ("hostPort" in executorDetail && executorDetail.hostPort != null) {
                         responseBody.executorSummary[columnKeyIndex].hostPort =
-                          executorSummaryMap.get(columnKeyIndex.toString()).hostPort;
+                          executorDetail.hostPort;
                     } else {
                         responseBody.executorSummary[columnKeyIndex].hostPort = "CANNOT FIND ADDRESS";
                     }
-                    executor_summary_table.push(responseBody.executorSummary[columnKeyIndex]);
+                    executorSummaryTable.push(responseBody.executorSummary[columnKeyIndex]);
                 });
                 // building task aggregated metrics by executor table
-                var executorSummaryTable = "#summary-executor-table";
-                var executor_summary_conf = {
-                    "data": executor_summary_table,
+                var executorSummaryConf = {
+                    "data": executorSummaryTable,
                     "columns": [
                         {data : "id"},
                         {data : "executorLogs", render: formatLogsCells},
@@ -433,10 +434,11 @@ $(document).ready(function () {
                             }
                         }
                     ],
-                    "order": [[0, "asc"]]
+                    "order": [[0, "asc"]],
+                    "bAutoWidth": false
                 }
                 var executorSummaryTableSelector =
-                    $(executorSummaryTable).DataTable(executor_summary_conf);
+                    $("#summary-executor-table").DataTable(executorSummaryConf);
                 $('#parent-container [data-toggle="tooltip"]').tooltip();
 
                 executorSummaryTableSelector.column(9).visible(dataToShow.showInputData);
@@ -472,7 +474,7 @@ $(document).ready(function () {
             });
 
             // prepare data for accumulatorUpdates
-            var accumulator_table = responseBody.accumulatorUpdates.filter(accumUpdate =>
+            var accumulatorTable = responseBody.accumulatorUpdates.filter(accumUpdate =>
                 !(accumUpdate.name).toString().includes("internal."));
 
             // rendering the UI page
@@ -510,47 +512,47 @@ $(document).ready(function () {
                                 var row3 = createRowMetadataForColumn(
                                     "Shuffle Remote Reads", taskMetricsResponse[columnKey], 14);
                                 if (dataToShow.showShuffleReadData) {
-                                    task_summary_metrics_table_array.push(row1);
-                                    task_summary_metrics_table_array.push(row2);
-                                    task_summary_metrics_table_array.push(row3);
+                                    taskSummaryMetricsTableArray.push(row1);
+                                    taskSummaryMetricsTableArray.push(row2);
+                                    taskSummaryMetricsTableArray.push(row3);
                                 }
                                 break;
 
                             case "schedulerDelay":
                                 var row = createRowMetadataForColumn(
                                     getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 11);
-                                task_summary_metrics_table_array.push(row);
+                                taskSummaryMetricsTableArray.push(row);
                                 break;
 
                             case "executorDeserializeTime":
                                 var row = createRowMetadataForColumn(
                                     getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 12);
-                                task_summary_metrics_table_array.push(row);
+                                taskSummaryMetricsTableArray.push(row);
                                 break;
 
                             case "resultSerializationTime":
                                 var row = createRowMetadataForColumn(
                                     getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 15);
-                                task_summary_metrics_table_array.push(row);
+                                taskSummaryMetricsTableArray.push(row);
                                 break;
 
                             case "gettingResultTime":
                                 var row = createRowMetadataForColumn(
                                     getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 16);
-                                task_summary_metrics_table_array.push(row);
+                                taskSummaryMetricsTableArray.push(row);
                                 break;
 
                             case "peakExecutionMemory":
                                 var row = createRowMetadataForColumn(
                                     getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 17);
-                                task_summary_metrics_table_array.push(row);
+                                taskSummaryMetricsTableArray.push(row);
                                 break;
 
                             case "inputMetrics":
                                 var row = createRowMetadataForColumn(
                                     getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 1);
                                 if (dataToShow.showInputData) {
-                                    task_summary_metrics_table_array.push(row);
+                                    taskSummaryMetricsTableArray.push(row);
                                 }
                                 break;
 
@@ -558,7 +560,7 @@ $(document).ready(function () {
                                 var row = createRowMetadataForColumn(
                                     getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 2);
                                 if (dataToShow.showOutputData) {
-                                    task_summary_metrics_table_array.push(row);
+                                    taskSummaryMetricsTableArray.push(row);
                                 }
                                 break;
 
@@ -566,7 +568,7 @@ $(document).ready(function () {
                                 var row = createRowMetadataForColumn(
                                     getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 4);
                                 if (dataToShow.showShuffleWriteData) {
-                                    task_summary_metrics_table_array.push(row);
+                                    taskSummaryMetricsTableArray.push(row);
                                 }
                                 break;
 
@@ -574,7 +576,7 @@ $(document).ready(function () {
                                 var row = createRowMetadataForColumn(
                                     getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 5);
                                 if (dataToShow.showBytesSpilledData) {
-                                    task_summary_metrics_table_array.push(row);
+                                    taskSummaryMetricsTableArray.push(row);
                                 }
                                 break;
 
@@ -582,7 +584,7 @@ $(document).ready(function () {
                                 var row = createRowMetadataForColumn(
                                     getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 6);
                                 if (dataToShow.showBytesSpilledData) {
-                                    task_summary_metrics_table_array.push(row);
+                                    taskSummaryMetricsTableArray.push(row);
                                 }
                                 break;
 
@@ -590,21 +592,20 @@ $(document).ready(function () {
                                 if (getColumnNameForTaskMetricSummary(columnKey) != "NA") {
                                     var row = createRowMetadataForColumn(
                                         getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 0);
-                                    task_summary_metrics_table_array.push(row);
+                                    taskSummaryMetricsTableArray.push(row);
                                 }
                                 break;
                         }
                     });
-                    var task_summary_metrics_table_filtered_array =
-                        task_summary_metrics_table_array.filter(row => row.checkboxId < 11);
-                    task_summary_metrics_table_current_state_array = task_summary_metrics_table_filtered_array.slice();
+                    var taskSummaryMetricsTableFilteredArray =
+                        taskSummaryMetricsTableArray.filter(row => row.checkboxId < 11);
+                    taskSummaryMetricsTableCurrentStateArray = taskSummaryMetricsTableFilteredArray.slice();
                     reselectCheckboxesBasedOnTaskTableState();
                 });
 
                 // building accumulator update table
-                var accumulatorTable = "#accumulator-table";
-                var accumulator_conf = {
-                    "data": accumulator_table,
+                var accumulatorConf = {
+                    "data": accumulatorTable,
                     "columns": [
                         {data : "id"},
                         {data : "name"},
@@ -612,20 +613,22 @@ $(document).ready(function () {
                     ],
                     "paging": false,
                     "searching": false,
-                    "order": [[0, "asc"]]
+                    "order": [[0, "asc"]],
+                    "bAutoWidth": false
                 }
-                $(accumulatorTable).DataTable(accumulator_conf);
+                $("#accumulator-table").DataTable(accumulatorConf);
 
                 // building tasks table that uses server side functionality
                 var totalTasksToShow = responseBody.numCompleteTasks + responseBody.numActiveTasks;
                 var taskTable = "#active-tasks-table";
-                var task_conf = {
+                var taskConf = {
                     "serverSide": true,
                     "paging": true,
                     "info": true,
                     "processing": true,
                     "lengthMenu": [[20, 40, 60, 100, totalTasksToShow], [20, 40, 60, 100, "All"]],
                     "orderMulti": false,
+                    "bAutoWidth": false,
                     "ajax": {
                         "url": endPoint + "/" + stageAttemptId + "/taskTable",
                         "data": function (data) {
@@ -752,7 +755,7 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if (accumulator_table.length > 0 && row.accumulatorUpdates.length > 0) {
+                                if (accumulatorTable.length > 0 && row.accumulatorUpdates.length > 0) {
                                     var accIndex = row.accumulatorUpdates.length - 1;
                                     return row.accumulatorUpdates[accIndex].name + ' : ' + row.accumulatorUpdates[accIndex].update;
                                 } else {
@@ -854,10 +857,10 @@ $(document).ready(function () {
                                 if (typeof msg === 'undefined') {
                                     return "";
                                 } else {
-                                    var form_head = msg.substring(0, msg.indexOf("at"));
+                                    var formHead = msg.substring(0, msg.indexOf("at"));
                                     var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
-                                    var form_msg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
-                                    return form_head + form + form_msg;
+                                    var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
+                                    return formHead + form + formMsg;
                                 }
                             },
                             name: "Errors"
@@ -874,7 +877,7 @@ $(document).ready(function () {
                         { "visible": false, "targets": 18 }
                     ],
                 };
-                taskTableSelector = $(taskTable).DataTable(task_conf);
+                taskTableSelector = $(taskTable).DataTable(taskConf);
                 $('#active-tasks-table_filter input').unbind();
                 var searchEvent;
                 $('#active-tasks-table_filter input').bind('keyup', function(e) {
@@ -896,27 +899,27 @@ $(document).ready(function () {
                         if ($(this).is(":checked")) {
                             $(".toggle-vis").prop('checked', true);
                             column.visible(true);
-                            createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_array);
+                            createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableArray);
                         } else {
                             $(".toggle-vis").prop('checked', false);
                             column.visible(false);
-                            var task_summary_metrics_table_filtered_array =
-                                task_summary_metrics_table_array.filter(row => row.checkboxId < 11);
-                            createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_filtered_array);
+                            var taskSummaryMetricsTableFilteredArray =
+                                taskSummaryMetricsTableArray.filter(row => row.checkboxId < 11);
+                            createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);
                         }
                     } else {
                         var column = taskTableSelector.column(para);
                         // Toggle the visibility
                         column.visible(!column.visible());
-                        var task_summary_metrics_table_filtered_array = [];
+                        var taskSummaryMetricsTableFilteredArray = [];
                         if ($(this).is(":checked")) {
-                            task_summary_metrics_table_current_state_array.push(task_summary_metrics_table_array.filter(row => (row.checkboxId).toString() == para)[0]);
-                            task_summary_metrics_table_filtered_array = task_summary_metrics_table_current_state_array.slice();
+                            taskSummaryMetricsTableCurrentStateArray.push(taskSummaryMetricsTableArray.filter(row => (row.checkboxId).toString() == para)[0]);
+                            taskSummaryMetricsTableFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
                         } else {
-                            task_summary_metrics_table_filtered_array =
-                                task_summary_metrics_table_current_state_array.filter(row => (row.checkboxId).toString() != para);
+                            taskSummaryMetricsTableFilteredArray =
+                                taskSummaryMetricsTableCurrentStateArray.filter(row => (row.checkboxId).toString() != para);
                         }
-                        createDataTableForTaskSummaryMetricsTable(task_summary_metrics_table_filtered_array);
+                        createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);
                     }
                 });
 
@@ -925,7 +928,7 @@ $(document).ready(function () {
                 $("#tasksTitle").html("Task (" + totalTasksToShow + ")");
 
                 // hide or show the accumulate update table
-                if (accumulator_table.length == 0) {
+                if (accumulatorTable.length == 0) {
                     $("#accumulator-update-table").hide();
                 } else {
                     taskTableSelector.column(18).visible(true);
