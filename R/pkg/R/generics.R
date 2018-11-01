@@ -748,7 +748,7 @@ setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
-setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
+setGeneric("approx_count_distinct", function(x, ...) { standardGeneric("approx_count_distinct") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1289,11 +1289,11 @@ setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
 #' @rdname column_math_functions
 #' @name NULL
-setGeneric("toDegrees", function(x) { standardGeneric("toDegrees") })
+setGeneric("degrees", function(x) { standardGeneric("degrees") })
 
 #' @rdname column_math_functions
 #' @name NULL
-setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
+setGeneric("radians", function(x) { standardGeneric("radians") })
 
 #' @rdname column_datetime_functions
 #' @name NULL
