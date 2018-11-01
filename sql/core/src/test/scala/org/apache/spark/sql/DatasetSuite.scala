@@ -268,7 +268,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       e = intercept[AnalysisException] {
         ds.select(expr("`(_1|_2)`").as[Int])
       }.getMessage
-      assert(e.contains("cannot resolve '`(_1|_2)`'"))
+      assert(e.contains("cannot resolve '(_1|_2)'"))
 
       e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
@@ -276,9 +276,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       assert(e.contains("Cannot resolve column name \"`(_1)?+.+`\""))
 
       e = intercept[AnalysisException] {
-        ds.select(ds("`(_1|_2)`"))
+        ds.select(ds("(_1|_2)"))
       }.getMessage
-      assert(e.contains("Cannot resolve column name \"`(_1|_2)`\""))
+      assert(e.contains("Cannot resolve column name \"(_1|_2)\""))
     }
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
@@ -709,7 +709,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"), e.getMessage)
+    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
   }
 
   test("runtime nullability check") {

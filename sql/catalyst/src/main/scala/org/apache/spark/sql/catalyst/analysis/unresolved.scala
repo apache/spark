@@ -115,14 +115,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
 
   override def toString: String = s"'$name"
 
-  override def sql: String = nameParts.map { part =>
-    part match {
-      case ParserUtils.escapedIdentifier(_) | ParserUtils.qualifiedEscapedIdentifier(_, _) =>
-        part
-      case _ =>
-        quoteIdentifier(part)
-    }
-  }.mkString(".")
+  override def sql: String = name
 }
 
 

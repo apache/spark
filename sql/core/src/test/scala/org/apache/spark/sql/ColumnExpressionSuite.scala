@@ -117,10 +117,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-25769 escape nested columns by backtick each of the column name") {
     Seq(
-      ($"a.b", "`a`.`b`"),
+      ($"a.b", "a.b"),
       ($"`a.b`", "`a.b`"),
-      ($"`a`.b", "`a`.`b`"),
-      ($"`a.b`.c", "`a.b`.`c`")).foreach { case (columnName, sqlString) =>
+      ($"`a`.b", "a.b"),
+      ($"`a.b`.c", "`a.b`.c")).foreach { case (columnName, sqlString) =>
       assert(columnName.expr.sql === sqlString)
     }
   }

@@ -45,7 +45,7 @@ SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`t`.`(a)?+.+`' given input columns: [t.A, t.B, t.c, t.d]; line 1 pos 7
+cannot resolve 't.`(a)?+.+`' given input columns: [t.A, t.B, t.c, t.d]; line 1 pos 7
 
 
 -- !query 5
@@ -54,7 +54,7 @@ SELECT `(a|b)` FROM testData2 WHERE a = 2
 struct<>
 -- !query 5 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`(a|b)`' given input columns: [testdata2.A, testdata2.B, testdata2.c, testdata2.d]; line 1 pos 7
+cannot resolve '(a|b)' given input columns: [testdata2.A, testdata2.B, testdata2.c, testdata2.d]; line 1 pos 7
 
 
 -- !query 6
@@ -81,7 +81,7 @@ SELECT SUM(`(a)`) FROM testData2
 struct<>
 -- !query 8 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`(a)`' given input columns: [testdata2.A, testdata2.B, testdata2.c, testdata2.d]; line 1 pos 11
+cannot resolve '(a)' given input columns: [testdata2.A, testdata2.B, testdata2.c, testdata2.d]; line 1 pos 11
 
 
 -- !query 9
@@ -301,7 +301,7 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)`
 struct<>
 -- !query 32 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`(a)`' given input columns: [testdata3.a, testdata3.b]; line 1 pos 38
+cannot resolve '(a)' given input columns: [testdata3.a, testdata3.b]; line 1 pos 38
 
 
 -- !query 33
