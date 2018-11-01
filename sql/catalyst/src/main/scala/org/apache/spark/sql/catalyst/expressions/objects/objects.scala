@@ -30,14 +30,13 @@ import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /**
@@ -963,25 +962,32 @@ case class MapObjects private(
   }
 }
 
+/**
+ * Similar to [[UnresolvedMapObjects]], this is a placeholder of [[CatalystToExternalMap]].
+ *
+ * @param child An expression that when evaluated returns a map object.
+ * @param keyFunction The function applied on the key collection elements.
+ * @param valueFunction The function applied on the value collection elements.
+ * @param collClass The type of the resulting collection.
+ */
+case class UnresolvedCatalystToExternalMap(
+    child: Expression,
+    @transient keyFunction: Expression => Expression,
+    @transient valueFunction: Expression => Expression,
+    collClass: Class[_]) extends UnaryExpression with Unevaluable {
+
+  override lazy val resolved = false
+
+  override def dataType: DataType = ObjectType(collClass)
+}
+
 object CatalystToExternalMap {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
-  /**
-   * Construct an instance of CatalystToExternalMap case class.
-   *
-   * @param keyFunction The function applied on the key collection elements.
-   * @param valueFunction The function applied on the value collection elements.
-   * @param inputData An expression that when evaluated returns a map object.
-   * @param collClass The type of the resulting collection.
-   */
-  def apply(
-      keyFunction: Expression => Expression,
-      valueFunction: Expression => Expression,
-      inputData: Expression,
-      collClass: Class[_]): CatalystToExternalMap = {
+  def apply(u: UnresolvedCatalystToExternalMap): CatalystToExternalMap = {
     val id = curId.getAndIncrement()
     val keyLoopValue = s"CatalystToExternalMap_keyLoopValue$id"
-    val mapType = inputData.dataType.asInstanceOf[MapType]
+    val mapType = u.child.dataType.asInstanceOf[MapType]
     val keyLoopVar = LambdaVariable(keyLoopValue, "", mapType.keyType, nullable = false)
     val valueLoopValue = s"CatalystToExternalMap_valueLoopValue$id"
     val valueLoopIsNull = if (mapType.valueContainsNull) {
@@ -991,9 +997,9 @@ object CatalystToExternalMap {
     }
     val valueLoopVar = LambdaVariable(valueLoopValue, valueLoopIsNull, mapType.valueType)
     CatalystToExternalMap(
-      keyLoopValue, keyFunction(keyLoopVar),
-      valueLoopValue, valueLoopIsNull, valueFunction(valueLoopVar),
-      inputData, collClass)
+      keyLoopValue, u.keyFunction(keyLoopVar),
+      valueLoopValue, valueLoopIsNull, u.valueFunction(valueLoopVar),
+      u.child, u.collClass)
   }
 }
 
@@ -1090,15 +1096,9 @@ case class CatalystToExternalMap private(
     val tupleLoopValue = ctx.freshName("tupleLoopValue")
     val builderValue = ctx.freshName("builderValue")
 
-    val getLength = s"${genInputData.value}.numElements()"
-
     val keyArray = ctx.freshName("keyArray")
     val valueArray = ctx.freshName("valueArray")
-    val getKeyArray =
-      s"${classOf[ArrayData].getName} $keyArray = ${genInputData.value}.keyArray();"
     val getKeyLoopVar = CodeGenerator.getValue(keyArray, inputDataType(mapType.keyType), loopIndex)
-    val getValueArray =
-      s"${classOf[ArrayData].getName} $valueArray = ${genInputData.value}.valueArray();"
     val getValueLoopVar = CodeGenerator.getValue(
       valueArray, inputDataType(mapType.valueType), loopIndex)
 
@@ -1147,10 +1147,10 @@ case class CatalystToExternalMap private(
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
 
       if (!${genInputData.isNull}) {
-        int $dataLength = $getLength;
+        int $dataLength = ${genInputData.value}.numElements();
         $constructBuilder
-        $getKeyArray
-        $getValueArray
+        ArrayData $keyArray = ${genInputData.value}.keyArray();
+        ArrayData $valueArray = ${genInputData.value}.valueArray();
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
@@ -1787,79 +1787,4 @@ case class ValidateExternalType(child: Expression, expected: DataType)
     """
     ev.copy(code = code, isNull = input.isNull)
   }
-}
-
-object GetKeyArrayFromMap {
-
-  /**
-   * Construct an instance of GetArrayFromMap case class
-   * extracting a key array from a Map expression.
-   *
-   * @param child a Map expression to extract a key array from
-   */
-  def apply(child: Expression): Expression = {
-    GetArrayFromMap(
-      child,
-      "keyArray",
-      _.keyArray(),
-      { case MapType(kt, _, _) => kt })
-  }
-}
-
-object GetValueArrayFromMap {
-
-  /**
-   * Construct an instance of GetArrayFromMap case class
-   * extracting a value array from a Map expression.
-   *
-   * @param child a Map expression to extract a value array from
-   */
-  def apply(child: Expression): Expression = {
-    GetArrayFromMap(
-      child,
-      "valueArray",
-      _.valueArray(),
-      { case MapType(_, vt, _) => vt })
-  }
-}
-
-/**
- * Extracts a key/value array from a Map expression.
- *
- * @param child a Map expression to extract an array from
- * @param functionName name of the function that is invoked to extract an array
- * @param arrayGetter function extracting `ArrayData` from `MapData`
- * @param elementTypeGetter function extracting array element `DataType` from `MapType`
- */
-case class GetArrayFromMap private(
-    child: Expression,
-    functionName: String,
-    arrayGetter: MapData => ArrayData,
-    elementTypeGetter: MapType => DataType) extends UnaryExpression with NonSQLExpression {
-
-  private lazy val encodedFunctionName: String = TermName(functionName).encodedName.toString
-
-  lazy val dataType: DataType = {
-    val mt: MapType = child.dataType.asInstanceOf[MapType]
-    ArrayType(elementTypeGetter(mt))
-  }
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[MapType]) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"Can't extract array from $child: need map type but got ${child.dataType.catalogString}")
-    }
-  }
-
-  override def nullSafeEval(input: Any): Any = {
-    arrayGetter(input.asInstanceOf[MapData])
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, childValue => s"$childValue.$encodedFunctionName()")
-  }
-
-  override def toString: String = s"$child.$functionName"
 }

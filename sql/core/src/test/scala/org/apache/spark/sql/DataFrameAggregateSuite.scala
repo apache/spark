@@ -669,23 +669,19 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  Seq(true, false).foreach { codegen =>
-    test("SPARK-22951: dropDuplicates on empty dataFrames should produce correct aggregate " +
-      s"results when codegen is enabled: $codegen") {
-      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, codegen.toString)) {
-        // explicit global aggregations
-        val emptyAgg = Map.empty[String, String]
-        checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.groupBy().agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.groupBy().agg(count("*")), Seq(Row(0)))
-        checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(count("*")), Seq(Row(0)))
+  testWithWholeStageCodegenOnAndOff("SPARK-22951: dropDuplicates on empty dataFrames " +
+    "should produce correct aggregate") { _ =>
+    // explicit global aggregations
+    val emptyAgg = Map.empty[String, String]
+    checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.groupBy().agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.groupBy().agg(count("*")), Seq(Row(0)))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(count("*")), Seq(Row(0)))
 
-        // global aggregation is converted to grouping aggregation:
-        assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
-      }
-    }
+    // global aggregation is converted to grouping aggregation:
+    assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
   }
 
   test("SPARK-21896: Window functions inside aggregate functions") {

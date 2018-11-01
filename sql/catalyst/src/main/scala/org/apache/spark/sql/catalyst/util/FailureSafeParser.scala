@@ -73,7 +73,8 @@ class FailureSafeParser[IN](
           Iterator.empty
         case FailFastMode =>
           throw new SparkException("Malformed records are detected in record parsing. " +
-            s"Parse Mode: ${FailFastMode.name}.", e.cause)
+            s"Parse Mode: ${FailFastMode.name}. To process malformed records as null " +
+            "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
       }
     }
   }

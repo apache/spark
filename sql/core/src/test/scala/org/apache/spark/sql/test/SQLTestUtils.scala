@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
 
@@ -62,6 +63,20 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
     super.beforeAll()
     if (loadTestDataBeforeTests) {
       loadTestData()
+    }
+  }
+
+  /**
+   * A helper function for turning off/on codegen.
+   */
+  protected def testWithWholeStageCodegenOnAndOff(testName: String)(f: String => Unit): Unit = {
+    Seq("false", "true").foreach { codegenEnabled =>
+      val isTurnOn = if (codegenEnabled == "true") "on" else "off"
+      test(s"$testName (whole-stage-codegen ${isTurnOn})") {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+          f(codegenEnabled)
+        }
+      }
     }
   }
 

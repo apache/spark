@@ -2384,13 +2384,22 @@ class Analyzer(
             case UnresolvedMapObjects(func, inputData, cls) if inputData.resolved =>
               inputData.dataType match {
                 case ArrayType(et, cn) =>
-                  val expr = MapObjects(func, inputData, et, cn, cls) transformUp {
+                  MapObjects(func, inputData, et, cn, cls) transformUp {
                     case UnresolvedExtractValue(child, fieldName) if child.resolved =>
                       ExtractValue(child, fieldName, resolver)
                   }
-                  expr
                 case other =>
                   throw new AnalysisException("need an array field but got " + other.catalogString)
+              }
+            case u: UnresolvedCatalystToExternalMap if u.child.resolved =>
+              u.child.dataType match {
+                case _: MapType =>
+                  CatalystToExternalMap(u) transformUp {
+                    case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+                      ExtractValue(child, fieldName, resolver)
+                  }
+                case other =>
+                  throw new AnalysisException("need a map field but got " + other.catalogString)
               }
           }
           validateNestedTupleFields(result)
