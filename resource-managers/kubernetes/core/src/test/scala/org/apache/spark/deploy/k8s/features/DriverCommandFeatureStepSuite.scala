@@ -29,21 +29,10 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
 
   private val MAIN_CLASS = "mainClass"
 
-  test("no resource defined runs java driver") {
-    val spec = applyFeatureStep(appArgs = Array("5 7"))
-    val container = spec.pod.container
-    assert(spec.pod.container.getArgs.asScala === List(
-      "driver",
-      "--properties-file", SPARK_CONF_PATH,
-      "--class", MAIN_CLASS,
-      "spark-internal", "5 7"))
-    assert(spec.systemProperties.isEmpty)
-  }
-
   test("java resource") {
     val mainResource = "local:///main.jar"
     val spec = applyFeatureStep(
-      resource = JavaMainAppResource(Some(mainResource)),
+      JavaMainAppResource(Some(mainResource)),
       appArgs = Array("5", "7"))
     assert(spec.pod.container.getArgs.asScala === List(
       "driver",
@@ -61,8 +50,8 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       .set(PYSPARK_MAJOR_PYTHON_VERSION, "3")
 
     val spec = applyFeatureStep(
-      conf = sparkConf,
-      resource = PythonMainAppResource(mainResource))
+      PythonMainAppResource(mainResource),
+      conf = sparkConf)
     assert(spec.pod.container.getArgs.asScala === List(
       "driver",
       "--properties-file", SPARK_CONF_PATH,
@@ -89,8 +78,8 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       .set("spark.files", filesInConf.mkString(","))
       .set(PYSPARK_MAJOR_PYTHON_VERSION, "2")
     val spec = applyFeatureStep(
+      PythonMainAppResource(mainResource),
       conf = sparkConf,
-      resource = PythonMainAppResource(mainResource),
       appArgs = Array("5", "7", "9"),
       pyFiles = pyFiles)
 
@@ -117,7 +106,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
     val mainResource = s"local://$expectedMainResource"
 
     val spec = applyFeatureStep(
-      resource = RMainAppResource(mainResource),
+      RMainAppResource(mainResource),
       appArgs = Array("5", "7", "9"))
 
     assert(spec.pod.container.getArgs.asScala === List(
@@ -128,8 +117,8 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
   }
 
   private def applyFeatureStep(
+      resource: MainAppResource,
       conf: SparkConf = new SparkConf(false),
-      resource: MainAppResource = JavaMainAppResource(None),
       appArgs: Array[String] = Array(),
       pyFiles: Seq[String] = Nil): KubernetesDriverSpec = {
     val driverConf = new KubernetesDriverSpecificConf(
