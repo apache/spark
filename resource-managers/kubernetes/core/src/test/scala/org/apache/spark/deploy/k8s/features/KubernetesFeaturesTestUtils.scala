@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Container, HasMetadata, Pod, PodBuilder, SecretBuilder}
+import io.fabric8.kubernetes.api.model.{Container, HasMetadata, Pod, PodBuilder, SecretBuilder, Volume}
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -64,8 +64,22 @@ object KubernetesFeaturesTestUtils {
     container.getEnv.asScala.exists(envVar => envVar.getName == envVarName)
   }
 
+  def containerHasEnvVars(container: Container, envs: Map[String, String]): Boolean = {
+    envs.toSet.subsetOf(container.getEnv.asScala
+      .map { e => (e.getName, e.getValue)}.toSet)
+  }
+
+  def containerHasVolumeMounts(container: Container, vms: Map[String, String]): Boolean = {
+    vms.toSet.subsetOf(container.getVolumeMounts.asScala
+      .map { vm => (vm.getName, vm.getMountPath)}.toSet)
+  }
+
   def podHasLabels(pod: Pod, labels: Map[String, String]): Boolean = {
     labels.toSet.subsetOf(pod.getMetadata.getLabels.asScala.toSet)
+  }
+
+  def podHasVolumes(pod: Pod, volumes: Seq[Volume]): Boolean = {
+    volumes.toSet.subsetOf(pod.getSpec.getVolumes.asScala.toSet)
   }
 
   // Kerberos Specific Test utils

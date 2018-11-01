@@ -279,5 +279,4 @@ private[spark] class HadoopBootstrapUtil extends Logging {
         }.toMap.asJava)
       .build()
   }
-
 }
