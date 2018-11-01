@@ -52,11 +52,15 @@ private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
    */
   def pageData(page: Int): PageData[T] = {
     val totalPages = (dataSize + pageSize - 1) / pageSize
-    val (from, to) = if (page <= 0 || page > totalPages) {
-      (0, dataSize.min(pageSize))
+    val pageToShow = if (page <= 0) {
+      1
+    } else if (page > totalPages) {
+      totalPages
     } else {
-      ((page - 1) * pageSize, dataSize.min(page * pageSize))
+      page
     }
+    val (from, to) = ((pageToShow - 1) * pageSize, dataSize.min(pageToShow * pageSize))
+
     PageData(totalPages, sliceData(from, to))
   }
 
@@ -93,11 +97,16 @@ private[spark] trait PagedTable[T] {
     val _dataSource = dataSource
     try {
       val PageData(totalPages, data) = _dataSource.pageData(page)
-      val pageNavi = if (page <= 0 || page > totalPages) {
-        pageNavigation(1, _dataSource.pageSize, totalPages)
+      val pageToShow = if (page <= 0) {
+        1
+      } else if (page > totalPages) {
+        totalPages
       } else {
-        pageNavigation(page, _dataSource.pageSize, totalPages)
+        page
       }
+
+      val pageNavi = pageNavigation(pageToShow, _dataSource.pageSize, totalPages)
+
       <div>
         {pageNavi}
         <table class={tableCssClass} id={tableId}>

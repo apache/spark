@@ -32,10 +32,10 @@ class PagedDataSourceSuite extends SparkFunSuite {
 
     val dataSource3 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
     assert(dataSource3.pageData(3) === PageData(3, Seq(5)))
-    // If the page number is out of range, fall back to the first page
+    // If the page number is more than maximum page, fall back to the last page
     val dataSource4 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
-    assert(dataSource4.pageData(4) === PageData(3, 1 to 2))
-    // If the page number is out of range, fall back to the first page
+    assert(dataSource4.pageData(4) === PageData(3, Seq(5)))
+    // If the page number is less than or equal to zero, fall back to the first page
     val dataSource5 = new SeqPagedDataSource[Int](1 to 5, pageSize = 2)
     assert(dataSource5.pageData(0) === PageData(3, 1 to 2))
   }
