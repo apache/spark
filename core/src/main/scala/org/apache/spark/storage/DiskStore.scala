@@ -263,7 +263,8 @@ private[spark] class EncryptedBlockData(
   }
 }
 
-private[spark] class EncryptedManagedBuffer(val blockData: EncryptedBlockData) extends ManagedBuffer {
+private[spark] class EncryptedManagedBuffer(
+    val blockData: EncryptedBlockData) extends ManagedBuffer {
 
   // This is the size of the decrypted data
   override def size(): Long = blockData.size
