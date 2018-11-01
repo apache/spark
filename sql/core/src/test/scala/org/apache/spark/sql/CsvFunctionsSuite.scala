@@ -82,7 +82,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("to_csv with option") {
     val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
-    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm").asJava
 
     checkAnswer(df.select(to_csv($"a", options)), Row("26/08/2015 18:00") :: Nil)
   }
