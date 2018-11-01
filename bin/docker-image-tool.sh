@@ -197,6 +197,9 @@ do
    if ! which minikube 1>/dev/null; then
      error "Cannot find minikube."
    fi
+   if ! minikube status 1>/dev/null; then
+     error "Cannot contact minikube. Make sure it's running."
+   fi
    eval $(minikube docker-env)
    ;;
  esac

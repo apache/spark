@@ -494,7 +494,10 @@ object KubernetesIntegrationTests {
       if (shouldBuildImage) {
         val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
         val cmd = Seq(dockerTool, "-m", "-t", imageTag.value, "build")
-        Process(cmd).!
+        val ec = Process(cmd).!
+        if (ec != 0) {
+          throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
+        }
       }
       shouldBuildImage = true
     },
