@@ -1229,6 +1229,10 @@ object CodeGenerator extends Logging {
   // bytecode instruction
   final val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
+  // This is the threshold to print out debug information when code generation takes more
+  // than this value.
+  final val SLOW_CODEGEN_MILLIS_THRESHOLD = 100
+
   /**
    * Compile the Java source code into a Java class, using Janino.
    *
@@ -1375,6 +1379,27 @@ object CodeGenerator extends Logging {
           CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
           CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
           logInfo(s"Code generated in $timeMs ms")
+
+          if (timeMs > SLOW_CODEGEN_MILLIS_THRESHOLD) {
+            logWarning(s"Code generation took more than $SLOW_CODEGEN_MILLIS_THRESHOLD ms." +
+              "Please set logger level to DEBUG to see further debug information.")
+
+            logDebug(s"Printing out debug information - body: ${code.body}... / " +
+              s"comment: ${code.comment}")
+
+            def getRelevantStackTraceForDebug(): Array[StackTraceElement] = {
+              Thread.currentThread().getStackTrace.drop(1)
+                .filterNot { p =>
+                  p.getClassName.startsWith("com.google.common") ||
+                    p.getClassName.startsWith("org.apache.spark.sql.catalyst") ||
+                    p.getClassName.startsWith("org.apache.spark.rdd")
+                }
+            }
+
+            logDebug(s"Stack trace - " +
+              s"${getRelevantStackTraceForDebug().take(30).map(_.toString).mkString("\n")}")
+          }
+
           result
         }
       })

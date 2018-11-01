@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, CreateNamedStruct, Expression, GenericInternalRow, JoinedRow, Literal, MutableProjection, NamedExpression, PreciseTimestampConversion, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, CreateNamedStruct, Expression, GenericInternalRow, JoinedRow, Literal, MutableProjection, NamedExpression, PreciseTimestampConversion, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -82,16 +82,12 @@ class MergingSessionsIterator(
   // The partition key of the current partition.
   private[this] var currentGroupingKey: UnsafeRow = _
 
-  private[this] var currentSessionStart: Long = Long.MaxValue
-
-  private[this] var currentSessionEnd: Long = Long.MinValue
+  private[this] var currentSession: UnsafeRow = _
 
   // The partition key of next partition.
   private[this] var nextGroupingKey: UnsafeRow = _
 
-  private[this] var nextGroupingSessionStart: Long = Long.MaxValue
-
-  private[this] var nextGroupingSessionEnd: Long = Long.MinValue
+  private[this] var nextGroupingSession: UnsafeRow = _
 
   // The first row of next partition.
   private[this] var firstRowInNextGroup: InternalRow = _
@@ -116,9 +112,7 @@ class MergingSessionsIterator(
       val inputRow = inputIterator.next()
       nextGroupingKey = groupingWithoutSessionProjection(inputRow).copy()
       val session = sessionProjection(inputRow)
-      val sessionRow = session.getStruct(0, 2)
-      nextGroupingSessionStart = sessionRow.getLong(0)
-      nextGroupingSessionEnd = sessionRow.getLong(1)
+      nextGroupingSession = session.getStruct(0, 2).copy()
       firstRowInNextGroup = inputRow.copy()
       sortedInputHasNewGroup = true
     } else {
@@ -132,8 +126,7 @@ class MergingSessionsIterator(
   /** Processes rows in the current group. It will stop when it find a new group. */
   protected def processCurrentSortedGroup(): Unit = {
     currentGroupingKey = nextGroupingKey
-    currentSessionStart = nextGroupingSessionStart
-    currentSessionEnd = nextGroupingSessionEnd
+    currentSession = nextGroupingSession
 
     // Now, we will start to find all rows belonging to this group.
     // We create a variable to track if we see the next group.
@@ -149,27 +142,27 @@ class MergingSessionsIterator(
       val groupingKey = groupingWithoutSessionProjection(currentRow)
 
       val session = sessionProjection(currentRow)
-      val sessionRow = session.getStruct(0, 2)
-      val sessionStart = sessionRow.getLong(0)
-      val sessionEnd = sessionRow.getLong(1)
+      val sessionStruct = session.getStruct(0, 2)
+      val sessionStart = getSessionStart(sessionStruct)
+      val sessionEnd = getSessionEnd(sessionStruct)
 
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {
-        if (sessionStart < currentSessionStart) {
+        if (sessionStart < getSessionStart(currentSession)) {
           throw new IllegalArgumentException("Input iterator is not sorted based on session!")
-        } else if (sessionStart <= currentSessionEnd) {
+        } else if (sessionStart <= getSessionEnd(currentSession)) {
           // expanding session length if needed
           expandEndOfCurrentSession(sessionEnd)
           processRow(sortBasedAggregationBuffer, currentRow)
         } else {
           // We find a new group.
           findNextPartition = true
-          startNewSession(currentRow, groupingKey, sessionStart, sessionEnd)
+          startNewSession(currentRow, groupingKey, sessionStruct)
         }
       } else {
         // We find a new group.
         findNextPartition = true
-        startNewSession(currentRow, groupingKey, sessionStart, sessionEnd)
+        startNewSession(currentRow, groupingKey, sessionStruct)
       }
     }
 
@@ -180,17 +173,28 @@ class MergingSessionsIterator(
     }
   }
 
-  private def startNewSession(currentRow: InternalRow, groupingKey: UnsafeRow, sessionStart: Long,
-                              sessionEnd: Long): Unit = {
+  private def startNewSession(currentRow: InternalRow, groupingKey: UnsafeRow,
+                              sessionStruct: UnsafeRow): Unit = {
     nextGroupingKey = groupingKey.copy()
-    nextGroupingSessionStart = sessionStart
-    nextGroupingSessionEnd = sessionEnd
+    nextGroupingSession = sessionStruct.copy()
     firstRowInNextGroup = currentRow.copy()
   }
 
+  private def getSessionStart(sessionStruct: UnsafeRow): Long = {
+    sessionStruct.getLong(0)
+  }
+
+  private def getSessionEnd(sessionStruct: UnsafeRow): Long = {
+    sessionStruct.getLong(1)
+  }
+
+  def updateSessionEnd(sessionStruct: UnsafeRow, sessionEnd: Long): Unit = {
+    sessionStruct.setLong(1, sessionEnd)
+  }
+
   private def expandEndOfCurrentSession(sessionEnd: Long): Unit = {
-    if (sessionEnd > currentSessionEnd) {
-      currentSessionEnd = sessionEnd
+    if (sessionEnd > getSessionEnd(currentSession)) {
+      updateSessionEnd(currentSession, sessionEnd)
     }
   }
 
@@ -225,17 +229,9 @@ class MergingSessionsIterator(
     groupingWithoutSessionAttributes :+ sessionExpression.toAttribute)
 
   private def generateGroupingKey(): UnsafeRow = {
-    val sessionStruct = CreateNamedStruct(
-      Literal("start") ::
-        PreciseTimestampConversion(
-          Literal(currentSessionStart, LongType), LongType, TimestampType) ::
-        Literal("end") ::
-        PreciseTimestampConversion(
-          Literal(currentSessionEnd, LongType), LongType, TimestampType) ::
-        Nil)
-
-    val joined = join(currentGroupingKey,
-      UnsafeProjection.create(sessionStruct).apply(InternalRow.empty))
+    val newRow = new SpecificInternalRow(Seq(sessionExpression.toAttribute).toStructType)
+    newRow.update(0, currentSession)
+    val joined = join(currentGroupingKey, newRow)
 
     groupingKeyProj(joined)
   }
