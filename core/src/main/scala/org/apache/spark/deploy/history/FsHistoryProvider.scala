@@ -284,7 +284,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           getRunner(() => cleanLogs()), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
       }
 
-      if (conf.get(DRIVER_LOG_DFS_DIR).isDefined && conf.get(DRIVER_LOG_CLEANER_ENABLED)) {
+      if (conf.contains(DRIVER_LOG_DFS_DIR) && conf.get(DRIVER_LOG_CLEANER_ENABLED)) {
         pool.scheduleWithFixedDelay(getRunner(() => cleanDriverLogs()),
           0,
           conf.get(DRIVER_LOG_CLEANER_INTERVAL),

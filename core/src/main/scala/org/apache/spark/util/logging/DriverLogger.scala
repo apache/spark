@@ -49,7 +49,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
 
   private def addLogAppender(): Unit = {
     val appenders = LogManager.getRootLogger().getAllAppenders()
-    val layout = if (conf.get(DRIVER_LOG_LAYOUT).isDefined) {
+    val layout = if (conf.contains(DRIVER_LOG_LAYOUT)) {
       new PatternLayout(conf.get(DRIVER_LOG_LAYOUT).get)
     } else if (appenders.hasMoreElements()) {
       appenders.nextElement().asInstanceOf[Appender].getLayout()
@@ -189,7 +189,7 @@ private[spark] object DriverLogger extends Logging {
 
   def apply(conf: SparkConf): Option[DriverLogger] = {
     if (conf.get(DRIVER_LOG_PERSISTTODFS) && Utils.isClientMode(conf)) {
-      if (conf.get(DRIVER_LOG_DFS_DIR).isDefined) {
+      if (conf.contains(DRIVER_LOG_DFS_DIR)) {
         try {
           Some(new DriverLogger(conf))
         } catch {
