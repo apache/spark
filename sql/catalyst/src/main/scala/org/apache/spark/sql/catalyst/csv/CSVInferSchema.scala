@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.csv
+package org.apache.spark.sql.catalyst.csv
 
 import java.math.BigDecimal
 
-import scala.util.control.Exception._
+import scala.util.control.Exception.allCatch
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
-import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
-private[csv] object CSVInferSchema {
+object CSVInferSchema {
 
   /**
    * Similar to the JSON schema inference
@@ -44,13 +43,7 @@ private[csv] object CSVInferSchema {
       val rootTypes: Array[DataType] =
         tokenRDD.aggregate(startType)(inferRowType(options), mergeRowTypes)
 
-      header.zip(rootTypes).map { case (thisHeader, rootType) =>
-        val dType = rootType match {
-          case _: NullType => StringType
-          case other => other
-        }
-        StructField(thisHeader, dType, nullable = true)
-      }
+      toStructFields(rootTypes, header, options)
     } else {
       // By default fields are assumed to be StringType
       header.map(fieldName => StructField(fieldName, StringType, nullable = true))
@@ -59,7 +52,20 @@ private[csv] object CSVInferSchema {
     StructType(fields)
   }
 
-  private def inferRowType(options: CSVOptions)
+  def toStructFields(
+      fieldTypes: Array[DataType],
+      header: Array[String],
+      options: CSVOptions): Array[StructField] = {
+    header.zip(fieldTypes).map { case (thisHeader, rootType) =>
+      val dType = rootType match {
+        case _: NullType => StringType
+        case other => other
+      }
+      StructField(thisHeader, dType, nullable = true)
+    }
+  }
+
+  def inferRowType(options: CSVOptions)
       (rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
