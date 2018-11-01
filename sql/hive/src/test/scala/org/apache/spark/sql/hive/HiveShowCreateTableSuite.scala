@@ -17,108 +17,10 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.{AnalysisException, ShowCreateTableSuite}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.util.Utils
 
-class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import testImplicits._
-
-  test("data source table with user specified schema") {
-    withTable("ddl_test") {
-      val jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
-
-      sql(
-        s"""CREATE TABLE ddl_test (
-           |  a STRING,
-           |  b STRING,
-           |  `extra col` ARRAY<INT>,
-           |  `<another>` STRUCT<x: INT, y: ARRAY<BOOLEAN>>
-           |)
-           |USING json
-           |OPTIONS (
-           | PATH '$jsonFilePath'
-           |)
-         """.stripMargin
-      )
-
-      checkCreateTable("ddl_test")
-    }
-  }
-
-  test("data source table CTAS") {
-    withTable("ddl_test") {
-      sql(
-        s"""CREATE TABLE ddl_test
-           |USING json
-           |AS SELECT 1 AS a, "foo" AS b
-         """.stripMargin
-      )
-
-      checkCreateTable("ddl_test")
-    }
-  }
-
-  test("partitioned data source table") {
-    withTable("ddl_test") {
-      sql(
-        s"""CREATE TABLE ddl_test
-           |USING json
-           |PARTITIONED BY (b)
-           |AS SELECT 1 AS a, "foo" AS b
-         """.stripMargin
-      )
-
-      checkCreateTable("ddl_test")
-    }
-  }
-
-  test("bucketed data source table") {
-    withTable("ddl_test") {
-      sql(
-        s"""CREATE TABLE ddl_test
-           |USING json
-           |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
-           |AS SELECT 1 AS a, "foo" AS b
-         """.stripMargin
-      )
-
-      checkCreateTable("ddl_test")
-    }
-  }
-
-  test("partitioned bucketed data source table") {
-    withTable("ddl_test") {
-      sql(
-        s"""CREATE TABLE ddl_test
-           |USING json
-           |PARTITIONED BY (c)
-           |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
-           |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
-         """.stripMargin
-      )
-
-      checkCreateTable("ddl_test")
-    }
-  }
-
-  test("data source table using Dataset API") {
-    withTable("ddl_test") {
-      spark
-        .range(3)
-        .select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd, 'id as 'e)
-        .write
-        .mode("overwrite")
-        .partitionBy("a", "b")
-        .bucketBy(2, "c", "d")
-        .saveAsTable("ddl_test")
-
-      checkCreateTable("ddl_test")
-    }
-  }
+class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
 
   test("simple hive table") {
     withTable("t1") {
@@ -233,20 +135,6 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     }
   }
 
-  test("hive view") {
-    withView("v1") {
-      sql("CREATE VIEW v1 AS SELECT 1 AS a")
-      checkCreateView("v1")
-    }
-  }
-
-  test("hive view with output columns") {
-    withView("v1") {
-      sql("CREATE VIEW v1 (b) AS SELECT 1 AS a")
-      checkCreateView("v1")
-    }
-  }
-
   test("hive bucketing is supported") {
     withTable("t1") {
       sql(
@@ -288,7 +176,7 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     }
   }
 
-  test("SPARK-24911: keep quotes for nested fields") {
+  test("SPARK-24911: keep quotes for nested fields in hive") {
     withTable("t1") {
       val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>)"
       sql(createTable)
@@ -306,55 +194,5 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
   private def createRawHiveTable(ddl: String): Unit = {
     hiveContext.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
       .client.runSqlHive(ddl)
-  }
-
-  private def checkCreateTable(table: String): Unit = {
-    checkCreateTableOrView(TableIdentifier(table, Some("default")), "TABLE")
-  }
-
-  private def checkCreateView(table: String): Unit = {
-    checkCreateTableOrView(TableIdentifier(table, Some("default")), "VIEW")
-  }
-
-  private def checkCreateTableOrView(table: TableIdentifier, checkType: String): Unit = {
-    val db = table.database.getOrElse("default")
-    val expected = spark.sharedState.externalCatalog.getTable(db, table.table)
-    val shownDDL = sql(s"SHOW CREATE TABLE ${table.quotedString}").head().getString(0)
-    sql(s"DROP $checkType ${table.quotedString}")
-
-    try {
-      sql(shownDDL)
-      val actual = spark.sharedState.externalCatalog.getTable(db, table.table)
-      checkCatalogTables(expected, actual)
-    } finally {
-      sql(s"DROP $checkType IF EXISTS ${table.table}")
-    }
-  }
-
-  private def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
-    def normalize(table: CatalogTable): CatalogTable = {
-      val nondeterministicProps = Set(
-        "CreateTime",
-        "transient_lastDdlTime",
-        "grantTime",
-        "lastUpdateTime",
-        "last_modified_by",
-        "last_modified_time",
-        "Owner:",
-        // The following are hive specific schema parameters which we do not need to match exactly.
-        "totalNumberFiles",
-        "maxFileSize",
-        "minFileSize"
-      )
-
-      table.copy(
-        createTime = 0L,
-        lastAccessTime = 0L,
-        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
-        stats = None,
-        ignoredProperties = Map.empty
-      )
-    }
-    assert(normalize(actual) == normalize(expected))
   }
 }
