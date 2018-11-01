@@ -59,6 +59,21 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
   }
 
+  test("schema_of_csv - infers schemas") {
+    checkAnswer(
+      spark.range(1).select(schema_of_csv(lit("0.1,1"))),
+      Seq(Row("struct<_c0:double,_c1:int>")))
+    checkAnswer(
+      spark.range(1).select(schema_of_csv("0.1,1")),
+      Seq(Row("struct<_c0:double,_c1:int>")))
+  }
+
+  test("schema_of_csv - infers schemas using options") {
+    val df = spark.range(1)
+      .select(schema_of_csv(lit("0.1 1"), Map("sep" -> " ").asJava))
+    checkAnswer(df, Seq(Row("struct<_c0:double,_c1:int>")))
+  }
+
   test("to_csv - struct") {
     val df = Seq(Tuple1(Tuple1(1))).toDF("a")
 

@@ -156,6 +156,16 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     assert(exception.getMessage.contains("from_csv() doesn't support the DROPMALFORMED mode"))
   }
 
+  test("infer schema of CSV strings") {
+    checkEvaluation(new SchemaOfCsv(Literal.create("1,abc")), "struct<_c0:int,_c1:string>")
+  }
+
+  test("infer schema of CSV strings by using options") {
+    checkEvaluation(
+      new SchemaOfCsv(Literal.create("1|abc"), Map("delimiter" -> "|")),
+      "struct<_c0:int,_c1:string>")
+  }
+
   test("to_csv - struct") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), schema)

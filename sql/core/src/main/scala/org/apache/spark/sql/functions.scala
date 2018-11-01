@@ -3871,6 +3871,41 @@ object functions {
   }
 
   /**
+   * Parses a CSV string and infers its schema in DDL format.
+   *
+   * @param csv a CSV string.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def schema_of_csv(csv: String): Column = schema_of_csv(lit(csv))
+
+  /**
+   * Parses a CSV string and infers its schema in DDL format.
+   *
+   * @param csv a string literal containing a CSV string.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def schema_of_csv(csv: Column): Column = withExpr(new SchemaOfCsv(csv.expr))
+
+  /**
+   * Parses a CSV string and infers its schema in DDL format using options.
+   *
+   * @param csv a string literal containing a CSV string.
+   * @param options options to control how the CSV is parsed. accepts the same options and the
+   *                json data source. See [[DataFrameReader#csv]].
+   * @return a column with string literal containing schema in DDL format.
+   *
+   * @group collection_funcs
+   * @since 3.0.0
+   */
+  def schema_of_csv(csv: Column, options: java.util.Map[String, String]): Column = {
+    withExpr(SchemaOfCsv(csv.expr, options.asScala.toMap))
+  }
+
+  /**
    * (Scala-specific) Converts a column containing a `StructType` into a CSV string
    * with the specified schema. Throws an exception, in the case of an unsupported type.
    *
