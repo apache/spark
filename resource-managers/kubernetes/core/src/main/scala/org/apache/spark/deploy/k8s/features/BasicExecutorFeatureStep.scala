@@ -58,13 +58,13 @@ private[spark] class BasicExecutorFeatureStep(
       (kubernetesConf.get(MEMORY_OVERHEAD_FACTOR) * executorMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
-  private val executorMemoryTotal = kubernetesConf.get(APP_RESOURCE_TYPE) match {
-    case Some("python") =>
+  private val executorMemoryTotal =
+    if (kubernetesConf.get(APP_RESOURCE_TYPE) == Some("python")) {
       executorMemoryWithOverhead +
         kubernetesConf.get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
-
-    case _ => executorMemoryWithOverhead
-  }
+    } else {
+      executorMemoryWithOverhead
+    }
 
   private val executorCores = kubernetesConf.sparkConf.getInt("spark.executor.cores", 1)
   private val executorCoresRequest =
