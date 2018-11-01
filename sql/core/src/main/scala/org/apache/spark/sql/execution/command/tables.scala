@@ -393,7 +393,7 @@ object LoadDataCommand {
           throw new IllegalArgumentException(e)
       }
     } else {
-      path
+      new Path(pathUri)
     }
   }
 }

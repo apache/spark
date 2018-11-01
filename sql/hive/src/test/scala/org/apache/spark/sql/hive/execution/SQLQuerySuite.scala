@@ -24,7 +24,7 @@ import java.sql.{Date, Timestamp}
 import java.util.{Locale, Set}
 
 import com.google.common.io.Files
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileContext, FileSystem, FsConstants, Path}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.sql._
@@ -1985,6 +1985,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         checkAnswer(sql("SELECT * FROM load_t2"), Seq(Row("1")))
       }
     }
+  }
+
+  test("SPARK-25918: LOAD DATA LOCAL INPATH should handle a relative path") {
+    val localFS = FileContext.getLocalFSFileContext()
+    val r = LoadDataCommand.makeQualified(
+      FsConstants.LOCAL_FS_URI, localFS.getWorkingDirectory, new Path("kv1.txt"))
+    assert(r === new Path(s"${localFS.getWorkingDirectory}/kv1.txt"))
   }
 
   test("SPARK-25738: defaultFs can have a port") {
