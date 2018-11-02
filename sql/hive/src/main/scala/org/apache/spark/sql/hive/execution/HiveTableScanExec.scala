@@ -181,7 +181,7 @@ case class HiveTableScanExec(
     prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
   }
 
-  private def rddForTable(): RDD[InternalRow] = {
+  private lazy val rddForTable: RDD[InternalRow] = {
     if (!relation.isPartitioned) {
       Utils.withDummyCallSite(sqlContext.sparkContext) {
         hadoopReader.makeRDDForTable(hiveQlTable)
@@ -196,7 +196,7 @@ case class HiveTableScanExec(
   protected override def doExecute(): RDD[InternalRow] = {
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // multiple partitions.
-    val rdd = rddForTable()
+    val rdd = rddForTable
     val numOutputRows = longMetric("numOutputRows")
     // Avoid to serialize MetastoreRelation because schema is lazy. (see SPARK-15649)
     val outputSchema = schema
@@ -221,6 +221,6 @@ case class HiveTableScanExec(
   override def otherCopyArgs: Seq[AnyRef] = Seq(sparkSession)
 
   override def outputPartitioning: Partitioning = {
-    SparkPlan.defaultPartitioning(rddForTable().getNumPartitions)
+    SparkPlan.defaultPartitioning(rddForTable.getNumPartitions)
   }
 }
