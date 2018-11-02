@@ -604,7 +604,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     sparkContext.union(children.map(_.execute()))
 
   override def outputPartitioning: Partitioning = {
-    UnknownPartitioning(children.map(_.outputPartitioning.numPartitions).sum)
+    SparkPlan.defaultPartitioning(children.map(_.outputPartitioning.numPartitions).sum)
   }
 }
 
