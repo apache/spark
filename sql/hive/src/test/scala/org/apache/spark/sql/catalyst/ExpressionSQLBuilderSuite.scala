@@ -141,12 +141,12 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
 
     checkSQL(
       TimeAdd('a, interval),
-      "`a` + interval 1 days"
+      "a + interval 1 days"
     )
 
     checkSQL(
       TimeSub('a, interval),
-      "`a` - interval 1 days"
+      "a - interval 1 days"
     )
   }
 }
