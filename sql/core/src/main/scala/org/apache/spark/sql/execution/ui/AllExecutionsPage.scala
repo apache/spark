@@ -251,8 +251,6 @@ private[ui] class ExecutionPagedTable(
     "table table-bordered table-condensed table-striped " +
       "table-head-clickable table-cell-width-limited"
 
-  override def prevPageSizeFormField: String = s"$executionTag.prevPageSize"
-
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
     parameterPath +

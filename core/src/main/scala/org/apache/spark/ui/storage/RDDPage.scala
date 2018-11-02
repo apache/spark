@@ -230,8 +230,6 @@ private[ui] class BlockPagedTable(
 
   override def pageSizeFormField: String = "block.pageSize"
 
-  override def prevPageSizeFormField: String = "block.prevPageSize"
-
   override def pageNumberFormField: String = "block.page"
 
   override val dataSource: BlockDataSource = new BlockDataSource(

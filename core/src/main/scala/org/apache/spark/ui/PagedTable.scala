@@ -83,8 +83,6 @@ private[spark] trait PagedTable[T] {
 
   def pageSizeFormField: String
 
-  def prevPageSizeFormField: String
-
   def pageNumberFormField: String
 
   def dataSource: PagedDataSource[T]
@@ -192,7 +190,6 @@ private[spark] trait PagedTable[T] {
           .split(search)
           .asScala
           .filterKeys(_ != pageSizeFormField)
-          .filterKeys(_ != prevPageSizeFormField)
           .filterKeys(_ != pageNumberFormField)
           .mapValues(URLDecoder.decode(_, "UTF-8"))
           .map { case (k, v) =>
@@ -210,9 +207,6 @@ private[spark] trait PagedTable[T] {
               action={Unparsed(goButtonFormPath)}
               class="form-inline pull-right"
               style="margin-bottom: 0px;">
-          <input type="hidden"
-                 name={prevPageSizeFormField}
-                 value={pageSize.toString} />
           {hiddenFormFields}
           <label>{totalPages} Pages. Jump to</label>
           <input type="text"

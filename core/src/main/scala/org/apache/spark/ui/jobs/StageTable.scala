@@ -148,8 +148,6 @@ private[ui] class StagePagedTable(
 
   override def pageSizeFormField: String = stageTag + ".pageSize"
 
-  override def prevPageSizeFormField: String = stageTag + ".prevPageSize"
-
   override def pageNumberFormField: String = stageTag + ".page"
 
   val parameterPath = UIUtils.prependBaseUri(request, basePath) + s"/$subPath/?" +

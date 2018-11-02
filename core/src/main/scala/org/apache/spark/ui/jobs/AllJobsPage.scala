@@ -515,8 +515,6 @@ private[ui] class JobPagedTable(
 
   override def pageSizeFormField: String = jobTag + ".pageSize"
 
-  override def prevPageSizeFormField: String = jobTag + ".prevPageSize"
-
   override def pageNumberFormField: String = jobTag + ".page"
 
   override val dataSource = new JobDataSource(

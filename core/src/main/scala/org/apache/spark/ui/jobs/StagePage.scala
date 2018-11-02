@@ -720,8 +720,6 @@ private[ui] class TaskPagedTable(
 
   override def pageSizeFormField: String = "task.pageSize"
 
-  override def prevPageSizeFormField: String = "task.prevPageSize"
-
   override def pageNumberFormField: String = "task.page"
 
   override val dataSource: TaskDataSource = new TaskDataSource(
