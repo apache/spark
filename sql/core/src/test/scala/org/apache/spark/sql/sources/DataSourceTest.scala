@@ -87,3 +87,7 @@ case class SimpleDDLScan(
     }.asInstanceOf[RDD[Row]]
   }
 }
+
+case class FakeRelation(sqlContext: SQLContext) extends BaseRelation {
+  override def schema: StructType = StructType(Seq(StructField("a", StringType)))
+}

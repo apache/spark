@@ -31,9 +31,14 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
+import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
 
 
@@ -55,10 +60,6 @@ class DefaultSource
   extends RelationProvider
   with SchemaRelationProvider
   with CreatableRelationProvider {
-
-  case class FakeRelation(sqlContext: SQLContext) extends BaseRelation {
-    override def schema: StructType = StructType(Seq(StructField("a", StringType)))
-  }
 
   override def createRelation(
       sqlContext: SQLContext,
@@ -95,10 +96,6 @@ class DefaultSource
 class DefaultSourceWithoutUserSpecifiedSchema
   extends RelationProvider
   with CreatableRelationProvider {
-
-  case class FakeRelation(sqlContext: SQLContext) extends BaseRelation {
-    override def schema: StructType = StructType(Seq(StructField("a", StringType)))
-  }
 
   override def createRelation(
       sqlContext: SQLContext,
@@ -904,5 +901,29 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         }
       }
     }
+  }
+
+  test("SPARK-24869 SaveIntoDataSourceCommand's input Dataset does not use cached data") {
+    var numTotalCachedHit = 0
+    val listener = new QueryExecutionListener {
+      override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = {}
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        qe.withCachedData match {
+          case c: SaveIntoDataSourceCommand
+            if c.query.isInstanceOf[InMemoryRelation] =>
+            numTotalCachedHit += 1
+          case _ =>
+        }
+      }
+    }
+    spark.listenerManager.register(listener)
+
+    val udf1 = udf({ (x: Int, y: Int) => x + y })
+    val df = spark.range(0, 3).toDF("a").withColumn("b", udf1(col("a"), lit(10)))
+    df.cache()
+    df.write.format("org.apache.spark.sql.test").save()
+    assert(numTotalCachedHit == 1, "Expected to use cached data")
+
+    spark.listenerManager.unregister(listener)
   }
 }

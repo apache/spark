@@ -41,8 +41,6 @@ case class SaveIntoDataSourceCommand(
     mode: SaveMode,
     outputColumnNames: Seq[String]) extends DataWritingCommand {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
-
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val df = sparkSession.internalCreateDataFrame(child.execute(), outputColumns.toStructType)
     dataSource.createRelation(sparkSession.sqlContext, mode, options, df)

@@ -39,7 +39,10 @@ private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc)
 
   @transient
   override lazy val sessionState: SessionState = {
-    new TestSQLSessionStateBuilder(this, None).build()
+    val ss = new TestSQLSessionStateBuilder(this, None).build()
+    // Add FakeDataSourceStrategy to test FakeRelation, see SPARK-24869 for more details.
+    ss.experimentalMethods.extraStrategies = FakeDataSourceStrategy(ss.conf) :: Nil
+    ss
   }
 
   // Needed for Java tests
