@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StructType
  * An optional mix-in for columnar [[FileFormat]]s. This trait provides some helpful metadata when
  * debugging a physical query plan.
  */
-private[datasources] trait ColumnarFileFormat {
+private[execution] trait ColumnarFileFormat {
   _: FileFormat =>
 
   /** Returns the number of columns required to satisfy the given schema. */
