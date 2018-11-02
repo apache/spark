@@ -92,7 +92,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
-  def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
+  def outputPartitioning: Partitioning
 
   /**
    * Specifies the data distribution requirements of all the children for this operator. By default
@@ -426,6 +426,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 object SparkPlan {
   private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
+
+  def defaultPartitioning(numPartitions: Int): Partitioning = {
+    if (numPartitions == 1) SinglePartition
+    else UnknownPartitioning(numPartitions)
+  }
 }
 
 trait LeafExecNode extends SparkPlan {

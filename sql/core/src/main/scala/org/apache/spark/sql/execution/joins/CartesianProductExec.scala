@@ -22,6 +22,7 @@ import org.apache.spark.rdd.{CartesianPartition, CartesianRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.{BinaryExecNode, ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.CompletionIterator
@@ -66,19 +67,22 @@ case class CartesianProductExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    val numOutputRows = longMetric("numOutputRows")
-
+  private lazy val cartesianRdd = {
     val leftResults = left.execute().asInstanceOf[RDD[UnsafeRow]]
     val rightResults = right.execute().asInstanceOf[RDD[UnsafeRow]]
 
-    val pair = new UnsafeCartesianRDD(
+    new UnsafeCartesianRDD(
       leftResults,
       rightResults,
       right.output.size,
       sqlContext.conf.cartesianProductExecBufferInMemoryThreshold,
       sqlContext.conf.cartesianProductExecBufferSpillThreshold)
-    pair.mapPartitionsWithIndexInternal { (index, iter) =>
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+
+    cartesianRdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {
         val boundCondition = newPredicate(condition.get, left.output ++ right.output)
@@ -96,5 +100,9 @@ case class CartesianProductExec(
         joiner.join(r._1, r._2)
       }
     }
+  }
+
+  override def outputPartitioning: Partitioning = {
+    SparkPlan.defaultPartitioning(cartesianRdd.getNumPartitions)
   }
 }

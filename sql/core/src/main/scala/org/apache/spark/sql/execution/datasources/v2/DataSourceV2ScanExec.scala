@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.DataSourceV2
@@ -54,15 +54,14 @@ case class DataSourceV2ScanExec(
     Seq(output, source, options).hashCode()
   }
 
-  override def outputPartitioning: physical.Partitioning = readSupport match {
-    case _ if partitions.length == 1 =>
-      SinglePartition
+  override def outputPartitioning: physical.Partitioning = (readSupport, partitions.length) match {
+    case (_, 1) => SinglePartition
 
-    case s: SupportsReportPartitioning =>
+    case (s: SupportsReportPartitioning, _) =>
       new DataSourcePartitioning(
         s.outputPartitioning(scanConfig), AttributeMap(output.map(a => a -> a.name)))
 
-    case _ => super.outputPartitioning
+    case (_, numPartitions) => UnknownPartitioning(numPartitions)
   }
 
   private lazy val partitions: Seq[InputPartition] = readSupport.planInputPartitions(scanConfig)

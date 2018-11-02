@@ -21,6 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -36,6 +37,9 @@ case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
 
   override def producedAttributes: AttributeSet = outputSet
   override def children: Seq[SparkPlan] = Nil
+  override def outputPartitioning: Partitioning = {
+    SparkPlan.defaultPartitioning(sparkContext.defaultParallelism)
+  }
 }
 
 object TestStrategy extends Strategy {

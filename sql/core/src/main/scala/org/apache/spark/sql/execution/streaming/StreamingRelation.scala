@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceV2}
@@ -142,6 +143,7 @@ case class StreamingRelationExec(sourceName: String, output: Seq[Attribute]) ext
   override protected def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException("StreamingRelationExec cannot be executed")
   }
+  override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 }
 
 object StreamingExecutionRelation {

@@ -481,4 +481,6 @@ case class CoGroupExec(
       }
     }
   }
+
+  override def outputPartitioning: Partitioning = left.outputPartitioning
 }

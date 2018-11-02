@@ -57,6 +57,8 @@ case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
   protected override def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException()
   }
+
+  override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 }
 
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {

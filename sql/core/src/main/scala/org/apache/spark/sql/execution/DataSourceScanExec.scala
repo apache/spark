@@ -143,6 +143,10 @@ case class RowDataSourceScanExec(
       fullOutput.map(QueryPlan.normalizeExprId(_, fullOutput)),
       rdd = null,
       tableIdentifier = None)
+
+  override def outputPartitioning: Partitioning = {
+    SparkPlan.defaultPartitioning(rdd.getNumPartitions)
+  }
 }
 
 /**

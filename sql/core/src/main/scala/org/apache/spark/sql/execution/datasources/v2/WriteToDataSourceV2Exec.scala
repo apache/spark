@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.util.Utils
@@ -95,6 +96,8 @@ case class WriteToDataSourceV2Exec(writeSupport: BatchWriteSupport, query: Spark
 
     sparkContext.emptyRDD
   }
+
+  override def outputPartitioning: Partitioning = query.outputPartitioning
 }
 
 object DataWritingSparkTask extends Logging {

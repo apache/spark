@@ -122,6 +122,10 @@ case class ExternalRDDScanExec[T](
   override def simpleString: String = {
     s"$nodeName${output.mkString("[", ",", "]")}"
   }
+
+  override def outputPartitioning: Partitioning = {
+    SparkPlan.defaultPartitioning(rdd.getNumPartitions)
+  }
 }
 
 /** Logical plan node for scanning data from an RDD of InternalRow. */

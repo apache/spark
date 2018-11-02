@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -85,6 +86,8 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
+
+  override def outputPartitioning: Partitioning = SinglePartition
 }
 
 /**
@@ -121,6 +124,8 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
+
+  override def outputPartitioning: Partitioning = SinglePartition
 }
 
 /**

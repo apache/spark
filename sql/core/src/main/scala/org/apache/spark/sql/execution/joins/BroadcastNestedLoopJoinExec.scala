@@ -339,10 +339,10 @@ case class BroadcastNestedLoopJoinExec(
     )
   }
 
-  protected override def doExecute(): RDD[InternalRow] = {
+  private lazy val resultRdd = {
     val broadcastedRelation = broadcast.executeBroadcast[Array[InternalRow]]()
 
-    val resultRdd = (joinType, buildSide) match {
+    (joinType, buildSide) match {
       case (_: InnerLike, _) =>
         innerJoin(broadcastedRelation)
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) =>
@@ -364,7 +364,9 @@ case class BroadcastNestedLoopJoinExec(
          */
         defaultJoin(broadcastedRelation)
     }
+  }
 
+  protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     resultRdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val resultProj = genResultProjection
@@ -374,5 +376,9 @@ case class BroadcastNestedLoopJoinExec(
         resultProj(r)
       }
     }
+  }
+
+  override def outputPartitioning: Partitioning = {
+    SparkPlan.defaultPartitioning(resultRdd.getNumPartitions)
   }
 }

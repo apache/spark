@@ -32,6 +32,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -594,6 +595,8 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long, expectedValue2:
       Seq(metrics("dummy2")))
     sc.emptyRDD
   }
+
+  override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 }
 
 
