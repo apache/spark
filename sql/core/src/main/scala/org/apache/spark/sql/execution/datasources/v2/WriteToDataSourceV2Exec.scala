@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.util.Utils
 
@@ -45,9 +45,9 @@ case class WriteToDataSourceV2(writeSupport: BatchWriteSupport, query: LogicalPl
  * The physical plan for writing data into data source v2.
  */
 case class WriteToDataSourceV2Exec(writeSupport: BatchWriteSupport, query: SparkPlan)
-  extends SparkPlan {
+  extends UnaryExecNode {
 
-  override def children: Seq[SparkPlan] = Seq(query)
+  override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
