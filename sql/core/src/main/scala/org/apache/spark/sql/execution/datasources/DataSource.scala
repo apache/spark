@@ -518,7 +518,8 @@ case class DataSource(
 
     providingClass.newInstance() match {
       case dataSource: CreatableRelationProvider =>
-        SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
+        SaveIntoDataSourceCommand(
+          data, dataSource, caseInsensitiveOptions, mode, data.output.map(_.name))
       case format: FileFormat =>
         DataSource.validateSchema(data.schema)
         planForWritingFileFormat(format, mode, data)
