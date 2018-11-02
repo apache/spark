@@ -20,11 +20,13 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 
 import com.google.common.io.Files
+import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
@@ -439,4 +441,11 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
+  test("SPARK-25918: LOAD DATA LOCAL INPATH should handle a relative path") {
+    val localFS = FileContext.getLocalFSFileContext()
+    val workingDir = localFS.getWorkingDirectory
+    val r = LoadDataCommand.makeQualified(
+      FsConstants.LOCAL_FS_URI, workingDir, new Path("kv1.txt"))
+    assert(r === new Path(s"$workingDir/kv1.txt"))
+  }
 }
