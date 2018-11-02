@@ -801,6 +801,8 @@ class SparseVector(Vector):
         """
         If the user has SciPy installed and calls a function not expliticly defined for SparseVectors,
         then the SciPy version of the function will be used (if available in your version of SciPy).
+        
+        This functionality is similar to densevector and is done with manual delegation in _delegate.
         """
 
         # Build a wrapper so that if inputs are sent to the SciPy function,
