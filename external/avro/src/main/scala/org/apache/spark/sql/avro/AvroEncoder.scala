@@ -57,6 +57,7 @@ object AvroEncoder {
   def of[T <: SpecificRecord](avroClass: Class[T]): Encoder[T] = {
     AvroExpressionEncoder.of(avroClass)
   }
+
   /**
    * Provides an Encoder for Avro objects implementing the given schema
    *
@@ -65,6 +66,19 @@ object AvroEncoder {
    * @return an Encoder for the given Avro Schema
    */
   def of[T <: IndexedRecord](avroSchema: Schema): Encoder[T] = {
+    AvroExpressionEncoder.of(avroSchema)
+  }
+
+  /**
+   * Provides an Encoder for Avro objects implementing the given schema
+   *
+   * @param jsonFormatSchema the json string represented Schema of the Avro object
+   *                         for which to generate the Encoder
+   * @tparam T the type of the Avro class that implements the Schema, must implement IndexedRecord
+   * @return an Encoder for the given Avro Schema
+   */
+  def of[T <: IndexedRecord](jsonFormatSchema: String): Encoder[T] = {
+    val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
     AvroExpressionEncoder.of(avroSchema)
   }
 }
