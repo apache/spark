@@ -86,7 +86,6 @@ object JSONBenchmark extends SqlBasedBenchmark {
         spark.read
           .schema(schema)
           .json(path.getAbsolutePath)
-          .filter((_: Row) => true)
           .count()
       }
 
@@ -95,7 +94,6 @@ object JSONBenchmark extends SqlBasedBenchmark {
           .option("encoding", "UTF-8")
           .schema(schema)
           .json(path.getAbsolutePath)
-          .filter((_: Row) => true)
           .count()
       }
 
@@ -128,7 +126,6 @@ object JSONBenchmark extends SqlBasedBenchmark {
         spark.read
           .schema(schema)
           .json(path.getAbsolutePath)
-          .filter((_: Row) => true)
           .count()
       }
 
@@ -137,7 +134,6 @@ object JSONBenchmark extends SqlBasedBenchmark {
           .option("encoding", "UTF-8")
           .schema(schema)
           .json(path.getAbsolutePath)
-          .filter((_: Row) => true)
           .count()
       }
 
