@@ -21,10 +21,11 @@ import java.util.{Timer, TimerTask}
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.status.api.v1.StageData
 
 /**
  * ConsoleProgressBar shows the progress of stages in the next line of the console. It poll the
- * status of active stages from `sc.statusTracker` periodically, the progress bar will be showed
+ * status of active stages from the app state store periodically, the progress bar will be showed
  * up after the stage has ran at least 500ms. If multiple stages run in the same time, the status
  * of them will be combined together, showed in one line.
  */
@@ -64,9 +65,8 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     if (now - lastFinishTime < firstDelayMSec) {
       return
     }
-    val stageIds = sc.statusTracker.getActiveStageIds()
-    val stages = stageIds.flatMap(sc.statusTracker.getStageInfo).filter(_.numTasks() > 1)
-      .filter(now - _.submissionTime() > firstDelayMSec).sortBy(_.stageId())
+    val stages = sc.statusStore.activeStages()
+      .filter { s => now - s.submissionTime.get.getTime() > firstDelayMSec }
     if (stages.length > 0) {
       show(now, stages.take(3))  // display at most 3 stages in same time
     }
@@ -77,15 +77,15 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    * after your last output, keeps overwriting itself to hold in one line. The logging will follow
    * the progress bar, then progress bar will be showed in next line without overwrite logs.
    */
-  private def show(now: Long, stages: Seq[SparkStageInfo]) {
+  private def show(now: Long, stages: Seq[StageData]) {
     val width = TerminalWidth / stages.size
     val bar = stages.map { s =>
-      val total = s.numTasks()
-      val header = s"[Stage ${s.stageId()}:"
-      val tailer = s"(${s.numCompletedTasks()} + ${s.numActiveTasks()}) / $total]"
+      val total = s.numTasks
+      val header = s"[Stage ${s.stageId}:"
+      val tailer = s"(${s.numCompleteTasks} + ${s.numActiveTasks}) / $total]"
       val w = width - header.length - tailer.length
       val bar = if (w > 0) {
-        val percent = w * s.numCompletedTasks() / total
+        val percent = w * s.numCompleteTasks / total
         (0 until w).map { i =>
           if (i < percent) "=" else if (i == percent) ">" else " "
         }.mkString("")

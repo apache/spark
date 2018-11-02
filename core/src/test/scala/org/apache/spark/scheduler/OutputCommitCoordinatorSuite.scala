@@ -18,12 +18,14 @@
 package org.apache.spark.scheduler
 
 import java.io.File
+import java.util.Date
 import java.util.concurrent.TimeoutException
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.apache.hadoop.mapred.{JobConf, OutputCommitter, TaskAttemptContext, TaskAttemptID}
+import org.apache.hadoop.mapred._
+import org.apache.hadoop.mapreduce.TaskType
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -31,7 +33,9 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapRedCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -112,7 +116,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
               locality: TaskLocality.Value): Option[(Int, TaskLocality.Value)] = {
             if (!hasDequeuedSpeculatedTask) {
               hasDequeuedSpeculatedTask = true
-              Some(0, TaskLocality.PROCESS_LOCAL)
+              Some((0, TaskLocality.PROCESS_LOCAL))
             } else {
               None
             }
@@ -150,7 +154,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("Job should not complete if all commits are denied") {
     // Create a mock OutputCommitCoordinator that denies all attempts to commit
     doReturn(false).when(outputCommitCoordinator).handleAskPermissionToCommit(
-      Matchers.any(), Matchers.any(), Matchers.any())
+      Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any())
     val rdd: RDD[Int] = sc.parallelize(Seq(1), 1)
     def resultHandler(x: Int, y: Unit): Unit = {}
     val futureAction: SimpleFutureAction[Unit] = sc.submitJob[Int, Unit, Unit](rdd,
@@ -158,37 +162,114 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       0 until rdd.partitions.size, resultHandler, () => Unit)
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
-    val e = intercept[SparkException] {
+    intercept[TimeoutException] {
       ThreadUtils.awaitResult(futureAction, 5 seconds)
     }
-    assert(e.getCause.isInstanceOf[TimeoutException])
     assert(tempDir.list().size === 0)
   }
 
   test("Only authorized committer failures can clear the authorized committer lock (SPARK-6614)") {
     val stage: Int = 1
+    val stageAttempt: Int = 1
     val partition: Int = 2
     val authorizedCommitter: Int = 3
     val nonAuthorizedCommitter: Int = 100
     outputCommitCoordinator.stageStart(stage, maxPartitionId = 2)
 
-    assert(outputCommitCoordinator.canCommit(stage, partition, authorizedCommitter))
-    assert(!outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter))
+    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition, authorizedCommitter))
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter))
     // The non-authorized committer fails
-    outputCommitCoordinator.taskCompleted(
-      stage, partition, attemptNumber = nonAuthorizedCommitter, reason = TaskKilled)
+    outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
+      attemptNumber = nonAuthorizedCommitter, reason = TaskKilled("test"))
     // New tasks should still not be able to commit because the authorized committer has not failed
-    assert(
-      !outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 1))
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter + 1))
     // The authorized committer now fails, clearing the lock
-    outputCommitCoordinator.taskCompleted(
-      stage, partition, attemptNumber = authorizedCommitter, reason = TaskKilled)
+    outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
+      attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
     // A new task should now be allowed to become the authorized committer
-    assert(
-      outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 2))
+    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter + 2))
     // There can only be one authorized committer
-    assert(
-      !outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 3))
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
+      nonAuthorizedCommitter + 3))
+  }
+
+  test("SPARK-19631: Do not allow failed attempts to be authorized for committing") {
+    val stage: Int = 1
+    val stageAttempt: Int = 1
+    val partition: Int = 1
+    val failedAttempt: Int = 0
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
+      attemptNumber = failedAttempt,
+      reason = ExecutorLostFailure("0", exitCausedByApp = true, None))
+    assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition, failedAttempt))
+    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition, failedAttempt + 1))
+  }
+
+  test("SPARK-24589: Differentiate tasks from different stage attempts") {
+    var stage = 1
+    val taskAttempt = 1
+    val partition = 1
+
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    assert(outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
+    assert(!outputCommitCoordinator.canCommit(stage, 2, partition, taskAttempt))
+
+    // Fail the task in the first attempt, the task in the second attempt should succeed.
+    stage += 1
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    outputCommitCoordinator.taskCompleted(stage, 1, partition, taskAttempt,
+      ExecutorLostFailure("0", exitCausedByApp = true, None))
+    assert(!outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
+    assert(outputCommitCoordinator.canCommit(stage, 2, partition, taskAttempt))
+
+    // Commit the 1st attempt, fail the 2nd attempt, make sure 3rd attempt cannot commit,
+    // then fail the 1st attempt and make sure the 4th one can commit again.
+    stage += 1
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
+    assert(outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
+    outputCommitCoordinator.taskCompleted(stage, 2, partition, taskAttempt,
+      ExecutorLostFailure("0", exitCausedByApp = true, None))
+    assert(!outputCommitCoordinator.canCommit(stage, 3, partition, taskAttempt))
+    outputCommitCoordinator.taskCompleted(stage, 1, partition, taskAttempt,
+      ExecutorLostFailure("0", exitCausedByApp = true, None))
+    assert(outputCommitCoordinator.canCommit(stage, 4, partition, taskAttempt))
+  }
+
+  test("SPARK-24589: Make sure stage state is cleaned up") {
+    // Normal application without stage failures.
+    sc.parallelize(1 to 100, 100)
+      .map { i => (i % 10, i) }
+      .reduceByKey(_ + _)
+      .collect()
+
+    assert(sc.dagScheduler.outputCommitCoordinator.isEmpty)
+
+    // Force failures in a few tasks so that a stage is retried. Collect the ID of the failing
+    // stage so that we can check the state of the output committer.
+    val retriedStage = sc.parallelize(1 to 100, 10)
+      .map { i => (i % 10, i) }
+      .reduceByKey { case (_, _) =>
+        val ctx = TaskContext.get()
+        if (ctx.stageAttemptNumber() == 0) {
+          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 1, 1, 1,
+            new Exception("Failure for test."))
+        } else {
+          ctx.stageId()
+        }
+      }
+      .collect()
+      .map { case (k, v) => v }
+      .toSet
+
+    assert(retriedStage.size === 1)
+    assert(sc.dagScheduler.outputCommitCoordinator.isEmpty)
+    verify(sc.env.outputCommitCoordinator, times(2))
+      .stageStart(Matchers.eq(retriedStage.head), Matchers.any())
+    verify(sc.env.outputCommitCoordinator).stageEnd(Matchers.eq(retriedStage.head))
   }
 }
 
@@ -196,6 +277,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
  * Class with methods that can be passed to runJob to test commits with a mock committer.
  */
 private case class OutputCommitFunctions(tempDirPath: String) {
+
+  private val jobId = new SerializableWritable(SparkHadoopWriterUtils.createJobID(new Date, 0))
 
   // Mock output committer that simulates a successful commit (after commit is authorized)
   private def successfulOutputCommitter = new FakeOutputCommitter {
@@ -229,14 +312,22 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     def jobConf = new JobConf {
       override def getOutputCommitter(): OutputCommitter = outputCommitter
     }
-    val sparkHadoopWriter = new SparkHadoopWriter(jobConf) {
-      override def newTaskAttemptContext(
-        conf: JobConf,
-        attemptId: TaskAttemptID): TaskAttemptContext = {
-        mock(classOf[TaskAttemptContext])
-      }
-    }
-    sparkHadoopWriter.setup(ctx.stageId, ctx.partitionId, ctx.attemptNumber)
-    sparkHadoopWriter.commit()
+
+    // Instantiate committer.
+    val committer = FileCommitProtocol.instantiate(
+      className = classOf[HadoopMapRedCommitProtocol].getName,
+      jobId = jobId.value.getId.toString,
+      outputPath = jobConf.get("mapred.output.dir"))
+
+    // Create TaskAttemptContext.
+    // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
+    // around by taking a mod. We expect that no task will be attempted 2 billion times.
+    val taskAttemptId = (ctx.taskAttemptId % Int.MaxValue).toInt
+    val attemptId = new TaskAttemptID(
+      new TaskID(jobId.value, TaskType.MAP, ctx.partitionId), taskAttemptId)
+    val taskContext = new TaskAttemptContextImpl(jobConf, attemptId)
+
+    committer.setupTask(taskContext)
+    committer.commitTask(taskContext)
   }
 }

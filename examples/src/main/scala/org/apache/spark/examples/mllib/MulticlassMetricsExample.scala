@@ -90,6 +90,8 @@ object MulticlassMetricsExample {
     println(s"Weighted F1 score: ${metrics.weightedFMeasure}")
     println(s"Weighted false positive rate: ${metrics.weightedFalsePositiveRate}")
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

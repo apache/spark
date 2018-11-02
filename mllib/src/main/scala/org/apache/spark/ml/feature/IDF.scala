@@ -44,7 +44,8 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
    * @group param
    */
   final val minDocFreq = new IntParam(
-    this, "minDocFreq", "minimum number of documents in which a term should appear for filtering")
+    this, "minDocFreq", "minimum number of documents in which a term should appear for filtering" +
+      " (>= 0)", ParamValidators.gtEq(0))
 
   setDefault(minDocFreq -> 0)
 
@@ -181,7 +182,7 @@ object IDFModel extends MLReadable[IDFModel] {
         .select("idf")
         .head()
       val model = new IDFModel(metadata.uid, new feature.IDFModel(OldVectors.fromML(idf)))
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

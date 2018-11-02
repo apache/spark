@@ -58,24 +58,16 @@ public class JavaReceiverAPISuite implements Serializable {
     TestServer server = new TestServer(0);
     server.start();
 
-    final AtomicLong dataCounter = new AtomicLong(0);
+    AtomicLong dataCounter = new AtomicLong(0);
 
     try {
       JavaStreamingContext ssc = new JavaStreamingContext("local[2]", "test", new Duration(200));
       JavaReceiverInputDStream<String> input =
         ssc.receiverStream(new JavaSocketReceiver("localhost", server.port()));
-      JavaDStream<String> mapped = input.map(new Function<String, String>() {
-        @Override
-        public String call(String v1) {
-          return v1 + ".";
-        }
-      });
-      mapped.foreachRDD(new VoidFunction<JavaRDD<String>>() {
-        @Override
-        public void call(JavaRDD<String> rdd) {
-          long count = rdd.count();
-          dataCounter.addAndGet(count);
-        }
+      JavaDStream<String> mapped = input.map((Function<String, String>) v1 -> v1 + ".");
+      mapped.foreachRDD((VoidFunction<JavaRDD<String>>) rdd -> {
+        long count = rdd.count();
+        dataCounter.addAndGet(count);
       });
 
       ssc.start();
@@ -110,11 +102,7 @@ public class JavaReceiverAPISuite implements Serializable {
 
     @Override
     public void onStart() {
-      new Thread()  {
-        @Override public void run() {
-          receive();
-        }
-      }.start();
+      new Thread(this::receive).start();
     }
 
     @Override

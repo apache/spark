@@ -20,12 +20,18 @@ package org.apache.spark.sql.catalyst.expressions
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.{IntegerType, LongType}
 
 class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("random") {
     checkDoubleEvaluation(Rand(30), 0.31429268272540556 +- 0.001)
     checkDoubleEvaluation(Randn(30), -0.4798519469521663 +- 0.001)
+
+    checkDoubleEvaluation(
+      new Rand(Literal.create(null, LongType)), 0.8446490682263027 +- 0.001)
+    checkDoubleEvaluation(
+      new Randn(Literal.create(null, IntegerType)), 1.1164209726833079 +- 0.001)
   }
 
   test("SPARK-9127 codegen with long seed") {

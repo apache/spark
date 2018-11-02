@@ -9,7 +9,7 @@ SELECT * FROM T1;
 SELECT * FROM T2;
 
 set hive.auto.convert.join=false;
-set mapred.reduce.tasks=2;
+set mapreduce.job.reduces=2;
 
 set hive.join.emit.interval=100;
 

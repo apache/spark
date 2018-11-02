@@ -780,7 +780,7 @@ setMethod("cogroup",
 #' @noRd
 setMethod("sortByKey",
           signature(x = "RDD"),
-          function(x, ascending = TRUE, numPartitions = SparkR:::getNumPartitions(x)) {
+          function(x, ascending = TRUE, numPartitions = SparkR:::getNumPartitionsRDD(x)) {
             rangeBounds <- list()
 
             if (numPartitions > 1) {
@@ -850,7 +850,7 @@ setMethod("sortByKey",
 #' @noRd
 setMethod("subtractByKey",
           signature(x = "RDD", other = "RDD"),
-          function(x, other, numPartitions = SparkR:::getNumPartitions(x)) {
+          function(x, other, numPartitions = SparkR:::getNumPartitionsRDD(x)) {
             filterFunction <- function(elem) {
               iters <- elem[[2]]
               (length(iters[[1]]) > 0) && (length(iters[[2]]) == 0)
@@ -860,7 +860,7 @@ setMethod("subtractByKey",
                                             other,
                                             numPartitions = numPartitions),
                                     filterFunction),
-                          function (v) { v[[1]] })
+                          function(v) { v[[1]] })
           })
 
 #' Return a subset of this RDD sampled by key.
@@ -925,7 +925,7 @@ setMethod("sampleByKey",
                   if (withReplacement) {
                     count <- stats::rpois(1, frac)
                     if (count > 0) {
-                      res[ (len + 1) : (len + count) ] <- rep(list(elem), count)
+                      res[(len + 1) : (len + count)] <- rep(list(elem), count)
                       len <- len + count
                     }
                   } else {

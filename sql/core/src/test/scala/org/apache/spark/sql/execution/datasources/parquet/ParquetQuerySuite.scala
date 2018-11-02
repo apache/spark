@@ -18,14 +18,17 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.sql.Timestamp
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
+import org.apache.spark.{DebugFilesystem, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -75,8 +78,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val df = spark.read.parquet(path).cache()
       assert(df.count() == 1000)
       spark.range(10).write.mode("overwrite").parquet(path)
-      assert(df.count() == 1000)
-      spark.catalog.refreshByPath(path)
       assert(df.count() == 10)
       assert(spark.read.parquet(path).count() == 10)
     }
@@ -89,8 +90,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val df = spark.read.parquet(path).cache()
       assert(df.count() == 1000)
       spark.range(10).write.mode("append").parquet(path)
-      assert(df.count() == 1000)
-      spark.catalog.refreshByPath(path)
       assert(df.count() == 1010)
       assert(spark.read.parquet(path).count() == 1010)
     }
@@ -109,7 +108,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val queryOutput = selfJoin.queryExecution.analyzed.output
 
       assertResult(4, "Field count mismatches")(queryOutput.size)
-      assertResult(2, "Duplicated expression ID in query plan:\n $selfJoin") {
+      assertResult(2, s"Duplicated expression ID in query plan:\n $selfJoin") {
         queryOutput.filter(_.name == "_1").map(_.exprId).size
       }
 
@@ -118,7 +117,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("nested data - struct with array field") {
-    val data = (1 to 10).map(i => Tuple1((i, Seq("val_$i"))))
+    val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
     withParquetTable(data, "t") {
       checkAnswer(sql("SELECT _1._2[0] FROM t"), data.map {
         case Tuple1((_, Seq(string))) => Row(string)
@@ -127,7 +126,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("nested data - array of struct") {
-    val data = (1 to 10).map(i => Tuple1(Seq(i -> "val_$i")))
+    val data = (1 to 10).map(i => Tuple1(Seq(i -> s"val_$i")))
     withParquetTable(data, "t") {
       checkAnswer(sql("SELECT _1[0]._2 FROM t"), data.map {
         case Tuple1(Seq((_, string))) => Row(string)
@@ -164,6 +163,100 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
+  test("SPARK-10634 timestamp written and read as INT64 - TIMESTAMP_MILLIS") {
+    val data = (1 to 10).map(i => Row(i, new java.sql.Timestamp(i)))
+    val schema = StructType(List(StructField("d", IntegerType, false),
+      StructField("time", TimestampType, false)).toArray)
+    withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.parquet(file.getCanonicalPath)
+        ("true" :: "false" :: Nil).foreach { vectorized =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            val df2 = spark.read.parquet(file.getCanonicalPath)
+            checkAnswer(df2, df.collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-10634 timestamp written and read as INT64 - truncation") {
+    withTable("ts") {
+      sql("create table ts (c1 int, c2 timestamp) using parquet")
+      sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
+      sql("insert into ts values (2, null)")
+      sql("insert into ts values (3, '1965-01-01 10:11:12.123456')")
+      checkAnswer(
+        sql("select * from ts"),
+        Seq(
+          Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123456")),
+          Row(2, null),
+          Row(3, Timestamp.valueOf("1965-01-01 10:11:12.123456"))))
+    }
+
+    // The microsecond portion is truncated when written as TIMESTAMP_MILLIS.
+    withTable("ts") {
+      withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
+        sql("create table ts (c1 int, c2 timestamp) using parquet")
+        sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
+        sql("insert into ts values (2, null)")
+        sql("insert into ts values (3, '1965-01-01 10:11:12.125456')")
+        sql("insert into ts values (4, '1965-01-01 10:11:12.125')")
+        sql("insert into ts values (5, '1965-01-01 10:11:12.1')")
+        sql("insert into ts values (6, '1965-01-01 10:11:12.123456789')")
+        sql("insert into ts values (7, '0001-01-01 00:00:00.000000')")
+        checkAnswer(
+          sql("select * from ts"),
+          Seq(
+            Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
+            Row(2, null),
+            Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+            Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+            Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
+            Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
+            Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+
+        // Read timestamps that were encoded as TIMESTAMP_MILLIS annotated as INT64
+        // with PARQUET_INT64_AS_TIMESTAMP_MILLIS set to false.
+        withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "false") {
+          checkAnswer(
+            sql("select * from ts"),
+            Seq(
+              Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
+              Row(2, null),
+              Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+              Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+              Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
+              Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
+              Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-10365 timestamp written and read as INT64 - TIMESTAMP_MICROS") {
+    val data = (1 to 10).map { i =>
+      val ts = new java.sql.Timestamp(i)
+      ts.setNanos(2000)
+      Row(i, ts)
+    }
+    val schema = StructType(List(StructField("d", IntegerType, false),
+      StructField("time", TimestampType, false)).toArray)
+    withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.parquet(file.getCanonicalPath)
+        ("true" :: "false" :: Nil).foreach { vectorized =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            val df2 = spark.read.parquet(file.getCanonicalPath)
+            checkAnswer(df2, df.collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
   test("Enabling/disabling merging partfiles when merging parquet schema") {
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
@@ -178,14 +271,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
 
     withSQLConf(
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
-      ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true"
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL"
     ) {
       testSchemaMerging(2)
     }
 
     withSQLConf(
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName,
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false"
     ) {
@@ -209,6 +306,85 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
     withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "false") {
       testSchemaMerging(2)
+    }
+  }
+
+  test("Enabling/disabling ignoreCorruptFiles") {
+    def testIgnoreCorruptFiles(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.parquet(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(df, Seq(Row(0), Row(1)))
+      }
+    }
+
+    def testIgnoreCorruptFilesWithoutSchemaInfer(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.schema("a long").parquet(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(df, Seq(Row(0), Row(1)))
+      }
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+      testIgnoreCorruptFiles()
+      testIgnoreCorruptFilesWithoutSchemaInfer()
+    }
+
+    withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+      val exception = intercept[SparkException] {
+        testIgnoreCorruptFiles()
+      }
+      assert(exception.getMessage().contains("is not a Parquet file"))
+      val exception2 = intercept[SparkException] {
+        testIgnoreCorruptFilesWithoutSchemaInfer()
+      }
+      assert(exception2.getMessage().contains("is not a Parquet file"))
+    }
+  }
+
+  /**
+   * this is part of test 'Enabling/disabling ignoreCorruptFiles' but run in a loop
+   * to increase the chance of failure
+    */
+  ignore("SPARK-20407 ParquetQuerySuite 'Enabling/disabling ignoreCorruptFiles' flaky test") {
+    def testIgnoreCorruptFiles(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.parquet(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(
+          df,
+          Seq(Row(0), Row(1)))
+      }
+    }
+
+    for (i <- 1 to 100) {
+      DebugFilesystem.clearOpenStreams()
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val exception = intercept[SparkException] {
+          testIgnoreCorruptFiles()
+        }
+        assert(exception.getMessage().contains("is not a Parquet file"))
+      }
+      DebugFilesystem.assertNoOpenStreams()
     }
   }
 
@@ -643,7 +819,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val path = dir.getCanonicalPath
       spark.range(3).write.parquet(path)
 
-      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
+      val fs = FileSystem.get(spark.sessionState.newHadoopConf())
       val files = fs.listFiles(new Path(path), true)
 
       while (files.hasNext) {
@@ -700,6 +876,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
         val withShortField = new StructType().add("f", ShortType)
         checkAnswer(spark.read.schema(withShortField).parquet(path), Row(1: Short))
+      }
+    }
+  }
+
+  test("SPARK-24230: filter row group using dictionary") {
+    withSQLConf(("parquet.filter.dictionary.enabled", "true")) {
+      // create a table with values from 0, 2, ..., 18 that will be dictionary-encoded
+      withParquetTable((0 until 100).map(i => ((i * 2) % 20, s"data-$i")), "t") {
+        // search for a key that is not present so the dictionary filter eliminates all row groups
+        // Fails without SPARK-24230:
+        //   java.io.IOException: expecting more rows but reached last block. Read 0 out of 50
+        checkAnswer(sql("SELECT _2 FROM t WHERE t._1 = 5"), Seq.empty)
       }
     }
   }

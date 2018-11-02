@@ -64,7 +64,7 @@ class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   private def computeLoss(input: BDM[Double], target: BDM[Double], model: TopologyModel): Double = {
-    val outputs = model.forward(input)
+    val outputs = model.forward(input, true)
     model.layerModels.last match {
       case layerWithLoss: LossFunction =>
         layerWithLoss.loss(outputs.last, target, new BDM[Double](target.rows, target.cols))

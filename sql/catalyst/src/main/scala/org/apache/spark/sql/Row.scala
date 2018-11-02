@@ -48,7 +48,7 @@ object Row {
   def apply(values: Any*): Row = new GenericRow(values.toArray)
 
   /**
-   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
+   * This method can be used to construct a [[Row]] from a `Seq` of values.
    */
   def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
 
@@ -74,7 +74,7 @@ object Row {
  * It is invalid to use the native primitive interface to retrieve a value that is null, instead a
  * user must check `isNullAt` before attempting to retrieve a value that might be null.
  *
- * To create a new Row, use [[RowFactory.create()]] in Java or [[Row.apply()]] in Scala.
+ * To create a new Row, use `RowFactory.create()` in Java or `Row.apply()` in Scala.
  *
  * A [[Row]] object can be constructed by providing field values. Example:
  * {{{
@@ -283,7 +283,7 @@ trait Row extends Serializable {
   def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
 
   /**
-   * Returns the value at position i of array type as [[java.util.List]].
+   * Returns the value at position i of array type as `java.util.List`.
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -298,7 +298,7 @@ trait Row extends Serializable {
   def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
-   * Returns the value at position i of array type as a [[java.util.Map]].
+   * Returns the value at position i of array type as a `java.util.Map`.
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -343,7 +343,7 @@ trait Row extends Serializable {
   }
 
   /**
-   * Returns a Map(name -> value) for the requested fieldNames
+   * Returns a Map consisting of names and values for the requested fieldNames
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * ie. 0 for Int - use isNullAt to ensure that value is not null
    *

@@ -21,16 +21,14 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
-import scala.Tuple2;
-
 import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.ml.linalg.Vectors;
+import org.apache.spark.mllib.linalg.DenseVector;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 import org.apache.spark.sql.Dataset;
@@ -69,35 +67,22 @@ public class JavaPCASuite extends SharedSparkSession {
     JavaRDD<Vector> dataRDD = jsc.parallelize(points, 2);
 
     RowMatrix mat = new RowMatrix(dataRDD.map(
-            new Function<Vector, org.apache.spark.mllib.linalg.Vector>() {
-              public org.apache.spark.mllib.linalg.Vector call(Vector vector) {
-                return new org.apache.spark.mllib.linalg.DenseVector(vector.toArray());
-              }
-            }
+        (Vector vector) -> (org.apache.spark.mllib.linalg.Vector) new DenseVector(vector.toArray())
     ).rdd());
 
     Matrix pc = mat.computePrincipalComponents(3);
 
     mat.multiply(pc).rows().toJavaRDD();
 
-    JavaRDD<Vector> expected = mat.multiply(pc).rows().toJavaRDD().map(
-      new Function<org.apache.spark.mllib.linalg.Vector, Vector>() {
-        public Vector call(org.apache.spark.mllib.linalg.Vector vector) {
-          return vector.asML();
-        }
-      }
-    );
+    JavaRDD<Vector> expected = mat.multiply(pc).rows().toJavaRDD()
+        .map(org.apache.spark.mllib.linalg.Vector::asML);
 
-    JavaRDD<VectorPair> featuresExpected = dataRDD.zip(expected).map(
-      new Function<Tuple2<Vector, Vector>, VectorPair>() {
-        public VectorPair call(Tuple2<Vector, Vector> pair) {
-          VectorPair featuresExpected = new VectorPair();
-          featuresExpected.setFeatures(pair._1());
-          featuresExpected.setExpected(pair._2());
-          return featuresExpected;
-        }
-      }
-    );
+    JavaRDD<VectorPair> featuresExpected = dataRDD.zip(expected).map(pair -> {
+      VectorPair featuresExpected1 = new VectorPair();
+      featuresExpected1.setFeatures(pair._1());
+      featuresExpected1.setExpected(pair._2());
+      return featuresExpected1;
+    });
 
     Dataset<Row> df = spark.createDataFrame(featuresExpected, VectorPair.class);
     PCAModel pca = new PCA()

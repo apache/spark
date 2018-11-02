@@ -24,13 +24,11 @@ variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
 called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 The implementation in `spark.mllib` has the following parameters:
 
-* *k* is the number of desired clusters.
+* *k* is the number of desired clusters. Note that it is possible for fewer than k clusters to be returned, for example, if there are fewer than k distinct points to cluster.
 * *maxIterations* is the maximum number of iterations to run.
 * *initializationMode* specifies either random initialization or
 initialization via k-means\|\|.
-* *runs* is the number of times to run the k-means algorithm (k-means is not
-guaranteed to find a globally optimal solution, and when run multiple times on
-a given dataset, the algorithm returns the best clustering result).
+* *runs* This param has no effect since Spark 2.0.0.
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged.
 * *initialModel* is an optional set of cluster centers used for initialization. If this parameter is supplied, only one run is performed.
@@ -44,7 +42,7 @@ The following code snippets can be executed in `spark-shell`.
 In the following example after loading and parsing data, we use the
 [`KMeans`](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) object to cluster the data
 into two clusters. The number of desired clusters is passed to the algorithm. We then compute Within
-Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In fact the
+Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In fact, the
 optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
 Refer to the [`KMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) and [`KMeansModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.KMeansModel) for details on the API.
@@ -136,7 +134,7 @@ Refer to the [`GaussianMixture` Python docs](api/python/pyspark.mllib.html#pyspa
 
 Power iteration clustering (PIC) is a scalable and efficient algorithm for clustering vertices of a
 graph given pairwise similarities as edge properties,
-described in [Lin and Cohen, Power Iteration Clustering](http://www.icml2010.org/papers/387.pdf).
+described in [Lin and Cohen, Power Iteration Clustering](http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf).
 It computes a pseudo-eigenvector of the normalized affinity matrix of the graph via
 [power iteration](http://en.wikipedia.org/wiki/Power_iteration)  and uses it to cluster vertices.
 `spark.mllib` includes an implementation of PIC using GraphX as its backend.

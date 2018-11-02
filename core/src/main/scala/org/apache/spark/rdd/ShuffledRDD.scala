@@ -25,10 +25,6 @@ import org.apache.spark.serializer.Serializer
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
   override val index: Int = idx
-
-  override def hashCode(): Int = index
-
-  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**
@@ -114,4 +110,6 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     super.clearDependencies()
     prev = null
   }
+
+  private[spark] override def isBarrier(): Boolean = false
 }

@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import scala.collection.immutable.HashMap
+import scala.collection.immutable.{HashMap, TreeMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 
 object PivotFirst {
@@ -77,15 +77,18 @@ case class PivotFirst(
 
   override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
 
-  override lazy val inputTypes: Seq[AbstractDataType] = children.map(_.dataType)
-
   override val nullable: Boolean = false
 
   val valueDataType = valueColumn.dataType
 
   override val dataType: DataType = ArrayType(valueDataType)
 
-  val pivotIndex = HashMap(pivotColumnValues.zipWithIndex: _*)
+  val pivotIndex = if (pivotColumn.dataType.isInstanceOf[AtomicType]) {
+    HashMap(pivotColumnValues.zipWithIndex: _*)
+  } else {
+    TreeMap(pivotColumnValues.zipWithIndex: _*)(
+      TypeUtils.getInterpretedOrdering(pivotColumn.dataType))
+  }
 
   val indexSize = pivotIndex.size
 
@@ -93,14 +96,12 @@ case class PivotFirst(
 
   override def update(mutableAggBuffer: InternalRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
-    if (pivotColValue != null) {
-      // We ignore rows whose pivot column value is not in the list of pivot column values.
-      val index = pivotIndex.getOrElse(pivotColValue, -1)
-      if (index >= 0) {
-        val value = valueColumn.eval(inputRow)
-        if (value != null) {
-          updateRow(mutableAggBuffer, mutableAggBufferOffset + index, value)
-        }
+    // We ignore rows whose pivot column value is not in the list of pivot column values.
+    val index = pivotIndex.getOrElse(pivotColValue, -1)
+    if (index >= 0) {
+      val value = valueColumn.eval(inputRow)
+      if (value != null) {
+        updateRow(mutableAggBuffer, mutableAggBufferOffset + index, value)
       }
     }
   }
@@ -142,7 +143,9 @@ case class PivotFirst(
 
 
   override val aggBufferAttributes: Seq[AttributeReference] =
-    pivotIndex.toList.sortBy(_._2).map(kv => AttributeReference(kv._1.toString, valueDataType)())
+    pivotIndex.toList.sortBy(_._2).map { kv =>
+      AttributeReference(Option(kv._1).getOrElse("null").toString, valueDataType)()
+    }
 
   override val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 

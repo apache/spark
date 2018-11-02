@@ -26,9 +26,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -102,15 +104,12 @@ abstract class AbstractCommandBuilder {
     // Load extra JAVA_OPTS from conf/java-opts, if it exists.
     File javaOpts = new File(join(File.separator, getConfDir(), "java-opts"));
     if (javaOpts.isFile()) {
-      BufferedReader br = new BufferedReader(new InputStreamReader(
-          new FileInputStream(javaOpts), StandardCharsets.UTF_8));
-      try {
+      try (BufferedReader br = new BufferedReader(new InputStreamReader(
+          new FileInputStream(javaOpts), StandardCharsets.UTF_8))) {
         String line;
         while ((line = br.readLine()) != null) {
           addOptionString(cmd, line);
         }
-      } finally {
-        br.close();
       }
     }
 
@@ -135,8 +134,7 @@ abstract class AbstractCommandBuilder {
   List<String> buildClassPath(String appClassPath) throws IOException {
     String sparkHome = getSparkHome();
 
-    List<String> cp = new ArrayList<>();
-    addToClassPath(cp, getenv("SPARK_CLASSPATH"));
+    Set<String> cp = new LinkedHashSet<>();
     addToClassPath(cp, appClassPath);
 
     addToClassPath(cp, getConfDir());
@@ -146,6 +144,7 @@ abstract class AbstractCommandBuilder {
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
       List<String> projects = Arrays.asList(
+        "common/kvstore",
         "common/network-common",
         "common/network-shuffle",
         "common/network-yarn",
@@ -158,12 +157,13 @@ abstract class AbstractCommandBuilder {
         "launcher",
         "mllib",
         "repl",
+        "resource-managers/mesos",
+        "resource-managers/yarn",
         "sql/catalyst",
         "sql/core",
         "sql/hive",
         "sql/hive-thriftserver",
-        "streaming",
-        "yarn"
+        "streaming"
       );
       if (prependClasses) {
         if (!isTesting) {
@@ -186,6 +186,7 @@ abstract class AbstractCommandBuilder {
       // Add this path to include jars that are shaded in the final deliverable created during
       // the maven build. These jars are copied to this directory during the build.
       addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
+      addToClassPath(cp, String.format("%s/mllib/target/jars/*", sparkHome));
     }
 
     // Add Spark jars to the classpath. For the testing case, we rely on the test code to set and
@@ -200,7 +201,7 @@ abstract class AbstractCommandBuilder {
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
     addToClassPath(cp, getenv("YARN_CONF_DIR"));
     addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
-    return cp;
+    return new ArrayList<>(cp);
   }
 
   /**
@@ -209,7 +210,7 @@ abstract class AbstractCommandBuilder {
    * @param cp List to which the new entries are appended.
    * @param entries New classpath entries (separated by File.pathSeparator).
    */
-  private void addToClassPath(List<String> cp, String entries) {
+  private void addToClassPath(Set<String> cp, String entries) {
     if (isEmpty(entries)) {
       return;
     }
@@ -230,13 +231,13 @@ abstract class AbstractCommandBuilder {
       return scala;
     }
     String sparkHome = getSparkHome();
-    File scala210 = new File(sparkHome, "launcher/target/scala-2.10");
+    File scala212 = new File(sparkHome, "launcher/target/scala-2.12");
     File scala211 = new File(sparkHome, "launcher/target/scala-2.11");
-    checkState(!scala210.isDirectory() || !scala211.isDirectory(),
-      "Presence of build for both scala versions (2.10 and 2.11) detected.\n" +
+    checkState(!scala212.isDirectory() || !scala211.isDirectory(),
+      "Presence of build for multiple Scala versions detected.\n" +
       "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    if (scala210.isDirectory()) {
-      return "2.10";
+    if (scala212.isDirectory()) {
+      return "2.12";
     } else {
       checkState(scala211.isDirectory(), "Cannot find any build directories.");
       return "2.11";
@@ -245,6 +246,9 @@ abstract class AbstractCommandBuilder {
 
   String getSparkHome() {
     String path = getenv(ENV_SPARK_HOME);
+    if (path == null && "1".equals(getenv("SPARK_TESTING"))) {
+      path = System.getProperty("spark.test.home");
+    }
     checkState(path != null,
       "Spark home not found; set it explicitly or use the SPARK_HOME environment variable.");
     return path;
@@ -288,24 +292,14 @@ abstract class AbstractCommandBuilder {
     }
 
     if (propsFile.isFile()) {
-      FileInputStream fd = null;
-      try {
-        fd = new FileInputStream(propsFile);
-        props.load(new InputStreamReader(fd, StandardCharsets.UTF_8));
+      try (InputStreamReader isr = new InputStreamReader(
+          new FileInputStream(propsFile), StandardCharsets.UTF_8)) {
+        props.load(isr);
         for (Map.Entry<Object, Object> e : props.entrySet()) {
           e.setValue(e.getValue().toString().trim());
         }
-      } finally {
-        if (fd != null) {
-          try {
-            fd.close();
-          } catch (IOException e) {
-            // Ignore.
-          }
-        }
       }
     }
-
     return props;
   }
 

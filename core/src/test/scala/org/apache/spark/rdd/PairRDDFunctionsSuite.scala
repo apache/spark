@@ -26,10 +26,11 @@ import org.apache.commons.math3.distribution.{BinomialDistribution, PoissonDistr
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
-import org.apache.hadoop.mapreduce.{JobContext => NewJobContext,
+import org.apache.hadoop.mapreduce.{Job => NewJob, JobContext => NewJobContext,
   OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat,
   RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
 import org.apache.hadoop.util.Progressable
+import org.scalatest.Assertions
 
 import org.apache.spark._
 import org.apache.spark.Partitioner
@@ -309,6 +310,69 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(joined.size > 0)
   }
 
+  // See SPARK-22465
+  test("cogroup between multiple RDD " +
+    "with an order of magnitude difference in number of partitions") {
+    val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 1000)
+    val rdd2 = sc
+      .parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+      .partitionBy(new HashPartitioner(10))
+    val joined = rdd1.cogroup(rdd2)
+    assert(joined.getNumPartitions == rdd1.getNumPartitions)
+  }
+
+  // See SPARK-22465
+  test("cogroup between multiple RDD with number of partitions similar in order of magnitude") {
+    val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 20)
+    val rdd2 = sc
+      .parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+      .partitionBy(new HashPartitioner(10))
+    val joined = rdd1.cogroup(rdd2)
+    assert(joined.getNumPartitions == rdd2.getNumPartitions)
+  }
+
+  test("cogroup between multiple RDD when defaultParallelism is set without proper partitioner") {
+    assert(!sc.conf.contains("spark.default.parallelism"))
+    try {
+      sc.conf.set("spark.default.parallelism", "4")
+      val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 20)
+      val rdd2 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)), 10)
+      val joined = rdd1.cogroup(rdd2)
+      assert(joined.getNumPartitions == sc.defaultParallelism)
+    } finally {
+      sc.conf.remove("spark.default.parallelism")
+    }
+  }
+
+  test("cogroup between multiple RDD when defaultParallelism is set with proper partitioner") {
+    assert(!sc.conf.contains("spark.default.parallelism"))
+    try {
+      sc.conf.set("spark.default.parallelism", "4")
+      val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 20)
+      val rdd2 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+        .partitionBy(new HashPartitioner(10))
+      val joined = rdd1.cogroup(rdd2)
+      assert(joined.getNumPartitions == rdd2.getNumPartitions)
+    } finally {
+      sc.conf.remove("spark.default.parallelism")
+    }
+  }
+
+  test("cogroup between multiple RDD when defaultParallelism is set; with huge number of " +
+    "partitions in upstream RDDs") {
+    assert(!sc.conf.contains("spark.default.parallelism"))
+    try {
+      sc.conf.set("spark.default.parallelism", "4")
+      val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 1000)
+      val rdd2 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+        .partitionBy(new HashPartitioner(10))
+      val joined = rdd1.cogroup(rdd2)
+      assert(joined.getNumPartitions == rdd2.getNumPartitions)
+    } finally {
+      sc.conf.remove("spark.default.parallelism")
+    }
+  }
+
   test("rightOuterJoin") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
@@ -516,12 +580,21 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     pairs.saveAsNewAPIHadoopFile[NewFakeFormat]("ignored")
 
     /*
-      Check that configurable formats get configured:
-      ConfigTestFormat throws an exception if we try to write
-      to it when setConf hasn't been called first.
-      Assertion is in ConfigTestFormat.getRecordWriter.
+     * Check that configurable formats get configured:
+     * ConfigTestFormat throws an exception if we try to write
+     * to it when setConf hasn't been called first.
+     * Assertion is in ConfigTestFormat.getRecordWriter.
      */
     pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
+  }
+
+  test("The JobId on the driver and executors should be the same during the commit") {
+    // Create more than one rdd to mimic stageId not equal to rddId
+    val pairs = sc.parallelize(Array((1, 2), (2, 3)), 2)
+      .map { p => (new Integer(p._1 + 1), new Integer(p._2 + 1)) }
+      .filter { p => p._1 > 0 }
+    pairs.saveAsNewAPIHadoopFile[YetAnotherFakeFormat]("ignored")
+    assert(JobID.jobid != -1)
   }
 
   test("saveAsHadoopFile should respect configured output committers") {
@@ -544,7 +617,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     val e = intercept[SparkException] {
       pairs.saveAsNewAPIHadoopFile[NewFakeFormatWithCallback]("ignored")
     }
-    assert(e.getMessage contains "failed to write")
+    assert(e.getCause.getMessage contains "failed to write")
 
     assert(FakeWriterWithCallback.calledBy === "write,callback,close")
     assert(FakeWriterWithCallback.exception != null, "exception should be captured")
@@ -561,11 +634,55 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       pairs.saveAsHadoopFile(
         "ignored", pairs.keyClass, pairs.valueClass, classOf[FakeFormatWithCallback], conf)
     }
-    assert(e.getMessage contains "failed to write")
+    assert(e.getCause.getMessage contains "failed to write")
 
     assert(FakeWriterWithCallback.calledBy === "write,callback,close")
     assert(FakeWriterWithCallback.exception != null, "exception should be captured")
     assert(FakeWriterWithCallback.exception.getMessage contains "failed to write")
+  }
+
+  test("saveAsNewAPIHadoopDataset should support invalid output paths when " +
+    "there are no files to be committed to an absolute output location") {
+    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
+
+    def saveRddWithPath(path: String): Unit = {
+      val job = NewJob.getInstance(new Configuration(sc.hadoopConfiguration))
+      job.setOutputKeyClass(classOf[Integer])
+      job.setOutputValueClass(classOf[Integer])
+      job.setOutputFormatClass(classOf[NewFakeFormat])
+      if (null != path) {
+        job.getConfiguration.set("mapred.output.dir", path)
+      } else {
+        job.getConfiguration.unset("mapred.output.dir")
+      }
+      val jobConfiguration = job.getConfiguration
+
+      // just test that the job does not fail with java.lang.IllegalArgumentException.
+      pairs.saveAsNewAPIHadoopDataset(jobConfiguration)
+    }
+
+    saveRddWithPath(null)
+    saveRddWithPath("")
+    saveRddWithPath("::invalid::")
+  }
+
+  // In spark 2.1, only null was supported - not other invalid paths.
+  // org.apache.hadoop.mapred.FileOutputFormat.getOutputPath fails with IllegalArgumentException
+  // for non-null invalid paths.
+  test("saveAsHadoopDataset should respect empty output directory when " +
+    "there are no files to be committed to an absolute output location") {
+    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
+
+    val conf = new JobConf()
+    conf.setOutputKeyClass(classOf[Integer])
+    conf.setOutputValueClass(classOf[Integer])
+    conf.setOutputFormat(classOf[FakeOutputFormat])
+    conf.setOutputCommitter(classOf[FakeOutputCommitter])
+
+    FakeOutputCommitter.ran = false
+    pairs.saveAsHadoopDataset(conf)
+
+    assert(FakeOutputCommitter.ran, "OutputCommitter was never called")
   }
 
   test("lookup") {
@@ -725,8 +842,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
 }
 
 /*
-  These classes are fakes for testing
-    "saveNewAPIHadoopFile should call setConf if format is configurable".
+  These classes are fakes for testing saveAsHadoopFile/saveNewAPIHadoopFile.
   Unfortunately, they have to be top level classes, and not defined in
   the test method, because otherwise Scala won't generate no-args constructors
   and the test will therefore throw InstantiationException when saveAsNewAPIHadoopFile
@@ -863,6 +979,40 @@ class NewFakeFormatWithCallback() extends NewFakeFormat {
   override def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     new NewFakeWriterWithCallback()
   }
+}
+
+class YetAnotherFakeCommitter extends NewOutputCommitter with Assertions {
+  def setupJob(j: NewJobContext): Unit = {
+    JobID.jobid = j.getJobID().getId
+  }
+
+  def needsTaskCommit(t: NewTaskAttempContext): Boolean = false
+
+  def setupTask(t: NewTaskAttempContext): Unit = {
+    val jobId = t.getTaskAttemptID().getJobID().getId
+    assert(jobId === JobID.jobid)
+  }
+
+  def commitTask(t: NewTaskAttempContext): Unit = {}
+
+  def abortTask(t: NewTaskAttempContext): Unit = {}
+}
+
+class YetAnotherFakeFormat() extends NewOutputFormat[Integer, Integer]() {
+
+  def checkOutputSpecs(j: NewJobContext): Unit = {}
+
+  def getRecordWriter(t: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
+    new NewFakeWriter()
+  }
+
+  def getOutputCommitter(t: NewTaskAttempContext): NewOutputCommitter = {
+    new YetAnotherFakeCommitter()
+  }
+}
+
+object JobID {
+  var jobid = -1
 }
 
 class ConfigTestFormat() extends NewFakeFormat() with Configurable {

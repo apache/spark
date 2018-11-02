@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
-import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -58,7 +57,12 @@ private[execution] object SparkPlanInfo {
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
     }
 
+    // dump the file scan metadata (e.g file path) to event log
+    val metadata = plan match {
+      case fileScan: FileSourceScanExec => fileScan.metadata
+      case _ => Map[String, String]()
+    }
     new SparkPlanInfo(plan.nodeName, plan.simpleString, children.map(fromSparkPlan),
-      plan.metadata, metrics)
+      metadata, metrics)
   }
 }

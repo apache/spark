@@ -572,10 +572,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       data: JavaRDD[java.lang.Iterable[Any]],
       minSupport: Double,
       numPartitions: Int): FPGrowthModel[Any] = {
-    val fpg = new FPGrowth()
-      .setMinSupport(minSupport)
-      .setNumPartitions(numPartitions)
-
+    val fpg = new FPGrowth(minSupport, numPartitions)
     val model = fpg.run(data.rdd.map(_.asScala.toArray))
     new FPGrowthModelWrapper(model)
   }
@@ -638,13 +635,17 @@ private[python] class PythonMLLibAPI extends Serializable {
       selectorType: String,
       numTopFeatures: Int,
       percentile: Double,
-      alpha: Double,
+      fpr: Double,
+      fdr: Double,
+      fwe: Double,
       data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
     new ChiSqSelector()
       .setSelectorType(selectorType)
       .setNumTopFeatures(numTopFeatures)
       .setPercentile(percentile)
-      .setAlpha(alpha)
+      .setFpr(fpr)
+      .setFdr(fdr)
+      .setFwe(fwe)
       .fit(data.rdd)
   }
 

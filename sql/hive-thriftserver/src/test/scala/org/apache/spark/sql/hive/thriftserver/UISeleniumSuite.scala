@@ -46,10 +46,13 @@ class UISeleniumSuite
   }
 
   override def afterAll(): Unit = {
-    if (webDriver != null) {
-      webDriver.quit()
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
     }
-    super.afterAll()
   }
 
   override protected def serverStartCommand(port: Int) = {
@@ -74,7 +77,7 @@ class UISeleniumSuite
   }
 
   ignore("thrift server ui test") {
-    withJdbcStatement { statement =>
+    withJdbcStatement("test_map") { statement =>
       val baseURL = s"http://localhost:$uiPort"
 
       val queries = Seq(

@@ -71,6 +71,12 @@ select
   sort_array(timestamp_array)
 from primitive_arrays;
 
+-- sort_array with an invalid string literal for the argument of sort order.
+select sort_array(array('b', 'd'), '1');
+
+-- sort_array with an invalid null literal casted as boolean for the argument of sort order.
+select sort_array(array('b', 'd'), cast(NULL as boolean));
+
 -- size
 select
   size(boolean_array),

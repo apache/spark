@@ -23,13 +23,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class UDFToIntIntMap extends UDF {
-    public Map<Integer, Integer> evaluate(Object o) {
-        return new HashMap<Integer, Integer>() {
-            {
-                put(1, 1);
-                put(2, 1);
-                put(3, 1);
-            }
-        };
-    }
+  public Map<Integer, Integer> evaluate(Object o) {
+    return new HashMap<Integer, Integer>() {
+      {
+        put(1, 1);
+        put(2, 1);
+        put(3, 1);
+      }
+    };
+  }
 }

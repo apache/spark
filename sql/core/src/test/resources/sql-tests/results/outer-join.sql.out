@@ -63,7 +63,7 @@ set spark.sql.crossJoin.enabled = true
 -- !query 5 schema
 struct<key:string,value:string>
 -- !query 5 output
-spark.sql.crossJoin.enabled
+spark.sql.crossJoin.enabled	true
 
 
 -- !query 6
@@ -85,4 +85,4 @@ set spark.sql.crossJoin.enabled = false
 -- !query 7 schema
 struct<key:string,value:string>
 -- !query 7 output
-spark.sql.crossJoin.enabled
+spark.sql.crossJoin.enabled	false

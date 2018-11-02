@@ -499,7 +499,7 @@ class LinearDataGenerator(object):
     def generateLinearRDD(sc, nexamples, nfeatures, eps,
                           nParts=2, intercept=0.0):
         """
-        Generate a RDD of LabeledPoints.
+        Generate an RDD of LabeledPoints.
         """
         return callMLlibFunc(
             "generateLinearRDDWrapper", sc, int(nexamples), int(nfeatures),
@@ -521,7 +521,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

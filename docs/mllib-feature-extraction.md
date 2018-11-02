@@ -105,7 +105,7 @@ p(w_i | w_j ) = \frac{\exp(u_{w_i}^{\top}v_{w_j})}{\sum_{l=1}^{V} \exp(u_l^{\top
 \]`
 where $V$ is the vocabulary size. 
 
-The skip-gram model with softmax is expensive because the cost of computing $\log p(w_i | w_j)$ 
+The skip-gram model with softmax is expensive because the cost of computing $\log p(w_i | w_j)$
 is proportional to $V$, which can be easily in order of millions. To speed up training of Word2Vec, 
 we used hierarchical softmax, which reduced the complexity of computing of $\log p(w_i | w_j)$ to
 $O(\log(V))$
@@ -227,21 +227,20 @@ both speed and statistical learning behavior.
 [`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) implements
 Chi-Squared feature selection. It operates on labeled data with categorical features. ChiSqSelector uses the
 [Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
-features to choose. It supports three selection methods: `KBest`, `Percentile` and `FPR`:
+features to choose. It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
 
-* `KBest` chooses the `k` top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
-* `Percentile` is similar to `KBest` but chooses a fraction of all features instead of a fixed number.
-* `FPR` chooses all features whose false positive rate meets some threshold.
+* `numTopFeatures` chooses a fixed number of top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
+* `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
+* `fpr` chooses all features whose p-values are below a threshold, thus controlling the false positive rate of selection.
+* `fdr` uses the [Benjamini-Hochberg procedure](https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure) to choose all features whose false discovery rate is below a threshold.
+* `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by 1/numFeatures, thus controlling the family-wise error rate of selection.
 
-By default, the selection method is `KBest`, the default number of top features is 50. User can use
-`setNumTopFeatures`, `setPercentile` and `setAlpha` to set different selection methods.
+By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
+The user can choose a selection method using `setSelectorType`.
 
 The number of features to select can be tuned using a held-out validation set.
 
 ### Model Fitting
-
-`ChiSqSelector` takes a `numTopFeatures` parameter specifying the number of top features that
-the selector will select.
 
 The [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) method takes
 an input of `RDD[LabeledPoint]` with categorical features, learns the summary statistics, and then
@@ -279,8 +278,8 @@ for details on the API.
 multiplication. In other words, it scales each column of the dataset by a scalar multiplier. This
 represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29)
 between the input vector, `v` and transforming vector, `scalingVec`, to yield a result vector.
-Qu8T948*1#
-Denoting the `scalingVec` as "`w`," this transformation may be written as:
+
+Denoting the `scalingVec` as "`w`", this transformation may be written as:
 
 `\[ \begin{pmatrix}
 v_1 \\

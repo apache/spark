@@ -19,20 +19,23 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
  * one condition.
  *
  * The order of joins will not be changed if all of them already have at least one condition.
+ *
+ * If star schema detection is enabled, reorder the star join plans based on heuristics.
  */
 object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
-
   /**
    * Join a list of plans together and push down the conditions into them.
    *
@@ -42,12 +45,11 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @param conditions a list of condition for join.
    */
   @tailrec
-  def createOrderedJoin(input: Seq[(LogicalPlan, InnerLike)], conditions: Seq[Expression])
+  final def createOrderedJoin(input: Seq[(LogicalPlan, InnerLike)], conditions: Seq[Expression])
     : LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
-      val (joinConditions, others) = conditions.partition(
-        e => !SubqueryExpression.hasCorrelatedSubquery(e))
+      val (joinConditions, others) = conditions.partition(canEvaluateWithinJoin)
       val ((left, leftJoinType), (right, rightJoinType)) = (input(0), input(1))
       val innerJoinType = (leftJoinType, rightJoinType) match {
         case (Inner, Inner) => Inner
@@ -65,7 +67,9 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val conditionalJoin = rest.find { planJoinPair =>
         val plan = planJoinPair._1
         val refs = left.outputSet ++ plan.outputSet
-        conditions.filterNot(canEvaluate(_, left)).filterNot(canEvaluate(_, plan))
+        conditions
+          .filterNot(l => l.references.nonEmpty && canEvaluate(l, left))
+          .filterNot(r => r.references.nonEmpty && canEvaluate(r, plan))
           .exists(_.references.subsetOf(refs))
       }
       // pick the next one if no condition left
@@ -73,7 +77,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
       val joinedRefs = left.outputSet ++ right.outputSet
       val (joinConditions, others) = conditions.partition(
-        e => e.references.subsetOf(joinedRefs) && !SubqueryExpression.hasCorrelatedSubquery(e))
+        e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
       val joined = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And))
 
       // should not have reference to same logical plan
@@ -82,9 +86,19 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case j @ ExtractFiltersAndInnerJoins(input, conditions)
+    case ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
-      createOrderedJoin(input, conditions)
+      if (SQLConf.get.starSchemaDetection && !SQLConf.get.cboEnabled) {
+        val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
+        if (starJoinPlan.nonEmpty) {
+          val rest = input.filterNot(starJoinPlan.contains(_))
+          createOrderedJoin(starJoinPlan ++ rest, conditions)
+        } else {
+          createOrderedJoin(input, conditions)
+        }
+      } else {
+        createOrderedJoin(input, conditions)
+      }
   }
 }
 
@@ -120,8 +134,8 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     val leftConditions = conditions.filter(_.references.subsetOf(join.left.outputSet))
     val rightConditions = conditions.filter(_.references.subsetOf(join.right.outputSet))
 
-    val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull)
-    val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull)
+    lazy val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull)
+    lazy val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull)
 
     join.joinType match {
       case RightOuter if leftHasNonNullPredicate => Inner
@@ -137,5 +151,53 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+  }
+}
+
+/**
+ * PythonUDF in join condition can not be evaluated, this rule will detect the PythonUDF
+ * and pull them out from join condition. For python udf accessing attributes from only one side,
+ * they are pushed down by operation push down rules. If not (e.g. user disables filter push
+ * down rules), we need to pull them out in this rule too.
+ */
+object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
+  def hasPythonUDF(expression: Expression): Boolean = {
+    expression.collectFirst { case udf: PythonUDF => udf }.isDefined
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case j @ Join(_, _, joinType, condition)
+        if condition.isDefined && hasPythonUDF(condition.get) =>
+      if (!joinType.isInstanceOf[InnerLike] && joinType != LeftSemi) {
+        // The current strategy only support InnerLike and LeftSemi join because for other type,
+        // it breaks SQL semantic if we run the join condition as a filter after join. If we pass
+        // the plan here, it'll still get a an invalid PythonUDF RuntimeException with message
+        // `requires attributes from more than one child`, we throw firstly here for better
+        // readable information.
+        throw new AnalysisException("Using PythonUDF in join condition of join type" +
+          s" $joinType is not supported.")
+      }
+      // If condition expression contains python udf, it will be moved out from
+      // the new join conditions.
+      val (udf, rest) =
+        splitConjunctivePredicates(condition.get).partition(hasPythonUDF)
+      val newCondition = if (rest.isEmpty) {
+        logWarning(s"The join condition:$condition of the join plan contains PythonUDF only," +
+          s" it will be moved out and the join plan will be turned to cross join.")
+        None
+      } else {
+        Some(rest.reduceLeft(And))
+      }
+      val newJoin = j.copy(condition = newCondition)
+      joinType match {
+        case _: InnerLike => Filter(udf.reduceLeft(And), newJoin)
+        case LeftSemi =>
+          Project(
+            j.left.output.map(_.toAttribute),
+            Filter(udf.reduceLeft(And), newJoin.copy(joinType = Inner)))
+        case _ =>
+          throw new AnalysisException("Using PythonUDF in join condition of join type" +
+            s" $joinType is not supported.")
+      }
   }
 }

@@ -24,8 +24,8 @@ import java.util.concurrent.Semaphore
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
@@ -36,7 +36,10 @@ import org.apache.spark.streaming.receiver.WriteAheadLogBasedBlockHandler._
 import org.apache.spark.util.Utils
 
 /** Testsuite for testing the network receiver behavior */
-class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
+class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val signaler: Signaler = ThreadSignaler
 
   test("receiver life cycle") {
 
@@ -102,13 +105,13 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     assert(executor.errors.head.eq(exception))
 
     // Verify restarting actually stops and starts the receiver
-    receiver.restart("restarting", null, 100)
-    eventually(timeout(50 millis), interval(10 millis)) {
+    receiver.restart("restarting", null, 600)
+    eventually(timeout(300 millis), interval(10 millis)) {
       // receiver will be stopped async
       assert(receiver.isStopped)
       assert(receiver.onStopCalled)
     }
-    eventually(timeout(1000 millis), interval(100 millis)) {
+    eventually(timeout(1000 millis), interval(10 millis)) {
       // receiver will be started async
       assert(receiver.onStartCalled)
       assert(executor.isReceiverStarted)

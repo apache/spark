@@ -20,10 +20,10 @@ package org.apache.spark.graphx
 import scala.reflect.ClassTag
 import scala.util.Random
 
+import org.apache.spark.SparkException
 import org.apache.spark.graphx.lib._
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkException
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -428,7 +428,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Compute the connected component membership of each vertex and return a graph with the vertex
    * value containing the lowest vertex id in the connected component containing that vertex.
    *
-   * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
+   * @see `org.apache.spark.graphx.lib.ConnectedComponents.run`
    */
   def connectedComponents(): Graph[VertexId, ED] = {
     ConnectedComponents.run(graph)
@@ -438,7 +438,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Compute the connected component membership of each vertex and return a graph with the vertex
    * value containing the lowest vertex id in the connected component containing that vertex.
    *
-   * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
+   * @see `org.apache.spark.graphx.lib.ConnectedComponents.run`
    */
   def connectedComponents(maxIterations: Int): Graph[VertexId, ED] = {
     ConnectedComponents.run(graph, maxIterations)

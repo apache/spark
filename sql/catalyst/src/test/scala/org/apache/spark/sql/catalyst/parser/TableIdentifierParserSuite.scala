@@ -25,8 +25,8 @@ class TableIdentifierParserSuite extends SparkFunSuite {
   // Add "$elem$", "$value$" & "$key$"
   val hiveNonReservedKeyword = Array("add", "admin", "after", "analyze", "archive", "asc", "before",
     "bucket", "buckets", "cascade", "change", "cluster", "clustered", "clusterstatus", "collection",
-    "columns", "comment", "compact", "compactions", "compute", "concatenate", "continue", "data",
-    "day", "databases", "datetime", "dbproperties", "deferred", "defined", "delimited",
+    "columns", "comment", "compact", "compactions", "compute", "concatenate", "continue", "cost",
+    "data", "day", "databases", "datetime", "dbproperties", "deferred", "defined", "delimited",
     "dependency", "desc", "directories", "directory", "disable", "distribute",
     "enable", "escaped", "exclusive", "explain", "export", "fields", "file", "fileformat", "first",
     "format", "formatted", "functions", "hold_ddltime", "hour", "idxproperties", "ignore", "index",
@@ -41,17 +41,17 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "sort", "sorted", "ssl", "statistics", "stored", "streamtable", "string", "struct", "tables",
     "tblproperties", "temporary", "terminated", "tinyint", "touch", "transactions", "unarchive",
     "undo", "uniontype", "unlock", "unset", "unsigned", "uri", "use", "utc", "utctimestamp",
-    "view", "while", "year", "work", "transaction", "write", "isolation", "level",
-    "snapshot", "autocommit", "all", "alter", "array", "as", "authorization", "between", "bigint",
+    "view", "while", "year", "work", "transaction", "write", "isolation", "level", "snapshot",
+    "autocommit", "all", "any", "alter", "array", "as", "authorization", "between", "bigint",
     "binary", "boolean", "both", "by", "create", "cube", "current_date", "current_timestamp",
     "cursor", "date", "decimal", "delete", "describe", "double", "drop", "exists", "external",
     "false", "fetch", "float", "for", "grant", "group", "grouping", "import", "in",
-    "insert", "int", "into", "is", "lateral", "like", "local", "none", "null",
+    "insert", "int", "into", "is", "pivot", "lateral", "like", "local", "none", "null",
     "of", "order", "out", "outer", "partition", "percent", "procedure", "range", "reads", "revoke",
     "rollup", "row", "rows", "set", "smallint", "table", "timestamp", "to", "trigger",
-    "true", "truncate", "update", "user", "using", "values", "with", "regexp", "rlike",
+    "true", "truncate", "update", "user", "values", "with", "regexp", "rlike",
     "bigint", "binary", "boolean", "current_date", "current_timestamp", "date", "double", "float",
-    "int", "smallint", "timestamp", "at")
+    "int", "smallint", "timestamp", "at", "position", "both", "leading", "trailing", "extract")
 
   val hiveStrictNonReservedKeyword = Seq("anti", "full", "inner", "left", "semi", "right",
     "natural", "union", "intersect", "except", "database", "on", "join", "cross", "select", "from",

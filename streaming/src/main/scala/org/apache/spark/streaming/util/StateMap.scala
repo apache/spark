@@ -364,7 +364,7 @@ private[streaming] object OpenHashMapBasedStateMap {
   }
 
   /**
-   * Internal class to represent a marker the demarkate the end of all state data in the
+   * Internal class to represent a marker that demarcates the end of all state data in the
    * serialized bytes.
    */
   class LimitMarker(val num: Int) extends Serializable

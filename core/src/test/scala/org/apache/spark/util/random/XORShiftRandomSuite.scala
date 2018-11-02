@@ -17,8 +17,6 @@
 
 package org.apache.spark.util.random
 
-import scala.language.reflectiveCalls
-
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.scalatest.Matchers
 
@@ -27,26 +25,22 @@ import org.apache.spark.util.Utils.times
 
 class XORShiftRandomSuite extends SparkFunSuite with Matchers {
 
-  private def fixture = new {
-    val seed = 1L
-    val xorRand = new XORShiftRandom(seed)
-    val hundMil = 1e8.toInt
-  }
-
   /*
    * This test is based on a chi-squared test for randomness.
    */
   test ("XORShift generates valid random numbers") {
 
-    val f = fixture
+    val xorRand = new XORShiftRandom(1L)
 
     val numBins = 10 // create 10 bins
     val numRows = 5 // create 5 rows
     val bins = Array.ofDim[Long](numRows, numBins)
 
     // populate bins based on modulus of the random number for each row
-    for (r <- 0 to numRows-1) {
-      times(f.hundMil) {bins(r)(math.abs(f.xorRand.nextInt) % numBins) += 1}
+    for (r <- 0 until numRows) {
+      times(100000000) {
+        bins(r)(math.abs(xorRand.nextInt) % numBins) += 1
+      }
     }
 
     /*

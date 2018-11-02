@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportResponseHandler;
+import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.RequestMessage;
 import org.apache.spark.network.protocol.ResponseMessage;
@@ -88,14 +89,14 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     try {
       requestHandler.channelActive();
     } catch (RuntimeException e) {
-      logger.error("Exception from request handler while registering channel", e);
+      logger.error("Exception from request handler while channel is active", e);
     }
     try {
       responseHandler.channelActive();
     } catch (RuntimeException e) {
-      logger.error("Exception from response handler while registering channel", e);
+      logger.error("Exception from response handler while channel is active", e);
     }
-    super.channelRegistered(ctx);
+    super.channelActive(ctx);
   }
 
   @Override
@@ -103,22 +104,37 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     try {
       requestHandler.channelInactive();
     } catch (RuntimeException e) {
-      logger.error("Exception from request handler while unregistering channel", e);
+      logger.error("Exception from request handler while channel is inactive", e);
     }
     try {
       responseHandler.channelInactive();
     } catch (RuntimeException e) {
-      logger.error("Exception from response handler while unregistering channel", e);
+      logger.error("Exception from response handler while channel is inactive", e);
     }
-    super.channelUnregistered(ctx);
+    super.channelInactive(ctx);
+  }
+
+  /**
+   * Overwrite acceptInboundMessage to properly delegate ChunkFetchRequest messages
+   * to ChunkFetchRequestHandler.
+   */
+  @Override
+  public boolean acceptInboundMessage(Object msg) throws Exception {
+    if (msg instanceof ChunkFetchRequest) {
+      return false;
+    } else {
+      return super.acceptInboundMessage(msg);
+    }
   }
 
   @Override
   public void channelRead0(ChannelHandlerContext ctx, Message request) throws Exception {
     if (request instanceof RequestMessage) {
       requestHandler.handle((RequestMessage) request);
-    } else {
+    } else if (request instanceof ResponseMessage) {
       responseHandler.handle((ResponseMessage) request);
+    } else {
+      ctx.fireChannelRead(request);
     }
   }
 

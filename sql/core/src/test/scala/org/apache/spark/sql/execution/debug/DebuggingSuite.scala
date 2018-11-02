@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.debug
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.TestData
 
@@ -33,9 +34,18 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("debugCodegen") {
-    val res = codegenString(spark.range(10).groupBy("id").count().queryExecution.executedPlan)
+    val res = codegenString(spark.range(10).groupBy(col("id") * 2).count()
+      .queryExecution.executedPlan)
     assert(res.contains("Subtree 1 / 2"))
     assert(res.contains("Subtree 2 / 2"))
     assert(res.contains("Object[]"))
+  }
+
+  test("debugCodegenStringSeq") {
+    val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
+      .queryExecution.executedPlan)
+    assert(res.length == 2)
+    assert(res.forall{ case (subtree, code) =>
+      subtree.contains("Range") && code.contains("Object[]")})
   }
 }

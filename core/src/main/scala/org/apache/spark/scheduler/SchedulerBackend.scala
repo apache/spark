@@ -30,8 +30,21 @@ private[spark] trait SchedulerBackend {
   def reviveOffers(): Unit
   def defaultParallelism(): Int
 
-  def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =
+  /**
+   * Requests that an executor kills a running task.
+   *
+   * @param taskId Id of the task.
+   * @param executorId Id of the executor the task is running on.
+   * @param interruptThread Whether the executor should interrupt the task thread.
+   * @param reason The reason for the task kill.
+   */
+  def killTask(
+      taskId: Long,
+      executorId: String,
+      interruptThread: Boolean,
+      reason: String): Unit =
     throw new UnsupportedOperationException
+
   def isReady(): Boolean = true
 
   /**
@@ -55,5 +68,14 @@ private[spark] trait SchedulerBackend {
    * @return Map containing the log names and their respective URLs
    */
   def getDriverLogUrls: Option[Map[String, String]] = None
+
+  /**
+   * Get the max number of tasks that can be concurrent launched currently.
+   * Note that please don't cache the value returned by this method, because the number can change
+   * due to add/remove executors.
+   *
+   * @return The max number of tasks that can be concurrent launched currently.
+   */
+  def maxNumConcurrentTasks(): Int
 
 }

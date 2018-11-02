@@ -38,5 +38,9 @@ private class SparkExecutorInfoImpl(
     val host: String,
     val port: Int,
     val cacheSize: Long,
-    val numRunningTasks: Int)
+    val numRunningTasks: Int,
+    val usedOnHeapStorageMemory: Long,
+    val usedOffHeapStorageMemory: Long,
+    val totalOnHeapStorageMemory: Long,
+    val totalOffHeapStorageMemory: Long)
   extends SparkExecutorInfo

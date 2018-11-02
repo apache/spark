@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.ui
 
 import java.text.SimpleDateFormat
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import scala.xml.Node
@@ -80,11 +80,13 @@ private[streaming] object UIUtils {
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val batchTimeFormat = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+    override def initialValue(): SimpleDateFormat =
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
   }
 
   private val batchTimeFormatWithMilliseconds = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS")
+    override def initialValue(): SimpleDateFormat =
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
   }
 
   /**

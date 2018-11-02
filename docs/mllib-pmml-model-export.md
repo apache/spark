@@ -7,7 +7,7 @@ displayTitle: PMML model export - RDD-based API
 * Table of contents
 {:toc}
 
-## `spark.mllib` supported models
+## spark.mllib supported models
 
 `spark.mllib` supports model export to Predictive Model Markup Language ([PMML](http://en.wikipedia.org/wiki/Predictive_Model_Markup_Language)).
 
@@ -15,7 +15,7 @@ The table below outlines the `spark.mllib` models that can be exported to PMML a
 
 <table class="table">
   <thead>
-    <tr><th>`spark.mllib` model</th><th>PMML model</th></tr>
+    <tr><th>spark.mllib model</th><th>PMML model</th></tr>
   </thead>
   <tbody>
     <tr>

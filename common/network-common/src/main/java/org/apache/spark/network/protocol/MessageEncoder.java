@@ -35,6 +35,10 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
 
   private static final Logger logger = LoggerFactory.getLogger(MessageEncoder.class);
 
+  public static final MessageEncoder INSTANCE = new MessageEncoder();
+
+  private MessageEncoder() {}
+
   /***
    * Encodes a Message by invoking its encode() method. For non-data messages, we will add one
    * ByteBuf to 'out' containing the total frame length, the message type, and the message itself.

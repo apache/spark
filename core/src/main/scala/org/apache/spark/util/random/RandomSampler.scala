@@ -19,7 +19,6 @@ package org.apache.spark.util.random
 
 import java.util.Random
 
-import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.commons.math3.distribution.PoissonDistribution

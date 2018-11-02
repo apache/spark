@@ -22,6 +22,8 @@ import java.util.{Arrays, Comparator}
 
 import scala.util.Random
 
+import com.google.common.primitives.Ints
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.unsafe.array.LongArray
@@ -30,7 +32,7 @@ import org.apache.spark.util.collection.Sorter
 import org.apache.spark.util.random.XORShiftRandom
 
 class RadixSortSuite extends SparkFunSuite with Logging {
-  private val N = 10000  // scale this down for more readable results
+  private val N = 10000L  // scale this down for more readable results
 
   /**
    * Describes a type of sort to test, e.g. two's complement descending. Each sort type has
@@ -73,22 +75,22 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       },
       2, 4, false, false, true))
 
-  private def generateTestData(size: Int, rand: => Long): (Array[JLong], LongArray) = {
-    val ref = Array.tabulate[Long](size) { i => rand }
-    val extended = ref ++ Array.fill[Long](size)(0)
+  private def generateTestData(size: Long, rand: => Long): (Array[JLong], LongArray) = {
+    val ref = Array.tabulate[Long](Ints.checkedCast(size)) { i => rand }
+    val extended = ref ++ Array.fill[Long](Ints.checkedCast(size))(0)
     (ref.map(i => new JLong(i)), new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
-  private def generateKeyPrefixTestData(size: Int, rand: => Long): (LongArray, LongArray) = {
-    val ref = Array.tabulate[Long](size * 2) { i => rand }
-    val extended = ref ++ Array.fill[Long](size * 2)(0)
+  private def generateKeyPrefixTestData(size: Long, rand: => Long): (LongArray, LongArray) = {
+    val ref = Array.tabulate[Long](Ints.checkedCast(size * 2)) { i => rand }
+    val extended = ref ++ Array.fill[Long](Ints.checkedCast(size * 2))(0)
     (new LongArray(MemoryBlock.fromLongArray(ref)),
      new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
-  private def collectToArray(array: LongArray, offset: Int, length: Int): Array[Long] = {
+  private def collectToArray(array: LongArray, offset: Int, length: Long): Array[Long] = {
     var i = 0
-    val out = new Array[Long](length)
+    val out = new Array[Long](Ints.checkedCast(length))
     while (i < length) {
       out(i) = array.get(offset + i)
       i += 1
@@ -107,15 +109,13 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     }
   }
 
-  private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
+  private def referenceKeyPrefixSort(buf: LongArray, lo: Long, hi: Long, refCmp: PrefixComparator) {
     val sortBuffer = new LongArray(MemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))
     new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
-      buf, lo, hi, new Comparator[RecordPointerAndKeyPrefix] {
+      buf, Ints.checkedCast(lo), Ints.checkedCast(hi), new Comparator[RecordPointerAndKeyPrefix] {
         override def compare(
             r1: RecordPointerAndKeyPrefix,
-            r2: RecordPointerAndKeyPrefix): Int = {
-          refCmp.compare(r1.keyPrefix, r2.keyPrefix)
-        }
+            r2: RecordPointerAndKeyPrefix): Int = refCmp.compare(r1.keyPrefix, r2.keyPrefix)
       })
   }
 

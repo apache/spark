@@ -26,8 +26,6 @@ package org.apache.spark.util
  */
 private[spark] class ManualClock(private var time: Long) extends Clock {
 
-  private var _isWaiting = false
-
   /**
    * @return `ManualClock` with initial time 0
    */
@@ -59,19 +57,9 @@ private[spark] class ManualClock(private var time: Long) extends Clock {
    * @return current time reported by the clock when waiting finishes
    */
   def waitTillTime(targetTime: Long): Long = synchronized {
-    _isWaiting = true
-    try {
-      while (time < targetTime) {
-        wait(10)
-      }
-      getTimeMillis()
-    } finally {
-      _isWaiting = false
+    while (time < targetTime) {
+      wait(10)
     }
+    getTimeMillis()
   }
-
-  /**
-   * Returns whether there is any thread being blocked in `waitTillTime`.
-   */
-  def isWaiting: Boolean = synchronized { _isWaiting }
 }

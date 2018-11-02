@@ -41,7 +41,10 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
  *   The RDD takes care of closing the connection.
  * @param sql the text of the query.
  *   The query must contain two ? placeholders for parameters used to partition the results.
- *   E.g. "select title, author from books where ? <= id and id <= ?"
+ *   For example,
+ *   {{{
+ *   select title, author from books where ? <= id and id <= ?
+ *   }}}
  * @param lowerBound the minimum value of the first placeholder
  * @param upperBound the maximum value of the second placeholder
  *   The lower and upper bounds are inclusive.
@@ -74,7 +77,7 @@ class JdbcRDD[T: ClassTag](
 
   override def compute(thePart: Partition, context: TaskContext): Iterator[T] = new NextIterator[T]
   {
-    context.addTaskCompletionListener{ context => closeIfNeeded() }
+    context.addTaskCompletionListener[Unit]{ context => closeIfNeeded() }
     val part = thePart.asInstanceOf[JdbcPartition]
     val conn = getConnection()
     val stmt = conn.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
@@ -151,7 +154,10 @@ object JdbcRDD {
    *   The RDD takes care of closing the connection.
    * @param sql the text of the query.
    *   The query must contain two ? placeholders for parameters used to partition the results.
-   *   E.g. "select title, author from books where ? <= id and id <= ?"
+   *   For example,
+   *   {{{
+   *   select title, author from books where ? <= id and id <= ?
+   *   }}}
    * @param lowerBound the minimum value of the first placeholder
    * @param upperBound the maximum value of the second placeholder
    *   The lower and upper bounds are inclusive.
@@ -191,7 +197,10 @@ object JdbcRDD {
    *   The RDD takes care of closing the connection.
    * @param sql the text of the query.
    *   The query must contain two ? placeholders for parameters used to partition the results.
-   *   E.g. "select title, author from books where ? <= id and id <= ?"
+   *   For example,
+   *   {{{
+   *   select title, author from books where ? <= id and id <= ?
+   *   }}}
    * @param lowerBound the minimum value of the first placeholder
    * @param upperBound the maximum value of the second placeholder
    *   The lower and upper bounds are inclusive.

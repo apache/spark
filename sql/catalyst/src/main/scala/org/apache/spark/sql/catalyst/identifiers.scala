@@ -47,6 +47,22 @@ sealed trait IdentifierWithDatabase {
   override def toString: String = quotedString
 }
 
+/**
+ * Encapsulates an identifier that is either a alias name or an identifier that has table
+ * name and optionally a database name.
+ * The SubqueryAlias node keeps track of the qualifier using the information in this structure
+ * @param identifier - Is an alias name or a table name
+ * @param database - Is a database name and is optional
+ */
+case class AliasIdentifier(identifier: String, database: Option[String])
+  extends IdentifierWithDatabase {
+
+  def this(identifier: String) = this(identifier, None)
+}
+
+object AliasIdentifier {
+  def apply(identifier: String): AliasIdentifier = new AliasIdentifier(identifier)
+}
 
 /**
  * Identifies a table in a database.
@@ -60,7 +76,11 @@ case class TableIdentifier(table: String, database: Option[String])
   override val identifier: String = table
 
   def this(table: String) = this(table, None)
+}
 
+/** A fully qualified identifier for a table (i.e., database.tableName) */
+case class QualifiedTableName(database: String, name: String) {
+  override def toString: String = s"$database.$name"
 }
 
 object TableIdentifier {

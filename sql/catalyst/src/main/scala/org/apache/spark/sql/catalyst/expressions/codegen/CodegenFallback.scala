@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, Nondeterministic}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 
 /**
  * A trait that can be used to provide a fallback mode for expression code generation.
@@ -25,32 +26,41 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, No
 trait CodegenFallback extends Expression {
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    foreach {
-      case n: Nondeterministic => n.setInitialValues()
-      case _ =>
-    }
-
     // LeafNode does not need `input`
     val input = if (this.isInstanceOf[LeafExpression]) "null" else ctx.INPUT_ROW
     val idx = ctx.references.length
     ctx.references += this
+    var childIndex = idx
+    this.foreach {
+      case n: Nondeterministic =>
+        // This might add the current expression twice, but it won't hurt.
+        ctx.references += n
+        childIndex += 1
+        ctx.addPartitionInitializationStatement(
+          s"""
+             |((Nondeterministic) references[$childIndex])
+             |  .initialize(partitionIndex);
+          """.stripMargin)
+      case _ =>
+    }
     val objectTerm = ctx.freshName("obj")
     val placeHolder = ctx.registerComment(this.toString)
+    val javaType = CodeGenerator.javaType(this.dataType)
     if (nullable) {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
         boolean ${ev.isNull} = $objectTerm == null;
-        ${ctx.javaType(this.dataType)} ${ev.value} = ${ctx.defaultValue(this.dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(this.dataType)};
         if (!${ev.isNull}) {
-          ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
+          ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
         }""")
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
-        ${ctx.javaType(this.dataType)} ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
-        """, isNull = "false")
+        $javaType ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
+        """, isNull = FalseLiteral)
     }
   }
 }

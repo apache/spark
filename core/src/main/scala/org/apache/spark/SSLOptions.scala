@@ -21,6 +21,7 @@ import java.io.File
 import java.security.NoSuchAlgorithmException
 import javax.net.ssl.SSLContext
 
+import org.apache.hadoop.conf.Configuration
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
 import org.apache.spark.internal.Logging
@@ -34,6 +35,8 @@ import org.apache.spark.internal.Logging
  *
  * @param enabled             enables or disables SSL; if it is set to false, the rest of the
  *                            settings are disregarded
+ * @param port                the port where to bind the SSL server; if not defined, it will be
+ *                            based on the non-SSL port for the same service.
  * @param keyStore            a path to the key-store file
  * @param keyStorePassword    a password to access the key-store file
  * @param keyPassword         a password to access the private key in the key-store
@@ -47,6 +50,7 @@ import org.apache.spark.internal.Logging
  */
 private[spark] case class SSLOptions(
     enabled: Boolean = false,
+    port: Option[Int] = None,
     keyStore: Option[File] = None,
     keyStorePassword: Option[String] = None,
     keyPassword: Option[String] = None,
@@ -91,21 +95,23 @@ private[spark] case class SSLOptions(
    * are supported by the current Java security provider for this protocol.
    */
   private val supportedAlgorithms: Set[String] = if (enabledAlgorithms.isEmpty) {
-    Set()
+    Set.empty
   } else {
     var context: SSLContext = null
-    try {
-      context = SSLContext.getInstance(protocol.orNull)
-      /* The set of supported algorithms does not depend upon the keys, trust, or
+    if (protocol.isEmpty) {
+      logDebug("No SSL protocol specified")
+      context = SSLContext.getDefault
+    } else {
+      try {
+        context = SSLContext.getInstance(protocol.get)
+        /* The set of supported algorithms does not depend upon the keys, trust, or
          rng, although they will influence which algorithms are eventually used. */
-      context.init(null, null, null)
-    } catch {
-      case npe: NullPointerException =>
-        logDebug("No SSL protocol specified")
-        context = SSLContext.getDefault
-      case nsa: NoSuchAlgorithmException =>
-        logDebug(s"No support for requested SSL protocol ${protocol.get}")
-        context = SSLContext.getDefault
+        context.init(null, null, null)
+      } catch {
+        case nsa: NoSuchAlgorithmException =>
+          logDebug(s"No support for requested SSL protocol ${protocol.get}")
+          context = SSLContext.getDefault
+      }
     }
 
     val providerAlgorithms = context.getServerSocketFactory.getSupportedCipherSuites.toSet
@@ -123,7 +129,7 @@ private[spark] case class SSLOptions(
   }
 
   /** Returns a string representation of this SSLOptions with all the passwords masked. */
-  override def toString: String = s"SSLOptions{enabled=$enabled, " +
+  override def toString: String = s"SSLOptions{enabled=$enabled, port=$port, " +
       s"keyStore=$keyStore, keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
       s"trustStore=$trustStore, trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
       s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}"
@@ -137,6 +143,7 @@ private[spark] object SSLOptions extends Logging {
    *
    * The following settings are allowed:
    * $ - `[ns].enabled` - `true` or `false`, to enable or disable SSL respectively
+   * $ - `[ns].port` - the port where to bind the SSL server
    * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
    * $ - `[ns].keyStorePassword` - a password to the key-store file
    * $ - `[ns].keyPassword` - a password to the private key
@@ -150,54 +157,68 @@ private[spark] object SSLOptions extends Logging {
    * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
    *
    * For a list of protocols and ciphers supported by particular Java versions, you may go to
-   * [[https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https Oracle
-   * blog page]].
+   * <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">
+   * Oracle blog page</a>.
    *
    * You can optionally specify the default configuration. If you do, for each setting which is
    * missing in SparkConf, the corresponding setting is used from the default configuration.
    *
    * @param conf Spark configuration object where the settings are collected from
+   * @param hadoopConf Hadoop configuration to get settings
    * @param ns the namespace name
    * @param defaults the default configuration
    * @return [[org.apache.spark.SSLOptions]] object
    */
-  def parse(conf: SparkConf, ns: String, defaults: Option[SSLOptions] = None): SSLOptions = {
+  def parse(
+      conf: SparkConf,
+      hadoopConf: Configuration,
+      ns: String,
+      defaults: Option[SSLOptions] = None): SSLOptions = {
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
 
-    val keyStore = conf.getOption(s"$ns.keyStore").map(new File(_))
+    val port = conf.getWithSubstitution(s"$ns.port").map(_.toInt)
+    port.foreach { p =>
+      require(p >= 0, "Port number must be a non-negative value.")
+    }
+
+    val keyStore = conf.getWithSubstitution(s"$ns.keyStore").map(new File(_))
         .orElse(defaults.flatMap(_.keyStore))
 
-    val keyStorePassword = conf.getOption(s"$ns.keyStorePassword")
+    val keyStorePassword = conf.getWithSubstitution(s"$ns.keyStorePassword")
+        .orElse(Option(hadoopConf.getPassword(s"$ns.keyStorePassword")).map(new String(_)))
         .orElse(defaults.flatMap(_.keyStorePassword))
 
-    val keyPassword = conf.getOption(s"$ns.keyPassword")
+    val keyPassword = conf.getWithSubstitution(s"$ns.keyPassword")
+        .orElse(Option(hadoopConf.getPassword(s"$ns.keyPassword")).map(new String(_)))
         .orElse(defaults.flatMap(_.keyPassword))
 
-    val keyStoreType = conf.getOption(s"$ns.keyStoreType")
+    val keyStoreType = conf.getWithSubstitution(s"$ns.keyStoreType")
         .orElse(defaults.flatMap(_.keyStoreType))
 
     val needClientAuth =
       conf.getBoolean(s"$ns.needClientAuth", defaultValue = defaults.exists(_.needClientAuth))
 
-    val trustStore = conf.getOption(s"$ns.trustStore").map(new File(_))
+    val trustStore = conf.getWithSubstitution(s"$ns.trustStore").map(new File(_))
         .orElse(defaults.flatMap(_.trustStore))
 
-    val trustStorePassword = conf.getOption(s"$ns.trustStorePassword")
+    val trustStorePassword = conf.getWithSubstitution(s"$ns.trustStorePassword")
+        .orElse(Option(hadoopConf.getPassword(s"$ns.trustStorePassword")).map(new String(_)))
         .orElse(defaults.flatMap(_.trustStorePassword))
 
-    val trustStoreType = conf.getOption(s"$ns.trustStoreType")
+    val trustStoreType = conf.getWithSubstitution(s"$ns.trustStoreType")
         .orElse(defaults.flatMap(_.trustStoreType))
 
-    val protocol = conf.getOption(s"$ns.protocol")
+    val protocol = conf.getWithSubstitution(s"$ns.protocol")
         .orElse(defaults.flatMap(_.protocol))
 
-    val enabledAlgorithms = conf.getOption(s"$ns.enabledAlgorithms")
+    val enabledAlgorithms = conf.getWithSubstitution(s"$ns.enabledAlgorithms")
         .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSet)
         .orElse(defaults.map(_.enabledAlgorithms))
         .getOrElse(Set.empty)
 
     new SSLOptions(
       enabled,
+      port,
       keyStore,
       keyStorePassword,
       keyPassword,

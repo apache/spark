@@ -143,7 +143,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
     }
 
     executionPool.acquireMemory(
-      numBytes, taskAttemptId, maybeGrowExecutionPool, computeMaxExecutionPoolSize)
+      numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize)
   }
 
   override def acquireStorageMemory(
@@ -160,7 +160,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
       case MemoryMode.OFF_HEAP => (
         offHeapExecutionMemoryPool,
         offHeapStorageMemoryPool,
-        maxOffHeapMemory)
+        maxOffHeapStorageMemory)
     }
     if (numBytes > maxMemory) {
       // Fail fast if the block simply won't fit
@@ -171,7 +171,8 @@ private[spark] class UnifiedMemoryManager private[memory] (
     if (numBytes > storagePool.memoryFree) {
       // There is not enough free memory in the storage pool, so try to borrow free memory from
       // the execution pool.
-      val memoryBorrowedFromExecution = Math.min(executionPool.memoryFree, numBytes)
+      val memoryBorrowedFromExecution = Math.min(executionPool.memoryFree,
+        numBytes - storagePool.memoryFree)
       executionPool.decrementPoolSize(memoryBorrowedFromExecution)
       storagePool.incrementPoolSize(memoryBorrowedFromExecution)
     }

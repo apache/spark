@@ -24,6 +24,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
       return a.value - b.value
     },
     editable: false,
+    align: 'left',
     showCurrentTime: false,
     min: startTime,
     zoomable: false,
@@ -99,6 +100,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
       return a.value - b.value;
     },
     editable: false,
+    align: 'left',
     showCurrentTime: false,
     min: startTime,
     zoomable: false,

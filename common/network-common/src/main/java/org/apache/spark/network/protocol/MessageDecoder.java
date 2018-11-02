@@ -35,6 +35,10 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
   private static final Logger logger = LoggerFactory.getLogger(MessageDecoder.class);
 
+  public static final MessageDecoder INSTANCE = new MessageDecoder();
+
+  private MessageDecoder() {}
+
   @Override
   public void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
     Message.Type msgType = Message.Type.decode(in);
@@ -75,6 +79,9 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
       case StreamFailure:
         return StreamFailure.decode(in);
+
+      case UploadStream:
+        return UploadStream.decode(in);
 
       default:
         throw new IllegalArgumentException("Unexpected message type: " + msgType);

@@ -164,7 +164,6 @@ class Statistics(object):
         of fit test of the observed data against the expected distribution,
         or againt the uniform distribution (by default), with each category
         having an expected frequency of `1 / len(observed)`.
-        (Note: `observed` cannot contain negative values)
 
         If `observed` is matrix, conduct Pearson's independence test on the
         input contingency matrix, which cannot contain negative entries or
@@ -175,6 +174,8 @@ class Statistics(object):
         For each feature, the (feature, label) pairs are converted into a
         contingency matrix for which the chi-squared statistic is computed.
         All label and feature values must be categorical.
+
+        .. note:: `observed` cannot contain negative values
 
         :param observed: it could be a vector containing the observed categorical
                          counts/relative frequencies, or the contingency matrix
@@ -258,7 +259,7 @@ class Statistics(object):
 
         The KS statistic gives us the maximum distance between the
         ECDF and the CDF. Intuitively if this statistic is large, the
-        probabilty that the null hypothesis is true becomes small.
+        probability that the null hypothesis is true becomes small.
         For specific details of the implementation, please have a look
         at the Scala documentation.
 
@@ -302,7 +303,13 @@ class Statistics(object):
 
 def _test():
     import doctest
+    import numpy
     from pyspark.sql import SparkSession
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = globals().copy()
     spark = SparkSession.builder\
         .master("local[4]")\
@@ -312,7 +319,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

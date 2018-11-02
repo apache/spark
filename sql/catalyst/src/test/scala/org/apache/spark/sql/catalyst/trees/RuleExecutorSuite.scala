@@ -56,4 +56,21 @@ class RuleExecutorSuite extends SparkFunSuite {
     }.getMessage
     assert(message.contains("Max iterations (10) reached for batch fixedPoint"))
   }
+
+  test("structural integrity checker") {
+    object WithSIChecker extends RuleExecutor[Expression] {
+      override protected def isPlanIntegral(expr: Expression): Boolean = expr match {
+        case IntegerLiteral(_) => true
+        case _ => false
+      }
+      val batches = Batch("once", Once, DecrementLiterals) :: Nil
+    }
+
+    assert(WithSIChecker.execute(Literal(10)) === Literal(9))
+
+    val message = intercept[TreeNodeException[LogicalPlan]] {
+      WithSIChecker.execute(Literal(10.1))
+    }.getMessage
+    assert(message.contains("the structural integrity of the plan is broken"))
+  }
 }

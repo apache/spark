@@ -26,35 +26,39 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager)
   override val metricRegistry = new MetricRegistry()
   override val sourceName = "BlockManager"
 
-  metricRegistry.register(MetricRegistry.name("memory", "maxMem_MB"), new Gauge[Long] {
-    override def getValue: Long = {
-      val storageStatusList = blockManager.master.getStorageStatus
-      val maxMem = storageStatusList.map(_.maxMem).sum
-      maxMem / 1024 / 1024
-    }
-  })
+  private def registerGauge(name: String, func: BlockManagerMaster => Long): Unit = {
+    metricRegistry.register(name, new Gauge[Long] {
+      override def getValue: Long = func(blockManager.master) / 1024 / 1024
+    })
+  }
 
-  metricRegistry.register(MetricRegistry.name("memory", "remainingMem_MB"), new Gauge[Long] {
-    override def getValue: Long = {
-      val storageStatusList = blockManager.master.getStorageStatus
-      val remainingMem = storageStatusList.map(_.memRemaining).sum
-      remainingMem / 1024 / 1024
-    }
-  })
+  registerGauge(MetricRegistry.name("memory", "maxMem_MB"),
+    _.getStorageStatus.map(_.maxMem).sum)
 
-  metricRegistry.register(MetricRegistry.name("memory", "memUsed_MB"), new Gauge[Long] {
-    override def getValue: Long = {
-      val storageStatusList = blockManager.master.getStorageStatus
-      val memUsed = storageStatusList.map(_.memUsed).sum
-      memUsed / 1024 / 1024
-    }
-  })
+  registerGauge(MetricRegistry.name("memory", "maxOnHeapMem_MB"),
+    _.getStorageStatus.map(_.maxOnHeapMem.getOrElse(0L)).sum)
 
-  metricRegistry.register(MetricRegistry.name("disk", "diskSpaceUsed_MB"), new Gauge[Long] {
-    override def getValue: Long = {
-      val storageStatusList = blockManager.master.getStorageStatus
-      val diskSpaceUsed = storageStatusList.map(_.diskUsed).sum
-      diskSpaceUsed / 1024 / 1024
-    }
-  })
+  registerGauge(MetricRegistry.name("memory", "maxOffHeapMem_MB"),
+    _.getStorageStatus.map(_.maxOffHeapMem.getOrElse(0L)).sum)
+
+  registerGauge(MetricRegistry.name("memory", "remainingMem_MB"),
+    _.getStorageStatus.map(_.memRemaining).sum)
+
+  registerGauge(MetricRegistry.name("memory", "remainingOnHeapMem_MB"),
+    _.getStorageStatus.map(_.onHeapMemRemaining.getOrElse(0L)).sum)
+
+  registerGauge(MetricRegistry.name("memory", "remainingOffHeapMem_MB"),
+    _.getStorageStatus.map(_.offHeapMemRemaining.getOrElse(0L)).sum)
+
+  registerGauge(MetricRegistry.name("memory", "memUsed_MB"),
+    _.getStorageStatus.map(_.memUsed).sum)
+
+  registerGauge(MetricRegistry.name("memory", "onHeapMemUsed_MB"),
+    _.getStorageStatus.map(_.onHeapMemUsed.getOrElse(0L)).sum)
+
+  registerGauge(MetricRegistry.name("memory", "offHeapMemUsed_MB"),
+    _.getStorageStatus.map(_.offHeapMemUsed.getOrElse(0L)).sum)
+
+  registerGauge(MetricRegistry.name("disk", "diskSpaceUsed_MB"),
+    _.getStorageStatus.map(_.diskUsed).sum)
 }

@@ -20,9 +20,6 @@ package org.apache.spark.examples.mllib;
 
 import scala.Tuple2;
 import scala.Tuple3;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.JavaRDD;
@@ -42,14 +39,8 @@ public class JavaIsotonicRegressionExample {
       jsc.sc(), "data/mllib/sample_isotonic_regression_libsvm_data.txt").toJavaRDD();
 
     // Create label, feature, weight tuples from input data with weight set to default value 1.0.
-    JavaRDD<Tuple3<Double, Double, Double>> parsedData = data.map(
-      new Function<LabeledPoint, Tuple3<Double, Double, Double>>() {
-        public Tuple3<Double, Double, Double> call(LabeledPoint point) {
-          return new Tuple3<>(new Double(point.label()),
-            new Double(point.features().apply(0)), 1.0);
-        }
-      }
-    );
+    JavaRDD<Tuple3<Double, Double, Double>> parsedData = data.map(point ->
+      new Tuple3<>(point.label(), point.features().apply(0), 1.0));
 
     // Split data into training (60%) and test (40%) sets.
     JavaRDD<Tuple3<Double, Double, Double>>[] splits =
@@ -59,29 +50,17 @@ public class JavaIsotonicRegressionExample {
 
     // Create isotonic regression model from training data.
     // Isotonic parameter defaults to true so it is only shown for demonstration
-    final IsotonicRegressionModel model =
-      new IsotonicRegression().setIsotonic(true).run(training);
+    IsotonicRegressionModel model = new IsotonicRegression().setIsotonic(true).run(training);
 
     // Create tuples of predicted and real labels.
-    JavaPairRDD<Double, Double> predictionAndLabel = test.mapToPair(
-      new PairFunction<Tuple3<Double, Double, Double>, Double, Double>() {
-        @Override
-        public Tuple2<Double, Double> call(Tuple3<Double, Double, Double> point) {
-          Double predictedLabel = model.predict(point._2());
-          return new Tuple2<>(predictedLabel, point._1());
-        }
-      }
-    );
+    JavaPairRDD<Double, Double> predictionAndLabel = test.mapToPair(point ->
+      new Tuple2<>(model.predict(point._2()), point._1()));
 
     // Calculate mean squared error between predicted and real labels.
-    Double meanSquaredError = new JavaDoubleRDD(predictionAndLabel.map(
-      new Function<Tuple2<Double, Double>, Object>() {
-        @Override
-        public Object call(Tuple2<Double, Double> pl) {
-          return Math.pow(pl._1() - pl._2(), 2);
-        }
-      }
-    ).rdd()).mean();
+    double meanSquaredError = predictionAndLabel.mapToDouble(pl -> {
+      double diff = pl._1() - pl._2();
+      return diff * diff;
+    }).mean();
     System.out.println("Mean Squared Error = " + meanSquaredError);
 
     // Save and load model

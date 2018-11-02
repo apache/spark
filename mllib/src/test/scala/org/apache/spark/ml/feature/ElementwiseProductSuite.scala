@@ -17,13 +17,31 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.sql.Row
 
-class ElementwiseProductSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class ElementwiseProductSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
+
+  test("streaming transform") {
+    val scalingVec = Vectors.dense(0.1, 10.0)
+    val data = Seq(
+      (Vectors.dense(0.1, 1.0), Vectors.dense(0.01, 10.0)),
+      (Vectors.dense(0.0, -1.1), Vectors.dense(0.0, -11.0))
+    )
+    val df = spark.createDataFrame(data).toDF("features", "expected")
+    val ep = new ElementwiseProduct()
+      .setInputCol("features")
+      .setOutputCol("actual")
+      .setScalingVec(scalingVec)
+    testTransformer[(Vector, Vector)](df, ep, "actual", "expected") {
+      case Row(actual: Vector, expected: Vector) =>
+        assert(actual ~== expected relTol 1e-14)
+    }
+  }
 
   test("read/write") {
     val ep = new ElementwiseProduct()

@@ -29,7 +29,7 @@ import org.apache.spark.util.collection.BitSet
 /**
  * A class containing additional operations for subclasses of VertexPartitionBase that provide
  * implicit evidence of membership in the `VertexPartitionBaseOpsConstructor` typeclass (for
- * example, [[VertexPartition.VertexPartitionOpsConstructor]]).
+ * example, `VertexPartition.VertexPartitionOpsConstructor`).
  */
 private[graphx] abstract class VertexPartitionBaseOps
     [VD: ClassTag, Self[X] <: VertexPartitionBase[X]: VertexPartitionBaseOpsConstructor]

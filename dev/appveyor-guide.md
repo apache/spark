@@ -1,6 +1,6 @@
 # AppVeyor Guides
 
-Currently, SparkR on Windows is being tested with [AppVeyor](https://ci.appveyor.com). This page describes how to set up AppVeyor with Spark, how to run the build, check the status and stop the build via this tool. There is the documenation for AppVeyor [here](https://www.appveyor.com/docs). Please refer this for full details.
+Currently, SparkR on Windows is being tested with [AppVeyor](https://ci.appveyor.com). This page describes how to set up AppVeyor with Spark, how to run the build, check the status and stop the build via this tool. There is the documentation for AppVeyor [here](https://www.appveyor.com/docs). Please refer this for full details.
 
 
 ### Setting up AppVeyor
@@ -45,7 +45,7 @@ Currently, SparkR on Windows is being tested with [AppVeyor](https://ci.appveyor
   
   <img width="144" alt="2016-08-30 12 16 35" src="https://cloud.githubusercontent.com/assets/6477701/18075026/3ee57bc6-6eac-11e6-826e-5dd09aeb0e7c.png">
 
-- Since we will use Github here, click the "GITHUB" button and then click "Authorize Github" so that AppVeyor can access to the Github logs (e.g. commits).
+- Since we will use Github here, click the "GITHUB" button and then click "Authorize Github" so that AppVeyor can access the Github logs (e.g. commits).
     
   <img width="517" alt="2016-09-04 11 10 22" src="https://cloud.githubusercontent.com/assets/6477701/18228819/9a4d5722-7299-11e6-900c-c5ff6b0450b1.png">
 
@@ -87,7 +87,7 @@ Currently, SparkR on Windows is being tested with [AppVeyor](https://ci.appveyor
 
   <img width="176" alt="2016-08-30 12 29 41" src="https://cloud.githubusercontent.com/assets/6477701/18075336/de618b52-6eae-11e6-8f01-e4ce48963087.png">
 
-- If the build is running, "CANCEL BUILD" buttom appears. Click this button top cancel the current build.
+- If the build is running, "CANCEL BUILD" button appears. Click this button to cancel the current build.
 
   <img width="158" alt="2016-08-30 1 11 13" src="https://cloud.githubusercontent.com/assets/6477701/18075806/4de68564-6eb3-11e6-855b-ee22918767f9.png">
 

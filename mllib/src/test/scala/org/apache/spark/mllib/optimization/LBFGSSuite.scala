@@ -191,7 +191,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     // With smaller convergenceTol, it takes more steps.
     assert(lossLBFGS3.length > lossLBFGS2.length)
 
-    // Based on observation, lossLBFGS2 runs 5 iterations, no theoretically guaranteed.
+    // Based on observation, lossLBFGS3 runs 6 iterations, no theoretically guaranteed.
     assert(lossLBFGS3.length == 6)
     assert((lossLBFGS3(4) - lossLBFGS3(5)) / lossLBFGS3(4) < convergenceTol)
   }
@@ -229,6 +229,25 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     assert(
       (weightLBFGS(0) ~= weightGD(0) relTol 0.02) && (weightLBFGS(1) ~= weightGD(1) relTol 0.02),
       "The weight differences between LBFGS and GD should be within 2%.")
+  }
+
+  test("SPARK-18471: LBFGS aggregator on empty partitions") {
+    val regParam = 0
+
+    val initialWeightsWithIntercept = Vectors.dense(0.0)
+    val convergenceTol = 1e-12
+    val numIterations = 1
+    val dataWithEmptyPartitions = sc.parallelize(Seq((1.0, Vectors.dense(2.0))), 2)
+
+    LBFGS.runLBFGS(
+      dataWithEmptyPartitions,
+      gradient,
+      simpleUpdater,
+      numCorrections,
+      convergenceTol,
+      numIterations,
+      regParam,
+      initialWeightsWithIntercept)
   }
 }
 

@@ -132,7 +132,7 @@ object Encoders {
    *  - primitive types: boolean, int, double, etc.
    *  - boxed types: Boolean, Integer, Double, etc.
    *  - String
-   *  - java.math.BigDecimal
+   *  - java.math.BigDecimal, java.math.BigInteger
    *  - time related: java.sql.Date, java.sql.Timestamp
    *  - collection types: only array and java.util.List currently, map support is in progress
    *  - nested java bean.
@@ -165,9 +165,9 @@ object Encoders {
    * (Scala-specific) Creates an encoder that serializes objects of type T using generic Java
    * serialization. This encoder maps T into a single byte array (binary) field.
    *
-   * Note that this is extremely inefficient and should only be used as the last resort.
-   *
    * T must be publicly accessible.
+   *
+   * @note This is extremely inefficient and should only be used as the last resort.
    *
    * @since 1.6.0
    */
@@ -177,9 +177,9 @@ object Encoders {
    * Creates an encoder that serializes objects of type T using generic Java serialization.
    * This encoder maps T into a single byte array (binary) field.
    *
-   * Note that this is extremely inefficient and should only be used as the last resort.
-   *
    * T must be publicly accessible.
+   *
+   * @note This is extremely inefficient and should only be used as the last resort.
    *
    * @since 1.6.0
    */
@@ -203,12 +203,10 @@ object Encoders {
     validatePublicClass[T]()
 
     ExpressionEncoder[T](
-      schema = new StructType().add("value", BinaryType),
-      flat = true,
-      serializer = Seq(
+      objSerializer =
         EncodeUsingSerializer(
-          BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo)),
-      deserializer =
+          BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo),
+      objDeserializer =
         DecodeUsingSerializer[T](
           Cast(GetColumnByOrdinal(0, BinaryType), BinaryType),
           classTag[T],

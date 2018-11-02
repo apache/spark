@@ -56,12 +56,14 @@ object RecommendationExample {
       val err = (r1 - r2)
       err * err
     }.mean()
-    println("Mean Squared Error = " + MSE)
+    println(s"Mean Squared Error = $MSE")
 
     // Save and load model
     model.save(sc, "target/tmp/myCollaborativeFilter")
     val sameModel = MatrixFactorizationModel.load(sc, "target/tmp/myCollaborativeFilter")
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

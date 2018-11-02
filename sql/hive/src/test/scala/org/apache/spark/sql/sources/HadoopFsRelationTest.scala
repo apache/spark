@@ -22,14 +22,11 @@ import java.io.File
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
-import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.datasources.{FileScanRDD, HadoopFsRelation, LocalityTestFileSystem, LogicalRelation}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -40,6 +37,10 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   import spark.implicits._
 
   val dataSourceName: String
+
+  protected val parquetDataSourceName: String = "parquet"
+
+  private def isParquetDataSource: Boolean = dataSourceName == parquetDataSourceName
 
   protected def supportsDataType(dataType: DataType): Boolean = true
 
@@ -117,10 +118,21 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new UDT.MyDenseVectorUDT()
   ).filter(supportsDataType)
 
-  for (dataType <- supportedDataTypes) {
-    for (parquetDictionaryEncodingEnabled <- Seq(true, false)) {
-      test(s"test all data types - $dataType with parquet.enable.dictionary = " +
-        s"$parquetDictionaryEncodingEnabled") {
+  test(s"test all data types") {
+    val parquetDictionaryEncodingEnabledConfs = if (isParquetDataSource) {
+      // Run with/without Parquet dictionary encoding enabled for Parquet data source.
+      Seq(true, false)
+    } else {
+      Seq(false)
+    }
+    for (dataType <- supportedDataTypes) {
+      for (parquetDictionaryEncodingEnabled <- parquetDictionaryEncodingEnabledConfs) {
+        val extraMessage = if (isParquetDataSource) {
+          s" with parquet.enable.dictionary = $parquetDictionaryEncodingEnabled"
+        } else {
+          ""
+        }
+        logInfo(s"Testing $dataType data type$extraMessage")
 
         val extraOptions = Map[String, String](
           "parquet.enable.dictionary" -> parquetDictionaryEncodingEnabled.toString
@@ -338,16 +350,17 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
     withTable("t") {
-      sql("CREATE TABLE t(i INT) USING parquet")
-      intercept[AnalysisException] {
+      sql(s"CREATE TABLE t(i INT) USING $dataSourceName")
+      val msg = intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
-      }
+      }.getMessage
+      assert(msg.contains("Table `t` already exists"))
     }
   }
 
   test("saveAsTable()/load() - non-partitioned table - Ignore") {
     withTable("t") {
-      sql("CREATE TABLE t(i INT) USING parquet")
+      sql(s"CREATE TABLE t(i INT) USING $dataSourceName")
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
       assert(spark.table("t").collect().isEmpty)
     }
@@ -446,7 +459,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     // Using only a subset of all partition columns
-    intercept[Throwable] {
+    intercept[AnalysisException] {
       partitionedTestDF2.write
         .format(dataSourceName)
         .mode(SaveMode.Append)
@@ -668,7 +681,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             assert(expectedResult.isRight, s"Was not expecting error with $path: " + e)
             assert(
               e.getMessage.contains(expectedResult.right.get),
-              s"Did not find expected error message wiht $path")
+              s"Did not find expected error message with $path")
         }
       }
 
@@ -756,76 +769,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  // NOTE: This test suite is not super deterministic.  On nodes with only relatively few cores
-  // (4 or even 1), it's hard to reproduce the data loss issue.  But on nodes with for example 8 or
-  // more cores, the issue can be reproduced steadily.  Fortunately our Jenkins builder meets this
-  // requirement.  We probably want to move this test case to spark-integration-tests or spark-perf
-  // later.
-  test("SPARK-8406: Avoids name collision while writing files") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark
-        .range(10000)
-        .repartition(250)
-        .write
-        .mode(SaveMode.Overwrite)
-        .format(dataSourceName)
-        .save(path)
-
-      assertResult(10000) {
-        spark
-          .read
-          .format(dataSourceName)
-          .option("dataSchema", StructType(StructField("id", LongType) :: Nil).json)
-          .load(path)
-          .count()
-      }
-    }
-  }
-
-  test("SPARK-8578 specified custom output committer will not be used to append data") {
-    val extraOptions = Map[String, String](
-      SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[AlwaysFailOutputCommitter].getName,
-      // Since Parquet has its own output committer setting, also set it
-      // to AlwaysFailParquetOutputCommitter at here.
-      "spark.sql.parquet.output.committer.class" ->
-        classOf[AlwaysFailParquetOutputCommitter].getName
-    )
-
-    val df = spark.range(1, 10).toDF("i")
-    withTempPath { dir =>
-      df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
-      // Because there data already exists,
-      // this append should succeed because we will use the output committer associated
-      // with file format and AlwaysFailOutputCommitter will not be used.
-      df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
-      checkAnswer(
-        spark.read
-          .format(dataSourceName)
-          .option("dataSchema", df.schema.json)
-          .options(extraOptions)
-          .load(dir.getCanonicalPath),
-        df.union(df))
-
-      // This will fail because AlwaysFailOutputCommitter is used when we do append.
-      intercept[Exception] {
-        df.write.mode("overwrite")
-          .options(extraOptions).format(dataSourceName).save(dir.getCanonicalPath)
-      }
-    }
-    withTempPath { dir =>
-      // Because there is no existing data,
-      // this append will fail because AlwaysFailOutputCommitter is used when we do append
-      // and there is no existing data.
-      intercept[Exception] {
-        df.write.mode("append")
-          .options(extraOptions)
-          .format(dataSourceName)
-          .save(dir.getCanonicalPath)
-      }
-    }
-  }
-
   test("SPARK-8887: Explicitly define which data types can be used as dynamic partition columns") {
     val df = Seq(
       (1, "v1", Array(1, 2, 3), Map("k1" -> "v1"), Tuple2(1, "4")),
@@ -847,7 +790,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       "fs.file.impl.disable.cache" -> "true"
     )
     withTempPath { dir =>
-      val path = "file://" + dir.getCanonicalPath
+      val path = dir.toURI.toString
       val df1 = spark.range(4)
       df1.coalesce(1).write.mode("overwrite").options(options).format(dataSourceName).save(path)
       df1.coalesce(1).write.mode("append").options(options).format(dataSourceName).save(path)
@@ -877,28 +820,21 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       }
     }
   }
-}
 
-// This class is used to test SPARK-8578. We should not use any custom output committer when
-// we actually append data to an existing dir.
-class AlwaysFailOutputCommitter(
-    outputPath: Path,
-    context: TaskAttemptContext)
-  extends FileOutputCommitter(outputPath, context) {
+  test("SPARK-16975: Partitioned table with the column having '_' should be read correctly") {
+    withTempDir { dir =>
+      val childDir = new File(dir, dataSourceName).getCanonicalPath
+      val dataDf = spark.range(10).toDF()
+      val df = dataDf.withColumn("_col", $"id")
+      df.write.format(dataSourceName).partitionBy("_col").save(childDir)
+      val reader = spark.read.format(dataSourceName)
 
-  override def commitJob(context: JobContext): Unit = {
-    sys.error("Intentional job commitment failure for testing purpose.")
-  }
-}
-
-// This class is used to test SPARK-8578. We should not use any custom output committer when
-// we actually append data to an existing dir.
-class AlwaysFailParquetOutputCommitter(
-    outputPath: Path,
-    context: TaskAttemptContext)
-  extends ParquetOutputCommitter(outputPath, context) {
-
-  override def commitJob(context: JobContext): Unit = {
-    sys.error("Intentional job commitment failure for testing purpose.")
+      // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema.
+      if (dataSourceName == classOf[SimpleTextSource].getCanonicalName) {
+        reader.option("dataSchema", dataDf.schema.json)
+      }
+      val readBack = reader.load(childDir)
+      checkAnswer(df, readBack)
+    }
   }
 }

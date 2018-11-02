@@ -1,6 +1,6 @@
 set hive.map.aggr=true;
 set hive.groupby.skewindata=false;
-set mapred.reduce.tasks=31;
+set mapreduce.job.reduces=31;
 
 CREATE TABLE DEST1(key INT, value STRING) STORED AS TEXTFILE;
 CREATE TABLE DEST2(key INT, value STRING) STORED AS TEXTFILE;

@@ -17,10 +17,11 @@
 # limitations under the License.
 #
 
-# Utility for creating well-formed pull request merges and pushing them to Apache.
-#   usage: ./apache-pr-merge.py    (see config env vars below)
+# Utility for creating well-formed pull request merges and pushing them to Apache
+# Spark.
+#   usage: ./merge_spark_pr.py    (see config env vars below)
 #
-# This utility assumes you already have local a Spark git folder and that you
+# This utility assumes you already have a local Spark git folder and that you
 # have added remotes corresponding to both (i) the github apache Spark
 # mirror and (ii) the apache git repo.
 
@@ -29,6 +30,7 @@ import os
 import re
 import subprocess
 import sys
+import traceback
 import urllib2
 
 try:
@@ -36,6 +38,9 @@ try:
     JIRA_IMPORTED = True
 except ImportError:
     JIRA_IMPORTED = False
+
+if sys.version < '3':
+    input = raw_input  # noqa
 
 # Location of your Spark git development area
 SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
@@ -70,22 +75,22 @@ def get_json(url):
         return json.load(urllib2.urlopen(request))
     except urllib2.HTTPError as e:
         if "X-RateLimit-Remaining" in e.headers and e.headers["X-RateLimit-Remaining"] == '0':
-            print "Exceeded the GitHub API rate limit; see the instructions in " + \
-                  "dev/merge_spark_pr.py to configure an OAuth token for making authenticated " + \
-                  "GitHub requests."
+            print("Exceeded the GitHub API rate limit; see the instructions in " +
+                  "dev/merge_spark_pr.py to configure an OAuth token for making authenticated " +
+                  "GitHub requests.")
         else:
-            print "Unable to fetch URL, exiting: %s" % url
+            print("Unable to fetch URL, exiting: %s" % url)
         sys.exit(-1)
 
 
 def fail(msg):
-    print msg
+    print(msg)
     clean_up()
     sys.exit(-1)
 
 
 def run_cmd(cmd):
-    print cmd
+    print(cmd)
     if isinstance(cmd, list):
         return subprocess.check_output(cmd)
     else:
@@ -93,19 +98,21 @@ def run_cmd(cmd):
 
 
 def continue_maybe(prompt):
-    result = raw_input("\n%s (y/n): " % prompt)
+    result = input("\n%s (y/n): " % prompt)
     if result.lower() != "y":
         fail("Okay, exiting")
 
+
 def clean_up():
-    print "Restoring head pointer to %s" % original_head
-    run_cmd("git checkout %s" % original_head)
+    if 'original_head' in globals():
+        print("Restoring head pointer to %s" % original_head)
+        run_cmd("git checkout %s" % original_head)
 
-    branches = run_cmd("git branch").replace(" ", "").split("\n")
+        branches = run_cmd("git branch").replace(" ", "").split("\n")
 
-    for branch in filter(lambda x: x.startswith(BRANCH_PREFIX), branches):
-        print "Deleting local branch %s" % branch
-        run_cmd("git branch -D %s" % branch)
+        for branch in filter(lambda x: x.startswith(BRANCH_PREFIX), branches):
+            print("Deleting local branch %s" % branch)
+            run_cmd("git branch -D %s" % branch)
 
 
 # merge the requested PR and return the merge hash
@@ -130,11 +137,16 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
                              '--pretty=format:%an <%ae>']).split("\n")
     distinct_authors = sorted(set(commit_authors),
                               key=lambda x: commit_authors.count(x), reverse=True)
-    primary_author = raw_input(
+    primary_author = input(
         "Enter primary author in the format of \"name <email>\" [%s]: " %
         distinct_authors[0])
     if primary_author == "":
         primary_author = distinct_authors[0]
+    else:
+        # When primary author is specified manually, de-dup it from author list and
+        # put it at the head of author list.
+        distinct_authors = list(filter(lambda x: x != primary_author, distinct_authors))
+        distinct_authors.insert(0, primary_author)
 
     commits = run_cmd(['git', 'log', 'HEAD..%s' % pr_branch_name,
                       '--pretty=format:%h [%an] %s']).split("\n\n")
@@ -147,19 +159,24 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
         # to people every time someone creates a public fork of Spark.
         merge_message_flags += ["-m", body.replace("@", "")]
 
-    authors = "\n".join(["Author: %s" % a for a in distinct_authors])
-
-    merge_message_flags += ["-m", authors]
+    committer_name = run_cmd("git config --get user.name").strip()
+    committer_email = run_cmd("git config --get user.email").strip()
 
     if had_conflicts:
-        committer_name = run_cmd("git config --get user.name").strip()
-        committer_email = run_cmd("git config --get user.email").strip()
         message = "This patch had conflicts when merged, resolved by\nCommitter: %s <%s>" % (
             committer_name, committer_email)
         merge_message_flags += ["-m", message]
 
     # The string "Closes #%s" string is required for GitHub to correctly close the PR
     merge_message_flags += ["-m", "Closes #%s from %s." % (pr_num, pr_repo_desc)]
+
+    authors = "Authored-by:" if len(distinct_authors) == 1 else "Lead-authored-by:"
+    authors += " %s" % (distinct_authors.pop(0))
+    if len(distinct_authors) > 0:
+        authors += "\n" + "\n".join(["Co-authored-by: %s" % a for a in distinct_authors])
+    authors += "\n" + "Signed-off-by: %s <%s>" % (committer_name, committer_email)
+
+    merge_message_flags += ["-m", authors]
 
     run_cmd(['git', 'commit', '--author="%s"' % primary_author] + merge_message_flags)
 
@@ -180,7 +197,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc):
 
 
 def cherry_pick(pr_num, merge_hash, default_branch):
-    pick_ref = raw_input("Enter a branch name [%s]: " % default_branch)
+    pick_ref = input("Enter a branch name [%s]: " % default_branch)
     if pick_ref == "":
         pick_ref = default_branch
 
@@ -227,7 +244,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     asf_jira = jira.client.JIRA({'server': JIRA_API_BASE},
                                 basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
 
-    jira_id = raw_input("Enter a JIRA id [%s]: " % default_jira_id)
+    jira_id = input("Enter a JIRA id [%s]: " % default_jira_id)
     if jira_id == "":
         jira_id = default_jira_id
 
@@ -240,21 +257,24 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     cur_summary = issue.fields.summary
     cur_assignee = issue.fields.assignee
     if cur_assignee is None:
+        cur_assignee = choose_jira_assignee(issue, asf_jira)
+    # Check again, we might not have chosen an assignee
+    if cur_assignee is None:
         cur_assignee = "NOT ASSIGNED!!!"
     else:
         cur_assignee = cur_assignee.displayName
 
     if cur_status == "Resolved" or cur_status == "Closed":
         fail("JIRA issue %s already has status '%s'" % (jira_id, cur_status))
-    print ("=== JIRA %s ===" % jira_id)
-    print ("summary\t\t%s\nassignee\t%s\nstatus\t\t%s\nurl\t\t%s/%s\n" % (
-        cur_summary, cur_assignee, cur_status, JIRA_BASE, jira_id))
+    print("=== JIRA %s ===" % jira_id)
+    print("summary\t\t%s\nassignee\t%s\nstatus\t\t%s\nurl\t\t%s/%s\n" %
+          (cur_summary, cur_assignee, cur_status, JIRA_BASE, jira_id))
 
     versions = asf_jira.project_versions("SPARK")
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
     versions = filter(lambda x: x.raw['released'] is False, versions)
     # Consider only x.y.z versions
-    versions = filter(lambda x: re.match('\d+\.\d+\.\d+', x.name), versions)
+    versions = filter(lambda x: re.match(r'\d+\.\d+\.\d+', x.name), versions)
 
     default_fix_versions = map(lambda x: fix_version_from_branch(x, versions).name, merge_branches)
     for v in default_fix_versions:
@@ -269,7 +289,7 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
                 default_fix_versions = filter(lambda x: x != v, default_fix_versions)
     default_fix_versions = ",".join(default_fix_versions)
 
-    fix_versions = raw_input("Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
+    fix_versions = input("Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
     if fix_versions == "":
         fix_versions = default_fix_versions
     fix_versions = fix_versions.replace(" ", "").split(",")
@@ -282,10 +302,50 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     resolve = filter(lambda a: a['name'] == "Resolve Issue", asf_jira.transitions(jira_id))[0]
     resolution = filter(lambda r: r.raw['name'] == "Fixed", asf_jira.resolutions())[0]
     asf_jira.transition_issue(
-        jira_id, resolve["id"], fixVersions = jira_fix_versions,
-        comment = comment, resolution = {'id': resolution.raw['id']})
+        jira_id, resolve["id"], fixVersions=jira_fix_versions,
+        comment=comment, resolution={'id': resolution.raw['id']})
 
-    print "Successfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions)
+    print("Successfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions))
+
+
+def choose_jira_assignee(issue, asf_jira):
+    """
+    Prompt the user to choose who to assign the issue to in jira, given a list of candidates,
+    including the original reporter and all commentors
+    """
+    while True:
+        try:
+            reporter = issue.fields.reporter
+            commentors = map(lambda x: x.author, issue.fields.comment.comments)
+            candidates = set(commentors)
+            candidates.add(reporter)
+            candidates = list(candidates)
+            print("JIRA is unassigned, choose assignee")
+            for idx, author in enumerate(candidates):
+                if author.key == "apachespark":
+                    continue
+                annotations = ["Reporter"] if author == reporter else []
+                if author in commentors:
+                    annotations.append("Commentor")
+                print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
+            raw_assignee = input(
+                "Enter number of user, or userid, to assign to (blank to leave unassigned):")
+            if raw_assignee == "":
+                return None
+            else:
+                try:
+                    id = int(raw_assignee)
+                    assignee = candidates[id]
+                except:
+                    # assume it's a user id, and try to assign (might fail, we just prompt again)
+                    assignee = asf_jira.user(raw_assignee)
+                asf_jira.assign_issue(issue.key, assignee.key)
+                return assignee
+        except KeyboardInterrupt:
+            raise
+        except:
+            traceback.print_exc()
+            print("Error assigning JIRA, try again (or leave blank and fix manually)")
 
 
 def resolve_jira_issues(title, merge_branches, comment):
@@ -300,23 +360,29 @@ def resolve_jira_issues(title, merge_branches, comment):
 def standardize_jira_ref(text):
     """
     Standardize the [SPARK-XXXXX] [MODULE] prefix
-    Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to "[SPARK-XXX][MLLIB] Issue"
+    Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to
+    "[SPARK-XXX][MLLIB] Issue"
 
-    >>> standardize_jira_ref("[SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful")
+    >>> standardize_jira_ref(
+    ...     "[SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful")
     '[SPARK-5821][SQL] ParquetRelation2 CTAS should check if delete is successful'
-    >>> standardize_jira_ref("[SPARK-4123][Project Infra][WIP]: Show new dependencies added in pull requests")
+    >>> standardize_jira_ref(
+    ...     "[SPARK-4123][Project Infra][WIP]: Show new dependencies added in pull requests")
     '[SPARK-4123][PROJECT INFRA][WIP] Show new dependencies added in pull requests'
     >>> standardize_jira_ref("[MLlib] Spark  5954: Top by key")
     '[SPARK-5954][MLLIB] Top by key'
     >>> standardize_jira_ref("[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl")
     '[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl'
-    >>> standardize_jira_ref("SPARK-1094 Support MiMa for reporting binary compatibility accross versions.")
-    '[SPARK-1094] Support MiMa for reporting binary compatibility accross versions.'
+    >>> standardize_jira_ref(
+    ...     "SPARK-1094 Support MiMa for reporting binary compatibility across versions.")
+    '[SPARK-1094] Support MiMa for reporting binary compatibility across versions.'
     >>> standardize_jira_ref("[WIP]  [SPARK-1146] Vagrant support for Spark")
     '[SPARK-1146][WIP] Vagrant support for Spark'
-    >>> standardize_jira_ref("SPARK-1032. If Yarn app fails before registering, app master stays aroun...")
+    >>> standardize_jira_ref(
+    ...     "SPARK-1032. If Yarn app fails before registering, app master stays aroun...")
     '[SPARK-1032] If Yarn app fails before registering, app master stays aroun...'
-    >>> standardize_jira_ref("[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.")
+    >>> standardize_jira_ref(
+    ...     "[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.")
     '[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.'
     >>> standardize_jira_ref("Additional information for users building from source code")
     'Additional information for users building from source code'
@@ -337,7 +403,7 @@ def standardize_jira_ref(text):
 
     # Extract spark component(s):
     # Look for alphanumeric chars, spaces, dashes, periods, and/or commas
-    pattern = re.compile(r'(\[[\w\s,-\.]+\])', re.IGNORECASE)
+    pattern = re.compile(r'(\[[\w\s,.-]+\])', re.IGNORECASE)
     for component in pattern.findall(text):
         components.append(component.upper())
         text = text.replace(component, '')
@@ -350,7 +416,8 @@ def standardize_jira_ref(text):
     # Assemble full text (JIRA ref(s), module(s), remaining text)
     clean_text = ''.join(jira_refs).strip() + ''.join(components).strip() + " " + text.strip()
 
-    # Replace multiple spaces with a single space, e.g. if no jira refs and/or components were included
+    # Replace multiple spaces with a single space, e.g. if no jira refs and/or components were
+    # included
     clean_text = re.sub(r'\s+', ' ', clean_text.strip())
 
     return clean_text
@@ -371,12 +438,16 @@ def main():
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
 
+    # Check this up front to avoid failing the JIRA update at the very end
+    if not JIRA_USERNAME or not JIRA_PASSWORD:
+        continue_maybe("The env-vars JIRA_USERNAME and/or JIRA_PASSWORD are not set. Continue?")
+
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = filter(lambda x: x.startswith("branch-"), [x['name'] for x in branches])
     # Assumes branch names can be sorted lexicographically
     latest_branch = sorted(branch_names, reverse=True)[0]
 
-    pr_num = raw_input("Which pull request would you like to merge? (e.g. 34): ")
+    pr_num = input("Which pull request would you like to merge? (e.g. 34): ")
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
     pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
@@ -385,17 +456,17 @@ def main():
     # Decide whether to use the modified title or not
     modified_title = standardize_jira_ref(pr["title"])
     if modified_title != pr["title"]:
-        print "I've re-written the title as follows to match the standard format:"
-        print "Original: %s" % pr["title"]
-        print "Modified: %s" % modified_title
-        result = raw_input("Would you like to use the modified title? (y/n): ")
+        print("I've re-written the title as follows to match the standard format:")
+        print("Original: %s" % pr["title"])
+        print("Modified: %s" % modified_title)
+        result = input("Would you like to use the modified title? (y/n): ")
         if result.lower() == "y":
             title = modified_title
-            print "Using modified title:"
+            print("Using modified title:")
         else:
             title = pr["title"]
-            print "Using original title:"
-        print title
+            print("Using original title:")
+        print(title)
     else:
         title = pr["title"]
 
@@ -414,13 +485,13 @@ def main():
         merge_hash = merge_commits[0]["commit_id"]
         message = get_json("%s/commits/%s" % (GITHUB_API_BASE, merge_hash))["commit"]["message"]
 
-        print "Pull request %s has already been merged, assuming you want to backport" % pr_num
+        print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
         commit_is_downloaded = run_cmd(['git', 'rev-parse', '--quiet', '--verify',
-                                    "%s^{commit}" % merge_hash]).strip() != ""
+                                        "%s^{commit}" % merge_hash]).strip() != ""
         if not commit_is_downloaded:
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
-        print "Found commit %s:\n%s" % (merge_hash, message)
+        print("Found commit %s:\n%s" % (merge_hash, message))
         cherry_pick(pr_num, merge_hash, latest_branch)
         sys.exit(0)
 
@@ -429,9 +500,9 @@ def main():
             "Continue? (experts only!)"
         continue_maybe(msg)
 
-    print ("\n=== Pull Request #%s ===" % pr_num)
-    print ("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (
-        title, pr_repo_desc, target_ref, url))
+    print("\n=== Pull Request #%s ===" % pr_num)
+    print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" %
+          (title, pr_repo_desc, target_ref, url))
     continue_maybe("Proceed with merging pull request #%s?" % pr_num)
 
     merged_refs = [target_ref]
@@ -439,26 +510,27 @@ def main():
     merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc)
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
-    while raw_input("\n%s (y/n): " % pick_prompt).lower() == "y":
+    while input("\n%s (y/n): " % pick_prompt).lower() == "y":
         merged_refs = merged_refs + [cherry_pick(pr_num, merge_hash, latest_branch)]
 
     if JIRA_IMPORTED:
         if JIRA_USERNAME and JIRA_PASSWORD:
             continue_maybe("Would you like to update an associated JIRA?")
-            jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (pr_num, GITHUB_BASE, pr_num)
+            jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % \
+                           (pr_num, GITHUB_BASE, pr_num)
             resolve_jira_issues(title, merged_refs, jira_comment)
         else:
-            print "JIRA_USERNAME and JIRA_PASSWORD not set"
-            print "Exiting without trying to close the associated JIRA."
+            print("JIRA_USERNAME and JIRA_PASSWORD not set")
+            print("Exiting without trying to close the associated JIRA.")
     else:
-        print "Could not find jira-python library. Run 'sudo pip install jira' to install."
-        print "Exiting without trying to close the associated JIRA."
+        print("Could not find jira-python library. Run 'sudo pip install jira' to install.")
+        print("Exiting without trying to close the associated JIRA.")
 
 if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
     try:
         main()
     except:

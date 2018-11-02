@@ -57,6 +57,8 @@ class ReceiverTrackerSuite extends TestSuiteBase {
         }
       } finally {
         tracker.stop(false)
+        // Make sure it is idempotent.
+        tracker.stop(false)
       }
     }
   }

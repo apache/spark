@@ -127,39 +127,6 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc3.value.isEmpty)
   }
 
-  test("LegacyAccumulatorWrapper") {
-    val acc = new LegacyAccumulatorWrapper("default", AccumulatorParam.StringAccumulatorParam)
-    assert(acc.value === "default")
-    assert(!acc.isZero)
-
-    acc.add("foo")
-    assert(acc.value === "foo")
-    assert(!acc.isZero)
-
-    acc.add(new java.lang.String("bar"))
-
-    val acc2 = acc.copyAndReset()
-    assert(acc2.value === "")
-    assert(acc2.isZero)
-
-    assert(acc.value === "bar")
-    assert(!acc.isZero)
-
-    acc2.add("baz")
-    assert(acc2.value === "baz")
-    assert(!acc2.isZero)
-
-    // Test merging
-    acc.merge(acc2)
-    assert(acc.value === "baz")
-    assert(!acc.isZero)
-
-    val acc3 = acc.copy()
-    assert(acc3.value === "baz")
-    assert(!acc3.isZero)
-
-    acc3.reset()
-    assert(acc3.isZero)
-    assert(acc3.value === "")
-  }
 }
+
+class MyData(val i: Int) extends Serializable

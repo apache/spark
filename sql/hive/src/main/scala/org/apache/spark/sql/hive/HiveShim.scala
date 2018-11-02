@@ -50,7 +50,7 @@ private[hive] object HiveShim {
   val HIVE_GENERIC_UDF_MACRO_CLS = "org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro"
 
   /*
-   * This function in hive-0.13 become private, but we have to do this to walkaround hive bug
+   * This function in hive-0.13 become private, but we have to do this to work around hive bug
    */
   private def appendReadColumnNames(conf: Configuration, cols: Seq[String]) {
     val old: String = conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, "")
@@ -69,13 +69,13 @@ private[hive] object HiveShim {
   }
 
   /*
-   * Cannot use ColumnProjectionUtils.appendReadColumns directly, if ids is null or empty
+   * Cannot use ColumnProjectionUtils.appendReadColumns directly, if ids is null
    */
   def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]) {
-    if (ids != null && ids.nonEmpty) {
+    if (ids != null) {
       ColumnProjectionUtils.appendReadColumns(conf, ids.asJava)
     }
-    if (names != null && names.nonEmpty) {
+    if (names != null) {
       appendReadColumnNames(conf, names)
     }
   }

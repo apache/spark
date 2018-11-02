@@ -4,3 +4,4 @@
 6,7,8,9,0,2015-08-21 16:58:01
 ~0,9,8,7,6,2015-08-22 17:59:02
 1,2,3,4,5,2015-08-23 18:00:42
+~ comment in last line to test SPARK-22516 - do not add empty line at the end of this file!

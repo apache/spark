@@ -25,7 +25,7 @@ import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
  * Split applied to a feature
  * @param feature feature index
  * @param threshold Threshold for continuous feature.
- *                  Split left if feature <= threshold, else right.
+ *                  Split left if feature is less than or equal to threshold, else right.
  * @param featureType type of feature -- categorical or continuous
  * @param categories Split left if categorical feature value is in this set, else right.
  */

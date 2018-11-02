@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import warnings
 
 from pyspark import since
@@ -116,9 +117,9 @@ class RegressionMetrics(JavaModelWrapper):
     @property
     @since('1.4.0')
     def explainedVariance(self):
-        """
+        r"""
         Returns the explained variance regression score.
-        explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
+        explainedVariance = :math:`1 - \frac{variance(y - \hat{y})}{variance(y)}`
         """
         return self.call("explainedVariance")
 
@@ -234,7 +235,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         if label is None:
             # note:: Deprecated in 2.0.0. Use accuracy.
-            warnings.warn("Deprecated in 2.0.0. Use accuracy.")
+            warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
             return self.call("precision")
         else:
             return self.call("precision", float(label))
@@ -246,7 +247,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         if label is None:
             # note:: Deprecated in 2.0.0. Use accuracy.
-            warnings.warn("Deprecated in 2.0.0. Use accuracy.")
+            warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
             return self.call("recall")
         else:
             return self.call("recall", float(label))
@@ -259,7 +260,7 @@ class MulticlassMetrics(JavaModelWrapper):
         if beta is None:
             if label is None:
                 # note:: Deprecated in 2.0.0. Use accuracy.
-                warnings.warn("Deprecated in 2.0.0. Use accuracy.")
+                warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
                 return self.call("fMeasure")
             else:
                 return self.call("fMeasure", label)
@@ -531,8 +532,14 @@ class MultilabelMetrics(JavaModelWrapper):
 
 def _test():
     import doctest
+    import numpy
     from pyspark.sql import SparkSession
     import pyspark.mllib.evaluation
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.mllib.evaluation.__dict__.copy()
     spark = SparkSession.builder\
         .master("local[4]")\
@@ -542,7 +549,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

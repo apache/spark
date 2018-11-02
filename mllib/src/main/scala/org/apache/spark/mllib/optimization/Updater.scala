@@ -95,9 +95,9 @@ class SimpleUpdater extends Updater {
  * The corresponding proximal operator for the L1 norm is the soft-thresholding
  * function. That is, each weight component is shrunk towards 0 by shrinkageVal.
  *
- * If w >  shrinkageVal, set weight component to w-shrinkageVal.
- * If w < -shrinkageVal, set weight component to w+shrinkageVal.
- * If -shrinkageVal < w < shrinkageVal, set weight component to 0.
+ * If w is greater than shrinkageVal, set weight component to w-shrinkageVal.
+ * If w is less than -shrinkageVal, set weight component to w+shrinkageVal.
+ * If w is (-shrinkageVal, shrinkageVal), set weight component to 0.
  *
  * Equivalently, set weight component to signum(w) * max(0.0, abs(w) - shrinkageVal)
  */

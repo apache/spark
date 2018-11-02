@@ -35,7 +35,6 @@ connExists <- function(env) {
 #' Also terminates the backend this R session is connected to.
 #' @rdname sparkR.session.stop
 #' @name sparkR.session.stop
-#' @export
 #' @note sparkR.session.stop since 2.0.0
 sparkR.session.stop <- function() {
   env <- .sparkREnv
@@ -84,54 +83,9 @@ sparkR.session.stop <- function() {
 
 #' @rdname sparkR.session.stop
 #' @name sparkR.stop
-#' @export
 #' @note sparkR.stop since 1.4.0
 sparkR.stop <- function() {
   sparkR.session.stop()
-}
-
-#' (Deprecated) Initialize a new Spark Context
-#'
-#' This function initializes a new SparkContext.
-#'
-#' @param master The Spark master URL
-#' @param appName Application name to register with cluster manager
-#' @param sparkHome Spark Home directory
-#' @param sparkEnvir Named list of environment variables to set on worker nodes
-#' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
-#' @param sparkJars Character vector of jar files to pass to the worker nodes
-#' @param sparkPackages Character vector of package coordinates
-#' @seealso \link{sparkR.session}
-#' @rdname sparkR.init-deprecated
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init("local[2]", "SparkR", "/home/spark")
-#' sc <- sparkR.init("local[2]", "SparkR", "/home/spark",
-#'                  list(spark.executor.memory="1g"))
-#' sc <- sparkR.init("yarn-client", "SparkR", "/home/spark",
-#'                  list(spark.executor.memory="4g"),
-#'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
-#'                  c("one.jar", "two.jar", "three.jar"),
-#'                  c("com.databricks:spark-avro_2.10:2.0.1"))
-#'}
-#' @note sparkR.init since 1.4.0
-sparkR.init <- function(
-  master = "",
-  appName = "SparkR",
-  sparkHome = Sys.getenv("SPARK_HOME"),
-  sparkEnvir = list(),
-  sparkExecutorEnv = list(),
-  sparkJars = "",
-  sparkPackages = "") {
-  .Deprecated("sparkR.session")
-  sparkR.sparkContext(master,
-     appName,
-     sparkHome,
-     convertNamedListToEnv(sparkEnvir),
-     convertNamedListToEnv(sparkExecutorEnv),
-     sparkJars,
-     sparkPackages)
 }
 
 # Internal function to handle creating the SparkContext.
@@ -154,17 +108,23 @@ sparkR.sparkContext <- function(
   packages <- processSparkPackages(sparkPackages)
 
   existingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
+  connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
   if (existingPort != "") {
     if (length(packages) != 0) {
       warning(paste("sparkPackages has no effect when using spark-submit or sparkR shell",
                     " please use the --packages commandline instead", sep = ","))
     }
     backendPort <- existingPort
+    authSecret <- Sys.getenv("SPARKR_BACKEND_AUTH_SECRET")
+    if (nchar(authSecret) == 0) {
+      stop("Auth secret not provided in environment.")
+    }
   } else {
     path <- tempfile(pattern = "backend_port")
     submitOps <- getClientModeSparkSubmitOpts(
         Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
         sparkEnvirMap)
+    invisible(checkJavaVersion())
     launchBackend(
         args = path,
         sparkHome = sparkHome,
@@ -187,14 +147,28 @@ sparkR.sparkContext <- function(
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
     rLibPath <- readString(f)
+    connectionTimeout <- readInt(f)
+
+    # Don't use readString() so that we can provide a useful
+    # error message if the R and Java versions are mismatched.
+    authSecretLen <- readInt(f)
+    if (length(authSecretLen) == 0 || authSecretLen == 0) {
+      stop("Unexpected EOF in JVM connection data. Mismatched versions?")
+    }
+    authSecret <- readStringData(f, authSecretLen)
     close(f)
     file.remove(path)
     if (length(backendPort) == 0 || backendPort == 0 ||
         length(monitorPort) == 0 || monitorPort == 0 ||
-        length(rLibPath) != 1) {
+        length(rLibPath) != 1 || length(authSecret) == 0) {
       stop("JVM failed to launch")
     }
-    assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
+
+    monitorConn <- socketConnection(port = monitorPort, blocking = TRUE,
+                                    timeout = connectionTimeout, open = "wb")
+    doServerAuth(monitorConn, authSecret)
+
+    assign(".monitorConn", monitorConn, envir = .sparkREnv)
     assign(".backendLaunched", 1, envir = .sparkREnv)
     if (rLibPath != "") {
       assign(".libPath", rLibPath, envir = .sparkREnv)
@@ -204,7 +178,7 @@ sparkR.sparkContext <- function(
 
   .sparkREnv$backendPort <- backendPort
   tryCatch({
-    connectBackend("localhost", backendPort)
+    connectBackend("localhost", backendPort, timeout = connectionTimeout, authSecret = authSecret)
   },
   error = function(err) {
     stop("Failed to connect JVM\n")
@@ -255,69 +229,24 @@ sparkR.sparkContext <- function(
   sc
 }
 
-#' (Deprecated) Initialize a new SQLContext
-#'
-#' This function creates a SparkContext from an existing JavaSparkContext and
-#' then uses it to initialize a new SQLContext
-#'
-#' Starting SparkR 2.0, a SparkSession is initialized and returned instead.
-#' This API is deprecated and kept for backward compatibility only.
-#'
-#' @param jsc The existing JavaSparkContext created with SparkR.init()
-#' @seealso \link{sparkR.session}
-#' @rdname sparkRSQL.init-deprecated
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
-#'}
-#' @note sparkRSQL.init since 1.4.0
-sparkRSQL.init <- function(jsc = NULL) {
-  .Deprecated("sparkR.session")
-
-  if (exists(".sparkRsession", envir = .sparkREnv)) {
-    return(get(".sparkRsession", envir = .sparkREnv))
-  }
-
-  # Default to without Hive support for backward compatibility.
-  sparkR.session(enableHiveSupport = FALSE)
-}
-
-#' (Deprecated) Initialize a new HiveContext
-#'
-#' This function creates a HiveContext from an existing JavaSparkContext
-#'
-#' Starting SparkR 2.0, a SparkSession is initialized and returned instead.
-#' This API is deprecated and kept for backward compatibility only.
-#'
-#' @param jsc The existing JavaSparkContext created with SparkR.init()
-#' @seealso \link{sparkR.session}
-#' @rdname sparkRHive.init-deprecated
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRHive.init(sc)
-#'}
-#' @note sparkRHive.init since 1.4.0
-sparkRHive.init <- function(jsc = NULL) {
-  .Deprecated("sparkR.session")
-
-  if (exists(".sparkRsession", envir = .sparkREnv)) {
-    return(get(".sparkRsession", envir = .sparkREnv))
-  }
-
-  # Default to without Hive support for backward compatibility.
-  sparkR.session(enableHiveSupport = TRUE)
-}
-
 #' Get the existing SparkSession or initialize a new SparkSession.
 #'
 #' SparkSession is the entry point into SparkR. \code{sparkR.session} gets the existing
 #' SparkSession or initializes a new SparkSession.
 #' Additional Spark properties can be set in \code{...}, and these named parameters take priority
 #' over values in \code{master}, \code{appName}, named lists of \code{sparkConfig}.
+#'
+#' When called in an interactive session, this method checks for the Spark installation, and, if not
+#' found, it will be downloaded and cached automatically. Alternatively, \code{install.spark} can
+#' be called manually.
+#'
+#' A default warehouse is created automatically in the current directory when a managed table is
+#' created via \code{sql} statement \code{CREATE TABLE}, for example. To change the location of the
+#' warehouse, set the named parameter \code{spark.sql.warehouse.dir} to the SparkSession. Along with
+#' the warehouse, an accompanied metastore may also be automatically created in the current
+#' directory when a new SparkSession is initialized with \code{enableHiveSupport} set to
+#' \code{TRUE}, which is the default. For more details, refer to Hive configuration at
+#' \url{http://spark.apache.org/docs/latest/sql-programming-guide.html#hive-tables}.
 #'
 #' For details on how to initialize and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
@@ -331,7 +260,6 @@ sparkRHive.init <- function(jsc = NULL) {
 #' @param enableHiveSupport enable support for Hive, fallback if not built with Hive support; once
 #'        set, this cannot be turned off on an existing session
 #' @param ... named Spark properties passed to the method.
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -341,7 +269,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' sparkR.session("yarn-client", "SparkR", "/home/spark",
 #'                list(spark.executor.memory="4g"),
 #'                c("one.jar", "two.jar", "three.jar"),
-#'                c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                c("com.databricks:spark-avro_2.11:2.0.1"))
 #' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
 #' @note sparkR.session since 2.0.0
@@ -369,8 +297,17 @@ sparkR.session <- function(
     overrideEnvs(sparkConfigMap, paramMap)
   }
 
+  deployMode <- ""
+  if (exists("spark.submit.deployMode", envir = sparkConfigMap)) {
+    deployMode <- sparkConfigMap[["spark.submit.deployMode"]]
+  }
+
+  if (!exists("spark.r.sql.derby.temp.dir", envir = sparkConfigMap)) {
+    sparkConfigMap[["spark.r.sql.derby.temp.dir"]] <- tempdir()
+  }
+
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
-    retHome <- sparkCheckInstall(sparkHome, master)
+    retHome <- sparkCheckInstall(sparkHome, master, deployMode)
     if (!is.null(retHome)) sparkHome <- retHome
     sparkExecutorEnvMap <- new.env()
     sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
@@ -395,7 +332,42 @@ sparkR.session <- function(
                                 enableHiveSupport)
     assign(".sparkRsession", sparkSession, envir = .sparkREnv)
   }
+
+  # Check if version number of SparkSession matches version number of SparkR package
+  jvmVersion <- callJMethod(sparkSession, "version")
+  # Remove -SNAPSHOT from jvm versions
+  jvmVersionStrip <- gsub("-SNAPSHOT", "", jvmVersion)
+  rPackageVersion <- paste0(packageVersion("SparkR"))
+
+  if (jvmVersionStrip != rPackageVersion) {
+    warning(paste("Version mismatch between Spark JVM and SparkR package. JVM version was",
+                  jvmVersion, ", while R package version was", rPackageVersion))
+  }
+
   sparkSession
+}
+
+#' Get the URL of the SparkUI instance for the current active SparkSession
+#'
+#' Get the URL of the SparkUI instance for the current active SparkSession.
+#'
+#' @return the SparkUI URL, or NA if it is disabled, or not started.
+#' @rdname sparkR.uiWebUrl
+#' @name sparkR.uiWebUrl
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' url <- sparkR.uiWebUrl()
+#' }
+#' @note sparkR.uiWebUrl since 2.1.1
+sparkR.uiWebUrl <- function() {
+  sc <- sparkR.callJMethod(getSparkContext(), "sc")
+  u <- callJMethod(sc, "uiWebUrl")
+  if (callJMethod(u, "isDefined")) {
+    callJMethod(u, "get")
+  } else {
+    NA
+  }
 }
 
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
@@ -412,24 +384,9 @@ sparkR.session <- function(
 #' setJobGroup("myJobGroup", "My job group description", TRUE)
 #'}
 #' @note setJobGroup since 1.5.0
-#' @method setJobGroup default
-setJobGroup.default <- function(groupId, description, interruptOnCancel) {
+setJobGroup <- function(groupId, description, interruptOnCancel) {
   sc <- getSparkContext()
-  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
-}
-
-setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
-  if (class(sc) == "jobj" && any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
-    .Deprecated("setJobGroup(groupId, description, interruptOnCancel)",
-                old = "setJobGroup(sc, groupId, description, interruptOnCancel)")
-    setJobGroup.default(groupId, description, interruptOnCancel)
-  } else {
-    # Parameter order is shifted
-    groupIdToUse <- sc
-    descriptionToUse <- groupId
-    interruptOnCancelToUse <- description
-    setJobGroup.default(groupIdToUse, descriptionToUse, interruptOnCancelToUse)
-  }
+  invisible(callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel))
 }
 
 #' Clear current job group ID and its description
@@ -442,21 +399,10 @@ setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
 #' clearJobGroup()
 #'}
 #' @note clearJobGroup since 1.5.0
-#' @method clearJobGroup default
-clearJobGroup.default <- function() {
+clearJobGroup <- function() {
   sc <- getSparkContext()
-  callJMethod(sc, "clearJobGroup")
+  invisible(callJMethod(sc, "clearJobGroup"))
 }
-
-clearJobGroup <- function(sc) {
-  if (!missing(sc) &&
-      class(sc) == "jobj" &&
-      any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
-    .Deprecated("clearJobGroup()", old = "clearJobGroup(sc)")
-  }
-  clearJobGroup.default()
-}
-
 
 #' Cancel active jobs for the specified group
 #'
@@ -469,21 +415,71 @@ clearJobGroup <- function(sc) {
 #' cancelJobGroup("myJobGroup")
 #'}
 #' @note cancelJobGroup since 1.5.0
-#' @method cancelJobGroup default
-cancelJobGroup.default <- function(groupId) {
+cancelJobGroup <- function(groupId) {
   sc <- getSparkContext()
-  callJMethod(sc, "cancelJobGroup", groupId)
+  invisible(callJMethod(sc, "cancelJobGroup", groupId))
 }
 
-cancelJobGroup <- function(sc, groupId) {
-  if (class(sc) == "jobj" && any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
-    .Deprecated("cancelJobGroup(groupId)", old = "cancelJobGroup(sc, groupId)")
-    cancelJobGroup.default(groupId)
-  } else {
-    # Parameter order is shifted
-    groupIdToUse <- sc
-    cancelJobGroup.default(groupIdToUse)
+#' Set a human readable description of the current job.
+#'
+#' Set a description that is shown as a job description in UI.
+#'
+#' @param value The job description of the current job.
+#' @rdname setJobDescription
+#' @name setJobDescription
+#' @examples
+#'\dontrun{
+#' setJobDescription("This is an example job.")
+#'}
+#' @note setJobDescription since 2.3.0
+setJobDescription <- function(value) {
+  if (!is.null(value)) {
+    value <- as.character(value)
   }
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setJobDescription", value))
+}
+
+#' Set a local property that affects jobs submitted from this thread, such as the
+#' Spark fair scheduler pool.
+#'
+#' @param key The key for a local property.
+#' @param value The value for a local property.
+#' @rdname setLocalProperty
+#' @name setLocalProperty
+#' @examples
+#'\dontrun{
+#' setLocalProperty("spark.scheduler.pool", "poolA")
+#'}
+#' @note setLocalProperty since 2.3.0
+setLocalProperty <- function(key, value) {
+  if (is.null(key) || is.na(key)) {
+    stop("key should not be NULL or NA.")
+  }
+  if (!is.null(value)) {
+    value <- as.character(value)
+  }
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setLocalProperty", as.character(key), value))
+}
+
+#' Get a local property set in this thread, or \code{NULL} if it is missing. See
+#' \code{setLocalProperty}.
+#'
+#' @param key The key for a local property.
+#' @rdname getLocalProperty
+#' @name getLocalProperty
+#' @examples
+#'\dontrun{
+#' getLocalProperty("spark.scheduler.pool")
+#'}
+#' @note getLocalProperty since 2.3.0
+getLocalProperty <- function(key) {
+  if (is.null(key) || is.na(key)) {
+    stop("key should not be NULL or NA.")
+  }
+  sc <- getSparkContext()
+  callJMethod(sc, "getLocalProperty", as.character(key))
 }
 
 sparkConfToSubmitOps <- new.env()
@@ -494,6 +490,8 @@ sparkConfToSubmitOps[["spark.driver.extraLibraryPath"]] <- "--driver-library-pat
 sparkConfToSubmitOps[["spark.master"]] <- "--master"
 sparkConfToSubmitOps[["spark.yarn.keytab"]] <- "--keytab"
 sparkConfToSubmitOps[["spark.yarn.principal"]] <- "--principal"
+sparkConfToSubmitOps[["spark.kerberos.keytab"]] <- "--keytab"
+sparkConfToSubmitOps[["spark.kerberos.principal"]] <- "--principal"
 
 
 # Utility function that returns Spark Submit arguments as a string
@@ -546,27 +544,42 @@ processSparkPackages <- function(packages) {
 #
 # @param sparkHome directory to find Spark package.
 # @param master the Spark master URL, used to check local or remote mode.
+# @param deployMode whether to deploy your driver on the worker nodes (cluster)
+#        or locally as an external client (client).
 # @return NULL if no need to update sparkHome, and new sparkHome otherwise.
-sparkCheckInstall <- function(sparkHome, master) {
+sparkCheckInstall <- function(sparkHome, master, deployMode) {
   if (!isSparkRShell()) {
     if (!is.na(file.info(sparkHome)$isdir)) {
-      msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
-      message(msg)
+      message("Spark package found in SPARK_HOME: ", sparkHome)
       NULL
     } else {
-      if (!nzchar(master) || isMasterLocal(master)) {
-        msg <- paste0("Spark not found in SPARK_HOME: ",
-                      sparkHome)
-        message(msg)
+      if (interactive() || isMasterLocal(master)) {
+        message("Spark not found in SPARK_HOME: ", sparkHome)
         packageLocalDir <- install.spark()
         packageLocalDir
-      } else {
+      } else if (isClientMode(master) || deployMode == "client") {
         msg <- paste0("Spark not found in SPARK_HOME: ",
                       sparkHome, "\n", installInstruction("remote"))
         stop(msg)
+      } else {
+        NULL
       }
     }
   } else {
     NULL
+  }
+}
+
+# Utility function for sending auth data over a socket and checking the server's reply.
+doServerAuth <- function(con, authSecret) {
+  if (nchar(authSecret) == 0) {
+    stop("Auth secret not provided.")
+  }
+  writeString(con, authSecret)
+  flush(con)
+  reply <- readString(con)
+  if (reply != "ok") {
+    close(con)
+    stop("Unexpected reply from server.")
   }
 }

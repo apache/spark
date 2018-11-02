@@ -26,7 +26,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -37,9 +36,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportClient;
@@ -47,20 +44,15 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class StreamSuite {
-  private static final String[] STREAMS = { "largeBuffer", "smallBuffer", "emptyBuffer", "file" };
+  private static final String[] STREAMS = StreamTestHelper.STREAMS;
+  private static StreamTestHelper testData;
 
   private static TransportServer server;
   private static TransportClientFactory clientFactory;
-  private static File testFile;
-  private static File tempDir;
-
-  private static ByteBuffer emptyBuffer;
-  private static ByteBuffer smallBuffer;
-  private static ByteBuffer largeBuffer;
 
   private static ByteBuffer createBuffer(int bufSize) {
     ByteBuffer buf = ByteBuffer.allocate(bufSize);
@@ -73,25 +65,9 @@ public class StreamSuite {
 
   @BeforeClass
   public static void setUp() throws Exception {
-    tempDir = Files.createTempDir();
-    emptyBuffer = createBuffer(0);
-    smallBuffer = createBuffer(100);
-    largeBuffer = createBuffer(100000);
+    testData = new StreamTestHelper();
 
-    testFile = File.createTempFile("stream-test-file", "txt", tempDir);
-    FileOutputStream fp = new FileOutputStream(testFile);
-    try {
-      Random rnd = new Random();
-      for (int i = 0; i < 512; i++) {
-        byte[] fileContent = new byte[1024];
-        rnd.nextBytes(fileContent);
-        fp.write(fileContent);
-      }
-    } finally {
-      fp.close();
-    }
-
-    final TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+    final TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
     final StreamManager streamManager = new StreamManager() {
       @Override
       public ManagedBuffer getChunk(long streamId, int chunkIndex) {
@@ -100,18 +76,7 @@ public class StreamSuite {
 
       @Override
       public ManagedBuffer openStream(String streamId) {
-        switch (streamId) {
-          case "largeBuffer":
-            return new NioManagedBuffer(largeBuffer);
-          case "smallBuffer":
-            return new NioManagedBuffer(smallBuffer);
-          case "emptyBuffer":
-            return new NioManagedBuffer(emptyBuffer);
-          case "file":
-            return new FileSegmentManagedBuffer(conf, testFile, 0, testFile.length());
-          default:
-            throw new IllegalArgumentException("Invalid stream: " + streamId);
-        }
+        return testData.openStream(conf, streamId);
       }
     };
     RpcHandler handler = new RpcHandler() {
@@ -137,12 +102,7 @@ public class StreamSuite {
   public static void tearDown() {
     server.close();
     clientFactory.close();
-    if (tempDir != null) {
-      for (File f : tempDir.listFiles()) {
-        f.delete();
-      }
-      tempDir.delete();
-    }
+    testData.cleanup();
   }
 
   @Test
@@ -234,21 +194,21 @@ public class StreamSuite {
           case "largeBuffer":
             baos = new ByteArrayOutputStream();
             out = baos;
-            srcBuffer = largeBuffer;
+            srcBuffer = testData.largeBuffer;
             break;
           case "smallBuffer":
             baos = new ByteArrayOutputStream();
             out = baos;
-            srcBuffer = smallBuffer;
+            srcBuffer = testData.smallBuffer;
             break;
           case "file":
-            outFile = File.createTempFile("data", ".tmp", tempDir);
+            outFile = File.createTempFile("data", ".tmp", testData.tempDir);
             out = new FileOutputStream(outFile);
             break;
           case "emptyBuffer":
             baos = new ByteArrayOutputStream();
             out = baos;
-            srcBuffer = emptyBuffer;
+            srcBuffer = testData.emptyBuffer;
             break;
           default:
             throw new IllegalArgumentException(streamId);
@@ -256,10 +216,10 @@ public class StreamSuite {
 
         TestCallback callback = new TestCallback(out);
         client.stream(streamId, callback);
-        waitForCompletion(callback);
+        callback.waitForCompletion(timeoutMs);
 
         if (srcBuffer == null) {
-          assertTrue("File stream did not match.", Files.equal(testFile, outFile));
+          assertTrue("File stream did not match.", Files.equal(testData.testFile, outFile));
         } else {
           ByteBuffer base;
           synchronized (srcBuffer) {
@@ -292,23 +252,9 @@ public class StreamSuite {
         throw error;
       }
     }
-
-    private void waitForCompletion(TestCallback callback) throws Exception {
-      long now = System.currentTimeMillis();
-      long deadline = now + timeoutMs;
-      synchronized (callback) {
-        while (!callback.completed && now < deadline) {
-          callback.wait(deadline - now);
-          now = System.currentTimeMillis();
-        }
-      }
-      assertTrue("Timed out waiting for stream.", callback.completed);
-      assertNull(callback.error);
-    }
-
   }
 
-  private static class TestCallback implements StreamCallback {
+  static class TestCallback implements StreamCallback {
 
     private final OutputStream out;
     public volatile boolean completed;
@@ -344,6 +290,22 @@ public class StreamSuite {
       }
     }
 
+    void waitForCompletion(long timeoutMs) {
+      long now = System.currentTimeMillis();
+      long deadline = now + timeoutMs;
+      synchronized (this) {
+        while (!completed && now < deadline) {
+          try {
+            wait(deadline - now);
+          } catch (InterruptedException ie) {
+            throw new RuntimeException(ie);
+          }
+          now = System.currentTimeMillis();
+        }
+      }
+      assertTrue("Timed out waiting for stream.", completed);
+      assertNull(error);
+    }
   }
 
 }

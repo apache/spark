@@ -18,22 +18,28 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.MalformedURLException
+import java.net.{MalformedURLException, URI}
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration._
 
 import com.google.common.io.Files
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
+import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.util.Utils
+import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.util.{ThreadUtils, Utils}
 
-class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
+
+class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
   test("Only one SparkContext may be active at a time") {
     // Regression test for SPARK-4180
@@ -289,12 +295,39 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("add jar with invalid path") {
+    val tmpDir = Utils.createTempDir()
+    val tmpJar = File.createTempFile("test", ".jar", tmpDir)
+
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.addJar(tmpJar.getAbsolutePath)
+
+    // Invalid jar path will only print the error log, will not add to file server.
+    sc.addJar("dummy.jar")
+    sc.addJar("")
+    sc.addJar(tmpDir.getAbsolutePath)
+
+    assert(sc.listJars().size == 1)
+    assert(sc.listJars().head.contains(tmpJar.getName))
+  }
+
+  test("SPARK-22585 addJar argument without scheme is interpreted literally without url decoding") {
+    val tmpDir = new File(Utils.createTempDir(), "host%3A443")
+    tmpDir.mkdirs()
+    val tmpJar = File.createTempFile("t%2F", ".jar", tmpDir)
+
+    sc = new SparkContext("local", "test")
+
+    sc.addJar(tmpJar.getAbsolutePath)
+    assert(sc.listJars().size === 1)
+  }
+
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       val future = sc.parallelize(Seq(0)).foreachAsync(_ => {Thread.sleep(1000L)})
       sc.cancelJobGroup("nonExistGroupId")
-      Await.ready(future, Duration(2, TimeUnit.SECONDS))
+      ThreadUtils.awaitReady(future, Duration(2, TimeUnit.SECONDS))
 
       // In SPARK-6414, sc.cancelJobGroup will cause NullPointerException and cause
       // SparkContext to shutdown, so the following assertion will fail.
@@ -451,4 +484,250 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       sc.stop()
     }
   }
+
+  test("register and deregister Spark listener from SparkContext") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    val sparkListener1 = new SparkListener { }
+    val sparkListener2 = new SparkListener { }
+    sc.addSparkListener(sparkListener1)
+    sc.addSparkListener(sparkListener2)
+    assert(sc.listenerBus.listeners.contains(sparkListener1))
+    assert(sc.listenerBus.listeners.contains(sparkListener2))
+    sc.removeSparkListener(sparkListener1)
+    assert(!sc.listenerBus.listeners.contains(sparkListener1))
+    assert(sc.listenerBus.listeners.contains(sparkListener2))
+  }
+
+  test("Cancelling stages/jobs with custom reasons.") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
+    val REASON = "You shall not pass"
+
+    for (cancelWhat <- Seq("stage", "job")) {
+      // This countdown latch used to make sure stage or job canceled in listener
+      val latch = new CountDownLatch(1)
+
+      val listener = cancelWhat match {
+        case "stage" =>
+          new SparkListener {
+            override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+              sc.cancelStage(taskStart.stageId, REASON)
+              latch.countDown()
+            }
+          }
+        case "job" =>
+          new SparkListener {
+            override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+              sc.cancelJob(jobStart.jobId, REASON)
+              latch.countDown()
+            }
+          }
+      }
+      sc.addSparkListener(listener)
+
+      val ex = intercept[SparkException] {
+        sc.range(0, 10000L, numSlices = 10).mapPartitions { x =>
+          x.synchronized {
+            x.wait()
+          }
+          x
+        }.count()
+      }
+
+      ex.getCause() match {
+        case null =>
+          assert(ex.getMessage().contains(REASON))
+        case cause: SparkException =>
+          assert(cause.getMessage().contains(REASON))
+        case cause: Throwable =>
+          fail("Expected the cause to be SparkException, got " + cause.toString() + " instead.")
+      }
+
+      latch.await(20, TimeUnit.SECONDS)
+      eventually(timeout(20.seconds)) {
+        assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+      }
+      sc.removeSparkListener(listener)
+    }
+  }
+
+  test("client mode with a k8s master url") {
+    intercept[SparkException] {
+      sc = new SparkContext("k8s://https://host:port", "test", new SparkConf())
+    }
+  }
+
+  testCancellingTasks("that raise interrupted exception on cancel") {
+    Thread.sleep(9999999)
+  }
+
+  // SPARK-20217 should not fail stage if task throws non-interrupted exception
+  testCancellingTasks("that raise runtime exception on cancel") {
+    try {
+      Thread.sleep(9999999)
+    } catch {
+      case t: Throwable =>
+        throw new RuntimeException("killed")
+    }
+  }
+
+  // Launches one task that will block forever. Once the SparkListener detects the task has
+  // started, kill and re-schedule it. The second run of the task will complete immediately.
+  // If this test times out, then the first version of the task wasn't killed successfully.
+  def testCancellingTasks(desc: String)(blockFn: => Unit): Unit = test(s"Killing tasks $desc") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+    SparkContextSuite.isTaskStarted = false
+    SparkContextSuite.taskKilled = false
+    SparkContextSuite.taskSucceeded = false
+
+    val listener = new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        eventually(timeout(10.seconds)) {
+          assert(SparkContextSuite.isTaskStarted)
+        }
+        if (!SparkContextSuite.taskKilled) {
+          SparkContextSuite.taskKilled = true
+          sc.killTaskAttempt(taskStart.taskInfo.taskId, true, "first attempt will hang")
+        }
+      }
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        if (taskEnd.taskInfo.attemptNumber == 1 && taskEnd.reason == Success) {
+          SparkContextSuite.taskSucceeded = true
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+    eventually(timeout(20.seconds)) {
+      sc.parallelize(1 to 1).foreach { x =>
+        // first attempt will hang
+        if (!SparkContextSuite.isTaskStarted) {
+          SparkContextSuite.isTaskStarted = true
+          blockFn
+        }
+        // second attempt succeeds immediately
+      }
+    }
+    eventually(timeout(10.seconds)) {
+      assert(SparkContextSuite.taskSucceeded)
+    }
+  }
+
+  test("SPARK-19446: DebugFilesystem.assertNoOpenStreams should report " +
+    "open streams to help debugging") {
+    val fs = new DebugFilesystem()
+    fs.initialize(new URI("file:///"), new Configuration())
+    val file = File.createTempFile("SPARK19446", "temp")
+    file.deleteOnExit()
+    Files.write(Array.ofDim[Byte](1000), file)
+    val path = new Path("file:///" + file.getCanonicalPath)
+    val stream = fs.open(path)
+    val exc = intercept[RuntimeException] {
+      DebugFilesystem.assertNoOpenStreams()
+    }
+    assert(exc != null)
+    assert(exc.getCause() != null)
+    stream.close()
+  }
+
+  test("support barrier execution mode under local mode") {
+    val conf = new SparkConf().setAppName("test").setMaster("local[2]")
+    sc = new SparkContext(conf)
+    val rdd = sc.makeRDD(Seq(1, 2, 3, 4), 2)
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
+      // If we don't get the expected taskInfos, the job shall abort due to stage failure.
+      if (context.getTaskInfos().length != 2) {
+        throw new SparkException("Expected taksInfos length is 2, actual length is " +
+          s"${context.getTaskInfos().length}.")
+      }
+      context.barrier()
+      it
+    }
+    rdd2.collect()
+
+    eventually(timeout(10.seconds)) {
+      assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  test("support barrier execution mode under local-cluster mode") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[3, 1, 1024]")
+      .setAppName("test-cluster")
+    sc = new SparkContext(conf)
+
+    val rdd = sc.makeRDD(Seq(1, 2, 3, 4), 2)
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
+      // If we don't get the expected taskInfos, the job shall abort due to stage failure.
+      if (context.getTaskInfos().length != 2) {
+        throw new SparkException("Expected taksInfos length is 2, actual length is " +
+          s"${context.getTaskInfos().length}.")
+      }
+      context.barrier()
+      it
+    }
+    rdd2.collect()
+
+    eventually(timeout(10.seconds)) {
+      assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  test("cancel zombie tasks in a result stage when the job finishes") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1,2,1024]")
+      .setAppName("test-cluster")
+      .set("spark.ui.enabled", "false")
+      // Disable this so that if a task is running, we can make sure the executor will always send
+      // task metrics via heartbeat to driver.
+      .set(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key, "false")
+      // Set a short heartbeat interval to send SparkListenerExecutorMetricsUpdate fast
+      .set("spark.executor.heartbeatInterval", "1s")
+    sc = new SparkContext(conf)
+    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
+    @volatile var runningTaskIds: Seq[Long] = null
+    val listener = new SparkListener {
+      override def onExecutorMetricsUpdate(
+          executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
+        if (executorMetricsUpdate.execId != SparkContext.DRIVER_IDENTIFIER) {
+          runningTaskIds = executorMetricsUpdate.accumUpdates.map(_._1)
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+    sc.range(0, 2).groupBy((x: Long) => x % 2, 2).map { case (x, _) =>
+      val context = org.apache.spark.TaskContext.get()
+      if (context.stageAttemptNumber == 0) {
+        if (context.partitionId == 0) {
+          // Make the first task in the first stage attempt fail.
+          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 0, 0, 0,
+            new java.io.IOException("fake"))
+        } else {
+          // Make the second task in the first stage attempt sleep to generate a zombie task
+          Thread.sleep(60000)
+        }
+      } else {
+        // Make the second stage attempt successful.
+      }
+      x
+    }.collect()
+    sc.listenerBus.waitUntilEmpty(10000)
+    // As executors will send the metrics of running tasks via heartbeat, we can use this to check
+    // whether there is any running task.
+    eventually(timeout(10.seconds)) {
+      // Make sure runningTaskIds has been set
+      assert(runningTaskIds != null)
+      // Verify there is no running task.
+      assert(runningTaskIds.isEmpty)
+    }
+  }
+}
+
+object SparkContextSuite {
+  @volatile var isTaskStarted = false
+  @volatile var taskKilled = false
+  @volatile var taskSucceeded = false
+  val semaphore = new Semaphore(0)
 }

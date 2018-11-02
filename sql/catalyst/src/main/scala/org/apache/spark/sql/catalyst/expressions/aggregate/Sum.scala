@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(x) - Returns the sum calculated from values of a group.")
-case class Sum(child: Expression) extends DeclarativeAggregate {
+  usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.")
+case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -33,8 +34,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
   // Return data type.
   override def dataType: DataType = resultType
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, DoubleType, DecimalType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, "function sum")
@@ -42,7 +42,8 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision + 10, scale)
-    case _ => child.dataType
+    case _: IntegralType => LongType
+    case _ => DoubleType
   }
 
   private lazy val sumDataType = resultType
@@ -61,12 +62,12 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
     if (child.nullable) {
       Seq(
         /* sum = */
-        Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType)), sum))
+        coalesce(coalesce(sum, zero) + child.cast(sumDataType), sum)
       )
     } else {
       Seq(
         /* sum = */
-        Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType))
+        coalesce(sum, zero) + child.cast(sumDataType)
       )
     }
   }
@@ -74,7 +75,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
   override lazy val mergeExpressions: Seq[Expression] = {
     Seq(
       /* sum = */
-      Coalesce(Seq(Add(Coalesce(Seq(sum.left, zero)), sum.right), sum.left))
+      coalesce(coalesce(sum.left, zero) + sum.right, sum.left)
     )
   }
 

@@ -1,9 +1,9 @@
 set hive.exec.compress.output = true;
 set hive.input.format=org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
-set mapred.min.split.size=256;
-set mapred.min.split.size.per.node=256;
-set mapred.min.split.size.per.rack=256;
-set mapred.max.split.size=256;
+set mapreduce.input.fileinputformat.split.minsize=256;
+set mapreduce.input.fileinputformat.split.minsize.per.node=256;
+set mapreduce.input.fileinputformat.split.minsize.per.rack=256;
+set mapreduce.input.fileinputformat.split.maxsize=256;
 
 
 drop table combine_3_srcpart_seq_rc;

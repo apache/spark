@@ -21,14 +21,14 @@ import javax.ws.rs.core.Response
 import javax.ws.rs.ext.Provider
 
 @Provider
-private[v1] class SecurityFilter extends ContainerRequestFilter with UIRootFromServletContext {
+private[v1] class SecurityFilter extends ContainerRequestFilter with ApiRequestContext {
   override def filter(req: ContainerRequestContext): Unit = {
-    val user = Option(req.getSecurityContext.getUserPrincipal).map { _.getName }.orNull
+    val user = httpRequest.getRemoteUser()
     if (!uiRoot.securityManager.checkUIViewPermissions(user)) {
       req.abortWith(
         Response
           .status(Response.Status.FORBIDDEN)
-          .entity(raw"""user "$user"is not authorized""")
+          .entity(raw"""user "$user" is not authorized""")
           .build()
       )
     }

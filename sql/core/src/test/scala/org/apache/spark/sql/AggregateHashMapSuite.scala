@@ -19,58 +19,53 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfter
 
-class SingleLevelAggregateHashMapSuite extends DataFrameAggregateSuite with BeforeAndAfter {
+import org.apache.spark.SparkConf
 
-  protected override def beforeAll(): Unit = {
-    sparkConf.set("spark.sql.codegen.fallback", "false")
-    sparkConf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "false")
-    super.beforeAll()
-  }
+class SingleLevelAggregateHashMapSuite extends DataFrameAggregateSuite with BeforeAndAfter {
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.codegen.fallback", "false")
+    .set("spark.sql.codegen.aggregate.map.twolevel.enabled", "false")
 
   // adding some checking after each test is run, assuring that the configs are not changed
   // in test code
   after {
     assert(sparkConf.get("spark.sql.codegen.fallback") == "false",
       "configuration parameter changed in test body")
-    assert(sparkConf.get("spark.sql.codegen.aggregate.map.twolevel.enable") == "false",
+    assert(sparkConf.get("spark.sql.codegen.aggregate.map.twolevel.enabled") == "false",
       "configuration parameter changed in test body")
   }
 }
 
 class TwoLevelAggregateHashMapSuite extends DataFrameAggregateSuite with BeforeAndAfter {
-
-  protected override def beforeAll(): Unit = {
-    sparkConf.set("spark.sql.codegen.fallback", "false")
-    sparkConf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "true")
-    super.beforeAll()
-  }
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.codegen.fallback", "false")
+    .set("spark.sql.codegen.aggregate.map.twolevel.enabled", "true")
 
   // adding some checking after each test is run, assuring that the configs are not changed
   // in test code
   after {
     assert(sparkConf.get("spark.sql.codegen.fallback") == "false",
       "configuration parameter changed in test body")
-    assert(sparkConf.get("spark.sql.codegen.aggregate.map.twolevel.enable") == "true",
+    assert(sparkConf.get("spark.sql.codegen.aggregate.map.twolevel.enabled") == "true",
       "configuration parameter changed in test body")
   }
 }
 
-class TwoLevelAggregateHashMapWithVectorizedMapSuite extends DataFrameAggregateSuite with
-BeforeAndAfter {
+class TwoLevelAggregateHashMapWithVectorizedMapSuite
+  extends DataFrameAggregateSuite
+  with BeforeAndAfter {
 
-  protected override def beforeAll(): Unit = {
-    sparkConf.set("spark.sql.codegen.fallback", "false")
-    sparkConf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "true")
-    sparkConf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "true")
-    super.beforeAll()
-  }
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.codegen.fallback", "false")
+    .set("spark.sql.codegen.aggregate.map.twolevel.enabled", "true")
+    .set("spark.sql.codegen.aggregate.map.vectorized.enable", "true")
 
   // adding some checking after each test is run, assuring that the configs are not changed
   // in test code
   after {
     assert(sparkConf.get("spark.sql.codegen.fallback") == "false",
       "configuration parameter changed in test body")
-    assert(sparkConf.get("spark.sql.codegen.aggregate.map.twolevel.enable") == "true",
+    assert(sparkConf.get("spark.sql.codegen.aggregate.map.twolevel.enabled") == "true",
       "configuration parameter changed in test body")
     assert(sparkConf.get("spark.sql.codegen.aggregate.map.vectorized.enable") == "true",
       "configuration parameter changed in test body")
