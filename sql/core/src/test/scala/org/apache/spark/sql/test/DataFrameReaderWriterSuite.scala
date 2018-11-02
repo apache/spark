@@ -20,6 +20,7 @@ package org.apache.spark.sql.test
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 
@@ -904,14 +905,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("SPARK-24869 SaveIntoDataSourceCommand's input Dataset does not use cached data") {
-    var numTotalCachedHit = 0
+    val CACHE_HIT_COUNT = new AtomicInteger()
     val listener = new QueryExecutionListener {
       override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = {}
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         qe.withCachedData match {
           case c: SaveIntoDataSourceCommand
             if c.query.isInstanceOf[InMemoryRelation] =>
-            numTotalCachedHit += 1
+            CACHE_HIT_COUNT.incrementAndGet()
           case _ =>
         }
       }
@@ -921,8 +922,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val udf1 = udf({ (x: Int, y: Int) => x + y })
     val df = spark.range(0, 3).toDF("a").withColumn("b", udf1(col("a"), lit(10)))
     df.cache()
-    df.write.format("org.apache.spark.sql.test").save()
-    assert(numTotalCachedHit == 1, "Expected to use cached data")
+    df.write.format("org.apache.spark.sql.test.DefaultSource").save()
+    waitForTasksToFinish()
+    assert(CACHE_HIT_COUNT.get() == 1, "expected to use cached data")
 
     spark.listenerManager.unregister(listener)
   }
