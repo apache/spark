@@ -85,7 +85,7 @@ class KryoSerializer(conf: SparkConf)
   private val avroSchemas = conf.getAvroSchema
   // whether to use unsafe based IO for serialization
   private val useUnsafe = conf.getBoolean("spark.kryo.unsafe", false)
-  private val usePool = conf.getBoolean("spark.kryo.pool", false)
+  private val usePool = conf.getBoolean("spark.kryo.pool", true)
 
   def newKryoOutput(): KryoOutput =
     if (useUnsafe) {
