@@ -24,8 +24,8 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
-import org.apache.spark.deploy.k8s.submit.PythonMainAppResource
+import org.apache.spark.deploy.k8s.submit._
+import org.apache.spark.internal.config._
 import org.apache.spark.ui.SparkUI
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
@@ -52,7 +52,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       new LocalObjectReferenceBuilder().withName(secret).build()
     }
   private val emptyDriverSpecificConf = KubernetesDriverSpecificConf(
-    None,
+    JavaMainAppResource(None),
     APP_NAME,
     MAIN_CLASS,
     APP_ARGS)
@@ -62,8 +62,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
       .set("spark.driver.cores", "2")
       .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
-      .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "256M")
-      .set(org.apache.spark.internal.config.DRIVER_MEMORY_OVERHEAD, 200L)
+      .set(DRIVER_MEMORY.key, "256M")
+      .set(DRIVER_MEMORY_OVERHEAD, 200L)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS.mkString(","))
     val kubernetesConf = KubernetesConf(
@@ -77,7 +77,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
-      Seq.empty[String],
       hadoopConfSpec = None)
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
@@ -130,21 +129,22 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
       "spark.app.id" -> APP_ID,
       KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX,
-      "spark.kubernetes.submitInDriver" -> "true")
+      "spark.kubernetes.submitInDriver" -> "true",
+      MEMORY_OVERHEAD_FACTOR.key -> MEMORY_OVERHEAD_FACTOR.defaultValue.get.toString)
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)
   }
 
   test("Check appropriate entrypoint rerouting for various bindings") {
     val javaSparkConf = new SparkConf()
-      .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "4g")
+      .set(DRIVER_MEMORY.key, "4g")
       .set(CONTAINER_IMAGE, "spark-driver:latest")
     val pythonSparkConf = new SparkConf()
-      .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "4g")
+      .set(DRIVER_MEMORY.key, "4g")
       .set(CONTAINER_IMAGE, "spark-driver-py:latest")
     val javaKubernetesConf = KubernetesConf(
       javaSparkConf,
       KubernetesDriverSpecificConf(
-        Some(JavaMainAppResource("")),
+        JavaMainAppResource(None),
         APP_NAME,
         PY_MAIN_CLASS,
         APP_ARGS),
@@ -156,13 +156,12 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
-      Seq.empty[String],
       hadoopConfSpec = None)
 
     val pythonKubernetesConf = KubernetesConf(
       pythonSparkConf,
       KubernetesDriverSpecificConf(
-        Some(PythonMainAppResource("")),
+        PythonMainAppResource(""),
         APP_NAME,
         PY_MAIN_CLASS,
         APP_ARGS),
@@ -174,7 +173,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
-      Seq.empty[String],
       hadoopConfSpec = None)
     val javaFeatureStep = new BasicDriverFeatureStep(javaKubernetesConf)
     val pythonFeatureStep = new BasicDriverFeatureStep(pythonKubernetesConf)
@@ -204,7 +202,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       DRIVER_ENVS,
       Nil,
-      allFiles,
       hadoopConfSpec = None)
 
     val step = new BasicDriverFeatureStep(kubernetesConf)
@@ -215,8 +212,50 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX,
       "spark.kubernetes.submitInDriver" -> "true",
       "spark.jars" -> "/opt/spark/jar1.jar,hdfs:///opt/spark/jar2.jar",
-      "spark.files" -> "https://localhost:9000/file1.txt,/opt/spark/file2.txt")
+      "spark.files" -> "https://localhost:9000/file1.txt,/opt/spark/file2.txt",
+      MEMORY_OVERHEAD_FACTOR.key -> MEMORY_OVERHEAD_FACTOR.defaultValue.get.toString)
     assert(additionalProperties === expectedSparkConf)
+  }
+
+  // Memory overhead tests. Tuples are:
+  //   test name, main resource, overhead factor, expected factor
+  Seq(
+    ("java", JavaMainAppResource(None), None, MEMORY_OVERHEAD_FACTOR.defaultValue.get),
+    ("python default", PythonMainAppResource(null), None, NON_JVM_MEMORY_OVERHEAD_FACTOR),
+    ("python w/ override", PythonMainAppResource(null), Some(0.9d), 0.9d),
+    ("r default", RMainAppResource(null), None, NON_JVM_MEMORY_OVERHEAD_FACTOR)
+  ).foreach { case (name, resource, factor, expectedFactor) =>
+    test(s"memory overhead factor: $name") {
+      // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
+      val driverMem = MEMORY_OVERHEAD_MIN_MIB / MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
+
+      // main app resource, overhead factor
+      val sparkConf = new SparkConf(false)
+        .set(CONTAINER_IMAGE, "spark-driver:latest")
+        .set(DRIVER_MEMORY.key, s"${driverMem.toInt}m")
+      factor.foreach { value => sparkConf.set(MEMORY_OVERHEAD_FACTOR, value) }
+      val driverConf = emptyDriverSpecificConf.copy(mainAppResource = resource)
+      val conf = KubernetesConf(
+        sparkConf,
+        driverConf,
+        RESOURCE_NAME_PREFIX,
+        APP_ID,
+        DRIVER_LABELS,
+        DRIVER_ANNOTATIONS,
+        Map.empty,
+        Map.empty,
+        DRIVER_ENVS,
+        Nil,
+        hadoopConfSpec = None)
+      val step = new BasicDriverFeatureStep(conf)
+      val pod = step.configurePod(SparkPod.initialPod())
+      val mem = pod.container.getResources.getRequests.get("memory").getAmount()
+      val expected = (driverMem + driverMem * expectedFactor).toInt
+      assert(mem === s"${expected}Mi")
+
+      val systemProperties = step.getAdditionalPodSystemProperties()
+      assert(systemProperties(MEMORY_OVERHEAD_FACTOR.key) === expectedFactor.toString)
+    }
   }
 
   def containerPort(name: String, portNumber: Int): ContainerPort =

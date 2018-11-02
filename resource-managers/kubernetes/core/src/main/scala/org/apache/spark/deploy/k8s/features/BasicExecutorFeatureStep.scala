@@ -58,16 +58,13 @@ private[spark] class BasicExecutorFeatureStep(
       (kubernetesConf.get(MEMORY_OVERHEAD_FACTOR) * executorMemoryMiB).toInt,
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
-  private val executorMemoryTotal = kubernetesConf.sparkConf
-    .getOption(APP_RESOURCE_TYPE.key).map{ res =>
-      val additionalPySparkMemory = res match {
-        case "python" =>
-          kubernetesConf.sparkConf
-            .get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
-        case _ => 0
-      }
-    executorMemoryWithOverhead + additionalPySparkMemory
-  }.getOrElse(executorMemoryWithOverhead)
+  private val executorMemoryTotal =
+    if (kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)) {
+      executorMemoryWithOverhead +
+        kubernetesConf.get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
+    } else {
+      executorMemoryWithOverhead
+    }
 
   private val executorCores = kubernetesConf.sparkConf.getInt("spark.executor.cores", 1)
   private val executorCoresRequest =
@@ -187,8 +184,4 @@ private[spark] class BasicExecutorFeatureStep(
 
     SparkPod(executorPod, containerWithLimitCores)
   }
-
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }
