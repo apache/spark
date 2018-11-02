@@ -29,7 +29,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.util.{ByteArrayWritableChannel, LimitedInputStream}
-import org.apache.spark.storage.StorageUtils
+import org.apache.spark.storage.{EncryptedManagedBuffer, StorageUtils}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -173,11 +173,13 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 private[spark] object ChunkedByteBuffer {
 
 
-  // TODO eliminate this method if we switch BlockManager to getting InputStreams
+  // TODO SPARK-25905 eliminate this method if we switch BlockManager to getting InputStreams
   def fromManagedBuffer(data: ManagedBuffer): ChunkedByteBuffer = {
     data match {
       case f: FileSegmentManagedBuffer =>
         fromFile(f.getFile, f.getOffset, f.getLength)
+      case e: EncryptedManagedBuffer =>
+        e.blockData.toChunkedByteBuffer(ByteBuffer.allocate _)
       case other =>
         new ChunkedByteBuffer(other.nioByteBuffer())
     }
