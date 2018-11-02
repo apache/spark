@@ -490,7 +490,7 @@ object AggUtils {
         val childOrdering = Seq((groupingWithoutSessionAttributes ++ Seq(sessionExpression))
           .map(SortOrder(_, Ascending)))
         val updatedSession = UpdatingSessionExec(
-          groupingWithoutSessionAttributes,
+          groupingExpressions.map(_.toAttribute),
           sessionExpression.toAttribute,
           optRequiredChildDistribution = Some(childDistribution),
           optRequiredChildOrdering = Some(childOrdering),

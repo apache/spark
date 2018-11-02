@@ -28,24 +28,28 @@ import org.apache.spark.sql.types.{LongType, TimestampType}
 // FIXME: javadoc!!
 class UpdatingSessionIterator(
     iter: Iterator[InternalRow],
-    groupWithoutSessionExpressions: Seq[Expression],
-    sessionExpression: Expression,
+    groupingExpressions: Seq[NamedExpression],
+    sessionExpression: NamedExpression,
     inputSchema: Seq[Attribute],
     inMemoryThreshold: Int,
     spillThreshold: Int) extends Iterator[InternalRow] {
 
   val sessionIndex = inputSchema.indexOf(sessionExpression)
 
-  val valuesExpressions: Seq[Attribute] = inputSchema.diff(groupWithoutSessionExpressions)
-    .diff(Seq(sessionExpression))
+  private val groupingWithoutSession: Seq[NamedExpression] =
+    groupingExpressions.diff(Seq(sessionExpression))
+  private val groupingWithoutSessionAttributes: Seq[Attribute] =
+    groupingWithoutSession.map(_.toAttribute)
+  private[this] val groupingWithoutSessionProjection: UnsafeProjection =
+    UnsafeProjection.create(groupingWithoutSession, inputSchema)
 
-  val keysProjection = GenerateUnsafeProjection.generate(groupWithoutSessionExpressions,
-    inputSchema)
-  val sessionProjection = GenerateUnsafeProjection.generate(Seq(sessionExpression), inputSchema)
+  val valuesExpressions: Seq[Attribute] = inputSchema.diff(groupingWithoutSession)
+
+  private[this] val sessionProjection: UnsafeProjection =
+    UnsafeProjection.create(Seq(sessionExpression), inputSchema)
 
   var currentKeys: InternalRow = _
-  var currentSessionStart: Long = Long.MaxValue
-  var currentSessionEnd: Long = Long.MinValue
+  var currentSession: UnsafeRow = _
 
   var currentRows: ExternalAppendOnlyUnsafeRowArray = new ExternalAppendOnlyUnsafeRowArray(
     inMemoryThreshold, spillThreshold)
@@ -85,29 +89,29 @@ class UpdatingSessionIterator(
       // without this, multiple rows in same key will be returned with same content
       val row = iter.next().copy()
 
-      val keys = keysProjection(row).copy()
-      val session = sessionProjection(row).copy()
-      val sessionRow = session.getStruct(0, 2)
-      val sessionStart = sessionRow.getLong(0)
-      val sessionEnd = sessionRow.getLong(1)
+      val keys = groupingWithoutSessionProjection(row)
+      val session = sessionProjection(row)
+      val sessionStruct = session.getStruct(0, 2)
+      val sessionStart = getSessionStart(sessionStruct)
+      val sessionEnd = getSessionEnd(sessionStruct)
 
       if (currentKeys == null) {
-        startNewSession(row, keys, sessionStart, sessionEnd)
+        startNewSession(row, keys, sessionStruct)
       } else if (keys != currentKeys) {
         closeCurrentSession(keyChanged = true)
         processedKeys.add(currentKeys)
-        startNewSession(row, keys, sessionStart, sessionEnd)
+        startNewSession(row, keys, sessionStruct)
         exitCondition = true
       } else {
-        if (sessionStart < currentSessionStart) {
+        if (sessionStart < getSessionStart(currentSession)) {
           handleBrokenPreconditionForSort()
-        } else if (sessionStart <= currentSessionEnd) {
+        } else if (sessionStart <= getSessionEnd(currentSession)) {
           // expanding session length if needed
           expandEndOfCurrentSession(sessionEnd)
           currentRows.add(row.asInstanceOf[UnsafeRow])
         } else {
           closeCurrentSession(keyChanged = false)
-          startNewSession(row, keys, sessionStart, sessionEnd)
+          startNewSession(row, keys, sessionStruct)
           exitCondition = true
         }
       }
@@ -124,24 +128,35 @@ class UpdatingSessionIterator(
     returnRowsIter.next()
   }
 
-  private def expandEndOfCurrentSession(sessionEnd: Long): Unit = {
-    if (sessionEnd > currentSessionEnd) {
-      currentSessionEnd = sessionEnd
-    }
-  }
-
-  private def startNewSession(row: InternalRow, keys: UnsafeRow, sessionStart: Long,
-                              sessionEnd: Long): Unit = {
-    if (processedKeys.contains(keys)) {
+  private def startNewSession(currentRow: InternalRow, groupingKey: UnsafeRow,
+                              sessionStruct: UnsafeRow): Unit = {
+    if (processedKeys.contains(groupingKey)) {
       handleBrokenPreconditionForSort()
     }
 
-    currentKeys = keys
-    currentSessionStart = sessionStart
-    currentSessionEnd = sessionEnd
+    currentKeys = groupingKey.copy()
+    currentSession = sessionStruct.copy()
 
     currentRows.clear()
-    currentRows.add(row.asInstanceOf[UnsafeRow])
+    currentRows.add(currentRow.asInstanceOf[UnsafeRow])
+  }
+
+  private def getSessionStart(sessionStruct: UnsafeRow): Long = {
+    sessionStruct.getLong(0)
+  }
+
+  private def getSessionEnd(sessionStruct: UnsafeRow): Long = {
+    sessionStruct.getLong(1)
+  }
+
+  def updateSessionEnd(sessionStruct: UnsafeRow, sessionEnd: Long): Unit = {
+    sessionStruct.setLong(1, sessionEnd)
+  }
+
+  private def expandEndOfCurrentSession(sessionEnd: Long): Unit = {
+    if (sessionEnd > getSessionEnd(currentSession)) {
+      updateSessionEnd(currentSession, sessionEnd)
+    }
   }
 
   private def handleBrokenPreconditionForSort(): Unit = {
@@ -149,38 +164,39 @@ class UpdatingSessionIterator(
     throw new IllegalStateException("The iterator must be sorted by key and session start!")
   }
 
+  private def createSessionRow(): InternalRow = {
+    val sessionRow = new SpecificInternalRow(Seq(sessionExpression.toAttribute).toStructType)
+    sessionRow.update(0, currentSession)
+    sessionRow
+  }
+
+  private val join = new JoinedRow
+  private val join2 = new JoinedRow
+
+  private val groupingKeyProj = GenerateUnsafeProjection.generate(groupingExpressions,
+    groupingWithoutSessionAttributes :+ sessionExpression.toAttribute)
+  private val valueProj = GenerateUnsafeProjection.generate(valuesExpressions, inputSchema)
+  private val restoreProj = GenerateUnsafeProjection.generate(inputSchema,
+    groupingExpressions.map(_.toAttribute) ++ valuesExpressions.map(_.toAttribute))
+
+  private def generateGroupingKey(): UnsafeRow = {
+    val newRow = new SpecificInternalRow(Seq(sessionExpression.toAttribute).toStructType)
+    newRow.update(0, currentSession)
+    val joined = join(currentKeys, newRow)
+
+    groupingKeyProj(joined)
+  }
+
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
-    // FIXME: Convert to JoinRow if possible to reduce codegen for unsafe projection
-    // FIXME: Same approach on MergingSessionsIterator.generateGroupingKey doesn't work here, why?
-    val sessionStruct = CreateNamedStruct(
-      Literal("start") ::
-        PreciseTimestampConversion(
-          Literal(currentSessionStart, LongType), LongType, TimestampType) ::
-        Literal("end") ::
-        PreciseTimestampConversion(
-          Literal(currentSessionEnd, LongType), LongType, TimestampType) ::
-        Nil)
-
-    val convertedAllExpressions = inputSchema.map { x =>
-      BindReferences.bindReference[Expression](x, inputSchema)
-    }
-
-    val newSchemaExpressions = convertedAllExpressions.indices.map { idx =>
-      if (idx == sessionIndex) {
-        sessionStruct
-      } else {
-        convertedAllExpressions(idx)
-      }
-    }
-
     returnRows = currentRows
     currentRows = new ExternalAppendOnlyUnsafeRowArray(
       inMemoryThreshold, spillThreshold)
 
+    val groupingKey = generateGroupingKey()
+
     val currentRowsIter = returnRows.generateIterator().map { internalRow =>
-      // FIXME: is there any way to change this?
-      val proj = UnsafeProjection.create(newSchemaExpressions, inputSchema)
-      proj(internalRow)
+      val valueRow = valueProj(internalRow)
+      restoreProj(join2(groupingKey, valueRow)).copy()
     }
 
     if (returnRowsIter != null && returnRowsIter.hasNext) {
@@ -192,8 +208,7 @@ class UpdatingSessionIterator(
     if (keyChanged) processedKeys.add(currentKeys)
 
     currentKeys = null
-    currentSessionStart = Long.MaxValue
-    currentSessionEnd = Long.MinValue
+    currentSession = null
   }
 
   private def assertIteratorNotCorrupted(): Unit = {
