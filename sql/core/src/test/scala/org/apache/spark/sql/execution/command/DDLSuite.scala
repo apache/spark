@@ -52,23 +52,24 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
   protected override def generateTable(
       catalog: SessionCatalog,
       name: TableIdentifier,
-      isDataSource: Boolean = true): CatalogTable = {
+      isDataSource: Boolean = true,
+      partitionCols: Seq[String] = Seq("a", "b")): CatalogTable = {
     val storage =
       CatalogStorageFormat.empty.copy(locationUri = Some(catalog.defaultTablePath(name)))
     val metadata = new MetadataBuilder()
       .putString("key", "value")
       .build()
+    val schema = new StructType()
+      .add("col1", "int", nullable = true, metadata = metadata)
+      .add("col2", "string")
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
-      schema = new StructType()
-        .add("col1", "int", nullable = true, metadata = metadata)
-        .add("col2", "string")
-        .add("a", "int")
-        .add("b", "int"),
+      schema = schema.copy(
+        fields = schema.fields ++ partitionCols.map(StructField(_, IntegerType))),
       provider = Some("parquet"),
-      partitionColumnNames = Seq("a", "b"),
+      partitionColumnNames = partitionCols,
       createTime = 0L,
       createVersion = org.apache.spark.SPARK_VERSION,
       tracksPartitionsInCatalog = true)
@@ -176,7 +177,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   protected def generateTable(
       catalog: SessionCatalog,
       name: TableIdentifier,
-      isDataSource: Boolean = true): CatalogTable
+      isDataSource: Boolean = true,
+      partitionCols: Seq[String] = Seq("a", "b")): CatalogTable
 
   private val escapedIdentifier = "`(.+)`".r
 
@@ -228,8 +230,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   private def createTable(
       catalog: SessionCatalog,
       name: TableIdentifier,
-      isDataSource: Boolean = true): Unit = {
-    catalog.createTable(generateTable(catalog, name, isDataSource), ignoreIfExists = false)
+      isDataSource: Boolean = true,
+      partitionCols: Seq[String] = Seq("a", "b")): Unit = {
+    catalog.createTable(
+      generateTable(catalog, name, isDataSource, partitionCols), ignoreIfExists = false)
   }
 
   private def createTablePartition(
@@ -1131,7 +1135,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("alter table: recover partition (parallel)") {
-    withSQLConf("spark.rdd.parallelListingThreshold" -> "1") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "0") {
       testRecoverPartitions()
     }
   }
@@ -1144,23 +1148,32 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
 
     val tableIdent = TableIdentifier("tab1")
-    createTable(catalog, tableIdent)
-    val part1 = Map("a" -> "1", "b" -> "5")
+    createTable(catalog, tableIdent, partitionCols = Seq("a", "b", "c"))
+    val part1 = Map("a" -> "1", "b" -> "5", "c" -> "19")
     createTablePartition(catalog, part1, tableIdent)
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
 
-    val part2 = Map("a" -> "2", "b" -> "6")
+    val part2 = Map("a" -> "2", "b" -> "6", "c" -> "31")
     val root = new Path(catalog.getTableMetadata(tableIdent).location)
     val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
     // valid
-    fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
-    fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
-    fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "_SUCCESS"))  // file
-    fs.mkdirs(new Path(new Path(root, "A=2"), "B=6"))
-    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), "b.csv"))  // file
-    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), "c.csv"))  // file
-    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), ".hiddenFile"))  // file
-    fs.mkdirs(new Path(new Path(root, "A=2/B=6"), "_temporary"))
+    fs.mkdirs(new Path(new Path(new Path(root, "a=1"), "b=5"), "c=19"))
+    fs.createNewFile(new Path(new Path(root, "a=1/b=5/c=19"), "a.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "a=1/b=5/c=19"), "_SUCCESS"))  // file
+
+    fs.mkdirs(new Path(new Path(new Path(root, "A=2"), "B=6"), "C=31"))
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), "b.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), "c.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), ".hiddenFile"))  // file
+    fs.mkdirs(new Path(new Path(root, "A=2/B=6/C=31"), "_temporary"))
+
+    val parts = (10 to 100).map { a =>
+      val part = Map("a" -> a.toString, "b" -> "5", "c" -> "42")
+      fs.mkdirs(new Path(new Path(new Path(root, s"a=$a"), "b=5"), "c=42"))
+      fs.createNewFile(new Path(new Path(root, s"a=$a/b=5/c=42"), "a.csv"))  // file
+      createTablePartition(catalog, part, tableIdent)
+      part
+    }
 
     // invalid
     fs.mkdirs(new Path(new Path(root, "a"), "b"))  // bad name
@@ -1174,7 +1187,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     try {
       sql("ALTER TABLE tab1 RECOVER PARTITIONS")
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-        Set(part1, part2))
+        Set(part1, part2) ++ parts)
       if (!isUsingHiveMetastore) {
         assert(catalog.getPartition(tableIdent, part1).parameters("numFiles") == "1")
         assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")

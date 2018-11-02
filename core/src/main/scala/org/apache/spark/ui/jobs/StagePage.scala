@@ -105,7 +105,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val stageAttemptId = parameterAttempt.toInt
 
     val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
-    val stageData = parent.store
+    val (stageData, stageJobIds) = parent.store
       .asOption(parent.store.stageAttempt(stageId, stageAttemptId, details = false))
       .getOrElse {
         val content =
@@ -117,7 +117,8 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
     val localitySummary = store.localitySummary(stageData.stageId, stageData.attemptId)
 
-    val totalTasks = taskCount(stageData)
+    val totalTasks = stageData.numActiveTasks + stageData.numCompleteTasks +
+      stageData.numFailedTasks + stageData.numKilledTasks
     if (totalTasks == 0) {
       val content =
         <div>
@@ -132,7 +133,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val totalTasksNumStr = if (totalTasks == storedTasks) {
       s"$totalTasks"
     } else {
-      s"$storedTasks, showing ${totalTasks}"
+      s"$totalTasks, showing $storedTasks"
     }
 
     val summary =
@@ -180,6 +181,15 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
             <li>
               <strong>Shuffle Spill (Disk): </strong>
               {Utils.bytesToString(stageData.diskBytesSpilled)}
+            </li>
+          }}
+          {if (!stageJobIds.isEmpty) {
+            <li>
+              <strong>Associated Job Ids: </strong>
+              {stageJobIds.map(jobId => {val detailUrl = "%s/jobs/job/?id=%s".format(
+                UIUtils.prependBaseUri(request, parent.basePath), jobId)
+              <a href={s"${detailUrl}"}>{s"${jobId}"} &nbsp;&nbsp;</a>
+            })}
             </li>
           }}
         </ul>
@@ -685,7 +695,7 @@ private[ui] class TaskDataSource(
 
   private var _tasksToShow: Seq[TaskData] = null
 
-  override def dataSize: Int = taskCount(stage)
+  override def dataSize: Int = store.taskCount(stage.stageId, stage.attemptId).toInt
 
   override def sliceData(from: Int, to: Int): Seq[TaskData] = {
     if (_tasksToShow == null) {
@@ -1047,13 +1057,8 @@ private[ui] object ApiHelper {
   }
 
   def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
-    val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0))
+    val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0)._1)
     (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
-  }
-
-  def taskCount(stageData: StageData): Int = {
-    stageData.numActiveTasks + stageData.numCompleteTasks + stageData.numFailedTasks +
-      stageData.numKilledTasks
   }
 
 }

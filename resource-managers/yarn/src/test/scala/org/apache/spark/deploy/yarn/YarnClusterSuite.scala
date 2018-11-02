@@ -265,7 +265,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // needed locations.
     val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.10.7-src.zip",
+        s"$sparkHome/python/lib/py4j-0.10.8.1-src.zip",
         s"$sparkHome/python")
     val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
@@ -282,13 +282,15 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val mod2Archive = TestUtils.createJarWithFiles(Map("mod2.py" -> TEST_PYMODULE), moduleDir)
     val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
     val result = File.createTempFile("result", null, tempDir)
+    val outFile = Some(File.createTempFile("stdout", null, tempDir))
 
     val finalState = runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files" -> pyFiles),
       appArgs = Seq(result.getAbsolutePath()),
       extraEnv = extraEnvVars,
-      extraConf = extraConf)
-    checkResult(finalState, result)
+      extraConf = extraConf,
+      outFile = outFile)
+    checkResult(finalState, result, outFile = outFile)
   }
 
   private def testUseClassPathFirst(clientMode: Boolean): Unit = {

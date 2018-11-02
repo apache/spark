@@ -67,7 +67,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       val dummyOption = new JSONOptions(Map.empty[String, String], "GMT")
       val dummySchema = StructType(Seq.empty)
-      val parser = new JacksonParser(dummySchema, dummyOption)
+      val parser = new JacksonParser(dummySchema, dummyOption, allowArrayAsStructs = true)
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
         jsonParser.nextToken()
@@ -249,7 +249,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     checkAnswer(
       sql("select nullstr, headers.Host from jsonTable"),
-      Seq(Row("", "1.abc.com"), Row("", null), Row("", null), Row(null, null))
+      Seq(Row("", "1.abc.com"), Row("", null), Row(null, null), Row(null, null))
     )
   }
 
@@ -2223,7 +2223,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
 
-
   test("SPARK-23723: specified encoding is not matched to actual encoding") {
     val fileName = "test-data/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
@@ -2489,5 +2488,66 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       }
       assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
     }
+  }
+
+  test("count() for malformed input") {
+    def countForMalformedJSON(expected: Long, input: Seq[String]): Unit = {
+      val schema = new StructType().add("a", StringType)
+      val strings = spark.createDataset(input)
+      val df = spark.read.schema(schema).json(strings)
+
+      assert(df.count() == expected)
+    }
+    def checkCount(expected: Long): Unit = {
+      val validRec = """{"a":"b"}"""
+      val inputs = Seq(
+        Seq("{-}", validRec),
+        Seq(validRec, "?"),
+        Seq("}", validRec),
+        Seq(validRec, """{"a": [1, 2, 3]}"""),
+        Seq("""{"a": {"a": "b"}}""", validRec)
+      )
+      inputs.foreach { input =>
+        countForMalformedJSON(expected, input)
+      }
+    }
+
+    checkCount(2)
+    countForMalformedJSON(0, Seq(""))
+  }
+
+  test("SPARK-25040: empty strings should be disallowed") {
+    def failedOnEmptyString(dataType: DataType): Unit = {
+       val df = spark.read.schema(s"a ${dataType.catalogString}")
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      val errMessage = intercept[SparkException] {
+        df.collect()
+      }.getMessage
+      assert(errMessage.contains(
+        s"Failed to parse an empty string for data type ${dataType.catalogString}"))
+    }
+
+    def emptyString(dataType: DataType, expected: Any): Unit = {
+      val df = spark.read.schema(s"a ${dataType.catalogString}")
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      checkAnswer(df, Row(expected) :: Nil)
+    }
+
+    failedOnEmptyString(BooleanType)
+    failedOnEmptyString(ByteType)
+    failedOnEmptyString(ShortType)
+    failedOnEmptyString(IntegerType)
+    failedOnEmptyString(LongType)
+    failedOnEmptyString(FloatType)
+    failedOnEmptyString(DoubleType)
+    failedOnEmptyString(DecimalType.SYSTEM_DEFAULT)
+    failedOnEmptyString(TimestampType)
+    failedOnEmptyString(DateType)
+    failedOnEmptyString(ArrayType(IntegerType))
+    failedOnEmptyString(MapType(StringType, IntegerType, true))
+    failedOnEmptyString(StructType(StructField("f1", IntegerType, true) :: Nil))
+
+    emptyString(StringType, "")
+    emptyString(BinaryType, "".getBytes(StandardCharsets.UTF_8))
   }
 }

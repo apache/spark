@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql
 
+import collection.JavaConverters._
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -130,7 +134,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(from_json($"value", schema)),
-      Row(null) :: Nil)
+      Row(Row(null)) :: Nil)
   }
 
   test("from_json - json doesn't conform to the array type") {
@@ -391,7 +395,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
     val in = Seq("""{"a": [1, 2, 3]}""").toDS()
-    val out = in.select(from_json('value, schema_of_json(lit("""{"a": [1]}"""))) as "parsed")
+    val out = in.select(from_json('value, schema_of_json("""{"a": [1]}""")) as "parsed")
     val expected = StructType(StructField(
       "parsed",
       StructType(StructField(
@@ -400,6 +404,12 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       true) :: Nil)
 
     assert(out.schema == expected)
+  }
+
+  test("infers schemas using options") {
+    val df = spark.range(1)
+      .select(schema_of_json(lit("{a:1}"), Map("allowUnquotedFieldNames" -> "true").asJava))
+    checkAnswer(df, Seq(Row("struct<a:bigint>")))
   }
 
   test("from_json - array of primitive types") {
@@ -468,5 +478,104 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     jsonDF.select(from_json($"a", schema) as "json").createOrReplaceTempView("jsonTable")
 
     checkAnswer(sql("""select json[0] from jsonTable"""), Seq(Row(null)))
+  }
+
+  test("to_json - array of primitive types") {
+    val df = Seq(Array(1, 2, 3)).toDF("a")
+    checkAnswer(df.select(to_json($"a")), Seq(Row("[1,2,3]")))
+  }
+
+  test("roundtrip to_json -> from_json - array of primitive types") {
+    val arr = Array(1, 2, 3)
+    val df = Seq(arr).toDF("a")
+    checkAnswer(df.select(from_json(to_json($"a"), ArrayType(IntegerType))), Row(arr))
+  }
+
+  test("roundtrip from_json -> to_json - array of primitive types") {
+    val json = "[1,2,3]"
+    val df = Seq(json).toDF("a")
+    val schema = new ArrayType(IntegerType, false)
+
+    checkAnswer(df.select(to_json(from_json($"a", schema))), Seq(Row(json)))
+  }
+
+  test("roundtrip from_json -> to_json - array of arrays") {
+    val json = "[[1],[2,3],[4,5,6]]"
+    val jsonDF = Seq(json).toDF("a")
+    val schema = new ArrayType(ArrayType(IntegerType, false), false)
+
+    checkAnswer(
+      jsonDF.select(to_json(from_json($"a", schema))),
+      Seq(Row(json)))
+  }
+
+  test("roundtrip from_json -> to_json - array of maps") {
+    val json = """[{"a":1},{"b":2}]"""
+    val jsonDF = Seq(json).toDF("a")
+    val schema = new ArrayType(MapType(StringType, IntegerType, false), false)
+
+    checkAnswer(
+      jsonDF.select(to_json(from_json($"a", schema))),
+      Seq(Row(json)))
+  }
+
+  test("roundtrip from_json -> to_json - array of structs") {
+    val json = """[{"a":1},{"a":2},{"a":3}]"""
+    val jsonDF = Seq(json).toDF("a")
+    val schema = new ArrayType(new StructType().add("a", IntegerType), false)
+
+    checkAnswer(
+      jsonDF.select(to_json(from_json($"a", schema))),
+      Seq(Row(json)))
+  }
+
+  test("pretty print - roundtrip from_json -> to_json") {
+    val json = """[{"book":{"publisher":[{"country":"NL","year":[1981,1986,1999]}]}}]"""
+    val jsonDF = Seq(json).toDF("root")
+    val expected =
+      """[ {
+        |  "book" : {
+        |    "publisher" : [ {
+        |      "country" : "NL",
+        |      "year" : [ 1981, 1986, 1999 ]
+        |    } ]
+        |  }
+        |} ]""".stripMargin
+
+    checkAnswer(
+      jsonDF.select(
+        to_json(
+          from_json($"root", schema_of_json(lit(json))),
+          Map("pretty" -> "true"))),
+      Seq(Row(expected)))
+  }
+
+  test("from_json invalid json - check modes") {
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      val schema = new StructType()
+        .add("a", IntegerType)
+        .add("b", IntegerType)
+        .add("_unparsed", StringType)
+      val badRec = """{"a" 1, "b": 11}"""
+      val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
+
+      checkAnswer(
+        df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
+        Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
+
+      val exception1 = intercept[SparkException] {
+        df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
+      }.getMessage
+      assert(exception1.contains(
+        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+
+      val exception2 = intercept[SparkException] {
+        df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED")))
+          .collect()
+      }.getMessage
+      assert(exception2.contains(
+        "from_json() doesn't support the DROPMALFORMED mode. " +
+          "Acceptable modes are PERMISSIVE and FAILFAST."))
+    }
   }
 }

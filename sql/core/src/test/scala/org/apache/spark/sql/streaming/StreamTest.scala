@@ -79,8 +79,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
   override def afterAll(): Unit = {
-    super.afterAll()
-    StateStore.stop() // stop the state store maintenance thread and unload store providers
+    try {
+      super.afterAll()
+    } finally {
+      StateStore.stop() // stop the state store maintenance thread and unload store providers
+    }
   }
 
   protected val defaultTrigger = Trigger.ProcessingTime(0)
@@ -467,7 +470,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       // Block until all data added has been processed for all the source
       awaiting.foreach { case (sourceIndex, offset) =>
         failAfter(streamingTimeout) {
-          currentStream.awaitOffset(sourceIndex, offset)
+          currentStream.awaitOffset(sourceIndex, offset, streamingTimeout.toMillis)
           // Make sure all processing including no-data-batches have been executed
           if (!currentStream.triggerClock.isInstanceOf[StreamManualClock]) {
             currentStream.processAllAvailable()
@@ -686,7 +689,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
               plan
                 .collect {
                   case r: StreamingExecutionRelation => r.source
-                  case r: StreamingDataSourceV2Relation => r.reader
+                  case r: StreamingDataSourceV2Relation => r.readSupport
                 }
                 .zipWithIndex
                 .find(_._1 == source)
@@ -735,7 +738,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           }
 
         case CheckAnswerRowsByFunc(globalCheckFunction, lastOnly) =>
-          val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
+          val sparkAnswer = currentStream match {
+            case null => fetchStreamAnswer(lastStream, lastOnly)
+            case s => fetchStreamAnswer(s, lastOnly)
+          }
           try {
             globalCheckFunction(sparkAnswer)
           } catch {

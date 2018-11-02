@@ -55,14 +55,17 @@ class RDDInfo(
 }
 
 private[spark] object RDDInfo {
-  private val callsiteForm = SparkEnv.get.conf.get(EVENT_LOG_CALLSITE_FORM)
-
   def fromRdd(rdd: RDD[_]): RDDInfo = {
     val rddName = Option(rdd.name).getOrElse(Utils.getFormattedClassName(rdd))
     val parentIds = rdd.dependencies.map(_.rdd.id)
-    val callSite = callsiteForm match {
-      case "short" => rdd.creationSite.shortForm
-      case "long" => rdd.creationSite.longForm
+    val callsiteLongForm = Option(SparkEnv.get)
+      .map(_.conf.get(EVENT_LOG_CALLSITE_LONG_FORM))
+      .getOrElse(false)
+
+    val callSite = if (callsiteLongForm) {
+      rdd.creationSite.longForm
+    } else {
+      rdd.creationSite.shortForm
     }
     new RDDInfo(rdd.id, rddName, rdd.partitions.length,
       rdd.getStorageLevel, parentIds, callSite, rdd.scope)

@@ -345,8 +345,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val denseBlockSizes = new Array[Long](5000)
     val sparseBlockSizes = Array[Long](0L, 1L, 0L, 2L)
     Seq(denseBlockSizes, sparseBlockSizes).foreach { blockSizes =>
-      ser.serialize(
-        HighlyCompressedMapStatus(BlockManagerId("exec-1", "host", 1234), blockSizes, 1))
+      ser.serialize(HighlyCompressedMapStatus(BlockManagerId("exec-1", "host", 1234), blockSizes))
     }
   }
 
@@ -410,6 +409,26 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       classOf[RegistratorWithoutAutoReset].getName)
     val ser2 = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
     assert(!ser2.getAutoReset)
+  }
+
+  test("SPARK-25176 ClassCastException when writing a Map after previously " +
+    "reading a Map with different generic type") {
+    // This test uses the example in https://github.com/EsotericSoftware/kryo/issues/384
+    import java.util._
+    val ser = new KryoSerializer(new SparkConf).newInstance().asInstanceOf[KryoSerializerInstance]
+
+    class MapHolder {
+      private val mapOne = new HashMap[Int, String]
+      private val mapTwo = this.mapOne
+    }
+
+    val serializedMapHolder = ser.serialize(new MapHolder)
+    ser.deserialize[MapHolder](serializedMapHolder)
+
+    val stringMap = new HashMap[Int, List[String]]
+    stringMap.put(1, new ArrayList[String])
+    val serializedMap = ser.serialize[Map[Int, List[String]]](stringMap)
+    ser.deserialize[HashMap[Int, List[String]]](serializedMap)
   }
 
   private def testSerializerInstanceReuse(autoReset: Boolean, referenceTracking: Boolean): Unit = {
