@@ -18,6 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 
@@ -239,6 +240,7 @@ private[spark] object Config extends Logging {
       .doc("This sets the resource type internally")
       .internal()
       .stringConf
+      .checkValues(Set(APP_RESOURCE_TYPE_JAVA, APP_RESOURCE_TYPE_PYTHON, APP_RESOURCE_TYPE_R))
       .createOptional
 
   val KUBERNETES_LOCAL_DIRS_TMPFS =

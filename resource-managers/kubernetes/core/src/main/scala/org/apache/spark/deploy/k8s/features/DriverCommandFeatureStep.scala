@@ -111,16 +111,16 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesConf[KubernetesDri
   }
 
   private def additionalJavaProperties(resource: String): Map[String, String] = {
-    resourceType("java") ++ mergeFileList("spark.jars", Seq(resource))
+    resourceType(APP_RESOURCE_TYPE_JAVA) ++ mergeFileList("spark.jars", Seq(resource))
   }
 
   private def additionalPythonProperties(resource: String): Map[String, String] = {
-    resourceType("python") ++
+    resourceType(APP_RESOURCE_TYPE_PYTHON) ++
       mergeFileList("spark.files", Seq(resource) ++ driverConf.pyFiles)
   }
 
   private def additionalRProperties(resource: String): Map[String, String] = {
-    resourceType("r") ++ mergeFileList("spark.files", Seq(resource))
+    resourceType(APP_RESOURCE_TYPE_R) ++ mergeFileList("spark.files", Seq(resource))
   }
 
   private def mergeFileList(key: String, filesToAdd: Seq[String]): Map[String, String] = {

@@ -110,4 +110,9 @@ private[spark] object Constants {
   // Hadoop credentials secrets for the Spark app.
   val SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR = "/mnt/secrets/hadoop-credentials"
   val SPARK_APP_HADOOP_SECRET_VOLUME_NAME = "hadoop-secret"
+
+  // Application resource types.
+  val APP_RESOURCE_TYPE_JAVA = "java"
+  val APP_RESOURCE_TYPE_PYTHON = "python"
+  val APP_RESOURCE_TYPE_R = "r"
 }
