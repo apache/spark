@@ -146,7 +146,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
         </ul>
       </div>
 
-    UIUtils.headerSparkPage(request, "SQL", summary ++ content, parent, Some(5000))
+    UIUtils.headerSparkPage(request, "SQL", summary ++ content, parent)
   }
 
   private def executionsTable(
