@@ -28,7 +28,7 @@ object ProcessUtils extends Logging {
    * executeProcess is used to run a command and return the output if it
    * completes within timeout seconds.
    */
-  def executeProcess(fullCommand: Array[String], timeout: Long): Seq[String] = {
+  def executeProcess(fullCommand: Array[String], timeout: Long, dumpErrors: Boolean = false): Seq[String] = {
     val pb = new ProcessBuilder().command(fullCommand: _*)
     pb.redirectErrorStream(true)
     val proc = pb.start()
@@ -41,7 +41,7 @@ object ProcessUtils extends Logging {
     assert(proc.waitFor(timeout, TimeUnit.SECONDS),
       s"Timed out while executing ${fullCommand.mkString(" ")}")
     assert(proc.exitValue == 0,
-      s"Failed to execute ${fullCommand.mkString(" ")}:\n${outputLines.mkString("\n")}")
+      s"Failed to execute ${fullCommand.mkString(" ")}${if (dumpErrors) "\n" + outputLines.mkString("\n")}")
     outputLines
   }
 }
