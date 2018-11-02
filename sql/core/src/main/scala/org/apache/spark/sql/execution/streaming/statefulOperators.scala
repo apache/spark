@@ -431,7 +431,6 @@ case class SessionWindowStateStoreRestoreExec(
     sessionExpression: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     eventTimeWatermark: Option[Long],
-    stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader with WatermarkSupport {
 
@@ -496,7 +495,7 @@ case class SessionWindowStateStoreRestoreExec(
 
 /**
  * For each input tuple, the key is calculated and sessions are being `put` into
- * the [[MultiValuesStateManager]].
+ * the [[SessionWindowLinkedListState]].
  */
 case class SessionWindowStateStoreSaveExec(
     keyWithoutSessionExpressions: Seq[Attribute],
@@ -504,7 +503,6 @@ case class SessionWindowStateStoreSaveExec(
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None,
-    stateFormatVersion: Int,
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
@@ -534,8 +532,6 @@ case class SessionWindowStateStoreSaveExec(
         child.output)
 
       val keyOrdering = TypeUtils.getInterpretedOrdering(keyExpressions.toStructType)
-        .asInstanceOf[Ordering[UnsafeRow]]
-      val valueOrdering = TypeUtils.getInterpretedOrdering(child.output.toStructType)
         .asInstanceOf[Ordering[UnsafeRow]]
 
       var lastSearchedSessionStartOption: Option[Long] = None

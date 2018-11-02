@@ -335,7 +335,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         sessionWindowOption match {
           case Some(sessionWindow) =>
-            val stateVersion = conf.getConf(SQLConf.STREAMING_SESSION_WINDOW_STATE_FORMAT_VERSION)
 
             aggregate.AggUtils.planStreamingAggregationForSession(
               namedGroupingExpressions,
@@ -343,7 +342,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
               rewrittenResultExpressions,
               conf.streamingSessionWindowMergeSessionInLocalPartition,
-              stateVersion,
               planLater(child))
 
           case None =>
