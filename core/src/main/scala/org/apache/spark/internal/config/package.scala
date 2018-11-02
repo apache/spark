@@ -703,8 +703,8 @@ package object config {
   private[spark] object Status {
 
     val ASYNC_TRACKING_ENABLED = ConfigBuilder("spark.appStateStore.asyncTracking.enable")
-    .booleanConf
-    .createWithDefault(true)
+      .booleanConf
+      .createWithDefault(true)
 
     val LIVE_ENTITY_UPDATE_PERIOD = ConfigBuilder("spark.ui.liveUpdate.period")
       .timeConf(TimeUnit.NANOSECONDS)
