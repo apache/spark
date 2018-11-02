@@ -16,38 +16,29 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.HasMetadata
-
-import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesExecutorSpecificConf
 import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 import org.apache.spark.internal.Logging
 
 /**
  * This step is responsible for mounting the DT secret for the executors
  */
-private[spark] class KerberosConfExecutorFeatureStep(
-    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+private[spark] class KerberosConfExecutorFeatureStep(conf: KubernetesExecutorConf)
   extends KubernetesFeatureConfigStep with Logging {
 
-  private val sparkConf = kubernetesConf.sparkConf
-  private val maybeKrb5CMap = sparkConf.getOption(KRB5_CONFIG_MAP_NAME)
+  private val maybeKrb5CMap = conf.getOption(KRB5_CONFIG_MAP_NAME)
   require(maybeKrb5CMap.isDefined, "HADOOP_CONF_DIR ConfigMap not found")
 
   override def configurePod(pod: SparkPod): SparkPod = {
     logInfo(s"Mounting Resources for Kerberos")
     HadoopBootstrapUtil.bootstrapKerberosPod(
-      sparkConf.get(KERBEROS_DT_SECRET_NAME),
-      sparkConf.get(KERBEROS_DT_SECRET_KEY),
-      sparkConf.get(KERBEROS_SPARK_USER_NAME),
+      conf.get(KERBEROS_DT_SECRET_NAME),
+      conf.get(KERBEROS_DT_SECRET_KEY),
+      conf.get(KERBEROS_SPARK_USER_NAME),
       None,
       None,
       maybeKrb5CMap,
       pod)
   }
-
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty[HasMetadata]
 }

@@ -32,10 +32,8 @@ import org.apache.spark.util.Utils
  * Creates the driver command for running the user app, and propagates needed configuration so
  * executors can also find the app code.
  */
-private[spark] class DriverCommandFeatureStep(conf: KubernetesConf[KubernetesDriverSpecificConf])
+private[spark] class DriverCommandFeatureStep(driverConf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep {
-
-  private val driverConf = conf.roleSpecificConf
 
   override def configurePod(pod: SparkPod): SparkPod = {
     driverConf.mainAppResource match {
@@ -85,7 +83,7 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesConf[KubernetesDri
     val pythonEnvs =
       Seq(new EnvVarBuilder()
           .withName(ENV_PYSPARK_MAJOR_PYTHON_VERSION)
-          .withValue(conf.sparkConf.get(PYSPARK_MAJOR_PYTHON_VERSION))
+          .withValue(driverConf.sparkConf.get(PYSPARK_MAJOR_PYTHON_VERSION))
         .build()) ++
       maybePythonFiles
 
@@ -124,7 +122,7 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesConf[KubernetesDri
   }
 
   private def mergeFileList(key: String, filesToAdd: Seq[String]): Map[String, String] = {
-    val existing = Utils.stringToSeq(conf.sparkConf.get(key, ""))
+    val existing = Utils.stringToSeq(driverConf.sparkConf.get(key, ""))
     Map(key -> (existing ++ filesToAdd).distinct.mkString(","))
   }
 
