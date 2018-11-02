@@ -824,7 +824,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .reverse()
       .first(maxTime)
       .asScala
-      .filter(l => l.logType == LogType.EventLogs)
+      .filter { l => l.logType == null || l.logType == LogType.EventLogs }
       .toList
     stale.foreach { log =>
       if (log.appId.isEmpty) {
@@ -883,7 +883,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .reverse()
       .first(maxTime)
       .asScala
-      .filter(i => i.logType == LogType.DriverLogs)
+      .filter { l => l.logType != null && l.logType == LogType.DriverLogs }
       .toList
     stale.foreach { log =>
       logInfo(s"Deleting invalid driver log ${log.logPath}")

@@ -115,12 +115,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         fileSystem.setPermission(new Path(dfsLogFile), LOG_FILE_PERMISSIONS)
       } catch {
         case e: Exception =>
-          if (inStream != null) {
-            Utils.tryLogNonFatalError(inStream.close())
-          }
-          if (outputStream != null) {
-            Utils.tryLogNonFatalError(outputStream.close())
-          }
+          JavaUtils.closeQuietly(inStream)
+          JavaUtils.closeQuietly(outputStream)
           throw e
       }
       threadpool = ThreadUtils.newDaemonSingleThreadScheduledExecutor("dfsSyncThread")

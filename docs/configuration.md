@@ -271,14 +271,13 @@ of the most common options to set are:
   <td>(none)</td>
   <td>
     Base directory in which Spark driver logs are synced, if <code>spark.driver.log.persistToDfs.enabled</code>
-    is true. Within this base directory, Spark creates a sub-directory for each application, and logs the driver
-    logs specific to the application in this directory. Users may want to set this to a unified location like an
-    HDFS directory so driver log files can be persisted for later usage. This directory should allow any Spark
-    user to read/write files and the Spark History Server user to delete files. Additionally, older logs from
-    this directory are cleaned by Spark History Server if <code>spark.history.fs.driverlog.cleaner.enabled</code>
-    is true or if not configured, falling back to <code>spark.history.fs.cleaner.enabled</code>. They are cleaned
-    if they are older than max age configured at <code>spark.history.fs.driverlog.cleaner.maxAge</code> or if not
-    configured, falling back to <code>spark.history.fs.cleaner.maxAge</code>.
+    is true. Within this base directory, each application logs the driver logs to an application specific file.
+    Users may want to set this to a unified location like an HDFS directory so driver log files can be persisted
+    for later usage. This directory should allow any Spark user to read/write files and the Spark History Server
+    user to delete files. Additionally, older logs from this directory are cleaned by
+    <a href="monitoring.html#spark-history-server-configuration-options"> Spark History Server</a>  if
+    <code>spark.history.fs.driverlog.cleaner.enabled</code> is true and, if they are older than max age configured
+    at <code>spark.history.fs.driverlog.cleaner.maxAge</code>.
   </td>
 </tr>
 <tr>
@@ -288,7 +287,7 @@ of the most common options to set are:
     If true, spark application running in client mode will write driver logs to a persistent storage, configured
     in <code>spark.driver.log.dfsDir</code>. If <code>spark.driver.log.dfsDir</code> is not configured, driver logs
     will not be persisted. Additionally, enable the cleaner by setting <code>spark.history.fs.driverlog.cleaner.enabled</code>
-    to true.
+    to true in <a href="monitoring.html#spark-history-server-configuration-options"> Spark History Server</a>.
   </td>
 </tr>
 <tr>

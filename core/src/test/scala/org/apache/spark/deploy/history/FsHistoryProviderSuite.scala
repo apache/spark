@@ -444,9 +444,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     clock.setTime(secondFileModifiedTime)
     log2.setLastModified(clock.getTimeMillis())
     log3.setLastModified(clock.getTimeMillis())
-    provider.cleanDriverLogs()
-
     // This should not trigger any cleanup
+    provider.cleanDriverLogs()
     provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(3)
 
     // Should trigger cleanup for first file but not second one
@@ -458,9 +457,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(log3.exists())
 
     // Update the third file length while keeping the original modified time
-    Utils.tryLogNonFatalError {
-      Files.write("Add logs to file".getBytes(), log3)
-    }
+    Files.write("Add logs to file".getBytes(), log3)
     log3.setLastModified(secondFileModifiedTime)
     // Should cleanup the second file but not the third file, as filelength changed.
     clock.setTime(secondFileModifiedTime + TimeUnit.SECONDS.toMillis(maxAge) + 1)
