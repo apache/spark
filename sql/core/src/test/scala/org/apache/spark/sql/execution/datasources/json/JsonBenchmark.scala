@@ -68,8 +68,8 @@ object JSONBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def perlineParsing(rowsNum: Int): Unit = {
-    val benchmark = new Benchmark("JSON per-line parsing", rowsNum, output = output)
+  def countShortColumn(rowsNum: Int): Unit = {
+    val benchmark = new Benchmark("count a short column", rowsNum, output = output)
 
     withTempPath { path =>
       // scalastyle:off println
@@ -101,8 +101,8 @@ object JSONBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def perlineParsingOfWideColumn(rowsNum: Int): Unit = {
-    val benchmark = new Benchmark("JSON parsing of wide lines", rowsNum, output = output)
+  def countWideColumn(rowsNum: Int): Unit = {
+    val benchmark = new Benchmark("count a wide column", rowsNum, output = output)
 
     withTempPath { path =>
       // scalastyle:off println
@@ -141,10 +141,10 @@ object JSONBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def countBenchmark(rowsNum: Int): Unit = {
+  def selectSubsetOfColumns(rowsNum: Int): Unit = {
     val colsNum = 10
     val benchmark =
-      new Benchmark(s"Count a dataset with $colsNum columns", rowsNum, output = output)
+      new Benchmark(s"Select a subset of $colsNum columns", rowsNum, output = output)
 
     withTempPath { path =>
       val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
@@ -175,9 +175,9 @@ object JSONBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Benchmark for performance of JSON parsing") {
       schemaInferring(100 * 1000 * 1000)
-      perlineParsing(100 * 1000 * 1000)
-      perlineParsingOfWideColumn(10 * 1000 * 1000)
-      countBenchmark(10 * 1000 * 1000)
+      countShortColumn(100 * 1000 * 1000)
+      countWideColumn(10 * 1000 * 1000)
+      selectSubsetOfColumns(10 * 1000 * 1000)
     }
   }
 }
