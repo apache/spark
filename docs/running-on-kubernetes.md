@@ -12,6 +12,11 @@ Kubernetes scheduler that has been added to Spark.
 In future versions, there may be behavioral changes around configuration,
 container images and entrypoints.**
 
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
+
 # Prerequisites
 
 * A runnable distribution of Spark 2.3 or above.
