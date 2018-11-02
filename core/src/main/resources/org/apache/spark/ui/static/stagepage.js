@@ -359,25 +359,28 @@ $(document).ready(function () {
             stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
             $.getJSON(createRESTEndPointForExecutorsPage(appId),
               function(executorSummaryResponse, status, jqXHR) {
-                var executorSummaryMap = {};
-                for (var i = 0; i < executorSummaryResponse.length; i++) {
-                    executorSummaryMap[executorSummaryResponse[i].id] = executorSummaryResponse[i];
-                }
+                var executorDetailsMap = {};
+                executorSummaryResponse.forEach(function (executorDetail) {
+                    executorDetailsMap[executorDetail.id] = executorDetail;
+                });
+
                 var executorSummaryTable = [];
                 stageExecutorSummaryInfoKeys.forEach(function (columnKeyIndex) {
-                    responseBody.executorSummary[columnKeyIndex].id = columnKeyIndex;
-                    var executorDetail = executorSummaryMap[columnKeyIndex.toString()];
-                    if ("executorLogs" in executorDetail && executorDetail.executorLogs != null) {
-                        responseBody.executorSummary[columnKeyIndex].executorLogs =
-                          executorDetail.executorLogs;
-                    } else {
-                        responseBody.executorSummary[columnKeyIndex].executorLogs = {};
-                    }
-                    if ("hostPort" in executorDetail && executorDetail.hostPort != null) {
-                        responseBody.executorSummary[columnKeyIndex].hostPort =
-                          executorDetail.hostPort;
-                    } else {
-                        responseBody.executorSummary[columnKeyIndex].hostPort = "CANNOT FIND ADDRESS";
+                    var executorSummary = responseBody.executorSummary[columnKeyIndex];
+                    var executorDetail = executorDetailsMap[columnKeyIndex.toString()];
+                    executorSummary.id = columnKeyIndex;
+                    executorSummary.executorLogs = {};
+                    executorSummary.hostPort = "CANNOT FIND ADDRESS";
+
+                    if (executorDetail) {
+                        if (executorDetail["executorLogs"]) {
+                            responseBody.executorSummary[columnKeyIndex].executorLogs =
+                                executorDetail["executorLogs"];
+                            }
+                        if (executorDetail["hostPort"]) {
+                            responseBody.executorSummary[columnKeyIndex].hostPort =
+                                executorDetail["hostPort"];
+                        }
                     }
                     executorSummaryTable.push(responseBody.executorSummary[columnKeyIndex]);
                 });
