@@ -252,7 +252,7 @@ object StreamingQueryStatusAndProgressSuite {
         processedRowsPerSecond = Double.PositiveInfinity  // should not be present in the json
       )
     ),
-    sink = SinkProgress("sink", null, None)
+    sink = SinkProgress("sink", None)
   )
 
   val testProgress2 = new StreamingQueryProgress(
@@ -276,7 +276,7 @@ object StreamingQueryStatusAndProgressSuite {
         processedRowsPerSecond = Double.NegativeInfinity // should not be present in the json
       )
     ),
-    sink = SinkProgress("sink", null, None)
+    sink = SinkProgress("sink", None)
   )
 
   val testStatus = new StreamingQueryStatus("active", true, false)

@@ -30,6 +30,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
 /**
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
@@ -218,7 +219,7 @@ class SinkProgress protected[sql](
 
   /** SinkProgress without custom metrics. */
   protected[sql] def this(description: String) {
-    this(description, null, DEFAULT_NUM_OUTPUT_ROWS)
+    this(description, DEFAULT_NUM_OUTPUT_ROWS)
   }
 
   /** The compact JSON representation of this progress. */
