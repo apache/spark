@@ -552,13 +552,19 @@ case class JsonToStructs(
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
-  lazy val converter = nullableSchema match {
-    case _: StructType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
-    case _: ArrayType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
-    case _: MapType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
+  lazy val converter = (rows: Iterator[InternalRow]) => {
+    if (rows.hasNext) {
+      val result = rows.next()
+      // JSON's parser produces one record only.
+      assert(!rows.hasNext)
+      nullableSchema match {
+        case _: StructType => result
+        case _: ArrayType => result.getArray(0)
+        case _: MapType => result.getMap(0)
+      }
+    } else {
+      throw new IllegalArgumentException("Expected one row from JSON parser.")
+    }
   }
 
   val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
