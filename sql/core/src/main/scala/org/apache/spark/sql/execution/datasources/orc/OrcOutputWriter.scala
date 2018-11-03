@@ -17,12 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.nio.charset.StandardCharsets.UTF_8
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapreduce.TaskAttemptContext
-import org.apache.orc.mapred.OrcStruct
-import org.apache.orc.mapreduce.OrcOutputFormat
+import org.apache.orc.OrcFile
+import org.apache.orc.mapred.{OrcOutputFormat => OrcMapRedOutputFormat, OrcStruct}
+import org.apache.orc.mapreduce.{OrcMapreduceRecordWriter, OrcOutputFormat}
 
+import org.apache.spark.SPARK_VERSION
+import org.apache.spark.sql.CREATE_VERSION
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 import org.apache.spark.sql.types._
@@ -36,11 +41,17 @@ private[orc] class OrcOutputWriter(
   private[this] val serializer = new OrcSerializer(dataSchema)
 
   private val recordWriter = {
-    new OrcOutputFormat[OrcStruct]() {
+    val orcOutputFormat = new OrcOutputFormat[OrcStruct]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         new Path(path)
       }
-    }.getRecordWriter(context)
+    }
+    val filename = orcOutputFormat.getDefaultWorkFile(context, ".orc")
+    val options = OrcMapRedOutputFormat.buildOptions(context.getConfiguration)
+    val writer = OrcFile.createWriter(filename, options)
+    val recordWriter = new OrcMapreduceRecordWriter[OrcStruct](writer)
+    writer.addUserMetadata(CREATE_VERSION, UTF_8.encode(SPARK_VERSION))
+    recordWriter
   }
 
   override def write(row: InternalRow): Unit = {
