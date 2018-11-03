@@ -238,4 +238,6 @@ case class StructsToCsv(
   override def nullSafeEval(value: Any): Any = converter(value)
 
   override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
+
+  override def prettyName: String = "to_csv"
 }
