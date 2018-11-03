@@ -18,6 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 
@@ -121,34 +122,6 @@ private[spark] object Config extends Logging {
   val KUBERNETES_PYSPARK_PY_FILES =
     ConfigBuilder("spark.kubernetes.python.pyFiles")
       .doc("The PyFiles that are distributed via client arguments")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_PYSPARK_MAIN_APP_RESOURCE =
-    ConfigBuilder("spark.kubernetes.python.mainAppResource")
-      .doc("The main app resource for pyspark jobs")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_PYSPARK_APP_ARGS =
-    ConfigBuilder("spark.kubernetes.python.appArgs")
-      .doc("The app arguments for PySpark Jobs")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_R_MAIN_APP_RESOURCE =
-    ConfigBuilder("spark.kubernetes.r.mainAppResource")
-      .doc("The main app resource for SparkR jobs")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_R_APP_ARGS =
-    ConfigBuilder("spark.kubernetes.r.appArgs")
-      .doc("The app arguments for SparkR Jobs")
       .internal()
       .stringConf
       .createOptional
@@ -267,6 +240,7 @@ private[spark] object Config extends Logging {
       .doc("This sets the resource type internally")
       .internal()
       .stringConf
+      .checkValues(Set(APP_RESOURCE_TYPE_JAVA, APP_RESOURCE_TYPE_PYTHON, APP_RESOURCE_TYPE_R))
       .createOptional
 
   val KUBERNETES_LOCAL_DIRS_TMPFS =
@@ -277,6 +251,30 @@ private[spark] object Config extends Logging {
         "your pods memory limit so you may wish to request more memory.")
       .booleanConf
       .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.driver.podTemplateFile")
+      .doc("File containing a template pod spec for the driver")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.executor.podTemplateFile")
+      .doc("File containing a template pod spec for executors")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.driver.podTemplateContainerName")
+      .doc("container name to be used as a basis for the driver in the given pod template")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.executor.podTemplateContainerName")
+      .doc("container name to be used as a basis for executors in the given pod template")
+      .stringConf
+      .createOptional
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"

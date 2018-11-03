@@ -32,7 +32,7 @@ import org.apache.spark.benchmark.Benchmark
  */
 object RangeBenchmark extends SqlBasedBenchmark {
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     import spark.implicits._
 
     runBenchmark("range") {
