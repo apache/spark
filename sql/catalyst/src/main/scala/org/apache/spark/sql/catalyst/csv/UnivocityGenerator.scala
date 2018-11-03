@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
-private[sql] class UnivocityGenerator(
+class UnivocityGenerator(
     schema: StructType,
     writer: Writer,
     options: CSVOptions) {
