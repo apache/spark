@@ -33,10 +33,6 @@ import org.apache.spark.util.Utils
  */
 private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
 
-  if (pageSize <= 0) {
-    throw new IllegalArgumentException("Page size must be positive")
-  }
-
   /**
    * Return the size of all data.
    */
@@ -51,7 +47,14 @@ private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
    * Slice the data for this page
    */
   def pageData(page: Int): PageData[T] = {
-    val totalPages = (dataSize + pageSize - 1) / pageSize
+    // Display all the data in one page, if the pageSize is less than or equal to zero.
+    val pageTableSize = if (pageSize <= 0) {
+      dataSize
+    } else {
+      pageSize
+    }
+    val totalPages = (dataSize + pageTableSize - 1) / pageTableSize
+
     val pageToShow = if (page <= 0) {
       1
     } else if (page > totalPages) {
@@ -59,7 +62,8 @@ private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
     } else {
       page
     }
-    val (from, to) = ((pageToShow - 1) * pageSize, dataSize.min(pageToShow * pageSize))
+
+    val (from, to) = ((pageToShow - 1) * pageSize, dataSize.min(pageToShow * pageTableSize))
 
     PageData(totalPages, sliceData(from, to))
   }
@@ -95,6 +99,7 @@ private[spark] trait PagedTable[T] {
     val _dataSource = dataSource
     try {
       val PageData(totalPages, data) = _dataSource.pageData(page)
+
       val pageToShow = if (page <= 0) {
         1
       } else if (page > totalPages) {
@@ -102,8 +107,14 @@ private[spark] trait PagedTable[T] {
       } else {
         page
       }
+      // Display all the data in one page, if the pageSize is less than or equal to zero.
+      val pageSize = if (_dataSource.pageSize <= 0) {
+        data.size
+      } else {
+        _dataSource.pageSize
+      }
 
-      val pageNavi = pageNavigation(pageToShow, _dataSource.pageSize, totalPages)
+      val pageNavi = pageNavigation(pageToShow, pageSize, totalPages)
 
       <div>
         {pageNavi}
