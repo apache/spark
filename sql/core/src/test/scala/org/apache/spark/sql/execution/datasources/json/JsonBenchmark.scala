@@ -231,7 +231,7 @@ object JSONBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val numIters = 2
+    val numIters = 3
     runBenchmark("Benchmark for performance of JSON parsing") {
       schemaInferring(100 * 1000 * 1000, numIters)
       countShortColumn(100 * 1000 * 1000, numIters)
