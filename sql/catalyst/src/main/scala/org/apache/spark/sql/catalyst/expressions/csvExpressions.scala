@@ -237,5 +237,5 @@ case class StructsToCsv(
 
   override def nullSafeEval(value: Any): Any = converter(value)
 
-  override def inputTypes: Seq[AbstractDataType] = TypeCollection(StructType) :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
 }
