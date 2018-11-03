@@ -535,7 +535,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         |q2 as (select * from testData where key = '4')
         |select * from q1 union all select * from q2""".stripMargin),
       Row(5, "5") :: Row(4, "4") :: Nil)
+  }
 
+  test("SPARK-19799: Support WITH clause in subqueries") {
+    checkAnswer(
+      sql("""
+            |select avg(b) from (
+            | with maxearnings as (
+            |   select course, year, max(earnings) as earnings FROM courseSales GROUP BY course, year
+            |   )
+            | select course, sum(earnings) as b FROM maxearnings GROUP BY course
+            | )""".stripMargin),
+      Row(54000) :: Nil)
   }
 
   test("Allow only a single WITH clause per query") {
@@ -544,6 +555,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         "with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
     }
   }
+
+
 
   test("date row") {
     checkAnswer(sql(
