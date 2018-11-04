@@ -1582,6 +1582,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     ))
     assert(nestedDs.schema == nestedSchema)
   }
+
+  test("SPARK-24762: Resolving Option[Product] field") {
+    val ds = Seq((1, ("a", 1.0)), (2, ("b", 2.0))).toDS().as[(Int, Option[(String, Double)])]
+    checkDataset(ds,
+      (1, Some(("a", 1.0))), (2, Some(("b", 2.0))))
+  }
+
+  test("SPARK-24762: select Option[Product] field") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+      .select(expr("struct(_2, _2 + 1)").as[Option[(Int, Int)]])
+    checkDataset(ds,
+      Some((1, 2)), Some((2, 3)), Some((3, 4)))
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
