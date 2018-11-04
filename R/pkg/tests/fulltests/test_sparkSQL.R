@@ -66,7 +66,7 @@ sparkSession <- if (windows_with_hadoop()) {
   } else {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
   }
-sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
+sc <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils", "getJavaSparkContext", sparkSession)
 # materialize the catalog implementation
 listTables()
 

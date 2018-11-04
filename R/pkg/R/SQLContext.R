@@ -103,7 +103,7 @@ infer_type <- function(x) {
 sparkR.conf <- function(key, defaultValue) {
   sparkSession <- getSparkSession()
   if (missing(key)) {
-    m <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getSessionConf", sparkSession)
+    m <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils", "getSessionConf", sparkSession)
     as.list(m, all.names = TRUE, sorted = TRUE)
   } else {
     conf <- callJMethod(sparkSession, "conf")
@@ -202,7 +202,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
   }
 
   if (is.list(data)) {
-    sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
+    sc <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils", "getJavaSparkContext", sparkSession)
     if (!is.null(numPartitions)) {
       rdd <- parallelize(sc, data, numSlices = numToInt(numPartitions))
     } else {
@@ -248,7 +248,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
 
   jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
   srdd <- callJMethod(jrdd, "rdd")
-  sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
+  sdf <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils", "createDF",
                      srdd, schema$jobj, sparkSession)
   dataFrame(sdf)
 }

@@ -34,7 +34,7 @@ strPairs <- list(list(strList, strList), list(strList, strList))
 
 # JavaSparkContext handle
 sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
-jsc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
+jsc <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils", "getJavaSparkContext", sparkSession)
 
 # Tests
 

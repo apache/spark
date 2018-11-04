@@ -19,7 +19,7 @@ context("binary functions")
 
 # JavaSparkContext handle
 sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
-sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
+sc <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils", "getJavaSparkContext", sparkSession)
 
 # Data
 nums <- 1:10

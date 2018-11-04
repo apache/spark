@@ -1178,7 +1178,7 @@ setMethod("collect",
               data.frame()
             } else {
               # listCols is a list of columns
-              listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
+              listCols <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils", "dfToCols", x@sdf)
               stopifnot(length(listCols) == ncol)
 
               # An empty data.frame with 0 columns and number of rows as collected
@@ -1348,7 +1348,7 @@ setMethod("first",
 setMethod("toRDD",
           signature(x = "SparkDataFrame"),
           function(x) {
-            jrdd <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToRowRDD", x@sdf)
+            jrdd <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils", "dfToRowRDD", x@sdf)
             colNames <- callJMethod(x@sdf, "columns")
             rdd <- RDD(jrdd, serializedMode = "row")
             lapply(rdd, function(row) {
@@ -1438,7 +1438,7 @@ dapplyInternal <- function(x, func, schema) {
                          function(name) { get(name, .broadcastNames) })
 
   sdf <- callJStatic(
-           "org.apache.spark.sql.api.r.SQLUtils",
+           "org.apache.spark.sql.api.r.RSQLUtils",
            "dapply",
            x@sdf,
            serialize(cleanClosure(func), connection = NULL),

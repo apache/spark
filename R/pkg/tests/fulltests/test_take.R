@@ -31,7 +31,7 @@ strList <- list("Dexter Morgan: Blood. Sometimes it sets my teeth on edge, ",
 
 # JavaSparkContext handle
 sparkSession <- sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
-sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
+sc <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("take() gives back the original elements in correct count and order", {
   numVectorRDD <- parallelize(sc, numVector, 10)

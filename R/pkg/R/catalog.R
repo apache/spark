@@ -192,7 +192,7 @@ tables <- function(databaseName = NULL) {
 #' @note tableNames since 1.4.0
 tableNames <- function(databaseName = NULL) {
   sparkSession <- getSparkSession()
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+  callJStatic("org.apache.spark.sql.api.r.RSQLUtils",
               "getTableNames",
               sparkSession,
               databaseName)

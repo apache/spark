@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.r
 import org.apache.spark.api.r._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.api.r.SQLUtils._
+import org.apache.spark.sql.api.r.RSQLUtils._
 import org.apache.spark.sql.types.StructType
 
 /**

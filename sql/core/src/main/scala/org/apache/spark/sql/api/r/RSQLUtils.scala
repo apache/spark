@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
 
-private[sql] object SQLUtils extends Logging {
+private[sql] object RSQLUtils extends Logging {
   SerDe.setSQLReadObject(readSqlObject).setSQLWriteObject(writeSqlObject)
 
   private[this] def withHiveExternalCatalog(sc: SparkContext): SparkContext = {

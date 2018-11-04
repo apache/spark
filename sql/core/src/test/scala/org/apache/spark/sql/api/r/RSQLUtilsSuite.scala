@@ -19,7 +19,7 @@ package org.apache.spark.sql.api.r
 
 import org.apache.spark.sql.test.SharedSQLContext
 
-class SQLUtilsSuite extends SharedSQLContext {
+class RSQLUtilsSuite extends SharedSQLContext {
 
   import testImplicits._
 
@@ -28,7 +28,7 @@ class SQLUtilsSuite extends SharedSQLContext {
       (1, 2, 3),
       (4, 5, 6)
     ).toDF
-    assert(SQLUtils.dfToCols(df) === Array(
+    assert(RSQLUtils.dfToCols(df) === Array(
       Array(1, 4),
       Array(2, 5),
       Array(3, 6)

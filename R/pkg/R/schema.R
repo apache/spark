@@ -65,7 +65,7 @@ structType.structField <- function(x, ...) {
   sfObjList <- lapply(fields, function(field) {
     field$jobj
   })
-  stObj <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+  stObj <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils",
                        "createStructType",
                        sfObjList)
   structType(stObj)
@@ -219,7 +219,7 @@ structField.character <- function(x, type, nullable = TRUE, ...) {
 
   checkType(type)
 
-  sfObj <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+  sfObj <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils",
                        "createStructField",
                        x,
                        type,

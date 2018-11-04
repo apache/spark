@@ -319,13 +319,13 @@ sparkR.session <- function(
     sparkSession <- get(".sparkRsession", envir = .sparkREnv)
     # Apply config to Spark Context and Spark Session if already there
     # Cannot change enableHiveSupport
-    callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+    callJStatic("org.apache.spark.sql.api.r.RSQLUtils",
                 "setSparkContextSessionConf",
                 sparkSession,
                 sparkConfigMap)
   } else {
     jsc <- get(".sparkRjsc", envir = .sparkREnv)
-    sparkSession <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+    sparkSession <- callJStatic("org.apache.spark.sql.api.r.RSQLUtils",
                                 "getOrCreateSparkSession",
                                 jsc,
                                 sparkConfigMap,
