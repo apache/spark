@@ -187,6 +187,7 @@ NULL
 #'          \itemize{
 #'          \item \code{to_json}: it is the column containing the struct, array of the structs,
 #'              the map or array of maps.
+#'          \item \code{to_csv}: it is the column containing the struct.
 #'          \item \code{from_json}: it is the column containing the JSON string.
 #'          \item \code{from_csv}: it is the column containing the CSV string.
 #'          }
@@ -204,11 +205,11 @@ NULL
 #'              also supported for the schema.
 #'          \item \code{from_csv}: a DDL-formatted string
 #'          }
-#' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
-#'            additional named properties to control how it is converted, accepts the same
-#'            options as the JSON data source. Additionally \code{to_json} supports the "pretty"
-#'            option which enables pretty JSON generation. In \code{arrays_zip}, this contains
-#'            additional Columns of arrays to be merged.
+#' @param ... additional argument(s). In \code{to_json}, \code{to_csv} and \code{from_json},
+#'            this contains additional named properties to control how it is converted, accepts
+#'            the same options as the JSON/CSV data source. Additionally \code{to_json} supports
+#'            the "pretty" option which enables pretty JSON generation. In \code{arrays_zip},
+#'            this contains additional Columns of arrays to be merged.
 #' @name column_collection_functions
 #' @rdname column_collection_functions
 #' @family collection functions
@@ -1737,6 +1738,26 @@ setMethod("to_json", signature(x = "Column"),
           function(x, ...) {
             options <- varargsToStrEnv(...)
             jc <- callJStatic("org.apache.spark.sql.functions", "to_json", x@jc, options)
+            column(jc)
+          })
+
+#' @details
+#' \code{to_csv}: Converts a column containing a \code{structType} into a Column of CSV string.
+#' Resolving the Column can fail if an unsupported type is encountered.
+#'
+#' @rdname column_collection_functions
+#' @aliases to_csv to_csv,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' # Converts a struct into a CSV string
+#' df2 <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' select(df2, to_csv(df2$d, dateFormat = 'dd/MM/yyyy'))}
+#' @note to_csv since 3.0.0
+setMethod("to_csv", signature(x = "Column"),
+          function(x, ...) {
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_csv", x@jc, options)
             column(jc)
           })
 

@@ -527,7 +527,8 @@ object FunctionRegistry {
 
     // csv
     expression[CsvToStructs]("from_csv"),
-    expression[SchemaOfCsv]("schema_of_csv")
+    expression[SchemaOfCsv]("schema_of_csv"),
+    expression[StructsToCsv]("to_csv")
   )
 
   val builtin: SimpleFunctionRegistry = {
