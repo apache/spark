@@ -38,7 +38,7 @@ import org.apache.orc.OrcConf.COMPRESS
 
 import org.apache.spark.{SPARK_VERSION, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.CREATE_VERSION
+import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -283,7 +283,7 @@ private[orc] class OrcOutputWriter(
         val writerField = recordWriter.getClass.getDeclaredField("writer")
         writerField.setAccessible(true)
         val writer = writerField.get(recordWriter).asInstanceOf[Writer]
-        writer.addUserMetadata(CREATE_VERSION, UTF_8.encode(SPARK_VERSION))
+        writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION))
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }

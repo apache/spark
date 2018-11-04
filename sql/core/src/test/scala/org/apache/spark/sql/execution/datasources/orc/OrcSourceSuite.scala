@@ -32,7 +32,7 @@ import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SPARK_VERSION
-import org.apache.spark.sql.{CREATE_VERSION, Row}
+import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -328,7 +328,8 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       val orcFilePath = new Path(partFiles.head.getAbsolutePath)
       val readerOptions = OrcFile.readerOptions(new Configuration())
       val reader = OrcFile.createReader(orcFilePath, readerOptions)
-      assert(UTF_8.decode(reader.getMetadataValue(CREATE_VERSION)).toString === SPARK_VERSION)
+      val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
+      assert(version === SPARK_VERSION)
     }
   }
 }

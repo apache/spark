@@ -815,7 +815,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       val metaData = m.getFileMetaData.getKeyValueMetaData
       m.close()
 
-      assert(metaData.get(CREATE_VERSION) === SPARK_VERSION)
+      assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION)
     }
   }
 }

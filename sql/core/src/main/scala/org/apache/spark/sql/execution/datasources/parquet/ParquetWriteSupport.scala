@@ -31,7 +31,7 @@ import org.apache.parquet.io.api.{Binary, RecordConsumer}
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.CREATE_VERSION
+import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -96,7 +96,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
 
     val messageType = new SparkToParquetSchemaConverter(configuration).convert(schema)
     val metadata = Map(
-      CREATE_VERSION -> SPARK_VERSION,
+      SPARK_VERSION_METADATA_KEY -> SPARK_VERSION,
       ParquetReadSupport.SPARK_METADATA_KEY -> schemaString
     ).asJava
 

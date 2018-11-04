@@ -27,7 +27,7 @@ import org.apache.orc.mapred.{OrcOutputFormat => OrcMapRedOutputFormat, OrcStruc
 import org.apache.orc.mapreduce.{OrcMapreduceRecordWriter, OrcOutputFormat}
 
 import org.apache.spark.SPARK_VERSION
-import org.apache.spark.sql.CREATE_VERSION
+import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 import org.apache.spark.sql.types._
@@ -50,7 +50,7 @@ private[orc] class OrcOutputWriter(
     val options = OrcMapRedOutputFormat.buildOptions(context.getConfiguration)
     val writer = OrcFile.createWriter(filename, options)
     val recordWriter = new OrcMapreduceRecordWriter[OrcStruct](writer)
-    writer.addUserMetadata(CREATE_VERSION, UTF_8.encode(SPARK_VERSION))
+    writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION))
     recordWriter
   }
 

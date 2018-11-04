@@ -52,5 +52,5 @@ package object sql {
    *
    * Note that Hive table property `spark.sql.create.version` also has Spark version.
    */
-  private[sql] val CREATE_VERSION = "org.apache.spark.sql.create.version"
+  private[sql] val SPARK_VERSION_METADATA_KEY = "org.apache.spark.version"
 }
