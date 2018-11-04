@@ -550,6 +550,12 @@ case class JsonToStructs(
       s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
   }
 
+  private val castRow = nullableSchema match {
+    case _: StructType => (row: InternalRow) => row
+    case _: ArrayType => (row: InternalRow) => row.getArray(0)
+    case _: MapType => (row: InternalRow) => row.getMap(0)
+  }
+
   // This converts parsed rows to the desired output by the given schema.
   @transient
   lazy val converter = (rows: Iterator[InternalRow]) => {
@@ -557,11 +563,7 @@ case class JsonToStructs(
       val result = rows.next()
       // JSON's parser produces one record only.
       assert(!rows.hasNext)
-      nullableSchema match {
-        case _: StructType => result
-        case _: ArrayType => result.getArray(0)
-        case _: MapType => result.getMap(0)
-      }
+      castRow(result)
     } else {
       throw new IllegalArgumentException("Expected one row from JSON parser.")
     }
