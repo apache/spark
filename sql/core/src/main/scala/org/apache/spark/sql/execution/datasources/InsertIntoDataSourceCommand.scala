@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.sources.InsertableRelation
 
 
@@ -30,14 +30,13 @@ import org.apache.spark.sql.sources.InsertableRelation
 case class InsertIntoDataSourceCommand(
     logicalRelation: LogicalRelation,
     query: LogicalPlan,
-    overwrite: Boolean)
-  extends RunnableCommand {
+    overwrite: Boolean,
+    outputColumnNames: Seq[String])
+  extends DataWritingCommand {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
-    val data = Dataset.ofRows(sparkSession, query)
+    val data = sparkSession.internalCreateDataFrame(child.execute(), outputColumns.toStructType)
     // Data has been casted to the target relation's schema by the PreprocessTableInsertion rule.
     relation.insert(data, overwrite)
 

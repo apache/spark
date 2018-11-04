@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSQLContext
@@ -587,6 +588,35 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
       sql("INSERT INTO TABLE test_table SELECT 2, null")
+    }
+  }
+
+  test("SPARK-25936 InsertIntoDataSourceCommand does not use Cached Data") {
+    withTable("test_table") {
+      withTempView("test_view") {
+        val schema = new StructType().add("id", LongType, false)
+        val newTable = CatalogTable(
+          identifier = TableIdentifier("test_table", None),
+          tableType = CatalogTableType.EXTERNAL,
+          storage = CatalogStorageFormat(
+            locationUri = None,
+            inputFormat = None,
+            outputFormat = None,
+            serde = None,
+            compressed = false,
+            properties = Map.empty),
+          schema = schema,
+          provider = Some(classOf[SimpleInsertSource].getName))
+        spark.sessionState.catalog.createTable(newTable, false)
+
+        spark.range(2).createTempView("test_view")
+        spark.catalog.cacheTable("test_view")
+
+        val sparkPlan =
+          sql("INSERT INTO TABLE test_table SELECT * FROM test_view").queryExecution.sparkPlan
+        assert(sparkPlan.collect { case i: InMemoryTableScanExec => i }.size === 1,
+          "expected to use cached table")
+      }
     }
   }
 }
