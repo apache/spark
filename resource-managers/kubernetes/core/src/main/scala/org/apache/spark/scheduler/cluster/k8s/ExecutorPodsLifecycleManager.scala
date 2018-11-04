@@ -31,7 +31,6 @@ import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsLifecycleManager(
     conf: SparkConf,
-    executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
     // Use a best-effort to track which executors have been removed already. It's not generally
