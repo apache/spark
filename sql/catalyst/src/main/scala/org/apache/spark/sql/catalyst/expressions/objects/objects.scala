@@ -1632,6 +1632,8 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
   override def foldable: Boolean = false
   override def nullable: Boolean = false
 
+  override lazy val deterministic: Boolean = false
+
   override def flatArguments: Iterator[Any] = Iterator(child)
 
   private val errMsg = "Null value appeared in non-nullable field:" +

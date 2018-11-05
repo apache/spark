@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -165,5 +166,14 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
         Nil,
         Literal(1))
     )
+  }
+
+  test("SPARK-24913: don't skip AssertNotNull and AssertTrue") {
+    val ifWithAssertNotNull = If(AssertNotNull(UnresolvedAttribute("b")), Literal(1), Literal(1))
+    val ifWithAssertTrue = If(AssertTrue(UnresolvedAttribute("b")), Literal(1), Literal(1))
+    val plan = Filter(And(ifWithAssertNotNull, ifWithAssertTrue), OneRowRelation())
+    val optimized = Optimize.execute(plan).analyze
+    // optimization should not change the plan
+    comparePlans(plan, optimized, checkAnalysis = false)
   }
 }
