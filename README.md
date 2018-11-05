@@ -6,7 +6,6 @@ This repository, located at https://github.com/palantir/spark, contains a fork o
 
 Some highlights include:
 
-- kubernetes support, sourced from https://github.com/apache-spark-on-k8s/spark
 - predicate pushdown additions, including a patched version of Parquet
 - various misc bugfixes
 
