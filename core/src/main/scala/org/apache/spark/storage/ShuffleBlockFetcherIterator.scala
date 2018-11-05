@@ -31,6 +31,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.util.TaskCompletionListener
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
@@ -72,7 +73,8 @@ final class ShuffleBlockFetcherIterator(
     maxBlocksInFlightPerAddress: Int,
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean)
-  extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
+  extends Iterator[(BlockId, InputStream)] with DownloadFileManager with TaskCompletionListener
+    with Logging {
 
   import ShuffleBlockFetcherIterator._
 
@@ -182,10 +184,12 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
+  override def onTaskCompletion(context: TaskContext): Unit = cleanup()
+
   /**
    * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
    */
-  private[this] def cleanup() {
+  private[spark] def cleanup() {
     synchronized {
       isZombie = true
     }
@@ -212,6 +216,9 @@ final class ShuffleBlockFetcherIterator(
         logWarning("Failed to cleanup shuffle fetch temp file " + file.path())
       }
     }
+    // remove task completion listener to release resources early as soon as this method
+    // is called before task completes
+    context.remoteTaskCompletionListener(this)
   }
 
   private[this] def sendRequest(req: FetchRequest) {
@@ -351,7 +358,7 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] def initialize(): Unit = {
     // Add a task completion callback (called in both success case and failure case) to cleanup.
-    context.addTaskCompletionListener[Unit](_ => cleanup())
+    context.addTaskCompletionListener(this)
 
     // Split local and remote blocks.
     val remoteRequests = splitLocalRemoteBlocks()

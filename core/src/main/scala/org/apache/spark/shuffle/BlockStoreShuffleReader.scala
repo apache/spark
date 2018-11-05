@@ -17,11 +17,14 @@
 
 package org.apache.spark.shuffle
 
+import java.io.InputStream
+
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.SerializerManager
-import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
+import org.apache.spark.storage.{BlockId, BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.TaskCompletionListener
 import org.apache.spark.util.collection.ExternalSorter
 
 /**
@@ -55,10 +58,20 @@ private[spark] class BlockStoreShuffleReader[K, C](
       SparkEnv.get.conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM),
       SparkEnv.get.conf.getBoolean("spark.shuffle.detectCorrupt", true))
 
+    val completionStreams =
+      CompletionIterator[(BlockId, InputStream), Iterator[(BlockId, InputStream)]](
+        wrappedStreams,
+        // cleanup as soon as finishing iterations to free up memory early as soon as
+        // the iterator finishes to prevent high GC pressure and OutOfMemoryErrors in
+        // case there are a number of ShuffledRDDPartitions are processed by a single
+        // task
+        wrappedStreams.cleanup()
+      )
+
     val serializerInstance = dep.serializer.newInstance()
 
     // Create a key/value iterator for each stream
-    val recordIter = wrappedStreams.flatMap { case (blockId, wrappedStream) =>
+    val recordIter = completionStreams.flatMap { case (blockId, wrappedStream) =>
       // Note: the asKeyValueIterator below wraps a key/value iterator inside of a
       // NextIterator. The NextIterator makes sure that close() is called on the
       // underlying InputStream when all records have been read.
@@ -103,11 +116,26 @@ private[spark] class BlockStoreShuffleReader[K, C](
         context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
+        val taskListener = new TaskCompletionListener {
+          override def onTaskCompletion(context: TaskContext): Unit = sorter.stop()
+        }
         // Use completion callback to stop sorter if task was finished/cancelled.
-        context.addTaskCompletionListener[Unit](_ => {
-          sorter.stop()
-        })
-        CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](sorter.iterator, sorter.stop())
+        context.addTaskCompletionListener(taskListener)
+        CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](
+          sorter.iterator,
+          {
+            sorter.stop()
+            // remove task completion listener as soon as the sorter stops to prevent holding
+            // its references till the end of the task which may lead to memory leaks, for
+            // example, in case of processing multiple ShuffledRDDPartitions by a single task
+            // like in case of CoalescedRDD occurred after the ShuffledRDD in the same stage
+            // (e.g. rdd.repartition(1000).coalesce(10));
+            // note that holding sorter references till the end of the task also holds
+            // references to PartitionedAppendOnlyMap and PartitionedPairBuffer too and these
+            // ones may consume a significant part of the available memory
+            context.remoteTaskCompletionListener(taskListener)
+          }
+        )
       case None =>
         aggregatedIter
     }
