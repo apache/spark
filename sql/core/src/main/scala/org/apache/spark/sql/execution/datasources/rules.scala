@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, AtomicType, MapType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -478,6 +478,29 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 }
 
 object DDLPreprocessingUtils {
+  private def isSafeToCast(
+    expected: DataType,
+    actual: DataType): Boolean = {
+    (expected, actual) match {
+      case (StructType(expectedTypes), StructType(actualTypes)) =>
+        expectedTypes.zip(actualTypes).forall {
+          case (left, right) =>
+            left.name.equals(right.name) && isSafeToCast(left.dataType, right.dataType)
+        }
+      case (ArrayType(expectedType, _), ArrayType(actualType, _)) =>
+        isSafeToCast(expectedType, actualType)
+      case (MapType(expectedKey, expectedValue, _), MapType(actualKey, actualValue, _)) =>
+        isSafeToCast(expectedKey, actualKey) && isSafeToCast(expectedValue, actualValue)
+      case (x, y) => Cast.canCast(x, y)
+    }
+  }
+
+  private def failIfNotSafeToCast(expected: DataType, actual: DataType): Unit = {
+    if (!isSafeToCast(expected, actual)) {
+      throw new AnalysisException(s"It is not safe to write out datatype $actual " +
+        s"into a table of type $expected, because struct columns would be in the wrong order.")
+    }
+  }
 
   /**
    * Adjusts the name and data type of the input query output columns, to match the expectation.
@@ -493,6 +516,7 @@ object DDLPreprocessingUtils {
           expected.metadata == actual.metadata) {
           actual
         } else {
+          failIfNotSafeToCast(expected.dataType, actual.dataType)
           // Renaming is needed for handling the following cases like
           // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
           // 2) Target tables have column metadata
