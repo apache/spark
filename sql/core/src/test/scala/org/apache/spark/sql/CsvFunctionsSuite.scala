@@ -45,7 +45,6 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
   }
 
-
   test("checking the columnNameOfCorruptRecord option") {
     val columnNameOfCorruptRecord = "_unparsed"
     val df = Seq("0,2013-111-11 12:13:14", "1,1983-08-04").toDS()
@@ -73,5 +72,18 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = spark.range(1)
       .select(schema_of_csv(lit("0.1 1"), Map("sep" -> " ").asJava))
     checkAnswer(df, Seq(Row("struct<_c0:double,_c1:int>")))
+  }
+
+  test("to_csv - struct") {
+    val df = Seq(Tuple1(Tuple1(1))).toDF("a")
+
+    checkAnswer(df.select(to_csv($"a")), Row("1") :: Nil)
+  }
+
+  test("to_csv with option") {
+    val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
+    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm").asJava
+
+    checkAnswer(df.select(to_csv($"a", options)), Row("26/08/2015 18:00") :: Nil)
   }
 }
