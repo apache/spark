@@ -652,7 +652,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   // completely blacklisted.
   test("SPARK-22148 Ensure we don't abort the taskSet if we haven't been completely blacklisted") {
     taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
-      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0")
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0",
+      // This is to avoid any potential flakiness in the test because of large pauses in jenkins
+      config.LOCALITY_WAIT.key -> "30s"
+    )
 
     val preferredLocation = Seq(ExecutorCacheTaskLocation("host0", "executor0"))
     val taskSet1 = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0,
