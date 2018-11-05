@@ -143,7 +143,11 @@ public abstract class MemoryConsumer {
    * Release N bytes of memory.
    */
   public void freeMemory(long size) {
-    taskMemoryManager.releaseExecutionMemory(size, this);
+    freeMemory(size, false);
+  }
+
+  public void freeMemory(long size, boolean stopTracking) {
+    taskMemoryManager.releaseExecutionMemory(size, this, stopTracking);
     used -= size;
   }
 
