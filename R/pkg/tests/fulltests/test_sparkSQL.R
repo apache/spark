@@ -1626,8 +1626,6 @@ test_that("column functions", {
   expect_equal(c[[1]][[1]]$a, 1)
   c <- collect(select(df, alias(from_csv(df$col, lit("a INT")), "csv")))
   expect_equal(c[[1]][[1]]$a, 1)
-  c <- collect(select(df, alias(from_csv(df$col, structType("a INT")), "csv")))
-  expect_equal(c[[1]][[1]]$a, 1)
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
