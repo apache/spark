@@ -98,8 +98,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     c = Calendar.getInstance()
     c.set(2015, 2, 18, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    checkEvaluation(Cast(Literal("2015-03-18"), DateType), new Date(c.getTimeInMillis))
-    checkEvaluation(Cast(Literal("2015-03-18 "), DateType), new Date(c.getTimeInMillis))
+
+    Seq("2015-03-18", " 2015-03-18", "2015-03-18 ", " 2015-03-18 ").foreach { s =>
+      checkEvaluation(Cast(Literal(s), DateType), new Date(c.getTimeInMillis))
+    }
     checkEvaluation(Cast(Literal("2015-03-18 123142"), DateType), new Date(c.getTimeInMillis))
     checkEvaluation(Cast(Literal("2015-03-18T123123"), DateType), new Date(c.getTimeInMillis))
     checkEvaluation(Cast(Literal("2015-03-18T"), DateType), new Date(c.getTimeInMillis))
@@ -130,9 +132,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
-      checkCastStringToTimestamp("2015-03-18", new Timestamp(c.getTimeInMillis))
-      checkCastStringToTimestamp("2015-03-18 ", new Timestamp(c.getTimeInMillis))
-      checkCastStringToTimestamp("2015-03-18T", new Timestamp(c.getTimeInMillis))
+      Seq("2015-03-18", " 2015-03-18", "2015-03-18 ", " 2015-03-18 ", "2015-03-18T").foreach { s =>
+        checkCastStringToTimestamp(s, new Timestamp(c.getTimeInMillis))
+      }
 
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)

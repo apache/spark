@@ -359,7 +359,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // TimestampConverter
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs, timeZone).orNull)
+      buildCast[UTF8String](_, s => DateTimeUtils.stringToTimestamp(s.trim(), timeZone).orNull)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
     case LongType =>
@@ -402,7 +402,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s).orNull)
+      buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s.trim()).orNull)
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
@@ -907,7 +907,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
       (c, evPrim, evNull) => code"""
         scala.Option<Integer> $intOpt =
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c);
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c.trim());
         if ($intOpt.isDefined()) {
           $evPrim = ((Integer) $intOpt.get()).intValue();
         } else {
@@ -1010,7 +1010,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""
           scala.Option<Long> $longOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $tz);
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c.trim(), $tz);
           if ($longOpt.isDefined()) {
             $evPrim = ((Long) $longOpt.get()).longValue();
           } else {
