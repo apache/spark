@@ -484,8 +484,8 @@ SELECT * FROM (
   FROM courseSales
 )
 PIVOT (
-  sum(earnings)
-  FOR course IN ('dotNET', 'Java')
+  sum(Earnings)
+  FOR Course IN ('dotNET', 'Java')
 )
 -- !query 31 schema
 struct<a:string,z:string,b:string,y:string,c:string,x:string,d:string,w:string,dotNET:bigint,Java:bigint>

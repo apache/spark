@@ -528,9 +528,6 @@ setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 #' @rdname printSchema
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
-#' @rdname registerTempTable-deprecated
-setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
-
 #' @rdname rename
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
@@ -595,9 +592,6 @@ setGeneric("write.parquet", function(x, path, ...) {
   standardGeneric("write.parquet")
 })
 
-#' @rdname write.parquet
-setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
-
 #' @rdname write.stream
 setGeneric("write.stream", function(df, source = NULL, outputMode = NULL, ...) {
   standardGeneric("write.stream")
@@ -636,9 +630,6 @@ setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
 #' @rdname union
 setGeneric("union", function(x, y) { standardGeneric("union") })
-
-#' @rdname union
-setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
 #' @rdname unionByName
 setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
@@ -984,6 +975,10 @@ setGeneric("format_string", function(format, x, ...) { standardGeneric("format_s
 #' @name NULL
 setGeneric("from_json", function(x, schema, ...) { standardGeneric("from_json") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("from_csv", function(x, schema, ...) { standardGeneric("from_csv") })
+
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
@@ -1258,7 +1253,7 @@ setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array")
 
 #' @rdname column_string_functions
 #' @name NULL
-setGeneric("split_string", function(x, pattern) { standardGeneric("split_string") })
+setGeneric("split_string", function(x, pattern, ...) { standardGeneric("split_string") })
 
 #' @rdname column_string_functions
 #' @name NULL
@@ -1307,6 +1302,10 @@ setGeneric("to_date", function(x, format) { standardGeneric("to_date") })
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("to_json", function(x, ...) { standardGeneric("to_json") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("to_csv", function(x, ...) { standardGeneric("to_csv") })
 
 #' @rdname column_datetime_functions
 #' @name NULL
@@ -1452,6 +1451,10 @@ setGeneric("spark.freqItemsets", function(object) { standardGeneric("spark.freqI
 
 #' @rdname spark.fpGrowth
 setGeneric("spark.associationRules", function(object) { standardGeneric("spark.associationRules") })
+
+#' @rdname spark.prefixSpan
+setGeneric("spark.findFrequentSequentialPatterns",
+            function(data, ...) { standardGeneric("spark.findFrequentSequentialPatterns") })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.

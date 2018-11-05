@@ -41,7 +41,7 @@ object UnsafeProjectionBenchmark extends BenchmarkBase {
     (1 to numRows).map(_ => encoder.toRow(generator().asInstanceOf[Row]).copy()).toArray
   }
 
-  override def benchmark(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("unsafe projection") {
       val iters = 1024 * 16
       val numRows = 1024 * 16

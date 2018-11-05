@@ -45,7 +45,7 @@ case class HashAggregateExec(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport {
+  extends UnaryExecNode with BlockingOperatorWithCodegen {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -150,14 +150,6 @@ case class HashAggregateExec(
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
-
-  // The result rows come from the aggregate buffer, or a single row(no grouping keys), so this
-  // operator doesn't need to copy its result even if its child does.
-  override def needCopyResult: Boolean = false
-
-  // Aggregate operator always consumes all the input rows before outputting any result, so we
-  // don't need a stop check before aggregating.
-  override def needStopCheck: Boolean = false
 
   protected override def doProduce(ctx: CodegenContext): String = {
     if (groupingExpressions.isEmpty) {
@@ -705,12 +697,15 @@ case class HashAggregateExec(
 
     def outputFromRegularHashMap: String = {
       s"""
-         |while ($iterTerm.next()) {
+         |while ($limitNotReachedCond $iterTerm.next()) {
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);
-         |
          |  if (shouldStop()) return;
+         |}
+         |$iterTerm.close();
+         |if ($sorterTerm == null) {
+         |  $hashMapTerm.free();
          |}
        """.stripMargin
     }
@@ -728,11 +723,6 @@ case class HashAggregateExec(
      // output the result
      $outputFromFastHashMap
      $outputFromRegularHashMap
-
-     $iterTerm.close();
-     if ($sorterTerm == null) {
-       $hashMapTerm.free();
-     }
      """
   }
 
@@ -854,33 +844,47 @@ case class HashAggregateExec(
 
     val updateRowInHashMap: String = {
       if (isFastHashMapEnabled) {
-        ctx.INPUT_ROW = fastRowBuffer
-        val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
-        val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
-        val effectiveCodes = subExprs.codes.mkString("\n")
-        val fastRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
-          boundUpdateExpr.map(_.genCode(ctx))
-        }
-        val updateFastRow = fastRowEvals.zipWithIndex.map { case (ev, i) =>
-          val dt = updateExpr(i).dataType
-          CodeGenerator.updateColumn(
-            fastRowBuffer, dt, i, ev, updateExpr(i).nullable, isVectorizedHashMapEnabled)
-        }
+        if (isVectorizedHashMapEnabled) {
+          ctx.INPUT_ROW = fastRowBuffer
+          val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
+          val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
+          val effectiveCodes = subExprs.codes.mkString("\n")
+          val fastRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
+            boundUpdateExpr.map(_.genCode(ctx))
+          }
+          val updateFastRow = fastRowEvals.zipWithIndex.map { case (ev, i) =>
+            val dt = updateExpr(i).dataType
+            CodeGenerator.updateColumn(
+              fastRowBuffer, dt, i, ev, updateExpr(i).nullable, isVectorized = true)
+          }
 
-        // If fast hash map is on, we first generate code to update row in fast hash map, if the
-        // previous loop up hit fast hash map. Otherwise, update row in regular hash map.
-        s"""
-           |if ($fastRowBuffer != null) {
-           |  // common sub-expressions
-           |  $effectiveCodes
-           |  // evaluate aggregate function
-           |  ${evaluateVariables(fastRowEvals)}
-           |  // update fast row
-           |  ${updateFastRow.mkString("\n").trim}
-           |} else {
-           |  $updateRowInRegularHashMap
-           |}
-       """.stripMargin
+          // If vectorized fast hash map is on, we first generate code to update row
+          // in vectorized fast hash map, if the previous loop up hit vectorized fast hash map.
+          // Otherwise, update row in regular hash map.
+          s"""
+             |if ($fastRowBuffer != null) {
+             |  // common sub-expressions
+             |  $effectiveCodes
+             |  // evaluate aggregate function
+             |  ${evaluateVariables(fastRowEvals)}
+             |  // update fast row
+             |  ${updateFastRow.mkString("\n").trim}
+             |} else {
+             |  $updateRowInRegularHashMap
+             |}
+          """.stripMargin
+        } else {
+          // If row-based hash map is on and the previous loop up hit fast hash map,
+          // we reuse regular hash buffer to update row of fast hash map.
+          // Otherwise, update row in regular hash map.
+          s"""
+             |// Updates the proper row buffer
+             |if ($fastRowBuffer != null) {
+             |  $unsafeRowBuffer = $fastRowBuffer;
+             |}
+             |$updateRowInRegularHashMap
+          """.stripMargin
+        }
       } else {
         updateRowInRegularHashMap
       }

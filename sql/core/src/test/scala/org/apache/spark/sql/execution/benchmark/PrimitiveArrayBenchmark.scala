@@ -36,7 +36,7 @@ object PrimitiveArrayBenchmark extends BenchmarkBase {
     .config("spark.sql.autoBroadcastJoinThreshold", 1)
     .getOrCreate()
 
-  override def benchmark(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Write primitive arrays in dataset") {
       writeDatasetArray(4)
     }

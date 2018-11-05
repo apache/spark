@@ -187,7 +187,9 @@ NULL
 #'          \itemize{
 #'          \item \code{to_json}: it is the column containing the struct, array of the structs,
 #'              the map or array of maps.
+#'          \item \code{to_csv}: it is the column containing the struct.
 #'          \item \code{from_json}: it is the column containing the JSON string.
+#'          \item \code{from_csv}: it is the column containing the CSV string.
 #'          }
 #' @param y Column to compute on.
 #' @param value A value to compute on.
@@ -196,11 +198,18 @@ NULL
 #'          \item \code{array_position}: a value to locate in the given array.
 #'          \item \code{array_remove}: a value to remove in the given array.
 #'          }
-#' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
-#'            additional named properties to control how it is converted, accepts the same
-#'            options as the JSON data source. Additionally \code{to_json} supports the "pretty"
-#'            option which enables pretty JSON generation. In \code{arrays_zip}, this contains
-#'            additional Columns of arrays to be merged.
+#' @param schema
+#'          \itemize{
+#'          \item \code{from_json}: a structType object to use as the schema to use
+#'              when parsing the JSON string. Since Spark 2.3, the DDL-formatted string is
+#'              also supported for the schema.
+#'          \item \code{from_csv}: a DDL-formatted string
+#'          }
+#' @param ... additional argument(s). In \code{to_json}, \code{to_csv} and \code{from_json},
+#'            this contains additional named properties to control how it is converted, accepts
+#'            the same options as the JSON/CSV data source. Additionally \code{to_json} supports
+#'            the "pretty" option which enables pretty JSON generation. In \code{arrays_zip},
+#'            this contains additional Columns of arrays to be merged.
 #' @name column_collection_functions
 #' @rdname column_collection_functions
 #' @family collection functions
@@ -1733,6 +1742,26 @@ setMethod("to_json", signature(x = "Column"),
           })
 
 #' @details
+#' \code{to_csv}: Converts a column containing a \code{structType} into a Column of CSV string.
+#' Resolving the Column can fail if an unsupported type is encountered.
+#'
+#' @rdname column_collection_functions
+#' @aliases to_csv to_csv,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' # Converts a struct into a CSV string
+#' df2 <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' select(df2, to_csv(df2$d, dateFormat = 'dd/MM/yyyy'))}
+#' @note to_csv since 3.0.0
+setMethod("to_csv", signature(x = "Column"),
+          function(x, ...) {
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_csv", x@jc, options)
+            column(jc)
+          })
+
+#' @details
 #' \code{to_timestamp}: Converts the column into a TimestampType. You may optionally specify
 #' a format according to the rules in:
 #' \url{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}.
@@ -2165,8 +2194,6 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' to \code{TRUE}. If the string is unparseable, the Column will contain the value NA.
 #'
 #' @rdname column_collection_functions
-#' @param schema a structType object to use as the schema to use when parsing the JSON string.
-#'               Since Spark 2.3, the DDL-formatted string is also supported for the schema.
 #' @param as.json.array indicating if input string is JSON array of objects or a single object.
 #' @aliases from_json from_json,Column,characterOrstructType-method
 #' @examples
@@ -2199,6 +2226,36 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
             options <- varargsToStrEnv(...)
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_json",
+                              x@jc, jschema, options)
+            column(jc)
+          })
+
+#' @details
+#' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
+#' with the specified \code{schema}.
+#' If the string is unparseable, the Column will contain the value NA.
+#'
+#' @rdname column_collection_functions
+#' @aliases from_csv from_csv,Column,character-method
+#' @examples
+#'
+#' \dontrun{
+#' df <- sql("SELECT 'Amsterdam,2018' as csv")
+#' schema <- "city STRING, year INT"
+#' head(select(df, from_csv(df$csv, schema)))}
+#' @note from_csv since 3.0.0
+setMethod("from_csv", signature(x = "Column", schema = "characterOrColumn"),
+          function(x, schema, ...) {
+            if (class(schema) == "Column") {
+              jschema <- schema@jc
+            } else if (is.character(schema)) {
+              jschema <- callJStatic("org.apache.spark.sql.functions", "lit", schema)
+            } else {
+              stop("schema argument should be a column or character")
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "from_csv",
                               x@jc, jschema, options)
             column(jc)
           })
@@ -3473,13 +3530,21 @@ setMethod("collect_set",
 
 #' @details
 #' \code{split_string}: Splits string on regular expression.
-#' Equivalent to \code{split} SQL function.
+#' Equivalent to \code{split} SQL function. Optionally a
+#' \code{limit} can be specified
 #'
 #' @rdname column_string_functions
+#' @param limit determines the length of the returned array.
+#'              \itemize{
+#'              \item \code{limit > 0}: length of the array will be at most \code{limit}
+#'              \item \code{limit <= 0}: the returned array can have any length
+#'              }
+#'
 #' @aliases split_string split_string,Column-method
 #' @examples
 #'
 #' \dontrun{
+#' head(select(df, split_string(df$Class, "\\d", 2)))
 #' head(select(df, split_string(df$Sex, "a")))
 #' head(select(df, split_string(df$Class, "\\d")))
 #' # This is equivalent to the following SQL expression
@@ -3487,8 +3552,9 @@ setMethod("collect_set",
 #' @note split_string 2.3.0
 setMethod("split_string",
           signature(x = "Column", pattern = "character"),
-          function(x, pattern) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "split", x@jc, pattern)
+          function(x, pattern, limit = -1) {
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "split", x@jc, pattern, as.integer(limit))
             column(jc)
           })
 

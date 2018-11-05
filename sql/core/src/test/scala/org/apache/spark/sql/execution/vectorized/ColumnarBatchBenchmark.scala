@@ -443,7 +443,7 @@ object ColumnarBatchBenchmark extends BenchmarkBase {
     benchmark.run
   }
 
-  override def benchmark(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Int Read/Write") {
       intAccess(1024 * 40)
     }
