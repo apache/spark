@@ -22,6 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -63,7 +64,7 @@ class EliminateSerializationSuite extends PlanTest {
     val expected = AppendColumnsWithObject(
       func.asInstanceOf[Any => Any],
       productEncoder[(Int, Int)].namedExpressions,
-      intEncoder.namedExpressions,
+      intEncoder.namedExpressions.map(e => Alias(e, "key")()),
       input).analyze
 
     comparePlans(optimized, expected)
