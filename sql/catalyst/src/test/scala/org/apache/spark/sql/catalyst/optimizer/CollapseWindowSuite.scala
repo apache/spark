@@ -27,7 +27,8 @@ class CollapseWindowSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("CollapseWindow", FixedPoint(10),
-        CollapseWindow) :: Nil
+        CollapseWindow,
+        ExchangeWindowWithOrderField) :: Nil
   }
 
   val testRelation = LocalRelation('a.double, 'b.double, 'c.string)
@@ -38,6 +39,8 @@ class CollapseWindowSuite extends PlanTest {
   val partitionSpec2 = Seq(c + 1)
   val orderSpec1 = Seq(c.asc)
   val orderSpec2 = Seq(c.desc)
+  val orderSpecAB = Seq(a.asc, b.asc)
+  val orderSpecA = Seq(a.asc)
 
   test("collapse two adjacent windows with the same partition/order") {
     val query = testRelation
@@ -87,6 +90,21 @@ class CollapseWindowSuite extends PlanTest {
 
     val expected = query.analyze
     val optimized = Optimize.execute(query.analyze)
+    comparePlans(optimized, expected)
+  }
+
+  test("Exchanged two adjacent windows with order field") {
+    val query = testRelation
+      .window(Seq(max(b).as('max_b)), partitionSpec1, orderSpecA)
+      .window(Seq(sum(a).as('sum_a)), partitionSpec1, orderSpecAB)
+
+    val optimized = Optimize.execute(query.analyze)
+
+    val expected = testRelation
+      .window(Seq(sum(a).as('sum_a)), partitionSpec1, orderSpecAB)
+      .window(Seq(max(b).as('max_b)), partitionSpec1, orderSpecA)
+      .analyze
+
     comparePlans(optimized, expected)
   }
 }

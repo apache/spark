@@ -120,7 +120,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
       RewriteDistinctAggregates,
-      ReplaceDeduplicateWithAggregate) ::
+      ReplaceDeduplicateWithAggregate,
+      ExchangeWindowWithOrderField) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -737,6 +738,26 @@ object CollapseWindow extends Rule[LogicalPlan] {
           // by ExtractWindowFunctions.
           WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+  }
+}
+
+/**
+  * Exchanged the adjacent logical window operator according to the order field of window.
+  */
+object ExchangeWindowWithOrderField extends Rule[LogicalPlan] {
+  private def compatibleOrder(os1 : Seq[SortOrder], os2: Seq[SortOrder]): Boolean = {
+    os1.length < os2.length && os2.take(os1.length).zip(os1).exists({
+      case (l, r) => l.semanticEquals(r)
+    })
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
+      if w1.references.intersect(w2.windowOutputSet).isEmpty &&
+        ps1 == ps2 && compatibleOrder(os2, os1) &&
+        WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
+      val newWindow = w1.copy(child = grandChild)
+      w2.copy(child = newWindow)
   }
 }
 
