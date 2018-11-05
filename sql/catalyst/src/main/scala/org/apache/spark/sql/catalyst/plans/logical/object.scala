@@ -262,12 +262,19 @@ object AppendColumns {
   def apply[T : Encoder, U : Encoder](
       func: T => U,
       child: LogicalPlan): AppendColumns = {
+    val outputEncoder = encoderFor[U]
+    val namedExpressions = if (!outputEncoder.isSerializedAsStruct) {
+      assert(outputEncoder.namedExpressions.length == 1)
+      outputEncoder.namedExpressions.map(Alias(_, "key")())
+    } else {
+      outputEncoder.namedExpressions
+    }
     new AppendColumns(
       func.asInstanceOf[Any => Any],
       implicitly[Encoder[T]].clsTag.runtimeClass,
       implicitly[Encoder[T]].schema,
       UnresolvedDeserializer(encoderFor[T].deserializer),
-      encoderFor[U].namedExpressions,
+      namedExpressions,
       child)
   }
 
@@ -275,12 +282,19 @@ object AppendColumns {
       func: T => U,
       inputAttributes: Seq[Attribute],
       child: LogicalPlan): AppendColumns = {
+    val outputEncoder = encoderFor[U]
+    val namedExpressions = if (!outputEncoder.isSerializedAsStruct) {
+      assert(outputEncoder.namedExpressions.length == 1)
+      outputEncoder.namedExpressions.map(Alias(_, "key")())
+    } else {
+      outputEncoder.namedExpressions
+    }
     new AppendColumns(
       func.asInstanceOf[Any => Any],
       implicitly[Encoder[T]].clsTag.runtimeClass,
       implicitly[Encoder[T]].schema,
       UnresolvedDeserializer(encoderFor[T].deserializer, inputAttributes),
-      encoderFor[U].namedExpressions,
+      namedExpressions,
       child)
   }
 }

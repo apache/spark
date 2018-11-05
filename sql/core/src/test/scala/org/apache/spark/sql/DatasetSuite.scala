@@ -1556,6 +1556,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       df.where($"city".contains(new java.lang.Character('A'))),
       Seq(Row("Amsterdam")))
   }
+
+  test("SPARK-25942: typed aggregation on primitive data") {
+    val ds = Seq(1, 2, 3).toDS()
+
+    val agg = ds.groupByKey(_ >= 2)
+      .agg(sum("value").as[Long], sum($"value" + 1).as[Long])
+    assert(agg.collect() === Seq((false, 1, 2), (true, 5, 7)))
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
