@@ -21,6 +21,7 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale}
 
 import org.scalatest.exceptions.TestFailedException
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
