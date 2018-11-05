@@ -472,6 +472,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     generateTreeString(0, Nil, new StringBuilder, verbose = verbose, addSuffix = addSuffix).toString
   }
 
+  def treeNodeName(): String = {
+    generateTreeString(0, Nil, new StringBuilder, verbose = false, onlyNodeName = true).toString
+  }
+
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
    * The numbers can be used with [[TreeNode.apply]] to easily access specific subtrees.
@@ -535,7 +539,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       builder: StringBuilder,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
+      addSuffix: Boolean = false,
+      onlyNodeName: Boolean = false): StringBuilder = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -544,8 +549,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       builder.append(if (lastChildren.last) "+- " else ":- ")
     }
 
-    val str = if (verbose) {
+    val str = if (verbose && !onlyNodeName) {
       if (addSuffix) verboseStringWithSuffix else verboseString
+    } else if (!verbose && onlyNodeName) {
+      nodeName
     } else {
       simpleString
     }
@@ -556,17 +563,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ false, builder, verbose,
-        addSuffix = addSuffix))
+        addSuffix = addSuffix, onlyNodeName = onlyNodeName))
       innerChildren.last.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ true, builder, verbose,
-        addSuffix = addSuffix)
+        addSuffix = addSuffix, onlyNodeName = onlyNodeName)
     }
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, builder, verbose, prefix, addSuffix))
+        depth + 1, lastChildren :+ false, builder, verbose, prefix, addSuffix, onlyNodeName))
       children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, builder, verbose, prefix, addSuffix)
+        depth + 1, lastChildren :+ true, builder, verbose, prefix, addSuffix, onlyNodeName)
     }
 
     builder
