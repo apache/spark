@@ -59,7 +59,9 @@ private[spark] class Heartbeater(
     heartbeater.awaitTermination(10, TimeUnit.SECONDS)
   }
 
-  /** Get the current executor level metrics. These are returned as an Array */
+  /**
+   * Get the current executor level metrics. These are returned as an array
+   */
   def getCurrentMetrics(): ExecutorMetrics = {
     val metrics = new Array[Long](ExecutorMetricType.numberOfMetrics)
     var offset = 0
