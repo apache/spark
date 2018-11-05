@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants.KERBEROS_SPARK_USER_NAME
+import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.assertHelper
 import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 
 class HadoopSparkUserExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
@@ -45,7 +46,7 @@ class HadoopSparkUserExecutorFeatureStepSuite extends SparkFunSuite with BeforeA
     when(kubernetesConf.sparkConf).thenReturn(sparkConf)
   }
 
-  test("Testing bootstrapSparkUserPod") {
+  test("bootstrapSparkUserPod being applied to a base spark pod") {
     when(hadoopBootstrapUtil.bootstrapSparkUserPod(
       Eq(hadoopSparkUser),
       Eq(sparkPod)
@@ -56,8 +57,8 @@ class HadoopSparkUserExecutorFeatureStepSuite extends SparkFunSuite with BeforeA
     })
     val sUserStep = new HadoopSparkUserExecutorFeatureStep(kubernetesConf, hadoopBootstrapUtil)
     val pod = sUserStep.configurePod(sparkPod)
-    assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-user" -> "true")))
-    assert(sUserStep.getAdditionalPodSystemProperties() === Map.empty)
-    assert(sUserStep.getAdditionalKubernetesResources() === Seq.empty)
+    KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-user" -> "true"))
+    assertHelper(sUserStep.getAdditionalPodSystemProperties(), Map.empty)
+    assertHelper(sUserStep.getAdditionalKubernetesResources(), Seq.empty)
   }
 }

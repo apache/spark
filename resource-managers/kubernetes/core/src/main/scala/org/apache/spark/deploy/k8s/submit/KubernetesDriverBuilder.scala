@@ -24,10 +24,8 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 import org.apache.spark.deploy.k8s.features.hadooputils._
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -49,28 +47,20 @@ private[spark] class KubernetesDriverBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-    providePythonStep: (
+    provideDriverCommandStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
-      => PythonDriverFeatureStep) =
-      new PythonDriverFeatureStep(_),
-    provideRStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => RDriverFeatureStep) =
-    new RDriverFeatureStep(_),
-    provideJavaStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => JavaDriverFeatureStep) =
-    new JavaDriverFeatureStep(_),
+      => DriverCommandFeatureStep) =
+      new DriverCommandFeatureStep(_),
     provideHadoopGlobalStep: ((
       KubernetesConf[KubernetesDriverSpecificConf],
-      HadoopBootstrapUtil,
-      HadoopKerberosLogin,
-      KubernetesHadoopDelegationTokenManager)
-        => KerberosConfDriverFeatureStep) =
-    new KerberosConfDriverFeatureStep(_, _, _, _),
+        HadoopBootstrapUtil,
+        HadoopKerberosLogin,
+        KubernetesHadoopDelegationTokenManager)
+      => KerberosConfDriverFeatureStep) =
+      new KerberosConfDriverFeatureStep(_, _, _, _),
     providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => PodTemplateConfigMapStep) =
-    new PodTemplateConfigMapStep(_),
+      new PodTemplateConfigMapStep(_),
     provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   def buildFromFeatures(
@@ -95,14 +85,7 @@ private[spark] class KubernetesDriverBuilder(
       Seq(providePodTemplateConfigMapStep(kubernetesConf))
     } else Nil
 
-    val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
-        case JavaMainAppResource(_) =>
-          provideJavaStep(kubernetesConf)
-        case PythonMainAppResource(_) =>
-          providePythonStep(kubernetesConf)
-        case RMainAppResource(_) =>
-          provideRStep(kubernetesConf)}
-      .getOrElse(provideJavaStep(kubernetesConf))
+    val driverCommandStep = provideDriverCommandStep(kubernetesConf)
 
     val maybeHadoopConfigStep =
       kubernetesConf.hadoopConfSpec.map { _ =>
@@ -116,7 +99,7 @@ private[spark] class KubernetesDriverBuilder(
       }
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
-      (baseFeatures :+ bindingsStep) ++
+      baseFeatures ++ Seq(driverCommandStep) ++
         secretFeature ++ envSecretFeature ++ volumesFeature ++
         maybeHadoopConfigStep.toSeq ++ podTemplateFeature
 

@@ -21,7 +21,6 @@ import java.io.File
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, SecretBuilder}
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.UserGroupInformation
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Matchers.{any, eq => Eq}
@@ -35,6 +34,7 @@ import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.HadoopConfSpec
+import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.assertHelper
 import org.apache.spark.deploy.k8s.features.hadooputils.{HadoopBootstrapUtil, HadoopKerberosLogin, KerberosConfigSpec}
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 
@@ -91,7 +91,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       .thenReturn(hadoopFiles)
   }
 
-  test("Testing HADOOP_CONF_DIR bootstrap without Kerberos") {
+  test("running HadoopBootstrapUtil without Kerberos") {
     val hConf = HadoopConfSpec(Option("HADOOP_CONF_DIR"), None)
     when(tokenManager.isSecurityEnabled).thenReturn(false)
     when(kubernetesConf.hadoopConfSpec).thenReturn(Some(hConf))
@@ -124,15 +124,16 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       hadoopKerberosLogin,
       tokenManager)
     val pod = kConfStep.configurePod(sparkPod)
-    assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
-      Map("bootstrap-hconf" -> "true", "bootstrap-user" -> "true")))
-    assert(kConfStep.getAdditionalPodSystemProperties() ===
+    KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
+      Map("bootstrap-hconf" -> "true", "bootstrap-user" -> "true"))
+    assertHelper(kConfStep.getAdditionalPodSystemProperties(),
       Map(KERBEROS_SPARK_USER_NAME -> jobUserName,
         HADOOP_CONFIG_MAP_NAME -> newCMapName))
-    assert(kConfStep.getAdditionalKubernetesResources() === List(newCMap))
+    assertHelper(kConfStep.getAdditionalKubernetesResources(), List(newCMap))
   }
 
-  test("Testing no Keytab and no Secret (krb5.conf path) (HADOOP_CONF_DIR env)") {
+  test("running HadoopBootstrapUtil and HadoopKerberosLogin with" +
+    " no Keytab and no Secret (krb5.conf path) (HADOOP_CONF_DIR env)") {
     val krbFileName = "KRB_FILE_NAME"
     val hConf = HadoopConfSpec(Option("HADOOP_CONF_DIR"), None)
     when(tokenManager.isSecurityEnabled).thenReturn(true)
@@ -181,19 +182,20 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       hadoopKerberosLogin,
       tokenManager)
     val pod = kConfStep.configurePod(sparkPod)
-    assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
-      Map("bootstrap-hconf" -> "true", "bootstrap-kerberos" -> "true")))
-    assert(kConfStep.getAdditionalPodSystemProperties() ===
+    KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
+      Map("bootstrap-hconf" -> "true", "bootstrap-kerberos" -> "true"))
+    assertHelper(kConfStep.getAdditionalPodSystemProperties(),
       Map(KERBEROS_DT_SECRET_NAME -> s"$dtSecretName-1",
         KERBEROS_DT_SECRET_KEY -> s"$dtSecretKey-1",
         KERBEROS_SPARK_USER_NAME -> jobUserName,
         KRB5_CONFIG_MAP_NAME -> newKCMapName,
         HADOOP_CONFIG_MAP_NAME -> newCMapName))
-    assert(kConfStep.getAdditionalKubernetesResources() ===
+    assertHelper(kConfStep.getAdditionalKubernetesResources(),
       List(newCMap, krbMap, newDTSecret))
   }
 
-  test("Testing with Keytab (krb5.conf cmap) (HADOOP_CONF_DIR env)") {
+  test("running HadoopBootstrapUtil and HadoopKerberosLogin with" +
+    "Keytab (krb5.conf cmap) (HADOOP_CONF_DIR env)") {
     val krbConfName = "KRB_CMAP_NAME"
     val hConf = HadoopConfSpec(Option("HADOOP_CONF_DIR"), None)
     when(tokenManager.isSecurityEnabled).thenReturn(true)
@@ -242,19 +244,19 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       hadoopKerberosLogin,
       tokenManager)
     val pod = kConfStep.configurePod(sparkPod)
-    assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
-      Map("bootstrap-hconf" -> "true", "bootstrap-kerberos" -> "true")))
-    assert(kConfStep.getAdditionalPodSystemProperties() ===
+    KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
+      Map("bootstrap-hconf" -> "true", "bootstrap-kerberos" -> "true"))
+    assertHelper(kConfStep.getAdditionalPodSystemProperties(),
       Map(KERBEROS_DT_SECRET_NAME -> s"$dtSecretName-2",
         KERBEROS_DT_SECRET_KEY -> s"$dtSecretKey-2",
         KERBEROS_SPARK_USER_NAME -> jobUserName,
         KRB5_CONFIG_MAP_NAME -> krbConfName,
         HADOOP_CONFIG_MAP_NAME -> newCMapName))
-    assert(kConfStep.getAdditionalKubernetesResources() ===
+    assertHelper(kConfStep.getAdditionalKubernetesResources(),
       List(newCMap, newDTSecret))
   }
 
-  test("Testing with Secrets (krb5.conf cmap) (HADOOP_CONF_DIR cmap)") {
+  test("running HadoopBootstrapUtil with Secrets (krb5.conf cmap) (HADOOP_CONF_DIR cmap)") {
     val krbConfName = "KRB_CMAP_NAME"
     val hConfName = "HCONF_CMAP_NAME"
     val hConf = HadoopConfSpec(None, Some(hConfName))
@@ -304,14 +306,14 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       hadoopKerberosLogin,
       tokenManager)
     val pod = kConfStep.configurePod(sparkPod)
-    assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
-      Map("bootstrap-hconf" -> "true")))
-    assert(kConfStep.getAdditionalPodSystemProperties() ===
+    KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
+      Map("bootstrap-hconf" -> "true"))
+    assertHelper(kConfStep.getAdditionalPodSystemProperties(),
       Map(KERBEROS_DT_SECRET_NAME -> s"$dtSecretName-3",
         KERBEROS_DT_SECRET_KEY -> s"$dtSecretKey-3",
         KERBEROS_SPARK_USER_NAME -> jobUserName,
         KRB5_CONFIG_MAP_NAME -> krbConfName,
         HADOOP_CONFIG_MAP_NAME -> hConfName))
-    assert(kConfStep.getAdditionalKubernetesResources() === List())
+    assertHelper(kConfStep.getAdditionalKubernetesResources(), List())
   }
 }

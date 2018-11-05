@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.assertHelper
 import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 
 class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
@@ -41,7 +42,7 @@ class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndA
     MockitoAnnotations.initMocks(this)
   }
 
-  test("Testing bootstrapKerberosPod") {
+  test("running bootstrapKerberosPod on base spark pod") {
     val krbConfName = "KRB_CONF_NAME"
     val dtSecretName = "DT_SECRET_NAME"
     val dtSecretKey = "DT_SECRET_KEY"
@@ -67,8 +68,8 @@ class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndA
     })
     val kConfStep = new KerberosConfExecutorFeatureStep(kubernetesConf, hadoopBootstrapUtil)
     val pod = kConfStep.configurePod(sparkPod)
-    assert(KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-kerberos" -> "true")))
-    assert(kConfStep.getAdditionalPodSystemProperties() === Map.empty)
-    assert(kConfStep.getAdditionalKubernetesResources() === Seq.empty)
+    KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-kerberos" -> "true"))
+    assertHelper(kConfStep.getAdditionalPodSystemProperties(), Map.empty)
+    assertHelper(kConfStep.getAdditionalKubernetesResources(), Seq.empty)
   }
 }

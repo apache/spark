@@ -64,27 +64,31 @@ object KubernetesFeaturesTestUtils {
     container.getEnv.asScala.exists(envVar => envVar.getName == envVarName)
   }
 
-  def containerHasEnvVars(container: Container, envs: Map[String, String]): Boolean = {
-    envs.toSet.subsetOf(container.getEnv.asScala
-      .map { e => (e.getName, e.getValue)}.toSet)
+  def containerHasEnvVars(container: Container, envs: Map[String, String]): Unit = {
+    assertHelper[Set[(String, String)]](envs.toSet,
+      container.getEnv.asScala
+        .map { e => (e.getName, e.getValue) }.toSet,
+      subsetOfTup[Set[(String, String)], String])
   }
 
-  def containerHasVolumeMounts(container: Container, vms: Map[String, String]): Boolean = {
-    vms.toSet.subsetOf(container.getVolumeMounts.asScala
-      .map { vm => (vm.getName, vm.getMountPath)}.toSet)
+  def containerHasVolumeMounts(container: Container, vms: Map[String, String]): Unit = {
+    assertHelper[Set[(String, String)]](vms.toSet,
+      container.getVolumeMounts.asScala
+        .map { vm => (vm.getName, vm.getMountPath) }.toSet,
+      subsetOfTup[Set[(String, String)], String])
   }
 
-  def podHasLabels(pod: Pod, labels: Map[String, String]): Boolean = {
-    labels.toSet.subsetOf(pod.getMetadata.getLabels.asScala.toSet)
+  def podHasLabels(pod: Pod, labels: Map[String, String]): Unit = {
+    assertHelper[Set[(String, String)]](labels.toSet, pod.getMetadata.getLabels.asScala.toSet,
+      subsetOfTup[Set[(String, String)], String])
   }
 
-  def podHasVolumes(pod: Pod, volumes: Seq[Volume]): Boolean = {
-    volumes.toSet.subsetOf(pod.getSpec.getVolumes.asScala.toSet)
+  def podHasVolumes(pod: Pod, volumes: Seq[Volume]): Unit = {
+    assertHelper[Set[Volume]](volumes.toSet, pod.getSpec.getVolumes.asScala.toSet,
+      subsetOfElem[Set[Volume], Volume])
   }
 
-  // Kerberos Specific Test utils
-
-  // Upon use of bootstrapHadoopConfDir
+  // Mocking bootstrapHadoopConfDir
   def hadoopConfBootPod(inputPod: SparkPod): SparkPod =
     SparkPod(
       new PodBuilder(inputPod.pod)
@@ -94,7 +98,7 @@ object KubernetesFeaturesTestUtils {
         .build(),
       inputPod.container)
 
-  // Upon use of bootstrapKerberosPod
+  // Mocking bootstrapKerberosPod
   def krbBootPod(inputPod: SparkPod): SparkPod =
     SparkPod(
       new PodBuilder(inputPod.pod)
@@ -104,7 +108,7 @@ object KubernetesFeaturesTestUtils {
         .build(),
       inputPod.container)
 
-  // Upon use of bootstrapSparkUserPod
+  // Mocking bootstrapSparkUserPod
   def userBootPod(inputPod: SparkPod): SparkPod =
     SparkPod(
       new PodBuilder(inputPod.pod)
@@ -113,4 +117,12 @@ object KubernetesFeaturesTestUtils {
           .endMetadata()
         .build(),
       inputPod.container)
+
+  def subsetOfElem[T <: Set[B], B <: Any]: (T, T) => Boolean = (a, b) => a.subsetOf(b)
+  def subsetOfTup[T <: Set[(B, B)], B <: Any]: (T, T) => Boolean = (a, b) => a.subsetOf(b)
+
+  def assertHelper[T](con1: T, con2: T,
+      expr: (T, T) => Boolean = (a: T, b: T) => a == b): Unit = {
+    assert(expr(con1, con2), s"$con1 does not equal $con2 as expected")
+  }
 }

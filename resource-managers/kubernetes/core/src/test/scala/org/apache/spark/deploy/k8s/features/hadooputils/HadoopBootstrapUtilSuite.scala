@@ -39,7 +39,8 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
 
   before {
     tmpDir = Utils.createTempDir()
-    tmpFile = createTempFile(tmpDir, "contents")
+    tmpFile = File.createTempFile(s"${UUID.randomUUID().toString}", ".txt", tmpDir)
+    Files.write("contents".getBytes, tmpFile)
   }
 
   after {
@@ -47,12 +48,12 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
     tmpDir.delete()
   }
 
-  test("Testing bootstrapKerberosPod with file location of krb5") {
+  test("bootstrapKerberosPod with file location specified for krb5.conf file") {
     val dtSecretName = "EXAMPLE_SECRET_NAME"
     val dtSecretItemKey = "EXAMPLE_ITEM_KEY"
     val userName = "SPARK_USER_NAME"
     val fileLocation = Some(tmpFile.getAbsolutePath)
-    val stringPath = tmpFile.toPath.getFileName.toString
+    val stringPath = tmpFile.getName
     val newKrb5ConfName = Some("/etc/krb5.conf")
     val resultingPod = hadoopBootstrapUtil.bootstrapKerberosPod(
       dtSecretName,
@@ -80,18 +81,18 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
           .endSecret()
         .build()
     )
-    assert(podHasVolumes(resultingPod.pod, expectedVolumes))
-    assert(containerHasEnvVars(resultingPod.container, Map(
+    podHasVolumes(resultingPod.pod, expectedVolumes)
+    containerHasEnvVars(resultingPod.container, Map(
       ENV_HADOOP_TOKEN_FILE_LOCATION -> s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$dtSecretItemKey",
       ENV_SPARK_USER -> userName)
-    ))
-    assert(containerHasVolumeMounts(resultingPod.container, Map(
+    )
+    containerHasVolumeMounts(resultingPod.container, Map(
       SPARK_APP_HADOOP_SECRET_VOLUME_NAME -> SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR,
       KRB_FILE_VOLUME -> (KRB_FILE_DIR_PATH + "/krb5.conf"))
-    ))
+    )
   }
 
-  test("Testing bootstrapKerberosPod with configMap of krb5") {
+  test("bootstrapKerberosPod with pre-existing configMap specified for krb5.conf file") {
     val dtSecretName = "EXAMPLE_SECRET_NAME"
     val dtSecretItemKey = "EXAMPLE_ITEM_KEY"
     val userName = "SPARK_USER_NAME"
@@ -118,25 +119,25 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
           .endSecret()
         .build()
     )
-    assert(podHasVolumes(resultingPod.pod, expectedVolumes))
-    assert(containerHasEnvVars(resultingPod.container, Map(
+    podHasVolumes(resultingPod.pod, expectedVolumes)
+    containerHasEnvVars(resultingPod.container, Map(
       ENV_HADOOP_TOKEN_FILE_LOCATION -> s"$SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR/$dtSecretItemKey",
       ENV_SPARK_USER -> userName)
-    ))
-    assert(containerHasVolumeMounts(resultingPod.container, Map(
+    )
+    containerHasVolumeMounts(resultingPod.container, Map(
       SPARK_APP_HADOOP_SECRET_VOLUME_NAME -> SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR)
-    ))
+    )
   }
 
-  test("Testing bootstrapSparkUserPod") {
+  test("default bootstrapSparkUserPod") {
     val userName = "SPARK_USER_NAME"
     val resultingPod = hadoopBootstrapUtil.bootstrapSparkUserPod(userName, sparkPod)
-    assert(containerHasEnvVars(resultingPod.container, Map(ENV_SPARK_USER -> userName)))
+    containerHasEnvVars(resultingPod.container, Map(ENV_SPARK_USER -> userName))
   }
 
-  test("Testing bootstrapHadoopConfDir with fileLocation HADOOP_CONF") {
+  test("bootstrapHadoopConfDir with directory location specified for HADOOP_CONF") {
     val hadoopConfDir = Some(tmpDir.getAbsolutePath)
-    val stringPath = tmpFile.toPath.getFileName.toString
+    val stringPath = tmpFile.getName
     val newHadoopConfigMapName = Some("hconfMapName")
     val resultingPod = hadoopBootstrapUtil.bootstrapHadoopConfDir(
       hadoopConfDir,
@@ -144,9 +145,9 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
       None,
       sparkPod
     )
-    assert(containerHasVolumeMounts(resultingPod.container, Map(
+    containerHasVolumeMounts(resultingPod.container, Map(
       HADOOP_FILE_VOLUME -> HADOOP_CONF_DIR_PATH)
-    ))
+    )
     val expectedVolumes = Seq(
       new VolumeBuilder()
         .withName(HADOOP_FILE_VOLUME)
@@ -160,16 +161,16 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
         .build()
     )
 
-    assert(podHasVolumes(resultingPod.pod, expectedVolumes))
-    assert(containerHasVolumeMounts(resultingPod.container, Map(
+    podHasVolumes(resultingPod.pod, expectedVolumes)
+    containerHasVolumeMounts(resultingPod.container, Map(
       HADOOP_FILE_VOLUME -> HADOOP_CONF_DIR_PATH)
-    ))
-    assert(containerHasEnvVars(resultingPod.container, Map(
+    )
+    containerHasEnvVars(resultingPod.container, Map(
       ENV_HADOOP_CONF_DIR -> HADOOP_CONF_DIR_PATH)
-    ))
+    )
   }
 
-  test("Testing bootstrapHadoopConfDir with configMap HADOOP_CONF") {
+  test("bootstrapHadoopConfDir with pre-existing configMap, storing HADOOP_CONF files, specified") {
     val existingHadoopConfigMapName = Some("hconfMapName")
     val resultingPod = hadoopBootstrapUtil.bootstrapHadoopConfDir(
       None,
@@ -177,9 +178,9 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
       existingHadoopConfigMapName,
       sparkPod
     )
-    assert(containerHasVolumeMounts(resultingPod.container, Map(
+    containerHasVolumeMounts(resultingPod.container, Map(
       HADOOP_FILE_VOLUME -> HADOOP_CONF_DIR_PATH)
-    ))
+    )
     val expectedVolumes = Seq(
       new VolumeBuilder()
         .withName(HADOOP_FILE_VOLUME)
@@ -187,41 +188,34 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
             .withName(existingHadoopConfigMapName.get)
             .endConfigMap()
         .build())
-    assert(podHasVolumes(resultingPod.pod, expectedVolumes))
+    podHasVolumes(resultingPod.pod, expectedVolumes)
   }
 
-  test("Testing buildKrb5ConfigMap") {
+  test("default buildKrb5ConfigMap") {
     val configMapName = "hconfMapName"
     val resultingCMap = hadoopBootstrapUtil.buildkrb5ConfigMap(
       configMapName,
       tmpFile.getAbsolutePath
     )
-    assert(resultingCMap === new ConfigMapBuilder()
+    assertHelper(resultingCMap, new ConfigMapBuilder()
       .withNewMetadata()
         .withName(configMapName)
         .endMetadata()
-      .addToData(Map(tmpFile.toPath.getFileName.toString -> "contents").asJava)
+      .addToData(Map(tmpFile.getName -> "contents").asJava)
     .build())
   }
 
-  test("Testing buildHadoopConfigMap") {
+  test("buildHadoopConfigMap on simple file") {
     val configMapName = "hconfMapName"
     val resultingCMap = hadoopBootstrapUtil.buildHadoopConfigMap(
       configMapName,
       Seq(tmpFile)
     )
-    assert(resultingCMap === new ConfigMapBuilder()
+    assertHelper(resultingCMap, new ConfigMapBuilder()
       .withNewMetadata()
       .withName(configMapName)
       .endMetadata()
-      .addToData(Map(tmpFile.toPath.getFileName.toString -> "contents").asJava)
+      .addToData(Map(tmpFile.getName -> "contents").asJava)
       .build())
-  }
-
-
-  def createTempFile(dir: File, contents: String): File = {
-    val file = new File(dir, s"${UUID.randomUUID().toString}")
-    Files.write(contents.getBytes, file)
-    file
   }
 }

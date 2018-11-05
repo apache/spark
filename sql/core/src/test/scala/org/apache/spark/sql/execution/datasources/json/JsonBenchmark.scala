@@ -39,13 +39,17 @@ import org.apache.spark.sql.types._
 object JSONBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
-  def schemaInferring(rowsNum: Int): Unit = {
+  def prepareDataInfo(benchmark: Benchmark): Unit = {
+    // scalastyle:off println
+    benchmark.out.println("Preparing data for benchmarking ...")
+    // scalastyle:on println
+  }
+
+  def schemaInferring(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark("JSON schema inferring", rowsNum, output = output)
 
     withTempPath { path =>
-      // scalastyle:off println
-      benchmark.out.println("Preparing data for benchmarking ...")
-      // scalastyle:on println
+      prepareDataInfo(benchmark)
 
       spark.sparkContext.range(0, rowsNum, 1)
         .map(_ => "a")
@@ -54,11 +58,11 @@ object JSONBenchmark extends SqlBasedBenchmark {
         .option("encoding", "UTF-8")
         .json(path.getAbsolutePath)
 
-      benchmark.addCase("No encoding", 3) { _ =>
+      benchmark.addCase("No encoding", numIters) { _ =>
         spark.read.json(path.getAbsolutePath)
       }
 
-      benchmark.addCase("UTF-8 is set", 3) { _ =>
+      benchmark.addCase("UTF-8 is set", numIters) { _ =>
         spark.read
           .option("encoding", "UTF-8")
           .json(path.getAbsolutePath)
@@ -68,28 +72,29 @@ object JSONBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def perlineParsing(rowsNum: Int): Unit = {
-    val benchmark = new Benchmark("JSON per-line parsing", rowsNum, output = output)
+  def writeShortColumn(path: String, rowsNum: Int): StructType = {
+    spark.sparkContext.range(0, rowsNum, 1)
+      .map(_ => "a")
+      .toDF("fieldA")
+      .write.json(path)
+    new StructType().add("fieldA", StringType)
+  }
+
+  def countShortColumn(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark("count a short column", rowsNum, output = output)
 
     withTempPath { path =>
-      // scalastyle:off println
-      benchmark.out.println("Preparing data for benchmarking ...")
-      // scalastyle:on println
+      prepareDataInfo(benchmark)
+      val schema = writeShortColumn(path.getAbsolutePath, rowsNum)
 
-      spark.sparkContext.range(0, rowsNum, 1)
-        .map(_ => "a")
-        .toDF("fieldA")
-        .write.json(path.getAbsolutePath)
-      val schema = new StructType().add("fieldA", StringType)
-
-      benchmark.addCase("No encoding", 3) { _ =>
+      benchmark.addCase("No encoding", numIters) { _ =>
         spark.read
           .schema(schema)
           .json(path.getAbsolutePath)
           .count()
       }
 
-      benchmark.addCase("UTF-8 is set", 3) { _ =>
+      benchmark.addCase("UTF-8 is set", numIters) { _ =>
         spark.read
           .option("encoding", "UTF-8")
           .schema(schema)
@@ -101,35 +106,36 @@ object JSONBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def perlineParsingOfWideColumn(rowsNum: Int): Unit = {
-    val benchmark = new Benchmark("JSON parsing of wide lines", rowsNum, output = output)
+  def writeWideColumn(path: String, rowsNum: Int): StructType = {
+    spark.sparkContext.range(0, rowsNum, 1)
+      .map { i =>
+        val s = "abcdef0123456789ABCDEF" * 20
+        s"""{"a":"$s","b": $i,"c":"$s","d":$i,"e":"$s","f":$i,"x":"$s","y":$i,"z":"$s"}"""
+      }
+      .toDF().write.text(path)
+    new StructType()
+      .add("a", StringType).add("b", LongType)
+      .add("c", StringType).add("d", LongType)
+      .add("e", StringType).add("f", LongType)
+      .add("x", StringType).add("y", LongType)
+      .add("z", StringType)
+  }
+
+  def countWideColumn(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark("count a wide column", rowsNum, output = output)
 
     withTempPath { path =>
-      // scalastyle:off println
-      benchmark.out.println("Preparing data for benchmarking ...")
-      // scalastyle:on println
+      prepareDataInfo(benchmark)
+      val schema = writeWideColumn(path.getAbsolutePath, rowsNum)
 
-      spark.sparkContext.range(0, rowsNum, 1)
-        .map { i =>
-          val s = "abcdef0123456789ABCDEF" * 20
-          s"""{"a":"$s","b": $i,"c":"$s","d":$i,"e":"$s","f":$i,"x":"$s","y":$i,"z":"$s"}"""
-         }
-        .toDF().write.text(path.getAbsolutePath)
-      val schema = new StructType()
-        .add("a", StringType).add("b", LongType)
-        .add("c", StringType).add("d", LongType)
-        .add("e", StringType).add("f", LongType)
-        .add("x", StringType).add("y", LongType)
-        .add("z", StringType)
-
-      benchmark.addCase("No encoding", 3) { _ =>
+      benchmark.addCase("No encoding", numIters) { _ =>
         spark.read
           .schema(schema)
           .json(path.getAbsolutePath)
           .count()
       }
 
-      benchmark.addCase("UTF-8 is set", 3) { _ =>
+      benchmark.addCase("UTF-8 is set", numIters) { _ =>
         spark.read
           .option("encoding", "UTF-8")
           .schema(schema)
@@ -141,12 +147,14 @@ object JSONBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def countBenchmark(rowsNum: Int): Unit = {
+  def selectSubsetOfColumns(rowsNum: Int, numIters: Int): Unit = {
     val colsNum = 10
     val benchmark =
-      new Benchmark(s"Count a dataset with $colsNum columns", rowsNum, output = output)
+      new Benchmark(s"Select a subset of $colsNum columns", rowsNum, output = output)
 
     withTempPath { path =>
+      prepareDataInfo(benchmark)
+
       val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
       val schema = StructType(fields)
       val columnNames = schema.fieldNames
@@ -158,13 +166,13 @@ object JSONBenchmark extends SqlBasedBenchmark {
 
       val ds = spark.read.schema(schema).json(path.getAbsolutePath)
 
-      benchmark.addCase(s"Select $colsNum columns + count()", 3) { _ =>
+      benchmark.addCase(s"Select $colsNum columns + count()", numIters) { _ =>
         ds.select("*").filter((_: Row) => true).count()
       }
-      benchmark.addCase(s"Select 1 column + count()", 3) { _ =>
+      benchmark.addCase(s"Select 1 column + count()", numIters) { _ =>
         ds.select($"col1").filter((_: Row) => true).count()
       }
-      benchmark.addCase(s"count()", 3) { _ =>
+      benchmark.addCase(s"count()", numIters) { _ =>
         ds.count()
       }
 
@@ -172,12 +180,64 @@ object JSONBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  def jsonParserCreation(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark("creation of JSON parser per line", rowsNum, output = output)
+
+    withTempPath { path =>
+      prepareDataInfo(benchmark)
+
+      val shortColumnPath = path.getAbsolutePath + "/short"
+      val shortSchema = writeShortColumn(shortColumnPath, rowsNum)
+
+      val wideColumnPath = path.getAbsolutePath + "/wide"
+      val wideSchema = writeWideColumn(wideColumnPath, rowsNum)
+
+      benchmark.addCase("Short column without encoding", numIters) { _ =>
+        spark.read
+          .schema(shortSchema)
+          .json(shortColumnPath)
+          .filter((_: Row) => true)
+          .count()
+      }
+
+      benchmark.addCase("Short column with UTF-8", numIters) { _ =>
+        spark.read
+          .option("encoding", "UTF-8")
+          .schema(shortSchema)
+          .json(shortColumnPath)
+          .filter((_: Row) => true)
+          .count()
+      }
+
+      benchmark.addCase("Wide column without encoding", numIters) { _ =>
+        spark.read
+          .schema(wideSchema)
+          .json(wideColumnPath)
+          .filter((_: Row) => true)
+          .count()
+      }
+
+      benchmark.addCase("Wide column with UTF-8", numIters) { _ =>
+        spark.read
+          .option("encoding", "UTF-8")
+          .schema(wideSchema)
+          .json(wideColumnPath)
+          .filter((_: Row) => true)
+          .count()
+      }
+
+      benchmark.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    val numIters = 3
     runBenchmark("Benchmark for performance of JSON parsing") {
-      schemaInferring(100 * 1000 * 1000)
-      perlineParsing(100 * 1000 * 1000)
-      perlineParsingOfWideColumn(10 * 1000 * 1000)
-      countBenchmark(10 * 1000 * 1000)
+      schemaInferring(100 * 1000 * 1000, numIters)
+      countShortColumn(100 * 1000 * 1000, numIters)
+      countWideColumn(10 * 1000 * 1000, numIters)
+      selectSubsetOfColumns(10 * 1000 * 1000, numIters)
+      jsonParserCreation(10 * 1000 * 1000, numIters)
     }
   }
 }
