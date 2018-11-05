@@ -22,7 +22,7 @@ import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructType}
 
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
@@ -441,7 +441,17 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     val group = df
       .groupBy("name")
       .agg(OptionBooleanIntAggregator("isGood").toColumn.alias("isGood"))
-    assert(df.schema == group.schema)
+
+    val expectedSchema = new StructType()
+      .add("name", StringType, nullable = true)
+      .add("isGood",
+        new StructType()
+          .add("_1", BooleanType, nullable = false)
+          .add("_2", IntegerType, nullable = false),
+        nullable = true)
+
+    assert(df.schema == expectedSchema)
+    assert(group.schema == expectedSchema)
     checkAnswer(group, Row("bob", Row(true, 3)) :: Nil)
     checkDataset(group.as[OptionBooleanIntData], OptionBooleanIntData("bob", Some((true, 3))))
   }

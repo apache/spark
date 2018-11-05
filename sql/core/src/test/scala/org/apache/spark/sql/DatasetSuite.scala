@@ -1556,12 +1556,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds,
       data: _*)
 
-    val schema = StructType(Seq(
-      StructField("value", StructType(Seq(
-        StructField("_1", IntegerType, nullable = false),
-        StructField("_2", StringType, nullable = true)
-      )), nullable = true)
-    ))
+    val schema = new StructType().add(
+      "value",
+      new StructType()
+        .add("_1", IntegerType, nullable = false)
+        .add("_2", StringType, nullable = true),
+      nullable = true)
 
     assert(ds.schema == schema)
 
