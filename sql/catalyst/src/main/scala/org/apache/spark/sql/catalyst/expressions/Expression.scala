@@ -21,9 +21,11 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -120,7 +122,8 @@ abstract class Expression extends TreeNode[Expression] {
 
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
-    if (eval.code.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+    val splitThreshold = SQLConf.get.methodSplitThreshold
+    if (eval.code.length > splitThreshold && ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
         val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
@@ -282,6 +285,31 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override lazy val canonicalized: Expression = child.canonicalized
 }
 
+/**
+ * An aggregate expression that gets rewritten (currently by the optimizer) into a
+ * different aggregate expression for evaluation. This is mainly used to provide compatibility
+ * with other databases. For example, we use this to support every, any/some aggregates by rewriting
+ * them with Min and Max respectively.
+ */
+trait UnevaluableAggregate extends DeclarativeAggregate {
+
+  override def nullable: Boolean = true
+
+  override lazy val aggBufferAttributes =
+    throw new UnsupportedOperationException(s"Cannot evaluate aggBufferAttributes: $this")
+
+  override lazy val initialValues: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate initialValues: $this")
+
+  override lazy val updateExpressions: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate updateExpressions: $this")
+
+  override lazy val mergeExpressions: Seq[Expression] =
+    throw new UnsupportedOperationException(s"Cannot evaluate mergeExpressions: $this")
+
+  override lazy val evaluateExpression: Expression =
+    throw new UnsupportedOperationException(s"Cannot evaluate evaluateExpression: $this")
+}
 
 /**
  * Expressions that don't have SQL representation should extend this trait.  Examples are

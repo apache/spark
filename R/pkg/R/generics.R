@@ -528,9 +528,6 @@ setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 #' @rdname printSchema
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
-#' @rdname registerTempTable-deprecated
-setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
-
 #' @rdname rename
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
@@ -595,9 +592,6 @@ setGeneric("write.parquet", function(x, path, ...) {
   standardGeneric("write.parquet")
 })
 
-#' @rdname write.parquet
-setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParquetFile") })
-
 #' @rdname write.stream
 setGeneric("write.stream", function(df, source = NULL, outputMode = NULL, ...) {
   standardGeneric("write.stream")
@@ -636,9 +630,6 @@ setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
 #' @rdname union
 setGeneric("union", function(x, y) { standardGeneric("union") })
-
-#' @rdname union
-setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
 #' @rdname unionByName
 setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
@@ -1311,6 +1302,10 @@ setGeneric("to_date", function(x, format) { standardGeneric("to_date") })
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("to_json", function(x, ...) { standardGeneric("to_json") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("to_csv", function(x, ...) { standardGeneric("to_csv") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

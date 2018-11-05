@@ -91,7 +91,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val parameterTaskSortColumn = UIUtils.stripXSS(request.getParameter("task.sort"))
     val parameterTaskSortDesc = UIUtils.stripXSS(request.getParameter("task.desc"))
     val parameterTaskPageSize = UIUtils.stripXSS(request.getParameter("task.pageSize"))
-    val parameterTaskPrevPageSize = UIUtils.stripXSS(request.getParameter("task.prevPageSize"))
 
     val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
     val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
@@ -99,8 +98,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     }.getOrElse("Index")
     val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
     val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
-    val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)
-
     val stageId = parameterId.toInt
     val stageAttemptId = parameterAttempt.toInt
 
@@ -198,15 +195,19 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val stageGraph = parent.store.asOption(parent.store.operationGraphForStage(stageId))
     val dagViz = UIUtils.showDagVizForStage(stageId, stageGraph)
 
-    val page: Int = {
-      // If the user has changed to a larger page size, then go to page 1 in order to avoid
-      // IndexOutOfBoundsException.
-      if (taskPageSize <= taskPrevPageSize) {
-        taskPage
+    val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
+    def accumulableRow(acc: AccumulableInfo): Seq[Node] = {
+      if (acc.name != null && acc.value != null) {
+        <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
       } else {
-        1
+        Nil
       }
     }
+    val accumulableTable = UIUtils.listingTable(
+      accumulableHeaders,
+      accumulableRow,
+      stageData.accumulatorUpdates.toSeq)
+
     val currentTime = System.currentTimeMillis()
     val taskTable = try {
       val _taskTable = new TaskPagedTable(
@@ -246,8 +247,8 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       makeTimeline(
         // Only show the tasks in the table
         Option(taskTable).map({ taskPagedTable =>
-          val from = (page - 1) * taskPageSize
-          val to = taskPagedTable.dataSource.dataSize.min(page * taskPageSize)
+          val from = (taskPage - 1) * taskPageSize
+          val to = taskPagedTable.dataSource.dataSize.min(taskPage * taskPageSize)
           taskPagedTable.dataSource.sliceData(from, to)}).getOrElse(Nil), currentTime) ++
         <div id="parent-container">
           <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
@@ -479,8 +480,6 @@ private[ui] class TaskPagedTable(
     "table table-bordered table-condensed table-striped table-head-clickable"
 
   override def pageSizeFormField: String = "task.pageSize"
-
-  override def prevPageSizeFormField: String = "task.prevPageSize"
 
   override def pageNumberFormField: String = "task.page"
 

@@ -458,15 +458,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df8.selectExpr("arrays_zip(v1, v2)"), expectedValue8)
   }
 
-  test("SPARK-24633: arrays_zip splits input processing correctly") {
-    Seq("true", "false").foreach { wholestageCodegenEnabled =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholestageCodegenEnabled) {
-        val df = spark.range(1)
-        val exprs = (0 to 5).map(x => array($"id" + lit(x)))
-        checkAnswer(df.select(arrays_zip(exprs: _*)),
-          Row(Seq(Row(0, 1, 2, 3, 4, 5))))
-      }
-    }
+  testWithWholeStageCodegenOnAndOff("SPARK-24633: arrays_zip splits input " +
+    "processing correctly") { _ =>
+    val df = spark.range(1)
+    val exprs = (0 to 5).map(x => array($"id" + lit(x)))
+    checkAnswer(df.select(arrays_zip(exprs: _*)),
+      Row(Seq(Row(0, 1, 2, 3, 4, 5))))
   }
 
   def testSizeOfMap(sizeOfNull: Any): Unit = {
