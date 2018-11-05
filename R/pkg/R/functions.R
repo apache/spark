@@ -2245,7 +2245,7 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
 #' @examples
 #'
 #' \dontrun{
-#' json <- '{"name":"Bob"}'
+#' json <- "{\"name\":\"Bob\"}"
 #' df <- sql("SELECT * FROM range(1)")
 #' head(select(df, schema_of_json(json)))}
 #' @note schema_of_json since 3.0.0
@@ -2301,7 +2301,7 @@ setMethod("from_csv", signature(x = "Column", schema = "characterOrColumn"),
 #' @examples
 #'
 #' \dontrun{
-#' csv <- "'Amsterdam,2018'"
+#' csv <- "Amsterdam,2018"
 #' df <- sql("SELECT * FROM range(1)")
 #' head(select(df, schema_of_csv(csv)))}
 #' @note schema_of_csv since 3.0.0
