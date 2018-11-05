@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.{Calendar, Locale}
 
 import org.scalatest.exceptions.TestFailedException
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
@@ -208,5 +208,21 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
         gmtId),
       "2015-12-31T16:00:00"
     )
+  }
+
+  test("take into account locale while parsing date") {
+    Seq("en", "ru").foreach { lang =>
+      val locale = new Locale(lang)
+      val date = new SimpleDateFormat("yyyy-MM-dd").parse("2018-11-05")
+      val schema = new StructType().add("d", DateType)
+      val dateFormat = "MMM yyyy"
+      val sdf = new SimpleDateFormat(dateFormat, locale)
+      val dateStr = sdf.format(date)
+      val options = Map("dateFormat" -> dateFormat)
+
+      checkEvaluation(
+        CsvToStructs(schema, options, Literal.create(dateStr), gmtId),
+        InternalRow(17836)) // number of days from 1970-01-01
+    }
   }
 }
