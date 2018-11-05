@@ -68,24 +68,24 @@ object KubernetesFeaturesTestUtils {
     assertHelper[Set[(String, String)]](envs.toSet,
       container.getEnv.asScala
         .map { e => (e.getName, e.getValue) }.toSet,
-      subsetOfTup[Set[(String, String)], String])
+      subsetOfTup[Set[(String, String)], String], "a subset of")
   }
 
   def containerHasVolumeMounts(container: Container, vms: Map[String, String]): Unit = {
     assertHelper[Set[(String, String)]](vms.toSet,
       container.getVolumeMounts.asScala
         .map { vm => (vm.getName, vm.getMountPath) }.toSet,
-      subsetOfTup[Set[(String, String)], String])
+      subsetOfTup[Set[(String, String)], String], "a subset of")
   }
 
   def podHasLabels(pod: Pod, labels: Map[String, String]): Unit = {
     assertHelper[Set[(String, String)]](labels.toSet, pod.getMetadata.getLabels.asScala.toSet,
-      subsetOfTup[Set[(String, String)], String])
+      subsetOfTup[Set[(String, String)], String], "a subset of")
   }
 
   def podHasVolumes(pod: Pod, volumes: Seq[Volume]): Unit = {
     assertHelper[Set[Volume]](volumes.toSet, pod.getSpec.getVolumes.asScala.toSet,
-      subsetOfElem[Set[Volume], Volume])
+      subsetOfElem[Set[Volume], Volume], "a subset of")
   }
 
   // Mocking bootstrapHadoopConfDir
@@ -122,7 +122,7 @@ object KubernetesFeaturesTestUtils {
   def subsetOfTup[T <: Set[(B, B)], B <: Any]: (T, T) => Boolean = (a, b) => a.subsetOf(b)
 
   def assertHelper[T](con1: T, con2: T,
-      expr: (T, T) => Boolean = (a: T, b: T) => a == b): Unit = {
-    assert(expr(con1, con2), s"$con1 does not equal $con2 as expected")
+      expr: (T, T) => Boolean = (a: T, b: T) => a == b, exprMsg: String = "equal to"): Unit = {
+    assert(expr(con1, con2), s"$con1 is not $exprMsg $con2 as expected")
   }
 }
