@@ -17,13 +17,12 @@
 package org.apache.spark.metrics
 
 import java.lang.management.{BufferPoolMXBean, ManagementFactory}
-import java.util
 import javax.management.ObjectName
+
+import scala.collection.mutable
 
 import org.apache.spark.executor.ProcfsBasedSystems
 import org.apache.spark.memory.MemoryManager
-
-import scala.collection.mutable
 
 /**
  * Executor metric types for executor-level metrics stored in ExecutorMetrics.
