@@ -20,23 +20,26 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.net.URI
 
+import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.util.Progressable
 import org.scalatest.PrivateMethodTester
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, SeenFilesMap}
+import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, FileStreamSourceCleaner, SeenFilesMap}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ExistsThrowsExceptionFileSystem._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StructType, _}
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSourceTest
@@ -177,7 +180,6 @@ abstract class FileStreamSourceTest
     }
   }
 
-
   protected def withTempDirs(body: (File, File) => Unit): Unit = {
     val src = Utils.createTempDir(namePrefix = "streaming.src")
     val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
@@ -186,6 +188,19 @@ abstract class FileStreamSourceTest
     } finally {
       Utils.deleteRecursively(src)
       Utils.deleteRecursively(tmp)
+    }
+  }
+
+  protected def withThreeTempDirs(body: (File, File, File) => Unit): Unit = {
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
+    val archive = Utils.createTempDir(namePrefix = "streaming.archive")
+    try {
+      body(src, tmp, archive)
+    } finally {
+      Utils.deleteRecursively(src)
+      Utils.deleteRecursively(tmp)
+      Utils.deleteRecursively(archive)
     }
   }
 
@@ -1386,9 +1401,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       latestFirst: Boolean,
       firstBatch: String,
       secondBatch: String,
-      maxFileAge: Option[String] = None): Unit = {
+      maxFileAge: Option[String] = None,
+      cleanSource: CleanSourceMode.Value = CleanSourceMode.NO_OP,
+      archiveDir: Option[String] = None): Unit = {
     val srcOptions = Map("latestFirst" -> latestFirst.toString, "maxFilesPerTrigger" -> "1") ++
-      maxFileAge.map("maxFileAge" -> _)
+      maxFileAge.map("maxFileAge" -> _) ++
+      Seq("cleanSource" -> cleanSource.toString) ++
+      archiveDir.map("sourceArchiveDir" -> _)
     val fileStream = createFileStream(
       "text",
       src.getCanonicalPath,
@@ -1542,12 +1561,12 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val unioned = source1.union(source2)
 
       def addMultiTextFileData(
-          source1Content: String,
-          source2Content: String): StreamAction = {
+                                source1Content: String,
+                                source2Content: String): StreamAction = {
         val actions = Seq(
           AddTextFileData(source1Content, sourceDir1, tmp),
           AddTextFileData(source2Content, sourceDir2, tmp)
-        ).filter(_.content != null)  // don't write to a source dir if no content specified
+        ).filter(_.content != null) // don't write to a source dir if no content specified
         StreamProgressLockedActions(actions, desc = actions.mkString("[ ", " | ", " ]"))
       }
 
@@ -1595,6 +1614,282 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         assert(schema === streamingSchema)
       }
     }
+  }
+
+  test("remove completed files when remove option is enabled") {
+    def assertFileIsRemoved(files: Array[String], fileName: String): Unit = {
+      assert(!files.exists(_.startsWith(fileName)))
+    }
+
+    def assertFileIsNotRemoved(files: Array[String], fileName: String): Unit = {
+      assert(files.exists(_.startsWith(fileName)))
+    }
+
+    withTempDirs { case (src, tmp) =>
+      withSQLConf(
+        SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
+        // Force deleting the old logs
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+      ) {
+        val option = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "1",
+          "cleanSource" -> "delete")
+
+        val fileStream = createFileStream("text", src.getCanonicalPath, options = option)
+        val filtered = fileStream.filter($"value" contains "keep")
+
+        testStream(filtered)(
+          AddTextFileData("keep1", src, tmp, tmpFilePrefix = "keep1"),
+          CheckAnswer("keep1"),
+          AssertOnQuery("input file removed") { _: StreamExecution =>
+            // it doesn't rename any file yet
+            assertFileIsNotRemoved(src.list(), "keep1")
+            true
+          },
+          AddTextFileData("keep2", src, tmp, tmpFilePrefix = "ke ep2 %"),
+          CheckAnswer("keep1", "keep2"),
+          AssertOnQuery("input file removed") { _: StreamExecution =>
+            val files = src.list()
+
+            // it renames input file for first batch, but not for second batch yet
+            assertFileIsRemoved(files, "keep1")
+            assertFileIsNotRemoved(files, "ke ep2 %")
+
+            true
+          },
+          AddTextFileData("keep3", src, tmp, tmpFilePrefix = "keep3"),
+          CheckAnswer("keep1", "keep2", "keep3"),
+          AssertOnQuery("input file renamed") { _: StreamExecution =>
+            val files = src.list()
+
+            // it renames input file for second batch, but not third batch yet
+            assertFileIsRemoved(files, "ke ep2 %")
+            assertFileIsNotRemoved(files, "keep3")
+
+            true
+          }
+        )
+      }
+    }
+  }
+
+  test("move completed files to archive directory when archive option is enabled") {
+
+    withThreeTempDirs { case (src, tmp, archiveDir) =>
+      withSQLConf(
+        SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
+        // Force deleting the old logs
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+      ) {
+        val option = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "1",
+          "cleanSource" -> "archive", "sourceArchiveDir" -> archiveDir.getAbsolutePath)
+
+        val fileStream = createFileStream("text", s"${src.getCanonicalPath}/*/*",
+          options = option)
+        val filtered = fileStream.filter($"value" contains "keep")
+
+        // src/k %1
+        // file: src/k %1/keep1
+        val dirForKeep1 = new File(src, "k %1")
+        // src/k %1/k 2
+        // file: src/k %1/k 2/keep2
+        val dirForKeep2 = new File(dirForKeep1, "k 2")
+        // src/k3
+        // file: src/k3/keep3
+        val dirForKeep3 = new File(src, "k3")
+
+        val expectedMovedDir1 = new File(archiveDir.getAbsolutePath + dirForKeep1.toURI.getPath)
+        val expectedMovedDir2 = new File(archiveDir.getAbsolutePath + dirForKeep2.toURI.getPath)
+        val expectedMovedDir3 = new File(archiveDir.getAbsolutePath + dirForKeep3.toURI.getPath)
+
+        testStream(filtered)(
+          AddTextFileData("keep1", dirForKeep1, tmp, tmpFilePrefix = "keep1"),
+          CheckAnswer("keep1"),
+          AssertOnQuery("input file archived") { _: StreamExecution =>
+            // it doesn't rename any file yet
+            assertFileIsNotMoved(dirForKeep1, expectedMovedDir1, "keep1")
+            true
+          },
+          AddTextFileData("keep2", dirForKeep2, tmp, tmpFilePrefix = "keep2 %"),
+          CheckAnswer("keep1", "keep2"),
+          AssertOnQuery("input file archived") { _: StreamExecution =>
+            // it renames input file for first batch, but not for second batch yet
+            assertFileIsMoved(dirForKeep1, expectedMovedDir1, "keep1")
+            assertFileIsNotMoved(dirForKeep2, expectedMovedDir2, "keep2 %")
+            true
+          },
+          AddTextFileData("keep3", dirForKeep3, tmp, tmpFilePrefix = "keep3"),
+          CheckAnswer("keep1", "keep2", "keep3"),
+          AssertOnQuery("input file archived") { _: StreamExecution =>
+            // it renames input file for second batch, but not third batch yet
+            assertFileIsMoved(dirForKeep2, expectedMovedDir2, "keep2 %")
+            assertFileIsNotMoved(dirForKeep3, expectedMovedDir3, "keep3")
+
+            true
+          },
+          AddTextFileData("keep4", dirForKeep3, tmp, tmpFilePrefix = "keep4"),
+          CheckAnswer("keep1", "keep2", "keep3", "keep4"),
+          AssertOnQuery("input file archived") { _: StreamExecution =>
+            // it renames input file for third batch, but not fourth batch yet
+            assertFileIsMoved(dirForKeep3, expectedMovedDir3, "keep3")
+            assertFileIsNotMoved(dirForKeep3, expectedMovedDir3, "keep4")
+
+            true
+          }
+        )
+      }
+    }
+  }
+
+  class FakeFileSystem extends FileSystem {
+    val requestsExists = new mutable.MutableList[Path]()
+    val requestsMkdirs = new mutable.MutableList[Path]()
+    val requestsRename = new mutable.MutableList[(Path, Path)]()
+
+    override def exists(f: Path): Boolean = {
+      requestsExists += f
+      true
+    }
+
+    override def mkdirs(f: Path, permission: FsPermission): Boolean = {
+      requestsMkdirs += f
+      true
+    }
+
+    override def rename(src: Path, dst: Path): Boolean = {
+      requestsRename += ((src, dst))
+      true
+    }
+
+    def clearRecords(): Unit = {
+      requestsExists.clear()
+      requestsMkdirs.clear()
+      requestsRename.clear()
+    }
+
+    override def getUri: URI = throw new NotImplementedError
+
+    override def open(f: Path, bufferSize: Int): FSDataInputStream = throw new NotImplementedError
+
+    override def create(
+        f: Path,
+        permission: FsPermission,
+        overwrite: Boolean,
+        bufferSize: Int,
+        replication: Short,
+        blockSize: Long,
+        progress: Progressable): FSDataOutputStream = throw new NotImplementedError
+
+    override def append(f: Path, bufferSize: Int, progress: Progressable): FSDataOutputStream =
+      throw new NotImplementedError
+
+    override def delete(f: Path, recursive: Boolean): Boolean = throw new NotImplementedError
+
+    override def listStatus(f: Path): Array[FileStatus] = throw new NotImplementedError
+
+    override def setWorkingDirectory(new_dir: Path): Unit = throw new NotImplementedError
+
+    override def getWorkingDirectory: Path = throw new NotImplementedError
+
+    override def getFileStatus(f: Path): FileStatus = throw new NotImplementedError
+  }
+
+  test("FileStreamSourceCleaner - archive - destinations match against source pattern") {
+
+    def assertNoMove(fs: FakeFileSystem): Unit = {
+      assert(fs.requestsExists.isEmpty)
+      assert(fs.requestsMkdirs.isEmpty)
+      assert(fs.requestsRename.isEmpty)
+    }
+
+    def assertMoveFile(fs: FakeFileSystem, sourcePath: Path, expectedArchivePath: Path): Unit = {
+      assert(fs.requestsExists.nonEmpty)
+      assert(fs.requestsExists.head === expectedArchivePath.getParent)
+      assert(fs.requestsMkdirs.isEmpty)
+      assert(fs.requestsRename.nonEmpty)
+      assert(fs.requestsRename.head === ((sourcePath, expectedArchivePath)))
+    }
+
+    val fakeFileSystem = new FakeFileSystem()
+
+    val sourcePatternPath = new Path("/hello*/h{e,f}ll?")
+    val baseArchiveDirPath = "/hello"
+
+    val sourceCleaner = new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
+      Some(baseArchiveDirPath))
+
+    // file 1: /hello/helln
+    // final destination = /hello/hello/helln
+    // parent directory of final destination matches source pattern
+    val sourcePath1 = new Path("/hello/helln")
+    sourceCleaner.archive(FileEntry(sourcePath1.toUri.getPath, 0, 0))
+
+    assertNoMove(fakeFileSystem)
+
+    fakeFileSystem.clearRecords()
+
+    // file 2: /hello/hfllo/spark
+    // final destination = /hello/hello/hfllo/spark
+    // no match
+    val sourcePath2 = new Path("/hello/hfllo/spark")
+    val expectedDestPath2 = new Path("/hello/hello/hfllo/spark")
+    sourceCleaner.archive(FileEntry(sourcePath2.toUri.getPath, 0, 0))
+
+    assertMoveFile(fakeFileSystem, sourcePath2, expectedDestPath2)
+
+    fakeFileSystem.clearRecords()
+
+    // file 3: /hello1/hflln
+    // final destination = /hello/hello1/hflln
+    // no match
+    val sourcePath3 = new Path("/hello1/hflln")
+    val expectedDestPath3 = new Path("/hello/hello1/hflln")
+    sourceCleaner.archive(FileEntry(sourcePath3.toUri.getPath, 0, 0))
+
+    assertMoveFile(fakeFileSystem, sourcePath3, expectedDestPath3)
+
+    fakeFileSystem.clearRecords()
+
+    // corner case: this should end up with all archive destinations to be
+    // matched against source pattern
+    val baseArchiveDirPath2 = "/"
+
+    val sourceCleaner2 = new FileStreamSourceCleaner(fakeFileSystem, sourcePatternPath,
+      Some(baseArchiveDirPath2))
+
+    // file 4 (& final destination): /hello/helln
+    // final destination matches source pattern
+    val sourcePath4 = new Path("/hello/helln")
+    sourceCleaner2.archive(FileEntry(sourcePath4.toUri.getPath, 0, 0))
+
+    assertNoMove(fakeFileSystem)
+
+    fakeFileSystem.clearRecords()
+
+    // file 5 (& final destination): /hello/hfllo/spark
+    // final destination matches source pattern
+    val sourcePath5 = new Path("/hello/hfllo/spark")
+    sourceCleaner2.archive(FileEntry(sourcePath5.toUri.getPath, 0, 0))
+
+    assertNoMove(fakeFileSystem)
+
+    fakeFileSystem.clearRecords()
+  }
+
+  private def assertFileIsNotMoved(sourceDir: File, expectedDir: File, filePrefix: String): Unit = {
+    assert(sourceDir.exists())
+    assert(sourceDir.list().exists(_.startsWith(filePrefix)))
+    if (!expectedDir.exists()) {
+      // OK
+    } else {
+      assert(!expectedDir.list().exists(_.startsWith(filePrefix)))
+    }
+  }
+
+  private def assertFileIsMoved(sourceDir: File, expectedDir: File, filePrefix: String): Unit = {
+    assert(sourceDir.exists())
+    assert(!sourceDir.list().exists(_.startsWith(filePrefix)))
+    assert(expectedDir.exists())
+    assert(expectedDir.list().exists(_.startsWith(filePrefix)))
   }
 }
 

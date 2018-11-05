@@ -546,6 +546,13 @@ Here are the details of all the sources in Spark.
         "s3://a/dataset.txt"<br/>
         "s3n://a/b/dataset.txt"<br/>
         "s3a://a/b/c/dataset.txt"<br/>
+        <code>cleanSource</code>: option to clean up completed files after processing.<br/>
+        Available options are "archive", "delete", "no_op". If the option is not provided, the default value is "no_op".<br/>
+        When "archive" is provided, additional option <code>sourceArchiveDir</code> must be provided as well. The value of "sourceArchiveDir" must be outside of source path, to ensure archived files are never included to new source files again.<br/>
+        Spark will move source files respecting its own path. For example, if the path of source file is "/a/b/dataset.txt" and the path of archive directory is "/archived/here", file will be moved to "/archived/here/a/b/dataset.txt"<br/>
+        NOTE: Both archiving (via moving) or deleting completed files would introduce overhead (slow down) in each micro-batch, so you need to understand the cost for each operation in your file system before enabling this option. On the other hand, enbling this option would reduce the cost to list source files which is considered as a heavy operation.<br/>
+        NOTE 2: The source path should not be used from multiple sources or queries when enabling this option, because source files will be moved or deleted which behavior may impact the other sources and queries.<br/>
+        NOTE 3: Both delete and move actions are best effort. Failing to delete or move files will not fail the streaming query.
         <br/><br/>
         For file-format-specific options, see the related methods in <code>DataStreamReader</code>
         (<a href="api/scala/index.html#org.apache.spark.sql.streaming.DataStreamReader">Scala</a>/<a href="api/java/org/apache/spark/sql/streaming/DataStreamReader.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader">Python</a>/<a

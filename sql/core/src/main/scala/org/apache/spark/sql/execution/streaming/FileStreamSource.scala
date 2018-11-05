@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.streaming
 import java.net.URI
 import java.util.concurrent.TimeUnit._
 
-import org.apache.hadoop.fs.{FileStatus, Path}
+import scala.util.control.NonFatal
+
+import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -52,6 +54,9 @@ class FileStreamSource(
   private val qualifiedBasePath: Path = {
     fs.makeQualified(new Path(path))  // can contain glob patterns
   }
+
+  private val sourceCleaner = new FileStreamSourceCleaner(fs, qualifiedBasePath,
+    sourceOptions.sourceArchiveDir)
 
   private val optionsWithPartitionBasePath = sourceOptions.optionMapWithoutPath ++ {
     if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path")) {
@@ -237,6 +242,7 @@ class FileStreamSource(
     val files = allFiles.sortBy(_.getModificationTime)(fileSortOrder).map { status =>
       (status.getPath.toUri.toString, status.getModificationTime)
     }
+
     val endTime = System.nanoTime
     val listingTimeMs = NANOSECONDS.toMillis(endTime - startTime)
     if (listingTimeMs > 2000) {
@@ -258,8 +264,26 @@ class FileStreamSource(
    * equal to `end` and will only request offsets greater than `end` in the future.
    */
   override def commit(end: Offset): Unit = {
-    // No-op for now; FileStreamSource currently garbage-collects files based on timestamp
-    // and the value of the maxFileAge parameter.
+    val logOffset = FileStreamSourceOffset(end).logOffset
+
+    if (sourceOptions.cleanSource != CleanSourceMode.NO_OP) {
+      val files = metadataLog.get(Some(logOffset), Some(logOffset)).flatMap(_._2)
+      val validFileEntities = files.filter(_.batchId == logOffset)
+      logDebug(s"completed file entries: ${validFileEntities.mkString(",")}")
+      sourceOptions.cleanSource match {
+        case CleanSourceMode.ARCHIVE =>
+          validFileEntities.foreach(sourceCleaner.archive)
+
+        case CleanSourceMode.DELETE =>
+          validFileEntities.foreach(sourceCleaner.remove)
+
+        case _ =>
+      }
+    } else {
+      // No-op for now; FileStreamSource currently garbage-collects files based on timestamp
+      // and the value of the maxFileAge parameter.
+    }
+
   }
 
   override def stop(): Unit = {}
@@ -267,7 +291,6 @@ class FileStreamSource(
 
 
 object FileStreamSource {
-
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
 
@@ -329,5 +352,130 @@ object FileStreamSource {
     }
 
     def size: Int = map.size()
+  }
+
+  private[sql] class FileStreamSourceCleaner(
+      fileSystem: FileSystem,
+      sourcePath: Path,
+      baseArchivePathString: Option[String]) extends Logging {
+
+    private val sourceGlobFilters: Seq[GlobFilter] = buildSourceGlobFilters(sourcePath)
+
+    private val baseArchivePath: Option[Path] = baseArchivePathString.map(new Path(_))
+
+    def archive(entry: FileEntry): Unit = {
+      require(baseArchivePath.isDefined)
+
+      val curPath = new Path(new URI(entry.path))
+      val curPathUri = curPath.toUri
+
+      val newPath = buildArchiveFilePath(curPathUri)
+
+      if (isArchiveFileMatchedAgainstSourcePattern(newPath)) {
+        logWarning(s"Fail to move $curPath to $newPath - destination matches " +
+          s"to source path/pattern. Skip moving file.")
+      } else {
+        doArchive(curPath, newPath)
+      }
+    }
+
+    def remove(entry: FileEntry): Unit = {
+      val curPath = new Path(new URI(entry.path))
+      try {
+        logDebug(s"Removing completed file $curPath")
+
+        if (!fileSystem.delete(curPath, false)) {
+          logWarning(s"Fail to remove $curPath / skip removing file.")
+        }
+      } catch {
+        case NonFatal(e) =>
+          // Log to error but swallow exception to avoid process being stopped
+          logWarning(s"Fail to remove $curPath / skip removing file.", e)
+      }
+    }
+
+    private def buildSourceGlobFilters(sourcePath: Path): Seq[GlobFilter] = {
+      val filters = new scala.collection.mutable.MutableList[GlobFilter]()
+
+      var currentPath = sourcePath
+      while (!currentPath.isRoot) {
+        filters += new GlobFilter(currentPath.getName)
+        currentPath = currentPath.getParent
+      }
+
+      filters.toList
+    }
+
+    private def buildArchiveFilePath(pathUri: URI): Path = {
+      require(baseArchivePathString.isDefined)
+      val baseArchivePathStr = baseArchivePathString.get
+      val normalizedBaseArchiveDirPath = if (baseArchivePathStr.endsWith("/")) {
+        baseArchivePathStr.substring(0, baseArchivePathStr.length - 1)
+      } else {
+        baseArchivePathStr
+      }
+
+      new Path(normalizedBaseArchiveDirPath + pathUri.getPath)
+    }
+
+    private def isArchiveFileMatchedAgainstSourcePattern(archiveFile: Path): Boolean = {
+      if (baseArchivePath.get.depth() > 2) {
+        // there's no chance for archive file to be matched against source pattern
+        return false
+      }
+
+      var matched = true
+
+      // new path will never match against source path when the depth is not a range of
+      // the depth of source path ~ (the depth of source path + 1)
+      // because the source files are picked when they match against source pattern or
+      // their parent directories match against source pattern
+      val depthSourcePattern = sourceGlobFilters.length
+      val depthArchiveFile = archiveFile.depth()
+
+      // we already checked against the depth of archive path, but rechecking wouldn't hurt
+      if (depthArchiveFile < depthSourcePattern || depthArchiveFile > depthSourcePattern + 1) {
+        // never matched
+        matched = false
+      } else {
+        var pathToCompare = if (depthArchiveFile == depthSourcePattern + 1) {
+          archiveFile.getParent
+        } else {
+          archiveFile
+        }
+
+        // Now pathToCompare should have same depth as sourceGlobFilters.length
+        var index = 0
+        do {
+          // GlobFilter only matches against its name, not full path so it's safe to compare
+          if (!sourceGlobFilters(index).accept(pathToCompare)) {
+            matched = false
+          } else {
+            pathToCompare = pathToCompare.getParent
+            index += 1
+          }
+        } while (matched && !pathToCompare.isRoot)
+      }
+
+      matched
+    }
+
+    private def doArchive(sourcePath: Path, archivePath: Path): Unit = {
+      try {
+        logDebug(s"Creating directory if it doesn't exist ${archivePath.getParent}")
+        if (!fileSystem.exists(archivePath.getParent)) {
+          fileSystem.mkdirs(archivePath.getParent)
+        }
+
+        logDebug(s"Archiving completed file $sourcePath to $archivePath")
+        if (!fileSystem.rename(sourcePath, archivePath)) {
+          logWarning(s"Fail to move $sourcePath to $archivePath / skip moving file.")
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Fail to move $sourcePath to $archivePath / skip moving file.", e)
+      }
+    }
+
   }
 }
