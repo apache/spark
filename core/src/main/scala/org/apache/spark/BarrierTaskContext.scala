@@ -165,6 +165,11 @@ class BarrierTaskContext private[spark] (
     this
   }
 
+  override def remoteTaskCompletionListener(listener: TaskCompletionListener): this.type = {
+    taskContext.remoteTaskCompletionListener(listener)
+    this
+  }
+
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
     taskContext.addTaskFailureListener(listener)
     this

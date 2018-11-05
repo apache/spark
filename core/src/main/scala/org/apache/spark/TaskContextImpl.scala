@@ -99,6 +99,13 @@ private[spark] class TaskContextImpl(
     this
   }
 
+  override def remoteTaskCompletionListener(listener: TaskCompletionListener)
+      : this.type = synchronized {
+    onCompleteCallbacks -= listener
+    this
+  }
+
+  /** Marks the task as failed and triggers the failure listeners. */
   @GuardedBy("this")
   private[spark] override def markTaskFailed(error: Throwable): Unit = synchronized {
     if (failed) return

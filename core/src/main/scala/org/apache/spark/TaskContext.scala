@@ -132,6 +132,8 @@ abstract class TaskContext extends Serializable {
     })
   }
 
+  def remoteTaskCompletionListener(listener: TaskCompletionListener): TaskContext
+
   /**
    * Adds a listener to be executed on task failure. Adding a listener to an already failed task
    * will result in that listener being called immediately.
