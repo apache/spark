@@ -395,15 +395,12 @@ private[spark] object JsonProtocol {
   /** Convert executor metrics to JSON. */
   def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
     val metrics = for {
-      (m, _) <- ExecutorMetricType.definedMetricsAndOffset.toSeq
+      (m, _) <- ExecutorMetricType.definedMetricsAndOffset
     } yield {
       JField(m, executorMetrics.getMetricValue(m))
     }
 
-      // ExecutorMetricType.definedMetricsAndOffset.foreach { case (m,offset) =>
-      // JField(m, executorMetrics.getMetricValue(m))
-   // }
-    JObject(metrics: _*)
+    JObject(metrics.toSeq: _*)
   }
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
@@ -620,7 +617,7 @@ private[spark] object JsonProtocol {
       ExecutorMetricType.definedMetricsAndOffset.map { case (metric, _) =>
         metric -> jsonOption(json \ metric).map(_.extract[Long]).getOrElse(0L)
       }
-    new ExecutorMetrics(metrics)
+    new ExecutorMetrics(metrics.toMap)
   }
 
   def taskEndFromJson(json: JValue): SparkListenerTaskEnd = {

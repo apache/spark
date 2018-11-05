@@ -17,10 +17,13 @@
 package org.apache.spark.metrics
 
 import java.lang.management.{BufferPoolMXBean, ManagementFactory}
+import java.util
 import javax.management.ObjectName
 
 import org.apache.spark.executor.ProcfsBasedSystems
 import org.apache.spark.memory.MemoryManager
+
+import scala.collection.mutable
 
 /**
  * Executor metric types for executor-level metrics stored in ExecutorMetrics.
@@ -150,7 +153,7 @@ private[spark] object ExecutorMetricType {
     ProcessTreeMetrics
   )
 
-  var definedMetricsAndOffset = Map.empty[String, Int]
+  var definedMetricsAndOffset = mutable.LinkedHashMap.empty[String, Int]
   var numberOfMetrics = 0
   metricGetters.foreach { m =>
     var metricInSet = 0
