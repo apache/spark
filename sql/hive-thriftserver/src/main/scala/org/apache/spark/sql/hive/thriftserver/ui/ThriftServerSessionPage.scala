@@ -58,7 +58,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
         </h4> ++
         generateSQLStatsTable(request, sessionStat.sessionId)
       }
-    UIUtils.headerSparkPage(request, "JDBC/ODBC Session", content, parent, Some(5000))
+    UIUtils.headerSparkPage(request, "JDBC/ODBC Session", content, parent)
   }
 
   /** Generate basic stats of the thrift server program */

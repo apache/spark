@@ -54,11 +54,11 @@ private[spark] class PodTemplateConfigMapStep(
     SparkPod(podWithVolume, containerWithVolume)
   }
 
-  def getAdditionalPodSystemProperties(): Map[String, String] = Map[String, String](
+  override def getAdditionalPodSystemProperties(): Map[String, String] = Map[String, String](
     KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key ->
       (EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH + "/" + EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
 
-  def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     require(conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined)
     val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
     val podTemplateString = Files.toString(new File(podTemplateFile), StandardCharsets.UTF_8)

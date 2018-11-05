@@ -1689,6 +1689,11 @@ test_that("column functions", {
     expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
   }
 
+  # Test to_csv()
+  df <- sql("SELECT named_struct('name', 'Bob') as people")
+  j <- collect(select(df, alias(to_csv(df$people), "csv")))
+  expect_equal(j[order(j$csv), ][1], "Bob")
+
   # Test create_array() and create_map()
   df <- as.DataFrame(data.frame(
     x = c(1.0, 2.0), y = c(-1.0, 3.0), z = c(-2.0, 5.0)
