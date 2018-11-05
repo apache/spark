@@ -40,19 +40,19 @@ private[kafka010] object TokenUtil extends Logging {
     override def getKind: Text = TOKEN_KIND;
   }
 
-  def obtainToken(sparkConf: SparkConf): Token[_ <: TokenIdentifier] = {
+  def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
     val adminClient = AdminClient.create(createAdminClientProperties(sparkConf))
     val createDelegationTokenOptions = new CreateDelegationTokenOptions()
     val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
     val token = createResult.delegationToken().get()
     printToken(token)
 
-    new Token[KafkaDelegationTokenIdentifier](
+    (new Token[KafkaDelegationTokenIdentifier](
       token.tokenInfo.tokenId.getBytes,
       token.hmacAsBase64String.getBytes,
       TOKEN_KIND,
       TOKEN_SERVICE
-    )
+    ), token.tokenInfo.expiryTimestamp)
   }
 
   private[kafka010] def createAdminClientProperties(sparkConf: SparkConf): Properties = {

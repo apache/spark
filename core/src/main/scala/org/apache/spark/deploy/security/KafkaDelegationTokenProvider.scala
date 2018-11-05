@@ -45,14 +45,14 @@ private[security] class KafkaDelegationTokenProvider
         getMethod("obtainToken", classOf[SparkConf])
 
       logDebug("Attempting to fetch Kafka security token.")
-      val token = obtainToken.invoke(null, sparkConf)
-        .asInstanceOf[Token[_ <: TokenIdentifier]]
+      val (token, nextRenewalDate) = obtainToken.invoke(null, sparkConf)
+        .asInstanceOf[(Token[_ <: TokenIdentifier], Long)]
       creds.addToken(token.getService, token)
+      return Some(nextRenewalDate)
     } catch {
       case NonFatal(e) =>
         logInfo(s"Failed to get token from service $serviceName", e)
     }
-
     None
   }
 
