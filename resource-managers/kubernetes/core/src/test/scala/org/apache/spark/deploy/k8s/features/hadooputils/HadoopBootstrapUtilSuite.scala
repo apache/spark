@@ -32,6 +32,10 @@ import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils._
 import org.apache.spark.util.Utils
 
 class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
+  private val dtSecretName = "EXAMPLE_SECRET_NAME"
+  private val dtSecretItemKey = "EXAMPLE_ITEM_KEY"
+  private val userName = "SPARK_USER_NAME"
+  private val configMapName = "hconfMapName"
   private val sparkPod = SparkPod.initialPod()
   private val hadoopBootstrapUtil = new HadoopBootstrapUtil
   private var tmpDir: File = _
@@ -49,9 +53,6 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
   }
 
   test("bootstrapKerberosPod with file location specified for krb5.conf file") {
-    val dtSecretName = "EXAMPLE_SECRET_NAME"
-    val dtSecretItemKey = "EXAMPLE_ITEM_KEY"
-    val userName = "SPARK_USER_NAME"
     val fileLocation = Some(tmpFile.getAbsolutePath)
     val stringPath = tmpFile.getName
     val newKrb5ConfName = Some("/etc/krb5.conf")
@@ -93,9 +94,6 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
   }
 
   test("bootstrapKerberosPod with pre-existing configMap specified for krb5.conf file") {
-    val dtSecretName = "EXAMPLE_SECRET_NAME"
-    val dtSecretItemKey = "EXAMPLE_ITEM_KEY"
-    val userName = "SPARK_USER_NAME"
     val existingKrb5ConfName = Some("krb5CMap")
     val resultingPod = hadoopBootstrapUtil.bootstrapKerberosPod(
       dtSecretName,
@@ -130,7 +128,6 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
   }
 
   test("default bootstrapSparkUserPod") {
-    val userName = "SPARK_USER_NAME"
     val resultingPod = hadoopBootstrapUtil.bootstrapSparkUserPod(userName, sparkPod)
     containerHasEnvVars(resultingPod.container, Map(ENV_SPARK_USER -> userName))
   }
@@ -138,7 +135,7 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
   test("bootstrapHadoopConfDir with directory location specified for HADOOP_CONF") {
     val hadoopConfDir = Some(tmpDir.getAbsolutePath)
     val stringPath = tmpFile.getName
-    val newHadoopConfigMapName = Some("hconfMapName")
+    val newHadoopConfigMapName = Some(configMapName)
     val resultingPod = hadoopBootstrapUtil.bootstrapHadoopConfDir(
       hadoopConfDir,
       newHadoopConfigMapName,
@@ -171,7 +168,7 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
   }
 
   test("bootstrapHadoopConfDir with pre-existing configMap, storing HADOOP_CONF files, specified") {
-    val existingHadoopConfigMapName = Some("hconfMapName")
+    val existingHadoopConfigMapName = Some(configMapName)
     val resultingPod = hadoopBootstrapUtil.bootstrapHadoopConfDir(
       None,
       None,
@@ -192,7 +189,6 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
   }
 
   test("default buildKrb5ConfigMap") {
-    val configMapName = "hconfMapName"
     val resultingCMap = hadoopBootstrapUtil.buildkrb5ConfigMap(
       configMapName,
       tmpFile.getAbsolutePath
@@ -206,7 +202,6 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
   }
 
   test("buildHadoopConfigMap on simple file") {
-    val configMapName = "hconfMapName"
     val resultingCMap = hadoopBootstrapUtil.buildHadoopConfigMap(
       configMapName,
       Seq(tmpFile)

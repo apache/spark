@@ -28,7 +28,6 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
