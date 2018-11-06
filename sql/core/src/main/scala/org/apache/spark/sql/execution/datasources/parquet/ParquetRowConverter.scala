@@ -206,9 +206,9 @@ private[parquet] class ParquetRowConverter(
     var i = 0
     while (i < fieldConverters.length) {
       fieldConverters(i).updater.start()
-      currentRow.setNullAt(i)
       i += 1
     }
+    i = 0
     while (i < currentRow.numFields) {
       currentRow.setNullAt(i)
       i += 1
