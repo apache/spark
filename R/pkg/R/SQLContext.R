@@ -247,19 +247,17 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
 
   if (shouldUseArrow) {
     rdd <- jrddInArrow
-  } else {
-    if (is.list(data)) {
-      sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
-      if (!is.null(numPartitions)) {
-        rdd <- parallelize(sc, data, numSlices = numToInt(numPartitions))
-      } else {
-        rdd <- parallelize(sc, data, numSlices = 1)
-      }
-    } else if (inherits(data, "RDD")) {
-      rdd <- data
+  } else if (is.list(data)) {
+    sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
+    if (!is.null(numPartitions)) {
+      rdd <- parallelize(sc, data, numSlices = numToInt(numPartitions))
     } else {
-      stop(paste("unexpected type:", class(data)))
+      rdd <- parallelize(sc, data, numSlices = 1)
     }
+  } else if (inherits(data, "RDD")) {
+    rdd <- data
+  } else {
+    stop(paste("unexpected type:", class(data)))
   }
 
   if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
