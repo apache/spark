@@ -160,7 +160,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
 
     val errMsg = intercept[AnalysisException] {
-      df2.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
+      df2.selectExpr("from_csv(value, 'time Timestamp', named_struct('a', 1))")
     }
     assert(errMsg.getMessage.startsWith("Must use a map() function for options"))
   }
