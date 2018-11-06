@@ -202,7 +202,7 @@ private class DiskBlockData(
   private def open() = new FileInputStream(file).getChannel
 }
 
-private class EncryptedBlockData(
+private[spark] class EncryptedBlockData(
     file: File,
     blockSize: Long,
     conf: SparkConf,
@@ -265,7 +265,8 @@ private class EncryptedBlockData(
   }
 }
 
-private class EncryptedManagedBuffer(val blockData: EncryptedBlockData) extends ManagedBuffer {
+private[spark] class EncryptedManagedBuffer(
+    val blockData: EncryptedBlockData) extends ManagedBuffer {
 
   // This is the size of the decrypted data
   override def size(): Long = blockData.size

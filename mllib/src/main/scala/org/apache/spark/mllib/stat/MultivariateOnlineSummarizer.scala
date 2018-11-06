@@ -273,7 +273,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   }
 
   /**
-   * L2 (Euclidian) norm of each dimension.
+   * L2 (Euclidean) norm of each dimension.
    *
    */
   @Since("1.2.0")
