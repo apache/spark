@@ -34,7 +34,7 @@ package org.apache.spark.sql.catalyst.expressions
  */
 object Canonicalize {
   def execute(e: Expression): Expression = {
-    expressionReorder(ignoreNamesTypes(e))
+    expressionReorder(ignoreNamesTypes(removeAlias(e)))
   }
 
   /** Remove names and nullability from types. */
@@ -89,6 +89,12 @@ object Canonicalize {
     // order the list in the In operator
     case In(value, list) if list.length > 1 => In(value, list.sortBy(_.hashCode()))
 
+    case _ => e
+  }
+
+  /** Remove Aliases, */
+  private def removeAlias(e: Expression): Expression = e match {
+    case a: Alias => a.child
     case _ => e
   }
 }
