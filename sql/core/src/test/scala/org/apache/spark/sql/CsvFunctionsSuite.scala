@@ -87,6 +87,14 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(to_csv($"a", options)), Row("26/08/2015 18:00") :: Nil)
   }
 
+  test("from_csv uses DDL strings for defining a schema - java") {
+    val df = Seq("""1,"haa"""").toDS()
+    checkAnswer(
+      df.select(
+        from_csv($"value", lit("a INT, b STRING"), new java.util.HashMap[String, String]())),
+      Row(Row(1, "haa")) :: Nil)
+  }
+
   test("roundtrip to_csv -> from_csv") {
     val df = Seq(Tuple1(Tuple1(1)), Tuple1(null)).toDF("struct")
     val schema = df.schema(0).dataType.asInstanceOf[StructType]
@@ -119,5 +127,41 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
         StructField("_c2", StringType, true))))))
 
     assert(out.schema == expected)
+  }
+
+  test("Support to_csv in SQL") {
+    val df1 = Seq(Tuple1(Tuple1(1))).toDF("a")
+    checkAnswer(
+      df1.selectExpr("to_csv(a)"),
+      Row("1") :: Nil)
+
+    val df2 = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
+    checkAnswer(
+      df2.selectExpr("to_csv(a, map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
+      Row("26/08/2015 18:00") :: Nil)
+
+    val errMsg = intercept[AnalysisException] {
+      df2.selectExpr("to_csv(a, map('a', 1))")
+    }
+    assert(errMsg.getMessage.startsWith(
+      "A type of keys and values in map() must be string, but got"))
+  }
+
+  test("Support from_csv in SQL") {
+    val df1 = Seq("1").toDS()
+    checkAnswer(
+      df1.selectExpr("from_csv(value, 'a INT')"),
+      Row(Row(1)) :: Nil)
+
+    val df2 = Seq("26/08/2015 18:00").toDS()
+    checkAnswer(
+      df2.selectExpr(
+        "from_csv(value, 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
+      Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+
+    val errMsg = intercept[AnalysisException] {
+      df2.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
+    }
+    assert(errMsg.getMessage.startsWith("Must use a map() function for options"))
   }
 }
