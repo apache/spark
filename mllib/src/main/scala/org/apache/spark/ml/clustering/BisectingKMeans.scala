@@ -118,7 +118,7 @@ class BisectingKMeansModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  @Since("2.4.0")
+  @Since("3.0.0")
   def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("2.0.0")

@@ -121,7 +121,7 @@ class GaussianMixtureModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  @Since("2.4.0")
+  @Since("3.0.0")
   def predict(features: Vector): Int = {
     val r = predictProbability(features)
     r.argmax
