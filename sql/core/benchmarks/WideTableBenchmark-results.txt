@@ -6,12 +6,12 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
 Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
 projection on wide table:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-split threshold 10                            8464 / 8737          0.1        8072.0       1.0X
-split threshold 100                           5959 / 6251          0.2        5683.4       1.4X
-split threshold 1024                          3202 / 3248          0.3        3053.2       2.6X
-split threshold 2048                          3009 / 3097          0.3        2869.2       2.8X
-split threshold 4096                          3414 / 3458          0.3        3256.1       2.5X
-split threshold 8196                          4095 / 4112          0.3        3905.5       2.1X
-split threshold 65536                       28800 / 29705          0.0       27465.8       0.3X
+split threshold 10                            7866 / 8321          0.1        7501.2       1.0X
+split threshold 100                           6579 / 6795          0.2        6274.4       1.2X
+split threshold 1024                          3189 / 3263          0.3        3041.5       2.5X
+split threshold 2048                          3074 / 3141          0.3        2931.6       2.6X
+split threshold 4096                          3374 / 3417          0.3        3217.6       2.3X
+split threshold 8196                          4250 / 4529          0.2        4053.4       1.9X
+split threshold 65536                       28825 / 29192          0.0       27489.4       0.3X
 
 

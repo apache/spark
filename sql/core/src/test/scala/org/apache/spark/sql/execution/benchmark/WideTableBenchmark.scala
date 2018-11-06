@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Benchmark to measure performance for wide table.
@@ -32,7 +33,7 @@ import org.apache.spark.benchmark.Benchmark
  */
 object WideTableBenchmark extends SqlBasedBenchmark {
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("projection on wide table") {
       val N = 1 << 20
       val df = spark.range(N)
@@ -40,7 +41,7 @@ object WideTableBenchmark extends SqlBasedBenchmark {
       val benchmark = new Benchmark("projection on wide table", N, output = output)
       Seq("10", "100", "1024", "2048", "4096", "8196", "65536").foreach { n =>
         benchmark.addCase(s"split threshold $n", numIters = 5) { iter =>
-          withSQLConf("spark.testing.codegen.splitThreshold" -> n) {
+          withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> n) {
             df.selectExpr(columns: _*).foreach(identity(_))
           }
         }
