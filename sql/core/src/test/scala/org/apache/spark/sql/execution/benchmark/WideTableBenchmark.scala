@@ -39,7 +39,7 @@ object WideTableBenchmark extends SqlBasedBenchmark {
       val df = spark.range(N)
       val columns = (0 until 400).map{ i => s"id as id$i"}
       val benchmark = new Benchmark("projection on wide table", N, output = output)
-      Seq("10", "100", "1024", "2048", "4096", "8196", "65536").foreach { n =>
+      Seq("10", "100", "1024", "2048", "4096", "8192", "65536").foreach { n =>
         benchmark.addCase(s"split threshold $n", numIters = 5) { iter =>
           withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> n) {
             df.selectExpr(columns: _*).foreach(identity(_))
