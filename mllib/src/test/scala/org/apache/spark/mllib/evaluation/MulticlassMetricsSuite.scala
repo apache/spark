@@ -24,7 +24,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  val delta = 1e-7
+  private val delta = 1e-7
 
   test("Multiclass evaluation metrics") {
     /*

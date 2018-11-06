@@ -69,7 +69,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
-  @Since("2.4.0")
+  @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   setDefault(metricName -> "f1")

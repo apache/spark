@@ -31,7 +31,7 @@ import org.apache.spark.sql.DataFrame
  *                         (prediction, label) pairs.
  */
 @Since("1.1.0")
-class MulticlassMetrics @Since("2.4.0") (predAndLabelsWithOptWeight: RDD[_]) {
+class MulticlassMetrics @Since("3.0.0") (predAndLabelsWithOptWeight: RDD[_]) {
   val predLabelsWeight: RDD[(Double, Double, Double)] = predAndLabelsWithOptWeight.map {
     case (prediction: Double, label: Double, weight: Double) =>
       (prediction, label, weight)
