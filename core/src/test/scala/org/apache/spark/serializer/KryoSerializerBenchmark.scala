@@ -42,7 +42,7 @@ object KryoSerializerBenchmark extends BenchmarkBase {
 
   var sc: SparkContext = null
   val N = 500
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val name = "Benchmark KryoPool vs old\"pool of 1\" implementation"
     runBenchmark(name) {
       val benchmark = new Benchmark(name, N, 10, output = output)
