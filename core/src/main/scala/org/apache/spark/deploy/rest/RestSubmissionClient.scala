@@ -408,7 +408,11 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 }
 
 private[spark] object RestSubmissionClient {
+
+  // SPARK_HOME and SPARK_CONF_DIR are filtered out because they are usually wrong
+  // on the remote machine (SPARK-12345) (SPARK-25934)
   private val BLACKLISTED_SPARK_ENV_VARS = Set("SPARK_ENV_LOADED", "SPARK_HOME", "SPARK_CONF_DIR")
+  
   private val REPORT_DRIVER_STATUS_INTERVAL = 1000
   private val REPORT_DRIVER_STATUS_MAX_TRIES = 10
   val PROTOCOL_VERSION = "v1"
@@ -418,8 +422,6 @@ private[spark] object RestSubmissionClient {
    */
   private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
     env.filterKeys { k =>
-      // SPARK_HOME and SPARK_CONF_DIR are filtered out because they are usually wrong
-      // on the remote machine (SPARK-12345) (SPARK-25934)
       (k.startsWith("SPARK_") && !BLACKLISTED_SPARK_ENV_VARS.contains(k)) || k.startsWith("MESOS_")
     }
   }
