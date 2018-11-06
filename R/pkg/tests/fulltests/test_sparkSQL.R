@@ -319,7 +319,7 @@ test_that("createDataFrame Arrow optimization", {
   },
   finally = {
     # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.shuffle.partitions", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
   })
 })
 
