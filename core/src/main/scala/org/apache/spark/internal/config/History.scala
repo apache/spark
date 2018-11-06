@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.history
+package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 
-private[spark] object config {
+private[spark] object History {
 
   val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
 
@@ -63,5 +62,4 @@ private[spark] object config {
         "parts of event log files. It can be disabled by setting this config to 0.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
-
 }
