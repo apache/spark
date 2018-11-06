@@ -489,7 +489,7 @@ package object config {
         "otherwise specified. These buffers reduce the number of disk seeks and system calls " +
         "made in creating intermediate shuffle files.")
       .bytesConf(ByteUnit.KiB)
-      .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH/ 1024,
+      .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
         s"The file buffer size must be greater than 0 and less than" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
