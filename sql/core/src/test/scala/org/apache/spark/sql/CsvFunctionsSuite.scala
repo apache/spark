@@ -21,6 +21,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
