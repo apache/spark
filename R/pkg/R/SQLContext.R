@@ -199,6 +199,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
   conf <- callJMethod(sparkSession, "conf")
   arrowEnabled <- tolower(callJMethod(conf, "get", "spark.sql.execution.arrow.enabled")) == "true"
   shouldUseArrow <- is.data.frame(data) && arrowEnabled
+  firstRow <- NULL
   if (is.data.frame(data)) {
       # get the names of columns, they will be put into RDD
       if (is.null(schema)) {
@@ -228,7 +229,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
           finally = {
             file.remove(fileName)
         })
-        row <- do.call(mapply, append(args, head(data, 1)))[[1]]
+        firstRow <- do.call(mapply, append(args, head(data, 1)))[[1]]
       } else {
         # drop factors and wrap lists
         data <- setNames(as.list(data), NULL)
@@ -239,7 +240,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
         # convert to rows
         data <- do.call(mapply, append(args, data))
         if (length(data) > 0) {
-          row <- data[[1]]
+          firstRow <- data[[1]]
         }
       }
   }
@@ -262,16 +263,16 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
   }
 
   if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
-    if (!exists("row")) {
-      row <- firstRDD(rdd)
+    if (is.null(firstRow)) {
+      firstRow <- firstRDD(rdd)
     }
     names <- if (is.null(schema)) {
-      names(row)
+      names(firstRow)
     } else {
       as.list(schema)
     }
     if (is.null(names)) {
-      names <- lapply(1:length(row), function(x) {
+      names <- lapply(1:length(firstRow), function(x) {
         paste("_", as.character(x), sep = "")
       })
     }
@@ -286,8 +287,8 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
       nn
     })
 
-    types <- lapply(row, infer_type)
-    fields <- lapply(1:length(row), function(i) {
+    types <- lapply(firstRow, infer_type)
+    fields <- lapply(1:length(firstRow), function(i) {
       structField(names[[i]], types[[i]], TRUE)
     })
     schema <- do.call(structType, fields)
