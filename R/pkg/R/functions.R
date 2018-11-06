@@ -355,12 +355,12 @@ setMethod("approx_count_distinct",
 #' head(distinct(select(df, "gear")))}
 #' @note approxCountDistinct(Column) since 1.4.0
 setMethod("approxCountDistinct",
-signature(x = "Column"),
-function(x) {
-    .Deprecated("approx_count_distinct")
-    jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc)
-    column(jc)
-})
+          signature(x = "Column"),
+          function(x) {
+            .Deprecated("approx_count_distinct")
+            jc <- callJStatic("org.apache.spark.sql.functions", "approx_count_distinct", x@jc)
+            column(jc)
+          })
 
 #' @details
 #' \code{ascii}: Computes the numeric value of the first character of the string column,
@@ -1671,12 +1671,12 @@ setMethod("tanh",
 #' @aliases toDegrees toDegrees,Column-method
 #' @note toDegrees since 1.4.0
 setMethod("toDegrees",
-signature(x = "Column"),
-function(x) {
-    .Deprecated("degrees")
-    jc <- callJStatic("org.apache.spark.sql.functions", "toDegrees", x@jc)
-    column(jc)
-})
+          signature(x = "Column"),
+          function(x) {
+            .Deprecated("degrees")
+            jc <- callJStatic("org.apache.spark.sql.functions", "degrees", x@jc)
+            column(jc)
+          })
 
 #' @details
 #' \code{degrees}: Converts an angle measured in radians to an approximately equivalent angle
@@ -1701,11 +1701,11 @@ setMethod("degrees",
 #' @note toRadians since 1.4.0
 setMethod("toRadians",
 signature(x = "Column"),
-function(x) {
-    .Deprecated("radians")
-    jc <- callJStatic("org.apache.spark.sql.functions", "toRadians", x@jc)
-    column(jc)
-})
+          function(x) {
+            .Deprecated("radians")
+            jc <- callJStatic("org.apache.spark.sql.functions", "radians", x@jc)
+            column(jc)
+          })
 
 #' @details
 #' \code{radians}: Converts an angle measured in degrees to an approximately equivalent angle
@@ -2133,12 +2133,12 @@ setMethod("approx_count_distinct",
 #' @aliases approxCountDistinct,Column-method
 #' @note approxCountDistinct(Column, numeric) since 1.4.0
 setMethod("approxCountDistinct",
-signature(x = "Column"),
-function(x, rsd = 0.05) {
-    .Deprecated("approx_count_distinct")
-    jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc, rsd)
-    column(jc)
-})
+          signature(x = "Column"),
+          function(x, rsd = 0.05) {
+            .Deprecated("approx_count_distinct")
+            jc <- callJStatic("org.apache.spark.sql.functions", "approx_count_distinct", x@jc, rsd)
+            column(jc)
+          })
 
 #' @details
 #' \code{countDistinct}: Returns the number of distinct items in a group.
