@@ -147,6 +147,30 @@ getDefaultSqlSource <- function() {
   l[["spark.sql.sources.default"]]
 }
 
+writeToTempFileInArrow <- function(rdf, numPartitions) {
+  stopifnot(require("arrow", quietly = TRUE))
+  stopifnot(require("withr", quietly = TRUE))
+  numPartitions <- if (!is.null(numPartitions)) {
+    numToInt(numPartitions)
+  } else {
+    1
+  }
+  fileName <- tempfile()
+  chunk <- as.integer(nrow(rdf) / numPartitions)
+  rdf_slices <- split(rdf, rep(1:ceiling(nrow(rdf) / chunk), each = chunk)[1:nrow(rdf)])
+  stream_writer <- NULL
+  for (rdf_slice in rdf_slices) {
+    batch <- arrow::record_batch(rdf_slice)
+    if (is.null(stream_writer)) {
+      stream <- arrow:::close_on_exit(arrow::file_output_stream(fileName))
+      schema <- batch$schema()
+      stream_writer <- arrow:::close_on_exit(arrow::record_batch_stream_writer(stream, schema))
+    }
+    arrow::write_record_batch(batch, stream_writer)
+  }
+  fileName
+}
+
 #' Create a SparkDataFrame
 #'
 #' Converts R data.frame or list into SparkDataFrame.
@@ -172,15 +196,16 @@ getDefaultSqlSource <- function() {
 createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                             numPartitions = NULL) {
   sparkSession <- getSparkSession()
-
+  conf <- callJMethod(sparkSession, "conf")
+  arrowEnabled <- tolower(callJMethod(conf, "get", "spark.sql.execution.arrow.enabled")) == "true"
+  shouldUseArrow <- is.data.frame(data) && arrowEnabled
   if (is.data.frame(data)) {
-      # Convert data into a list of rows. Each row is a list.
-
       # get the names of columns, they will be put into RDD
       if (is.null(schema)) {
         schema <- names(data)
       }
 
+      # Convert data into a list of rows. Each row is a list.
       # get rid of factor type
       cleanCols <- function(x) {
         if (is.factor(x)) {
@@ -189,33 +214,57 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
           x
         }
       }
+      data[] <- lapply(data, cleanCols)
 
-      # drop factors and wrap lists
-      data <- setNames(lapply(data, cleanCols), NULL)
-
-      # check if all columns have supported type
-      lapply(data, getInternalType)
-
-      # convert to rows
       args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
-      data <- do.call(mapply, append(args, data))
+      if (arrowEnabled) {
+        stopifnot(length(data) > 0)
+        fileName <- writeToTempFileInArrow(data, numPartitions)
+        tryCatch(
+          jrddInArrow <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                                     "readArrowStreamFromFile",
+                                     sparkSession,
+                                     fileName),
+          finally = {
+            file.remove(fileName)
+        })
+        row <- do.call(mapply, append(args, head(data, 1)))[[1]]
+      } else {
+        # drop factors and wrap lists
+        data <- setNames(as.list(data), NULL)
+
+        # check if all columns have supported type
+        lapply(data, getInternalType)
+
+        # convert to rows
+        data <- do.call(mapply, append(args, data))
+        if (length(data) > 0) {
+          row <- data[[1]]
+        }
+      }
   }
 
-  if (is.list(data)) {
-    sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
-    if (!is.null(numPartitions)) {
-      rdd <- parallelize(sc, data, numSlices = numToInt(numPartitions))
-    } else {
-      rdd <- parallelize(sc, data, numSlices = 1)
-    }
-  } else if (inherits(data, "RDD")) {
-    rdd <- data
+  if (shouldUseArrow) {
+    rdd <- jrddInArrow
   } else {
-    stop(paste("unexpected type:", class(data)))
+    if (is.list(data)) {
+      sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
+      if (!is.null(numPartitions)) {
+        rdd <- parallelize(sc, data, numSlices = numToInt(numPartitions))
+      } else {
+        rdd <- parallelize(sc, data, numSlices = 1)
+      }
+    } else if (inherits(data, "RDD")) {
+      rdd <- data
+    } else {
+      stop(paste("unexpected type:", class(data)))
+    }
   }
 
   if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
-    row <- firstRDD(rdd)
+    if (!exists("row")) {
+      row <- firstRDD(rdd)
+    }
     names <- if (is.null(schema)) {
       names(row)
     } else {
@@ -246,10 +295,15 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
 
   stopifnot(class(schema) == "structType")
 
-  jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
-  srdd <- callJMethod(jrdd, "rdd")
-  sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
-                     srdd, schema$jobj, sparkSession)
+  if (shouldUseArrow) {
+    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                       "toDataFrame", rdd, schema$jobj, sparkSession)
+  } else {
+    jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
+    srdd <- callJMethod(jrdd, "rdd")
+    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
+                       srdd, schema$jobj, sparkSession)
+  }
   dataFrame(sdf)
 }
 
