@@ -435,7 +435,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   private def testSerializerInstanceReuse(
-     autoReset: Boolean, referenceTracking: Boolean, usePool: Boolean): Unit = {
+      autoReset: Boolean, referenceTracking: Boolean, usePool: Boolean): Unit = {
     val conf = new SparkConf(loadDefaults = false)
       .set("spark.kryo.referenceTracking", referenceTracking.toString)
       .set("spark.kryo.pool", usePool.toString)

@@ -332,11 +332,9 @@ private[spark] class KryoSerializerInstance(
     } else {
       if (cachedKryo != null) {
         val kryo = cachedKryo
-        /**
-         * As a defensive measure, call reset() to clear any Kryo state that might have
-         * been modified by the last operation to borrow this instance
-         * (see SPARK-7766 for discussion of this issue)
-         */
+        // As a defensive measure, call reset() to clear any Kryo state that might have
+        // been modified by the last operation to borrow this instance
+        // (see SPARK-7766 for discussion of this issue)
         kryo.reset()
         cachedKryo = null
         kryo
