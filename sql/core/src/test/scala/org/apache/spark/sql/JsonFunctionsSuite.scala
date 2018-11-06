@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import java.text.SimpleDateFormat
+import java.util.Locale
+
 import collection.JavaConverters._
 
 import org.apache.spark.SparkException
@@ -576,6 +579,22 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       assert(exception2.contains(
         "from_json() doesn't support the DROPMALFORMED mode. " +
           "Acceptable modes are PERMISSIVE and FAILFAST."))
+    }
+  }
+
+  test("use locale while parsing timestamps") {
+    Seq("en-US", "ko-KR", "zh-CN", "ru-RU").foreach { langTag =>
+      val locale = Locale.forLanguageTag(langTag)
+      val ts = new SimpleDateFormat("dd/MM/yyyy HH:mm").parse("06/11/2018 18:00")
+      val timestampFormat = "dd MMM yyyy HH:mm"
+      val sdf = new SimpleDateFormat(timestampFormat, locale)
+      val input = Seq(s"""{"time": "${sdf.format(ts)}"}""").toDS()
+      val schema = new StructType().add("time", TimestampType)
+      val options = Map("timestampFormat" -> timestampFormat, "locale" -> langTag)
+      val df = input.select(from_json($"value", schema, options))
+
+      checkAnswer(df,
+        Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
     }
   }
 }
