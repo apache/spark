@@ -274,7 +274,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Parses a trimmed UTF8 date string to the corresponding a corresponding [[Long]] value.
+   * Trim and parse a given UTF8 date string to the corresponding a corresponding [[Long]] value.
    * The return type is [[Option]] in order to distinguish between 0L and null. The following
    * formats are allowed:
    *
@@ -441,7 +441,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Parses a trimmed UTF8 date string to a corresponding [[Int]] value.
+   * Trim and parse a given UTF8 date string to a corresponding [[Int]] value.
    * The return type is [[Option]] in order to distinguish between 0 and null. The following
    * formats are allowed:
    *
