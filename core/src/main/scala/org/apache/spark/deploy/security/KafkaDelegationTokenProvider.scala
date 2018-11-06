@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.security
 
+import scala.language.existentials
 import scala.reflect.runtime.universe
 import scala.util.control.NonFatal
 
