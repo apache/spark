@@ -48,20 +48,23 @@ class MulticlassMetrics @Since("3.0.0") (predAndLabelsWithOptWeight: RDD[_]) {
 
   private lazy val labelCountByClass: Map[Double, Double] =
     predLabelsWeight.map {
-      case (prediction: Double, label: Double, weight: Double) =>
+      case (_: Double, label: Double, weight: Double) =>
         (label, weight)
-    }.reduceByKey(_ + _).collect().toMap
+    }.reduceByKey(_ + _)
+    .collectAsMap()
   private lazy val labelCount: Double = labelCountByClass.values.sum
   private lazy val tpByClass: Map[Double, Double] = predLabelsWeight
+    .filter(predLabelWeight => predLabelWeight._1 == predLabelWeight._2)
     .map {
-      case (prediction: Double, label: Double, weight: Double) =>
-        (label, if (label == prediction) weight else 0.0)
+      case (_: Double, label: Double, weight: Double) =>
+        (label, weight)
     }.reduceByKey(_ + _)
     .collectAsMap()
   private lazy val fpByClass: Map[Double, Double] = predLabelsWeight
+    .filter(predLabelWeight => predLabelWeight._1 != predLabelWeight._2)
     .map {
-      case (prediction: Double, label: Double, weight: Double) =>
-        (prediction, if (prediction != label) weight else 0.0)
+      case (prediction: Double, _: Double, weight: Double) =>
+        (prediction, weight)
     }.reduceByKey(_ + _)
     .collectAsMap()
   private lazy val confusions = predLabelsWeight
