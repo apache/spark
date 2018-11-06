@@ -65,26 +65,26 @@ object KubernetesFeaturesTestUtils {
   }
 
   def containerHasEnvVars(container: Container, envs: Map[String, String]): Unit = {
-    assertHelper[Set[(String, String)]](envs.toSet,
+    assertHelper(envs.toSet,
       container.getEnv.asScala
         .map { e => (e.getName, e.getValue) }.toSet,
-      subsetOfTup[Set[(String, String)], String], "a subset of")
+      subsetOfTup, "a subset of")
   }
 
   def containerHasVolumeMounts(container: Container, vms: Map[String, String]): Unit = {
-    assertHelper[Set[(String, String)]](vms.toSet,
+    assertHelper(vms.toSet,
       container.getVolumeMounts.asScala
         .map { vm => (vm.getName, vm.getMountPath) }.toSet,
-      subsetOfTup[Set[(String, String)], String], "a subset of")
+      subsetOfTup, "a subset of")
   }
 
   def podHasLabels(pod: Pod, labels: Map[String, String]): Unit = {
-    assertHelper[Set[(String, String)]](labels.toSet, pod.getMetadata.getLabels.asScala.toSet,
-      subsetOfTup[Set[(String, String)], String], "a subset of")
+    assertHelper(labels.toSet, pod.getMetadata.getLabels.asScala.toSet,
+      subsetOfTup, "a subset of")
   }
 
   def podHasVolumes(pod: Pod, volumes: Seq[Volume]): Unit = {
-    assertHelper[Set[Volume]](volumes.toSet, pod.getSpec.getVolumes.asScala.toSet,
+    assertHelper(volumes.toSet, pod.getSpec.getVolumes.asScala.toSet,
       subsetOfElem[Set[Volume], Volume], "a subset of")
   }
 
@@ -118,8 +118,9 @@ object KubernetesFeaturesTestUtils {
         .build(),
       inputPod.container)
 
-  def subsetOfElem[T <: Set[B], B <: Any]: (T, T) => Boolean = (a, b) => a.subsetOf(b)
-  def subsetOfTup[T <: Set[(B, B)], B <: Any]: (T, T) => Boolean = (a, b) => a.subsetOf(b)
+  private def subsetOfElem[T <: Set[B], B <: Any]: (T, T) => Boolean = (a, b) => a.subsetOf(b)
+  private def subsetOfTup: (Set[(String, String)], Set[(String, String)]) => Boolean =
+    (a, b) => a.subsetOf(b)
 
   def assertHelper[T](con1: T, con2: T,
       expr: (T, T) => Boolean = (a: T, b: T) => a == b, exprMsg: String = "equal to"): Unit = {
