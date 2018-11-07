@@ -91,6 +91,8 @@ else
     rm "$PYCODESTYLE_REPORT_PATH"
 fi
 
+flake8 --version
+
 # Check by flake8
 if hash "$FLAKE8BUILD" 2> /dev/null; then
     IS_EXPECTED_FLAKE8=$(python -c 'import pkg_resources; \
