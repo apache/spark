@@ -345,14 +345,6 @@ setMethod("approx_count_distinct",
 #'
 #' @rdname column_aggregate_functions
 #' @aliases approxCountDistinct approxCountDistinct,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' head(select(df, approxCountDistinct(df$gear)))
-#' head(select(df, approxCountDistinct(df$gear, 0.02)))
-#' head(select(df, countDistinct(df$gear, df$cyl)))
-#' head(select(df, n_distinct(df$gear)))
-#' head(distinct(select(df, "gear")))}
 #' @note approxCountDistinct(Column) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
@@ -2127,8 +2119,6 @@ setMethod("approx_count_distinct",
             column(jc)
           })
 
-#' @param rsd maximum estimation error allowed (default = 0.05).
-#'
 #' @rdname column_aggregate_functions
 #' @aliases approxCountDistinct,Column-method
 #' @note approxCountDistinct(Column, numeric) since 1.4.0
