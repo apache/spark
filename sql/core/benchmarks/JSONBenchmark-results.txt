@@ -7,31 +7,42 @@ OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
 JSON schema inferring:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-No encoding                                 62946 / 63310          1.6         629.5       1.0X
-UTF-8 is set                              112814 / 112866          0.9        1128.1       0.6X
+No encoding                                 71832 / 72149          1.4         718.3       1.0X
+UTF-8 is set                              101700 / 101819          1.0        1017.0       0.7X
 
 Preparing data for benchmarking ...
 OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
-JSON per-line parsing:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+count a short column:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-No encoding                                 16468 / 16553          6.1         164.7       1.0X
-UTF-8 is set                                16420 / 16441          6.1         164.2       1.0X
+No encoding                                 16501 / 16519          6.1         165.0       1.0X
+UTF-8 is set                                16477 / 16516          6.1         164.8       1.0X
 
 Preparing data for benchmarking ...
 OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
-JSON parsing of wide lines:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+count a wide column:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-No encoding                                 39789 / 40053          0.3        3978.9       1.0X
-UTF-8 is set                                39505 / 39584          0.3        3950.5       1.0X
+No encoding                                 39871 / 40242          0.3        3987.1       1.0X
+UTF-8 is set                                39581 / 39721          0.3        3958.1       1.0X
 
+Preparing data for benchmarking ...
 OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
 Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
-Count a dataset with 10 columns:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+Select a subset of 10 columns:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-Select 10 columns + count()                 15997 / 16015          0.6        1599.7       1.0X
-Select 1 column + count()                   13280 / 13326          0.8        1328.0       1.2X
-count()                                       3006 / 3021          3.3         300.6       5.3X
+Select 10 columns + count()                 16011 / 16033          0.6        1601.1       1.0X
+Select 1 column + count()                   14350 / 14392          0.7        1435.0       1.1X
+count()                                       3007 / 3034          3.3         300.7       5.3X
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+creation of JSON parser per line:        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Short column without encoding                 8334 / 8453          1.2         833.4       1.0X
+Short column with UTF-8                     13627 / 13784          0.7        1362.7       0.6X
+Wide column without encoding              155073 / 155351          0.1       15507.3       0.1X
+Wide column with UTF-8                    212114 / 212263          0.0       21211.4       0.0X
 
 

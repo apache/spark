@@ -721,7 +721,7 @@ private[spark] class BlockManager(
    * Get block from remote block managers as serialized bytes.
    */
   def getRemoteBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
-    // TODO if we change this method to return the ManagedBuffer, then getRemoteValues
+    // TODO SPARK-25905 if we change this method to return the ManagedBuffer, then getRemoteValues
     // could just use the inputStream on the temp file, rather than reading the file into memory.
     // Until then, replication can cause the process to use too much memory and get killed
     // even though we've read the data to disk.

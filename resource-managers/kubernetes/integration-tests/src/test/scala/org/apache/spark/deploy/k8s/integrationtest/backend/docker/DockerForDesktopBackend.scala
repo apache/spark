@@ -14,25 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.integrationtest
+package org.apache.spark.deploy.k8s.integrationtest.backend.docker
 
-import java.io.File
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants
+import org.apache.spark.deploy.k8s.integrationtest.backend.cloud.KubeConfigBackend
 
-import com.google.common.base.Charsets
-import com.google.common.io.Files
+private[spark] object DockerForDesktopBackend
+  extends KubeConfigBackend(TestConstants.BACKEND_DOCKER_FOR_DESKTOP) {
 
-object TestConfig {
-  def getTestImageTag: String = {
-    val imageTagFileProp = System.getProperty("spark.kubernetes.test.imageTagFile")
-    require(imageTagFileProp != null, "Image tag file must be provided in system properties.")
-    val imageTagFile = new File(imageTagFileProp)
-    require(imageTagFile.isFile, s"No file found for image tag at ${imageTagFile.getAbsolutePath}.")
-    Files.toString(imageTagFile, Charsets.UTF_8).trim
-  }
-
-  def getTestImageRepo: String = {
-    val imageRepo = System.getProperty("spark.kubernetes.test.imageRepo")
-    require(imageRepo != null, "Image repo must be provided in system properties.")
-    imageRepo
-  }
 }
