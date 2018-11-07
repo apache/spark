@@ -542,7 +542,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("""
             |select avg(b) from (
             | with maxearnings as (
-            |   select course, year, max(earnings) as earnings FROM courseSales 
+            |   select course, year, max(earnings) as earnings FROM courseSales
             |     GROUP BY course, year
             |   )
             | select course, sum(earnings) as b FROM maxearnings GROUP BY course
