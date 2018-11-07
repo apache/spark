@@ -140,16 +140,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c = Calendar.getInstance()
     c.set(2015, 2, 18, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(stringToDate(UTF8String.fromString("2015-03-18")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18 ")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18 123142")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18T123123")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18T")).get ===
-      millisToDays(c.getTimeInMillis))
+    Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18 123142",
+      "2015-03-18T123123", "2015-03-18T").foreach { s =>
+      assert(stringToDate(UTF8String.fromString(s)).get === millisToDays(c.getTimeInMillis))
+    }
 
     assert(stringToDate(UTF8String.fromString("2015-03-18X")).isEmpty)
     assert(stringToDate(UTF8String.fromString("2015/03/18")).isEmpty)
@@ -214,9 +208,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("2015-03-18", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18 ", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18T", Option(c.getTimeInMillis * 1000))
+
+      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
+        checkStringToTimestamp(s, Option(c.getTimeInMillis * 1000))
+      }
 
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)
