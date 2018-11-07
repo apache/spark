@@ -213,7 +213,7 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.driverlog.cleaner.interval</td>
     <td><code>spark.history.fs.cleaner.interval</code></td>
     <td>
-      How often the filesystem driver log history cleaner checks for files to delete.
+      How often the filesystem driver log cleaner checks for files to delete.
       Files are only deleted if they are older than <code>spark.history.fs.driverlog.cleaner.maxAge</code>
     </td>
   </tr>

@@ -274,10 +274,10 @@ of the most common options to set are:
     is true. Within this base directory, each application logs the driver logs to an application specific file.
     Users may want to set this to a unified location like an HDFS directory so driver log files can be persisted
     for later usage. This directory should allow any Spark user to read/write files and the Spark History Server
-    user to delete files. Additionally, older logs from this directory are cleaned by
-    <a href="monitoring.html#spark-history-server-configuration-options"> Spark History Server</a>  if
+    user to delete files. Additionally, older logs from this directory are cleaned by the
+    <a href="monitoring.html#spark-history-server-configuration-options">Spark History Server</a> if
     <code>spark.history.fs.driverlog.cleaner.enabled</code> is true and, if they are older than max age configured
-    at <code>spark.history.fs.driverlog.cleaner.maxAge</code>.
+    by setting <code>spark.history.fs.driverlog.cleaner.maxAge</code>.
   </td>
 </tr>
 <tr>
@@ -287,15 +287,14 @@ of the most common options to set are:
     If true, spark application running in client mode will write driver logs to a persistent storage, configured
     in <code>spark.driver.log.dfsDir</code>. If <code>spark.driver.log.dfsDir</code> is not configured, driver logs
     will not be persisted. Additionally, enable the cleaner by setting <code>spark.history.fs.driverlog.cleaner.enabled</code>
-    to true in <a href="monitoring.html#spark-history-server-configuration-options"> Spark History Server</a>.
+    to true in <a href="monitoring.html#spark-history-server-configuration-options">Spark History Server</a>.
   </td>
 </tr>
 <tr>
   <td><code>spark.driver.log.layout</code></td>
   <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n</td>
   <td>
-    The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If 
-    <code>spark.driver.log.persistToDfs.enabled</code> is true and this configuration is used. If this is not configured,
+    The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If this is not configured,
     it uses the layout for the first appender defined in log4j.properties. If that is also not configured, driver logs
     use the default layout.
   </td>
