@@ -1,0 +1,122 @@
+================================================================================================
+SQL Single Numeric Column Scan
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+SQL Single TINYINT Column Scan:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum                                           2013 / 2071          7.8         128.0       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+SQL Single SMALLINT Column Scan:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum                                           1955 / 1957          8.0         124.3       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+SQL Single INT Column Scan:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum                                           2179 / 2303          7.2         138.6       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+SQL Single BIGINT Column Scan:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum                                           2222 / 2240          7.1         141.3       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+SQL Single FLOAT Column Scan:            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum                                           1999 / 2063          7.9         127.1       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+SQL Single DOUBLE Column Scan:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum                                           2085 / 2105          7.5         132.6       1.0X
+
+
+================================================================================================
+Int and String Scan
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+Int and String Scan:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum of columns                                3810 / 3822          2.8         363.3       1.0X
+
+
+================================================================================================
+Partitioned Table Scan
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+Partitioned Table:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Data column                                   2433 / 2576          6.5         154.7       1.0X
+Partition column                              2235 / 2329          7.0         142.1       1.1X
+Both columns                                  2617 / 2700          6.0         166.4       0.9X
+
+
+================================================================================================
+Repeated String Scan
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+Repeated String:                         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum of string length                          2479 / 2508          4.2         236.4       1.0X
+
+
+================================================================================================
+String with Nulls Scan
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+String with Nulls Scan (0.0%):           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum of string length                          4080 / 4100          2.6         389.1       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+String with Nulls Scan (50.0%):          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum of string length                          3199 / 3279          3.3         305.1       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+String with Nulls Scan (95.0%):          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum of string length                          2120 / 2121          4.9         202.2       1.0X
+
+
+================================================================================================
+Single Column Scan From Wide Columns
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+Single Column Scan from 100 columns:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum of single column                          3210 / 3282          0.3        3061.7       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+Single Column Scan from 200 columns:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum of single column                          6543 / 6721          0.2        6239.7       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
+Single Column Scan from 300 columns:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Sum of single column                          9799 / 9875          0.1        9344.8       1.0X
+
+
