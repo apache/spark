@@ -30,7 +30,7 @@ import scala.util.control.NonFatal
 import com.esotericsoftware.kryo.{Kryo, KryoException, Serializer => KryoClassSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import com.esotericsoftware.kryo.io.{UnsafeInput => KryoUnsafeInput, UnsafeOutput => KryoUnsafeOutput}
-import com.esotericsoftware.kryo.pool.{KryoFactory, KryoPool}
+import com.esotericsoftware.kryo.pool.{KryoCallback, KryoFactory, KryoPool}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
 import org.apache.avro.generic.{GenericData, GenericRecord}
@@ -101,12 +101,28 @@ class KryoSerializer(conf: SparkConf)
     }
   }
 
-  @transient
-  var pool: KryoPool = getPool
+  private class PoolWrapper extends KryoPool {
+    private var pool: KryoPool = getPool
 
-  private def getPool: KryoPool = {
-    new KryoPool.Builder(factory).softReferences.build
+    override def borrow(): Kryo = pool.borrow()
+
+    override def release(kryo: Kryo): Unit = pool.release(kryo)
+
+    override def run[T](kryoCallback: KryoCallback[T]): T = pool.run(kryoCallback)
+
+    def reset(): Unit = {
+      pool = getPool
+    }
+
+    private def getPool: KryoPool = {
+      new KryoPool.Builder(factory).softReferences.build
+    }
   }
+
+  @transient
+  private lazy val internalPool = new PoolWrapper
+
+  def pool: KryoPool = internalPool
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
@@ -231,8 +247,8 @@ class KryoSerializer(conf: SparkConf)
   }
 
   override def setDefaultClassLoader(classLoader: ClassLoader): Serializer = {
-    defaultClassLoader = Some(classLoader)
-    pool = getPool
+    super.setDefaultClassLoader(classLoader)
+    internalPool.reset()
     this
   }
 
