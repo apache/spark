@@ -102,7 +102,11 @@ class KryoSerializer(conf: SparkConf)
   }
 
   @transient
-  lazy val pool = new KryoPool.Builder(factory).softReferences.build
+  var pool: KryoPool = getPool
+
+  private def getPool: KryoPool = {
+    new KryoPool.Builder(factory).softReferences.build
+  }
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
@@ -224,6 +228,12 @@ class KryoSerializer(conf: SparkConf)
 
     kryo.setClassLoader(classLoader)
     kryo
+  }
+
+  override def setDefaultClassLoader(classLoader: ClassLoader): Serializer = {
+    defaultClassLoader = Some(classLoader)
+    pool = getPool
+    this
   }
 
   override def newInstance(): SerializerInstance = {
