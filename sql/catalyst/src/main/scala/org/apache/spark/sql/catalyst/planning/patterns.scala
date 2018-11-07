@@ -56,12 +56,12 @@ object PhysicalOperation extends PredicateHelper {
   private def collectProjectsAndFilters(plan: LogicalPlan):
       (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
     plan match {
-      case Project(fields, child) if fields.forall(_.deterministic) =>
+      case Project(fields, child) if fields.forall(_.idempotent) =>
         val (_, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
-      case Filter(condition, child) if condition.deterministic =>
+      case Filter(condition, child) if condition.idempotent =>
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)

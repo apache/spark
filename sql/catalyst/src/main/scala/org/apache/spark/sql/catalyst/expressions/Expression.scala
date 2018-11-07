@@ -84,6 +84,15 @@ abstract class Expression extends TreeNode[Expression] {
    */
   lazy val deterministic: Boolean = children.forall(_.deterministic)
 
+  /**
+   * Returns true iff the current expression can produce other results apart from its evaluation.
+   * This is the case for expressions which throw exceptions in certain conditions.
+   * By default leaf expressions return false since Nil.exists(_.hasSideEffect) returns false.
+   */
+  lazy val hasSideEffect: Boolean = children.exists(_.hasSideEffect)
+
+  final def idempotent: Boolean = deterministic && !hasSideEffect
+
   def nullable: Boolean
 
   def references: AttributeSet = AttributeSet.fromAttributeSets(children.map(_.references))

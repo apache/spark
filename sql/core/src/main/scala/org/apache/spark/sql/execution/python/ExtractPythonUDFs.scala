@@ -216,12 +216,12 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   // Split the original FilterExec to two FilterExecs. Only push down the first few predicates
-  // that are all deterministic.
+  // that are all idempotent.
   private def trySplitFilter(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case filter: Filter =>
         val (candidates, nonDeterministic) =
-          splitConjunctivePredicates(filter.condition).partition(_.deterministic)
+          splitConjunctivePredicates(filter.condition).partition(_.idempotent)
         val (pushDown, rest) = candidates.partition(!hasScalarPythonUDF(_))
         if (pushDown.nonEmpty) {
           val newChild = Filter(pushDown.reduceLeft(And), filter.child)

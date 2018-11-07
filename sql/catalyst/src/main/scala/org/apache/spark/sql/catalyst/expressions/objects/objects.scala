@@ -1632,7 +1632,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
   override def foldable: Boolean = false
   override def nullable: Boolean = false
 
-  override lazy val deterministic: Boolean = false
+  override lazy val hasSideEffect: Boolean = true
 
   override def flatArguments: Iterator[Any] = Iterator(child)
 

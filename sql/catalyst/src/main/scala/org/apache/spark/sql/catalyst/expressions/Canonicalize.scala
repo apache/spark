@@ -64,10 +64,10 @@ object Canonicalize {
     case m: Multiply => orderCommutative(m, { case Multiply(l, r) => Seq(l, r) }).reduce(Multiply)
 
     case o: Or =>
-      orderCommutative(o, { case Or(l, r) if l.deterministic && r.deterministic => Seq(l, r) })
+      orderCommutative(o, { case Or(l, r) if l.idempotent && r.idempotent => Seq(l, r) })
         .reduce(Or)
     case a: And =>
-      orderCommutative(a, { case And(l, r) if l.deterministic && r.deterministic => Seq(l, r)})
+      orderCommutative(a, { case And(l, r) if l.idempotent && r.idempotent => Seq(l, r)})
         .reduce(And)
 
     case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)

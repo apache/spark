@@ -107,10 +107,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         if (condition.isEmpty) {
           (None, None, None)
         } else {
-          // Span rather than partition, because nondeterministic expressions don't commute
+          // Span rather than partition, because non-idempotent expressions don't commute
           // across AND.
-          val (deterministicConjuncts, nonDeterministicConjuncts) =
-            splitConjunctivePredicates(condition.get).partition(_.deterministic)
+          val (deterministicConjuncts, nonIdempotentConjuncts) =
+            splitConjunctivePredicates(condition.get).partition(_.idempotent)
 
           val (leftConjuncts, nonLeftConjuncts) = deterministicConjuncts.partition { cond =>
             cond.references.subsetOf(left.outputSet)
@@ -123,7 +123,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           (
             leftConjuncts.reduceOption(And),
             rightConjuncts.reduceOption(And),
-            (nonLeftConjuncts.intersect(nonRightConjuncts) ++ nonDeterministicConjuncts)
+            (nonLeftConjuncts.intersect(nonRightConjuncts) ++ nonIdempotentConjuncts)
               .reduceOption(And)
           )
         }

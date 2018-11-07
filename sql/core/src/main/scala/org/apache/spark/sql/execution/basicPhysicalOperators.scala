@@ -58,10 +58,10 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val exprs = projectList.map(x => BindReferences.bindReference[Expression](x, child.output))
     val resultVars = exprs.map(_.genCode(ctx))
-    // Evaluation of non-deterministic expressions can't be deferred.
-    val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
+    // Evaluation of non-idempotent expressions can't be deferred.
+    val nonIdempotentAttrs = projectList.filterNot(_.idempotent).map(_.toAttribute)
     s"""
-       |${evaluateRequiredVariables(output, resultVars, AttributeSet(nonDeterministicAttrs))}
+       |${evaluateRequiredVariables(output, resultVars, AttributeSet(nonIdempotentAttrs))}
        |${consume(ctx, resultVars)}
      """.stripMargin
   }

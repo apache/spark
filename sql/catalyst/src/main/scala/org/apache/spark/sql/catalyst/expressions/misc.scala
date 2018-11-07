@@ -66,7 +66,7 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def nullable: Boolean = true
 
-  override lazy val deterministic: Boolean = false
+  override lazy val hasSideEffect: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
 

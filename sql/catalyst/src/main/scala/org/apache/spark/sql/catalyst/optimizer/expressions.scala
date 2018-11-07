@@ -184,7 +184,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
       // grouping expressions.
       val groupingExpressionSet = collectGroupingExpressions(q)
       q transformExpressionsDown {
-      case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
+      case a: Add if a.idempotent && a.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
           val foldableExpr = foldables.reduce((x, y) => Add(x, y))
@@ -193,7 +193,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
         } else {
           a
         }
-      case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
+      case m: Multiply if m.idempotent && m.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
           val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
@@ -418,7 +418,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
       case If(cond, trueValue, falseValue)
-        if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
+        if cond.idempotent && trueValue.semanticEquals(falseValue) => trueValue
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
@@ -448,11 +448,11 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
           if branches.forall(_._2.semanticEquals(elseValue)) =>
         // For non-deterministic conditions with side effect, we can not remove it, or change
         // the ordering. As a result, we try to remove the deterministic conditions from the tail.
-        var hitNonDeterministicCond = false
+        var hitNonIdempotentCond = false
         var i = branches.length
-        while (i > 0 && !hitNonDeterministicCond) {
-          hitNonDeterministicCond = !branches(i - 1)._1.deterministic
-          if (!hitNonDeterministicCond) {
+        while (i > 0 && !hitNonIdempotentCond) {
+          hitNonIdempotentCond = !branches(i - 1)._1.idempotent
+          if (!hitNonIdempotentCond) {
             i -= 1
           }
         }
