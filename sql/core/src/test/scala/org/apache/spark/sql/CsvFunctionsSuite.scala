@@ -19,7 +19,9 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -85,5 +87,34 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm").asJava
 
     checkAnswer(df.select(to_csv($"a", options)), Row("26/08/2015 18:00") :: Nil)
+  }
+
+  test("from_csv invalid csv - check modes") {
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      val schema = new StructType()
+        .add("a", IntegerType)
+        .add("b", IntegerType)
+        .add("_unparsed", StringType)
+      val badRec = "\""
+      val df = Seq(badRec, "2,12").toDS()
+
+      checkAnswer(
+        df.select(from_csv($"value", schema, Map("mode" -> "PERMISSIVE"))),
+        Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
+
+      val exception1 = intercept[SparkException] {
+        df.select(from_csv($"value", schema, Map("mode" -> "FAILFAST"))).collect()
+      }.getMessage
+      assert(exception1.contains(
+        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+
+      val exception2 = intercept[SparkException] {
+        df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED")))
+          .collect()
+      }.getMessage
+      assert(exception2.contains(
+        "from_csv() doesn't support the DROPMALFORMED mode. " +
+          "Acceptable modes are PERMISSIVE and FAILFAST."))
+    }
   }
 }
