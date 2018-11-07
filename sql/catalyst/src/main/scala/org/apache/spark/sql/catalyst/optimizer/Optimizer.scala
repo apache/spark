@@ -179,7 +179,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RemoveRedundantProject) :+
     Batch("UpdateAttributeReferences", Once,
       UpdateNullabilityInAttributeReferences) :+
-    Batch("Ohad", Once,
+    Batch("RepartitionBeforeGenerateAndWindow", Once,
       RepartitionBeforeGenerateAndWindow)
   }
 
