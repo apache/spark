@@ -26,7 +26,7 @@ object TestConstants {
   val CONFIG_KEY_KUBE_MASTER_URL = "spark.kubernetes.test.master"
   val CONFIG_KEY_KUBE_NAMESPACE = "spark.kubernetes.test.namespace"
   val CONFIG_KEY_KUBE_SVC_ACCOUNT = "spark.kubernetes.test.serviceAccountName"
-  val CONFIG_KEY_IMAGE_TAG = "spark.kubernetes.test.imageTagF"
+  val CONFIG_KEY_IMAGE_TAG = "spark.kubernetes.test.imageTag"
   val CONFIG_KEY_IMAGE_TAG_FILE = "spark.kubernetes.test.imageTagFile"
   val CONFIG_KEY_IMAGE_REPO = "spark.kubernetes.test.imageRepo"
   val CONFIG_KEY_UNPACK_DIR = "spark.kubernetes.test.unpackSparkDir"
