@@ -542,7 +542,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("""
             |select avg(b) from (
             | with maxearnings as (
-            |   select course, year, max(earnings) as earnings FROM courseSales GROUP BY course, year
+            |   select course, year, max(earnings) as earnings FROM courseSales 
+            |     GROUP BY course, year
             |   )
             | select course, sum(earnings) as b FROM maxearnings GROUP BY course
             | )""".stripMargin),
@@ -555,8 +556,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         "with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
     }
   }
-
-
 
   test("date row") {
     checkAnswer(sql(
