@@ -1692,7 +1692,7 @@ setMethod("degrees",
 #' @aliases toRadians toRadians,Column-method
 #' @note toRadians since 1.4.0
 setMethod("toRadians",
-signature(x = "Column"),
+          signature(x = "Column"),
           function(x) {
             .Deprecated("radians")
             jc <- callJStatic("org.apache.spark.sql.functions", "radians", x@jc)
