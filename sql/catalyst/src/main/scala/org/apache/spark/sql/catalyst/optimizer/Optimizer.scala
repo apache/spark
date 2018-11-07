@@ -178,7 +178,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       CollapseProject,
       RemoveRedundantProject) :+
     Batch("UpdateAttributeReferences", Once,
-      UpdateNullabilityInAttributeReferences)
+      UpdateNullabilityInAttributeReferences) :+
+    Batch("Ohad", Once,
+      RepartitionBeforeGenerateAndWindow)
   }
 
   /**
@@ -1658,6 +1660,19 @@ object UpdateNullabilityInAttributeReferences extends Rule[LogicalPlan] {
       p transformExpressions {
         case ar: AttributeReference if nullabilityMap.contains(ar) =>
           ar.withNullability(nullabilityMap(ar))
+      }
+  }
+}
+
+object RepartitionBeforeGenerateAndWindow extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case w @ Window(_, _, _, g: Generate) =>
+      val prts = ExpressionSet(w.partitionSpec) -- ExpressionSet(g.generatorOutput)
+      if (prts.nonEmpty) {
+        w.copy(child = g.copy(child = RepartitionByExpression(prts.toSeq,
+          g.child, SQLConf.get.numShufflePartitions)))
+      } else {
+        w
       }
   }
 }
