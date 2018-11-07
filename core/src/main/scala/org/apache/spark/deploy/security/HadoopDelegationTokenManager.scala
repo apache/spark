@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.security
 
 import java.io.File
+import java.net.URI
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
@@ -71,11 +72,13 @@ private[spark] class HadoopDelegationTokenManager(
   private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
 
   private val principal = sparkConf.get(PRINCIPAL).orNull
-  private val keytab = sparkConf.get(KEYTAB).orNull
+
+  // The keytab can be a local: URI for cluster mode, so translate it to a regular path. If it is
+  // needed later on, the code will check that it exists.
+  private val keytab = sparkConf.get(KEYTAB).map { uri => new URI(uri).getPath() }.orNull
 
   require((principal == null) == (keytab == null),
     "Both principal and keytab must be defined, or neither.")
-  require(keytab == null || new File(keytab).isFile(), s"Cannot find keytab at $keytab.")
 
   private val delegationTokenProviders = loadProviders()
   logDebug("Using the following builtin delegation token providers: " +
@@ -264,6 +267,7 @@ private[spark] class HadoopDelegationTokenManager(
 
   private def doLogin(): UserGroupInformation = {
     logInfo(s"Attempting to login to KDC using principal: $principal")
+    require(new File(keytab).isFile(), s"Cannot find keytab at $keytab.")
     val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
     logInfo("Successfully logged into KDC.")
     ugi

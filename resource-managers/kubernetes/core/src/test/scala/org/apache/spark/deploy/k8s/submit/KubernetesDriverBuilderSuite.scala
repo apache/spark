@@ -34,7 +34,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val SECRETS_STEP_TYPE = "mount-secrets"
   private val DRIVER_CMD_STEP_TYPE = "driver-command"
   private val ENV_SECRETS_STEP_TYPE = "env-secrets"
-  private val HADOOP_GLOBAL_STEP_TYPE = "hadoop-global"
+  private val HADOOP_CONF_STEP_TYPE = "hadoop-conf"
+  private val KERBEROS_CONF_STEP_TYPE = "kerberos-conf"
+  private val DELEGATION_TOKEN_CONF_STEP_TYPE = "delegation-tokens"
   private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
   private val TEMPLATE_VOLUME_STEP_TYPE = "template-volume"
 
@@ -59,8 +61,14 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
 
-  private val hadoopGlobalStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    HADOOP_GLOBAL_STEP_TYPE, classOf[KerberosConfDriverFeatureStep])
+  private val hadoopConfStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    HADOOP_CONF_STEP_TYPE, classOf[HadoopConfDriverFeatureStep])
+
+  private val kerberosStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    KERBEROS_CONF_STEP_TYPE, classOf[KerberosConfDriverFeatureStep])
+
+  private val delegationTokenStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    DELEGATION_TOKEN_CONF_STEP_TYPE, classOf[DelegationTokenFeatureStep])
 
   private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
@@ -68,6 +76,15 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val templateVolumeStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     TEMPLATE_VOLUME_STEP_TYPE, classOf[PodTemplateConfigMapStep]
   )
+
+  private val ALWAYS_ON_STEPS = Seq(BASIC_STEP_TYPE,
+    CREDENTIALS_STEP_TYPE,
+    SERVICE_STEP_TYPE,
+    LOCAL_DIRS_STEP_TYPE,
+    DRIVER_CMD_STEP_TYPE,
+    HADOOP_CONF_STEP_TYPE,
+    KERBEROS_CONF_STEP_TYPE,
+    DELEGATION_TOKEN_CONF_STEP_TYPE)
 
   private val builderUnderTest: KubernetesDriverBuilder =
     new KubernetesDriverBuilder(
@@ -79,7 +96,9 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => localDirsStep,
       _ => mountVolumesStep,
       _ => driverCommandStep,
-      _ => hadoopGlobalStep,
+      _ => hadoopConfStep,
+      _ => kerberosStep,
+      _ => delegationTokenStep,
       _ => templateVolumeStep)
 
   test("Apply fundamental steps all the time.") {
@@ -99,13 +118,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       hadoopConfSpec = None)
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE)
+    validateStepTypesApplied(builderUnderTest.buildFromFeatures(conf))
   }
 
   test("Apply secrets step if secrets are present.") {
@@ -127,13 +140,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
       SECRETS_STEP_TYPE,
-      ENV_SECRETS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE)
+      ENV_SECRETS_STEP_TYPE)
   }
 
   test("Apply volumes step if mounts are present.") {
@@ -160,12 +168,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       hadoopConfSpec = None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      MOUNT_VOLUMES_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE)
+      MOUNT_VOLUMES_STEP_TYPE)
   }
 
   test("Apply template volume step if executor template is present.") {
@@ -190,78 +193,14 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Option.empty)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE,
       TEMPLATE_VOLUME_STEP_TYPE)
-  }
-
-  test("Apply HadoopSteps if HADOOP_CONF_DIR is defined.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = Some(
-        HadoopConfSpec(
-          Some("/var/hadoop-conf"),
-          None)))
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE,
-      HADOOP_GLOBAL_STEP_TYPE)
-  }
-
-  test("Apply HadoopSteps if HADOOP_CONF ConfigMap is defined.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = Some(
-        HadoopConfSpec(
-          None,
-          Some("pre-defined-configMapName"))))
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE,
-      HADOOP_GLOBAL_STEP_TYPE)
   }
 
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)
   : Unit = {
-    assert(resolvedSpec.systemProperties.size === stepTypes.size)
-    stepTypes.foreach { stepType =>
+    val validSteps = (stepTypes ++ ALWAYS_ON_STEPS).toSet
+    assert(resolvedSpec.systemProperties.keys === validSteps)
+    validSteps.foreach { stepType =>
       assert(resolvedSpec.pod.pod.getMetadata.getLabels.get(stepType) === stepType)
       assert(resolvedSpec.driverKubernetesResources.containsSlice(
         KubernetesFeaturesTestUtils.getSecretsForStepType(stepType)))

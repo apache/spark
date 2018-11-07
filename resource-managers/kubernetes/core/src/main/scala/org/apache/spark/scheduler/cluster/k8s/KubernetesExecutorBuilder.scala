@@ -41,27 +41,13 @@ private[spark] class KubernetesExecutorBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-    provideHadoopConfStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
-      => HadoopConfExecutorFeatureStep) =
-      new HadoopConfExecutorFeatureStep(_),
-    provideKerberosConfStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
-      => KerberosConfExecutorFeatureStep) =
-      new KerberosConfExecutorFeatureStep(_),
-    provideHadoopSparkUserStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
-      => HadoopSparkUserExecutorFeatureStep) =
-      new HadoopSparkUserExecutorFeatureStep(_),
+    provideDelegationTokenStep: (KubernetesConf[_] => DelegationTokenFeatureStep) =
+      new DelegationTokenFeatureStep(_, false),
     provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
     val sparkConf = kubernetesConf.sparkConf
-    val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
-    val maybeDTSecretName = sparkConf.getOption(KERBEROS_DT_SECRET_NAME)
-    val maybeDTDataItem = sparkConf.getOption(KERBEROS_DT_SECRET_KEY)
-
     val baseFeatures = Seq(provideBasicStep(kubernetesConf), provideLocalDirsStep(kubernetesConf))
     val secretFeature = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
       Seq(provideSecretsStep(kubernetesConf))
@@ -73,23 +59,14 @@ private[spark] class KubernetesExecutorBuilder(
       Seq(provideVolumesStep(kubernetesConf))
     } else Nil
 
-    val maybeHadoopConfFeatureSteps = maybeHadoopConfigMap.map { _ =>
-      val maybeKerberosStep =
-        if (maybeDTSecretName.isDefined && maybeDTDataItem.isDefined) {
-          provideKerberosConfStep(kubernetesConf)
-        } else {
-          provideHadoopSparkUserStep(kubernetesConf)
-        }
-      Seq(provideHadoopConfStep(kubernetesConf)) :+
-        maybeKerberosStep
-    }.getOrElse(Seq.empty[KubernetesFeatureConfigStep])
+    val dtSecretStep = Seq(provideDelegationTokenStep(kubernetesConf))
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       baseFeatures ++
       secretFeature ++
       secretEnvFeature ++
       volumesFeature ++
-      maybeHadoopConfFeatureSteps
+      dtSecretStep
 
     var executorPod = provideInitialPod()
     for (feature <- allFeatures) {

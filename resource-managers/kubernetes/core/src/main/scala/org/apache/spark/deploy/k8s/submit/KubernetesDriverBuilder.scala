@@ -48,10 +48,12 @@ private[spark] class KubernetesDriverBuilder(
       KubernetesConf[KubernetesDriverSpecificConf]
       => DriverCommandFeatureStep) =
       new DriverCommandFeatureStep(_),
-    provideHadoopGlobalStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => KerberosConfDriverFeatureStep) =
-    new KerberosConfDriverFeatureStep(_),
+    provideHadoopConfStep: (KubernetesConf[_] => HadoopConfDriverFeatureStep) =
+      new HadoopConfDriverFeatureStep(_),
+    provideKerberosConfStep: (KubernetesConf[_] => KerberosConfDriverFeatureStep) =
+      new KerberosConfDriverFeatureStep(_),
+    provideDelegationTokenStep: (KubernetesConf[_] => DelegationTokenFeatureStep) =
+      new DelegationTokenFeatureStep(_, true),
     providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => PodTemplateConfigMapStep) =
     new PodTemplateConfigMapStep(_),
@@ -81,14 +83,15 @@ private[spark] class KubernetesDriverBuilder(
 
     val driverCommandStep = provideDriverCommandStep(kubernetesConf)
 
-    val maybeHadoopConfigStep =
-      kubernetesConf.hadoopConfSpec.map { _ =>
-        provideHadoopGlobalStep(kubernetesConf)}
+    val otherSteps = Seq(
+      provideHadoopConfStep(kubernetesConf),
+      provideKerberosConfStep(kubernetesConf),
+      provideDelegationTokenStep(kubernetesConf))
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       baseFeatures ++ Seq(driverCommandStep) ++
         secretFeature ++ envSecretFeature ++ volumesFeature ++
-        maybeHadoopConfigStep.toSeq ++ podTemplateFeature
+        otherSteps ++ podTemplateFeature
 
     var spec = KubernetesDriverSpec(
       provideInitialPod(),

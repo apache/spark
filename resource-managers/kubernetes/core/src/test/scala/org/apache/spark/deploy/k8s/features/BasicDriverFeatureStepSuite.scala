@@ -27,6 +27,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.util.Utils
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
@@ -95,15 +96,15 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val foundPortNames = configuredPod.container.getPorts.asScala.toSet
     assert(expectedPortNames === foundPortNames)
 
-    assert(configuredPod.container.getEnv.size === 3)
     val envs = configuredPod.container
       .getEnv
       .asScala
       .map(env => (env.getName, env.getValue))
       .toMap
-    assert(envs(DRIVER_CUSTOM_ENV1) === DRIVER_ENVS(DRIVER_CUSTOM_ENV1))
-    assert(envs(DRIVER_CUSTOM_ENV2) === DRIVER_ENVS(DRIVER_CUSTOM_ENV2))
-
+    DRIVER_ENVS.foreach { case (k, v) =>
+      assert(envs(v) === v)
+    }
+    assert(envs(ENV_SPARK_USER) === Utils.getCurrentUserName())
     assert(configuredPod.pod.getSpec().getImagePullSecrets.asScala ===
       TEST_IMAGE_PULL_SECRET_OBJECTS)
 

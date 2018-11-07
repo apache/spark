@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model._
+import org.apache.hadoop.security.UserGroupInformation
 import org.mockito.MockitoAnnotations
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 
@@ -28,6 +29,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.util.Utils
 
 class BasicExecutorFeatureStepSuite
   extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterEach {
@@ -201,12 +203,15 @@ class BasicExecutorFeatureStepSuite
       ENV_EXECUTOR_MEMORY -> "1g",
       ENV_APPLICATION_ID -> APP_ID,
       ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
-      ENV_EXECUTOR_POD_IP -> null) ++ additionalEnvVars
+      ENV_EXECUTOR_POD_IP -> null,
+      ENV_SPARK_USER -> Utils.getCurrentUserName())
 
-    assert(executorPod.container.getEnv.size() === defaultEnvs.size)
+    val allEnvs = defaultEnvs ++ additionalEnvVars
+
+    assert(executorPod.container.getEnv.size() === allEnvs.size)
     val mapEnvs = executorPod.container.getEnv.asScala.map {
       x => (x.getName, x.getValue)
     }.toMap
-    assert(defaultEnvs === mapEnvs)
+    assert(allEnvs === mapEnvs)
   }
 }

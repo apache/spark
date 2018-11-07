@@ -100,6 +100,9 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_MAX_TO_STRING_FIELDS = 25
 
+  /** Scheme used for files that are locally available on worker nodes in the cluster. */
+  val LOCAL_SCHEME = "local"
+
   private[spark] def maxNumToStringFields = {
     if (SparkEnv.get != null) {
       SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
@@ -2863,6 +2866,11 @@ private[spark] object Utils extends Logging {
    */
   def stringHalfWidth(str: String): Int = {
     if (str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
+  }
+
+  /** Returns whether the URI is a "local:" URI. */
+  def isLocalUri(uri: String): Boolean = {
+    uri.startsWith(s"$LOCAL_SCHEME:")
   }
 }
 
