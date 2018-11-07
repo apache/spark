@@ -41,7 +41,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.AMCredentialRenewer
+import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
@@ -99,20 +99,18 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     }
   }
 
-  private val credentialRenewer: Option[AMCredentialRenewer] = sparkConf.get(KEYTAB).map { _ =>
-    new AMCredentialRenewer(sparkConf, yarnConf)
+  private val tokenManager: Option[YARNHadoopDelegationTokenManager] = {
+    sparkConf.get(KEYTAB).map { _ =>
+      new YARNHadoopDelegationTokenManager(sparkConf, yarnConf)
+    }
   }
 
-  private val ugi = credentialRenewer match {
-    case Some(cr) =>
+  private val ugi = tokenManager match {
+    case Some(tm) =>
       // Set the context class loader so that the token renewer has access to jars distributed
       // by the user.
-      val currentLoader = Thread.currentThread().getContextClassLoader()
-      Thread.currentThread().setContextClassLoader(userClassLoader)
-      try {
-        cr.start()
-      } finally {
-        Thread.currentThread().setContextClassLoader(currentLoader)
+      Utils.withContextClassLoader(userClassLoader) {
+        tm.start()
       }
 
     case _ =>
@@ -380,7 +378,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
           userClassThread.interrupt()
         }
         if (!inShutdown) {
-          credentialRenewer.foreach(_.stop())
+          tokenManager.foreach(_.stop())
         }
       }
     }
@@ -440,7 +438,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       securityMgr,
       localResources)
 
-    credentialRenewer.foreach(_.setDriverRef(driverRef))
+    tokenManager.foreach(_.setDriverRef(driverRef))
 
     // Initialize the AM endpoint *after* the allocator has been initialized. This ensures
     // that when the driver sends an initial executor request (e.g. after an AM restart),

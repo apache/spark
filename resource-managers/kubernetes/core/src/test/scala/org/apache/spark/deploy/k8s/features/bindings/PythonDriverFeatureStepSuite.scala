@@ -54,7 +54,8 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
       roleSecretEnvNamesToKeyRefs = Map.empty,
       roleEnvs = Map.empty,
       roleVolumes = Nil,
-      sparkFiles = Seq.empty[String])
+      sparkFiles = Seq.empty[String],
+      hadoopConfSpec = None)
 
     val step = new PythonDriverFeatureStep(kubernetesConf)
     val driverPod = step.configurePod(baseDriverPod).pod
@@ -92,7 +93,8 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
       roleSecretEnvNamesToKeyRefs = Map.empty,
       roleEnvs = Map.empty,
       roleVolumes = Nil,
-      sparkFiles = Seq.empty[String])
+      sparkFiles = Seq.empty[String],
+      hadoopConfSpec = None)
     val step = new PythonDriverFeatureStep(kubernetesConf)
     val driverContainerwithPySpark = step.configurePod(baseDriverPod).container
     val args = driverContainerwithPySpark

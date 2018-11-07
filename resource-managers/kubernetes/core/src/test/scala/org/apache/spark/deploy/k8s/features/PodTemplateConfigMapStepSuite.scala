@@ -42,14 +42,14 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
         Seq.empty),
       "resource",
       "app-id",
-      None,
       Map.empty,
       Map.empty,
       Map.empty,
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String])
+      Seq.empty[String],
+      Option.empty)
     templateFile = Files.createTempFile("pod-template", "yml").toFile
     templateFile.deleteOnExit()
     Mockito.doReturn(Option(templateFile.getAbsolutePath)).when(sparkConf)
@@ -75,7 +75,7 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
 
     assert(configuredPod.container.getVolumeMounts.size() === 1)
     val volumeMount = configuredPod.container.getVolumeMounts.get(0)
-    assert(volumeMount.getMountPath === Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH)
+    assert(volumeMount.getMountPath === Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH)
     assert(volumeMount.getName === Constants.POD_TEMPLATE_VOLUME)
 
     val resources = step.getAdditionalKubernetesResources()
@@ -91,7 +91,7 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(systemProperties.size === 1)
     assert(systemProperties.contains(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key))
     assert(systemProperties.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key).get ===
-      (Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH + "/" +
+      (Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH + "/" +
         Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
   }
 }

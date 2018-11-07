@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  */
 object UDTSerializationBenchmark extends BenchmarkBase {
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
 
     runBenchmark("VectorUDT de/serialization") {
       val iters = 1e2.toInt
