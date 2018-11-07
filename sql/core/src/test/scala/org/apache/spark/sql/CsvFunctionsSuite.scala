@@ -121,19 +121,17 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("use locale while parsing timestamps") {
+  test("parse timestamps with locale") {
     Seq("en-US", "ko-KR", "zh-CN", "ru-RU").foreach { langTag =>
       val locale = Locale.forLanguageTag(langTag)
       val ts = new SimpleDateFormat("dd/MM/yyyy HH:mm").parse("06/11/2018 18:00")
       val timestampFormat = "dd MMM yyyy HH:mm"
       val sdf = new SimpleDateFormat(timestampFormat, locale)
       val input = Seq(s"""${sdf.format(ts)}""").toDS()
-      val schema = new StructType().add("time", TimestampType)
       val options = Map("timestampFormat" -> timestampFormat, "locale" -> langTag)
-      val df = input.select(from_csv($"value", schema, options))
+      val df = input.select(from_csv($"value", lit("time timestamp"), options.asJava))
 
-      checkAnswer(df,
-        Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
+      checkAnswer(df, Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
     }
   }
 }

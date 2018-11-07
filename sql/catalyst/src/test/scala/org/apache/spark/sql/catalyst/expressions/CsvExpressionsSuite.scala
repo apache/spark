@@ -211,7 +211,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     )
   }
 
-  test("take into account locale while parsing date") {
+  test("parse date with locale") {
     Seq("en-US", "ru-RU").foreach { langTag =>
       val locale = Locale.forLanguageTag(langTag)
       val date = new SimpleDateFormat("yyyy-MM-dd").parse("2018-11-05")
