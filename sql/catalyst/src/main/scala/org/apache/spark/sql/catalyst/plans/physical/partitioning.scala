@@ -223,13 +223,20 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
       required match {
         case h: HashClusteredDistribution =>
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
-            case (l, r) => l.semanticEquals(r)
+            case (l, r) => l.sameResult(r)
           }
         case ClusteredDistribution(requiredClustering, _) =>
-          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          expressions.forall(x => requiredClustering.exists(_.sameResult(x)))
         case _ => false
       }
     }
+  }
+
+  override def sameResult(other: Expression): Boolean = other match {
+    case HashPartitioning(exprs, _) => expressions.zip(exprs).forall {
+        case (l, r) => l.sameResult(r)
+      }
+    case _ => false
   }
 
   /**
@@ -265,7 +272,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
         case ClusteredDistribution(requiredClustering, _) =>
-          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          ordering.map(_.child).forall(x => requiredClustering.exists(_.sameResult(x)))
         case _ => false
       }
     }

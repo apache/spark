@@ -86,7 +86,7 @@ case class SortOrder(
   def isAscending: Boolean = direction == Ascending
 
   def satisfies(required: SortOrder): Boolean = {
-    (sameOrderExpressions + child).exists(required.child.semanticEquals) &&
+    (sameOrderExpressions + child).exists(required.child.sameResult) &&
       direction == required.direction && nullOrdering == required.nullOrdering
   }
 }

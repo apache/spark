@@ -195,13 +195,25 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
-   * Returns true when two expressions will always compute the same result, even if they differ
+   * Returns true when two expressions will always compute the same output, even if they differ
    * cosmetically (i.e. capitalization of names in attributes may be different).
    *
    * See [[Canonicalize]] for more details.
    */
   def semanticEquals(other: Expression): Boolean =
     deterministic && other.deterministic && canonicalized == other.canonicalized
+
+  /**
+   * Returns true when two expressions will always compute the same result, even if the output may
+   * be different, because of different names or similar differences.
+   * Usually this means they their canonicalized form equals, but it may also not be the case, as
+   * different output expressions can evaluate to the same result as well (eg. when an expression
+   * is aliased).
+   */
+  def sameResult(other: Expression): Boolean = other match {
+    case a: Alias => sameResult(a.child)
+    case _ => this.semanticEquals(other)
+  }
 
   /**
    * Returns a `hashCode` for the calculation performed by this expression. Unlike the standard
