@@ -97,7 +97,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    * @throws UnsupportedOperationException if this buffer's size exceeds the maximum array size.
    */
   def toArray: Array[Byte] = {
-    if (size >= Integer.MAX_VALUE) {
+    if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       throw new UnsupportedOperationException(
         s"cannot call toArray because buffer size ($size bytes) exceeds maximum array size")
     }
