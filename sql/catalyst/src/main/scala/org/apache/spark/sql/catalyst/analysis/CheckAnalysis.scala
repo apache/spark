@@ -368,11 +368,11 @@ trait CheckAnalysis extends PredicateHelper {
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
-            !o.isInstanceOf[DeserializeToObject] && !o.isInstanceOf[SerializeFromObject] =>
+            !o.isInstanceOf[DeserializeToObject] =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
-              s"""nondeterministic expressions are only allowed in Project, Filter,
-                 | Aggregate, Window, SerializeFromObject or DeserializeToObject, found:
+              s"""nondeterministic expressions are only allowed in
+                 |Project, Filter, Aggregate, Window or DeserializeToObject, found:
                  | ${o.expressions.map(_.sql).mkString(",")}
                  |in operator ${operator.simpleString}
                """.stripMargin)
