@@ -1557,12 +1557,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(Row("Amsterdam")))
   }
 
-  test("SPARK-25942: typed aggregation on primitive data") {
+  test("SPARK-25942: typed aggregation on primitive type") {
     val ds = Seq(1, 2, 3).toDS()
 
     val agg = ds.groupByKey(_ >= 2)
       .agg(sum("value").as[Long], sum($"value" + 1).as[Long])
     assert(agg.collect() === Seq((false, 1, 2), (true, 5, 7)))
+  }
+
+  test("SPARK-25942: typed aggregation on product type") {
+    val ds = Seq((1, 2), (2, 3), (3, 4)).toDS()
+    val agg = ds.groupByKey(x => x).agg(sum("_1").as[Long], sum($"_2" + 1).as[Long])
+    assert(agg.collect().sorted === Seq(((1, 2), 1, 3), ((2, 3), 2, 4), ((3, 4), 3, 5)))
   }
 }
 
