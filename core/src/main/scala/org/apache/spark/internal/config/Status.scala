@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.status
+package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.internal.config._
-
-private[spark] object config {
+private[spark] object Status {
 
   val ASYNC_TRACKING_ENABLED = ConfigBuilder("spark.appStateStore.asyncTracking.enable")
     .booleanConf
@@ -51,4 +49,10 @@ private[spark] object config {
     .intConf
     .createWithDefault(Int.MaxValue)
 
+  val APP_STATUS_METRICS_ENABLED =
+    ConfigBuilder("spark.app.status.metrics.enabled")
+      .doc("Whether Dropwizard/Codahale metrics " +
+        "will be reported for the status of the running spark app.")
+      .booleanConf
+      .createWithDefault(false)
 }
