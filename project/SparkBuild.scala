@@ -374,6 +374,8 @@ object SparkBuild extends PomBuild {
   // SPARK-14738 - Remove docker tests from main Spark build
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
+  enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
+
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
    * jar.
@@ -455,6 +457,65 @@ object DockerIntegrationTests {
     dependencyOverrides += "com.google.guava" % "guava" % "18.0",
     resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/",
     libraryDependencies += "com.oracle" % "ojdbc6" % "11.2.0.1.0" from "https://app.camunda.com/nexus/content/repositories/public/com/oracle/ojdbc6/11.2.0.1.0/ojdbc6-11.2.0.1.0.jar" // scalastyle:ignore
+  )
+}
+
+/**
+ * These settings run a hardcoded configuration of the Kubernetes integration tests using
+ * minikube. Docker images will have the "dev" tag, and will be overwritten every time the
+ * integration tests are run. The integration tests are actually bound to the "test" phase,
+ * so running "test" on this module will run the integration tests.
+ *
+ * There are two ways to run the tests:
+ * - the "tests" task builds docker images and runs the test, so it's a little slow.
+ * - the "run-its" task just runs the tests on a pre-built set of images.
+ *
+ * Note that this does not use the shell scripts that the maven build uses, which are more
+ * configurable. This is meant as a quick way for developers to run these tests against their
+ * local changes.
+ */
+object KubernetesIntegrationTests {
+  import BuildCommons._
+
+  val dockerBuild = TaskKey[Unit]("docker-imgs", "Build the docker images for ITs.")
+  val runITs = TaskKey[Unit]("run-its", "Only run ITs, skip image build.")
+  val imageTag = settingKey[String]("Tag to use for images built during the test.")
+  val namespace = settingKey[String]("Namespace where to run pods.")
+
+  // Hack: this variable is used to control whether to build docker images. It's updated by
+  // the tasks below in a non-obvious way, so that you get the functionality described in
+  // the scaladoc above.
+  private var shouldBuildImage = true
+
+  lazy val settings = Seq(
+    imageTag := "dev",
+    namespace := "default",
+    dockerBuild := {
+      if (shouldBuildImage) {
+        val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
+        val cmd = Seq(dockerTool, "-m", "-t", imageTag.value, "build")
+        val ec = Process(cmd).!
+        if (ec != 0) {
+          throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
+        }
+      }
+      shouldBuildImage = true
+    },
+    runITs := Def.taskDyn {
+      shouldBuildImage = false
+      Def.task {
+        (test in Test).value
+      }
+    }.value,
+    test in Test := (test in Test).dependsOn(dockerBuild).value,
+    javaOptions in Test ++= Seq(
+      "-Dspark.kubernetes.test.deployMode=minikube",
+      s"-Dspark.kubernetes.test.imageTag=${imageTag.value}",
+      s"-Dspark.kubernetes.test.namespace=${namespace.value}",
+      s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"
+    ),
+    // Force packaging before building images, so that the latest code is tested.
+    dockerBuild := dockerBuild.dependsOn(packageBin in Compile in assembly).value
   )
 }
 
