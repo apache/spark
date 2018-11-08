@@ -56,14 +56,4 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
   private[spark] def decRecordsWritten(v: Long): Unit = {
     _recordsWritten.setValue(recordsWritten - v)
   }
-
-  // Legacy methods for backward compatibility.
-  // TODO: remove these once we make this class private.
-  @deprecated("use bytesWritten instead", "2.0.0")
-  def shuffleBytesWritten: Long = bytesWritten
-  @deprecated("use writeTime instead", "2.0.0")
-  def shuffleWriteTime: Long = writeTime
-  @deprecated("use recordsWritten instead", "2.0.0")
-  def shuffleRecordsWritten: Long = recordsWritten
-
 }

@@ -135,31 +135,6 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   def fMeasure(label: Double): Double = fMeasure(label, 1.0)
 
   /**
-   * Returns precision
-   */
-  @Since("1.1.0")
-  @deprecated("Use accuracy.", "2.0.0")
-  lazy val precision: Double = accuracy
-
-  /**
-   * Returns recall
-   * (equals to precision for multiclass classifier
-   * because sum of all false positives is equal to sum
-   * of all false negatives)
-   */
-  @Since("1.1.0")
-  @deprecated("Use accuracy.", "2.0.0")
-  lazy val recall: Double = accuracy
-
-  /**
-   * Returns f-measure
-   * (equals to precision and recall because precision equals recall)
-   */
-  @Since("1.1.0")
-  @deprecated("Use accuracy.", "2.0.0")
-  lazy val fMeasure: Double = accuracy
-
-  /**
    * Returns accuracy
    * (equals to the total number of correctly classified instances
    * out of the total number of instances.)
