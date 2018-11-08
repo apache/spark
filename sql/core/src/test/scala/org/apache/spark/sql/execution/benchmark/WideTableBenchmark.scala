@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -43,7 +42,7 @@ object WideTableBenchmark extends SqlBasedBenchmark {
       Seq("10", "100", "1024", "2048", "4096", "8192", "65536").foreach { n =>
         benchmark.addCase(s"split threshold $n", numIters = 5) { iter =>
           withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> n) {
-            df.selectExpr(columns: _*).foreach((x => x): Row => Unit)
+            df.selectExpr(columns: _*).foreach(_ => ())
           }
         }
       }
