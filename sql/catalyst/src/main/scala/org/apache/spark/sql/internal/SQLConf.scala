@@ -1286,7 +1286,7 @@ object SQLConf {
       .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
         "for use with pyspark.sql.DataFrame.toPandas, " +
         "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame," +
-        "and createDataFrame when its input is a R DataFrame. " +
+        "and createDataFrame when its input is an R DataFrame. " +
         "The following data types are unsupported: " +
         "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
       .booleanConf

@@ -159,7 +159,7 @@ writeToTempFileInArrow <- function(rdf, numPartitions) {
         1
       }
       fileName <- tempfile(pattern = "spark-arrow", fileext = ".tmp")
-      chunk <- as.integer(nrow(rdf) / numPartitions)
+      chunk <- as.integer(ceiling(nrow(rdf) / numPartitions))
       rdf_slices <- split(rdf, rep(1:ceiling(nrow(rdf) / chunk), each = chunk)[1:nrow(rdf)])
       stream_writer <- NULL
       for (rdf_slice in rdf_slices) {
@@ -232,6 +232,22 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
       if (arrowEnabled) {
         shouldUseArrow <- tryCatch({
           stopifnot(length(data) > 0)
+          dataHead <- head(data, 1)
+          # Currenty Arrow optimization does not support POSIXct and raw for now.
+          # Also, it does not support explicit float type set by users. It leads to
+          # incorrect conversion. We will fall back to the path without Arrow optimization.
+          if (any(sapply(dataHead, function(x) is(x, "POSIXct")))) {
+            stop("Arrow optimization with R DataFrame does not support POSIXct type yet.")
+          }
+          if (any(sapply(dataHead, is.raw))) {
+            stop("Arrow optimization with R DataFrame does not support raw type yet.")
+          }
+          if (inherits(schema, "structType")) {
+            if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
+              stop("Arrow optimization with R DataFrame does not support FloatType type yet.")
+            }
+          }
+          firstRow <- do.call(mapply, append(args, dataHead))[[1]]
           fileName <- writeToTempFileInArrow(data, numPartitions)
           tryCatch(
             jrddInArrow <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
@@ -241,11 +257,10 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
           finally = {
             file.remove(fileName)
           })
-          firstRow <- do.call(mapply, append(args, head(data, 1)))[[1]]
           TRUE
         },
         error = function(e) {
-          message(paste0("createDataFrame attempted Arrow optimization because ",
+          message(paste0("WARN: createDataFrame attempted Arrow optimization because ",
                          "'spark.sql.execution.arrow.enabled' is set to true; however, ",
                          "failed, attempting non-optimization. Reason: ",
                          e))
