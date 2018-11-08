@@ -22,6 +22,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class WindowData(month: Int, area: String, product: Int)
+case class EmpSalary(empno: Int, depname: String, salary: Double)
 
 
 /**
@@ -30,6 +31,19 @@ case class WindowData(month: Int, area: String, product: Int)
 class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
 
   import testImplicits._
+
+  val empSalaryData = Seq(
+    EmpSalary(11, "develop", 5200D),
+    EmpSalary(7, "develop", 4200D),
+    EmpSalary(9, "develop", 4500D),
+    EmpSalary(8, "develop", 6000D),
+    EmpSalary(10, "develop", 5200D),
+    EmpSalary(5, "personnel", 3500D),
+    EmpSalary(2, "personnel", 3900D),
+    EmpSalary(3, "sales", 4800D),
+    EmpSalary(1, "sales", 5000D),
+    EmpSalary(4, "sales", 4800D)
+  )
 
   test("window function: udaf with aggregate expression") {
     val data = Seq(
@@ -171,6 +185,30 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
         (5, "c", 9, 9),
         (6, "c", 10, 10)
       ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("window function: allow parentheses around window reference") {
+    sparkContext.parallelize(empSalaryData).toDF().createOrReplaceTempView("empsalary")
+
+    checkAnswer(
+      sql(
+        """
+          |SELECT sum(salary) OVER (w), avg(salary) OVER w
+          |FROM empsalary
+          |WINDOW w AS (PARTITION BY depname ORDER BY salary DESC)
+        """.stripMargin),
+      Seq(
+        (6000, 6000),
+        (16400, 5466.6666666666666667D),
+        (16400, 5466.6666666666666667),
+        (20900, 5225),
+        (25100, 5020),
+        (3900, 3900),
+        (7400, 3700),
+        (5000, 5000),
+        (14600, 4866.6666666666666667),
+        (14600, 4866.6666666666666667)
+      ).map(i => Row(i._1, i._2)))
   }
 
   test("window function: distinct should not be silently ignored") {
