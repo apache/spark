@@ -148,23 +148,29 @@ getDefaultSqlSource <- function() {
 }
 
 writeToTempFileInArrow <- function(rdf, numPartitions) {
-  stopifnot(require("arrow", quietly = TRUE))
-  stopifnot(require("withr", quietly = TRUE))
+  if (!require("arrow", quietly = TRUE)) {
+    stop("'arrow' package should be installed.")
+  }
+  if (!require("withr", quietly = TRUE)) {
+    stop("'withr' package should be installed.")
+  }
+
   numPartitions <- if (!is.null(numPartitions)) {
     numToInt(numPartitions)
   } else {
     1
   }
-  fileName <- tempfile()
+  fileName <- tempfile(pattern = "spark-arrow", fileext = ".tmp")
   chunk <- as.integer(nrow(rdf) / numPartitions)
   rdf_slices <- split(rdf, rep(1:ceiling(nrow(rdf) / chunk), each = chunk)[1:nrow(rdf)])
   stream_writer <- NULL
   for (rdf_slice in rdf_slices) {
     batch <- arrow::record_batch(rdf_slice)
     if (is.null(stream_writer)) {
-      stream <- arrow:::close_on_exit(arrow::file_output_stream(fileName))
+      # We should avoid internal calls 'close_on_exit' but looks there's no exposed API for it.
+      stream <- arrow:::close_on_exit(arrow::file_output_stream(fileName)) # nolint
       schema <- batch$schema()
-      stream_writer <- arrow:::close_on_exit(arrow::record_batch_stream_writer(stream, schema))
+      stream_writer <- arrow:::close_on_exit(arrow::record_batch_stream_writer(stream, schema)) # nolint
     }
     arrow::write_record_batch(batch, stream_writer)
   }
@@ -196,9 +202,8 @@ writeToTempFileInArrow <- function(rdf, numPartitions) {
 createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                             numPartitions = NULL) {
   sparkSession <- getSparkSession()
-  conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- tolower(callJMethod(conf, "get", "spark.sql.execution.arrow.enabled")) == "true"
-  shouldUseArrow <- is.data.frame(data) && arrowEnabled
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+  shouldUseArrow <- FALSE
   firstRow <- NULL
   if (is.data.frame(data)) {
       # get the names of columns, they will be put into RDD
@@ -206,7 +211,6 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
         schema <- names(data)
       }
 
-      # Convert data into a list of rows. Each row is a list.
       # get rid of factor type
       cleanCols <- function(x) {
         if (is.factor(x)) {
@@ -219,18 +223,31 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
 
       args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
       if (arrowEnabled) {
-        stopifnot(length(data) > 0)
-        fileName <- writeToTempFileInArrow(data, numPartitions)
-        tryCatch(
-          jrddInArrow <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-                                     "readArrowStreamFromFile",
-                                     sparkSession,
-                                     fileName),
+        shouldUseArrow <- tryCatch({
+          stopifnot(length(data) > 0)
+          fileName <- writeToTempFileInArrow(data, numPartitions)
+          tryCatch(
+            jrddInArrow <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                                       "readArrowStreamFromFile",
+                                       sparkSession,
+                                       fileName),
           finally = {
             file.remove(fileName)
+          })
+          firstRow <- do.call(mapply, append(args, head(data, 1)))[[1]]
+          TRUE
+        },
+        error = function(e) {
+          message(paste0("createDataFrame attempted Arrow optimization because ",
+                         "'spark.sql.execution.arrow.enabled' is set to true; however, ",
+                         "failed, attempting non-optimization. Reason: ",
+                         e))
+          return(FALSE)
         })
-        firstRow <- do.call(mapply, append(args, head(data, 1)))[[1]]
-      } else {
+      }
+
+      if (!shouldUseArrow) {
+        # Convert data into a list of rows. Each row is a list.
         # drop factors and wrap lists
         data <- setNames(as.list(data), NULL)
 

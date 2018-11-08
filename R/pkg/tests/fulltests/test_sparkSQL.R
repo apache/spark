@@ -311,8 +311,8 @@ test_that("createDataFrame Arrow optimization", {
   skip_if_not_installed("arrow")
   skip_if_not_installed("withr")
   expected <- collect(createDataFrame(mtcars))
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
   conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- callJMethod(conf, "get", "spark.sql.execution.arrow.enabled")
   callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
   tryCatch({
     expect_equal(collect(createDataFrame(mtcars)), expected)
