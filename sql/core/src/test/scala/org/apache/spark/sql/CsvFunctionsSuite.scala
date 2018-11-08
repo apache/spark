@@ -117,4 +117,51 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
           "Acceptable modes are PERMISSIVE and FAILFAST."))
     }
   }
+
+  test("from_csv uses DDL strings for defining a schema - java") {
+    val df = Seq("""1,"haa"""").toDS()
+    checkAnswer(
+      df.select(
+        from_csv($"value", lit("a INT, b STRING"), new java.util.HashMap[String, String]())),
+      Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("roundtrip to_csv -> from_csv") {
+    val df = Seq(Tuple1(Tuple1(1)), Tuple1(null)).toDF("struct")
+    val schema = df.schema(0).dataType.asInstanceOf[StructType]
+    val options = Map.empty[String, String]
+    val readback = df.select(to_csv($"struct").as("csv"))
+      .select(from_csv($"csv", schema, options).as("struct"))
+
+    checkAnswer(df, readback)
+  }
+
+  test("roundtrip from_csv -> to_csv") {
+    val df = Seq(Some("1"), None).toDF("csv")
+    val schema = new StructType().add("a", IntegerType)
+    val options = Map.empty[String, String]
+    val readback = df.select(from_csv($"csv", schema, options).as("struct"))
+      .select(to_csv($"struct").as("csv"))
+
+    checkAnswer(df, readback)
+  }
+
+  test("infers schemas of a CSV string and pass to to from_csv") {
+    val in = Seq("""0.123456789,987654321,"San Francisco"""").toDS()
+    val options = Map.empty[String, String].asJava
+    val out = in.select(from_csv('value, schema_of_csv("0.1,1,a"), options) as "parsed")
+    val expected = StructType(Seq(StructField(
+      "parsed",
+      StructType(Seq(
+        StructField("_c0", DoubleType, true),
+        StructField("_c1", IntegerType, true),
+        StructField("_c2", StringType, true))))))
+
+    assert(out.schema == expected)
+  }
+
+  test("Support to_csv in SQL") {
+    val df1 = Seq(Tuple1(Tuple1(1))).toDF("a")
+    checkAnswer(df1.selectExpr("to_csv(a)"), Row("1") :: Nil)
+  }
 }
