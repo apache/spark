@@ -129,7 +129,7 @@ object PartitioningUtils {
       //   "hdfs://host:9000/invalidPath"
       //   "hdfs://host:9000/path"
       // TODO: Selective case sensitivity.
-      val discoveredBasePaths = optDiscoveredBasePaths.flatten.map(_.toString.toLowerCase())
+      val discoveredBasePaths = optDiscoveredBasePaths.flatten.map(_.toString.toLowerCase(Locale.ROOT))
       assert(
         discoveredBasePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
@@ -324,7 +324,7 @@ object PartitioningUtils {
     } else {
       // TODO: Selective case sensitivity.
       val distinctPartColNames =
-        pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase())).distinct
+        pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase((Locale.ROOT)))).distinct
       assert(
         distinctPartColNames.size == 1,
         listConflictingPartitionColumns(pathsWithPartitionValues))

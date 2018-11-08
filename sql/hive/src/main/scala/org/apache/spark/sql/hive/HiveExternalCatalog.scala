@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
@@ -871,7 +870,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // columns. Here we Lowercase the column names before passing the partition spec to Hive
       // client, to satisfy Hive.
       // scalastyle:off caselocale
-      orderedPartitionSpec.put(colName.toLowerCase, partition(colName))
+      orderedPartitionSpec.put(colName.toLowerCase(Locale.ROOT), partition(colName))
       // scalastyle:on caselocale
     }
 
@@ -901,7 +900,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // columns. Here we Lowercase the column names before passing the partition spec to Hive
       // client, to satisfy Hive.
       // scalastyle:off caselocale
-      orderedPartitionSpec.put(colName.toLowerCase, partition(colName))
+      orderedPartitionSpec.put(colName.toLowerCase(Locale.ROOT), partition(colName))
       // scalastyle:on caselocale
     }
 
@@ -923,7 +922,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // APIs, to match this behaviour.
   private def lowerCasePartitionSpec(spec: TablePartitionSpec): TablePartitionSpec = {
     // scalastyle:off caselocale
-    spec.map { case (k, v) => k.toLowerCase -> v }
+    spec.map { case (k, v) => k.toLowerCase(Locale.ROOT) -> v }
     // scalastyle:on caselocale
   }
 
@@ -931,7 +930,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   private def buildLowerCasePartColNameMap(table: CatalogTable): Map[String, String] = {
     val actualPartColNames = table.partitionColumnNames
     // scalastyle:off caselocale
-    actualPartColNames.map(colName => (colName.toLowerCase, colName)).toMap
+    actualPartColNames.map(colName => (colName.toLowerCase(Locale.ROOT), colName)).toMap
     // scalastyle:on caselocale
   }
 
@@ -942,7 +941,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       spec: TablePartitionSpec,
       partColMap: Map[String, String]): TablePartitionSpec = {
     // scalastyle:off caselocale
-    spec.map { case (k, v) => partColMap(k.toLowerCase) -> v }
+    spec.map { case (k, v) => partColMap(k.toLowerCase(Locale.ROOT)) -> v }
     // scalastyle:on caselocale
   }
 
@@ -1003,7 +1002,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // a default path generate by the new spec with lower cased partition column names. This is
     // unexpected and we need to rename them manually and alter the partition location.
     // scalastyle:off caselocale
-    val hasUpperCasePartitionColumn = partitionColumnNames.exists(col => col.toLowerCase != col)
+    val hasUpperCasePartitionColumn = partitionColumnNames
+      .exists(col => col.toLowerCase(Locale.ROOT) != col)
     // scalastyle:on caselocale
     if (tableMeta.tableType == MANAGED && hasUpperCasePartitionColumn) {
       val tablePath = new Path(tableMeta.location)
@@ -1046,7 +1046,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // just move `a=1/b=3` into `A=1` with new name `B=3`.
       } else {
         // scalastyle:off caselocale
-        val actualPartitionString = getPartitionPathString(col.toLowerCase, partValue)
+        val actualPartitionString = getPartitionPathString(col.toLowerCase(Locale.ROOT), partValue)
         // scalastyle:on caselocale
         val actualPartitionPath = new Path(currentFullPath, actualPartitionString)
         try {
@@ -1199,7 +1199,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partitionPath)
       partSpec.map { case (partName, partValue) =>
         // scalastyle:off caselocale
-        partColNameMap(partName.toLowerCase) + "=" + escapePathName(partValue)
+        partColNameMap(partName.toLowerCase(Locale.ROOT)) + "=" + escapePathName(partValue)
         // scalastyle:on caselocale
       }.mkString("/")
     }

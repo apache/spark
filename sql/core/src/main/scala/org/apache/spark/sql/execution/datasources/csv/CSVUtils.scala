@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.util.Locale
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.csv.CSVExprUtils
@@ -70,7 +72,7 @@ object CSVUtils {
       val duplicates = {
         val headerNames = row.filter(_ != null)
           // scalastyle:off caselocale
-          .map(name => if (caseSensitive) name else name.toLowerCase)
+          .map(name => if (caseSensitive) name else name.toLowerCase(Locale.ROOT))
         // scalastyle:on caselocale
         headerNames.diff(headerNames.distinct).distinct
       }
@@ -81,7 +83,7 @@ object CSVUtils {
           // index as the suffix.
           s"_c$index"
           // scalastyle:off caselocale
-        } else if (!caseSensitive && duplicates.contains(value.toLowerCase)) {
+        } else if (!caseSensitive && duplicates.contains(value.toLowerCase(Locale.ROOT))) {
           // scalastyle:on caselocale
           // When there are case-insensitive duplicates, put the index as the suffix.
           s"$value$index"
