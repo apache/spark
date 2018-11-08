@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Calendar
+import java.text.{DecimalFormat, DecimalFormatSymbols}
+import java.util.{Calendar, Locale}
 
 import org.scalatest.exceptions.TestFailedException
 
@@ -208,5 +209,18 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
         gmtId),
       "2015-12-31T16:00:00"
     )
+  }
+
+  test("parse decimals using locale") {
+    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach { langTag =>
+      val schema = new StructType().add("d", DecimalType(10, 5))
+      val options = Map("locale" -> langTag, "sep" -> "|")
+      val expected = Decimal(1000.001, 10, 5)
+      val df = new DecimalFormat("", new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
+      val input = df.format(expected.toBigDecimal)
+      checkEvaluation(
+        CsvToStructs(schema, options, Literal.create(input), gmtId),
+        InternalRow(expected))
+    }
   }
 }
