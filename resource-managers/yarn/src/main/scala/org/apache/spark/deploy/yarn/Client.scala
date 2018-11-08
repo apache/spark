@@ -370,6 +370,8 @@ private[spark] class Client(
     new Path(resolvedDestDir, qualifiedDestPath.getName())
   }
 
+
+
   /**
    * Upload any resources to the distributed cache if needed. If a resource is intended to be
    * consumed locally, set up the appropriate config for downstream code to handle it properly.
@@ -500,6 +502,8 @@ private[spark] class Client(
       require(localizedPath != null, "Keytab file already distributed.")
     }
 
+
+
     /**
      * Add Spark to the cache. There are two settings that control what files to add to the cache:
      * - if a Spark archive is defined, use the archive. The archive is expected to contain
@@ -552,10 +556,12 @@ private[spark] class Client(
           try {
             jarsStream.setLevel(0)
             jarsDir.listFiles().foreach { f =>
-              if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
-                jarsStream.putNextEntry(new ZipEntry(f.getName))
-                Files.copy(f, jarsStream)
-                jarsStream.closeEntry()
+              if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar")  && f.canRead) {
+                if (!f.getName.toLowerCase(Locale.ROOT).startsWith("ranger-")) {
+                  jarsStream.putNextEntry(new ZipEntry(f.getName))
+                  Files.copy(f, jarsStream)
+                  jarsStream.closeEntry()
+                }
               }
             }
           } finally {
@@ -568,6 +574,82 @@ private[spark] class Client(
           jarsArchive.delete()
       }
     }
+
+
+    if (checkRangerResources(sparkConf)) {
+      val jarsDir = new File(YarnCommandBuilderUtils.findJarsDir(
+        sparkConf.getenv("SPARK_HOME")))
+      val jarsArchive = File.createTempFile(LOCALIZED_RANGER_LIB_DIR, ".zip",
+        new File(Utils.getLocalDir(sparkConf)))
+      val jarsStream = new ZipOutputStream(new FileOutputStream(jarsArchive))
+
+      try {
+        jarsStream.setLevel(0)
+        uploadRangerJarDir(jarsDir, jarsStream, jarsDir)
+      } finally {
+        jarsStream.close()
+      }
+
+      distribute(jarsArchive.toURI.getPath,
+        resType = LocalResourceType.ARCHIVE,
+        destName = Some(LOCALIZED_RANGER_LIB_DIR))
+      jarsArchive.delete()
+  }
+
+
+    /**
+    * check if ranger plugin dir exist in $SPARK_HOME/jars
+    * Note : if the return value is true ,we upload the ranger dir to __ranger_libs_ by default
+    */
+    def checkRangerResources(
+        sparkConf: SparkConf): Boolean = {
+        val dir = new File(YarnCommandBuilderUtils.findJarsDir(
+        sparkConf.getenv("SPARK_HOME")))
+
+        dir.listFiles(new FileFilter {
+        override def accept(pathname: File): Boolean = {
+           pathname.isDirectory && pathname.getName.equals("ranger-hive-plugin-impl")
+       }
+       }).length != 0
+  }
+
+
+     /**
+      * recursively upload ranger plugin jar files found in $SPARK_HOME/jars
+      * Note:including jars found in $SPARK_HOME/jars sub directories
+      */
+    def uploadRangerJarDir(
+      jarsDir: File,
+      jarsStream: ZipOutputStream,
+      rootDir: File): Unit = {
+      if (!jarsDir.isDirectory) {
+        return
+      }
+      if (jarsDir.equals(rootDir)) {
+        jarsDir.listFiles().foreach { f =>
+          if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar")  && f.canRead) {
+            if (f.getName.toLowerCase(Locale.ROOT).startsWith("ranger-")) {
+              val name = f.getAbsolutePath.substring(rootDir.getAbsolutePath.length + 1)
+              jarsStream.putNextEntry(new ZipEntry(name))
+              Files.copy(f, jarsStream)
+              jarsStream.closeEntry()
+            }
+          } else if (f.isDirectory && f.getName.toLowerCase(Locale.ROOT).startsWith("ranger-")) {
+            uploadRangerJarDir(f, jarsStream, rootDir)
+          }
+        }
+      } else {
+        jarsDir.listFiles().foreach { f =>
+          if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
+            val name = f.getAbsolutePath.substring(rootDir.getAbsolutePath.length + 1)
+            jarsStream.putNextEntry(new ZipEntry(name))
+            Files.copy(f, jarsStream)
+            jarsStream.closeEntry()
+          }
+        }
+      }
+    }
+
 
     /**
      * Copy user jar to the distributed cache if their scheme is not "local".
@@ -1232,6 +1314,9 @@ private object Client extends Logging {
   // Subdirectory where Spark libraries will be placed.
   val LOCALIZED_LIB_DIR = "__spark_libs__"
 
+  // Subdirectory where Ranger libraries will be placed.
+  val LOCALIZED_RANGER_LIB_DIR = "__ranger_libs__"
+
   /**
    * Return the path to the given application's staging directory.
    */
@@ -1318,6 +1403,11 @@ private object Client extends Logging {
 
     // Add the Spark jars to the classpath, depending on how they were distributed.
     addClasspathEntry(buildPath(Environment.PWD.$$(), LOCALIZED_LIB_DIR, "*"), env)
+    val rangerExt = "org.apache.ranger.authorization.spark.authorizer.RangerSparkSQLExtension"
+    if (rangerExt.equals(sparkConf.getOption("spark.sql.extensions").getOrElse(""))) {
+      addClasspathEntry(buildPath(Environment.PWD.$$(), LOCALIZED_RANGER_LIB_DIR, "*"), env)
+    }
+
     if (sparkConf.get(SPARK_ARCHIVE).isEmpty) {
       sparkConf.get(SPARK_JARS).foreach { jars =>
         jars.filter(isLocalUri).foreach { jar =>
@@ -1399,6 +1489,8 @@ private object Client extends Logging {
   private def addClasspathEntry(path: String, env: HashMap[String, String]): Unit =
     YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, path)
 
+
+
   /**
    * Returns the path to be sent to the NM for a path that is valid on the gateway.
    *
@@ -1421,6 +1513,8 @@ private object Client extends Logging {
       path
     }
   }
+
+
 
   /**
    * Return whether two URI represent file system are the same
