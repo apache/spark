@@ -148,33 +148,40 @@ getDefaultSqlSource <- function() {
 }
 
 writeToTempFileInArrow <- function(rdf, numPartitions) {
-  if (!require("arrow", quietly = TRUE)) {
+  if (requireNamespace("arrow", quietly = TRUE)) {
+    # Currently arrow requires withr; otherwise, write APIs don't work.
+    # Direct 'require' is not recommended by CRAN. Here's a workaround.
+    require1 <- require
+    if (require1("withr", quietly = TRUE)) {
+      numPartitions <- if (!is.null(numPartitions)) {
+        numToInt(numPartitions)
+      } else {
+        1
+      }
+      fileName <- tempfile(pattern = "spark-arrow", fileext = ".tmp")
+      chunk <- as.integer(nrow(rdf) / numPartitions)
+      rdf_slices <- split(rdf, rep(1:ceiling(nrow(rdf) / chunk), each = chunk)[1:nrow(rdf)])
+      stream_writer <- NULL
+      for (rdf_slice in rdf_slices) {
+        batch <- arrow::record_batch(rdf_slice)
+        if (is.null(stream_writer)) {
+          # We should avoid private calls like 'close_on_exit' (CRAN disallows) but looks
+          # there's no exposed API for it. Here's a workaround but ideally this should
+          # be removed.
+          close_on_exit <- get("close_on_exit", envir = asNamespace("arrow"), inherits = FALSE)
+          stream <- close_on_exit(arrow::file_output_stream(fileName))
+          schema <- batch$schema()
+          stream_writer <- close_on_exit(arrow::record_batch_stream_writer(stream, schema))
+        }
+        arrow::write_record_batch(batch, stream_writer)
+      }
+      return(fileName)
+    } else {
+      stop("'withr' package should be installed.")
+    }
+  } else {
     stop("'arrow' package should be installed.")
   }
-  if (!require("withr", quietly = TRUE)) {
-    stop("'withr' package should be installed.")
-  }
-
-  numPartitions <- if (!is.null(numPartitions)) {
-    numToInt(numPartitions)
-  } else {
-    1
-  }
-  fileName <- tempfile(pattern = "spark-arrow", fileext = ".tmp")
-  chunk <- as.integer(nrow(rdf) / numPartitions)
-  rdf_slices <- split(rdf, rep(1:ceiling(nrow(rdf) / chunk), each = chunk)[1:nrow(rdf)])
-  stream_writer <- NULL
-  for (rdf_slice in rdf_slices) {
-    batch <- arrow::record_batch(rdf_slice)
-    if (is.null(stream_writer)) {
-      # We should avoid internal calls 'close_on_exit' but looks there's no exposed API for it.
-      stream <- arrow:::close_on_exit(arrow::file_output_stream(fileName)) # nolint
-      schema <- batch$schema()
-      stream_writer <- arrow:::close_on_exit(arrow::record_batch_stream_writer(stream, schema)) # nolint
-    }
-    arrow::write_record_batch(batch, stream_writer)
-  }
-  fileName
 }
 
 #' Create a SparkDataFrame
