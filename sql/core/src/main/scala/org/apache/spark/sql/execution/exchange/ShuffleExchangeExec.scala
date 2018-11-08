@@ -26,7 +26,7 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, SortOrder, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
@@ -225,11 +225,9 @@ object ShuffleExchangeExec {
           iter.map(row => mutablePair.update(projection(row).copy(), null))
         }
         // Construct ordering on extracted sort key.
-        val orderingAttributes =
-          for {
-            (ord, i) <- sortingExpressions.zipWithIndex
-            expr = BoundReference(i, ord.child.dataType, ord.child.nullable)
-          } yield SortOrder(expr, ord.direction, ord.nullOrdering, ord.sameOrderExpressions)
+        val orderingAttributes = sortingExpressions.zipWithIndex.map { case (ord, i) =>
+          ord.copy(child = BoundReference(i, ord.dataType, ord.nullable))
+        }
         implicit val ordering: Ordering[InternalRow] =
           new LazilyGeneratedOrdering(orderingAttributes)
         new RangePartitioner(
