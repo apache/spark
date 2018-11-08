@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-var blockUICount = true;
+var shouldBlockUI = true;
 
 $(document).ajaxStop(function () {
-    if (blockUICount) {
+    if (shouldBlockUI) {
         $.unblockUI();
-        blockUICount = false;
+        shouldBlockUI = false;
     }
 });
 
 $(document).ajaxStart(function () {
-    if (blockUICount) {
+    if (shouldBlockUI) {
         $.blockUI({message: '<h3>Loading Stage Page...</h3>'});
     }
 });
@@ -77,55 +77,48 @@ function getColumnNameForTaskMetricSummary(columnKey) {
     switch(columnKey) {
         case "executorRunTime":
             return "Duration";
-            break;
 
         case "jvmGcTime":
             return "GC Time";
-            break;
 
         case "gettingResultTime":
             return "Getting Result Time";
-            break;
 
         case "inputMetrics":
             return "Input Size / Records";
-            break;
 
         case "outputMetrics":
             return "Output Size / Records";
-            break;
 
         case "peakExecutionMemory":
             return "Peak Execution Memory";
-            break;
 
         case "resultSerializationTime":
             return "Result Serialization Time";
-            break;
 
         case "schedulerDelay":
             return "Scheduler Delay";
-            break;
 
         case "diskBytesSpilled":
             return "Shuffle spill (disk)";
-            break;
 
         case "memoryBytesSpilled":
             return "Shuffle spill (memory)";
-            break;
 
         case "shuffleReadMetrics":
             return "Shuffle Read Size / Records";
-            break;
 
         case "shuffleWriteMetrics":
             return "Shuffle Write Size / Records";
-            break;
 
         case "executorDeserializeTime":
             return "Task Deserialization Time";
-            break;
+
+        case "shuffleReadBlockedTime":
+            return "Shuffle Read Blocked Time";
+
+        case "shuffleRemoteReads":
+            return "Shuffle Remote Reads";
 
         default:
             return "NA";
@@ -235,9 +228,9 @@ function createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTable) {
     taskSummaryMetricsTableCurrentStateArray = taskSummaryMetricsTable.slice();
 }
 
-function createRowMetadataForColumn(columnName, data, checkboxId, colKey) {
+function createRowMetadataForColumn(colKey, data, checkboxId) {
   var row = {
-      "metric": columnName,
+      "metric": getColumnNameForTaskMetricSummary(colKey),
       "data": data,
       "checkboxId": checkboxId,
       "columnKey": colKey
@@ -504,11 +497,11 @@ $(document).ready(function () {
                         switch(columnKey) {
                             case "shuffleReadMetrics":
                                 var row1 = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 3, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 3);
                                 var row2 = createRowMetadataForColumn(
-                                    "Shuffle Read Blocked Time", taskMetricsResponse[columnKey], 13, "shuffleReadBlockedTime");
+                                    "shuffleReadBlockedTime", taskMetricsResponse[columnKey], 13);
                                 var row3 = createRowMetadataForColumn(
-                                    "Shuffle Remote Reads", taskMetricsResponse[columnKey], 14, "shuffleRemoteReads");
+                                    "shuffleRemoteReads", taskMetricsResponse[columnKey], 14);
                                 if (dataToShow.showShuffleReadData) {
                                     taskSummaryMetricsTableArray.push(row1);
                                     taskSummaryMetricsTableArray.push(row2);
@@ -518,37 +511,37 @@ $(document).ready(function () {
 
                             case "schedulerDelay":
                                 var row = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 11, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 11);
                                 taskSummaryMetricsTableArray.push(row);
                                 break;
 
                             case "executorDeserializeTime":
                                 var row = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 12, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 12);
                                 taskSummaryMetricsTableArray.push(row);
                                 break;
 
                             case "resultSerializationTime":
                                 var row = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 15, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 15);
                                 taskSummaryMetricsTableArray.push(row);
                                 break;
 
                             case "gettingResultTime":
                                 var row = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 16, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 16);
                                 taskSummaryMetricsTableArray.push(row);
                                 break;
 
                             case "peakExecutionMemory":
                                 var row = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 17, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 17);
                                 taskSummaryMetricsTableArray.push(row);
                                 break;
 
                             case "inputMetrics":
                                 var row = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 1, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 1);
                                 if (dataToShow.showInputData) {
                                     taskSummaryMetricsTableArray.push(row);
                                 }
@@ -556,7 +549,7 @@ $(document).ready(function () {
 
                             case "outputMetrics":
                                 var row = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 2, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 2);
                                 if (dataToShow.showOutputData) {
                                     taskSummaryMetricsTableArray.push(row);
                                 }
@@ -564,7 +557,7 @@ $(document).ready(function () {
 
                             case "shuffleWriteMetrics":
                                 var row = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 4, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 4);
                                 if (dataToShow.showShuffleWriteData) {
                                     taskSummaryMetricsTableArray.push(row);
                                 }
@@ -572,7 +565,7 @@ $(document).ready(function () {
 
                             case "diskBytesSpilled":
                                 var row = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 5, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 5);
                                 if (dataToShow.showBytesSpilledData) {
                                     taskSummaryMetricsTableArray.push(row);
                                 }
@@ -580,7 +573,7 @@ $(document).ready(function () {
 
                             case "memoryBytesSpilled":
                                 var row = createRowMetadataForColumn(
-                                    getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 6, columnKey);
+                                    columnKey, taskMetricsResponse[columnKey], 6);
                                 if (dataToShow.showBytesSpilledData) {
                                     taskSummaryMetricsTableArray.push(row);
                                 }
@@ -589,7 +582,7 @@ $(document).ready(function () {
                             default:
                                 if (getColumnNameForTaskMetricSummary(columnKey) != "NA") {
                                     var row = createRowMetadataForColumn(
-                                        getColumnNameForTaskMetricSummary(columnKey), taskMetricsResponse[columnKey], 0, columnKey);
+                                        columnKey, taskMetricsResponse[columnKey], 0);
                                     taskSummaryMetricsTableArray.push(row);
                                 }
                                 break;
