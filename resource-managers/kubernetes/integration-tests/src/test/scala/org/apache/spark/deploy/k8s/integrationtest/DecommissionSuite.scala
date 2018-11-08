@@ -16,7 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
 import org.apache.spark.deploy.k8s.integrationtest.TestConfig.{getTestImageRepo, getTestImageTag}
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
