@@ -578,4 +578,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
           "Acceptable modes are PERMISSIVE and FAILFAST."))
     }
   }
+
+  test("corrupt record column in the middle") {
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("_unparsed", StringType)
+      .add("b", IntegerType)
+    val badRec = """{"a" 1, "b": 11}"""
+    val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
+
+    checkAnswer(
+      df.select(from_json($"value", schema, Map("columnNameOfCorruptRecord" -> "_unparsed"))),
+      Row(Row(null, badRec, null)) :: Row(Row(2, null, 12)) :: Nil)
+  }
 }
