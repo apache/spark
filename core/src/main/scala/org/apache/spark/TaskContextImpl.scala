@@ -157,8 +157,6 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   override def isCompleted(): Boolean = synchronized(completed)
 
-  override def isRunningLocally(): Boolean = false
-
   override def isInterrupted(): Boolean = reasonIfKilled.isDefined
 
   override def getLocalProperty(key: String): String = localProperties.getProperty(key)
