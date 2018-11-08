@@ -108,14 +108,13 @@ $(document).ready(function() {
     requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
-    $.getJSON(uiRoot + "/api/v1/applications?limit=" + appLimit, function(response,status,jqXHR) {
+    status = requestedIncomplete ? 'RUNNING' : 'COMPLETED';
+
+    $.getJSON(uiRoot + "/api/v1/applications?limit=" + appLimit + "&status=" + status, function(response,status,jqXHR) {
       var array = [];
       var hasMultipleAttempts = false;
       for (i in response) {
         var app = response[i];
-        if (app["attempts"][0]["completed"] == requestedIncomplete) {
-          continue; // if we want to show for Incomplete, we skip the completed apps; otherwise skip incomplete ones.
-        }
         var id = app["id"];
         var name = app["name"];
         if (app["attempts"].length > 1) {
