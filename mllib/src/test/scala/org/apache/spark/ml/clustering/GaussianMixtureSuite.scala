@@ -274,6 +274,9 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     val model = gmm.fit(dataset)
     testClusteringModelSinglePrediction(model, model.predict, dataset,
       model.getFeaturesCol, model.getPredictionCol)
+
+    testClusteringModelSingleProbabilisticPrediction(model, model.predictProbability, dataset,
+      model.getFeaturesCol, model.getProbabilityCol)
   }
 }
 

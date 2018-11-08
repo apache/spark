@@ -127,7 +127,8 @@ class GaussianMixtureModel private[ml] (
     r.argmax
   }
 
-  private[clustering] def predictProbability(features: Vector): Vector = {
+  @Since("3.0.0")
+  def predictProbability(features: Vector): Vector = {
     val probs: Array[Double] =
       GaussianMixtureModel.computeProbabilities(features.asBreeze.toDenseVector, gaussians, weights)
     Vectors.dense(probs)

@@ -169,4 +169,17 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
         assert(prediction === transform(features))
     }
   }
+
+  def testClusteringModelSingleProbabilisticPrediction(
+    model: Model[_],
+    transform: Vector => Vector,
+    dataset: Dataset[_],
+    input: String,
+    output: String): Unit = {
+    model.transform(dataset).select(input, output)
+      .collect().foreach {
+      case Row(features: Vector, prediction: Vector) =>
+        assert(prediction === transform(features))
+    }
+  }
 }
