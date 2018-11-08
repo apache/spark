@@ -404,7 +404,8 @@ class DataStreamReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None,  allowUnquotedControlChars=None, lineSep=None):
+             multiLine=None,  allowUnquotedControlChars=None, lineSep=None,
+             dropFieldIfAllNull=None, encoding=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -467,8 +468,15 @@ class DataStreamReader(OptionUtils):
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
+        :param encoding: allows to forcibly set one of standard basic or extended encoding for
+                         the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
+                         the encoding of input JSON will be detected automatically
+                         when the multiLine option is set to ``true``.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        :param dropFieldIfAllNull: whether to ignore column of all null values or empty
+                                   array/struct during schema inference. If None is set, it
+                                   uses the default value, ``false``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -483,7 +491,8 @@ class DataStreamReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep)
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
+            dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
