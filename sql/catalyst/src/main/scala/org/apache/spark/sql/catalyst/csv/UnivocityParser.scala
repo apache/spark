@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.csv
 
 import java.io.InputStream
 import java.math.BigDecimal
+import java.text.{DecimalFormat, DecimalFormatSymbols, NumberFormat}
+import java.util.Locale
 
 import scala.util.Try
 import scala.util.control.NonFatal
-
 import com.univocity.parsers.csv.CsvParser
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
@@ -104,6 +104,12 @@ class UnivocityParser(
     requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
   }
 
+  private val decimalParser = {
+    val df = new DecimalFormat("", new DecimalFormatSymbols(options.locale))
+    df.setParseBigDecimal(true)
+    df
+  }
+
   /**
    * Create a converter which converts the string value to a value according to a desired type.
    * Currently, we do not support complex types (`ArrayType`, `MapType`, `StructType`).
@@ -149,8 +155,8 @@ class UnivocityParser(
 
     case dt: DecimalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        val value = new BigDecimal(datum.replaceAll(",", ""))
-        Decimal(value, dt.precision, dt.scale)
+        val bigDecimal = decimalParser.parse(datum).asInstanceOf[BigDecimal]
+        Decimal(bigDecimal, dt.precision, dt.scale)
       }
 
     case _: TimestampType => (d: String) =>
