@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
-import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
@@ -64,15 +64,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   // Note: Since Spark 2.0 this class has become a wrapper of SparkSession, where the
   // real functionality resides. This class remains mainly for backward compatibility.
-
-  @deprecated("Use SparkSession.builder instead", "2.0.0")
-  def this(sc: SparkContext) = {
-    this(SparkSession.builder().sparkContext(sc).getOrCreate())
-  }
-
-  @deprecated("Use SparkSession.builder instead", "2.0.0")
-  def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
-
   // TODO: move this logic into SparkSession
 
   private[sql] def sessionState: SessionState = sparkSession.sessionState
@@ -766,45 +757,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
  * getOrCreate instead of the global one.
  */
 object SQLContext {
-
-  /**
-   * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
-   *
-   * This function can be used to create a singleton SQLContext object that can be shared across
-   * the JVM.
-   *
-   * If there is an active SQLContext for current thread, it will be returned instead of the global
-   * one.
-   *
-   * @since 1.5.0
-   */
-  @deprecated("Use SparkSession.builder instead", "2.0.0")
-  def getOrCreate(sparkContext: SparkContext): SQLContext = {
-    SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
-  }
-
-  /**
-   * Changes the SQLContext that will be returned in this thread and its children when
-   * SQLContext.getOrCreate() is called. This can be used to ensure that a given thread receives
-   * a SQLContext with an isolated session, instead of the global (first created) context.
-   *
-   * @since 1.6.0
-   */
-  @deprecated("Use SparkSession.setActiveSession instead", "2.0.0")
-  def setActive(sqlContext: SQLContext): Unit = {
-    SparkSession.setActiveSession(sqlContext.sparkSession)
-  }
-
-  /**
-   * Clears the active SQLContext for current thread. Subsequent calls to getOrCreate will
-   * return the first created context instead of a thread-local override.
-   *
-   * @since 1.6.0
-   */
-  @deprecated("Use SparkSession.clearActiveSession instead", "2.0.0")
-  def clearActive(): Unit = {
-    SparkSession.clearActiveSession()
-  }
 
   /**
    * Converts an iterator of Java Beans to InternalRow using the provided

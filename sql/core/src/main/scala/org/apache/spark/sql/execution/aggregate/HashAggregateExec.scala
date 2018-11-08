@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.TaskContext
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -762,6 +762,8 @@ case class HashAggregateExec(
       ("true", "true", "", "")
     }
 
+    val oomeClassName = classOf[SparkOutOfMemoryError].getName
+
     val findOrInsertRegularHashMap: String =
       s"""
          |// generate grouping key
@@ -787,7 +789,7 @@ case class HashAggregateExec(
          |    $unsafeRowKeys, ${hashEval.value});
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
-         |    throw new OutOfMemoryError("No enough memory for aggregation");
+         |    throw new $oomeClassName("No enough memory for aggregation");
          |  }
          |}
        """.stripMargin
