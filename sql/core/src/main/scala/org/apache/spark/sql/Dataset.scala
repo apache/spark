@@ -3179,7 +3179,7 @@ class Dataset[T] private[sql](
         val batchOrder = new ArrayBuffer[(Int, Int)]()
         var partitionCount = 0
 
-        // Handler to eagerly write batches to Python out of order
+        // Handler to eagerly write batches to Python un-ordered
         def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
           if (arrowBatches.nonEmpty) {
             // Write all batches (can be more than 1) in the partition, store the batch order tuple

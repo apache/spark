@@ -187,7 +187,8 @@ class FramedSerializer(Serializer):
 
 class ArrowCollectSerializer(Serializer):
     """
-    Deserialize a stream of batches followed by batch order information.
+    Deserialize a stream of batches followed by batch order information. Used in
+    DataFrame._collectAsArrow() after invoking Dataset.collectAsArrowToPython() in the JVM.
     """
 
     def __init__(self):
@@ -198,9 +199,8 @@ class ArrowCollectSerializer(Serializer):
 
     def load_stream(self, stream):
         """
-        Load a stream of un-ordered Arrow RecordBatches, where the last
-        iteration will yield a list of indices to put the RecordBatches in
-        the correct order.
+        Load a stream of un-ordered Arrow RecordBatches, where the last iteration yields
+        a list of indices that can be used to put the RecordBatches in the correct order.
         """
         # load the batches
         for batch in self.serializer.load_stream(stream):
