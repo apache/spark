@@ -158,9 +158,6 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(metrics.accuracy  ~==
       (2.0 * w1 + 2.0 * w1 + 1.0 * w2 + 1.0 * w2) / tw relTol delta)
-    assert(metrics.accuracy  ~==  metrics.precision relTol delta)
-    assert(metrics.accuracy  ~==  metrics.recall relTol delta)
-    assert(metrics.accuracy  ~==  metrics.fMeasure relTol delta)
     assert(metrics.accuracy  ~==  metrics.weightedRecall relTol delta)
     val weight0 = (2 * w1 + 1 * w2 + 1 * w1) / tw
     val weight1 = (1 * w2 + 2 * w1 + 1 * w2) / tw
