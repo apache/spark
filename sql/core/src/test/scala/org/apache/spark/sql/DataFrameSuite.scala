@@ -1986,7 +1986,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
     val df = sparkContext.parallelize(Seq(
-      new java.lang.Integer(22) -> "John",
+      java.lang.Integer.valueOf(22) -> "John",
       null.asInstanceOf[java.lang.Integer] -> "Lucy")).toDF("age", "name")
 
     // passing null into the UDF that could handle it
@@ -2219,9 +2219,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-17957: no change on nullability in FilterExec output") {
     val df = sparkContext.parallelize(Seq(
-      null.asInstanceOf[java.lang.Integer] -> new java.lang.Integer(3),
-      new java.lang.Integer(1) -> null.asInstanceOf[java.lang.Integer],
-      new java.lang.Integer(2) -> new java.lang.Integer(4))).toDF()
+      null.asInstanceOf[java.lang.Integer] -> java.lang.Integer.valueOf(3),
+      java.lang.Integer.valueOf(1) -> null.asInstanceOf[java.lang.Integer],
+      java.lang.Integer.valueOf(2) -> java.lang.Integer.valueOf(4))).toDF()
 
     verifyNullabilityInFilterExec(df,
       expr = "Rand()", expectedNonNullableColumns = Seq.empty[String])
@@ -2236,9 +2236,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-17957: set nullability to false in FilterExec output") {
     val df = sparkContext.parallelize(Seq(
-      null.asInstanceOf[java.lang.Integer] -> new java.lang.Integer(3),
-      new java.lang.Integer(1) -> null.asInstanceOf[java.lang.Integer],
-      new java.lang.Integer(2) -> new java.lang.Integer(4))).toDF()
+      null.asInstanceOf[java.lang.Integer] -> java.lang.Integer.valueOf(3),
+      java.lang.Integer.valueOf(1) -> null.asInstanceOf[java.lang.Integer],
+      java.lang.Integer.valueOf(2) -> java.lang.Integer.valueOf(4))).toDF()
 
     verifyNullabilityInFilterExec(df,
       expr = "_1 + _2 * 3", expectedNonNullableColumns = Seq("_1", "_2"))
