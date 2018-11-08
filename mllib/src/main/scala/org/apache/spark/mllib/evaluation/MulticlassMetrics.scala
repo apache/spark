@@ -31,12 +31,14 @@ import org.apache.spark.sql.DataFrame
  *                         (prediction, label) pairs.
  */
 @Since("1.1.0")
-class MulticlassMetrics @Since("3.0.0") (predAndLabelsWithOptWeight: RDD[_]) {
+class MulticlassMetrics @Since("1.1.0") (predAndLabelsWithOptWeight: RDD[_ <: Product]) {
   val predLabelsWeight: RDD[(Double, Double, Double)] = predAndLabelsWithOptWeight.map {
     case (prediction: Double, label: Double, weight: Double) =>
       (prediction, label, weight)
     case (prediction: Double, label: Double) =>
       (prediction, label, 1.0)
+    case other =>
+      throw new IllegalArgumentException(s"Expected tuples, got $other")
   }
 
   /**
