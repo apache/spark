@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.deploy.security
 
 import java.text.SimpleDateFormat
 import java.util.Properties
@@ -32,15 +32,15 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
-private[kafka010] object TokenUtil extends Logging {
-  private[kafka010] val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
-  private[kafka010] val TOKEN_SERVICE = new Text("kafka.server.delegation.token")
+private[spark] object KafkaTokenUtil extends Logging {
+  private[spark] val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
+  private[spark] val TOKEN_SERVICE = new Text("kafka.server.delegation.token")
 
-  private[kafka010] class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
+  private[spark] class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
     override def getKind: Text = TOKEN_KIND;
   }
 
-  def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
+  private[security] def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
     val adminClient = AdminClient.create(createAdminClientProperties(sparkConf))
     val createDelegationTokenOptions = new CreateDelegationTokenOptions()
     val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
@@ -55,7 +55,7 @@ private[kafka010] object TokenUtil extends Logging {
     ), token.tokenInfo.expiryTimestamp)
   }
 
-  private[kafka010] def createAdminClientProperties(sparkConf: SparkConf): Properties = {
+  private[security] def createAdminClientProperties(sparkConf: SparkConf): Properties = {
     val adminClientProperties = new Properties
 
     val bootstrapServers = sparkConf.get(KAFKA_BOOTSTRAP_SERVERS)
@@ -84,13 +84,48 @@ private[kafka010] object TokenUtil extends Logging {
     // - Keytab not provided -> try to log in with JVM global security configuration
     //   which can be configured for example with 'java.security.auth.login.config'.
     //   For this no additional parameter needed.
-    KafkaSecurityHelper.getKeytabJaasParams(sparkConf).foreach { jaasParams =>
+    getKeytabJaasParams(sparkConf).foreach { jaasParams =>
       logInfo("Keytab detected, using it for login.")
       adminClientProperties.put(SaslConfigs.SASL_MECHANISM, SaslConfigs.GSSAPI_MECHANISM)
       adminClientProperties.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
     }
 
     adminClientProperties
+  }
+
+  private[security] def getKeytabJaasParams(sparkConf: SparkConf): Option[String] = {
+    val keytab = sparkConf.get(KEYTAB)
+    if (keytab.isDefined) {
+      val serviceName = sparkConf.get(KAFKA_KERBEROS_SERVICE_NAME)
+      require(serviceName.nonEmpty, "Kerberos service name must be defined")
+      val principal = sparkConf.get(PRINCIPAL)
+      require(principal.nonEmpty, "Principal must be defined")
+
+      val params =
+        s"""
+        |${getKrb5LoginModuleName} required
+        | useKeyTab=true
+        | serviceName="${serviceName.get}"
+        | keyTab="${keytab.get}"
+        | principal="${principal.get}";
+        """.stripMargin.replace("\n", "")
+      logDebug(s"Krb JAAS params: $params")
+      Some(params)
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Krb5LoginModule package vary in different JVMs.
+   * Please see Hadoop UserGroupInformation for further details.
+   */
+  private def getKrb5LoginModuleName(): String = {
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      "com.ibm.security.auth.module.Krb5LoginModule"
+    } else {
+      "com.sun.security.auth.module.Krb5LoginModule"
+    }
   }
 
   private def printToken(token: DelegationToken): Unit = {

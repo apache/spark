@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.security
 
-import scala.language.existentials
-import scala.reflect.runtime.universe
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -28,7 +26,6 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{KAFKA_BOOTSTRAP_SERVERS, KAFKA_SECURITY_PROTOCOL}
-import org.apache.spark.util.Utils
 
 private[security] class KafkaDelegationTokenProvider
   extends HadoopDelegationTokenProvider with Logging {
@@ -40,14 +37,9 @@ private[security] class KafkaDelegationTokenProvider
       sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
     try {
-      val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
-      val obtainToken = mirror.classLoader.
-        loadClass("org.apache.spark.sql.kafka010.TokenUtil").
-        getMethod("obtainToken", classOf[SparkConf])
-
       logDebug("Attempting to fetch Kafka security token.")
-      val (token, nextRenewalDate) = obtainToken.invoke(null, sparkConf)
-        .asInstanceOf[(Token[_ <: TokenIdentifier], Long)]
+      val (token, nextRenewalDate): (Token[_ <: TokenIdentifier], Long) =
+        KafkaTokenUtil.obtainToken(sparkConf)
       creds.addToken(token.getService, token)
       return Some(nextRenewalDate)
     } catch {

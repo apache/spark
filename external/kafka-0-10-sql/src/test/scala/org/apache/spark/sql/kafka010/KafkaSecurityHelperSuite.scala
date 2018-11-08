@@ -24,8 +24,9 @@ import org.apache.hadoop.security.token.Token
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.security.KafkaTokenUtil
+import org.apache.spark.deploy.security.KafkaTokenUtil.KafkaDelegationTokenIdentifier
 import org.apache.spark.internal.config.{KAFKA_KERBEROS_SERVICE_NAME, KEYTAB, PRINCIPAL}
-import org.apache.spark.sql.kafka010.TokenUtil.KafkaDelegationTokenIdentifier
 
 class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
   private val keytab = "/path/to/keytab"
@@ -45,52 +46,16 @@ class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
     val token = new Token[KafkaDelegationTokenIdentifier](
       tokenId.getBytes,
       tokenPassword.getBytes,
-      TokenUtil.TOKEN_KIND,
-      TokenUtil.TOKEN_SERVICE
+      KafkaTokenUtil.TOKEN_KIND,
+      KafkaTokenUtil.TOKEN_SERVICE
     )
     val creds = new Credentials()
-    creds.addToken(TokenUtil.TOKEN_SERVICE, token)
+    creds.addToken(KafkaTokenUtil.TOKEN_SERVICE, token)
     UserGroupInformation.getCurrentUser.addCredentials(creds)
   }
 
   private def resetUGI: Unit = {
     UserGroupInformation.setLoginUser(null)
-  }
-
-  test("getKeytabJaasParams without keytab should return None") {
-    val jaasParams = KafkaSecurityHelper.getKeytabJaasParams(sparkConf)
-    assert(!jaasParams.isDefined)
-  }
-
-  test("getKeytabJaasParams with keytab no service should throw exception") {
-    sparkConf.set(KEYTAB, keytab)
-
-    val thrown = intercept[IllegalArgumentException] {
-      KafkaSecurityHelper.getKeytabJaasParams(sparkConf)
-    }
-
-    assert(thrown.getMessage contains "Kerberos service name must be defined")
-  }
-
-  test("getKeytabJaasParams with keytab no principal should throw exception") {
-    sparkConf.set(KEYTAB, keytab)
-    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
-
-    val thrown = intercept[IllegalArgumentException] {
-      KafkaSecurityHelper.getKeytabJaasParams(sparkConf)
-    }
-
-    assert(thrown.getMessage contains "Principal must be defined")
-  }
-
-  test("getKeytabJaasParams with keytab should return kerberos module") {
-    sparkConf.set(KEYTAB, keytab)
-    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
-    sparkConf.set(PRINCIPAL, principal)
-
-    val jaasParams = KafkaSecurityHelper.getKeytabJaasParams(sparkConf)
-
-    assert(jaasParams.get.contains("Krb5LoginModule"))
   }
 
   test("getTokenJaasParams without token should return None") {

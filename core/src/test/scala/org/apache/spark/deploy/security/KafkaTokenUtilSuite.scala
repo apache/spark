@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.deploy.security
 
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.common.config.SaslConfigs
@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 
-class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
+class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
   private val bootStrapServers = "127.0.0.1:0"
   private val plainSecurityProtocol = "SASL_PLAINTEXT"
   private val sslSecurityProtocol = "SASL_SSL"
@@ -43,7 +43,7 @@ class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("createAdminClientProperties without bootstrap servers should throw exception") {
     val thrown = intercept[IllegalArgumentException] {
-      TokenUtil.createAdminClientProperties(sparkConf)
+      KafkaTokenUtil.createAdminClientProperties(sparkConf)
     }
     assert(thrown.getMessage contains
       "Tried to obtain kafka delegation token but bootstrap servers not configured.")
@@ -55,7 +55,7 @@ class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkConf.set(KAFKA_TRUSTSTORE_LOCATION, trustStoreLocation)
     sparkConf.set(KAFKA_TRUSTSTORE_PASSWORD, trustStoreLocation)
 
-    val adminClientProperties = TokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       === bootStrapServers)
@@ -71,7 +71,7 @@ class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkConf.set(KAFKA_TRUSTSTORE_LOCATION, trustStoreLocation)
     sparkConf.set(KAFKA_TRUSTSTORE_PASSWORD, trustStorePassword)
 
-    val adminClientProperties = TokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       === bootStrapServers)
@@ -85,7 +85,7 @@ class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkConf.set(KAFKA_BOOTSTRAP_SERVERS, bootStrapServers)
     sparkConf.set(KAFKA_SECURITY_PROTOCOL, sslSecurityProtocol)
 
-    val adminClientProperties = TokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       === bootStrapServers)
@@ -102,7 +102,7 @@ class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
     sparkConf.set(PRINCIPAL, principal)
 
-    val adminClientProperties = TokenUtil.createAdminClientProperties(sparkConf)
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
     assert(adminClientProperties.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG)
       === bootStrapServers)
@@ -110,5 +110,41 @@ class TokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
       === sslSecurityProtocol)
     assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
     assert(adminClientProperties.containsKey(SaslConfigs.SASL_JAAS_CONFIG))
+  }
+
+  test("getKeytabJaasParams without keytab should return None") {
+    val jaasParams = KafkaTokenUtil.getKeytabJaasParams(sparkConf)
+    assert(!jaasParams.isDefined)
+  }
+
+  test("getKeytabJaasParams with keytab no service should throw exception") {
+    sparkConf.set(KEYTAB, keytab)
+
+    val thrown = intercept[IllegalArgumentException] {
+      KafkaTokenUtil.getKeytabJaasParams(sparkConf)
+    }
+
+    assert(thrown.getMessage contains "Kerberos service name must be defined")
+  }
+
+  test("getKeytabJaasParams with keytab no principal should throw exception") {
+    sparkConf.set(KEYTAB, keytab)
+    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
+
+    val thrown = intercept[IllegalArgumentException] {
+      KafkaTokenUtil.getKeytabJaasParams(sparkConf)
+    }
+
+    assert(thrown.getMessage contains "Principal must be defined")
+  }
+
+  test("getKeytabJaasParams with keytab should return kerberos module") {
+    sparkConf.set(KEYTAB, keytab)
+    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
+    sparkConf.set(PRINCIPAL, principal)
+
+    val jaasParams = KafkaTokenUtil.getKeytabJaasParams(sparkConf)
+
+    assert(jaasParams.get.contains("Krb5LoginModule"))
   }
 }
