@@ -538,7 +538,7 @@ private[ml] object GBTClassifierParams {
     Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
+private[ml] trait GBTClassifierParams extends GBTParams with TreeRegressorParams {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
