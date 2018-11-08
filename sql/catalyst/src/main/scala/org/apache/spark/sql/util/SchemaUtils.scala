@@ -80,8 +80,11 @@ private[spark] object SchemaUtils {
   def checkColumnNameDuplication(
       columnNames: Seq[String], colType: String, caseSensitiveAnalysis: Boolean): Unit = {
     // scalastyle:off caselocale
-    val names = if (caseSensitiveAnalysis) columnNames else
+    val names = if (caseSensitiveAnalysis) {
+      columnNames
+    } else {
       columnNames.map(_.toLowerCase(Locale.ROOT))
+    }
     // scalastyle:on caselocale
     if (names.distinct.length != names.length) {
       val duplicateColumns = names.groupBy(identity).collect {
