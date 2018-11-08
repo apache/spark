@@ -148,7 +148,11 @@ getDefaultSqlSource <- function() {
 }
 
 writeToTempFileInArrow <- function(rdf, numPartitions) {
-  if (requireNamespace("arrow", quietly = TRUE)) {
+  # R API in Arrow is not yet released. CRAN requires to add the package in requireNamespace
+  # at DESCRIPTION. Later, CRAN checks if the package is available or not. Therefore, it works
+  # around by avoiding direct requireNamespace.
+  requireNamespace1 <- requireNamespace
+  if (requireNamespace1("arrow", quietly = TRUE)) {
     # Currently arrow requires withr; otherwise, write APIs don't work.
     # Direct 'require' is not recommended by CRAN. Here's a workaround.
     require1 <- require

@@ -22,9 +22,7 @@ Suggests:
     rmarkdown,
     testthat,
     e1071,
-    survival,
-    arrow,
-    withr
+    survival
 Collate:
     'schema.R'
     'generics.R'
