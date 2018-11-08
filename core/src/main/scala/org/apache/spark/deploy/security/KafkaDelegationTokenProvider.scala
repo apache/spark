@@ -21,7 +21,6 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -38,8 +37,7 @@ private[security] class KafkaDelegationTokenProvider
       creds: Credentials): Option[Long] = {
     try {
       logDebug("Attempting to fetch Kafka security token.")
-      val (token, nextRenewalDate): (Token[_ <: TokenIdentifier], Long) =
-        KafkaTokenUtil.obtainToken(sparkConf)
+      val (token, nextRenewalDate) = KafkaTokenUtil.obtainToken(sparkConf)
       creds.addToken(token.getService, token)
       return Some(nextRenewalDate)
     } catch {
