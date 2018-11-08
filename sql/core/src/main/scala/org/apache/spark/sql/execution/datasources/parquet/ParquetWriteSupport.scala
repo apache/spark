@@ -29,7 +29,7 @@ import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
 import org.apache.parquet.io.api.{Binary, RecordConsumer}
 
-import org.apache.spark.SPARK_VERSION
+import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
 import org.apache.spark.sql.catalyst.InternalRow
@@ -96,7 +96,7 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
 
     val messageType = new SparkToParquetSchemaConverter(configuration).convert(schema)
     val metadata = Map(
-      SPARK_VERSION_METADATA_KEY -> SPARK_VERSION,
+      SPARK_VERSION_METADATA_KEY -> SPARK_VERSION_SHORT,
       ParquetReadSupport.SPARK_METADATA_KEY -> schemaString
     ).asJava
 

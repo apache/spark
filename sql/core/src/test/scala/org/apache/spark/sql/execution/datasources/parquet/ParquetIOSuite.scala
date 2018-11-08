@@ -39,7 +39,7 @@ import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
-import org.apache.spark.{SPARK_VERSION, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
@@ -815,7 +815,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       val metaData = m.getFileMetaData.getKeyValueMetaData
       m.close()
 
-      assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION)
+      assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
     }
   }
 }

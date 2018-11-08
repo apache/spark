@@ -36,7 +36,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.orc.OrcConf.COMPRESS
 
-import org.apache.spark.{SPARK_VERSION, TaskContext}
+import org.apache.spark.{SPARK_VERSION_SHORT, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
 import org.apache.spark.sql.SparkSession
@@ -283,7 +283,7 @@ private[orc] class OrcOutputWriter(
         val writerField = recordWriter.getClass.getDeclaredField("writer")
         writerField.setAccessible(true)
         val writer = writerField.get(recordWriter).asInstanceOf[Writer]
-        writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION))
+        writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION_SHORT))
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }
