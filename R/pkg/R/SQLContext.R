@@ -153,6 +153,14 @@ writeToTempFileInArrow <- function(rdf, numPartitions) {
   # around by avoiding direct requireNamespace.
   requireNamespace1 <- requireNamespace
   if (requireNamespace1("arrow", quietly = TRUE)) {
+    record_batch <- get("record_batch", envir = asNamespace("arrow"), inherits = FALSE)
+    record_batch_stream_writer <- get(
+      "record_batch_stream_writer", envir = asNamespace("arrow"), inherits = FALSE)
+    file_output_stream <- get(
+      "file_output_stream", envir = asNamespace("arrow"), inherits = FALSE)
+    write_record_batch <- get(
+      "write_record_batch", envir = asNamespace("arrow"), inherits = FALSE)
+
     # Currently arrow requires withr; otherwise, write APIs don't work.
     # Direct 'require' is not recommended by CRAN. Here's a workaround.
     require1 <- require
@@ -167,17 +175,17 @@ writeToTempFileInArrow <- function(rdf, numPartitions) {
       rdf_slices <- split(rdf, rep(1:ceiling(nrow(rdf) / chunk), each = chunk)[1:nrow(rdf)])
       stream_writer <- NULL
       for (rdf_slice in rdf_slices) {
-        batch <- arrow::record_batch(rdf_slice)
+        batch <- record_batch(rdf_slice)
         if (is.null(stream_writer)) {
           # We should avoid private calls like 'close_on_exit' (CRAN disallows) but looks
           # there's no exposed API for it. Here's a workaround but ideally this should
           # be removed.
           close_on_exit <- get("close_on_exit", envir = asNamespace("arrow"), inherits = FALSE)
-          stream <- close_on_exit(arrow::file_output_stream(fileName))
+          stream <- close_on_exit(file_output_stream(fileName))
           schema <- batch$schema()
-          stream_writer <- close_on_exit(arrow::record_batch_stream_writer(stream, schema))
+          stream_writer <- close_on_exit(record_batch_stream_writer(stream, schema))
         }
-        arrow::write_record_batch(batch, stream_writer)
+        write_record_batch(batch, stream_writer)
       }
       return(fileName)
     } else {

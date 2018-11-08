@@ -326,12 +326,12 @@ test_that("createDataFrame Arrow optimization", {
 test_that("createDataFrame Arrow optimization - type specification", {
   skip_if_not_installed("arrow")
   skip_if_not_installed("withr")
-  rdf <- data.frame(list(list(a=1,
-                              b="a",
-                              c=TRUE,
-                              d=1.1,
-                              e=1L,
-                              g=as.Date("1990-02-24"))))
+  rdf <- data.frame(list(list(a = 1,
+                              b = "a",
+                              c = TRUE,
+                              d = 1.1,
+                              e = 1L,
+                              g = as.Date("1990-02-24"))))
   expected <- collect(createDataFrame(rdf))
   arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
   conf <- callJMethod(sparkSession, "conf")
