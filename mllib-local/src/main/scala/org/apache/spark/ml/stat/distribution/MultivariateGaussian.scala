@@ -48,7 +48,7 @@ class MultivariateGaussian @Since("2.0.0") (
     this(Vectors.fromBreeze(mean), Matrices.fromBreeze(cov))
   }
 
-  private val breezeMu = mean.asBreeze.toDenseVector
+  @transient private lazy val breezeMu = mean.asBreeze.toDenseVector
 
   /**
    * Compute distribution dependent constants:

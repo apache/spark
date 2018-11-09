@@ -43,7 +43,7 @@ class MultivariateGaussian @Since("1.3.0") (
   require(sigma.numCols == sigma.numRows, "Covariance matrix must be square")
   require(mu.size == sigma.numCols, "Mean vector length must match covariance matrix size")
 
-  private val breezeMu = mu.asBreeze.toDenseVector
+  @transient private lazy val breezeMu = mu.asBreeze.toDenseVector
 
   /**
    * private[mllib] constructor
