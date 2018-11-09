@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.{Calendar, Locale}
 
 import org.scalatest.exceptions.TestFailedException
 
@@ -736,5 +737,21 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       new SchemaOfJson(Literal.create("""{"col":01}"""),
         CreateMap(Seq(Literal.create("allowNumericLeadingZeros"), Literal.create("true")))),
       "struct<col:bigint>")
+  }
+
+  test("parse date with locale") {
+    Seq("en-US", "ru-RU").foreach { langTag =>
+      val locale = Locale.forLanguageTag(langTag)
+      val date = new SimpleDateFormat("yyyy-MM-dd").parse("2018-11-05")
+      val schema = new StructType().add("d", DateType)
+      val dateFormat = "MMM yyyy"
+      val sdf = new SimpleDateFormat(dateFormat, locale)
+      val dateStr = s"""{"d":"${sdf.format(date)}"}"""
+      val options = Map("dateFormat" -> dateFormat, "locale" -> langTag)
+
+      checkEvaluation(
+        JsonToStructs(schema, options, Literal.create(dateStr), gmtId),
+        InternalRow(17836)) // number of days from 1970-01-01
+    }
   }
 }
