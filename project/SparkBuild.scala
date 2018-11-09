@@ -17,6 +17,7 @@
 
 import java.io._
 import java.nio.file.Files
+import java.util.Locale
 
 import scala.io.Source
 import scala.util.Properties
@@ -650,10 +651,13 @@ object Assembly {
     },
     jarName in (Test, assembly) := s"${moduleName.value}-test-${version.value}.jar",
     mergeStrategy in assembly := {
-      case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
-      case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf")
+                                                               => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$")
+                                                               => MergeStrategy.discard
       case "log4j.properties"                                  => MergeStrategy.discard
-      case m if m.toLowerCase.startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
+      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/")
+                                                               => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat
       case _                                                   => MergeStrategy.first
     }
