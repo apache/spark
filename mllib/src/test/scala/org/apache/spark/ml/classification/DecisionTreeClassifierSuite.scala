@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
@@ -28,6 +28,7 @@ import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{DataFrame, Row}
 
 class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
@@ -374,6 +375,23 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     val model = dt.fit(data)
 
     testDefaultReadWrite(model)
+  }
+
+  test("Kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
+    val ser = new KryoSerializer(conf).newInstance()
+
+    val model1 = new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 1, 2)
+    val model2 = new DecisionTreeClassificationModel("dtc", new LeafNode(1.0, 2.0, null), 2, 2)
+
+    Seq(model1, model2).foreach { o =>
+      val o2 = ser.deserialize[DecisionTreeClassificationModel](ser.serialize(o))
+      TreeTests.checkEqual(o, o2)
+      assert(o.numFeatures === o2.numFeatures)
+      assert(o.numClasses === o2.numClasses)
+    }
   }
 }
 
