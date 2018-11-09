@@ -414,7 +414,8 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_DATE_ENABLED = buildConf("spark.sql.parquet.filterPushdown.date")
     .doc("If true, enables Parquet filter push-down optimization for Date. " +
-      "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+      s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
+      "enabled.")
     .internal()
     .booleanConf
     .createWithDefault(true)
@@ -422,7 +423,7 @@ object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.timestamp")
       .doc("If true, enables Parquet filter push-down optimization for Timestamp. " +
-        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is " +
+        s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled and Timestamp stored as TIMESTAMP_MICROS or TIMESTAMP_MILLIS type.")
     .internal()
     .booleanConf
@@ -431,7 +432,8 @@ object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.decimal")
       .doc("If true, enables Parquet filter push-down optimization for Decimal. " +
-        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+        s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
+        "enabled.")
       .internal()
       .booleanConf
       .createWithDefault(true)
@@ -439,7 +441,8 @@ object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.string.startsWith")
     .doc("If true, enables Parquet filter push-down optimization for string startsWith function. " +
-      "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+      s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
+      "enabled.")
     .internal()
     .booleanConf
     .createWithDefault(true)
@@ -450,7 +453,8 @@ object SQLConf {
         "Large threshold won't necessarily provide much better performance. " +
         "The experiment argued that 300 is the limit threshold. " +
         "By setting this value to 0 this feature can be disabled. " +
-        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+        s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
+        "enabled.")
       .internal()
       .intConf
       .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
@@ -462,13 +466,6 @@ object SQLConf {
       "systems such as Apache Hive and Apache Impala use. If false, the newer format in Parquet " +
       "will be used. For example, decimals will be written in int-based format. If Parquet " +
       "output is intended for use with systems that do not support this newer format, set to true.")
-    .booleanConf
-    .createWithDefault(false)
-
-  val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
-    .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
-      "filters. This configuration only has an effect when 'spark.sql.parquet.filterPushdown' " +
-      "is enabled.")
     .booleanConf
     .createWithDefault(false)
 
@@ -487,11 +484,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+<<<<<<< HEAD
   val PARQUET_PARTITION_PRUNING_ENABLED = buildConf("spark.sql.parquet.enablePartitionPruning")
       .doc("Enables driver-side partition pruning for Parquet.")
       .booleanConf
       .createWithDefault(true)
 
+||||||| merged common ancestors
+=======
+  val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
+    .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
+      "filters. " +
+      s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' " +
+      "is enabled and the vectorized reader is not used. You can ensure the vectorized reader " +
+      s"is not used by setting '${PARQUET_VECTORIZED_READER_ENABLED.key}' to false.")
+    .booleanConf
+    .createWithDefault(false)
+
+>>>>>>> 3404a73~1
   val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.columnarReaderBatchSize")
     .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
       "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
@@ -652,7 +662,7 @@ object SQLConf {
     .internal()
     .doc("When true, a table created by a Hive CTAS statement (no USING clause) " +
       "without specifying any storage property will be converted to a data source table, " +
-      "using the data source set by spark.sql.sources.default.")
+      s"using the data source set by ${DEFAULT_DATA_SOURCE_NAME.key}.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1118,7 +1128,7 @@ object SQLConf {
   val DEFAULT_SIZE_IN_BYTES = buildConf("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
-      "which is larger than `spark.sql.autoBroadcastJoinThreshold` to be more conservative. " +
+      s"which is larger than `${AUTO_BROADCASTJOIN_THRESHOLD.key}` to be more conservative. " +
       "That is to say by default the optimizer will not choose to broadcast a table unless it " +
       "knows for sure its size is small enough.")
     .longConf
@@ -1289,7 +1299,7 @@ object SQLConf {
 
   val ARROW_FALLBACK_ENABLED =
     buildConf("spark.sql.execution.arrow.fallback.enabled")
-      .doc("When true, optimizations enabled by 'spark.sql.execution.arrow.enabled' will " +
+      .doc(s"When true, optimizations enabled by '${ARROW_EXECUTION_ENABLED.key}' will " +
         "fallback automatically to non-optimized implementations if an error occurs.")
       .booleanConf
       .createWithDefault(true)
@@ -1493,15 +1503,16 @@ object SQLConf {
   val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
     .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
       "displayed if and only if the REPL supports the eager evaluation. Currently, the " +
-      "eager evaluation is only supported in PySpark. For the notebooks like Jupyter, " +
-      "the HTML table (generated by _repr_html_) will be returned. For plain Python REPL, " +
-      "the returned outputs are formatted like dataframe.show().")
+      "eager evaluation is supported in PySpark and SparkR. In PySpark, for the notebooks like " +
+      "Jupyter, the HTML table (generated by _repr_html_) will be returned. For plain Python " +
+      "REPL, the returned outputs are formatted like dataframe.show(). In SparkR, the returned " +
+      "outputs are showed similar to R data.frame would.")
     .booleanConf
     .createWithDefault(false)
 
   val REPL_EAGER_EVAL_MAX_NUM_ROWS = buildConf("spark.sql.repl.eagerEval.maxNumRows")
     .doc("The max number of rows that are returned by eager evaluation. This only takes " +
-      "effect when spark.sql.repl.eagerEval.enabled is set to true. The valid range of this " +
+      s"effect when ${REPL_EAGER_EVAL_ENABLED.key} is set to true. The valid range of this " +
       "config is from 0 to (Int.MaxValue - 1), so the invalid config like negative and " +
       "greater than (Int.MaxValue - 1) will be normalized to 0 and (Int.MaxValue - 1).")
     .intConf
@@ -1509,7 +1520,7 @@ object SQLConf {
 
   val REPL_EAGER_EVAL_TRUNCATE = buildConf("spark.sql.repl.eagerEval.truncate")
     .doc("The max number of characters for each cell that is returned by eager evaluation. " +
-      "This only takes effect when spark.sql.repl.eagerEval.enabled is set to true.")
+      s"This only takes effect when ${REPL_EAGER_EVAL_ENABLED.key} is set to true.")
     .intConf
     .createWithDefault(20)
 
@@ -1578,6 +1589,14 @@ object SQLConf {
     .internal()
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
+    buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
+      .internal()
+      .doc("If it is set to true, the parser will treat HAVING without GROUP BY as a normal " +
+        "WHERE, which does not follow SQL standard.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**

@@ -24,10 +24,8 @@ ERRORS=$(echo -e "q\n" \
         -Phadoop-palantir \
         -Pkinesis-asl \
         -Pmesos \
-        -Pkafka-0-8 \
         -Pkubernetes \
         -Pyarn \
-        -Pflume \
         -Phive \
         -Phive-thriftserver \
         checkstyle test:checkstyle \
