@@ -1,7 +1,7 @@
 #!/bin/bash
 
 scalaVersion="2.11"
-version="2.3.2"
+version="2.4.1"
 
 mvn deploy:deploy-file -Dfile=./target/spark-parent_"$scalaVersion"-"$version"-SNAPSHOT-tests.jar -DrepositoryId=snapshots -Durl=https://artifactory.eng.toasttab.com/artifactory/libs-snapshot-local -DgroupId=org.apache.spark -DartifactId="$moduleName"_"$scalaVersion" -Dversion="$version"-SNAPSHOT
 
