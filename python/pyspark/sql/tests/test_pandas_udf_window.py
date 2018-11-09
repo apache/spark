@@ -27,19 +27,6 @@ from pyspark.testing.utils import QuietTest
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
     _pandas_requirement_message or _pyarrow_requirement_message)
-class BoundedWindowPandasUDFTests(ReusedSQLTestCase):
-    @property
-    def data(self):
-        from pyspark.sql.functions import array, explode, col, lit
-        return self.spark.range(10).toDF('id') \
-            .withColumn("vs", array([lit(i * 1.0) + col('id') for i in range(20, 30)])) \
-            .withColumn("v", explode(col('vs'))) \
-            .drop('vs') \
-            .withColumn('w', lit(1.0))
-
-@unittest.skipIf(
-    not _have_pandas or not _have_pyarrow,
-    _pandas_requirement_message or _pyarrow_requirement_message)
 class WindowPandasUDFTests(ReusedSQLTestCase):
     @property
     def data(self):
@@ -59,6 +46,15 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
     def pandas_scalar_time_two(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
         return pandas_udf(lambda v: v * 2, 'double')
+
+    @property
+    def pandas_agg_count_udf(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        @pandas_udf('long', PandasUDFType.GROUPED_AGG)
+        def count(v):
+            return len(v)
+        return count
 
     @property
     def pandas_agg_mean_udf(self):
@@ -90,7 +86,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
     @property
     def unbounded_window(self):
         return Window.partitionBy('id') \
-            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing).orderBy('v')
 
     @property
     def ordered_window(self):
@@ -99,6 +95,32 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
     @property
     def unpartitioned_window(self):
         return Window.partitionBy()
+
+    @property
+    def sliding_row_window(self):
+        return Window.partitionBy('id').orderBy('v').rowsBetween(-2, 1)
+
+    @property
+    def sliding_range_window(self):
+        return Window.partitionBy('id').orderBy('v').rangeBetween(-2, 4)
+
+    @property
+    def growing_row_window(self):
+        return Window.partitionBy('id').orderBy('v').rowsBetween(Window.unboundedPreceding, 3)
+
+    @property
+    def growing_range_window(self):
+        return Window.partitionBy('id').orderBy('v') \
+            .rangeBetween(Window.unboundedPreceding, 4)
+
+    @property
+    def shrinking_row_window(self):
+        return Window.partitionBy('id').orderBy('v').rowsBetween(-2, Window.unboundedFollowing)
+
+    @property
+    def shrinking_range_window(self):
+        return Window.partitionBy('id').orderBy('v') \
+            .rangeBetween(-3, Window.unboundedFollowing)
 
     def test_simple(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType, percent_rank, mean, max
@@ -248,8 +270,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
         df = self.data
         w = self.unbounded_window
-        ow = self.ordered_window
-        mean_udf = self.pandas_agg_mean_udf
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
@@ -258,39 +278,104 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
                 foo_udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUPED_MAP)
                 df.withColumn('v2', foo_udf(df['v']).over(w))
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    AnalysisException,
-                    '.*Only unbounded window frame is supported.*'):
-                df.withColumn('mean_v', mean_udf(df['v']).over(ow))
-
     def test_bounded_simple(self):
-        from pyspark.sql.functions import mean, max, min
+        from pyspark.sql.functions import mean, max, min, count
 
         df = self.data
-        w =  Window.partitionBy('id').rowsBetween(-2, 3)
+        w1 = self.sliding_row_window
+        w2 = self.shrinking_range_window
 
+        plus_one = self.python_plus_one
+        count_udf = self.pandas_agg_count_udf
         mean_udf = self.pandas_agg_mean_udf
         max_udf = self.pandas_agg_max_udf
         min_udf = self.pandas_agg_min_udf
 
-        result1 = df.withColumn('mean_v', mean_udf(df['v']).over(w)) \
-            .withColumn('max_v', max_udf(df['v']).over(w)) \
-            .withColumn('min_v', min_udf(df['v']).over(w))
+        result1 = df.withColumn('mean_v', mean_udf(plus_one(df['v'])).over(w1)) \
+            .withColumn('count_v', count_udf(df['v']).over(w2)) \
+            .withColumn('max_v',  max_udf(df['v']).over(w2)) \
+            .withColumn('min_v', min_udf(df['v']).over(w1)) \
+ \
+        expected1 = df.withColumn('mean_v', mean(plus_one(df['v'])).over(w1)) \
+            .withColumn('count_v', count(df['v']).over(w2)) \
+            .withColumn('max_v', max(df['v']).over(w2)) \
+            .withColumn('min_v', min(df['v']).over(w1)) \
+ \
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
-        expected1 = df.withColumn('mean_v', mean(df['v']).over(w)) \
-            . withColumn('max_v', max(df['v']).over(w)) \
-            .withColumn('min_v', min(df['v']).over(w))
+    def test_growing_window(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w1 = self.growing_row_window
+        w2 = self.growing_range_window
+
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn('m1', mean_udf(df['v']).over(w1)) \
+            .withColumn('m2', mean_udf(df['v']).over(w2))
+
+        expected1 = df.withColumn('m1', mean(df['v']).over(w1)) \
+            .withColumn('m2', mean(df['v']).over(w2))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+
+    def test_sliding_window(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w1 = self.sliding_row_window
+        w2 = self.sliding_range_window
+
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn('m1', mean_udf(df['v']).over(w1)) \
+            .withColumn('m2', mean_udf(df['v']).over(w2))
+
+        expected1 = df.withColumn('m1', mean(df['v']).over(w1)) \
+            .withColumn('m2', mean(df['v']).over(w2))
 
         result1.show()
         expected1.show()
-        #expected1 = df.withColumn('mean_v', mean(df['v']).over(w))
-
-        #result2 = df.select(mean_udf(df['v']).over(w))
-        #expected2 = df.select(mean(df['v']).over(w))
 
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
-        #self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+
+    def test_shrinking_window(self):
+        from pyspark.sql.functions import mean
+
+        df = self.data
+        w1 = self.shrinking_row_window
+        w2 = self.shrinking_range_window
+
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn('m1', mean_udf(df['v']).over(w1)) \
+            .withColumn('m2', mean_udf(df['v']).over(w2))
+
+        expected1 = df.withColumn('m1', mean(df['v']).over(w1)) \
+            .withColumn('m2', mean(df['v']).over(w2))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+
+    def test_bounded_mixed(self):
+        from pyspark.sql.functions import mean, max, min, count
+
+        df = self.data
+        w1 = self.sliding_row_window
+        w2 = self.unbounded_window
+
+        mean_udf = self.pandas_agg_mean_udf
+        max_udf = self.pandas_agg_max_udf
+
+        result1 = df.withColumn('mean_v', mean_udf(df['v']).over(w1)) \
+            .withColumn('max_v', max_udf(df['v']).over(w2)) \
+            .withColumn('mean_unbounded_v', mean_udf(df['v']).over(w1))
+
+        expected1 = df.withColumn('mean_v', mean(df['v']).over(w1)) \
+            .withColumn('max_v', max(df['v']).over(w2)) \
+            .withColumn('mean_unbounded_v', mean(df['v']).over(w1))
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
 
 if __name__ == "__main__":

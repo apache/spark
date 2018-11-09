@@ -81,8 +81,8 @@ case class WindowInPandasExec(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    child: SparkPlan
-) extends WindowExecBase(windowExpression, partitionSpec, orderSpec, child) {
+    child: SparkPlan)
+  extends WindowExecBase(windowExpression, partitionSpec, orderSpec, child) {
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpression.map(_.toAttribute)
@@ -118,14 +118,13 @@ case class WindowInPandasExec(
   }
 
   /**
-   * Helper function to get all relevant helper functions and data structures for window bounds
+   * Get all relevant helper functions and data structures for window bounds
    *
    * This function returns:
    * (1) Total number of window bound indices in the python input row
    * (2) Function from frame index to its lower bound column index in the python input row
    * (3) Function from frame index to its upper bound column index in the python input row
-   * (4) Function that returns a frame requires window bound indices in the python input row
-   *     (unbounded window doesn't need it)
+   * (4) Function indicates whether a frame requires window bound indices
    * (5) Function from frame index to its eval type
    */
   private def computeWindowBoundHelpers(
@@ -136,7 +135,11 @@ case class WindowInPandasExec(
 
     val evalTypes = functionFrames.map {
       case _: UnboundedWindowFunctionFrame => PythonEvalType.SQL_UNBOUNDED_WINDOW_AGG_PANDAS_UDF
-      case _ => PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF
+      case _: UnboundedFollowingWindowFunctionFrame |
+        _: SlidingWindowFunctionFrame |
+        _: UnboundedPrecedingWindowFunctionFrame => PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF
+      // It should be impossible to get other types of window function frame here
+      case frame => throw new RuntimeException(s"Unexpected window function frame $frame.")
     }
 
     val requiredIndices = functionFrames.map {
@@ -146,7 +149,7 @@ case class WindowInPandasExec(
 
     val upperBoundIndices = requiredIndices.scan(0)(_ + _).tail
 
-    val boundIndices = (requiredIndices zip upperBoundIndices).map {case (num, upperBoundIndex) =>
+    val boundIndices = requiredIndices.zip(upperBoundIndices).map { case (num, upperBoundIndex) =>
         if (num == 0) {
           // Sentinel values for unbounded window
           (-1, -1)
@@ -158,10 +161,11 @@ case class WindowInPandasExec(
     def lowerBoundIndex(frameIndex: Int) = boundIndices(frameIndex)._1
     def upperBoundIndex(frameIndex: Int) = boundIndices(frameIndex)._2
     def frameEvalType(frameIndex: Int) = evalTypes(frameIndex)
-    def frameRequireIndex(frameIndex: Int) =
+    def frameRequiresWindowIndice(frameIndex: Int) =
       evalTypes(frameIndex) == PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF
 
-    (requiredIndices.sum, lowerBoundIndex, upperBoundIndex, frameRequireIndex, frameEvalType)
+    (requiredIndices.sum, lowerBoundIndex, upperBoundIndex,
+      frameRequiresWindowIndice, frameEvalType)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -185,8 +189,8 @@ case class WindowInPandasExec(
 
     val numFrames = factories.length
 
-    val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
-    val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
+    val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
+    val spillThreshold = conf.windowExecBufferSpillThreshold
 
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)

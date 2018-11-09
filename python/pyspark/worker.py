@@ -164,18 +164,13 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
     def wrapped(begin_index, end_index, *series):
-        import numpy as np
         import pandas as pd
         result = []
         for i in range(0, len(begin_index)):
-            begin = begin_index[i]
-            end = end_index[i]
-            range_index = np.arange(begin, end)
             # Note: Create a slice from a series is actually pretty expensive to
-            #       do for each window. However, there is no way to reduce/eliminate
+            #       do for each window. However, there is no way to reduce
             #       the cost of creating sub series here AFAIK.
-            # TODO: s.take might be the best way to create sub series
-            series_slices = [s.take(range_index) for s in series]
+            series_slices = [s[begin_index[i]: end_index[i]] for s in series]
             result.append(f(*series_slices))
         return pd.Series(result)
 
