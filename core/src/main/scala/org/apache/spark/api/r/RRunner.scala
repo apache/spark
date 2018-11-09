@@ -348,7 +348,7 @@ private[r] object RRunner {
     val sparkConf = SparkEnv.get.conf
     val requestedRCommand = Provenance.fromConf("spark.r.command")
       .orElse(Provenance.fromConf("spark.sparkr.r.command"))
-    val condaEnv = condaSetupInstructions.map(CondaEnvironmentManager.createCondaEnvironment)
+    val condaEnv = condaSetupInstructions.map(CondaEnvironmentManager.createOrGetCondaEnvironment)
     val rCommand = condaEnv.map { conda =>
       requestedRCommand.foreach(exec => sys.error(s"It's forbidden to set the r executable " +
         s"when using conda, but found: $exec"))

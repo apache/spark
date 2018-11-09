@@ -94,7 +94,7 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
 
   private[this] val condaEnv = {
     // Set up conda environment if there are any conda packages requested
-    condaInstructions.map(CondaEnvironmentManager.createCondaEnvironment)
+    condaInstructions.map(CondaEnvironmentManager.createOrGetCondaEnvironment)
   }
 
   private[this] val envVars: Map[String, String] = {
