@@ -189,7 +189,7 @@ case class ExpressionEncoder[T](
   val serializer: Seq[NamedExpression] = {
     val clsName = Utils.getSimpleName(clsTag.runtimeClass)
 
-    if (isSerializedAsStruct && !classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)) {
+    if (isSerializedAsStruct && !isOptionType) {
       val nullSafeSerializer = objSerializer.transformUp {
         case r: BoundReference =>
           // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
@@ -220,7 +220,7 @@ case class ExpressionEncoder[T](
    * `GetColumnByOrdinal` with corresponding ordinal.
    */
   val deserializer: Expression = {
-    if (isSerializedAsStruct && !classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)) {
+    if (isSerializedAsStruct && !isOptionType) {
       // We serialized this kind of objects to root-level row. The input of general deserializer
       // is a `GetColumnByOrdinal(0)` expression to extract first column of a row. We need to
       // transform attributes accessors.
@@ -250,6 +250,11 @@ case class ExpressionEncoder[T](
    * Returns true if the type `T` is serialized as a struct.
    */
   def isSerializedAsStruct: Boolean = objSerializer.dataType.isInstanceOf[StructType]
+
+  /**
+   * Returns true if the type `T` is `Option`.
+   */
+  def isOptionType: Boolean = classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)
 
   // serializer expressions are used to encode an object to a row, while the object is usually an
   // intermediate value produced inside an operator, not from the output of the child operator. This

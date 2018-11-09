@@ -1595,6 +1595,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(ds,
       Some((1, 2)), Some((2, 3)), Some((3, 4)))
   }
+
+  test("SPARK-24762: joinWith on Option[Product]") {
+    val ds1 = Seq(Some((1, 2)), Some((2, 3))).toDS().as("a")
+    val ds2 = Seq(Some((1, 2)), Some((2, 3))).toDS().as("b")
+    val joined = ds1.joinWith(ds2, $"a.value._1" === $"b.value._2", "inner")
+    checkDataset(joined, (Some((2, 3)), Some((1, 2))))
+  }
+
+  test("SPARK-24762: typed agg on Option[Product] type") {
+    val ds = Seq(Some((1, 2)), Some((2, 3)), Some((1, 3))).toDS()
+    assert(ds.groupByKey(_.get._1).count().collect() === Seq((1, 2), (2, 1)))
+
+    assert(ds.groupByKey(x => x).count().collect() ===
+      Seq((Some((1, 2)), 1), (Some((2, 3)), 1), (Some((1, 3)), 1)))
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
