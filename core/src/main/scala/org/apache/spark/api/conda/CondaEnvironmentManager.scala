@@ -20,9 +20,11 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.PosixFilePermission
+import java.util.concurrent.locks.{Lock, ReentrantLock}
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.sys.process.BasicIO
 import scala.sys.process.Process
 import scala.sys.process.ProcessBuilder
@@ -211,6 +213,9 @@ object CondaEnvironmentManager extends Logging {
   private[this] val httpUrlToken =
     Pattern.compile("(\\b\\w+://[^:/@]*:)([^/@]+)(?=@([\\w-.]+)(:\\d+)?\\b)")
 
+  private val initializedEnvironmentsLock = new ReentrantLock()
+  private val initializedEnvironments = mutable.HashMap[CondaSetupInstructions, CondaEnvironment]()
+
   private[conda] def redactCredentials(line: String): String = {
     httpUrlToken.matcher(line).replaceAll("$1<password>")
   }
@@ -239,6 +244,24 @@ object CondaEnvironmentManager extends Logging {
       Utils.createTempDir(localDirs(dirId).getAbsolutePath, "conda").getAbsolutePath
     }
     condaEnvManager.create(envDir, condaPackages, instructions.channels, instructions.extraArgs)
+  }
+
+  /**
+   * Helper method that will cache precreated conda environments.
+   */
+  def createOrGetCondaEnvironment(instructions: CondaSetupInstructions): CondaEnvironment = {
+    initializedEnvironmentsLock.lock()
+    try {
+      initializedEnvironments.get(instructions) match {
+        case Some(condaEnv) => condaEnv
+        case None =>
+          val condaEnv = createCondaEnvironment(instructions)
+          initializedEnvironments.put(instructions, condaEnv)
+          condaEnv
+      }
+    } finally {
+      initializedEnvironmentsLock.unlock()
+    }
   }
 
 }
