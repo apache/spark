@@ -679,7 +679,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       unrequiredChildIndex = Nil,
       outer = ctx.OUTER != null,
       // scalastyle:off caselocale
-      Some(ctx.tblName.getText.toLowerCase(Locale.ROOT)),
+      Some(ctx.tblName.getText.toLowerCase),
       // scalastyle:on caselocale
       ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply),
       query)

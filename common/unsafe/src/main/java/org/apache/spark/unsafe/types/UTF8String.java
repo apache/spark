@@ -23,7 +23,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Map;
 
 import com.esotericsoftware.kryo.Kryo;
@@ -412,7 +411,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private UTF8String toUpperCaseSlow() {
-    return fromString(toString().toUpperCase(Locale.ROOT));
+    return fromString(toString().toUpperCase());
   }
 
   /**
@@ -442,7 +441,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private UTF8String toLowerCaseSlow() {
-    return fromString(toString().toLowerCase(Locale.ROOT));
+    return fromString(toString().toLowerCase());
   }
 
   /**

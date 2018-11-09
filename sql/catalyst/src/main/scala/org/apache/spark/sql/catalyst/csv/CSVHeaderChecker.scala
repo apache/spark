@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import java.util.Locale
-
 import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.internal.Logging
@@ -69,8 +67,8 @@ class CSVHeaderChecker(
           var (nameInSchema, nameInHeader) = (fieldNames(i), columnNames(i))
           if (!caseSensitive) {
             // scalastyle:off caselocale
-            nameInSchema = nameInSchema.toLowerCase(Locale.ROOT)
-            nameInHeader = nameInHeader.toLowerCase(Locale.ROOT)
+            nameInSchema = nameInSchema.toLowerCase
+            nameInHeader = nameInHeader.toLowerCase
             // scalastyle:on caselocale
           }
           if (nameInHeader != nameInSchema) {

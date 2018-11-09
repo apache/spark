@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.IOException
-import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -97,7 +96,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
     val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
       // scalastyle:off caselocale
-      .map(mode => PartitionOverwriteMode.withName(mode.toUpperCase(Locale.ROOT)))
+      .map(mode => PartitionOverwriteMode.withName(mode.toUpperCase))
       // scalastyle:on caselocale
       .getOrElse(sparkSession.sessionState.conf.partitionOverwriteMode)
     val enableDynamicOverwrite = partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC

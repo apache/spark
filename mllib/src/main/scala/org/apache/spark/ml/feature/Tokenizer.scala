@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import java.util.Locale
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
@@ -39,7 +37,7 @@ class Tokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   override protected def createTransformFunc: String => Seq[String] = {
     // scalastyle:off caselocale
-    _.toLowerCase(Locale.ROOT).split("\\s")
+    _.toLowerCase.split("\\s")
     // scalastyle:on caselocale
   }
 
@@ -145,7 +143,7 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override protected def createTransformFunc: String => Seq[String] = { originStr =>
     val re = $(pattern).r
     // scalastyle:off caselocale
-    val str = if ($(toLowercase)) originStr.toLowerCase(Locale.ROOT) else originStr
+    val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
     // scalastyle:on caselocale
     val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
     val minLength = $(minTokenLength)

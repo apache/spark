@@ -17,8 +17,6 @@
 
 package org.apache.spark.unsafe.types
 
-import java.util.Locale
-
 import org.apache.commons.lang3.StringUtils
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -68,13 +66,13 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
   // scalastyle:off caselocale
   test("toUpperCase") {
     forAll { (s: String) =>
-      assert(toUTF8(s).toUpperCase === toUTF8(s.toUpperCase(Locale.ROOT)))
+      assert(toUTF8(s).toUpperCase === toUTF8(s.toUpperCase))
     }
   }
 
   test("toLowerCase") {
     forAll { (s: String) =>
-      assert(toUTF8(s).toLowerCase === toUTF8(s.toLowerCase(Locale.ROOT)))
+      assert(toUTF8(s).toLowerCase === toUTF8(s.toLowerCase))
     }
   }
   // scalastyle:on caselocale
