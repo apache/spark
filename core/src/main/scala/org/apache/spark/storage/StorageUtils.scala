@@ -22,6 +22,7 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import scala.collection.Map
 import scala.collection.mutable
 
+import sun.misc.Unsafe
 import sun.nio.ch.DirectBuffer
 
 import org.apache.spark.internal.Logging
@@ -193,6 +194,35 @@ private[spark] class StorageStatus(
 
 /** Helper methods for storage-related objects. */
 private[spark] object StorageUtils extends Logging {
+
+  // In Java 8, the type of DirectBuffer.cleaner() was sun.misc.Cleaner, and it was possible
+  // to access the method sun.misc.Cleaner.clean() to invoke it. The type changed to
+  // jdk.internal.ref.Cleaner in later JDKs, and the .clean() method is not accessible even with
+  // reflection. However sun.misc.Unsafe added a invokeCleaner() method in JDK 9+ and this is
+  // still accessible with reflection.
+  private val bufferCleaner: DirectBuffer => Unit =
+    if (System.getProperty("java.version").split("\\.").head.toInt < 9) {
+      // scalastyle:off classforname
+      val cleanerMethod = Class.forName("sun.misc.Cleaner").getMethod("clean")
+      // scalastyle:on classforname
+      (buffer: DirectBuffer) => {
+        // Careful to avoid the return type of .cleaner(), which changes with JDK
+        val cleaner: AnyRef = buffer.cleaner()
+        if (cleaner != null) {
+          cleanerMethod.invoke(cleaner)
+        }
+      }
+    } else {
+      // scalastyle:off classforname
+      val cleanerMethod =
+        Class.forName("sun.misc.Unsafe").getMethod("invokeCleaner", classOf[ByteBuffer])
+      // scalastyle:on classforname
+      val unsafeField = classOf[Unsafe].getDeclaredField("theUnsafe")
+      unsafeField.setAccessible(true)
+      val unsafe = unsafeField.get(null).asInstanceOf[Unsafe]
+      (buffer: DirectBuffer) => cleanerMethod.invoke(unsafe, buffer)
+    }
+
   /**
    * Attempt to clean up a ByteBuffer if it is direct or memory-mapped. This uses an *unsafe* Sun
    * API that will cause errors if one attempts to read from the disposed buffer. However, neither
@@ -204,14 +234,8 @@ private[spark] object StorageUtils extends Logging {
   def dispose(buffer: ByteBuffer): Unit = {
     if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
       logTrace(s"Disposing of $buffer")
-      cleanDirectBuffer(buffer.asInstanceOf[DirectBuffer])
+      bufferCleaner(buffer.asInstanceOf[DirectBuffer])
     }
   }
 
-  private def cleanDirectBuffer(buffer: DirectBuffer) = {
-    val cleaner = buffer.cleaner()
-    if (cleaner != null) {
-      cleaner.clean()
-    }
-  }
 }
