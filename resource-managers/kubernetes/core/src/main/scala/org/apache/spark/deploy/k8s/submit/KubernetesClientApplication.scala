@@ -17,16 +17,9 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.StringWriter
-<<<<<<< HEAD
-import java.util.{Collections, Locale, Properties, UUID}
-||||||| merged common ancestors
-import java.util.{Collections, Locale, UUID}
-import java.util.Properties
-=======
 import java.util.{Collections, Locale, Properties, UUID}
 import java.util.{Collections, UUID}
 import java.util.Properties
->>>>>>> 3404a73~1
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -233,15 +226,8 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       clientArguments.mainAppResource,
       clientArguments.mainClass,
       clientArguments.driverArgs,
-<<<<<<< HEAD
-      clientArguments.maybePyFiles)
-||||||| merged common ancestors
-      clientArguments.maybePyFiles)
-    val builder = new KubernetesDriverBuilder
-=======
       clientArguments.maybePyFiles,
       clientArguments.hadoopConfigDir)
->>>>>>> 3404a73~1
     val namespace = kubernetesConf.namespace()
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.

@@ -106,22 +106,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (memoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", memoryMb.get.toString)
     }
-<<<<<<< HEAD
-    val worker: Socket = env.createPythonWorker(
-      pythonExec, envVars.asScala.toMap, condaInstructions)
-    // Whether is the worker released into idle pool
-    val released = new AtomicBoolean(false)
-||||||| merged common ancestors
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
-    // Whether is the worker released into idle pool
-    val released = new AtomicBoolean(false)
-=======
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
+    val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap,
+      condaInstructions)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
     // sure there is only one winner that is going to release or close the worker.
     val releasedOrClosed = new AtomicBoolean(false)
->>>>>>> 3404a73~1
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = newWriterThread(env, worker, inputIterator, partitionIndex, context)
@@ -351,6 +341,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           }
         }
         dataOut.flush()
+
         dataOut.writeInt(evalType)
         writeCommand(dataOut)
         writeIteratorToStream(dataOut)
@@ -476,18 +467,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
-<<<<<<< HEAD
-        if (reuseWorker) {
-          env.releasePythonWorker(pythonExec, envVars.asScala.toMap, condaInstructions, worker)
-          released.set(true)
-||||||| merged common ancestors
-        if (reuseWorker) {
-          env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
-          released.set(true)
-=======
         if (reuseWorker && releasedOrClosed.compareAndSet(false, true)) {
-          env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
->>>>>>> 3404a73~1
+          env.releasePythonWorker(pythonExec, envVars.asScala.toMap, condaInstructions, worker)
         }
       }
       eos = true

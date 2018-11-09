@@ -55,32 +55,12 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
-<<<<<<< HEAD
-    streamingFlumeSink, streamingFlume,
-    streamingKafka, sparkGangliaLgpl, streamingKinesisAsl,
-    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests, sparkDist) =
-||||||| merged common ancestors
-    streamingFlumeSink, streamingFlume,
-    streamingKafka, sparkGangliaLgpl, streamingKinesisAsl,
-    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
-=======
     sparkGangliaLgpl, streamingKinesisAsl,
-    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
->>>>>>> 3404a73~1
+    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests, sparkDist) =
     Seq("kubernetes", "mesos", "yarn",
-<<<<<<< HEAD
-      "streaming-flume-sink", "streaming-flume",
-      "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
+      "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests",
       "spark-dist-hadoop-palantir").map(ProjectRef(buildLocation, _))
-||||||| merged common ancestors
-      "streaming-flume-sink", "streaming-flume",
-      "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
-      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
-=======
-      "ganglia-lgpl", "streaming-kinesis-asl",
-      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
->>>>>>> 3404a73~1
 
   val assemblyProjects@Seq(networkYarn, streamingKafka010Assembly, streamingKinesisAslAssembly) =
     Seq("network-yarn", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")

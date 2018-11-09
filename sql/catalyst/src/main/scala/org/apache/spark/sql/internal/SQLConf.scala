@@ -484,14 +484,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-<<<<<<< HEAD
-  val PARQUET_PARTITION_PRUNING_ENABLED = buildConf("spark.sql.parquet.enablePartitionPruning")
-      .doc("Enables driver-side partition pruning for Parquet.")
-      .booleanConf
-      .createWithDefault(true)
-
-||||||| merged common ancestors
-=======
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
       "filters. " +
@@ -501,7 +493,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
->>>>>>> 3404a73~1
+  val PARQUET_PARTITION_PRUNING_ENABLED = buildConf("spark.sql.parquet.enablePartitionPruning")
+      .doc("Enables driver-side partition pruning for Parquet.")
+      .booleanConf
+      .createWithDefault(true)
+
   val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.columnarReaderBatchSize")
     .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
       "be carefully chosen to minimize overhead and avoid OOMs in reading data.")

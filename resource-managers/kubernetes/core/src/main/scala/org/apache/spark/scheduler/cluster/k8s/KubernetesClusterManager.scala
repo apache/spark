@@ -69,15 +69,6 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       defaultServiceAccountToken,
       defaultServiceAccountCaCrt)
 
-<<<<<<< HEAD
-    if (sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
-      KubernetesUtils.loadPodFromTemplate(
-        kubernetesClient,
-        new File(sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get))
-    }
-
-||||||| merged common ancestors
-=======
     if (sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
       KubernetesUtils.loadPodFromTemplate(
         kubernetesClient,
@@ -85,7 +76,6 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
     }
 
->>>>>>> 3404a73~1
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
       "kubernetes-executor-requests")
 

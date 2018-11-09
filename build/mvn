@@ -159,20 +159,12 @@ export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
 
 echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
-<<<<<<< HEAD
-# Last, call the `mvn` command as usual
-"${MVN_BIN}" -DzincPort=${ZINC_PORT} -e "$@"
-||||||| merged common ancestors
-# Last, call the `mvn` command as usual
-"${MVN_BIN}" -DzincPort=${ZINC_PORT} "$@"
-=======
 # call the `mvn` command as usual
 # SPARK-25854
-"${MVN_BIN}" -DzincPort=${ZINC_PORT} "$@"
+"${MVN_BIN}" -DzincPort=${ZINC_PORT} -e "$@"
 MVN_RETCODE=$?
 
 # Try to shut down zinc explicitly if the server is still running.
 "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
 
 exit $MVN_RETCODE
->>>>>>> 3404a73~1

@@ -81,16 +81,6 @@ private[spark] object Constants {
   val ENV_R_PRIMARY = "R_PRIMARY"
   val ENV_R_ARGS = "R_APP_ARGS"
 
-<<<<<<< HEAD
-  // Pod spec templates
-  val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "pod-spec-template.yml"
-  val EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH = "/opt/spark/pod-template"
-  val POD_TEMPLATE_VOLUME = "podspec-volume"
-  val POD_TEMPLATE_CONFIGMAP = "podspec-configmap"
-  val POD_TEMPLATE_KEY = "podspec-configmap-key"
-
-||||||| merged common ancestors
-=======
   // Pod spec templates
   val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "pod-spec-template.yml"
   val EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH = "/opt/spark/pod-template"
@@ -98,7 +88,6 @@ private[spark] object Constants {
   val POD_TEMPLATE_CONFIGMAP = "podspec-configmap"
   val POD_TEMPLATE_KEY = "podspec-configmap-key"
 
->>>>>>> 3404a73~1
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   val DEFAULT_DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"

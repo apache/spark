@@ -28,13 +28,8 @@ ERRORS=$(echo -e "q\n" \
         -Pyarn \
         -Phive \
         -Phive-thriftserver \
-<<<<<<< HEAD
-        -Pkubernetes \
         -Pkubernetes-integration-tests \
-||||||| merged common ancestors
-=======
         -Pspark-ganglia-lgpl \
->>>>>>> 3404a73~1
         scalastyle test:scalastyle \
     | awk '{if($1~/error/)print}' \
 )

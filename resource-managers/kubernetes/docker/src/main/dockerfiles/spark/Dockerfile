@@ -31,15 +31,8 @@ ARG k8s_tests=kubernetes/tests
 
 RUN set -ex && \
     apk upgrade --no-cache && \
-<<<<<<< HEAD
-    apk add --no-cache bash tini && \
-||||||| merged common ancestors
-    apk add --no-cache bash tini libc6-compat linux-pam && \
-=======
-    apk add --no-cache bash tini libc6-compat linux-pam krb5 krb5-libs && \
->>>>>>> 3404a73~1
+    apk add --no-cache bash tini krb5 krb5-libs && \
     mkdir -p /opt/spark && \
-    mkdir -p /opt/spark/examples && \
     mkdir -p /opt/spark/work-dir && \
     touch /opt/spark/RELEASE && \
     rm /bin/sh && \
@@ -50,17 +43,6 @@ COPY ${spark_jars} /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY ${img_path}/spark/entrypoint.sh /opt/
-<<<<<<< HEAD
-||||||| merged common ancestors
-COPY examples /opt/spark/examples
-COPY kubernetes/tests /opt/spark/tests
-COPY data /opt/spark/data
-=======
-COPY ${example_jars} /opt/spark/examples/jars
-COPY examples/src /opt/spark/examples/src
-COPY ${k8s_tests} /opt/spark/tests
-COPY data /opt/spark/data
->>>>>>> 3404a73~1
 
 ENV SPARK_HOME /opt/spark
 

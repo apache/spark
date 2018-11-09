@@ -16,16 +16,6 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-<<<<<<< HEAD
-import java.io.File
-
-import io.fabric8.kubernetes.client.KubernetesClient
-
-import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s._
-||||||| merged common ancestors
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesRoleSpecificConf, SparkPod}
-=======
 import java.io.File
 
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -33,8 +23,8 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
->>>>>>> 3404a73~1
 import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, EnvSecretsFeatureStep, LocalDirsFeatureStep, MountSecretsFeatureStep}
 
 private[spark] class KubernetesExecutorBuilder(
     provideBasicStep: (KubernetesConf [KubernetesExecutorSpecificConf])
@@ -54,12 +44,6 @@ private[spark] class KubernetesExecutorBuilder(
       new LocalDirsFeatureStep(_),
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
-<<<<<<< HEAD
-      new MountVolumesFeatureStep(_),
-    provideInitialPod: () => SparkPod = SparkPod.initialPod) {
-||||||| merged common ancestors
-      new MountVolumesFeatureStep(_)) {
-=======
       new MountVolumesFeatureStep(_),
     provideHadoopConfStep: (
       KubernetesConf[KubernetesExecutorSpecificConf]
@@ -74,7 +58,6 @@ private[spark] class KubernetesExecutorBuilder(
       => HadoopSparkUserExecutorFeatureStep) =
       new HadoopSparkUserExecutorFeatureStep(_),
     provideInitialPod: () => SparkPod = SparkPod.initialPod) {
->>>>>>> 3404a73~1
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
@@ -97,12 +80,6 @@ private[spark] class KubernetesExecutorBuilder(
       Seq(provideMountLocalFilesStep(kubernetesConf))
     } else Nil
 
-<<<<<<< HEAD
-    val allFeatures = baseFeatures ++
-      secretFeature ++ secretEnvFeature ++ volumesFeature ++ localFilesFeature
-||||||| merged common ancestors
-    val allFeatures = baseFeatures ++ secretFeature ++ secretEnvFeature ++ volumesFeature
-=======
     val maybeHadoopConfFeatureSteps = maybeHadoopConfigMap.map { _ =>
       val maybeKerberosStep =
         if (maybeDTSecretName.isDefined && maybeDTDataItem.isDefined) {
@@ -119,8 +96,8 @@ private[spark] class KubernetesExecutorBuilder(
       secretFeature ++
       secretEnvFeature ++
       volumesFeature ++
-      maybeHadoopConfFeatureSteps
->>>>>>> 3404a73~1
+      maybeHadoopConfFeatureSteps ++
+      localFilesFeature
 
     var executorPod = provideInitialPod()
     for (feature <- allFeatures) {
@@ -129,20 +106,6 @@ private[spark] class KubernetesExecutorBuilder(
     executorPod
   }
 }
-<<<<<<< HEAD
-
-private[spark] object KubernetesExecutorBuilder {
-  def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesExecutorBuilder = {
-    conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
-      .map(new File(_))
-      .map(file => new KubernetesExecutorBuilder(provideInitialPod = () =>
-          KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
-      ))
-      .getOrElse(new KubernetesExecutorBuilder())
-  }
-}
-||||||| merged common ancestors
-=======
 
 private[spark] object KubernetesExecutorBuilder {
   def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesExecutorBuilder = {
@@ -157,4 +120,3 @@ private[spark] object KubernetesExecutorBuilder {
       .getOrElse(new KubernetesExecutorBuilder())
   }
 }
->>>>>>> 3404a73~1

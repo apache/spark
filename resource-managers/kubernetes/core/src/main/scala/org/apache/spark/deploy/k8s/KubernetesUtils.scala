@@ -16,26 +16,12 @@
  */
 package org.apache.spark.deploy.k8s
 
-<<<<<<< HEAD
-import java.io.File
-||||||| merged common ancestors
-import scala.collection.JavaConverters._
-=======
 import java.io.File
 
 import scala.collection.JavaConverters._
->>>>>>> 3404a73~1
 
-<<<<<<< HEAD
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder, Time}
-import io.fabric8.kubernetes.client.KubernetesClient
-import scala.collection.JavaConverters._
-||||||| merged common ancestors
-import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, Time}
-=======
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
->>>>>>> 3404a73~1
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -111,32 +97,6 @@ private[spark] object KubernetesUtils extends Logging {
     }
   }
 
-<<<<<<< HEAD
-  def loadPodFromTemplate(
-      kubernetesClient: KubernetesClient,
-      templateFile: File): SparkPod = {
-    try {
-      val pod = kubernetesClient.pods().load(templateFile).get()
-      pod.getSpec.getContainers.asScala.toList match {
-        case first :: rest => SparkPod(
-          new PodBuilder(pod)
-            .editSpec()
-              .withContainers(rest.asJava)
-              .endSpec()
-            .build(),
-          first)
-        case Nil => SparkPod(pod, new ContainerBuilder().build())
-      }
-    } catch {
-      case e: Exception =>
-        logError(
-          s"Encountered exception while attempting to load initial pod spec from file", e)
-        throw new SparkException("Could not load pod from template file.", e)
-    }
-  }
-
-||||||| merged common ancestors
-=======
   def loadPodFromTemplate(
       kubernetesClient: KubernetesClient,
       templateFile: File,
@@ -178,7 +138,6 @@ private[spark] object KubernetesUtils extends Logging {
       }.getOrElse(SparkPod(pod, new ContainerBuilder().build()))
   }
 
->>>>>>> 3404a73~1
   def parseMasterUrl(url: String): String = url.substring("k8s://".length)
 
   def formatPairsBundle(pairs: Seq[(String, String)], indent: Int = 1) : String = {

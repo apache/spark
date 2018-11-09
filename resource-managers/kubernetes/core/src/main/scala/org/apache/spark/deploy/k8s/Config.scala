@@ -286,17 +286,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  val KUBERNETES_DRIVER_PODTEMPLATE_FILE =
-    ConfigBuilder("spark.kubernetes.driver.podTemplateFile")
-      .doc("File containing a template pod spec for the driver")
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_EXECUTOR_PODTEMPLATE_FILE =
-    ConfigBuilder("spark.kubernetes.executor.podTemplateFile")
-      .doc("File containing a template pod spec for executors")
-      .stringConf
-      .createOptional
   val APP_RESOURCE_TYPE =
     ConfigBuilder("spark.kubernetes.resource.type")
       .doc("This sets the resource type internally")

@@ -19,7 +19,6 @@ package org.apache.spark.api.python
 
 import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
-import java.nio.charset.StandardCharsets
 import java.util.Arrays
 import javax.annotation.concurrent.GuardedBy
 
@@ -33,18 +32,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
-<<<<<<< HEAD
 private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
                                          requestedEnvVars: Map[String, String],
                                          condaInstructions: Option[CondaSetupInstructions])
-  extends Logging {
-||||||| merged common ancestors
-private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
-  extends Logging {
-=======
-private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
   extends Logging { self =>
->>>>>>> 3404a73~1
 
   import PythonWorkerFactory._
 
@@ -101,7 +92,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   @GuardedBy("self")
   private val simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
 
-<<<<<<< HEAD
   private[this] val condaEnv = {
     // Set up conda environment if there are any conda packages requested
     condaInstructions.map(CondaEnvironmentManager.createCondaEnvironment)
@@ -122,11 +112,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   val pythonPath = PythonUtils.mergePythonPaths(
-||||||| merged common ancestors
-  val pythonPath = PythonUtils.mergePythonPaths(
-=======
-  private val pythonPath = PythonUtils.mergePythonPaths(
->>>>>>> 3404a73~1
     PythonUtils.sparkPythonPath,
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
