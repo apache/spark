@@ -290,6 +290,32 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     checkModelData(ovaModel, newOvaModel)
   }
 
+  test("should ignore empty output cols") {
+    val lr = new LogisticRegression().setMaxIter(1)
+    val ovr = new OneVsRest().setClassifier(lr)
+    val ovrModel = ovr.fit(dataset)
+
+    val output1 = ovrModel.setPredictionCol("").setRawPredictionCol("")
+      .transform(dataset)
+    assert(output1.schema.fieldNames.toSet ===
+      Set("label", "features"))
+
+    val output2 = ovrModel.setPredictionCol("prediction").setRawPredictionCol("")
+      .transform(dataset)
+    assert(output2.schema.fieldNames.toSet ===
+      Set("label", "features", "prediction"))
+
+    val output3 = ovrModel.setPredictionCol("").setRawPredictionCol("rawPrediction")
+      .transform(dataset)
+    assert(output3.schema.fieldNames.toSet ===
+      Set("label", "features", "rawPrediction"))
+
+    val output4 = ovrModel.setPredictionCol("prediction").setRawPredictionCol("rawPrediction")
+      .transform(dataset)
+    assert(output4.schema.fieldNames.toSet ===
+      Set("label", "features", "prediction", "rawPrediction"))
+  }
+
   test("should support all NumericType labels and not support other types") {
     val ovr = new OneVsRest().setClassifier(new LogisticRegression().setMaxIter(1))
     MLTestingUtils.checkNumericTypes[OneVsRestModel, OneVsRest](
