@@ -240,6 +240,18 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
+  <check customId="notthrowoutofmemory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">throw new OutOfMemoryError</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to throw OutOfMemoryError? It will kill the hole executor, you should use
+      SparkOutOfMemoryError instead.
+      If you must throw OutOfMemoryError, wrap the code block with
+      // scalastyle:off notthrowoutofmemory
+      throw new OutOfMemoryError(...)
+      // scalastyle:on notthrowoutofmemory
+    ]]></customMessage>
+  </check>
+
   <!-- As of SPARK-9613 JavaConversions should be replaced with JavaConverters -->
   <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">JavaConversions</parameter></parameters>

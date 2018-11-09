@@ -64,6 +64,11 @@
         <property name="message" value="No trailing whitespace allowed."/>
     </module>
 
+    <module name="RegexpSingleline">
+        <property name="format" value="throw new OutOfMemoryError"/>
+        <property name="message" value="Throw OutOfMemoryError will kill entire executor, replace it with SparkOutOfMemoryError."/>
+    </module>
+
     <module name="NewlineAtEndOfFile"/>
 
     <module name="TreeWalker">
