@@ -2857,7 +2857,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("self join with aliases on partitioned tables #1") {
+  test("SPARK-25988: self join with aliases on partitioned tables #1") {
     withTempView("tmpView1", "tmpView2") {
       withTable("tab1", "tab2") {
         sql(
@@ -2883,7 +2883,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("self join with aliases on partitioned tables #2") {
+  test("SPARK-25988: self join with aliases on partitioned tables #2") {
     withTempView("tmp") {
       withTable("tab1", "tab2") {
         sql(
@@ -2899,7 +2899,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
             |SELECT  N.tdate, EX AS new_ex
             |FROM tab1 N
             |JOIN tab2 Z
-            |ON      N.tdate         = Z.tdate
+            |ON N.tdate = Z.tdate
           """.stripMargin)
         sql(
           """
