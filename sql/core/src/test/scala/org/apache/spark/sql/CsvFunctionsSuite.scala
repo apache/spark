@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import java.text.SimpleDateFormat
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
@@ -163,5 +166,19 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
   test("Support to_csv in SQL") {
     val df1 = Seq(Tuple1(Tuple1(1))).toDF("a")
     checkAnswer(df1.selectExpr("to_csv(a)"), Row("1") :: Nil)
+  }
+
+  test("parse timestamps with locale") {
+    Seq("en-US", "ko-KR", "zh-CN", "ru-RU").foreach { langTag =>
+      val locale = Locale.forLanguageTag(langTag)
+      val ts = new SimpleDateFormat("dd/MM/yyyy HH:mm").parse("06/11/2018 18:00")
+      val timestampFormat = "dd MMM yyyy HH:mm"
+      val sdf = new SimpleDateFormat(timestampFormat, locale)
+      val input = Seq(s"""${sdf.format(ts)}""").toDS()
+      val options = Map("timestampFormat" -> timestampFormat, "locale" -> langTag)
+      val df = input.select(from_csv($"value", lit("time timestamp"), options.asJava))
+
+      checkAnswer(df, Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
+    }
   }
 }
