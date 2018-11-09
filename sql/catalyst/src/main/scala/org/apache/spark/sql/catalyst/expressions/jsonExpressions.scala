@@ -569,13 +569,15 @@ case class JsonToStructs(
       throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
         s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
     }
-    val rawParser = new JacksonParser(nullableSchema, parsedOptions, allowArrayAsStructs = false)
-    val createParser = CreateJacksonParser.utf8String _
-
-    val parserSchema = nullableSchema match {
-      case s: StructType => s
-      case other => StructType(StructField("value", other) :: Nil)
+    val (parserSchema, actualSchema) = nullableSchema match {
+      case s: StructType =>
+        (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
+      case other =>
+        (StructType(StructField("value", other) :: Nil), other)
     }
+
+    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
+    val createParser = CreateJacksonParser.utf8String _
 
     new FailureSafeParser[UTF8String](
       input => rawParser.parse(input, createParser, identity[UTF8String]),

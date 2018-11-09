@@ -48,18 +48,6 @@ private[util] sealed trait BaseReadWrite {
   private var optionSparkSession: Option[SparkSession] = None
 
   /**
-   * Sets the Spark SQLContext to use for saving/loading.
-   *
-   * @deprecated Use session instead. This method will be removed in 3.0.0.
-   */
-  @Since("1.6.0")
-  @deprecated("Use session instead. This method will be removed in 3.0.0.", "2.0.0")
-  def context(sqlContext: SQLContext): this.type = {
-    optionSparkSession = Option(sqlContext.sparkSession)
-    this
-  }
-
-  /**
    * Sets the Spark Session to use for saving/loading.
    */
   @Since("2.0.0")
@@ -215,10 +203,6 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   // override for Java compatibility
   @Since("1.6.0")
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
-
-  // override for Java compatibility
-  @Since("1.6.0")
-  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
 }
 
 /**
@@ -281,9 +265,6 @@ class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
 
   // override for Java compatibility
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
-
-  // override for Java compatibility
-  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
 }
 
 /**
@@ -352,9 +333,6 @@ abstract class MLReader[T] extends BaseReadWrite {
 
   // override for Java compatibility
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
-
-  // override for Java compatibility
-  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
 }
 
 /**
