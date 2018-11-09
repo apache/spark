@@ -66,7 +66,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
    * a weak reference so that it can be garbage collected if required, as we can always reconstruct
    * in the future.
    */
-  @transient private var _value: WeakReference[T] = new WeakReference()
+  @transient private var _value: WeakReference[T] = _
 
   /** The compression codec to use, or None if compression is disabled */
   @transient private var compressionCodec: Option[CompressionCodec] = _
@@ -96,12 +96,16 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private var checksums: Array[Int] = _
 
   override protected def getValue() = {
-    val memoized: Option[T] = _value.get
+    var memoized : Option[T] = None
+    if (_value != null) {
+      memoized = _value.get
+    }
+
     if (memoized.isDefined) {
       memoized.get
     } else {
       val newlyRead = readBroadcastBlock()
-      _value = new WeakReference(newlyRead)
+      _value = new WeakReference[T](newlyRead)
       newlyRead
     }
   }
