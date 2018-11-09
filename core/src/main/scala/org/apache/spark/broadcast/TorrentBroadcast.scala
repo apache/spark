@@ -25,6 +25,7 @@ import java.util.zip.Adler32
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
@@ -65,7 +66,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
    * a weak reference so that it can be garbage collected if required, as we can always reconstruct
    * in the future.
    */
-  @transient private var _value: WeakReference[T] = new WeakReference(null.asInstanceOf[T])
+  @transient private var _value: WeakReference[T] = _
 
   /** The compression codec to use, or None if compression is disabled */
   @transient private var compressionCodec: Option[CompressionCodec] = _
@@ -95,13 +96,13 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private var checksums: Array[Int] = _
 
   override protected def getValue() = {
-    val memoized = _value.get()
-    if (memoized == null) {
+    val memoized = Option.apply(_value).flatMap(x => Option.apply(x.get))
+    if (memoized.isDefined) {
+      memoized.get
+    } else {
       val newlyRead = readBroadcastBlock()
       _value = new WeakReference[T](newlyRead)
       newlyRead
-    } else {
-      memoized
     }
   }
 
