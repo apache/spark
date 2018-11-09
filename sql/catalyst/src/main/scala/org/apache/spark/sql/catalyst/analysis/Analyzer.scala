@@ -824,7 +824,8 @@ class Analyzer(
     }
 
     private def dedupAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
-      attrMap.get(attr).getOrElse(attr).withQualifier(attr.qualifier)
+      val exprId = attrMap.getOrElse(attr, attr).exprId
+      attr.withExprId(exprId)
     }
 
     /**
