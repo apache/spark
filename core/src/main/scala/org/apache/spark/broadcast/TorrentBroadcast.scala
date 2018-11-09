@@ -96,7 +96,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private var checksums: Array[Int] = _
 
   override protected def getValue() = {
-    val memoized: T = if (value == null) null.asInstanceOf[T] else _value.get
+    val memoized: T = if (_value == null) null.asInstanceOf[T] else _value.get
     if (memoized != null) {
       memoized
     } else {
