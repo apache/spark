@@ -96,7 +96,8 @@ class MultivariateGaussianSuite extends SparkFunSuite with MLlibTestSparkContext
 
     Seq(dist1, dist2).foreach { i =>
       val i2 = ser.deserialize[MultivariateGaussian](ser.serialize(i))
-      assert(i === i2)
+      assert(i.sigma === i2.sigma)
+      assert(i.mu === i2.mu)
     }
   }
 }
