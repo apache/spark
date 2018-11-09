@@ -296,6 +296,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * that should be used for parsing.</li>
    * <li>`dropFieldIfAllNull` (default `false`): whether to ignore column of all null values or
    * empty array/struct during schema inference.</li>
+   * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
+   * For instance, this is used while parsing dates and timestamps.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -372,6 +374,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines.</li>
+   * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
+   * For instance, this is used while parsing dates and timestamps.</li>
    * </ul>
    *
    * @since 2.0.0
