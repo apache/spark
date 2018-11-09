@@ -50,7 +50,21 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
     PythonEvalType.SQL_BATCHED_UDF,
     udfDeterministic = true)
 
-  val notSupportJoinTypes = Seq(LeftOuter, RightOuter, FullOuter, LeftAnti)
+  val unsupportedJoinTypes = Seq(LeftOuter, RightOuter, FullOuter, LeftAnti)
+
+  private def comparePlansWithConf(query: LogicalPlan, expected: LogicalPlan): Unit = {
+    // AnalysisException thrown by CheckCartesianProducts while spark.sql.crossJoin.enabled=false
+    val exception = intercept[AnalysisException] {
+      Optimize.execute(query.analyze)
+    }
+    assert(exception.message.startsWith("Detected implicit cartesian product"))
+
+    // pull out the python udf while set spark.sql.crossJoin.enabled=true
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(query.analyze)
+      comparePlans(optimized, expected)
+    }
+  }
 
   test("inner join condition with python udf only") {
     val query = testRelationLeft.join(
@@ -61,18 +75,7 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
       testRelationRight,
       joinType = Inner,
       condition = None).where(pythonUDF).analyze
-
-    // AnalysisException thrown by CheckCartesianProducts while spark.sql.crossJoin.enabled=false
-    val exception = the [AnalysisException] thrownBy {
-      Optimize.execute(query.analyze)
-    }
-    assert(exception.message.startsWith("Detected implicit cartesian product"))
-
-    // pull out the python udf while set spark.sql.crossJoin.enabled=true
-    withSQLConf(CROSS_JOINS_ENABLED.key -> "true") {
-      val optimized = Optimize.execute(query.analyze)
-      comparePlans(optimized, expected)
-    }
+    comparePlansWithConf(query, expected)
   }
 
   test("left semi join condition with python udf only") {
@@ -84,21 +87,10 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
       testRelationRight,
       joinType = Inner,
       condition = None).where(pythonUDF).select('a, 'b).analyze
-
-    // AnalysisException thrown by CheckCartesianProducts while spark.sql.crossJoin.enabled=false
-    val exception = the [AnalysisException] thrownBy {
-      Optimize.execute(query.analyze)
-    }
-    assert(exception.message.startsWith("Detected implicit cartesian product"))
-
-    // pull out the python udf while set spark.sql.crossJoin.enabled=true
-    withSQLConf(CROSS_JOINS_ENABLED.key -> "true") {
-      val optimized = Optimize.execute(query.analyze)
-      comparePlans(optimized, expected)
-    }
+    comparePlansWithConf(query, expected)
   }
 
-  test("python udf with other common condition") {
+  test("python udf and common condition") {
     val query = testRelationLeft.join(
       testRelationRight,
       joinType = Inner,
@@ -111,8 +103,59 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
+  test("python udf or common condition") {
+    val query = testRelationLeft.join(
+      testRelationRight,
+      joinType = Inner,
+      condition = Some(pythonUDF || 'a.attr === 'c.attr))
+    val expected = testRelationLeft.join(
+      testRelationRight,
+      joinType = Inner,
+      condition = None).where(pythonUDF || 'a.attr === 'c.attr).analyze
+    comparePlansWithConf(query, expected)
+  }
+
+  test("pull out whole complex condition with multiple python udf") {
+    val pythonUDF1 = PythonUDF("pythonUDF1", null,
+      BooleanType,
+      Seq.empty,
+      PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+    val condition = (pythonUDF || 'a.attr === 'c.attr) && pythonUDF1
+
+    val query = testRelationLeft.join(
+      testRelationRight,
+      joinType = Inner,
+      condition = Some(condition))
+    val expected = testRelationLeft.join(
+      testRelationRight,
+      joinType = Inner,
+      condition = None).where(condition).analyze
+    comparePlansWithConf(query, expected)
+  }
+
+  test("partial pull out complex condition with multiple python udf") {
+    val pythonUDF1 = PythonUDF("pythonUDF1", null,
+      BooleanType,
+      Seq.empty,
+      PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+    val condition = (pythonUDF || pythonUDF1) && 'a.attr === 'c.attr
+
+    val query = testRelationLeft.join(
+      testRelationRight,
+      joinType = Inner,
+      condition = Some(condition))
+    val expected = testRelationLeft.join(
+      testRelationRight,
+      joinType = Inner,
+      condition = Some('a.attr === 'c.attr)).where(pythonUDF || pythonUDF1).analyze
+    val optimized = Optimize.execute(query.analyze)
+    comparePlans(optimized, expected)
+  }
+
   test("throw an exception for not support join type") {
-    for (joinType <- notSupportJoinTypes) {
+    for (joinType <- unsupportedJoinTypes) {
       val thrownException = the [AnalysisException] thrownBy {
         val query = testRelationLeft.join(
           testRelationRight,
