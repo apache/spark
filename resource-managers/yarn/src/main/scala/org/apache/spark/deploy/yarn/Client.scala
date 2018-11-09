@@ -576,7 +576,7 @@ private[spark] class Client(
     }
 
 
-    if (checkRangerResources(sparkConf)) {
+    if (checkRangerEnable(sparkConf)) {
       val jarsDir = new File(YarnCommandBuilderUtils.findJarsDir(
         sparkConf.getenv("SPARK_HOME")))
       val jarsArchive = File.createTempFile(LOCALIZED_RANGER_LIB_DIR, ".zip",
@@ -597,21 +597,6 @@ private[spark] class Client(
   }
 
 
-    /**
-    * check if ranger plugin dir exist in $SPARK_HOME/jars
-    * Note : if the return value is true ,we upload the ranger dir to __ranger_libs_ by default
-    */
-    def checkRangerResources(
-        sparkConf: SparkConf): Boolean = {
-        val dir = new File(YarnCommandBuilderUtils.findJarsDir(
-        sparkConf.getenv("SPARK_HOME")))
-
-        dir.listFiles(new FileFilter {
-        override def accept(pathname: File): Boolean = {
-           pathname.isDirectory && pathname.getName.equals("ranger-hive-plugin-impl")
-       }
-       }).length != 0
-  }
 
 
      /**
@@ -1403,8 +1388,8 @@ private object Client extends Logging {
 
     // Add the Spark jars to the classpath, depending on how they were distributed.
     addClasspathEntry(buildPath(Environment.PWD.$$(), LOCALIZED_LIB_DIR, "*"), env)
-    val rangerExt = "org.apache.ranger.authorization.spark.authorizer.RangerSparkSQLExtension"
-    if (rangerExt.equals(sparkConf.getOption("spark.sql.extensions").getOrElse(""))) {
+
+    if (checkRangerEnable(sparkConf)) {
       addClasspathEntry(buildPath(Environment.PWD.$$(), LOCALIZED_RANGER_LIB_DIR, "*"), env)
     }
 
@@ -1489,6 +1474,16 @@ private object Client extends Logging {
   private def addClasspathEntry(path: String, env: HashMap[String, String]): Unit =
     YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, path)
 
+  /**
+   * check if ranger is enabled
+   */
+  private def checkRangerEnable(sparkConf: SparkConf): Boolean = {
+      val rangerExt = "org.apache.ranger.authorization.spark.authorizer.RangerSparkSQLExtension"
+      if (rangerExt.equals(sparkConf.getOption("spark.sql.extensions").getOrElse(""))) {
+        return true
+      }
+      return false
+  }
 
 
   /**
