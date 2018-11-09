@@ -96,9 +96,9 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private var checksums: Array[Int] = _
 
   override protected def getValue() = {
-    val memoized = Option.apply(_value).flatMap(x => Option.apply(x.get))
-    if (memoized.isDefined) {
-      memoized.get
+    val memoized: T = if (value == null) null.asInstanceOf[T] else _value.get
+    if (memoized != null) {
+      memoized
     } else {
       val newlyRead = readBroadcastBlock()
       _value = new WeakReference[T](newlyRead)
