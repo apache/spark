@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.Date
+import java.util.{Date, Locale}
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
@@ -27,8 +27,8 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
+import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.security.AccessControlException
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatcher
@@ -39,8 +39,8 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.History._
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.security.GroupMappingServiceProvider
@@ -834,7 +834,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
       argThat(new ArgumentMatcher[Path]() {
         override def matches(path: Any): Boolean = {
-          path.asInstanceOf[Path].getName.toLowerCase == "accessdenied"
+          path.asInstanceOf[Path].getName.toLowerCase(Locale.ROOT) == "accessdenied"
         }
       }))
     val mockedProvider = spy(provider)
@@ -854,6 +854,39 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
     mockedProvider.cleanLogs()
     assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+  }
+
+  test("check in-progress event logs absolute length") {
+    val path = new Path("testapp.inprogress")
+    val provider = new FsHistoryProvider(createTestConf())
+    val mockedProvider = spy(provider)
+    val mockedFs = mock(classOf[FileSystem])
+    val in = mock(classOf[FSDataInputStream])
+    val dfsIn = mock(classOf[DFSInputStream])
+    when(mockedProvider.fs).thenReturn(mockedFs)
+    when(mockedFs.open(path)).thenReturn(in)
+    when(in.getWrappedStream).thenReturn(dfsIn)
+    when(dfsIn.getFileLength).thenReturn(200)
+    // FileStatus.getLen is more than logInfo fileSize
+    var fileStatus = new FileStatus(200, false, 0, 0, 0, path)
+    var logInfo = new LogInfo(path.toString, 0, Some("appId"), Some("attemptId"), 100)
+    assert(mockedProvider.shouldReloadLog(logInfo, fileStatus))
+
+    fileStatus = new FileStatus()
+    fileStatus.setPath(path)
+    // DFSInputStream.getFileLength is more than logInfo fileSize
+    logInfo = new LogInfo(path.toString, 0, Some("appId"), Some("attemptId"), 100)
+    assert(mockedProvider.shouldReloadLog(logInfo, fileStatus))
+    // DFSInputStream.getFileLength is equal to logInfo fileSize
+    logInfo = new LogInfo(path.toString, 0, Some("appId"), Some("attemptId"), 200)
+    assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
+    // in.getWrappedStream returns other than DFSInputStream
+    val bin = mock(classOf[BufferedInputStream])
+    when(in.getWrappedStream).thenReturn(bin)
+    assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
+    // fs.open throws exception
+    when(mockedFs.open(path)).thenThrow(new IOException("Throwing intentionally"))
+    assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
   }
 
   /**

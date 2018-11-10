@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 
@@ -32,8 +32,8 @@ import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
  * The physical plan for writing data into a continuous processing [[StreamingWriteSupport]].
  */
 case class WriteToContinuousDataSourceExec(writeSupport: StreamingWriteSupport, query: SparkPlan)
-    extends SparkPlan with Logging {
-  override def children: Seq[SparkPlan] = Seq(query)
+    extends UnaryExecNode with Logging {
+  override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -57,7 +57,7 @@ case class WriteToContinuousDataSourceExec(writeSupport: StreamingWriteSupport, 
       case cause: Throwable =>
         cause match {
           // Do not wrap interruption exceptions that will be handled by streaming specially.
-          case _ if StreamExecution.isInterruptionException(cause) => throw cause
+          case _ if StreamExecution.isInterruptionException(cause, sparkContext) => throw cause
           // Only wrap non fatal exceptions.
           case NonFatal(e) => throw new SparkException("Writing job aborted.", e)
           case _ => throw cause

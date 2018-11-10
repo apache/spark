@@ -325,10 +325,6 @@ package object config {
     .stringConf
     .createOptional
 
-  private[spark] val KERBEROS_RELOGIN_PERIOD = ConfigBuilder("spark.yarn.kerberos.relogin.period")
-    .timeConf(TimeUnit.SECONDS)
-    .createWithDefaultString("1m")
-
   // The list of cache-related config entries. This is used by Client and the AM to clean
   // up the environment so that these settings do not appear on the web UI.
   private[yarn] val CACHE_CONFIGS = Seq(
@@ -344,5 +340,9 @@ package object config {
     ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
       .booleanConf
       .createWithDefault(false)
+
+  private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
+  private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
+  private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."
 
 }

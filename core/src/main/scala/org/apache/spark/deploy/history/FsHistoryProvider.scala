@@ -19,7 +19,6 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
 import java.nio.file.Files
-import java.nio.file.attribute.PosixFilePermissions
 import java.util.{Date, ServiceLoader}
 import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -35,7 +34,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 import org.fusesource.leveldbjni.internal.NativeDB
@@ -43,13 +42,14 @@ import org.fusesource.leveldbjni.internal.NativeDB
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.Status._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
-import org.apache.spark.status.config._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.kvstore._
@@ -87,7 +87,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     this(conf, new SystemClock())
   }
 
-  import config._
   import FsHistoryProvider._
 
   // Interval between safemode checks.
@@ -133,9 +132,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
-    val perms = PosixFilePermissions.fromString("rwx------")
-    val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath(),
-      PosixFilePermissions.asFileAttribute(perms)).toFile()
+    val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath()).toFile()
+    Utils.chmod700(dbPath)
 
     val metadata = new FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
       AppStatusStore.CURRENT_VERSION, logDir.toString())
@@ -451,7 +449,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               listing.write(info.copy(lastProcessed = newLastScanTime, fileSize = entry.getLen()))
             }
 
-            if (info.fileSize < entry.getLen()) {
+            if (shouldReloadLog(info, entry)) {
               if (info.appId.isDefined && fastInProgressParsing) {
                 // When fast in-progress parsing is on, we don't need to re-parse when the
                 // size changes, but we do need to invalidate any existing UIs.
@@ -541,6 +539,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
+  }
+
+  private[history] def shouldReloadLog(info: LogInfo, entry: FileStatus): Boolean = {
+    var result = info.fileSize < entry.getLen
+    if (!result && info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)) {
+      try {
+        result = Utils.tryWithResource(fs.open(entry.getPath)) { in =>
+          in.getWrappedStream match {
+            case dfsIn: DFSInputStream => info.fileSize < dfsIn.getFileLength
+            case _ => false
+          }
+        }
+      } catch {
+        case e: Exception =>
+          logDebug(s"Failed to check the length for the file : ${info.logPath}", e)
+      }
+    }
+    result
   }
 
   private def cleanAppData(appId: String, attemptId: Option[String], logPath: String): Unit = {

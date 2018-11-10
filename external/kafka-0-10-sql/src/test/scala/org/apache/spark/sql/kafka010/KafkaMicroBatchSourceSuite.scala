@@ -33,11 +33,13 @@ import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.{ForeachWriter, SparkSession}
+import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
@@ -598,18 +600,37 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val join = values.join(values, "key")
 
-    testStream(join)(
-      makeSureGetOffsetCalled,
-      AddKafkaData(Set(topic), 1, 2),
-      CheckAnswer((1, 1, 1), (2, 2, 2)),
-      AddKafkaData(Set(topic), 6, 3),
-      CheckAnswer((1, 1, 1), (2, 2, 2), (3, 3, 3), (1, 6, 1), (1, 1, 6), (1, 6, 6)),
-      AssertOnQuery { q =>
+    def checkQuery(check: AssertOnQuery): Unit = {
+      testStream(join)(
+        makeSureGetOffsetCalled,
+        AddKafkaData(Set(topic), 1, 2),
+        CheckAnswer((1, 1, 1), (2, 2, 2)),
+        AddKafkaData(Set(topic), 6, 3),
+        CheckAnswer((1, 1, 1), (2, 2, 2), (3, 3, 3), (1, 6, 1), (1, 1, 6), (1, 6, 6)),
+        check
+      )
+    }
+
+    withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      checkQuery(AssertOnQuery { q =>
         assert(q.availableOffsets.iterator.size == 1)
+        // The kafka source is scanned twice because of self-join
+        assert(q.recentProgress.map(_.numInputRows).sum == 8)
+        true
+      })
+    }
+
+    withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+      checkQuery(AssertOnQuery { q =>
+        assert(q.availableOffsets.iterator.size == 1)
+        assert(q.lastExecution.executedPlan.collect {
+          case r: ReusedExchangeExec => r
+        }.length == 1)
+        // The kafka source is scanned only once because of exchange reuse.
         assert(q.recentProgress.map(_.numInputRows).sum == 4)
         true
-      }
-    )
+      })
+    }
   }
 
   test("read Kafka transactional messages: read_committed") {
@@ -851,6 +872,58 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         waitUntilBatchProcessed,
         CheckNewAnswer() // offset: 24*
       )
+    }
+  }
+
+  test("SPARK-25495: FetchedData.reset should reset all fields") {
+    val topic = newTopic()
+    val topicPartition = new TopicPartition(topic, 0)
+    testUtils.createTopic(topic, partitions = 1)
+
+    val ds = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.isolation.level", "read_committed")
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+      .select($"value".as[String])
+
+    testUtils.withTranscationalProducer { producer =>
+      producer.beginTransaction()
+      (0 to 3).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.commitTransaction()
+    }
+    testUtils.waitUntilOffsetAppears(topicPartition, 5)
+
+    val q = ds.writeStream.foreachBatch { (ds: Dataset[String], epochId: Long) =>
+      if (epochId == 0) {
+        // Send more message before the tasks of the current batch start reading the current batch
+        // data, so that the executors will prefetch messages in the next batch and drop them. In
+        // this case, if we forget to reset `FetchedData._nextOffsetInFetchedData` or
+        // `FetchedData._offsetAfterPoll` (See SPARK-25495), the next batch will see incorrect
+        // values and return wrong results hence fail the test.
+        testUtils.withTranscationalProducer { producer =>
+          producer.beginTransaction()
+          (4 to 7).foreach { i =>
+            producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+          }
+          producer.commitTransaction()
+        }
+        testUtils.waitUntilOffsetAppears(topicPartition, 10)
+        checkDatasetUnorderly(ds, (0 to 3).map(_.toString): _*)
+      } else {
+        checkDatasetUnorderly(ds, (4 to 7).map(_.toString): _*)
+      }
+    }.start()
+    try {
+      q.processAllAvailable()
+    } finally {
+      q.stop()
     }
   }
 }

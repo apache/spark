@@ -52,6 +52,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val carsNullFile = "test-data/cars-null.csv"
   private val carsEmptyValueFile = "test-data/cars-empty-value.csv"
   private val carsBlankColName = "test-data/cars-blank-column-name.csv"
+  private val carsCrlf = "test-data/cars-crlf.csv"
   private val emptyFile = "test-data/empty.csv"
   private val commentsFile = "test-data/comments.csv"
   private val disableCommentsFile = "test-data/disable_comments.csv"
@@ -218,6 +219,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       // scalastyle:on
       verifyCars(spark.table("carsTable"), withHeader = true)
     }
+  }
+
+  test("crlf line separators in multiline mode") {
+    val cars = spark
+      .read
+      .format("csv")
+      .option("multiLine", "true")
+      .option("header", "true")
+      .load(testFile(carsCrlf))
+
+    verifyCars(cars, withHeader = true)
   }
 
   test("test aliases sep and encoding for delimiter and charset") {
@@ -1819,5 +1831,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     checkAnswer(spark.read.schema(schema).csv(input), Row(null))
     checkAnswer(spark.read.option("multiLine", true).schema(schema).csv(input), Row(null))
     assert(spark.read.csv(input).collect().toSet == Set(Row()))
+  }
+
+  test("field names of inferred schema shouldn't compare to the first row") {
+    val input = Seq("1,2").toDS()
+    val df = spark.read.option("enforceSchema", false).csv(input)
+    checkAnswer(df, Row("1", "2"))
+  }
+
+  test("using the backward slash as the delimiter") {
+    val input = Seq("""abc\1""").toDS()
+    val delimiter = """\\"""
+    checkAnswer(spark.read.option("delimiter", delimiter).csv(input), Row("abc", "1"))
+    checkAnswer(spark.read.option("inferSchema", true).option("delimiter", delimiter).csv(input),
+      Row("abc", 1))
+    val schema = new StructType().add("a", StringType).add("b", IntegerType)
+    checkAnswer(spark.read.schema(schema).option("delimiter", delimiter).csv(input), Row("abc", 1))
   }
 }

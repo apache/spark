@@ -29,6 +29,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.internal.config.Status._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
@@ -37,8 +38,6 @@ import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
 class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
-
-  import config._
 
   private val conf = new SparkConf()
     .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)

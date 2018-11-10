@@ -125,8 +125,15 @@ class BisectingKMeansModel private[ml] (
   /**
    * Computes the sum of squared distances between the input points and their corresponding cluster
    * centers.
+   *
+   * @deprecated This method is deprecated and will be removed in future versions. Use
+   *             ClusteringEvaluator instead. You can also get the cost on the training dataset in
+   *             the summary.
    */
   @Since("2.0.0")
+  @deprecated("This method is deprecated and will be removed in future versions. Use " +
+    "ClusteringEvaluator instead. You can also get the cost on the training dataset in the " +
+    "summary.", "3.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
     val data = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)

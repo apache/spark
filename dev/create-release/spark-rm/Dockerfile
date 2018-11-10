@@ -62,8 +62,8 @@ RUN echo 'deb http://cran.cnr.Berkeley.edu/bin/linux/ubuntu xenial/' >> /etc/apt
   pip install $BASE_PIP_PKGS && \
   pip install $PIP_PKGS && \
   cd && \
-  virtualenv -p python3 p35 && \
-  . p35/bin/activate && \
+  virtualenv -p python3 /opt/p35 && \
+  . /opt/p35/bin/activate && \
   pip install $BASE_PIP_PKGS && \
   pip install $PIP_PKGS && \
   # Install R packages and dependencies used when building.

@@ -23,7 +23,7 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -369,6 +369,24 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   test("sampleBy") {
     val df = spark.range(0, 100).select((col("id") % 3).as("key"))
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
+    checkAnswer(
+      sampled.groupBy("key").count().orderBy("key"),
+      Seq(Row(0, 6), Row(1, 11)))
+  }
+
+  test("sampleBy one column") {
+    val df = spark.range(0, 100).select((col("id") % 3).as("key"))
+    val sampled = df.stat.sampleBy($"key", Map(0 -> 0.1, 1 -> 0.2), 0L)
+    checkAnswer(
+      sampled.groupBy("key").count().orderBy("key"),
+      Seq(Row(0, 6), Row(1, 11)))
+  }
+
+  test("sampleBy multiple columns") {
+    val df = spark.range(0, 100)
+      .select(lit("Foo").as("name"), (col("id") % 3).as("key"))
+    val sampled = df.stat.sampleBy(
+      struct($"name", $"key"), Map(Row("Foo", 0) -> 0.1, Row("Foo", 1) -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
       Seq(Row(0, 6), Row(1, 11)))

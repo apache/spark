@@ -119,25 +119,6 @@ class DataFrame(object):
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
-    @since(1.3)
-    def registerTempTable(self, name):
-        """Registers this DataFrame as a temporary table using the given name.
-
-        The lifetime of this temporary table is tied to the :class:`SparkSession`
-        that was used to create this :class:`DataFrame`.
-
-        >>> df.registerTempTable("people")
-        >>> df2 = spark.sql("select * from people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
-        >>> spark.catalog.dropTempView("people")
-
-        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
-        """
-        warnings.warn(
-            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
-        self._jdf.createOrReplaceTempView(name)
-
     @since(2.0)
     def createTempView(self, name):
         """Creates a local temporary view with this DataFrame.
@@ -880,16 +861,23 @@ class DataFrame(object):
         |  0|    5|
         |  1|    9|
         +---+-----+
+        >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
+        33
 
+        .. versionchanged:: 3.0
+           Added sampling by a column of :class:`Column`
         """
-        if not isinstance(col, basestring):
-            raise ValueError("col must be a string, but got %r" % type(col))
+        if isinstance(col, basestring):
+            col = Column(col)
+        elif not isinstance(col, Column):
+            raise ValueError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):
             raise ValueError("fractions must be a dict but got %r" % type(fractions))
         for k, v in fractions.items():
             if not isinstance(k, (float, int, long, basestring)):
                 raise ValueError("key must be float, int, long, or string, but got %r" % type(k))
             fractions[k] = float(v)
+        col = col._jc
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         return DataFrame(self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
 
@@ -1454,20 +1442,6 @@ class DataFrame(object):
         Also as standard in SQL, this function resolves columns by position (not by name).
         """
         return DataFrame(self._jdf.union(other._jdf), self.sql_ctx)
-
-    @since(1.3)
-    def unionAll(self, other):
-        """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
-
-        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by :func:`distinct`.
-
-        Also as standard in SQL, this function resolves columns by position (not by name).
-
-        .. note:: Deprecated in 2.0, use :func:`union` instead.
-        """
-        warnings.warn("Deprecated in 2.0, use union instead.", DeprecationWarning)
-        return self.union(other)
 
     @since(2.3)
     def unionByName(self, other):
