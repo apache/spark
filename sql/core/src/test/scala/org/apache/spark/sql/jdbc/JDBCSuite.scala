@@ -1478,4 +1478,18 @@ class JDBCSuite extends QueryTest
       checkNotPushdown(sql("SELECT name, theid FROM predicateOption WHERE theid = 1")),
       Row("fred", 1) :: Nil)
   }
+
+  test("SPARK-20319 Already quoted identifiers are getting wrapped with additional quotes") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    val df = spark.createDataset(Seq(("a", "b"), ("c", "d"))).toDF(""""ID"""", """"VAL"""")
+    val schema = JdbcUtils.schemaString(df, "jdbc:oracle")
+    val insertStatement = JdbcUtils.getInsertStatement(
+      "dummyTable",
+      df.schema,
+      None,
+      true,
+      oracleDialect)
+    assert(schema.contains("\"ID\" VARCHAR2(255)"))
+    assert(insertStatement.equals("INSERT INTO dummyTable (\"ID\",\"VAL\") VALUES (?,?)"))
+  }
 }

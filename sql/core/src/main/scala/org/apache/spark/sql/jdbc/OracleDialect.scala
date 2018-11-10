@@ -81,6 +81,10 @@ private case object OracleDialect extends JdbcDialect {
     case _ => None
   }
 
+  override def quoteIdentifier(colName: String): String = {
+    s""""${colName.stripPrefix("\"").stripSuffix("\"")}""""
+  }
+
   override def compileValue(value: Any): Any = value match {
     // The JDBC drivers support date literals in SQL statements written in the
     // format: {d 'yyyy-mm-dd'} and timestamp literals in SQL statements written
