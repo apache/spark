@@ -241,6 +241,10 @@ fi
 
 # Make R package - this is used for both CRAN release and packing R layout into distribution
 if [ "$MAKE_R" == "true" ]; then
+  echo "Make sure Spark jars folder contains all hadoop dependencies"
+  SPARK_JARS_DIR="$SPARK_HOME/assembly/target/scala-${SCALA_VERSION}/jars"
+  cp -n ${SPARK_HOME}/R/rjarsdep/target/scala-${SCALA_VERSION}/jars/* $SPARK_JARS_DIR
+
   echo "Building R source package"
   R_PACKAGE_VERSION=`grep Version "$SPARK_HOME/R/pkg/DESCRIPTION" | awk '{print $NF}'`
   pushd "$SPARK_HOME/R" > /dev/null

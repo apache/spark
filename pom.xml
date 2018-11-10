@@ -2797,6 +2797,9 @@
     </profile>
     <profile>
       <id>sparkr</id>
+      <modules>
+        <module>R/rjarsdep</module>
+      </modules>
     </profile>
   </profiles>
 </project>
