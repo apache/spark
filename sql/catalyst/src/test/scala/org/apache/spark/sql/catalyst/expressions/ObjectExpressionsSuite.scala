@@ -307,7 +307,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val conf = new SparkConf()
     Seq(true, false).foreach { useKryo =>
       val serializer = if (useKryo) new KryoSerializer(conf) else new JavaSerializer(conf)
-      val expected = serializer.newInstance().serialize(new Integer(1)).array()
+      val expected = serializer.newInstance().serialize(Integer.valueOf(1)).array()
       val encodeUsingSerializer = EncodeUsingSerializer(inputObject, useKryo)
       checkEvaluation(encodeUsingSerializer, expected, InternalRow.fromSeq(Seq(1)))
       checkEvaluation(encodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
@@ -384,9 +384,9 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val conf = new SparkConf()
     Seq(true, false).foreach { useKryo =>
       val serializer = if (useKryo) new KryoSerializer(conf) else new JavaSerializer(conf)
-      val input = serializer.newInstance().serialize(new Integer(1)).array()
+      val input = serializer.newInstance().serialize(Integer.valueOf(1)).array()
       val decodeUsingSerializer = DecodeUsingSerializer(inputObject, ClassTag(cls), useKryo)
-      checkEvaluation(decodeUsingSerializer, new Integer(1), InternalRow.fromSeq(Seq(input)))
+      checkEvaluation(decodeUsingSerializer, Integer.valueOf(1), InternalRow.fromSeq(Seq(input)))
       checkEvaluation(decodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
     }
   }
@@ -575,7 +575,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // NULL key test
     val scalaMapHasNullKey = scala.collection.Map[java.lang.Integer, String](
-      null.asInstanceOf[java.lang.Integer] -> "v0", new java.lang.Integer(1) -> "v1")
+      null.asInstanceOf[java.lang.Integer] -> "v0", java.lang.Integer.valueOf(1) -> "v1")
     val javaMapHasNullKey = new java.util.HashMap[java.lang.Integer, java.lang.String]() {
       {
         put(null, "v0")

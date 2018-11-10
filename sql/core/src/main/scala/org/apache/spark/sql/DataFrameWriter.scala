@@ -243,7 +243,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val source = cls.newInstance().asInstanceOf[DataSourceV2]
+      val source = cls.getConstructor().newInstance().asInstanceOf[DataSourceV2]
       source match {
         case provider: BatchWriteSupportProvider =>
           val sessionOptions = DataSourceV2Utils.extractSessionConfigs(

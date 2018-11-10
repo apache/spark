@@ -508,7 +508,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val union2 = spark.read.format("avro").load(testAvro).select("union_float_double").collect()
     assert(
       union2
-        .map(x => new java.lang.Double(x(0).toString))
+        .map(x => java.lang.Double.valueOf(x(0).toString))
         .exists(p => Math.abs(p - Math.PI) < 0.001))
 
     val fixed = spark.read.format("avro").load(testAvro).select("fixed3").collect()

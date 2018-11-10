@@ -49,11 +49,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.util.SystemClock")
     try {
-      Utils.classForName(clockClass).newInstance().asInstanceOf[Clock]
+      Utils.classForName(clockClass).getConstructor().newInstance().asInstanceOf[Clock]
     } catch {
       case e: ClassNotFoundException if clockClass.startsWith("org.apache.spark.streaming") =>
         val newClockClass = clockClass.replace("org.apache.spark.streaming", "org.apache.spark")
-        Utils.classForName(newClockClass).newInstance().asInstanceOf[Clock]
+        Utils.classForName(newClockClass).getConstructor().newInstance().asInstanceOf[Clock]
     }
   }
 

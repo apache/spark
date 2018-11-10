@@ -194,7 +194,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
       // jar.
       sc = new SparkContext("local", "test", conf)
       val rdd = sc.parallelize(Seq(1), 1).map { _ =>
-        val exc = excClass.newInstance().asInstanceOf[Exception]
+        val exc = excClass.getConstructor().newInstance().asInstanceOf[Exception]
         throw exc
       }
 
