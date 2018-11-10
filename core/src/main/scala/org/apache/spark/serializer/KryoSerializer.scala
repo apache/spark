@@ -132,7 +132,8 @@ class KryoSerializer(conf: SparkConf)
         .foreach { className => kryo.register(Class.forName(className, true, classLoader)) }
       // Allow the user to register their own classes by setting spark.kryo.registrator.
       userRegistrators
-        .map(Class.forName(_, true, classLoader).newInstance().asInstanceOf[KryoRegistrator])
+        .map(Class.forName(_, true, classLoader).getConstructor().
+          newInstance().asInstanceOf[KryoRegistrator])
         .foreach { reg => reg.registerClasses(kryo) }
       // scalastyle:on classforname
     } catch {

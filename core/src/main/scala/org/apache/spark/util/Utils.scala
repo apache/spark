@@ -2430,7 +2430,8 @@ private[spark] object Utils extends Logging {
       "org.apache.spark.security.ShellBasedGroupsMappingProvider")
     if (groupProviderClassName != "") {
       try {
-        val groupMappingServiceProvider = classForName(groupProviderClassName).newInstance.
+        val groupMappingServiceProvider = classForName(groupProviderClassName).
+          getConstructor().newInstance().
           asInstanceOf[org.apache.spark.security.GroupMappingServiceProvider]
         val currentUserGroups = groupMappingServiceProvider.getGroups(username)
         return currentUserGroups
