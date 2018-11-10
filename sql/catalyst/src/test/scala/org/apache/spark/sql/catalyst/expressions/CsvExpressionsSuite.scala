@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.{Calendar, Locale}
 
 import org.scalatest.exceptions.TestFailedException
 
@@ -164,5 +165,65 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     checkEvaluation(
       new SchemaOfCsv(Literal.create("1|abc"), Map("delimiter" -> "|")),
       "struct<_c0:int,_c1:string>")
+  }
+
+  test("to_csv - struct") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val struct = Literal.create(create_row(1), schema)
+    checkEvaluation(StructsToCsv(Map.empty, struct, gmtId), "1")
+  }
+
+  test("to_csv null input column") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val struct = Literal.create(null, schema)
+    checkEvaluation(
+      StructsToCsv(Map.empty, struct, gmtId),
+      null
+    )
+  }
+
+  test("to_csv with timestamp") {
+    val schema = StructType(StructField("t", TimestampType) :: Nil)
+    val c = Calendar.getInstance(DateTimeUtils.TimeZoneGMT)
+    c.set(2016, 0, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    val struct = Literal.create(create_row(c.getTimeInMillis * 1000L), schema)
+
+    checkEvaluation(StructsToCsv(Map.empty, struct, gmtId), "2016-01-01T00:00:00.000Z")
+    checkEvaluation(
+      StructsToCsv(Map.empty, struct, Option("PST")), "2015-12-31T16:00:00.000-08:00")
+
+    checkEvaluation(
+      StructsToCsv(
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+          DateTimeUtils.TIMEZONE_OPTION -> gmtId.get),
+        struct,
+        gmtId),
+      "2016-01-01T00:00:00"
+    )
+    checkEvaluation(
+      StructsToCsv(
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+          DateTimeUtils.TIMEZONE_OPTION -> "PST"),
+        struct,
+        gmtId),
+      "2015-12-31T16:00:00"
+    )
+  }
+
+  test("parse date with locale") {
+    Seq("en-US", "ru-RU").foreach { langTag =>
+      val locale = Locale.forLanguageTag(langTag)
+      val date = new SimpleDateFormat("yyyy-MM-dd").parse("2018-11-05")
+      val schema = new StructType().add("d", DateType)
+      val dateFormat = "MMM yyyy"
+      val sdf = new SimpleDateFormat(dateFormat, locale)
+      val dateStr = sdf.format(date)
+      val options = Map("dateFormat" -> dateFormat, "locale" -> langTag)
+
+      checkEvaluation(
+        CsvToStructs(schema, options, Literal.create(dateStr), gmtId),
+        InternalRow(17836)) // number of days from 1970-01-01
+    }
   }
 }

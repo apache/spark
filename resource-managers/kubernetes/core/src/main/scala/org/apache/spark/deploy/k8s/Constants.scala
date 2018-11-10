@@ -69,12 +69,8 @@ private[spark] object Constants {
   val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
 
   // BINDINGS
-  val ENV_PYSPARK_PRIMARY = "PYSPARK_PRIMARY"
   val ENV_PYSPARK_FILES = "PYSPARK_FILES"
-  val ENV_PYSPARK_ARGS = "PYSPARK_APP_ARGS"
   val ENV_PYSPARK_MAJOR_PYTHON_VERSION = "PYSPARK_MAJOR_PYTHON_VERSION"
-  val ENV_R_PRIMARY = "R_PRIMARY"
-  val ENV_R_ARGS = "R_APP_ARGS"
 
   // Pod spec templates
   val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "pod-spec-template.yml"
@@ -88,6 +84,7 @@ private[spark] object Constants {
   val DEFAULT_DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
   val DEFAULT_EXECUTOR_CONTAINER_NAME = "spark-kubernetes-executor"
   val MEMORY_OVERHEAD_MIN_MIB = 384L
+  val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
 
   // Hadoop Configuration
   val HADOOP_FILE_VOLUME = "hadoop-properties"
@@ -113,4 +110,9 @@ private[spark] object Constants {
   // Hadoop credentials secrets for the Spark app.
   val SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR = "/mnt/secrets/hadoop-credentials"
   val SPARK_APP_HADOOP_SECRET_VOLUME_NAME = "hadoop-secret"
+
+  // Application resource types.
+  val APP_RESOURCE_TYPE_JAVA = "java"
+  val APP_RESOURCE_TYPE_PYTHON = "python"
+  val APP_RESOURCE_TYPE_R = "r"
 }

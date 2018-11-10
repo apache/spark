@@ -41,13 +41,13 @@ import org.apache.spark.util._
 class BarrierTaskContext private[spark] (
     taskContext: TaskContext) extends TaskContext with Logging {
 
+  import BarrierTaskContext._
+
   // Find the driver side RPCEndpointRef of the coordinator that handles all the barrier() calls.
   private val barrierCoordinator: RpcEndpointRef = {
     val env = SparkEnv.get
     RpcUtils.makeDriverRef("barrierSync", env.conf, env.rpcEnv)
   }
-
-  private val timer = new Timer("Barrier task timer for barrier() calls.")
 
   // Local barrierEpoch that identify a barrier() call from current task, it shall be identical
   // with the driver side epoch.
@@ -158,8 +158,6 @@ class BarrierTaskContext private[spark] (
 
   override def isInterrupted(): Boolean = taskContext.isInterrupted()
 
-  override def isRunningLocally(): Boolean = taskContext.isRunningLocally()
-
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     taskContext.addTaskCompletionListener(listener)
     this
@@ -234,4 +232,7 @@ object BarrierTaskContext {
   @Experimental
   @Since("2.4.0")
   def get(): BarrierTaskContext = TaskContext.get().asInstanceOf[BarrierTaskContext]
+
+  private val timer = new Timer("Barrier task timer for barrier() calls.")
+
 }
