@@ -254,7 +254,7 @@ private[orc] class OrcOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
-  extends OutputWriter with Logging {
+  extends OutputWriter {
 
   private[this] val serializer = new OrcSerializer(dataSchema, context.getConfiguration)
 
@@ -279,20 +279,13 @@ private[orc] class OrcOutputWriter(
   override def close(): Unit = {
     if (recordWriterInstantiated) {
       // Hive 1.2.1 ORC initializes its private `writer` field at the first write.
-      try {
-        val writerField = recordWriter.getClass.getDeclaredField("writer")
-        writerField.setAccessible(true)
-        val writer = writerField.get(recordWriter).asInstanceOf[Writer]
-        writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION_SHORT))
-      } catch {
-        case NonFatal(e) => log.warn(e.toString, e)
-      }
+      OrcFileFormat.addSparkVersionMetadata(recordWriter)
       recordWriter.close(Reporter.NULL)
     }
   }
 }
 
-private[orc] object OrcFileFormat extends HiveInspectors {
+private[orc] object OrcFileFormat extends HiveInspectors with Logging {
   // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
   private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 
@@ -351,5 +344,19 @@ private[orc] object OrcFileFormat extends HiveInspectors {
     val ids = requestedSchema.map(a => dataSchema.fieldIndex(a.name): Integer)
     val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+  }
+
+  /**
+   * Add a metadata specifying Spark version.
+   */
+  def addSparkVersionMetadata(recordWriter: RecordWriter[NullWritable, Writable]): Unit = {
+    try {
+      val writerField = recordWriter.getClass.getDeclaredField("writer")
+      writerField.setAccessible(true)
+      val writer = writerField.get(recordWriter).asInstanceOf[Writer]
+      writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION_SHORT))
+    } catch {
+      case NonFatal(e) => log.warn(e.toString, e)
+    }
   }
 }
