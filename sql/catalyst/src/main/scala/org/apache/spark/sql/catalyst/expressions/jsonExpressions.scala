@@ -529,7 +529,7 @@ case class JsonToStructs(
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
-      schema = JsonExprUtils.evalSchemaExpr(schema),
+      schema = ExprUtils.evalTypeExpr(schema),
       options = options,
       child = child,
       timeZoneId = None)
@@ -538,7 +538,7 @@ case class JsonToStructs(
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
-      schema = JsonExprUtils.evalSchemaExpr(schema),
+      schema = ExprUtils.evalTypeExpr(schema),
       options = ExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
@@ -569,13 +569,15 @@ case class JsonToStructs(
       throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
         s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
     }
-    val rawParser = new JacksonParser(nullableSchema, parsedOptions, allowArrayAsStructs = false)
-    val createParser = CreateJacksonParser.utf8String _
-
-    val parserSchema = nullableSchema match {
-      case s: StructType => s
-      case other => StructType(StructField("value", other) :: Nil)
+    val (parserSchema, actualSchema) = nullableSchema match {
+      case s: StructType =>
+        (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
+      case other =>
+        (StructType(StructField("value", other) :: Nil), other)
     }
+
+    val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
+    val createParser = CreateJacksonParser.utf8String _
 
     new FailureSafeParser[UTF8String](
       input => rawParser.parse(input, createParser, identity[UTF8String]),
@@ -783,16 +785,4 @@ case class SchemaOfJson(
   }
 
   override def prettyName: String = "schema_of_json"
-}
-
-object JsonExprUtils {
-  def evalSchemaExpr(exp: Expression): DataType = exp match {
-    case Literal(s, StringType) => DataType.fromDDL(s.toString)
-    case e @ SchemaOfJson(_: Literal, _) =>
-      val ddlSchema = e.eval(EmptyRow).asInstanceOf[UTF8String]
-      DataType.fromDDL(ddlSchema.toString)
-    case e => throw new AnalysisException(
-      "Schema should be specified in DDL format as a string literal" +
-      s" or output of the schema_of_json function instead of ${e.sql}")
-  }
 }

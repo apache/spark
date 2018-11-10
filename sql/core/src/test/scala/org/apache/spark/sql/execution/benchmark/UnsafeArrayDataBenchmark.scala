@@ -194,7 +194,7 @@ object UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.run
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Benchmark UnsafeArrayData") {
       readUnsafeArray(10)
       writeUnsafeArray(10)

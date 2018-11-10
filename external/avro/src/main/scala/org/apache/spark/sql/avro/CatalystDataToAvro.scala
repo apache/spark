@@ -52,13 +52,7 @@ case class CatalystDataToAvro(child: Expression) extends UnaryExpression {
     out.toByteArray
   }
 
-  override def simpleString: String = {
-    s"to_avro(${child.sql}, ${child.dataType.simpleString})"
-  }
-
-  override def sql: String = {
-    s"to_avro(${child.sql}, ${child.dataType.catalogString})"
-  }
+  override def prettyName: String = "to_avro"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
