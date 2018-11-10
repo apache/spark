@@ -901,7 +901,7 @@ class Analyzer(
       if (e.resolved) return e
       e match {
         case f: LambdaFunction if !f.bound => f
-        case u@UnresolvedAttribute(nameParts) =>
+        case u @ UnresolvedAttribute(nameParts) =>
           // Leave unchanged if resolution fails. Hopefully will be resolved next round.
           val result =
             withPosition(u) {
@@ -1105,11 +1105,14 @@ class Analyzer(
       expr transformUp {
         case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
         case u @ UnresolvedAttribute(nameParts) =>
-          withPosition(u) {
-            plan.resolve(nameParts, resolver)
-              .orElse(resolveLiteralFunction(nameParts, u, plan))
-              .getOrElse(u)
-          }
+          val result =
+            withPosition(u) {
+              plan.resolve(nameParts, resolver)
+                .orElse(resolveLiteralFunction(nameParts, u, plan))
+                .getOrElse(u)
+            }
+          logDebug(s"Resolving $u to $result")
+          result
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
           ExtractValue(child, fieldName, resolver)
       }
