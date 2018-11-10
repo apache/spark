@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.json
 
 import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
+import java.text.{DecimalFormat, DecimalFormatSymbols}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -133,6 +134,12 @@ class JacksonParser(
         val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
         Seq(InternalRow(new GenericArrayData(Seq(convertObject(parser, st, fieldConverters)))))
     }
+  }
+
+  private val decimalParser = {
+    val df = new DecimalFormat("", new DecimalFormatSymbols(options.locale))
+    df.setParseBigDecimal(true)
+    df
   }
 
   /**
@@ -261,6 +268,9 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken[Decimal](parser, dataType) {
         case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
           Decimal(parser.getDecimalValue, dt.precision, dt.scale)
+        case VALUE_STRING =>
+          val bigDecimal = decimalParser.parse(parser.getText).asInstanceOf[java.math.BigDecimal]
+          Decimal(bigDecimal, dt.precision, dt.scale)
       }
 
     case st: StructType =>
