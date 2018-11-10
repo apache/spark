@@ -154,13 +154,12 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           val job = Job.getInstance(conf)
           FileInputFormat.setInputPaths(job, file.filePath)
 
-          val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
           // Custom OrcRecordReader is used to get
           // ObjectInspector during recordReader creation itself and can
           // avoid NameNode call in unwrapOrcStructs per file.
           // Specifically would be helpful for partitioned datasets.
           val orcReader = OrcFile.createReader(filePath, OrcFile.readerOptions(conf))
-          new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
+          new SparkOrcNewRecordReader(orcReader, conf, file.start, file.length)
         }
 
         val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
