@@ -307,7 +307,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       val ds = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val disabledSources = df.sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
       var options = extraOptions.toMap
-      val sink = ds.newInstance() match {
+      val sink = ds.getConstructor().newInstance() match {
         case w: StreamingWriteSupportProvider
             if !disabledSources.contains(w.getClass.getCanonicalName) =>
           val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
