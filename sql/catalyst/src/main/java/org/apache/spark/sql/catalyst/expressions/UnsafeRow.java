@@ -281,9 +281,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       // fixed length
       long cursor = getLong(ordinal) >>> 32;
       assert cursor > 0 : "invalid cursor " + cursor;
-      // zero-out the bytes
-      Platform.putLong(baseObject, baseOffset + cursor, 0L);
-      Platform.putLong(baseObject, baseOffset + cursor + 8, 0L);
 
       if (value == null) {
         setNullAt(ordinal);
@@ -294,6 +291,13 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
         final BigInteger integer = value.toJavaBigDecimal().unscaledValue();
         byte[] bytes = integer.toByteArray();
         assert(bytes.length <= 16);
+
+        // always zero-out the 8-byte to 16-byte buffer
+        Platform.putLong(baseObject, baseOffset + cursor + 8, 0L);
+        if (bytes.length < 8) {
+          // need zero-out the 8-byte buffer when bytes.length less than 8-byte
+          Platform.putLong(baseObject, baseOffset + cursor, 0L);
+        }
 
         // Write the bytes to the variable length portion.
         Platform.copyMemory(

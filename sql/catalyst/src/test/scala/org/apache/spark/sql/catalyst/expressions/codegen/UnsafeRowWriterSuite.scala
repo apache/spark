@@ -50,4 +50,29 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     assert(res1 == res2)
   }
 
+  test("SPARK-26001: write a decimal with 16 bytes and then one with less than 8") {
+    val decimal1 = Decimal(3.431)
+    decimal1.changePrecision(38, 10)
+    checkDecimalSizeInBytes(decimal1, 5)
+
+    val decimal2 = Decimal(123456789.1232456789)
+    decimal2.changePrecision(38, 18)
+    checkDecimalSizeInBytes(decimal2, 11)
+    // On an UnsafeRowWriter we write decimal2 first and then decimal1
+    val unsafeRowWriter1 = new UnsafeRowWriter(1)
+    unsafeRowWriter1.resetRowWriter()
+    unsafeRowWriter1.write(0, decimal2, decimal2.precision, decimal2.scale)
+    unsafeRowWriter1.reset()
+    unsafeRowWriter1.write(0, decimal1, decimal1.precision, decimal1.scale)
+    val res1 = unsafeRowWriter1.getRow
+
+    // On a second UnsafeRowWriter we write directly decimal1
+    val unsafeRowWriter2 = new UnsafeRowWriter(1)
+    unsafeRowWriter2.resetRowWriter()
+    unsafeRowWriter2.write(0, decimal1, decimal1.precision, decimal1.scale)
+    val res2 = unsafeRowWriter2.getRow
+    // The two rows should be the equal
+    assert(res1 == res2)
+  }
+
 }
