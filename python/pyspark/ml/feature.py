@@ -361,8 +361,9 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
               "splits specified will be treated as errors.",
               typeConverter=TypeConverters.toListFloat)
 
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
-                          "Options are 'skip' (filter out rows with invalid values), " +
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries "
+                          "containing NaN values. Values outside the splits will always be treated "
+                          "as errors. Options are 'skip' (filter out rows with invalid values), " +
                           "'error' (throw an error), or 'keep' (keep invalid values in a special " +
                           "additional bucket).",
                           typeConverter=TypeConverters.toString)
