@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale}
 
@@ -225,19 +224,6 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
       checkEvaluation(
         CsvToStructs(schema, options, Literal.create(dateStr), gmtId),
         InternalRow(17836)) // number of days from 1970-01-01
-    }
-  }
-
-  test("parse decimals using locale") {
-    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach { langTag =>
-      val schema = new StructType().add("d", DecimalType(10, 5))
-      val options = Map("locale" -> langTag, "sep" -> "|")
-      val expected = Decimal(1000.001, 10, 5)
-      val df = new DecimalFormat("", new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
-      val input = df.format(expected.toBigDecimal)
-      checkEvaluation(
-        CsvToStructs(schema, options, Literal.create(input), gmtId),
-        InternalRow(expected))
     }
   }
 }

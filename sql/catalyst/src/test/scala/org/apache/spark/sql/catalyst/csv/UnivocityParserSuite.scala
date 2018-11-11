@@ -196,4 +196,15 @@ class UnivocityParserSuite extends SparkFunSuite {
     assert(doubleVal2 == Double.PositiveInfinity)
   }
 
+  test("parse decimals using locale") {
+    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach { langTag =>
+      val strVal = "1000.001"
+      val decimalVal = new BigDecimal(strVal)
+      val decimalType = new DecimalType(10, 5)
+
+      val options = new CSVOptions(Map("locale" -> langTag), false, "GMT")
+      assert(parser.makeConverter("_1", decimalType, options = options).apply(strVal) ===
+        Decimal(decimalVal, decimalType.precision, decimalType.scale))
+    }
+  }
 }
