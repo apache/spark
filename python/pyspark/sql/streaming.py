@@ -404,7 +404,8 @@ class DataStreamReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None,  allowUnquotedControlChars=None, lineSep=None, locale=None):
+             multiLine=None,  allowUnquotedControlChars=None, lineSep=None, locale=None,
+             dropFieldIfAllNull=None, encoding=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -472,6 +473,13 @@ class DataStreamReader(OptionUtils):
         :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
                        it uses the default value, ``en-US``. For instance, ``locale`` is used while
                        parsing dates and timestamps.
+        :param dropFieldIfAllNull: whether to ignore column of all null values or empty
+                                   array/struct during schema inference. If None is set, it
+                                   uses the default value, ``false``.
+        :param encoding: allows to forcibly set one of standard basic or extended encoding for
+                         the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
+                         the encoding of input JSON will be detected automatically
+                         when the multiLine option is set to ``true``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -486,7 +494,8 @@ class DataStreamReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale)
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
+            dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
