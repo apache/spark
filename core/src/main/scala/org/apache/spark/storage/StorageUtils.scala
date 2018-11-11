@@ -201,7 +201,8 @@ private[spark] object StorageUtils extends Logging {
   // reflection. However sun.misc.Unsafe added a invokeCleaner() method in JDK 9+ and this is
   // still accessible with reflection.
   private val bufferCleaner: DirectBuffer => Unit =
-    if (System.getProperty("java.version").split("\\.").head.toInt < 9) {
+    // Split java.version on non-digit chars:
+    if (System.getProperty("java.version").split("\\D+").head.toInt < 9) {
       // scalastyle:off classforname
       val cleanerMethod = Class.forName("sun.misc.Cleaner").getMethod("clean")
       // scalastyle:on classforname
