@@ -1848,4 +1848,20 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val schema = new StructType().add("a", StringType).add("b", IntegerType)
     checkAnswer(spark.read.schema(schema).option("delimiter", delimiter).csv(input), Row("abc", 1))
   }
+
+  test("using spark.sql.columnNameOfCorruptRecord") {
+    // Test if we can query corrupt records.
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      val csvDF = spark.read.csv(corruptRecords)
+      val schema = StructType(
+        StructField("_unparsed", StringType, true) ::
+          StructField("a", StringType, true) :: Nil)
+
+      assert(schema === csvDF.schema)
+
+      checkAnswer(
+        csvDF.select($"a", $"_unparsed"),
+        Row(null, "\"") :: Nil)
+    }
+  }
 }
