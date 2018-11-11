@@ -237,6 +237,13 @@ case class InMemoryTableScanExec(
       if list.forall(ExtractableLiteral.unapply(_).isDefined) && list.nonEmpty =>
       list.map(l => statsFor(a).lowerBound <= l.asInstanceOf[Literal] &&
         l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
+
+    case StartsWith(a: AttributeReference, ExtractableLiteral(l)) =>
+      statsFor(a).lowerBound.substr(0, Length(l)) <= l &&
+        l <= statsFor(a).upperBound.substr(0, Length(l))
+    case StartsWith(ExtractableLiteral(l), a: AttributeReference) =>
+      statsFor(a).lowerBound.substr(0, Length(l)) <= l &&
+        l <= statsFor(a).upperBound.substr(0, Length(l))
   }
 
   lazy val partitionFilters: Seq[Expression] = {
