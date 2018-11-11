@@ -59,7 +59,7 @@ library(SparkR)
 
 ```{r, include=FALSE}
 # disable eval if java version not supported
-override_eval <- tryCatch(!is.numeric(SparkR:::checkJavaVersion()),
+override_eval <- tryCatch(stop("test"),
           error = function(e) { TRUE },
           warning = function(e) { TRUE })
 
