@@ -148,24 +148,20 @@ getDefaultSqlSource <- function() {
 }
 
 writeToTempFileInArrow <- function(rdf, numPartitions) {
+  requireNamespace1 <- requireNamespace
+
   # For some reasons, Arrow R API requires to load 'defer_parent' which is from 'withr' package.
   # This is a workaround to avoid this error. Otherwise, we should directly load 'withr'
   # package, which CRAN complains about.
-  defer_parent <- function(x, ...)
-    # requireNamespace complains in CRAN in Jenkins. We should fix.
-    requireNamespace1 <- requireNamespace
-    if (requireNamespace1("withr", quietly = TRUE)) {
-      defer_parent <- get("defer_parent", envir = asNamespace("withr"), inherits = FALSE)
-      defer_parent(x, ...)
-    } else {
-      stop("'withr' package should be installed.")
-    }
+  if (requireNamespace1("withr", quietly = TRUE)) {
+    defer_parent <- get("defer_parent", envir = asNamespace("withr"), inherits = FALSE)
+  } else {
+    stop("'withr' package should be installed.")
   }
 
   # R API in Arrow is not yet released. CRAN requires to add the package in requireNamespace
   # at DESCRIPTION. Later, CRAN checks if the package is available or not. Therefore, it works
   # around by avoiding direct requireNamespace.
-  requireNamespace1 <- requireNamespace
   if (requireNamespace1("arrow", quietly = TRUE)) {
     record_batch <- get("record_batch", envir = asNamespace("arrow"), inherits = FALSE)
     record_batch_stream_writer <- get(
