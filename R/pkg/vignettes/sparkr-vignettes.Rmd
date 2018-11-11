@@ -63,12 +63,12 @@ override_eval <- tryCatch(!is.numeric(SparkR:::checkJavaVersion()),
           error = function(e) { TRUE },
           warning = function(e) { TRUE })
 
-opts_hooks$set(eval = function(options) {
-  if (override_eval) {
+if (override_eval) {
+  opts_hooks$set(eval = function(options) {
     options$eval = FALSE
-  }
-  options
-})
+    options
+  })
+}
 ```
 
 `SparkSession` is the entry point into SparkR which connects your R program to a Spark cluster. You can create a `SparkSession` using `sparkR.session` and pass in options such as the application name, any Spark packages depended on, etc.
