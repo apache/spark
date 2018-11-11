@@ -104,10 +104,6 @@ private[sql] object SQLUtils extends Logging {
     sparkSession.createDataFrame(rowRDD, schema)
   }
 
-  def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
-    df.rdd.map(r => rowToRBytes(r))
-  }
-
   private[this] def doConversion(data: Object, dataType: DataType): Object = {
     data match {
       case d: java.lang.Double if dataType == FloatType =>
@@ -125,15 +121,6 @@ private[sql] object SQLUtils extends Logging {
     Row.fromSeq((0 until num).map { i =>
       doConversion(SerDe.readObject(dis, jvmObjectTracker = null), schema.fields(i).dataType)
     })
-  }
-
-  private[sql] def rowToRBytes(row: Row): Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    val dos = new DataOutputStream(bos)
-
-    val cols = (0 until row.length).map(row(_).asInstanceOf[Object]).toArray
-    SerDe.writeObject(dos, cols, jvmObjectTracker = null)
-    bos.toByteArray()
   }
 
   // Schema for DataFrame of serialized R data
@@ -166,22 +153,6 @@ private[sql] object SQLUtils extends Logging {
     val bv = broadcastVars.map(_.asInstanceOf[Broadcast[Object]])
     val realSchema = if (schema == null) SERIALIZED_R_DATA_SCHEMA else schema
     gd.flatMapGroupsInR(func, packageNames, bv, realSchema)
-  }
-
-
-  def dfToCols(df: DataFrame): Array[Array[Any]] = {
-    val localDF: Array[Row] = df.collect()
-    val numCols = df.columns.length
-    val numRows = localDF.length
-
-    val colArray = new Array[Array[Any]](numCols)
-    for (colNo <- 0 until numCols) {
-      colArray(colNo) = new Array[Any](numRows)
-      for (rowNo <- 0 until numRows) {
-        colArray(colNo)(rowNo) = localDF(rowNo)(colNo)
-      }
-    }
-    colArray
   }
 
   def readSqlObject(dis: DataInputStream, dataType: Char): Object = {

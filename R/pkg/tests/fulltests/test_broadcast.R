@@ -25,18 +25,6 @@ sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", 
 nums <- 1:2
 rrdd <- parallelize(sc, nums, 2L)
 
-test_that("using broadcast variable", {
-  randomMat <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
-  randomMatBr <- broadcastRDD(sc, randomMat)
-
-  useBroadcast <- function(x) {
-    sum(get(randomMatBr@id, envir = .broadcastValues) * x)
-  }
-  actual <- collectRDD(lapply(rrdd, useBroadcast))
-  expected <- list(sum(randomMat) * 1, sum(randomMat) * 2)
-  expect_equal(actual, expected)
-})
-
 test_that("without using broadcast variable", {
   randomMat <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
 

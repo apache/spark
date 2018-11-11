@@ -208,8 +208,6 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
     } else {
       rdd <- parallelize(sc, data, numSlices = 1)
     }
-  } else if (inherits(data, "RDD")) {
-    rdd <- data
   } else {
     stop(paste("unexpected type:", class(data)))
   }

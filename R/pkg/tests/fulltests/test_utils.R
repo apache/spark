@@ -116,15 +116,6 @@ test_that("cleanClosure on R functions", {
   actual <- collectRDD(lapply(rdd, f))
   expected <- as.list(c(rep(FALSE, 4), rep(TRUE, 6)))
   expect_equal(actual, expected)
-
-  # Test for broadcast variables.
-  a <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
-  aBroadcast <- broadcastRDD(sc, a)
-  normMultiply <- function(x) { norm(aBroadcast$value) * x }
-  newnormMultiply <- SparkR:::cleanClosure(normMultiply)
-  env <- environment(newnormMultiply)
-  expect_equal(ls(env), "aBroadcast")
-  expect_equal(get("aBroadcast", envir = env, inherits = FALSE), aBroadcast)
 })
 
 test_that("varargsToJProperties", {
