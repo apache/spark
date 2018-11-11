@@ -151,9 +151,12 @@ writeToTempFileInArrow <- function(rdf, numPartitions) {
   # For some reasons, Arrow R API requires to load 'defer_parent' which is from 'withr' package.
   # This is a workaround to avoid this error. Otherwise, we should directly load 'withr'
   # package, which CRAN complains about.
-  defer_parent <- function(x, ...) {
-    if (requireNamespace("withr", quietly = TRUE)) {
-      withr::defer_parent(x, ...)
+  defer_parent <- function(x, ...)
+    # requireNamespace complains in CRAN in Jenkins. We should fix.
+    requireNamespace1 <- requireNamespace
+    if (requireNamespace1("withr", quietly = TRUE)) {
+      defer_parent <- get("defer_parent", envir = asNamespace("withr"), inherits = FALSE)
+      defer_parent(x, ...)
     } else {
       stop("'withr' package should be installed.")
     }
