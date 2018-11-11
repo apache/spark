@@ -148,10 +148,10 @@ getDefaultSqlSource <- function() {
 }
 
 writeToTempFileInArrow <- function(rdf, numPartitions) {
-  defer_parent <- function(x, ...){
-    # For some reasons, Arrow R API requires to load 'defer_parent', which is from 'withr' package.
-    # This is a workaround to avoid this error. Otherwise, we should directly load 'withr'
-    # package, which CRAN complains about.
+  # For some reasons, Arrow R API requires to load 'defer_parent' which is from 'withr' package.
+  # This is a workaround to avoid this error. Otherwise, we should directly load 'withr'
+  # package, which CRAN complains about.
+  defer_parent <- function(x, ...) {
     if (requireNamespace("withr", quietly = TRUE)) {
       withr::defer_parent(x, ...)
     } else {
