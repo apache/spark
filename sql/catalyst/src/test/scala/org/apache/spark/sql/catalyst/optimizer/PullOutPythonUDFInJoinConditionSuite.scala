@@ -52,7 +52,7 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
 
   val unsupportedJoinTypes = Seq(LeftOuter, RightOuter, FullOuter, LeftAnti)
 
-  private def comparePlansWithConf(query: LogicalPlan, expected: LogicalPlan): Unit = {
+  private def comparePlanWithCrossJoinEnable(query: LogicalPlan, expected: LogicalPlan): Unit = {
     // AnalysisException thrown by CheckCartesianProducts while spark.sql.crossJoin.enabled=false
     val exception = intercept[AnalysisException] {
       Optimize.execute(query.analyze)
@@ -75,7 +75,7 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
       testRelationRight,
       joinType = Inner,
       condition = None).where(pythonUDF).analyze
-    comparePlansWithConf(query, expected)
+    comparePlanWithCrossJoinEnable(query, expected)
   }
 
   test("left semi join condition with python udf only") {
@@ -87,7 +87,7 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
       testRelationRight,
       joinType = Inner,
       condition = None).where(pythonUDF).select('a, 'b).analyze
-    comparePlansWithConf(query, expected)
+    comparePlanWithCrossJoinEnable(query, expected)
   }
 
   test("python udf and common condition") {
@@ -112,7 +112,7 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
       testRelationRight,
       joinType = Inner,
       condition = None).where(pythonUDF || 'a.attr === 'c.attr).analyze
-    comparePlansWithConf(query, expected)
+    comparePlanWithCrossJoinEnable(query, expected)
   }
 
   test("pull out whole complex condition with multiple python udf") {
@@ -131,7 +131,7 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
       testRelationRight,
       joinType = Inner,
       condition = None).where(condition).analyze
-    comparePlansWithConf(query, expected)
+    comparePlanWithCrossJoinEnable(query, expected)
   }
 
   test("partial pull out complex condition with multiple python udf") {
