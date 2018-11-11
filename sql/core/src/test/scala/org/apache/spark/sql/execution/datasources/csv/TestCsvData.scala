@@ -33,8 +33,4 @@ private[csv] trait TestCsvData {
       }
     }(Encoders.STRING)
   }
-
-  def corruptRecords: Dataset[String] =
-    spark.createDataset(spark.sparkContext.parallelize(
-      "\"" :: Nil))(Encoders.STRING)
 }

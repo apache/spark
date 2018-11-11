@@ -34,7 +34,7 @@ import org.apache.log4j.{AppenderSkeleton, LogManager}
 import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -1850,18 +1850,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("using spark.sql.columnNameOfCorruptRecord") {
-    // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
-      val csvDF = spark.read.csv(corruptRecords)
-      val schema = StructType(
-        StructField("_unparsed", StringType, true) ::
-          StructField("a", StringType, true) :: Nil)
+      val csv = "\""
+      val df = spark.read
+        .schema("a int, _unparsed string")
+        .csv(Seq(csv).toDS())
 
-      assert(schema === csvDF.schema)
-
-      checkAnswer(
-        csvDF.select($"a", $"_unparsed"),
-        Row(null, "\"") :: Nil)
+      checkAnswer(df, Row(null, csv))
     }
   }
 }
