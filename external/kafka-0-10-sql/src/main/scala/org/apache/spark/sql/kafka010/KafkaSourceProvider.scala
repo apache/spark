@@ -510,7 +510,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
 
       // So that the driver does not pull too much data
-      .set(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, new java.lang.Integer(1))
+      .set(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, java.lang.Integer.valueOf(1))
 
       // If buffer config is not set, set it to reasonable value to work around
       // buffer issues (see KAFKA-3135)

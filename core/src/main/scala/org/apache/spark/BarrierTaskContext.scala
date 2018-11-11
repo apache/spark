@@ -158,8 +158,6 @@ class BarrierTaskContext private[spark] (
 
   override def isInterrupted(): Boolean = taskContext.isInterrupted()
 
-  override def isRunningLocally(): Boolean = taskContext.isRunningLocally()
-
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     taskContext.addTaskCompletionListener(listener)
     this

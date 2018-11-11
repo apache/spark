@@ -47,33 +47,3 @@ case class AccumulableInfo private[spark] (
     private[spark] val countFailedValues: Boolean,
     // TODO: use this to identify internal task metrics instead of encoding it in the name
     private[spark] val metadata: Option[String] = None)
-
-
-/**
- * A collection of deprecated constructors. This will be removed soon.
- */
-object AccumulableInfo {
-
-  @deprecated("do not create AccumulableInfo", "2.0.0")
-  def apply(
-      id: Long,
-      name: String,
-      update: Option[String],
-      value: String,
-      internal: Boolean): AccumulableInfo = {
-    new AccumulableInfo(
-      id, Option(name), update, Option(value), internal, countFailedValues = false)
-  }
-
-  @deprecated("do not create AccumulableInfo", "2.0.0")
-  def apply(id: Long, name: String, update: Option[String], value: String): AccumulableInfo = {
-    new AccumulableInfo(
-      id, Option(name), update, Option(value), internal = false, countFailedValues = false)
-  }
-
-  @deprecated("do not create AccumulableInfo", "2.0.0")
-  def apply(id: Long, name: String, value: String): AccumulableInfo = {
-    new AccumulableInfo(
-      id, Option(name), None, Option(value), internal = false, countFailedValues = false)
-  }
-}
