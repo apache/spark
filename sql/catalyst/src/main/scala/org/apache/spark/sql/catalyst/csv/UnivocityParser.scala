@@ -105,7 +105,7 @@ class UnivocityParser(
     requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
   }
 
-  private val decimalParser = {
+  private val decimalFormat = {
     val df = new DecimalFormat("", new DecimalFormatSymbols(options.locale))
     df.setParseBigDecimal(true)
     df
@@ -156,7 +156,7 @@ class UnivocityParser(
 
     case dt: DecimalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        val bigDecimal = decimalParser.parse(datum).asInstanceOf[BigDecimal]
+        val bigDecimal = decimalFormat.parse(datum).asInstanceOf[BigDecimal]
         Decimal(bigDecimal, dt.precision, dt.scale)
       }
 
