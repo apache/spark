@@ -59,12 +59,14 @@ library(SparkR)
 
 ```{r, include=FALSE}
 # disable eval if java version not supported
-enable_eval <- tryCatch(is.numeric(SparkR:::checkJavaVersion()),
-          error = function(e) { FALSE },
-          warning = function(e) { FALSE })
+override_eval <- tryCatch(!is.numeric(SparkR:::checkJavaVersion()),
+          error = function(e) { TRUE },
+          warning = function(e) { TRUE })
 
 opts_hooks$set(eval = function(options) {
-  options$eval = enable_eval
+  if (override_eval) {
+    options$eval = FALSE
+  }
   options
 })
 ```
