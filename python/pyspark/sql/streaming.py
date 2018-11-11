@@ -468,10 +468,6 @@ class DataStreamReader(OptionUtils):
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
-        :param encoding: allows to forcibly set one of standard basic or extended encoding for
-                         the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
-                         the encoding of input JSON will be detected automatically
-                         when the multiLine option is set to ``true``.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
         :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
@@ -480,6 +476,10 @@ class DataStreamReader(OptionUtils):
         :param dropFieldIfAllNull: whether to ignore column of all null values or empty
                                    array/struct during schema inference. If None is set, it
                                    uses the default value, ``false``.
+        :param encoding: allows to forcibly set one of standard basic or extended encoding for
+                         the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
+                         the encoding of input JSON will be detected automatically
+                         when the multiLine option is set to ``true``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
