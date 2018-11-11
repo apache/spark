@@ -231,7 +231,7 @@ class SessionCatalog(
 
   def databaseExists(db: String): Boolean = {
     val dbName = formatDatabaseName(db)
-    externalCatalog.databaseExists(dbName)
+    externalCatalog.databaseExists(dbName, compatible = true)
   }
 
   def listDatabases(): Seq[String] = {
