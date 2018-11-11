@@ -22,7 +22,8 @@ Suggests:
     rmarkdown,
     testthat,
     e1071,
-    survival
+    survival,
+    withr
 Collate:
     'schema.R'
     'generics.R'

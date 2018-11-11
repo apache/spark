@@ -240,7 +240,7 @@ private[sql] object SQLUtils extends Logging {
   }
 
   /**
-   * R callable function to read a file in Arrow stream format and create a `RDD`
+   * R callable function to read a file in Arrow stream format and create an `RDD`
    * using each serialized ArrowRecordBatch as a partition.
    */
   def readArrowStreamFromFile(

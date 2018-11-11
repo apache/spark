@@ -148,6 +148,17 @@ getDefaultSqlSource <- function() {
 }
 
 writeToTempFileInArrow <- function(rdf, numPartitions) {
+  defer_parent <- function(x, ...){
+    # For some reasons, Arrow R API requires to load 'defer_parent', which is from 'withr' package.
+    # This is a workaround to avoid this error. Otherwise, we should directly load 'withr'
+    # package, which CRAN complains about.
+    if (requireNamespace("withr", quietly = TRUE)) {
+      withr::defer_parent(x, ...)
+    } else {
+      stop("'withr' package should be installed.")
+    }
+  }
+
   # R API in Arrow is not yet released. CRAN requires to add the package in requireNamespace
   # at DESCRIPTION. Later, CRAN checks if the package is available or not. Therefore, it works
   # around by avoiding direct requireNamespace.
@@ -161,38 +172,61 @@ writeToTempFileInArrow <- function(rdf, numPartitions) {
     write_record_batch <- get(
       "write_record_batch", envir = asNamespace("arrow"), inherits = FALSE)
 
-    # Currently arrow requires withr; otherwise, write APIs don't work.
-    # Direct 'require' is not recommended by CRAN. Here's a workaround.
-    require1 <- require
-    if (require1("withr", quietly = TRUE)) {
-      numPartitions <- if (!is.null(numPartitions)) {
-        numToInt(numPartitions)
-      } else {
-        1
-      }
-      fileName <- tempfile(pattern = "spark-arrow", fileext = ".tmp")
-      chunk <- as.integer(ceiling(nrow(rdf) / numPartitions))
-      rdf_slices <- split(rdf, rep(1:ceiling(nrow(rdf) / chunk), each = chunk)[1:nrow(rdf)])
-      stream_writer <- NULL
+    numPartitions <- if (!is.null(numPartitions)) {
+      numToInt(numPartitions)
+    } else {
+      1
+    }
+
+    rdf_slices <- if (numPartitions > 1) {
+      split(rdf, makeSplits(numPartitions, nrow(rdf)))
+    } else {
+      list(rdf)
+    }
+
+    fileName <- tempfile(pattern = "spark-arrow", fileext = ".tmp")
+    stream_writer <- NULL
+    tryCatch({
       for (rdf_slice in rdf_slices) {
         batch <- record_batch(rdf_slice)
         if (is.null(stream_writer)) {
           # We should avoid private calls like 'close_on_exit' (CRAN disallows) but looks
           # there's no exposed API for it. Here's a workaround but ideally this should
           # be removed.
-          close_on_exit <- get("close_on_exit", envir = asNamespace("arrow"), inherits = FALSE)
-          stream <- close_on_exit(file_output_stream(fileName))
+          stream <- file_output_stream(fileName)
           schema <- batch$schema()
-          stream_writer <- close_on_exit(record_batch_stream_writer(stream, schema))
+          stream_writer <- record_batch_stream_writer(stream, schema)
         }
+
         write_record_batch(batch, stream_writer)
       }
-      return(fileName)
-    } else {
-      stop("'withr' package should be installed.")
-    }
+    },
+    finally = {
+      if (!is.null(stream_writer)) {
+        stream_writer$Close()
+      }
+    })
+
+    return(fileName)
   } else {
     stop("'arrow' package should be installed.")
+  }
+}
+
+checkTypeRequirementForArrow <- function(dataHead, schema) {
+  # Currenty Arrow optimization does not support POSIXct and raw for now.
+  # Also, it does not support explicit float type set by users. It leads to
+  # incorrect conversion. We will fall back to the path without Arrow optimization.
+  if (any(sapply(dataHead, function(x) is(x, "POSIXct")))) {
+    stop("Arrow optimization with R DataFrame does not support POSIXct type yet.")
+  }
+  if (any(sapply(dataHead, is.raw))) {
+    stop("Arrow optimization with R DataFrame does not support raw type yet.")
+  }
+  if (inherits(schema, "structType")) {
+    if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
+      stop("Arrow optimization with R DataFrame does not support FloatType type yet.")
+    }
   }
 }
 
@@ -225,75 +259,63 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
   shouldUseArrow <- FALSE
   firstRow <- NULL
   if (is.data.frame(data)) {
-      # get the names of columns, they will be put into RDD
-      if (is.null(schema)) {
-        schema <- names(data)
-      }
+    # get the names of columns, they will be put into RDD
+    if (is.null(schema)) {
+      schema <- names(data)
+    }
 
-      # get rid of factor type
-      cleanCols <- function(x) {
-        if (is.factor(x)) {
-          as.character(x)
-        } else {
-          x
-        }
+    # get rid of factor type
+    cleanCols <- function(x) {
+      if (is.factor(x)) {
+        as.character(x)
+      } else {
+        x
       }
-      data[] <- lapply(data, cleanCols)
+    }
+    data[] <- lapply(data, cleanCols)
 
-      args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
-      if (arrowEnabled) {
-        shouldUseArrow <- tryCatch({
-          stopifnot(length(data) > 0)
-          dataHead <- head(data, 1)
-          # Currenty Arrow optimization does not support POSIXct and raw for now.
-          # Also, it does not support explicit float type set by users. It leads to
-          # incorrect conversion. We will fall back to the path without Arrow optimization.
-          if (any(sapply(dataHead, function(x) is(x, "POSIXct")))) {
-            stop("Arrow optimization with R DataFrame does not support POSIXct type yet.")
-          }
-          if (any(sapply(dataHead, is.raw))) {
-            stop("Arrow optimization with R DataFrame does not support raw type yet.")
-          }
-          if (inherits(schema, "structType")) {
-            if (any(sapply(schema$fields(), function(x) x$dataType.toString() == "FloatType"))) {
-              stop("Arrow optimization with R DataFrame does not support FloatType type yet.")
-            }
-          }
-          firstRow <- do.call(mapply, append(args, dataHead))[[1]]
-          fileName <- writeToTempFileInArrow(data, numPartitions)
-          tryCatch(
-            jrddInArrow <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-                                       "readArrowStreamFromFile",
-                                       sparkSession,
-                                       fileName),
-          finally = {
-            file.remove(fileName)
-          })
-          TRUE
-        },
-        error = function(e) {
-          message(paste0("WARN: createDataFrame attempted Arrow optimization because ",
-                         "'spark.sql.execution.arrow.enabled' is set to true; however, ",
-                         "failed, attempting non-optimization. Reason: ",
-                         e))
-          return(FALSE)
+    args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
+    if (arrowEnabled) {
+      shouldUseArrow <- tryCatch({
+        stopifnot(length(data) > 0)
+        dataHead <- head(data, 1)
+        checkTypeRequirementForArrow(data, schema)
+        fileName <- writeToTempFileInArrow(data, numPartitions)
+        tryCatch(
+          jrddInArrow <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                                     "readArrowStreamFromFile",
+                                     sparkSession,
+                                     fileName),
+        finally = {
+          file.remove(fileName)
         })
+
+        firstRow <- do.call(mapply, append(args, dataHead))[[1]]
+        TRUE
+      },
+      error = function(e) {
+        warning(paste0("createDataFrame attempted Arrow optimization because ",
+                       "'spark.sql.execution.arrow.enabled' is set to true; however, ",
+                       "failed, attempting non-optimization. Reason: ",
+                       e))
+        return(FALSE)
+      })
+    }
+
+    if (!shouldUseArrow) {
+      # Convert data into a list of rows. Each row is a list.
+      # drop factors and wrap lists
+      data <- setNames(as.list(data), NULL)
+
+      # check if all columns have supported type
+      lapply(data, getInternalType)
+
+      # convert to rows
+      data <- do.call(mapply, append(args, data))
+      if (length(data) > 0) {
+        firstRow <- data[[1]]
       }
-
-      if (!shouldUseArrow) {
-        # Convert data into a list of rows. Each row is a list.
-        # drop factors and wrap lists
-        data <- setNames(as.list(data), NULL)
-
-        # check if all columns have supported type
-        lapply(data, getInternalType)
-
-        # convert to rows
-        data <- do.call(mapply, append(args, data))
-        if (length(data) > 0) {
-          firstRow <- data[[1]]
-        }
-      }
+    }
   }
 
   if (shouldUseArrow) {
