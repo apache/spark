@@ -144,20 +144,11 @@ class BarrierTaskContext(TaskContext):
         """Construct a BarrierTaskContext, use get instead"""
         pass
 
-    def __new__(cls):
-        """
-        Rewrite __new__ method to BarrierTaskContext for _getOrCreate called when _taskContext
-        is not instance of BarrierTaskContext.
-        """
-        if not isinstance(cls._taskContext, BarrierTaskContext):
-            cls._taskContext = object.__new__(cls)
-        return cls._taskContext
-
     @classmethod
     def _getOrCreate(cls):
         """Internal function to get or create global BarrierTaskContext."""
         if not isinstance(cls._taskContext, BarrierTaskContext):
-            cls._taskContext = BarrierTaskContext()
+            cls._taskContext = object.__new__(cls)
         return cls._taskContext
 
     @classmethod

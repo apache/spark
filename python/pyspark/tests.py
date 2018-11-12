@@ -618,10 +618,13 @@ class TaskContextTests(PySparkTestCase):
         """
         Verify that BarrierTaskContext.barrier() with reused python worker.
         """
+        self.sc._conf.set("spark.python.work.reuse", "true")
         rdd = self.sc.parallelize(range(4), 4)
         # start a normal job first to start all worker
         result = rdd.map(lambda x: x ** 2).collect()
         self.assertEqual([0, 1, 4, 9], result)
+        # make sure `spark.python.work.reuse=true`
+        self.assertEqual(self.sc._conf.get("spark.python.work.reuse"), "true")
 
         # worker will be reused in this barrier job
         self.test_barrier()
