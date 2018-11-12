@@ -159,7 +159,6 @@ class SQLAppStatusListener(
   }
 
   private def aggregateMetrics(exec: LiveExecutionData): Map[Long, String] = {
-    val metricIds = exec.metrics.map(_.accumulatorId).toSet
     val metricTypes = exec.metrics.map { m => (m.accumulatorId, m.metricType) }.toMap
     val metrics = exec.stages.toSeq
       .flatMap { stageId => Option(stageMetrics.get(stageId)) }
@@ -167,7 +166,7 @@ class SQLAppStatusListener(
       .flatMap { metrics => metrics.ids.zip(metrics.values) }
 
     val aggregatedMetrics = (metrics ++ exec.driverAccumUpdates.toSeq)
-      .filter { case (id, _) => metricIds.contains(id) }
+      .filter { case (id, _) => metricTypes.contains(id) }
       .groupBy(_._1)
       .map { case (id, values) =>
         id -> SQLMetrics.stringValue(metricTypes(id), values.map(_._2))
