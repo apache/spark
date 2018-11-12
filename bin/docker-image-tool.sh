@@ -116,7 +116,7 @@ function build {
   local SPARK_ROOT="$SPARK_HOME"
 
   if is_dev_build; then
-    create_dev_build_context
+    create_dev_build_context || error "Failed to create docker build context."
     SPARK_ROOT="$CTX_DIR/base"
   fi
 
