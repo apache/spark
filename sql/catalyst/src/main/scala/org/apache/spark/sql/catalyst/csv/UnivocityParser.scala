@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils, FailureSafeParser}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -105,10 +106,12 @@ class UnivocityParser(
     requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
   }
 
-  private val decimalFormat = {
+  private val decimalParser = if (SQLConf.get.legacyDecimalParsing) {
+    (s: String) => new BigDecimal(s.replaceAll(",", ""))
+  } else {
     val df = new DecimalFormat("", new DecimalFormatSymbols(options.locale))
     df.setParseBigDecimal(true)
-    df
+    (s: String) => df.parse(s).asInstanceOf[BigDecimal]
   }
 
   /**
@@ -156,8 +159,7 @@ class UnivocityParser(
 
     case dt: DecimalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        val bigDecimal = decimalFormat.parse(datum).asInstanceOf[BigDecimal]
-        Decimal(bigDecimal, dt.precision, dt.scale)
+        Decimal(decimalParser(datum), dt.precision, dt.scale)
       }
 
     case _: TimestampType => (d: String) =>
