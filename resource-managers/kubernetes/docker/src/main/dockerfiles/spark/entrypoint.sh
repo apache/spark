@@ -30,6 +30,10 @@ set -e
 # If there is no passwd entry for the container UID, attempt to create one
 if [ -z "$uidentry" ] ; then
     if [ -w /etc/passwd ] ; then
+        # TODO Should we allow providing an environment variable to set the desired username?
+        #      SPARK_USER_NAME is the obvious candidate here but we only propagate this to the
+        #      pods when using Hadoop therefore we'd need to move that to a feature step that
+        #      always runs e.g. Basic(Driver|Executor)FeatureStep
         echo "$myuid:x:$myuid:$mygid:anonymous uid:$SPARK_HOME:/bin/false" >> /etc/passwd
     else
         echo "Container ENTRYPOINT failed to add passwd entry for anonymous UID"
