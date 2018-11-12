@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
-rootProject.name = 'spark-docker-gradle'
+// This must be the same as the repo name, palantir/spark is the only bucket this repo is provisioned to write to
+rootProject.name = 'spark'
 
 include ':spark-docker-image-generator'
