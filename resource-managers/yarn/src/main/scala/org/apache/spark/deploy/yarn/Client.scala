@@ -575,7 +575,6 @@ private[spark] class Client(
       }
     }
 
-
     if (checkRangerEnable(sparkConf)) {
       val jarsDir = new File(YarnCommandBuilderUtils.findJarsDir(
         sparkConf.getenv("SPARK_HOME")))
@@ -594,47 +593,39 @@ private[spark] class Client(
         resType = LocalResourceType.ARCHIVE,
         destName = Some(LOCALIZED_RANGER_LIB_DIR))
       jarsArchive.delete()
-  }
+    }
 
-
-
-
-     /**
-      * recursively upload ranger plugin jar files found in $SPARK_HOME/jars
-      * Note:including jars found in $SPARK_HOME/jars sub directories
-      */
-    def uploadRangerJarDir(
-      jarsDir: File,
-      jarsStream: ZipOutputStream,
-      rootDir: File): Unit = {
-      if (!jarsDir.isDirectory) {
-        return
-      }
-      if (jarsDir.equals(rootDir)) {
-        jarsDir.listFiles().foreach { f =>
-          if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar")  && f.canRead) {
-            if (f.getName.toLowerCase(Locale.ROOT).startsWith("ranger-")) {
+    /**
+     * recursively upload ranger plugin jar files found in $SPARK_HOME/jars
+     * Note:including jars found in $SPARK_HOME/jars sub directories
+     */
+    def uploadRangerJarDir(jarsDir: File, jarsStream: ZipOutputStream, rootDir: File): Unit = {
+      if (jarsDir.isDirectory) {
+        if (jarsDir.equals(rootDir)) {
+          jarsDir.listFiles().foreach { f =>
+            if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
+              if (f.getName.toLowerCase(Locale.ROOT).startsWith("ranger-")) {
+                val name = f.getAbsolutePath.substring(rootDir.getAbsolutePath.length + 1)
+                jarsStream.putNextEntry(new ZipEntry(name))
+                Files.copy(f, jarsStream)
+                jarsStream.closeEntry()
+              }
+            } else if (f.isDirectory && f.getName.toLowerCase(Locale.ROOT).startsWith("ranger-")) {
+              uploadRangerJarDir(f, jarsStream, rootDir)
+            }
+          }
+        } else {
+          jarsDir.listFiles().foreach { f =>
+            if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
               val name = f.getAbsolutePath.substring(rootDir.getAbsolutePath.length + 1)
               jarsStream.putNextEntry(new ZipEntry(name))
               Files.copy(f, jarsStream)
               jarsStream.closeEntry()
             }
-          } else if (f.isDirectory && f.getName.toLowerCase(Locale.ROOT).startsWith("ranger-")) {
-            uploadRangerJarDir(f, jarsStream, rootDir)
-          }
-        }
-      } else {
-        jarsDir.listFiles().foreach { f =>
-          if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
-            val name = f.getAbsolutePath.substring(rootDir.getAbsolutePath.length + 1)
-            jarsStream.putNextEntry(new ZipEntry(name))
-            Files.copy(f, jarsStream)
-            jarsStream.closeEntry()
           }
         }
       }
     }
-
 
     /**
      * Copy user jar to the distributed cache if their scheme is not "local".
@@ -1478,13 +1469,9 @@ private object Client extends Logging {
    * check if ranger is enabled
    */
   private def checkRangerEnable(sparkConf: SparkConf): Boolean = {
-      val rangerExt = "org.apache.ranger.authorization.spark.authorizer.RangerSparkSQLExtension"
-      if (rangerExt.equals(sparkConf.getOption("spark.sql.extensions").getOrElse(""))) {
-        return true
-      }
-      return false
+    val rangerExt = "org.apache.ranger.authorization.spark.authorizer.RangerSparkSQLExtension"
+    sparkConf.getOption("spark.sql.extensions").contains(rangerExt)
   }
-
 
   /**
    * Returns the path to be sent to the NM for a path that is valid on the gateway.
@@ -1508,8 +1495,6 @@ private object Client extends Logging {
       path
     }
   }
-
-
 
   /**
    * Return whether two URI represent file system are the same
