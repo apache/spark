@@ -57,7 +57,7 @@ install:
 jobs:
   include:
     - stage: core-java-scala-test
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 core/testOnly  test.* org.apache.sparktest.*
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 core/testOnly  test.org.apache.spark.* org.apache.sparktest.*
     - stage: core-a-m-test
       script: ./build/sbt -mem 4096 -Phadoop-2.7 core/testOnly   org.apache.spark.a*  org.apache.spark.b* org.apache.spark.c* org.apache.spark.d* org.apache.spark.e* org.apache.spark.f* org.apache.spark.g* org.apache.spark.h* org.apache.spark.i* org.apache.spark.j* org.apache.spark.k* org.apache.spark.l* org.apache.spark.m*
     - stage: core-n-z-test
