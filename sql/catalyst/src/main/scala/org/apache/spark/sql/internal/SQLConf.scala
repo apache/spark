@@ -1596,7 +1596,6 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_DECIMAL_PARSING_ENABLED = buildConf("spark.sql.legacy.decimalParsing.enabled")
-    .internal()
     .doc("If it is set to false, it enables parsing decimals in locale specific formats. " +
       "To switch back to previous behaviour when parsing was performed by java.math.BigDecimal " +
       "and all commas were removed from the input, set the flag to true.")
