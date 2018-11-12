@@ -202,8 +202,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
 
   test("parse decimals using locale") {
     def checkDecimalParsing(langTag: String): Unit = {
-      val strVal = "1000.001"
-      val decimalVal = new BigDecimal(strVal)
+      val decimalVal = new BigDecimal("1000.001")
       val decimalType = new DecimalType(10, 5)
       val expected = Decimal(decimalVal, decimalType.precision, decimalType.scale)
       val df = new DecimalFormat("", new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
@@ -211,8 +210,8 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
 
       val options = new CSVOptions(Map("locale" -> langTag), false, "GMT")
       val parser = new UnivocityParser(new StructType().add("d", decimalType), options)
-      assert(parser.makeConverter("_1", decimalType, options = options).apply(input) ===
-        Decimal(decimalVal, decimalType.precision, decimalType.scale))
+
+      assert(parser.makeConverter("_1", decimalType, options = options).apply(input) === expected)
     }
 
     withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "false") {
