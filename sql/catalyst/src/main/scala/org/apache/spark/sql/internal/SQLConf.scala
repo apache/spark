@@ -1598,8 +1598,8 @@ object SQLConf {
   val LEGACY_DECIMAL_PARSING_ENABLED = buildConf("spark.sql.legacy.decimalParsing.enabled")
     .internal()
     .doc("If it is set to false, it enables parsing decimals in locale specific formats. " +
-    "To switch back to previous behaviour when parsing was performed by java.math.BigDecimal and " +
-    "all commas were removed from the input, set the flag to true.")
+      "To switch back to previous behaviour when parsing was performed by java.math.BigDecimal " +
+      "and all commas were removed from the input, set the flag to true.")
     .booleanConf
     .createWithDefault(false)
 }
@@ -2018,7 +2018,6 @@ class SQLConf extends Serializable with Logging {
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
 
   def legacyDecimalParsing: Boolean = getConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED)
-
 
   /** ********************** SQLConf functionality methods ************ */
 
