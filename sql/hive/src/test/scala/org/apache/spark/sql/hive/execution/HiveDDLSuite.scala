@@ -30,12 +30,12 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -2368,28 +2368,6 @@ class HiveDDLSuite
           Row("View Original Text", "SELECT * FROM (SELECT 1) T", "")
         )
       ))
-    }
-  }
-
-  test("Refresh table after insert into table") {
-    withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-      Seq("t1", "t2").foreach { tableName =>
-        withTable(tableName) {
-          if (tableName.equals("t1")) {
-            sql(s"CREATE TABLE $tableName (a INT) STORED AS parquet")
-          } else {
-            sql(s"CREATE TABLE $tableName (a INT) USING parquet")
-          }
-
-          sql(s"INSERT INTO TABLE $tableName VALUES (1)")
-
-          val catalog = spark.sessionState.catalog
-          val qualifiedTableName = QualifiedTableName(catalog.getCurrentDatabase, tableName)
-          val cachedRelation = catalog.getCachedTable(qualifiedTableName)
-          // cachedRelation should be null after refresh table.
-          assert(cachedRelation === null)
-        }
-      }
     }
   }
 }
