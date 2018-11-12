@@ -126,12 +126,7 @@ private[v1] class StagesResource extends BaseAppResource {
       if (uriQueryParameters.getFirst("search[value]") != null &&
         uriQueryParameters.getFirst("search[value]").length > 0) {
         isSearch = true
-        searchValue = try {
-          Some(uriQueryParameters.getFirst("search[value]"))
-        } catch {
-          case e: Exception => e.getMessage
-            None
-        }
+        searchValue = Some(uriQueryParameters.getFirst("search[value]"))
       }
       val _tasksToShow: Seq[TaskData] = doPagination(uriQueryParameters, stageId, stageAttemptId,
         isSearch, totalRecords.toInt)
@@ -140,15 +135,14 @@ private[v1] class StagesResource extends BaseAppResource {
         // Performs server-side search based on input from user
         if (isSearch) {
           val filteredTaskList = filterTaskList(_tasksToShow, searchValue.get)
-          filteredRecords = "0"
-          if (filteredTaskList.nonEmpty) {
-            filteredRecords = filteredTaskList.get.length.toString
+          filteredRecords = filteredTaskList.length.toString
+          if (filteredTaskList.length > 0) {
             val pageStartIndex = uriQueryParameters.getFirst("start").toInt
             val pageLength = uriQueryParameters.getFirst("length").toInt
-            ret.put("aaData", filteredTaskList.get.slice(
+            ret.put("aaData", filteredTaskList.slice(
               pageStartIndex, pageStartIndex + pageLength))
           } else {
-            ret.put("aaData", filteredTaskList.get)
+            ret.put("aaData", filteredTaskList)
           }
         } else {
           ret.put("aaData", _tasksToShow)
@@ -187,7 +181,7 @@ private[v1] class StagesResource extends BaseAppResource {
   // Filters task list based on search parameter
   def filterTaskList(
     taskDataList: Seq[TaskData],
-    searchValue: String): Option[Seq[TaskData]] = {
+    searchValue: String): Seq[TaskData] = {
     val defaultOptionString: String = "d"
     val searchValueLowerCase = searchValue.toLowerCase(Locale.ROOT)
     val containsValue = (taskDataParams: Any) => taskDataParams.toString.toLowerCase(
@@ -212,21 +206,16 @@ private[v1] class StagesResource extends BaseAppResource {
         || containsValue(task.taskMetrics.get.shuffleWriteMetrics.recordsWritten)
         || containsValue(task.taskMetrics.get.shuffleWriteMetrics.writeTime))
     }
-    val filteredTaskDataSequence: Option[Seq[TaskData]] = try {
-      Some(taskDataList.filter(f =>
-        (containsValue(f.taskId) || containsValue(f.index) || containsValue(f.attempt)
-          || containsValue(f.launchTime)
-          || containsValue(f.resultFetchStart.getOrElse(defaultOptionString))
-          || containsValue(f.duration.getOrElse(defaultOptionString))
-          || containsValue(f.executorId) || containsValue(f.host) || containsValue(f.status)
-          || containsValue(f.taskLocality) || containsValue(f.speculative)
-          || containsValue(f.errorMessage.getOrElse(defaultOptionString))
-          || taskMetricsContainsValue(f)
-          || containsValue(f.schedulerDelay) || containsValue(f.gettingResultTime))))
-    } catch {
-      case e: Exception => e.getMessage
-        None
-    }
+    val filteredTaskDataSequence: Seq[TaskData] = taskDataList.filter(f =>
+      (containsValue(f.taskId) || containsValue(f.index) || containsValue(f.attempt)
+        || containsValue(f.launchTime)
+        || containsValue(f.resultFetchStart.getOrElse(defaultOptionString))
+        || containsValue(f.duration.getOrElse(defaultOptionString))
+        || containsValue(f.executorId) || containsValue(f.host) || containsValue(f.status)
+        || containsValue(f.taskLocality) || containsValue(f.speculative)
+        || containsValue(f.errorMessage.getOrElse(defaultOptionString))
+        || taskMetricsContainsValue(f)
+        || containsValue(f.schedulerDelay) || containsValue(f.gettingResultTime)))
     filteredTaskDataSequence
   }
 
