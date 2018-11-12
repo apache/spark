@@ -174,7 +174,7 @@
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.9.3</libthrift.version>
-    <antlr4.version>4.7</antlr4.version>
+    <antlr4.version>4.7.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
     <!--
