@@ -117,35 +117,38 @@ private[v1] class StagesResource extends BaseAppResource {
       val uriQueryParameters = uriInfo.getQueryParameters(true)
       val totalRecords = uriQueryParameters.getFirst("numTasks")
       var isSearch = false
-      var searchValue: String = null
+      var searchValue: Option[String] = None
       var filteredRecords = totalRecords
-      var _tasksToShow: Seq[TaskData] = null
       // The datatables client API sends a list of query parameters to the server which contain
       // information like the columns to be sorted, search value typed by the user in the search
       // box, pagination index etc. For more information on these query parameters,
       // refer https://datatables.net/manual/server-side.
       if (uriQueryParameters.getFirst("search[value]") != null &&
         uriQueryParameters.getFirst("search[value]").length > 0) {
-        _tasksToShow = doPagination(uriQueryParameters, stageId, stageAttemptId, true,
-          totalRecords.toInt)
         isSearch = true
-        searchValue = uriQueryParameters.getFirst("search[value]")
-      } else {
-        _tasksToShow = doPagination(uriQueryParameters, stageId, stageAttemptId, false,
-          totalRecords.toInt)
+        searchValue = try {
+          Some(uriQueryParameters.getFirst("search[value]"))
+        } catch {
+          case e: Exception => e.getMessage
+            None
+        }
       }
+      val _tasksToShow: Seq[TaskData] = doPagination(uriQueryParameters, stageId, stageAttemptId,
+        isSearch, totalRecords.toInt)
       val ret = new HashMap[String, Object]()
       if (_tasksToShow.nonEmpty) {
         // Performs server-side search based on input from user
         if (isSearch) {
-          val filteredTaskList = filterTaskList(_tasksToShow, searchValue)
-          filteredRecords = filteredTaskList.length.toString
-          if (filteredTaskList.length > 0) {
+          val filteredTaskList = filterTaskList(_tasksToShow, searchValue.get)
+          filteredRecords = "0"
+          if (filteredTaskList.nonEmpty) {
+            filteredRecords = filteredTaskList.get.length.toString
             val pageStartIndex = uriQueryParameters.getFirst("start").toInt
             val pageLength = uriQueryParameters.getFirst("length").toInt
-            ret.put("aaData", filteredTaskList.slice(pageStartIndex, pageStartIndex + pageLength))
+            ret.put("aaData", filteredTaskList.get.slice(
+              pageStartIndex, pageStartIndex + pageLength))
           } else {
-            ret.put("aaData", filteredTaskList)
+            ret.put("aaData", filteredTaskList.get)
           }
         } else {
           ret.put("aaData", _tasksToShow)
@@ -162,26 +165,29 @@ private[v1] class StagesResource extends BaseAppResource {
   // Performs pagination on the server side
   def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int,
     stageAttemptId: Int, isSearch: Boolean, totalRecords: Int): Seq[TaskData] = {
-    val queryParams = queryParameters.keySet()
     var columnNameToSort = queryParameters.getFirst("columnNameToSort")
+    // Sorting on Logs column will default to Index column sort
     if (columnNameToSort.equalsIgnoreCase("Logs")) {
       columnNameToSort = "Index"
     }
     val isAscendingStr = queryParameters.getFirst("order[0][dir]")
     var pageStartIndex = 0
     var pageLength = totalRecords
+    // We fetch only the desired rows upto the specified page length for all cases except when a
+    // search query is present, in that case, we need to fetch all the rows to perform the search
+    // on the entire table
     if (!isSearch) {
       pageStartIndex = queryParameters.getFirst("start").toInt
       pageLength = queryParameters.getFirst("length").toInt
     }
-    return withUI(_.store.taskList(stageId, stageAttemptId, pageStartIndex, pageLength,
+    withUI(_.store.taskList(stageId, stageAttemptId, pageStartIndex, pageLength,
       indexName(columnNameToSort), isAscendingStr.equalsIgnoreCase("asc")))
   }
 
   // Filters task list based on search parameter
   def filterTaskList(
     taskDataList: Seq[TaskData],
-    searchValue: String): Seq[TaskData] = {
+    searchValue: String): Option[Seq[TaskData]] = {
     val defaultOptionString: String = "d"
     val searchValueLowerCase = searchValue.toLowerCase(Locale.ROOT)
     val containsValue = (taskDataParams: Any) => taskDataParams.toString.toLowerCase(
@@ -206,16 +212,21 @@ private[v1] class StagesResource extends BaseAppResource {
         || containsValue(task.taskMetrics.get.shuffleWriteMetrics.recordsWritten)
         || containsValue(task.taskMetrics.get.shuffleWriteMetrics.writeTime))
     }
-    val filteredTaskDataSequence: Seq[TaskData] = taskDataList.filter(f =>
-      (containsValue(f.taskId) || containsValue(f.index) || containsValue(f.attempt)
-        || containsValue(f.launchTime)
-        || containsValue(f.resultFetchStart.getOrElse(defaultOptionString))
-        || containsValue(f.duration.getOrElse(defaultOptionString))
-        || containsValue(f.executorId) || containsValue(f.host) || containsValue(f.status)
-        || containsValue(f.taskLocality) || containsValue(f.speculative)
-        || containsValue(f.errorMessage.getOrElse(defaultOptionString))
-        || taskMetricsContainsValue(f)
-        || containsValue(f.schedulerDelay) || containsValue(f.gettingResultTime)))
+    val filteredTaskDataSequence: Option[Seq[TaskData]] = try {
+      Some(taskDataList.filter(f =>
+        (containsValue(f.taskId) || containsValue(f.index) || containsValue(f.attempt)
+          || containsValue(f.launchTime)
+          || containsValue(f.resultFetchStart.getOrElse(defaultOptionString))
+          || containsValue(f.duration.getOrElse(defaultOptionString))
+          || containsValue(f.executorId) || containsValue(f.host) || containsValue(f.status)
+          || containsValue(f.taskLocality) || containsValue(f.speculative)
+          || containsValue(f.errorMessage.getOrElse(defaultOptionString))
+          || taskMetricsContainsValue(f)
+          || containsValue(f.schedulerDelay) || containsValue(f.gettingResultTime))))
+    } catch {
+      case e: Exception => e.getMessage
+        None
+    }
     filteredTaskDataSequence
   }
 
