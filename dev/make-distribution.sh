@@ -192,6 +192,7 @@ fi
 if [ -d "$SPARK_HOME"/resource-managers/kubernetes/core/target/ ]; then
   mkdir -p "$DISTDIR/kubernetes/"
   cp -a "$SPARK_HOME"/resource-managers/kubernetes/docker/src/main/dockerfiles "$DISTDIR/kubernetes/"
+  cp -a "$SPARK_HOME"/resource-managers/kubernetes/integration-tests/tests "$DISTDIR/kubernetes/"
 fi
 
 # Copy examples and dependencies
@@ -211,9 +212,13 @@ mkdir -p "$DISTDIR/examples/src/main"
 cp -r "$SPARK_HOME/examples/src/main" "$DISTDIR/examples/src/"
 
 # Copy license and ASF files
-cp "$SPARK_HOME/LICENSE" "$DISTDIR"
-cp -r "$SPARK_HOME/licenses" "$DISTDIR"
-cp "$SPARK_HOME/NOTICE" "$DISTDIR"
+if [ -e "$SPARK_HOME/LICENSE-binary" ]; then
+  cp "$SPARK_HOME/LICENSE-binary" "$DISTDIR/LICENSE"
+  cp -r "$SPARK_HOME/licenses-binary" "$DISTDIR/licenses"
+  cp "$SPARK_HOME/NOTICE-binary" "$DISTDIR/NOTICE"
+else
+  echo "Skipping copying LICENSE files"
+fi
 
 if [ -e "$SPARK_HOME/CHANGES.txt" ]; then
   cp "$SPARK_HOME/CHANGES.txt" "$DISTDIR"

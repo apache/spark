@@ -37,8 +37,11 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   override def afterAll(): Unit = {
-    spark.sessionState.functionRegistry.dropFunction(FunctionIdentifier("dummyPythonUDF"))
-    super.afterAll()
+    try {
+      spark.sessionState.functionRegistry.dropFunction(FunctionIdentifier("dummyPythonUDF"))
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("Python UDF: push down deterministic FilterExec predicates") {
@@ -114,4 +117,11 @@ class MyDummyPythonUDF extends UserDefinedPythonFunction(
   func = new DummyUDF,
   dataType = BooleanType,
   pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+  udfDeterministic = true)
+
+class MyDummyScalarPandasUDF extends UserDefinedPythonFunction(
+  name = "dummyScalarPandasUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  pythonEvalType = PythonEvalType.SQL_SCALAR_PANDAS_UDF,
   udfDeterministic = true)

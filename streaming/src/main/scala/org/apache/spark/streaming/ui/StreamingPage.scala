@@ -148,7 +148,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val resources = generateLoadResources()
+    val resources = generateLoadResources(request)
     val basicInfo = generateBasicInfo()
     val content = resources ++
       basicInfo ++
@@ -156,17 +156,17 @@ private[ui] class StreamingPage(parent: StreamingTab)
         generateStatTable() ++
           generateBatchListTables()
       }
-    SparkUIUtils.headerSparkPage("Streaming Statistics", content, parent, Some(5000))
+    SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent)
   }
 
   /**
    * Generate html that will load css/js files for StreamingPage
    */
-  private def generateLoadResources(): Seq[Node] = {
+  private def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
-    <script src={SparkUIUtils.prependBaseUri("/static/d3.min.js")}></script>
-      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri("/static/streaming/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri("/static/streaming/streaming-page.js")}></script>
+    <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
+      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming/streaming-page.css")} type="text/css"/>
+      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming/streaming-page.js")}></script>
     // scalastyle:on
   }
 

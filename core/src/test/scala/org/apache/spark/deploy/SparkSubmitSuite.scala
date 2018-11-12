@@ -74,20 +74,25 @@ trait TestPrematureExit {
     @volatile var exitedCleanly = false
     mainObject.exitFn = (_) => exitedCleanly = true
 
+    @volatile var exception: Exception = null
     val thread = new Thread {
       override def run() = try {
         mainObject.main(input)
       } catch {
-        // If exceptions occur after the "exit" has happened, fine to ignore them.
-        // These represent code paths not reachable during normal execution.
-        case e: Exception => if (!exitedCleanly) throw e
+        // Capture the exception to check whether the exception contains searchString or not
+        case e: Exception => exception = e
       }
     }
     thread.start()
     thread.join()
-    val joined = printStream.lineBuffer.mkString("\n")
-    if (!joined.contains(searchString)) {
-      fail(s"Search string '$searchString' not found in $joined")
+    if (exitedCleanly) {
+      val joined = printStream.lineBuffer.mkString("\n")
+      assert(joined.contains(searchString))
+    } else {
+      assert(exception != null)
+      if (!exception.getMessage.contains(searchString)) {
+        throw exception
+      }
     }
   }
 }
@@ -178,6 +183,26 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     appArgs.queue should be ("thequeue")
     appArgs.toString should include ("thequeue")
+  }
+
+  test("SPARK-24241: do not fail fast if executor num is 0 when dynamic allocation is enabled") {
+    val clArgs1 = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "--num-executors", "0",
+      "--conf", "spark.dynamicAllocation.enabled=true",
+      "thejar.jar")
+    new SparkSubmitArguments(clArgs1)
+
+    val clArgs2 = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "--num-executors", "0",
+      "--conf", "spark.dynamicAllocation.enabled=false",
+      "thejar.jar")
+
+    val e = intercept[SparkException](new SparkSubmitArguments(clArgs2))
+    assert(e.getMessage.contains("Number of executors must be a positive number"))
   }
 
   test("specify deploy mode through configuration") {
@@ -751,9 +776,13 @@ class SparkSubmitSuite
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
 
     // Test remote python files
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
     val f4 = File.createTempFile("test-submit-remote-python-files", "", tmpDir)
+    val pyFile1 = File.createTempFile("file1", ".py", tmpDir)
+    val pyFile2 = File.createTempFile("file2", ".py", tmpDir)
     val writer4 = new PrintWriter(f4)
-    val remotePyFiles = "hdfs:///tmp/file1.py,hdfs:///tmp/file2.py"
+    val remotePyFiles = s"s3a://${pyFile1.getAbsolutePath},s3a://${pyFile2.getAbsolutePath}"
     writer4.println("spark.submit.pyFiles " + remotePyFiles)
     writer4.close()
     val clArgs4 = Seq(
@@ -763,7 +792,7 @@ class SparkSubmitSuite
       "hdfs:///tmp/mister.py"
     )
     val appArgs4 = new SparkSubmitArguments(clArgs4)
-    val (_, _, conf4, _) = submit.prepareSubmitEnvironment(appArgs4)
+    val (_, _, conf4, _) = submit.prepareSubmitEnvironment(appArgs4, conf = Some(hadoopConf))
     // Should not format python path for yarn cluster mode
     conf4.get("spark.submit.pyFiles") should be(Utils.resolveURIs(remotePyFiles))
   }
@@ -971,20 +1000,24 @@ class SparkSubmitSuite
   }
 
   test("download remote resource if it is not supported by yarn service") {
-    testRemoteResources(enableHttpFs = false, blacklistHttpFs = false)
+    testRemoteResources(enableHttpFs = false)
   }
 
   test("avoid downloading remote resource if it is supported by yarn service") {
-    testRemoteResources(enableHttpFs = true, blacklistHttpFs = false)
+    testRemoteResources(enableHttpFs = true)
   }
 
   test("force download from blacklisted schemes") {
-    testRemoteResources(enableHttpFs = true, blacklistHttpFs = true)
+    testRemoteResources(enableHttpFs = true, blacklistSchemes = Seq("http"))
+  }
+
+  test("force download for all the schemes") {
+    testRemoteResources(enableHttpFs = true, blacklistSchemes = Seq("*"))
   }
 
   private def testRemoteResources(
       enableHttpFs: Boolean,
-      blacklistHttpFs: Boolean): Unit = {
+      blacklistSchemes: Seq[String] = Nil): Unit = {
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     if (enableHttpFs) {
@@ -1001,8 +1034,8 @@ class SparkSubmitSuite
     val tmpHttpJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
     val tmpHttpJarPath = s"http://${new File(tmpHttpJar.toURI).getAbsolutePath}"
 
-    val forceDownloadArgs = if (blacklistHttpFs) {
-      Seq("--conf", "spark.yarn.dist.forceDownloadSchemes=http")
+    val forceDownloadArgs = if (blacklistSchemes.nonEmpty) {
+      Seq("--conf", s"spark.yarn.dist.forceDownloadSchemes=${blacklistSchemes.mkString(",")}")
     } else {
       Nil
     }
@@ -1020,14 +1053,19 @@ class SparkSubmitSuite
 
     val jars = conf.get("spark.yarn.dist.jars").split(",").toSet
 
-    // The URI of remote S3 resource should still be remote.
-    assert(jars.contains(tmpS3JarPath))
+    def isSchemeBlacklisted(scheme: String) = {
+      blacklistSchemes.contains("*") || blacklistSchemes.contains(scheme)
+    }
 
-    if (enableHttpFs && !blacklistHttpFs) {
+    if (!isSchemeBlacklisted("s3")) {
+      assert(jars.contains(tmpS3JarPath))
+    }
+
+    if (enableHttpFs && blacklistSchemes.isEmpty) {
       // If Http FS is supported by yarn service, the URI of remote http resource should
       // still be remote.
       assert(jars.contains(tmpHttpJarPath))
-    } else {
+    } else if (!enableHttpFs || isSchemeBlacklisted("http")) {
       // If Http FS is not supported by yarn service, or http scheme is configured to be force
       // downloading, the URI of remote http resource should be changed to a local one.
       val jarName = new File(tmpHttpJar.toURI).getName
@@ -1073,6 +1111,91 @@ class SparkSubmitSuite
     assert(exception.getMessage() === "hello")
   }
 
+  test("support --py-files/spark.submit.pyFiles in non pyspark application") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+
+    val tmpDir = Utils.createTempDir()
+    val pyFile = File.createTempFile("tmpPy", ".egg", tmpDir)
+
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--py-files", s"s3a://${pyFile.getAbsolutePath}",
+      "spark-internal"
+    )
+
+    val appArgs = new SparkSubmitArguments(args)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, conf = Some(hadoopConf))
+
+    conf.get(PY_FILES.key) should be (s"s3a://${pyFile.getAbsolutePath}")
+    conf.get("spark.submit.pyFiles") should (startWith("/"))
+
+    // Verify "spark.submit.pyFiles"
+    val args1 = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--conf", s"spark.submit.pyFiles=s3a://${pyFile.getAbsolutePath}",
+      "spark-internal"
+    )
+
+    val appArgs1 = new SparkSubmitArguments(args1)
+    val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1, conf = Some(hadoopConf))
+
+    conf1.get(PY_FILES.key) should be (s"s3a://${pyFile.getAbsolutePath}")
+    conf1.get("spark.submit.pyFiles") should (startWith("/"))
+  }
+
+  test("handles natural line delimiters in --properties-file and --conf uniformly") {
+    val delimKey = "spark.my.delimiter."
+    val LF = "\n"
+    val CR = "\r"
+
+    val lineFeedFromCommandLine = s"${delimKey}lineFeedFromCommandLine" -> LF
+    val leadingDelimKeyFromFile = s"${delimKey}leadingDelimKeyFromFile" -> s"${LF}blah"
+    val trailingDelimKeyFromFile = s"${delimKey}trailingDelimKeyFromFile" -> s"blah${CR}"
+    val infixDelimFromFile = s"${delimKey}infixDelimFromFile" -> s"${CR}blah${LF}"
+    val nonDelimSpaceFromFile = s"${delimKey}nonDelimSpaceFromFile" -> " blah\f"
+
+    val testProps = Seq(leadingDelimKeyFromFile, trailingDelimKeyFromFile, infixDelimFromFile,
+      nonDelimSpaceFromFile)
+
+    val props = new java.util.Properties()
+    val propsFile = File.createTempFile("test-spark-conf", ".properties",
+      Utils.createTempDir())
+    val propsOutputStream = new FileOutputStream(propsFile)
+    try {
+      testProps.foreach { case (k, v) => props.put(k, v) }
+      props.store(propsOutputStream, "test whitespace")
+    } finally {
+      propsOutputStream.close()
+    }
+
+    val clArgs = Seq(
+      "--class", "org.SomeClass",
+      "--conf", s"${lineFeedFromCommandLine._1}=${lineFeedFromCommandLine._2}",
+      "--conf", "spark.master=yarn",
+      "--properties-file", propsFile.getPath,
+      "thejar.jar")
+
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+    Seq(
+      lineFeedFromCommandLine,
+      leadingDelimKeyFromFile,
+      trailingDelimKeyFromFile,
+      infixDelimFromFile
+    ).foreach { case (k, v) =>
+      conf.get(k) should be (v)
+    }
+
+    conf.get(nonDelimSpaceFromFile._1) should be ("blah")
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {

@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -84,15 +84,25 @@ class SparkSession private(
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  /**
+   * Constructor used in Pyspark. Contains explicit application of Spark Session Extensions
+   * which otherwise only occurs during getOrCreate. We cannot add this to the default constructor
+   * since that would cause every new session to reinvoke Spark Session Extensions on the currently
+   * running extensions.
+   */
   private[sql] def this(sc: SparkContext) {
-    this(sc, None, None, new SparkSessionExtensions)
+    this(sc, None, None,
+      SparkSession.applyExtensions(
+        sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS),
+        new SparkSessionExtensions))
   }
 
   sparkContext.assertNotStopped()
 
   // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
   SQLConf.setSQLConfGetter(() => {
-    SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(SQLConf.getFallbackConf)
+    SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sessionState.conf)
+      .getOrElse(SQLConf.getFallbackConf)
   })
 
   /**
@@ -269,7 +279,7 @@ class SparkSession private(
    */
   @transient
   lazy val emptyDataFrame: DataFrame = {
-    createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
+    createDataFrame(sparkContext.emptyRDD[Row].setName("empty"), StructType(Nil))
   }
 
   /**
@@ -394,7 +404,7 @@ class SparkSession private(
     // BeanInfo is not serializable so we must rediscover it remotely for each partition.
       SQLContext.beansToRows(iter, Utils.classForName(className), attributeSeq)
     }
-    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd)(self))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd.setName(rdd.name))(self))
   }
 
   /**
@@ -593,7 +603,7 @@ class SparkSession private(
     } else {
       rowRDD.map { r: Row => InternalRow.fromSeq(r.toSeq) }
     }
-    internalCreateDataFrame(catalystRows, schema)
+    internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
 
@@ -898,6 +908,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def getOrCreate(): SparkSession = synchronized {
+      assertOnDriver()
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
@@ -934,23 +945,9 @@ object SparkSession extends Logging {
           // Do not update `SparkConf` for existing `SparkContext`, as it's shared by all sessions.
         }
 
-        // Initialize extensions if the user has defined a configurator class.
-        val extensionConfOption = sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
-        if (extensionConfOption.isDefined) {
-          val extensionConfClassName = extensionConfOption.get
-          try {
-            val extensionConfClass = Utils.classForName(extensionConfClassName)
-            val extensionConf = extensionConfClass.newInstance()
-              .asInstanceOf[SparkSessionExtensions => Unit]
-            extensionConf(extensions)
-          } catch {
-            // Ignore the error if we cannot find the class or when the class has the wrong type.
-            case e @ (_: ClassCastException |
-                      _: ClassNotFoundException |
-                      _: NoClassDefFoundError) =>
-              logWarning(s"Cannot use $extensionConfClassName to configure session extensions.", e)
-          }
-        }
+        applyExtensions(
+          sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS),
+          extensions)
 
         session = new SparkSession(sparkContext, None, None, extensions)
         options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
@@ -1020,16 +1017,34 @@ object SparkSession extends Logging {
   /**
    * Returns the active SparkSession for the current thread, returned by the builder.
    *
+   * @note Return None, when calling this function on executors
+   *
    * @since 2.2.0
    */
-  def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
+  def getActiveSession: Option[SparkSession] = {
+    if (TaskContext.get != null) {
+      // Return None when running on executors.
+      None
+    } else {
+      Option(activeThreadSession.get)
+    }
+  }
 
   /**
    * Returns the default SparkSession that is returned by the builder.
    *
+   * @note Return None, when calling this function on executors
+   *
    * @since 2.2.0
    */
-  def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
+  def getDefaultSession: Option[SparkSession] = {
+    if (TaskContext.get != null) {
+      // Return None when running on executors.
+      None
+    } else {
+      Option(defaultSession.get)
+    }
+  }
 
   /**
    * Returns the currently active SparkSession, otherwise the default one. If there is no default
@@ -1059,6 +1074,14 @@ object SparkSession extends Logging {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
       case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
+    }
+  }
+
+  private def assertOnDriver(): Unit = {
+    if (Utils.isTesting && TaskContext.get != null) {
+      // we're accessing it during task execution, fail.
+      throw new IllegalStateException(
+        "SparkSession should only be created and accessed on the driver.")
     }
   }
 
@@ -1108,5 +1131,30 @@ object SparkSession extends Logging {
       SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
     }
+  }
+
+  /**
+   * Initialize extensions for given extension classname. This class will be applied to the
+   * extensions passed into this function.
+   */
+  private def applyExtensions(
+      extensionOption: Option[String],
+      extensions: SparkSessionExtensions): SparkSessionExtensions = {
+    if (extensionOption.isDefined) {
+      val extensionConfClassName = extensionOption.get
+      try {
+        val extensionConfClass = Utils.classForName(extensionConfClassName)
+        val extensionConf = extensionConfClass.getConstructor().newInstance()
+          .asInstanceOf[SparkSessionExtensions => Unit]
+        extensionConf(extensions)
+      } catch {
+        // Ignore the error if we cannot find the class or when the class has the wrong type.
+        case e@(_: ClassCastException |
+                _: ClassNotFoundException |
+                _: NoClassDefFoundError) =>
+          logWarning(s"Cannot use $extensionConfClassName to configure session extensions.", e)
+      }
+    }
+    extensions
   }
 }

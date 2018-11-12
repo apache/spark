@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -80,8 +81,8 @@ case class Last(child: Expression, ignoreNullsExpr: Expression)
   override lazy val updateExpressions: Seq[Expression] = {
     if (ignoreNulls) {
       Seq(
-        /* last = */ If(IsNull(child), last, child),
-        /* valueSet = */ Or(valueSet, IsNotNull(child))
+        /* last = */ If(child.isNull, last, child),
+        /* valueSet = */ valueSet || child.isNotNull
       )
     } else {
       Seq(
@@ -95,7 +96,7 @@ case class Last(child: Expression, ignoreNullsExpr: Expression)
     // Prefer the right hand expression if it has been set.
     Seq(
       /* last = */ If(valueSet.right, last.right, last.left),
-      /* valueSet = */ Or(valueSet.right, valueSet.left)
+      /* valueSet = */ valueSet.right || valueSet.left
     )
   }
 

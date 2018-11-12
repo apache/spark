@@ -18,12 +18,14 @@
 package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
+import java.nio.file.Files
 import java.util.{Date, ServiceLoader}
-import java.util.concurrent.{ExecutorService, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.concurrent.ExecutionException
 import scala.io.Source
 import scala.util.Try
 import scala.xml.Node
@@ -31,9 +33,8 @@ import scala.xml.Node
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.MoreExecutors
-import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.fs.permission.FsAction
-import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 import org.fusesource.leveldbjni.internal.NativeDB
@@ -41,13 +42,14 @@ import org.fusesource.leveldbjni.internal.NativeDB
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.Status._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
-import org.apache.spark.status.config._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.kvstore._
@@ -85,7 +87,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     this(conf, new SystemClock())
   }
 
-  import config._
   import FsHistoryProvider._
 
   // Interval between safemode checks.
@@ -112,7 +113,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-  private val fs = new Path(logDir).getFileSystem(hadoopConf)
+  // Visible for testing
+  private[history] val fs: FileSystem = new Path(logDir).getFileSystem(hadoopConf)
 
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
@@ -130,8 +132,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
-    require(path.isDirectory(), s"Configured store directory ($path) does not exist.")
-    val dbPath = new File(path, "listing.ldb")
+    val dbPath = Files.createDirectories(new File(path, "listing.ldb").toPath()).toFile()
+    Utils.chmod700(dbPath)
+
     val metadata = new FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
       AppStatusStore.CURRENT_VERSION, logDir.toString())
 
@@ -155,6 +158,25 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val diskManager = storePath.map { path =>
     new HistoryServerDiskManager(conf, path, listing, clock)
+  }
+
+  private val blacklist = new ConcurrentHashMap[String, Long]
+
+  // Visible for testing
+  private[history] def isBlacklisted(path: Path): Boolean = {
+    blacklist.containsKey(path.getName)
+  }
+
+  private def blacklist(path: Path): Unit = {
+    blacklist.put(path.getName, clock.getTimeMillis())
+  }
+
+  /**
+   * Removes expired entries in the blacklist, according to the provided `expireTimeInSeconds`.
+   */
+  private def clearBlacklist(expireTimeInSeconds: Long): Unit = {
+    val expiredThreshold = clock.getTimeMillis() - expireTimeInSeconds * 1000
+    blacklist.asScala.retain((_, creationTime) => creationTime >= expiredThreshold)
   }
 
   private val activeUIs = new mutable.HashMap[(String, Option[String]), LoadedAppUI]()
@@ -414,7 +436,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // reading a garbage file is safe, but we would log an error which can be scary to
             // the end-user.
             !entry.getPath().getName().startsWith(".") &&
-            SparkHadoopUtil.get.checkAccessPermission(entry, FsAction.READ)
+            !isBlacklisted(entry.getPath)
         }
         .filter { entry =>
           try {
@@ -427,7 +449,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               listing.write(info.copy(lastProcessed = newLastScanTime, fileSize = entry.getLen()))
             }
 
-            if (info.fileSize < entry.getLen()) {
+            if (shouldReloadLog(info, entry)) {
               if (info.appId.isDefined && fastInProgressParsing) {
                 // When fast in-progress parsing is on, we don't need to re-parse when the
                 // size changes, but we do need to invalidate any existing UIs.
@@ -457,32 +479,37 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         logDebug(s"New/updated attempts found: ${updated.size} ${updated.map(_.getPath)}")
       }
 
-      val tasks = updated.map { entry =>
+      val tasks = updated.flatMap { entry =>
         try {
-          replayExecutor.submit(new Runnable {
+          val task: Future[Unit] = replayExecutor.submit(new Runnable {
             override def run(): Unit = mergeApplicationListing(entry, newLastScanTime, true)
-          })
+          }, Unit)
+          Some(task -> entry.getPath)
         } catch {
           // let the iteration over the updated entries break, since an exception on
           // replayExecutor.submit (..) indicates the ExecutorService is unable
           // to take any more submissions at this time
           case e: Exception =>
             logError(s"Exception while submitting event log for replay", e)
-            null
+            None
         }
-      }.filter(_ != null)
+      }
 
       pendingReplayTasksCount.addAndGet(tasks.size)
 
       // Wait for all tasks to finish. This makes sure that checkForLogs
       // is not scheduled again while some tasks are already running in
       // the replayExecutor.
-      tasks.foreach { task =>
+      tasks.foreach { case (task, path) =>
         try {
           task.get()
         } catch {
           case e: InterruptedException =>
             throw e
+          case e: ExecutionException if e.getCause.isInstanceOf[AccessControlException] =>
+            // We don't have read permissions on the log file
+            logWarning(s"Unable to read log $path", e.getCause)
+            blacklist(path)
           case e: Exception =>
             logError("Exception while merging application listings", e)
         } finally {
@@ -512,6 +539,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
+  }
+
+  private[history] def shouldReloadLog(info: LogInfo, entry: FileStatus): Boolean = {
+    var result = info.fileSize < entry.getLen
+    if (!result && info.logPath.endsWith(EventLoggingListener.IN_PROGRESS)) {
+      try {
+        result = Utils.tryWithResource(fs.open(entry.getPath)) { in =>
+          in.getWrappedStream match {
+            case dfsIn: DFSInputStream => info.fileSize < dfsIn.getFileLength
+            case _ => false
+          }
+        }
+      } catch {
+        case e: Exception =>
+          logDebug(s"Failed to check the length for the file : ${info.logPath}", e)
+      }
+    }
+    result
   }
 
   private def cleanAppData(appId: String, attemptId: Option[String], logPath: String): Unit = {
@@ -775,6 +820,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         listing.delete(classOf[LogInfo], log.logPath)
       }
     }
+    // Clean the blacklist from the expired entries.
+    clearBlacklist(CLEAN_INTERVAL_S)
   }
 
   /**
@@ -934,13 +981,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   private def deleteLog(log: Path): Unit = {
-    try {
-      fs.delete(log, true)
-    } catch {
-      case _: AccessControlException =>
-        logInfo(s"No permission to delete $log, ignoring.")
-      case ioe: IOException =>
-        logError(s"IOException in cleaning $log", ioe)
+    if (isBlacklisted(log)) {
+      logDebug(s"Skipping deleting $log as we don't have permissions on it.")
+    } else {
+      try {
+        fs.delete(log, true)
+      } catch {
+        case _: AccessControlException =>
+          logInfo(s"No permission to delete $log, ignoring.")
+        case ioe: IOException =>
+          logError(s"IOException in cleaning $log", ioe)
+      }
     }
   }
 

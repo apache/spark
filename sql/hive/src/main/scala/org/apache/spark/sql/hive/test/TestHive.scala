@@ -35,6 +35,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, ExternalCatalogWithListener}
+import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
@@ -58,7 +60,12 @@ object TestHive
         .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
         .set("spark.ui.enabled", "false")
-        .set("spark.unsafe.exceptionOnMemoryLeak", "true")))
+        .set("spark.unsafe.exceptionOnMemoryLeak", "true")
+        // Disable ConvertToLocalRelation for better test coverage. Test cases built on
+        // LocalRelation will exercise the optimization rules better by disabling it as
+        // this rule may potentially block testing of other optimization rules such as
+        // ConstantPropagation etc.
+        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)))
 
 
 case class TestHiveVersion(hiveClient: HiveClient)
@@ -83,11 +90,11 @@ private[hive] class TestHiveSharedState(
     hiveClient: Option[HiveClient] = None)
   extends SharedState(sc) {
 
-  override lazy val externalCatalog: TestHiveExternalCatalog = {
-    new TestHiveExternalCatalog(
+  override lazy val externalCatalog: ExternalCatalogWithListener = {
+    new ExternalCatalogWithListener(new TestHiveExternalCatalog(
       sc.conf,
       sc.hadoopConfiguration,
-      hiveClient)
+      hiveClient))
   }
 }
 
@@ -208,7 +215,9 @@ private[hive] class TestHiveSparkSession(
     new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
-  lazy val metadataHive: HiveClient = sharedState.externalCatalog.client.newSession()
+  lazy val metadataHive: HiveClient = {
+    sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.newSession()
+  }
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
@@ -562,7 +571,7 @@ private[hive] class TestHiveQueryExecution(
 
   override lazy val analyzed: LogicalPlan = {
     val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _) => tbl.table :: Nil
+      case CacheTableCommand(tbl, _, _, _) => tbl.table :: Nil
       case _ => Nil
     }
 

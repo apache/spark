@@ -206,7 +206,9 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       jobs: Seq[v1.JobData],
       killEnabled: Boolean): Seq[Node] = {
     // stripXSS is called to remove suspicious characters used in XSS attacks
-    val allParameters = request.getParameterMap.asScala.toMap.mapValues(_.map(UIUtils.stripXSS))
+    val allParameters = request.getParameterMap.asScala.toMap.map { case (k, v) =>
+      UIUtils.stripXSS(k) -> v.map(UIUtils.stripXSS).toSeq
+    }
     val parameterOtherTable = allParameters.filterNot(_._1.startsWith(jobTag))
       .map(para => para._1 + "=" + para._2(0))
 
@@ -218,7 +220,6 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val parameterJobSortColumn = UIUtils.stripXSS(request.getParameter(jobTag + ".sort"))
     val parameterJobSortDesc = UIUtils.stripXSS(request.getParameter(jobTag + ".desc"))
     val parameterJobPageSize = UIUtils.stripXSS(request.getParameter(jobTag + ".pageSize"))
-    val parameterJobPrevPageSize = UIUtils.stripXSS(request.getParameter(jobTag + ".prevPageSize"))
 
     val jobPage = Option(parameterJobPage).map(_.toInt).getOrElse(1)
     val jobSortColumn = Option(parameterJobSortColumn).map { sortColumn =>
@@ -229,17 +230,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       jobSortColumn == jobIdTitle
     )
     val jobPageSize = Option(parameterJobPageSize).map(_.toInt).getOrElse(100)
-    val jobPrevPageSize = Option(parameterJobPrevPageSize).map(_.toInt).getOrElse(jobPageSize)
 
-    val page: Int = {
-      // If the user has changed to a larger page size, then go to page 1 in order to avoid
-      // IndexOutOfBoundsException.
-      if (jobPageSize <= jobPrevPageSize) {
-        jobPage
-      } else {
-        1
-      }
-    }
     val currentTime = System.currentTimeMillis()
 
     try {
@@ -248,7 +239,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         jobs,
         tableHeaderId,
         jobTag,
-        UIUtils.prependBaseUri(parent.basePath),
+        UIUtils.prependBaseUri(request, parent.basePath),
         "jobs", // subPath
         parameterOtherTable,
         killEnabled,
@@ -257,7 +248,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         pageSize = jobPageSize,
         sortColumn = jobSortColumn,
         desc = jobSortDesc
-      ).table(page)
+      ).table(jobPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
         <div class="alert alert-error">
@@ -407,7 +398,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val helpText = """A job is triggered by an action, like count() or saveAsTextFile().""" +
       " Click on a job to see information about the stages of tasks inside it."
 
-    UIUtils.headerSparkPage("Spark Jobs", content, parent, helpText = Some(helpText))
+    UIUtils.headerSparkPage(request, "Spark Jobs", content, parent, helpText = Some(helpText))
   }
 
 }
@@ -462,7 +453,7 @@ private[ui] class JobDataSource(
 
     val jobDescription = UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
 
-    val detailUrl = "%s/jobs/job?id=%s".format(basePath, jobData.jobId)
+    val detailUrl = "%s/jobs/job/?id=%s".format(basePath, jobData.jobId)
 
     new JobTableRowData(
       jobData,
@@ -523,8 +514,6 @@ private[ui] class JobPagedTable(
       "table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = jobTag + ".pageSize"
-
-  override def prevPageSizeFormField: String = jobTag + ".prevPageSize"
 
   override def pageNumberFormField: String = jobTag + ".page"
 

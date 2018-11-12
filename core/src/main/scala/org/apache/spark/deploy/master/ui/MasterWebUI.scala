@@ -43,7 +43,7 @@ class MasterWebUI(
     val masterPage = new MasterPage(this)
     attachPage(new ApplicationPage(this))
     attachPage(masterPage)
-    attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
+    addStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)
     attachHandler(createRedirectHandler(
       "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
     attachHandler(createRedirectHandler(

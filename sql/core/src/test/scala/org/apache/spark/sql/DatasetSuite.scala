@@ -164,6 +164,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(ClassData("a", 2))))
   }
 
+  test("as map of case class - reorder fields by name") {
+    val df = spark.range(3).select(map(lit(1), struct($"id".cast("int").as("b"), lit("a").as("a"))))
+    val ds = df.as[Map[Int, ClassData]]
+    assert(ds.collect() === Array(
+      Map(1 -> ClassData("a", 0)),
+      Map(1 -> ClassData("a", 1)),
+      Map(1 -> ClassData("a", 2))))
+  }
+
   test("map") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDataset(
@@ -611,7 +620,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     ).toDF("id", "stringData")
     val sampleDF = df.sample(false, 0.7, 50)
     // After sampling, sampleDF doesn't contain id=1.
-    assert(!sampleDF.select("id").collect.contains(1))
+    assert(!sampleDF.select("id").as[Int].collect.contains(1))
     // simpleUdf should not encounter id=1.
     checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count.toInt)(Row(1)))
   }
@@ -688,15 +697,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-11894: Incorrect results are returned when using null") {
     val nullInt = null.asInstanceOf[java.lang.Integer]
-    val ds1 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
-    val ds2 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
+    val ds1 = Seq((nullInt, "1"), (java.lang.Integer.valueOf(22), "2")).toDS()
+    val ds2 = Seq((nullInt, "1"), (java.lang.Integer.valueOf(22), "2")).toDS()
 
     checkDataset(
       ds1.joinWith(ds2, lit(true), "cross"),
       ((nullInt, "1"), (nullInt, "1")),
-      ((nullInt, "1"), (new java.lang.Integer(22), "2")),
-      ((new java.lang.Integer(22), "2"), (nullInt, "1")),
-      ((new java.lang.Integer(22), "2"), (new java.lang.Integer(22), "2")))
+      ((nullInt, "1"), (java.lang.Integer.valueOf(22), "2")),
+      ((java.lang.Integer.valueOf(22), "2"), (nullInt, "1")),
+      ((java.lang.Integer.valueOf(22), "2"), (java.lang.Integer.valueOf(22), "2")))
   }
 
   test("change encoder with compatible schema") {
@@ -872,7 +881,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.rdd.map(r => r.id).count === 2)
     assert(ds2.rdd.map(r => r.id).count === 2)
 
-    val ds3 = ds.map(g => new java.lang.Long(g.id))
+    val ds3 = ds.map(g => java.lang.Long.valueOf(g.id))
     assert(ds3.rdd.map(r => r).count === 2)
   }
 
@@ -969,6 +978,55 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkShowString(ds, expected)
   }
 
+  test("SPARK-25108 Fix the show method to display the full width character alignment problem") {
+    // scalastyle:off nonascii
+    val df = Seq(
+      (0, null, 1),
+      (0, "", 1),
+      (0, "ab c", 1),
+      (0, "1098", 1),
+      (0, "mø", 1),
+      (0, "γύρ", 1),
+      (0, "pê", 1),
+      (0, "ー", 1),
+      (0, "测", 1),
+      (0, "か", 1),
+      (0, "걸", 1),
+      (0, "à", 1),
+      (0, "焼", 1),
+      (0, "羍む", 1),
+      (0, "뺭ᾘ", 1),
+      (0, "\u0967\u0968\u0969", 1)
+    ).toDF("b", "a", "c")
+    // scalastyle:on nonascii
+    val ds = df.as[ClassData]
+    val expected =
+      // scalastyle:off nonascii
+      """+---+----+---+
+        ||  b|   a|  c|
+        |+---+----+---+
+        ||  0|null|  1|
+        ||  0|    |  1|
+        ||  0|ab c|  1|
+        ||  0|1098|  1|
+        ||  0|  mø|  1|
+        ||  0| γύρ|  1|
+        ||  0|  pê|  1|
+        ||  0|  ー|  1|
+        ||  0|  测|  1|
+        ||  0|  か|  1|
+        ||  0|  걸|  1|
+        ||  0|   à|  1|
+        ||  0|  焼|  1|
+        ||  0|羍む|  1|
+        ||  0| 뺭ᾘ|  1|
+        ||  0| १२३|  1|
+        |+---+----+---+
+        |""".stripMargin
+    // scalastyle:on nonascii
+    checkShowString(ds, expected)
+  }
+
   test(
     "SPARK-15112: EmbedDeserializerInFilter should not optimize plan fragment that changes schema"
   ) {
@@ -1016,7 +1074,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Dataset should throw RuntimeException if top-level product input object is null") {
     val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
     assert(e.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getMessage.contains("top level Product input object"))
+    assert(e.getMessage.contains("top level Product or row object"))
   }
 
   test("dropDuplicates") {
@@ -1296,7 +1354,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       new java.sql.Timestamp(100000))
   }
 
-  test("SPARK-19896: cannot have circular references in in case class") {
+  test("SPARK-19896: cannot have circular references in case class") {
     val errMsg1 = intercept[UnsupportedOperationException] {
       Seq(CircularReferenceClassA(null)).toDS
     }
@@ -1425,6 +1483,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23627: provide isEmpty in DataSet") {
+    val ds1 = spark.emptyDataset[Int]
+    val ds2 = Seq(1, 2, 3).toDS()
+
+    assert(ds1.isEmpty == true)
+    assert(ds2.isEmpty == false)
+  }
+
   test("SPARK-22472: add null check for top-level primitive values") {
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]
@@ -1433,7 +1499,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(e.getCause.isInstanceOf[NullPointerException])
 
     withTempPath { path =>
-      Seq(new Integer(1), null).toDF("i").write.parquet(path.getCanonicalPath)
+      Seq(Integer.valueOf(1), null).toDF("i").write.parquet(path.getCanonicalPath)
       // If the primitive values are from files, we need to do runtime null check.
       val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
       intercept[NullPointerException](ds.collect())
@@ -1452,6 +1518,43 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val group1 = cached.groupBy("x").agg(min(col("y")) as "value")
     val group2 = cached.groupBy("x").agg(min(col("z")) as "value")
     checkAnswer(group1.union(group2), Row(4, 5) :: Row(1, 2) :: Row(4, 6) :: Row(1, 3) :: Nil)
+  }
+
+  test("SPARK-23835: null primitive data type should throw NullPointerException") {
+    val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
+    intercept[NullPointerException](ds.as[(Int, Int)].collect())
+  }
+
+  test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val a = Seq(Some(1)).toDS
+      val b = Seq(Some(1.2)).toDS
+      val expected = Seq((Some(1), Some(1.2))).toDS
+      val joined = a.joinWith(b, lit(true))
+      assert(joined.schema == expected.schema)
+      checkDataset(joined, expected.collect: _*)
+    }
+  }
+
+  test("SPARK-24548: Dataset with tuple encoders should have correct schema") {
+    val encoder = Encoders.tuple(newStringEncoder,
+      Encoders.tuple(newStringEncoder, newStringEncoder))
+
+    val data = Seq(("a", ("1", "2")), ("b", ("3", "4")))
+    val rdd = sparkContext.parallelize(data)
+
+    val ds1 = spark.createDataset(rdd)
+    val ds2 = spark.createDataset(rdd)(encoder)
+    assert(ds1.schema == ds2.schema)
+    checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
+  }
+
+  test("SPARK-24571: filtering of string values by char literal") {
+    val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
+    checkAnswer(df.where('city === 'X'), Seq(Row("X")))
+    checkAnswer(
+      df.where($"city".contains(java.lang.Character.valueOf('A'))),
+      Seq(Row("Amsterdam")))
   }
 }
 

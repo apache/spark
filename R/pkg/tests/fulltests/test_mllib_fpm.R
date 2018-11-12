@@ -44,7 +44,8 @@ test_that("spark.fpGrowth", {
   expected_association_rules <- data.frame(
     antecedent = I(list(list("2"), list("3"))),
     consequent = I(list(list("1"), list("1"))),
-    confidence = c(1, 1)
+    confidence = c(1, 1),
+    lift = c(1, 1)
   )
 
   expect_equivalent(expected_association_rules, collect(spark.associationRules(model)))
@@ -81,5 +82,21 @@ test_that("spark.fpGrowth", {
   )
 
 })
+
+test_that("spark.prefixSpan", {
+    df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
+                          list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+                          list(list(list(1L, 2L), list(5L))),
+                          list(list(list(6L)))), schema = c("sequence"))
+    result1 <- spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L,
+                                                    maxLocalProjDBSize = 32000000L)
+
+    expected_result <- createDataFrame(list(list(list(list(1L)), 3L),
+                                            list(list(list(3L)), 2L),
+                                            list(list(list(2L)), 3L),
+                                            list(list(list(1L, 2L)), 3L),
+                                            list(list(list(1L), list(3L)), 2L)),
+                                            schema = c("sequence", "freq"))
+  })
 
 sparkR.session.stop()

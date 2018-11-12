@@ -21,7 +21,6 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -219,15 +218,24 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if list.isEmpty && !v.nullable => FalseLiteral
+      case In(v, list) if list.isEmpty =>
+        // When v is not nullable, the following expression will be optimized
+        // to FalseLiteral which is tested in OptimizeInSuite.scala
+        If(IsNotNull(v), FalseLiteral, Literal(null, BooleanType))
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
-        if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {
+        if (newList.length == 1
+          // TODO: `EqualTo` for structural types are not working. Until SPARK-24443 is addressed,
+          // TODO: we exclude them in this rule.
+          && !v.isInstanceOf[CreateNamedStructLike]
+          && !newList.head.isInstanceOf[CreateNamedStructLike]) {
+          EqualTo(v, newList.head)
+        } else if (newList.length > SQLConf.get.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
-        } else if (newList.size < list.size) {
+        } else if (newList.length < list.length) {
           expr.copy(list = newList)
-        } else { // newList.length == list.length
+        } else { // newList.length == list.length && newList.length > 1
           expr
         }
     }
@@ -255,23 +263,50 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case TrueLiteral Or _ => TrueLiteral
       case _ Or TrueLiteral => TrueLiteral
 
-      case a And b if Not(a).semanticEquals(b) => FalseLiteral
-      case a Or b if Not(a).semanticEquals(b) => TrueLiteral
-      case a And b if a.semanticEquals(Not(b)) => FalseLiteral
-      case a Or b if a.semanticEquals(Not(b)) => TrueLiteral
+      case a And b if Not(a).semanticEquals(b) =>
+        If(IsNull(a), Literal.create(null, a.dataType), FalseLiteral)
+      case a And b if a.semanticEquals(Not(b)) =>
+        If(IsNull(b), Literal.create(null, b.dataType), FalseLiteral)
+
+      case a Or b if Not(a).semanticEquals(b) =>
+        If(IsNull(a), Literal.create(null, a.dataType), TrueLiteral)
+      case a Or b if a.semanticEquals(Not(b)) =>
+        If(IsNull(b), Literal.create(null, b.dataType), TrueLiteral)
 
       case a And b if a.semanticEquals(b) => a
       case a Or b if a.semanticEquals(b) => a
 
-      case a And (b Or c) if Not(a).semanticEquals(b) => And(a, c)
-      case a And (b Or c) if Not(a).semanticEquals(c) => And(a, b)
-      case (a Or b) And c if a.semanticEquals(Not(c)) => And(b, c)
-      case (a Or b) And c if b.semanticEquals(Not(c)) => And(a, c)
+      // The following optimizations are applicable only when the operands are not nullable,
+      // since the three-value logic of AND and OR are different in NULL handling.
+      // See the chart:
+      // +---------+---------+---------+---------+
+      // | operand | operand |   OR    |   AND   |
+      // +---------+---------+---------+---------+
+      // | TRUE    | TRUE    | TRUE    | TRUE    |
+      // | TRUE    | FALSE   | TRUE    | FALSE   |
+      // | FALSE   | FALSE   | FALSE   | FALSE   |
+      // | UNKNOWN | TRUE    | TRUE    | UNKNOWN |
+      // | UNKNOWN | FALSE   | UNKNOWN | FALSE   |
+      // | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+      // +---------+---------+---------+---------+
 
-      case a Or (b And c) if Not(a).semanticEquals(b) => Or(a, c)
-      case a Or (b And c) if Not(a).semanticEquals(c) => Or(a, b)
-      case (a And b) Or c if a.semanticEquals(Not(c)) => Or(b, c)
-      case (a And b) Or c if b.semanticEquals(Not(c)) => Or(a, c)
+      // (NULL And (NULL Or FALSE)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
+      case a And (b Or c) if !a.nullable && Not(a).semanticEquals(b) => And(a, c)
+      // (NULL And (FALSE Or NULL)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
+      case a And (b Or c) if !a.nullable && Not(a).semanticEquals(c) => And(a, b)
+      // ((NULL Or FALSE) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
+      case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) => And(b, c)
+      // ((FALSE Or NULL) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
+      case (a Or b) And c if !c.nullable && b.semanticEquals(Not(c)) => And(a, c)
+
+      // (NULL Or (NULL And TRUE)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
+      case a Or (b And c) if !a.nullable && Not(a).semanticEquals(b) => Or(a, c)
+      // (NULL Or (TRUE And NULL)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
+      case a Or (b And c) if !a.nullable && Not(a).semanticEquals(c) => Or(a, b)
+      // ((NULL And TRUE) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
+      case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) => Or(b, c)
+      // ((TRUE And NULL) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
+      case (a And b) Or c if !c.nullable && b.semanticEquals(Not(c)) => Or(a, c)
 
       // Common factor elimination for conjunction
       case and @ (left And right) =>
@@ -382,6 +417,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
+      case If(cond, trueValue, falseValue)
+        if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
@@ -395,17 +432,35 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
           e.copy(branches = newBranches)
         }
 
-      case e @ CaseWhen(branches, _) if branches.headOption.map(_._1) == Some(TrueLiteral) =>
+      case CaseWhen(branches, _) if branches.headOption.map(_._1).contains(TrueLiteral) =>
         // If the first branch is a true literal, remove the entire CaseWhen and use the value
         // from that. Note that CaseWhen.branches should never be empty, and as a result the
         // headOption (rather than head) added above is just an extra (and unnecessary) safeguard.
         branches.head._2
 
       case CaseWhen(branches, _) if branches.exists(_._1 == TrueLiteral) =>
-        // a branc with a TRue condition eliminates all following branches,
+        // a branch with a true condition eliminates all following branches,
         // these branches can be pruned away
         val (h, t) = branches.span(_._1 != TrueLiteral)
         CaseWhen( h :+ t.head, None)
+
+      case e @ CaseWhen(branches, Some(elseValue))
+          if branches.forall(_._2.semanticEquals(elseValue)) =>
+        // For non-deterministic conditions with side effect, we can not remove it, or change
+        // the ordering. As a result, we try to remove the deterministic conditions from the tail.
+        var hitNonDeterministicCond = false
+        var i = branches.length
+        while (i > 0 && !hitNonDeterministicCond) {
+          hitNonDeterministicCond = !branches(i - 1)._1.deterministic
+          if (!hitNonDeterministicCond) {
+            i -= 1
+          }
+        }
+        if (i == 0) {
+          elseValue
+        } else {
+          e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
+        }
     }
   }
 }
@@ -495,6 +550,7 @@ object NullPropagation extends Rule[LogicalPlan] {
 
       // If the value expression is NULL then transform the In expression to null literal.
       case In(Literal(null, _), _) => Literal.create(null, BooleanType)
+      case InSubquery(Seq(Literal(null, _)), _) => Literal.create(null, BooleanType)
 
       // Non-leaf NullIntolerant expressions will return null, if at least one of its children is
       // a null literal.
@@ -643,6 +699,7 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
   }
 }
 
+
 /**
  * Combine nested [[Concat]] expressions.
  */
@@ -677,5 +734,62 @@ object CombineConcats extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
     case concat: Concat if hasNestedConcats(concat) =>
       flattenConcats(concat)
+  }
+}
+
+/**
+ * A rule that replaces `Literal(null, _)` with `FalseLiteral` for further optimizations.
+ *
+ * This rule applies to conditions in [[Filter]] and [[Join]]. Moreover, it transforms predicates
+ * in all [[If]] expressions as well as branch conditions in all [[CaseWhen]] expressions.
+ *
+ * For example, `Filter(Literal(null, _))` is equal to `Filter(FalseLiteral)`.
+ *
+ * Another example containing branches is `Filter(If(cond, FalseLiteral, Literal(null, _)))`;
+ * this can be optimized to `Filter(If(cond, FalseLiteral, FalseLiteral))`, and eventually
+ * `Filter(FalseLiteral)`.
+ *
+ * As this rule is not limited to conditions in [[Filter]] and [[Join]], arbitrary plans can
+ * benefit from it. For example, `Project(If(And(cond, Literal(null)), Literal(1), Literal(2)))`
+ * can be simplified into `Project(Literal(2))`.
+ *
+ * As a result, many unnecessary computations can be removed in the query optimization phase.
+ */
+object ReplaceNullWithFalse extends Rule[LogicalPlan] {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
+    case j @ Join(_, _, _, Some(cond)) => j.copy(condition = Some(replaceNullWithFalse(cond)))
+    case p: LogicalPlan => p transformExpressions {
+      case i @ If(pred, _, _) => i.copy(predicate = replaceNullWithFalse(pred))
+      case cw @ CaseWhen(branches, _) =>
+        val newBranches = branches.map { case (cond, value) =>
+          replaceNullWithFalse(cond) -> value
+        }
+        cw.copy(branches = newBranches)
+    }
+  }
+
+  /**
+   * Recursively replaces `Literal(null, _)` with `FalseLiteral`.
+   *
+   * Note that `transformExpressionsDown` can not be used here as we must stop as soon as we hit
+   * an expression that is not [[CaseWhen]], [[If]], [[And]], [[Or]] or `Literal(null, _)`.
+   */
+  private def replaceNullWithFalse(e: Expression): Expression = e match {
+    case cw: CaseWhen if cw.dataType == BooleanType =>
+      val newBranches = cw.branches.map { case (cond, value) =>
+        replaceNullWithFalse(cond) -> replaceNullWithFalse(value)
+      }
+      val newElseValue = cw.elseValue.map(replaceNullWithFalse)
+      CaseWhen(newBranches, newElseValue)
+    case i @ If(pred, trueVal, falseVal) if i.dataType == BooleanType =>
+      If(replaceNullWithFalse(pred), replaceNullWithFalse(trueVal), replaceNullWithFalse(falseVal))
+    case And(left, right) =>
+      And(replaceNullWithFalse(left), replaceNullWithFalse(right))
+    case Or(left, right) =>
+      Or(replaceNullWithFalse(left), replaceNullWithFalse(right))
+    case Literal(null, _) => FalseLiteral
+    case _ => e
   }
 }

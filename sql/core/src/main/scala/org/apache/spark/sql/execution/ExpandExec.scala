@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -152,7 +153,7 @@ case class ExpandExec(
       } else {
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
-        val code = s"""
+        val code = code"""
           |boolean $isNull = true;
           |${CodeGenerator.javaType(firstExpr.dataType)} $value =
           |  ${CodeGenerator.defaultValue(firstExpr.dataType)};

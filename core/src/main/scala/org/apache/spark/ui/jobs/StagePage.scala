@@ -91,7 +91,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val parameterTaskSortColumn = UIUtils.stripXSS(request.getParameter("task.sort"))
     val parameterTaskSortDesc = UIUtils.stripXSS(request.getParameter("task.desc"))
     val parameterTaskPageSize = UIUtils.stripXSS(request.getParameter("task.pageSize"))
-    val parameterTaskPrevPageSize = UIUtils.stripXSS(request.getParameter("task.prevPageSize"))
 
     val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
     val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
@@ -99,20 +98,18 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     }.getOrElse("Index")
     val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
     val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
-    val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)
-
     val stageId = parameterId.toInt
     val stageAttemptId = parameterAttempt.toInt
 
     val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
-    val stageData = parent.store
+    val (stageData, stageJobIds) = parent.store
       .asOption(parent.store.stageAttempt(stageId, stageAttemptId, details = false))
       .getOrElse {
         val content =
           <div id="no-info">
             <p>No information to display for Stage {stageId} (Attempt {stageAttemptId})</p>
           </div>
-        return UIUtils.headerSparkPage(stageHeader, content, parent)
+        return UIUtils.headerSparkPage(request, stageHeader, content, parent)
       }
 
     val localitySummary = store.localitySummary(stageData.stageId, stageData.attemptId)
@@ -125,7 +122,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           <h4>Summary Metrics</h4> No tasks have started yet
           <h4>Tasks</h4> No tasks have started yet
         </div>
-      return UIUtils.headerSparkPage(stageHeader, content, parent)
+      return UIUtils.headerSparkPage(request, stageHeader, content, parent)
     }
 
     val storedTasks = store.taskCount(stageData.stageId, stageData.attemptId)
@@ -133,7 +130,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val totalTasksNumStr = if (totalTasks == storedTasks) {
       s"$totalTasks"
     } else {
-      s"$totalTasks, showing ${storedTasks}"
+      s"$totalTasks, showing $storedTasks"
     }
 
     val summary =
@@ -181,6 +178,15 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
             <li>
               <strong>Shuffle Spill (Disk): </strong>
               {Utils.bytesToString(stageData.diskBytesSpilled)}
+            </li>
+          }}
+          {if (!stageJobIds.isEmpty) {
+            <li>
+              <strong>Associated Job Ids: </strong>
+              {stageJobIds.map(jobId => {val detailUrl = "%s/jobs/job/?id=%s".format(
+                UIUtils.prependBaseUri(request, parent.basePath), jobId)
+              <a href={s"${detailUrl}"}>{s"${jobId}"} &nbsp;&nbsp;</a>
+            })}
             </li>
           }}
         </ul>
@@ -269,28 +275,19 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       accumulableRow,
       stageData.accumulatorUpdates.toSeq)
 
-    val page: Int = {
-      // If the user has changed to a larger page size, then go to page 1 in order to avoid
-      // IndexOutOfBoundsException.
-      if (taskPageSize <= taskPrevPageSize) {
-        taskPage
-      } else {
-        1
-      }
-    }
     val currentTime = System.currentTimeMillis()
     val (taskTable, taskTableHTML) = try {
       val _taskTable = new TaskPagedTable(
         stageData,
-        UIUtils.prependBaseUri(parent.basePath) +
-          s"/stages/stage?id=${stageId}&attempt=${stageAttemptId}",
+        UIUtils.prependBaseUri(request, parent.basePath) +
+          s"/stages/stage/?id=${stageId}&attempt=${stageAttemptId}",
         currentTime,
         pageSize = taskPageSize,
         sortColumn = taskSortColumn,
         desc = taskSortDesc,
         store = parent.store
       )
-      (_taskTable, _taskTable.table(page))
+      (_taskTable, _taskTable.table(taskPage))
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
         val errorMessage =
@@ -498,7 +495,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       <div class="aggregated-tasks collapsible-table">
         {taskTableHTML ++ jsForScrollingDownToTaskTable}
       </div>
-    UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
+    UIUtils.headerSparkPage(request, stageHeader, content, parent, showVisualization = true)
   }
 
   def makeTimeline(tasks: Seq[TaskData], currentTime: Long): Seq[Node] = {
@@ -686,7 +683,7 @@ private[ui] class TaskDataSource(
 
   private var _tasksToShow: Seq[TaskData] = null
 
-  override def dataSize: Int = stage.numTasks
+  override def dataSize: Int = store.taskCount(stage.stageId, stage.attemptId).toInt
 
   override def sliceData(from: Int, to: Int): Seq[TaskData] = {
     if (_tasksToShow == null) {
@@ -722,8 +719,6 @@ private[ui] class TaskPagedTable(
     "table table-bordered table-condensed table-striped table-head-clickable"
 
   override def pageSizeFormField: String = "task.pageSize"
-
-  override def prevPageSizeFormField: String = "task.prevPageSize"
 
   override def pageNumberFormField: String = "task.page"
 
@@ -1048,7 +1043,7 @@ private[ui] object ApiHelper {
   }
 
   def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
-    val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0))
+    val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0)._1)
     (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
   }
 

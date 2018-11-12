@@ -17,6 +17,7 @@
 
 import java.io._
 import java.nio.file.Files
+import java.util.Locale
 
 import scala.io.Source
 import scala.util.Properties
@@ -27,6 +28,7 @@ import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
+import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
 import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
@@ -39,8 +41,8 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, sqlKafka010) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "sql-kafka-0-10"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, sqlKafka010, avro) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver", "sql-kafka-0-10", "avro"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(streaming, streamingKafka010) =
@@ -54,16 +56,14 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, mesos, yarn,
-    streamingFlumeSink, streamingFlume,
-    streamingKafka, sparkGangliaLgpl, streamingKinesisAsl,
-    dockerIntegrationTests, hadoopCloud) =
+    sparkGangliaLgpl, streamingKinesisAsl,
+    dockerIntegrationTests, hadoopCloud, kubernetesIntegrationTests) =
     Seq("kubernetes", "mesos", "yarn",
-      "streaming-flume-sink", "streaming-flume",
-      "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
-      "docker-integration-tests", "hadoop-cloud").map(ProjectRef(buildLocation, _))
+      "ganglia-lgpl", "streaming-kinesis-asl",
+      "docker-integration-tests", "hadoop-cloud", "kubernetes-integration-tests").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
-    Seq("network-yarn", "streaming-flume-assembly", "streaming-kafka-0-8-assembly", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
+  val assemblyProjects@Seq(networkYarn, streamingKafka010Assembly, streamingKinesisAslAssembly) =
+    Seq("network-yarn", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
 
   val copyJarsProjects@Seq(assembly, examples) = Seq("assembly", "examples")
@@ -93,6 +93,12 @@ object SparkBuild extends PomBuild {
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
+
+    Option(System.getProperty("scala.version"))
+      .filter(_.startsWith("2.12"))
+      .foreach { versionString =>
+        System.setProperty("scala-2.12", "true")
+      }
     if (System.getProperty("scala-2.12") == "") {
       // To activate scala-2.10 profile, replace empty property value to non-empty value
       // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
@@ -211,7 +217,7 @@ object SparkBuild extends PomBuild {
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.10",
+    unidocGenjavadocVersion := "0.11",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -317,7 +323,7 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings))
+      ExcludedDependencies.settings ++ Checkstyle.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -325,7 +331,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, sqlKafka010, kvstore
+      unsafe, tags, sqlKafka010, kvstore, avro
     ).contains(x)
   }
 
@@ -366,10 +372,10 @@ object SparkBuild extends PomBuild {
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
-  enable(Flume.settings)(streamingFlumeSink)
-
   // SPARK-14738 - Remove docker tests from main Spark build
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
+
+  enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
@@ -445,9 +451,6 @@ object Unsafe {
   )
 }
 
-object Flume {
-  lazy val settings = sbtavro.SbtAvro.avroSettings
-}
 
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
@@ -459,11 +462,71 @@ object DockerIntegrationTests {
 }
 
 /**
+ * These settings run a hardcoded configuration of the Kubernetes integration tests using
+ * minikube. Docker images will have the "dev" tag, and will be overwritten every time the
+ * integration tests are run. The integration tests are actually bound to the "test" phase,
+ * so running "test" on this module will run the integration tests.
+ *
+ * There are two ways to run the tests:
+ * - the "tests" task builds docker images and runs the test, so it's a little slow.
+ * - the "run-its" task just runs the tests on a pre-built set of images.
+ *
+ * Note that this does not use the shell scripts that the maven build uses, which are more
+ * configurable. This is meant as a quick way for developers to run these tests against their
+ * local changes.
+ */
+object KubernetesIntegrationTests {
+  import BuildCommons._
+
+  val dockerBuild = TaskKey[Unit]("docker-imgs", "Build the docker images for ITs.")
+  val runITs = TaskKey[Unit]("run-its", "Only run ITs, skip image build.")
+  val imageTag = settingKey[String]("Tag to use for images built during the test.")
+  val namespace = settingKey[String]("Namespace where to run pods.")
+
+  // Hack: this variable is used to control whether to build docker images. It's updated by
+  // the tasks below in a non-obvious way, so that you get the functionality described in
+  // the scaladoc above.
+  private var shouldBuildImage = true
+
+  lazy val settings = Seq(
+    imageTag := "dev",
+    namespace := "default",
+    dockerBuild := {
+      if (shouldBuildImage) {
+        val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
+        val cmd = Seq(dockerTool, "-m", "-t", imageTag.value, "build")
+        val ec = Process(cmd).!
+        if (ec != 0) {
+          throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
+        }
+      }
+      shouldBuildImage = true
+    },
+    runITs := Def.taskDyn {
+      shouldBuildImage = false
+      Def.task {
+        (test in Test).value
+      }
+    }.value,
+    test in Test := (test in Test).dependsOn(dockerBuild).value,
+    javaOptions in Test ++= Seq(
+      "-Dspark.kubernetes.test.deployMode=minikube",
+      s"-Dspark.kubernetes.test.imageTag=${imageTag.value}",
+      s"-Dspark.kubernetes.test.namespace=${namespace.value}",
+      s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"
+    ),
+    // Force packaging before building images, so that the latest code is tested.
+    dockerBuild := dockerBuild.dependsOn(packageBin in Compile in assembly).value
+  )
+}
+
+/**
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
+    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1",
+    dependencyOverrides += "jline" % "jline" % "2.14.6")
 }
 
 /**
@@ -579,11 +642,8 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     jarName in assembly := {
-      if (moduleName.value.contains("streaming-flume-assembly")
-        || moduleName.value.contains("streaming-kafka-0-8-assembly")
-        || moduleName.value.contains("streaming-kafka-0-10-assembly")
+      if (moduleName.value.contains("streaming-kafka-0-10-assembly")
         || moduleName.value.contains("streaming-kinesis-asl-assembly")) {
-        // This must match the same name used in maven (see external/kafka-0-8-assembly/pom.xml)
         s"${moduleName.value}-${version.value}.jar"
       } else {
         s"${moduleName.value}-${version.value}-hadoop${hadoopVersion.value}.jar"
@@ -591,10 +651,13 @@ object Assembly {
     },
     jarName in (Test, assembly) := s"${moduleName.value}-test-${version.value}.jar",
     mergeStrategy in assembly := {
-      case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
-      case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf")
+                                                               => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$")
+                                                               => MergeStrategy.discard
       case "log4j.properties"                                  => MergeStrategy.discard
-      case m if m.toLowerCase.startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
+      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/")
+                                                               => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat
       case _                                                   => MergeStrategy.first
     }
@@ -686,9 +749,11 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, kubernetes, yarn, tags, streamingKafka010, sqlKafka010),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
+        yarn, tags, streamingKafka010, sqlKafka010, avro),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, kubernetes, yarn, tags, streamingKafka010, sqlKafka010),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
+        yarn, tags, streamingKafka010, sqlKafka010, avro),
 
     unidocAllClasspaths in (ScalaUnidoc, unidoc) := {
       ignoreClasspaths((unidocAllClasspaths in (ScalaUnidoc, unidoc)).value)
@@ -728,7 +793,8 @@ object Unidoc {
 
     scalacOptions in (ScalaUnidoc, unidoc) ++= Seq(
       "-groups", // Group similar methods together based on the @group annotation.
-      "-skip-packages", "org.apache.hadoop"
+      "-skip-packages", "org.apache.hadoop",
+      "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath
     ) ++ (
       // Add links to sources when generating Scaladoc for a non-snapshot release
       if (!isSnapshot.value) {
@@ -737,6 +803,17 @@ object Unidoc {
         Seq()
       }
     )
+  )
+}
+
+object Checkstyle {
+  lazy val settings = Seq(
+    checkstyleSeverityLevel := Some(CheckstyleSeverityLevel.Error),
+    javaSource in (Compile, checkstyle) := baseDirectory.value / "src/main/java",
+    javaSource in (Test, checkstyle) := baseDirectory.value / "src/test/java",
+    checkstyleConfigLocation := CheckstyleConfigLocation.File("dev/checkstyle.xml"),
+    checkstyleOutputFile := baseDirectory.value / "target/checkstyle-output.xml",
+    checkstyleOutputFile in Test := baseDirectory.value / "target/checkstyle-output.xml"
   )
 }
 

@@ -17,17 +17,19 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.StringWriter
+import java.util.{Collections, Locale, Properties, UUID}
 import java.util.{Collections, UUID}
 import java.util.Properties
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
+import org.apache.hadoop.security.UserGroupInformation
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -39,22 +41,32 @@ import org.apache.spark.util.Utils
  * @param mainAppResource the main application resource if any
  * @param mainClass the main class of the application to run
  * @param driverArgs arguments to the driver
+ * @param maybePyFiles additional Python files via --py-files
  */
 private[spark] case class ClientArguments(
-    mainAppResource: Option[MainAppResource],
+    mainAppResource: MainAppResource,
     mainClass: String,
-    driverArgs: Array[String])
+    driverArgs: Array[String],
+    maybePyFiles: Option[String],
+    hadoopConfigDir: Option[String])
 
 private[spark] object ClientArguments {
 
   def fromCommandLineArgs(args: Array[String]): ClientArguments = {
-    var mainAppResource: Option[MainAppResource] = None
+    var mainAppResource: MainAppResource = JavaMainAppResource(None)
     var mainClass: Option[String] = None
     val driverArgs = mutable.ArrayBuffer.empty[String]
+    var maybePyFiles : Option[String] = None
 
     args.sliding(2, 2).toList.foreach {
       case Array("--primary-java-resource", primaryJavaResource: String) =>
-        mainAppResource = Some(JavaMainAppResource(primaryJavaResource))
+        mainAppResource = JavaMainAppResource(Some(primaryJavaResource))
+      case Array("--primary-py-file", primaryPythonResource: String) =>
+        mainAppResource = PythonMainAppResource(primaryPythonResource)
+      case Array("--primary-r-file", primaryRFile: String) =>
+        mainAppResource = RMainAppResource(primaryRFile)
+      case Array("--other-py-files", pyFiles: String) =>
+        maybePyFiles = Some(pyFiles)
       case Array("--main-class", clazz: String) =>
         mainClass = Some(clazz)
       case Array("--arg", arg: String) =>
@@ -69,7 +81,9 @@ private[spark] object ClientArguments {
     ClientArguments(
       mainAppResource,
       mainClass.get,
-      driverArgs.toArray)
+      driverArgs.toArray,
+      maybePyFiles,
+      sys.env.get(ENV_HADOOP_CONF_DIR))
   }
 }
 
@@ -201,11 +215,9 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     // considerably restrictive, e.g. must be no longer than 63 characters in length. So we generate
     // a unique app ID (captured by spark.app.id) in the format below.
     val kubernetesAppId = s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
-    val launchTime = System.currentTimeMillis()
     val waitForAppCompletion = sparkConf.get(WAIT_FOR_APP_COMPLETION)
-    val kubernetesResourceNamePrefix = {
-      s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
-    }
+    val kubernetesResourceNamePrefix = KubernetesClientApplication.getResourceNamePrefix(appName)
+    sparkConf.set(KUBERNETES_PYSPARK_PY_FILES, clientArguments.maybePyFiles.getOrElse(""))
     val kubernetesConf = KubernetesConf.createDriverConf(
       sparkConf,
       appName,
@@ -213,12 +225,13 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       kubernetesAppId,
       clientArguments.mainAppResource,
       clientArguments.mainClass,
-      clientArguments.driverArgs)
-    val builder = new KubernetesDriverBuilder
+      clientArguments.driverArgs,
+      clientArguments.maybePyFiles,
+      clientArguments.hadoopConfigDir)
     val namespace = kubernetesConf.namespace()
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
-    val master = sparkConf.get("spark.master").substring("k8s://".length)
+    val master = KubernetesUtils.parseMasterUrl(sparkConf.get("spark.master"))
     val loggingInterval = if (waitForAppCompletion) Some(sparkConf.get(REPORT_INTERVAL)) else None
 
     val watcher = new LoggingPodStatusWatcherImpl(kubernetesAppId, loggingInterval)
@@ -231,7 +244,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       None,
       None)) { kubernetesClient =>
         val client = new Client(
-          builder,
+          KubernetesDriverBuilder(kubernetesClient, kubernetesConf.sparkConf),
           kubernetesConf,
           kubernetesClient,
           waitForAppCompletion,
@@ -240,5 +253,21 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
           kubernetesResourceNamePrefix)
         client.run()
     }
+  }
+}
+
+private[spark] object KubernetesClientApplication {
+
+  def getAppName(conf: SparkConf): String = conf.getOption("spark.app.name").getOrElse("spark")
+
+  def getResourceNamePrefix(appName: String): String = {
+    val launchTime = System.currentTimeMillis()
+    s"$appName-$launchTime"
+      .trim
+      .toLowerCase(Locale.ROOT)
+      .replaceAll("\\s+", "-")
+      .replaceAll("\\.", "-")
+      .replaceAll("[^a-z0-9\\-]", "")
+      .replaceAll("-+", "-")
   }
 }

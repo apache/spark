@@ -34,10 +34,14 @@ object PythonUDF {
     e.isInstanceOf[PythonUDF] && SCALAR_TYPES.contains(e.asInstanceOf[PythonUDF].evalType)
   }
 
-  def isGroupAggPandasUDF(e: Expression): Boolean = {
+  def isGroupedAggPandasUDF(e: Expression): Boolean = {
     e.isInstanceOf[PythonUDF] &&
       e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
   }
+
+  // This is currently same as GroupedAggPandasUDF, but we might support new types in the future,
+  // e.g, N -> N transform.
+  def isWindowPandasUDF(e: Expression): Boolean = isGroupedAggPandasUDF(e)
 }
 
 /**

@@ -24,7 +24,6 @@ import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, S
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -46,7 +45,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegralType, StringType}
+import org.apache.spark.sql.types.{AtomicType, IntegralType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -343,7 +342,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   }
 
   override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
-    conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000
+    conf.getIntVar(HiveConf.ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY) * 1000L
   }
 
   override def loadPartition(
@@ -599,6 +598,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     object ExtractableLiteral {
       def unapply(expr: Expression): Option[String] = expr match {
+        case Literal(null, _) => None // `null`s can be cast as other types; we want to avoid NPEs.
         case Literal(value, _: IntegralType) => Some(value.toString)
         case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString))
         case _ => None
@@ -607,7 +607,23 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     object ExtractableLiterals {
       def unapply(exprs: Seq[Expression]): Option[Seq[String]] = {
-        val extractables = exprs.map(ExtractableLiteral.unapply)
+        // SPARK-24879: The Hive metastore filter parser does not support "null", but we still want
+        // to push down as many predicates as we can while still maintaining correctness.
+        // In SQL, the `IN` expression evaluates as follows:
+        //  > `1 in (2, NULL)` -> NULL
+        //  > `1 in (1, NULL)` -> true
+        //  > `1 in (2)` -> false
+        // Since Hive metastore filters are NULL-intolerant binary operations joined only by
+        // `AND` and `OR`, we can treat `NULL` as `false` and thus rewrite `1 in (2, NULL)` as
+        // `1 in (2)`.
+        // If the Hive metastore begins supporting NULL-tolerant predicates and Spark starts
+        // pushing down these predicates, then this optimization will become incorrect and need
+        // to be changed.
+        val extractables = exprs
+            .filter {
+              case Literal(null, _) => false
+              case _ => true
+            }.map(ExtractableLiteral.unapply)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {
@@ -657,17 +673,32 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
 
+    object ExtractAttribute {
+      def unapply(expr: Expression): Option[Attribute] = {
+        expr match {
+          case attr: Attribute => Some(attr)
+          case Cast(child @ AtomicType(), dt: AtomicType, _)
+              if Cast.canSafeCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
+          case _ => None
+        }
+      }
+    }
+
     def convert(expr: Expression): Option[String] = expr match {
-      case In(NonVarcharAttribute(name), ExtractableLiterals(values)) if useAdvanced =>
+      case In(ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiterals(values))
+          if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case InSet(NonVarcharAttribute(name), ExtractableValues(values)) if useAdvanced =>
+      case InSet(ExtractAttribute(NonVarcharAttribute(name)), ExtractableValues(values))
+          if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case op @ SpecialBinaryComparison(NonVarcharAttribute(name), ExtractableLiteral(value)) =>
+      case op @ SpecialBinaryComparison(
+          ExtractAttribute(NonVarcharAttribute(name)), ExtractableLiteral(value)) =>
         Some(s"$name ${op.symbol} $value")
 
-      case op @ SpecialBinaryComparison(ExtractableLiteral(value), NonVarcharAttribute(name)) =>
+      case op @ SpecialBinaryComparison(
+          ExtractableLiteral(value), ExtractAttribute(NonVarcharAttribute(name))) =>
         Some(s"$value ${op.symbol} $name")
 
       case And(expr1, expr2) if useAdvanced =>
@@ -956,7 +987,7 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       part: JList[String],
       deleteData: Boolean,
       purge: Boolean): Unit = {
-    val dropOptions = dropOptionsClass.newInstance().asInstanceOf[Object]
+    val dropOptions = dropOptionsClass.getConstructor().newInstance().asInstanceOf[Object]
     dropOptionsDeleteData.setBoolean(dropOptions, deleteData)
     dropOptionsPurge.setBoolean(dropOptions, purge)
     dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)

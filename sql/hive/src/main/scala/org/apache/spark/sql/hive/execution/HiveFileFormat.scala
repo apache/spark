@@ -115,7 +115,8 @@ class HiveOutputWriter(
   private def tableDesc = fileSinkConf.getTableInfo
 
   private val serializer = {
-    val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
+    val serializer = tableDesc.getDeserializerClass.getConstructor().
+      newInstance().asInstanceOf[Serializer]
     serializer.initialize(jobConf, tableDesc.getProperties)
     serializer
   }

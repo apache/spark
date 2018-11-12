@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, PodBuilder}
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
+import org.apache.spark.deploy.k8s.submit._
 
 class KubernetesConfSuite extends SparkFunSuite {
 
@@ -40,6 +40,9 @@ class KubernetesConfSuite extends SparkFunSuite {
   private val SECRET_NAMES_TO_MOUNT_PATHS = Map(
     "secret1" -> "/mnt/secrets/secret1",
     "secret2" -> "/mnt/secrets/secret2")
+  private val SECRET_ENV_VARS = Map(
+    "envName1" -> "name1:key1",
+    "envName2" -> "name2:key2")
   private val CUSTOM_ENVS = Map(
     "customEnvKey1" -> "customEnvValue1",
     "customEnvKey2" -> "customEnvValue2")
@@ -53,47 +56,22 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      None,
+      mainAppResource = JavaMainAppResource(None),
       MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      maybePyFiles = None,
+      hadoopConfDir = None)
     assert(conf.appId === APP_ID)
     assert(conf.sparkConf.getAll.toMap === sparkConf.getAll.toMap)
     assert(conf.appResourceNamePrefix === RESOURCE_NAME_PREFIX)
     assert(conf.roleSpecificConf.appName === APP_NAME)
-    assert(conf.roleSpecificConf.mainAppResource.isEmpty)
     assert(conf.roleSpecificConf.mainClass === MAIN_CLASS)
     assert(conf.roleSpecificConf.appArgs === APP_ARGS)
   }
 
-  test("Creating driver conf with and without the main app jar influences spark.jars") {
+  test("Resolve driver labels, annotations, secret mount paths, envs, and memory overhead") {
     val sparkConf = new SparkConf(false)
-      .setJars(Seq("local:///opt/spark/jar1.jar"))
-    val mainAppJar = Some(JavaMainAppResource("local:///opt/spark/main.jar"))
-    val kubernetesConfWithMainJar = KubernetesConf.createDriverConf(
-      sparkConf,
-      APP_NAME,
-      RESOURCE_NAME_PREFIX,
-      APP_ID,
-      mainAppJar,
-      MAIN_CLASS,
-      APP_ARGS)
-    assert(kubernetesConfWithMainJar.sparkConf.get("spark.jars")
-      .split(",")
-      === Array("local:///opt/spark/jar1.jar", "local:///opt/spark/main.jar"))
-    val kubernetesConfWithoutMainJar = KubernetesConf.createDriverConf(
-      sparkConf,
-      APP_NAME,
-      RESOURCE_NAME_PREFIX,
-      APP_ID,
-      None,
-      MAIN_CLASS,
-      APP_ARGS)
-    assert(kubernetesConfWithoutMainJar.sparkConf.get("spark.jars").split(",")
-      === Array("local:///opt/spark/jar1.jar"))
-  }
-
-  test("Resolve driver labels, annotations, secret mount paths, and envs.") {
-    val sparkConf = new SparkConf(false)
+      .set(MEMORY_OVERHEAD_FACTOR, 0.3)
     CUSTOM_LABELS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$key", value)
     }
@@ -102,6 +80,9 @@ class KubernetesConfSuite extends SparkFunSuite {
     }
     SECRET_NAMES_TO_MOUNT_PATHS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$key", value)
+    }
+    SECRET_ENV_VARS.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX$key", value)
     }
     CUSTOM_ENVS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_ENV_PREFIX$key", value)
@@ -112,16 +93,20 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      None,
+      mainAppResource = JavaMainAppResource(None),
       MAIN_CLASS,
-      APP_ARGS)
+      APP_ARGS,
+      maybePyFiles = None,
+      hadoopConfDir = None)
     assert(conf.roleLabels === Map(
       SPARK_APP_ID_LABEL -> APP_ID,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++
       CUSTOM_LABELS)
     assert(conf.roleAnnotations === CUSTOM_ANNOTATIONS)
     assert(conf.roleSecretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
+    assert(conf.roleSecretEnvNamesToKeyRefs === SECRET_ENV_VARS)
     assert(conf.roleEnvs === CUSTOM_ENVS)
+    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
   }
 
   test("Basic executor translated fields.") {
@@ -129,9 +114,9 @@ class KubernetesConfSuite extends SparkFunSuite {
       new SparkConf(false),
       EXECUTOR_ID,
       APP_ID,
-      DRIVER_POD)
+      Some(DRIVER_POD))
     assert(conf.roleSpecificConf.executorId === EXECUTOR_ID)
-    assert(conf.roleSpecificConf.driverPod === DRIVER_POD)
+    assert(conf.roleSpecificConf.driverPod.get === DRIVER_POD)
   }
 
   test("Image pull secrets.") {
@@ -140,7 +125,7 @@ class KubernetesConfSuite extends SparkFunSuite {
         .set(IMAGE_PULL_SECRETS, "my-secret-1,my-secret-2 "),
       EXECUTOR_ID,
       APP_ID,
-      DRIVER_POD)
+      Some(DRIVER_POD))
     assert(conf.imagePullSecrets() ===
       Seq(
         new LocalObjectReferenceBuilder().withName("my-secret-1").build(),
@@ -155,6 +140,9 @@ class KubernetesConfSuite extends SparkFunSuite {
     CUSTOM_ANNOTATIONS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_EXECUTOR_ANNOTATION_PREFIX$key", value)
     }
+    SECRET_ENV_VARS.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX$key", value)
+    }
     SECRET_NAMES_TO_MOUNT_PATHS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_EXECUTOR_SECRETS_PREFIX$key", value)
     }
@@ -163,13 +151,13 @@ class KubernetesConfSuite extends SparkFunSuite {
       sparkConf,
       EXECUTOR_ID,
       APP_ID,
-      DRIVER_POD)
+      Some(DRIVER_POD))
     assert(conf.roleLabels === Map(
       SPARK_EXECUTOR_ID_LABEL -> EXECUTOR_ID,
       SPARK_APP_ID_LABEL -> APP_ID,
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE) ++ CUSTOM_LABELS)
     assert(conf.roleAnnotations === CUSTOM_ANNOTATIONS)
     assert(conf.roleSecretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
+    assert(conf.roleSecretEnvNamesToKeyRefs === SECRET_ENV_VARS)
   }
-
 }

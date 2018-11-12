@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchPartitionException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ListenerBus
 
 /**
  * Interface for the system catalog (of functions, partitions, tables, and databases).
@@ -31,9 +30,12 @@ import org.apache.spark.util.ListenerBus
  *
  * Implementations should throw [[NoSuchDatabaseException]] when databases don't exist.
  */
-abstract class ExternalCatalog
-  extends ListenerBus[ExternalCatalogEventListener, ExternalCatalogEvent] {
+trait ExternalCatalog {
   import CatalogTypes.TablePartitionSpec
+
+  // --------------------------------------------------------------------------
+  // Utils
+  // --------------------------------------------------------------------------
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
@@ -63,22 +65,9 @@ abstract class ExternalCatalog
   // Databases
   // --------------------------------------------------------------------------
 
-  final def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {
-    val db = dbDefinition.name
-    postToAll(CreateDatabasePreEvent(db))
-    doCreateDatabase(dbDefinition, ignoreIfExists)
-    postToAll(CreateDatabaseEvent(db))
-  }
+  def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit
 
-  protected def doCreateDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit
-
-  final def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
-    postToAll(DropDatabasePreEvent(db))
-    doDropDatabase(db, ignoreIfNotExists, cascade)
-    postToAll(DropDatabaseEvent(db))
-  }
-
-  protected def doDropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
+  def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
   /**
    * Alter a database whose name matches the one specified in `dbDefinition`,
@@ -87,14 +76,7 @@ abstract class ExternalCatalog
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  final def alterDatabase(dbDefinition: CatalogDatabase): Unit = {
-    val db = dbDefinition.name
-    postToAll(AlterDatabasePreEvent(db))
-    doAlterDatabase(dbDefinition)
-    postToAll(AlterDatabaseEvent(db))
-  }
-
-  protected def doAlterDatabase(dbDefinition: CatalogDatabase): Unit
+  def alterDatabase(dbDefinition: CatalogDatabase): Unit
 
   def getDatabase(db: String): CatalogDatabase
 
@@ -110,41 +92,15 @@ abstract class ExternalCatalog
   // Tables
   // --------------------------------------------------------------------------
 
-  final def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
-    val db = tableDefinition.database
-    val name = tableDefinition.identifier.table
-    val tableDefinitionWithVersion =
-      tableDefinition.copy(createVersion = org.apache.spark.SPARK_VERSION)
-    postToAll(CreateTablePreEvent(db, name))
-    doCreateTable(tableDefinitionWithVersion, ignoreIfExists)
-    postToAll(CreateTableEvent(db, name))
-  }
+  def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit
 
-  protected def doCreateTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit
-
-  final def dropTable(
-      db: String,
-      table: String,
-      ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = {
-    postToAll(DropTablePreEvent(db, table))
-    doDropTable(db, table, ignoreIfNotExists, purge)
-    postToAll(DropTableEvent(db, table))
-  }
-
-  protected def doDropTable(
+  def dropTable(
       db: String,
       table: String,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit
 
-  final def renameTable(db: String, oldName: String, newName: String): Unit = {
-    postToAll(RenameTablePreEvent(db, oldName, newName))
-    doRenameTable(db, oldName, newName)
-    postToAll(RenameTableEvent(db, oldName, newName))
-  }
-
-  protected def doRenameTable(db: String, oldName: String, newName: String): Unit
+  def renameTable(db: String, oldName: String, newName: String): Unit
 
   /**
    * Alter a table whose database and name match the ones specified in `tableDefinition`, assuming
@@ -154,15 +110,7 @@ abstract class ExternalCatalog
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  final def alterTable(tableDefinition: CatalogTable): Unit = {
-    val db = tableDefinition.database
-    val name = tableDefinition.identifier.table
-    postToAll(AlterTablePreEvent(db, name, AlterTableKind.TABLE))
-    doAlterTable(tableDefinition)
-    postToAll(AlterTableEvent(db, name, AlterTableKind.TABLE))
-  }
-
-  protected def doAlterTable(tableDefinition: CatalogTable): Unit
+  def alterTable(tableDefinition: CatalogTable): Unit
 
   /**
    * Alter the data schema of a table identified by the provided database and table name. The new
@@ -173,22 +121,10 @@ abstract class ExternalCatalog
    * @param table Name of table to alter schema for
    * @param newDataSchema Updated data schema to be used for the table.
    */
-  final def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit = {
-    postToAll(AlterTablePreEvent(db, table, AlterTableKind.DATASCHEMA))
-    doAlterTableDataSchema(db, table, newDataSchema)
-    postToAll(AlterTableEvent(db, table, AlterTableKind.DATASCHEMA))
-  }
-
-  protected def doAlterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
+  def alterTableDataSchema(db: String, table: String, newDataSchema: StructType): Unit
 
   /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
-  final def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit = {
-    postToAll(AlterTablePreEvent(db, table, AlterTableKind.STATS))
-    doAlterTableStats(db, table, stats)
-    postToAll(AlterTableEvent(db, table, AlterTableKind.STATS))
-  }
-
-  protected def doAlterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
+  def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
 
   def getTable(db: String, table: String): CatalogTable
 
@@ -340,49 +276,17 @@ abstract class ExternalCatalog
   // Functions
   // --------------------------------------------------------------------------
 
-  final def createFunction(db: String, funcDefinition: CatalogFunction): Unit = {
-    val name = funcDefinition.identifier.funcName
-    postToAll(CreateFunctionPreEvent(db, name))
-    doCreateFunction(db, funcDefinition)
-    postToAll(CreateFunctionEvent(db, name))
-  }
+  def createFunction(db: String, funcDefinition: CatalogFunction): Unit
 
-  protected def doCreateFunction(db: String, funcDefinition: CatalogFunction): Unit
+  def dropFunction(db: String, funcName: String): Unit
 
-  final def dropFunction(db: String, funcName: String): Unit = {
-    postToAll(DropFunctionPreEvent(db, funcName))
-    doDropFunction(db, funcName)
-    postToAll(DropFunctionEvent(db, funcName))
-  }
+  def alterFunction(db: String, funcDefinition: CatalogFunction): Unit
 
-  protected def doDropFunction(db: String, funcName: String): Unit
-
-  final def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = {
-    val name = funcDefinition.identifier.funcName
-    postToAll(AlterFunctionPreEvent(db, name))
-    doAlterFunction(db, funcDefinition)
-    postToAll(AlterFunctionEvent(db, name))
-  }
-
-  protected def doAlterFunction(db: String, funcDefinition: CatalogFunction): Unit
-
-  final def renameFunction(db: String, oldName: String, newName: String): Unit = {
-    postToAll(RenameFunctionPreEvent(db, oldName, newName))
-    doRenameFunction(db, oldName, newName)
-    postToAll(RenameFunctionEvent(db, oldName, newName))
-  }
-
-  protected def doRenameFunction(db: String, oldName: String, newName: String): Unit
+  def renameFunction(db: String, oldName: String, newName: String): Unit
 
   def getFunction(db: String, funcName: String): CatalogFunction
 
   def functionExists(db: String, funcName: String): Boolean
 
   def listFunctions(db: String, pattern: String): Seq[String]
-
-  override protected def doPostEvent(
-      listener: ExternalCatalogEventListener,
-      event: ExternalCatalogEvent): Unit = {
-    listener.onEvent(event)
-  }
 }

@@ -18,13 +18,17 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -95,6 +99,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
+  // Current set of delegation tokens to send to executors.
+  private val delegationTokens = new AtomicReference[Array[Byte]]()
+
+  // The token manager used to create security tokens.
+  private var delegationTokenManager: Option[HadoopDelegationTokenManager] = None
+
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
@@ -152,6 +162,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       case UpdateDelegationTokens(newDelegationTokens) =>
+        SparkHadoopUtil.get.addDelegationTokens(newDelegationTokens, conf)
+        delegationTokens.set(newDelegationTokens)
         executorDataMap.values.foreach { ed =>
           ed.executorEndpoint.send(UpdateDelegationTokens(newDelegationTokens))
         }
@@ -170,8 +182,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (executorDataMap.contains(executorId)) {
           executorRef.send(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
           context.reply(true)
-        } else if (scheduler.nodeBlacklist != null &&
-          scheduler.nodeBlacklist.contains(hostname)) {
+        } else if (scheduler.nodeBlacklist.contains(hostname)) {
           // If the cluster manager gives us an executor on a blacklisted node (because it
           // already started allocating those resources before we informed it of our blacklist,
           // or if it ignored our blacklist), then we reject that executor immediately.
@@ -231,7 +242,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val reply = SparkAppConfig(
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
-          fetchHadoopDelegationTokens())
+          Option(delegationTokens.get()))
         context.reply(reply)
     }
 
@@ -243,7 +254,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
-            new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
+            new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
+              Some(executorData.executorAddress.hostPort))
         }.toIndexedSeq
         scheduler.resourceOffers(workOffers)
       }
@@ -268,7 +280,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (executorIsAlive(executorId)) {
           val executorData = executorDataMap(executorId)
           val workOffers = IndexedSeq(
-            new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
+            new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores,
+              Some(executorData.executorAddress.hostPort)))
           scheduler.resourceOffers(workOffers)
         } else {
           Seq.empty
@@ -289,7 +302,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       for (task <- tasks.flatten) {
         val serializedTask = TaskDescription.encode(task)
         if (serializedTask.limit() >= maxRpcMessageSize) {
-          scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
+          Option(scheduler.taskIdToTaskSetManager.get(task.taskId)).foreach { taskSetMgr =>
             try {
               var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
                 "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
@@ -389,6 +402,21 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // TODO (prashant) send conf instead of properties
     driverEndpoint = createDriverEndpointRef(properties)
+
+    if (UserGroupInformation.isSecurityEnabled()) {
+      delegationTokenManager = createTokenManager()
+      delegationTokenManager.foreach { dtm =>
+        dtm.setDriverRef(driverEndpoint)
+        val creds = if (dtm.renewalEnabled) {
+          dtm.start().getCredentials()
+        } else {
+          val creds = UserGroupInformation.getCurrentUser().getCredentials()
+          dtm.obtainDelegationTokens(creds)
+          creds
+        }
+        delegationTokens.set(SparkHadoopUtil.get.serialize(creds))
+      }
+    }
   }
 
   protected def createDriverEndpointRef(
@@ -415,6 +443,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   override def stop() {
     reviveThread.shutdownNow()
     stopExecutors()
+    delegationTokenManager.foreach(_.stop())
     try {
       if (driverEndpoint != null) {
         driverEndpoint.askSync[Boolean](StopDriver)
@@ -493,6 +522,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   override def getExecutorIds(): Seq[String] = {
     executorDataMap.keySet.toSeq
+  }
+
+  override def maxNumConcurrentTasks(): Int = {
+    executorDataMap.values.map { executor =>
+      executor.totalCores / scheduler.CPUS_PER_TASK
+    }.sum
   }
 
   /**
@@ -633,7 +668,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
           doRequestTotalExecutors(requestedTotalExecutors)
         } else {
-          numPendingExecutors += knownExecutors.size
+          numPendingExecutors += executorsToKill.size
           Future.successful(true)
         }
 
@@ -677,7 +712,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     true
   }
 
-  protected def fetchHadoopDelegationTokens(): Option[Array[Byte]] = { None }
+  /**
+   * Create the delegation token manager to be used for the application. This method is called
+   * once during the start of the scheduler backend (so after the object has already been
+   * fully constructed), only if security is enabled in the Hadoop configuration.
+   */
+  protected def createTokenManager(): Option[HadoopDelegationTokenManager] = None
+
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {

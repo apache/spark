@@ -225,7 +225,7 @@ private[deploy] class DriverRunner(
       // check if attempting another run
       keepTrying = supervise && exitCode != 0 && !killed
       if (keepTrying) {
-        if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000) {
+        if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000L) {
           waitSeconds = 1
         }
         logInfo(s"Command exited with status $exitCode, re-launching after $waitSeconds s.")

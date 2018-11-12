@@ -55,7 +55,9 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
           partitionSchema, sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
-        ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
+        ExpressionSet(normalizedFilters
+          .filterNot(SubqueryExpression.hasSubquery(_))
+          .filter(_.references.subsetOf(partitionSet)))
 
       if (partitionKeyFilters.nonEmpty) {
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)

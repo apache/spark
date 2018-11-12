@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, ORDER_BY_ORDINAL}
 
 class RemoveRedundantSortsSuite extends PlanTest {
 
@@ -42,15 +38,15 @@ class RemoveRedundantSortsSuite extends PlanTest {
 
   test("remove redundant order by") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
-    val unnecessaryReordered = orderedPlan.select('a).orderBy('a.asc, 'b.desc_nullsFirst)
+    val unnecessaryReordered = orderedPlan.limit(2).select('a).orderBy('a.asc, 'b.desc_nullsFirst)
     val optimized = Optimize.execute(unnecessaryReordered.analyze)
-    val correctAnswer = orderedPlan.select('a).analyze
+    val correctAnswer = orderedPlan.limit(2).select('a).analyze
     comparePlans(Optimize.execute(optimized), correctAnswer)
   }
 
   test("do not remove sort if the order is different") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
-    val reorderedDifferently = orderedPlan.select('a).orderBy('a.asc, 'b.desc)
+    val reorderedDifferently = orderedPlan.limit(2).select('a).orderBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(reorderedDifferently.analyze)
     val correctAnswer = reorderedDifferently.analyze
     comparePlans(optimized, correctAnswer)
@@ -69,6 +65,14 @@ class RemoveRedundantSortsSuite extends PlanTest {
     val filteredAndReordered = orderedPlan.limit(Literal(10)).orderBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
     val correctAnswer = orderedPlan.limit(Literal(10)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("different sorts are not simplified if limit is in between") {
+    val orderedPlan = testRelation.select('a, 'b).orderBy('b.desc).limit(Literal(10))
+      .orderBy('a.asc)
+    val optimized = Optimize.execute(orderedPlan.analyze)
+    val correctAnswer = orderedPlan.analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -97,5 +101,38 @@ class RemoveRedundantSortsSuite extends PlanTest {
     val optimized = Optimize.execute(groupedAndResorted.analyze)
     val correctAnswer = groupedAndResorted.analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("remove two consecutive sorts") {
+    val orderedTwice = testRelation.orderBy('a.asc).orderBy('b.desc)
+    val optimized = Optimize.execute(orderedTwice.analyze)
+    val correctAnswer = testRelation.orderBy('b.desc).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("remove sorts separated by Filter/Project operators") {
+    val orderedTwiceWithProject = testRelation.orderBy('a.asc).select('b).orderBy('b.desc)
+    val optimizedWithProject = Optimize.execute(orderedTwiceWithProject.analyze)
+    val correctAnswerWithProject = testRelation.select('b).orderBy('b.desc).analyze
+    comparePlans(optimizedWithProject, correctAnswerWithProject)
+
+    val orderedTwiceWithFilter =
+      testRelation.orderBy('a.asc).where('b > Literal(0)).orderBy('b.desc)
+    val optimizedWithFilter = Optimize.execute(orderedTwiceWithFilter.analyze)
+    val correctAnswerWithFilter = testRelation.where('b > Literal(0)).orderBy('b.desc).analyze
+    comparePlans(optimizedWithFilter, correctAnswerWithFilter)
+
+    val orderedTwiceWithBoth =
+      testRelation.orderBy('a.asc).select('b).where('b > Literal(0)).orderBy('b.desc)
+    val optimizedWithBoth = Optimize.execute(orderedTwiceWithBoth.analyze)
+    val correctAnswerWithBoth =
+      testRelation.select('b).where('b > Literal(0)).orderBy('b.desc).analyze
+    comparePlans(optimizedWithBoth, correctAnswerWithBoth)
+
+    val orderedThrice = orderedTwiceWithBoth.select(('b + 1).as('c)).orderBy('c.asc)
+    val optimizedThrice = Optimize.execute(orderedThrice.analyze)
+    val correctAnswerThrice = testRelation.select('b).where('b > Literal(0))
+      .select(('b + 1).as('c)).orderBy('c.asc).analyze
+    comparePlans(optimizedThrice, correctAnswerThrice)
   }
 }

@@ -69,5 +69,5 @@ SELECT * FROM episodes_partitioned WHERE doctor_pt > 6 ORDER BY air_date;
 SELECT * FROM episodes_partitioned ORDER BY air_date LIMIT 5;
 -- Fetch w/filter to specific partition
 SELECT * FROM episodes_partitioned WHERE doctor_pt = 6;
--- Fetch w/non-existant partition
+-- Fetch w/non-existent partition
 SELECT * FROM episodes_partitioned WHERE doctor_pt = 7 LIMIT 5;

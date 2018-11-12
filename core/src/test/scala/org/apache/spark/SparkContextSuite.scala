@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.File
 import java.net.{MalformedURLException, URI}
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.{Semaphore, TimeUnit}
+import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.concurrent.duration._
 
@@ -33,7 +33,9 @@ import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFor
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 
@@ -498,45 +500,36 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("Cancelling stages/jobs with custom reasons.") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
     val REASON = "You shall not pass"
-    val slices = 10
-
-    val listener = new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-        if (SparkContextSuite.cancelStage) {
-          eventually(timeout(10.seconds)) {
-            assert(SparkContextSuite.isTaskStarted)
-          }
-          sc.cancelStage(taskStart.stageId, REASON)
-          SparkContextSuite.cancelStage = false
-          SparkContextSuite.semaphore.release(slices)
-        }
-      }
-
-      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        if (SparkContextSuite.cancelJob) {
-          eventually(timeout(10.seconds)) {
-            assert(SparkContextSuite.isTaskStarted)
-          }
-          sc.cancelJob(jobStart.jobId, REASON)
-          SparkContextSuite.cancelJob = false
-          SparkContextSuite.semaphore.release(slices)
-        }
-      }
-    }
-    sc.addSparkListener(listener)
 
     for (cancelWhat <- Seq("stage", "job")) {
-      SparkContextSuite.semaphore.drainPermits()
-      SparkContextSuite.isTaskStarted = false
-      SparkContextSuite.cancelStage = (cancelWhat == "stage")
-      SparkContextSuite.cancelJob = (cancelWhat == "job")
+      // This countdown latch used to make sure stage or job canceled in listener
+      val latch = new CountDownLatch(1)
+
+      val listener = cancelWhat match {
+        case "stage" =>
+          new SparkListener {
+            override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+              sc.cancelStage(taskStart.stageId, REASON)
+              latch.countDown()
+            }
+          }
+        case "job" =>
+          new SparkListener {
+            override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+              sc.cancelJob(jobStart.jobId, REASON)
+              latch.countDown()
+            }
+          }
+      }
+      sc.addSparkListener(listener)
 
       val ex = intercept[SparkException] {
-        sc.range(0, 10000L, numSlices = slices).mapPartitions { x =>
-          SparkContextSuite.isTaskStarted = true
-          // Block waiting for the listener to cancel the stage or job.
-          SparkContextSuite.semaphore.acquire()
+        sc.range(0, 10000L, numSlices = 10).mapPartitions { x =>
+          x.synchronized {
+            x.wait()
+          }
           x
         }.count()
       }
@@ -550,9 +543,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           fail("Expected the cause to be SparkException, got " + cause.toString() + " instead.")
       }
 
+      latch.await(20, TimeUnit.SECONDS)
       eventually(timeout(20.seconds)) {
         assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
       }
+      sc.removeSparkListener(listener)
     }
   }
 
@@ -634,11 +629,103 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(exc.getCause() != null)
     stream.close()
   }
+
+  test("support barrier execution mode under local mode") {
+    val conf = new SparkConf().setAppName("test").setMaster("local[2]")
+    sc = new SparkContext(conf)
+    val rdd = sc.makeRDD(Seq(1, 2, 3, 4), 2)
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
+      // If we don't get the expected taskInfos, the job shall abort due to stage failure.
+      if (context.getTaskInfos().length != 2) {
+        throw new SparkException("Expected taksInfos length is 2, actual length is " +
+          s"${context.getTaskInfos().length}.")
+      }
+      context.barrier()
+      it
+    }
+    rdd2.collect()
+
+    eventually(timeout(10.seconds)) {
+      assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  test("support barrier execution mode under local-cluster mode") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[3, 1, 1024]")
+      .setAppName("test-cluster")
+    sc = new SparkContext(conf)
+
+    val rdd = sc.makeRDD(Seq(1, 2, 3, 4), 2)
+    val rdd2 = rdd.barrier().mapPartitions { it =>
+      val context = BarrierTaskContext.get()
+      // If we don't get the expected taskInfos, the job shall abort due to stage failure.
+      if (context.getTaskInfos().length != 2) {
+        throw new SparkException("Expected taksInfos length is 2, actual length is " +
+          s"${context.getTaskInfos().length}.")
+      }
+      context.barrier()
+      it
+    }
+    rdd2.collect()
+
+    eventually(timeout(10.seconds)) {
+      assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  test("cancel zombie tasks in a result stage when the job finishes") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[1,2,1024]")
+      .setAppName("test-cluster")
+      .set("spark.ui.enabled", "false")
+      // Disable this so that if a task is running, we can make sure the executor will always send
+      // task metrics via heartbeat to driver.
+      .set(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key, "false")
+      // Set a short heartbeat interval to send SparkListenerExecutorMetricsUpdate fast
+      .set("spark.executor.heartbeatInterval", "1s")
+    sc = new SparkContext(conf)
+    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
+    @volatile var runningTaskIds: Seq[Long] = null
+    val listener = new SparkListener {
+      override def onExecutorMetricsUpdate(
+          executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
+        if (executorMetricsUpdate.execId != SparkContext.DRIVER_IDENTIFIER) {
+          runningTaskIds = executorMetricsUpdate.accumUpdates.map(_._1)
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+    sc.range(0, 2).groupBy((x: Long) => x % 2, 2).map { case (x, _) =>
+      val context = org.apache.spark.TaskContext.get()
+      if (context.stageAttemptNumber == 0) {
+        if (context.partitionId == 0) {
+          // Make the first task in the first stage attempt fail.
+          throw new FetchFailedException(SparkEnv.get.blockManager.blockManagerId, 0, 0, 0,
+            new java.io.IOException("fake"))
+        } else {
+          // Make the second task in the first stage attempt sleep to generate a zombie task
+          Thread.sleep(60000)
+        }
+      } else {
+        // Make the second stage attempt successful.
+      }
+      x
+    }.collect()
+    sc.listenerBus.waitUntilEmpty(10000)
+    // As executors will send the metrics of running tasks via heartbeat, we can use this to check
+    // whether there is any running task.
+    eventually(timeout(10.seconds)) {
+      // Make sure runningTaskIds has been set
+      assert(runningTaskIds != null)
+      // Verify there is no running task.
+      assert(runningTaskIds.isEmpty)
+    }
+  }
 }
 
 object SparkContextSuite {
-  @volatile var cancelJob = false
-  @volatile var cancelStage = false
   @volatile var isTaskStarted = false
   @volatile var taskKilled = false
   @volatile var taskSucceeded = false

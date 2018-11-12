@@ -24,6 +24,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
@@ -59,6 +60,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   var rmClient: AMRMClient[ContainerRequest] = _
 
+  var clock: ManualClock = _
+
   var containerNum = 0
 
   override def beforeEach() {
@@ -66,6 +69,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     rmClient = AMRMClient.createAMRMClient()
     rmClient.init(conf)
     rmClient.start()
+    clock = new ManualClock()
   }
 
   override def afterEach() {
@@ -83,7 +87,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   def createAllocator(
       maxExecutors: Int = 5,
-      rmClient: AMRMClient[ContainerRequest] = rmClient): YarnAllocator = {
+      rmClient: AMRMClient[ContainerRequest] = rmClient,
+      additionalConfigs: Map[String, String] = Map()): YarnAllocator = {
     val args = Array(
       "--jar", "somejar.jar",
       "--class", "SomeClass")
@@ -92,6 +97,11 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       .set("spark.executor.instances", maxExecutors.toString)
       .set("spark.executor.cores", "5")
       .set("spark.executor.memory", "2048")
+
+    for ((name, value) <- additionalConfigs) {
+      sparkConfClone.set(name, value)
+    }
+
     new YarnAllocator(
       "not used",
       mock(classOf[RpcEndpointRef]),
@@ -101,15 +111,16 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       appAttemptId,
       new SecurityManager(sparkConf),
       Map(),
-      new MockResolver())
+      new MockResolver(),
+      clock)
   }
 
-  def createContainer(host: String): Container = {
+  def createContainer(host: String, resource: Resource = containerResource): Container = {
     // When YARN 2.6+ is required, avoid deprecation by using version with long second arg
     val containerId = ContainerId.newInstance(appAttemptId, containerNum)
     containerNum += 1
     val nodeId = NodeId.newInstance(host, 1000)
-    Container.newInstance(containerId, nodeId, "", containerResource, RM_REQUEST_PRIORITY, null)
+    Container.newInstance(containerId, nodeId, "", resource, RM_REQUEST_PRIORITY, null)
   }
 
   test("single container allocated") {
@@ -128,6 +139,29 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
     size should be (0)
+  }
+
+  test("custom resource requested from yarn") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
+
+    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+    val handler = createAllocator(1, mockAmClient,
+      Map(YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2G"))
+
+    handler.updateResourceRequests()
+    val container = createContainer("host1", handler.resource)
+    handler.handleAllocatedContainers(Array(container))
+
+    // get amount of memory and vcores from resource, so effectively skipping their validation
+    val expectedResources = Resource.newInstance(handler.resource.getMemory(),
+      handler.resource.getVirtualCores)
+    ResourceRequestHelper.setResourceRequests(Map("gpu" -> "2G"), expectedResources)
+    val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
+
+    verify(mockAmClient).addContainerRequest(captor.capture())
+    val containerRequest: ContainerRequest = captor.getValue
+    assert(containerRequest.getCapability === expectedResources)
   }
 
   test("container should not be created if requested number if met") {
@@ -332,10 +366,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map(), Set("hostA"))
     verify(mockAmClient).updateBlacklist(Seq("hostA").asJava, Seq[String]().asJava)
 
-    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map(), Set("hostA", "hostB"))
+    val blacklistedNodes = Set(
+      "hostA",
+      "hostB"
+    )
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map(), blacklistedNodes)
     verify(mockAmClient).updateBlacklist(Seq("hostB").asJava, Seq[String]().asJava)
 
-    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
+    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set.empty)
     verify(mockAmClient).updateBlacklist(Seq[String]().asJava, Seq("hostA", "hostB").asJava)
   }
 
@@ -353,8 +391,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   test("window based failure executor counting") {
     sparkConf.set("spark.yarn.executor.failuresValidityInterval", "100s")
     val handler = createAllocator(4)
-    val clock = new ManualClock(0L)
-    handler.setClock(clock)
 
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)

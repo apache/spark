@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 object TypedAggregateExpression {
   def apply[BUF : Encoder, OUT : Encoder](
@@ -37,18 +38,14 @@ object TypedAggregateExpression {
     val bufferSerializer = bufferEncoder.namedExpressions
 
     val outputEncoder = encoderFor[OUT]
-    val outputType = if (outputEncoder.flat) {
-      outputEncoder.schema.head.dataType
-    } else {
-      outputEncoder.schema
-    }
+    val outputType = outputEncoder.objSerializer.dataType
 
     // Checks if the buffer object is simple, i.e. the buffer encoder is flat and the serializer
     // expression is an alias of `BoundReference`, which means the buffer object doesn't need
     // serialization.
     val isSimpleBuffer = {
       bufferSerializer.head match {
-        case Alias(_: BoundReference, _) if bufferEncoder.flat => true
+        case Alias(_: BoundReference, _) if !bufferEncoder.isSerializedAsStruct => true
         case _ => false
       }
     }
@@ -70,7 +67,7 @@ object TypedAggregateExpression {
         outputEncoder.serializer,
         outputEncoder.deserializer.dataType,
         outputType,
-        !outputEncoder.flat || outputEncoder.schema.head.nullable)
+        outputEncoder.objSerializer.nullable)
     } else {
       ComplexTypedAggregateExpression(
         aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
@@ -81,7 +78,7 @@ object TypedAggregateExpression {
         bufferEncoder.resolveAndBind().deserializer,
         outputEncoder.serializer,
         outputType,
-        !outputEncoder.flat || outputEncoder.schema.head.nullable)
+        outputEncoder.objSerializer.nullable)
     }
   }
 }
@@ -109,7 +106,9 @@ trait TypedAggregateExpression extends AggregateFunction {
     s"$nodeName($input)"
   }
 
-  override def nodeName: String = aggregator.getClass.getSimpleName.stripSuffix("$")
+  // aggregator.getClass.getSimpleName can cause Malformed class name error,
+  // call safer `Utils.getSimpleName` instead
+  override def nodeName: String = Utils.getSimpleName(aggregator.getClass).stripSuffix("$");
 }
 
 // TODO: merge these 2 implementations once we refactor the `AggregateFunction` interface.

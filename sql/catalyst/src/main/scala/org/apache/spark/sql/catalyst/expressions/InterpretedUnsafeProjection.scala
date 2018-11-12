@@ -87,12 +87,11 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
 /**
  * Helper functions for creating an [[InterpretedUnsafeProjection]].
  */
-object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
-
+object InterpretedUnsafeProjection {
   /**
    * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
    */
-  override protected def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
+  def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
     // We need to make sure that we do not reuse stateful expressions.
     val cleanedExpressions = exprs.map(_.transform {
       case s: Stateful => s.freshCopy()

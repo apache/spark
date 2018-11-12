@@ -1014,7 +1014,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val path = dir.getCanonicalPath
 
       withSQLConf(
-          ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true",
+          ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
           "spark.sql.sources.commitProtocolClass" ->
             classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
         spark.range(3).write.parquet(s"$path/p0=0/p1=0")

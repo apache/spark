@@ -67,7 +67,7 @@ object JdbcUtils extends Logging {
   /**
    * Returns true if the table already exists in the JDBC database.
    */
-  def tableExists(conn: Connection, options: JDBCOptions): Boolean = {
+  def tableExists(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
     val dialect = JdbcDialects.get(options.url)
 
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
@@ -76,6 +76,7 @@ object JdbcUtils extends Logging {
     Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
       try {
+        statement.setQueryTimeout(options.queryTimeout)
         statement.executeQuery()
       } finally {
         statement.close()
@@ -86,9 +87,10 @@ object JdbcUtils extends Logging {
   /**
    * Drops a table from the JDBC database.
    */
-  def dropTable(conn: Connection, table: String): Unit = {
+  def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
     val statement = conn.createStatement
     try {
+      statement.setQueryTimeout(options.queryTimeout)
       statement.executeUpdate(s"DROP TABLE $table")
     } finally {
       statement.close()
@@ -98,11 +100,17 @@ object JdbcUtils extends Logging {
   /**
    * Truncates a table from the JDBC database without side effects.
    */
-  def truncateTable(conn: Connection, options: JDBCOptions): Unit = {
+  def truncateTable(conn: Connection, options: JdbcOptionsInWrite): Unit = {
     val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
-      statement.executeUpdate(dialect.getTruncateQuery(options.table))
+      statement.setQueryTimeout(options.queryTimeout)
+      val truncateQuery = if (options.isCascadeTruncate.isDefined) {
+        dialect.getTruncateQuery(options.table, options.isCascadeTruncate)
+      } else {
+        dialect.getTruncateQuery(options.table)
+      }
+      statement.executeUpdate(truncateQuery)
     } finally {
       statement.close()
     }
@@ -172,7 +180,7 @@ object JdbcUtils extends Logging {
 
   private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
-      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
+      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }
 
   /**
@@ -252,8 +260,9 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(options.url)
 
     try {
-      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.table))
+      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.tableOrQuery))
       try {
+        statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(statement.executeQuery(), dialect))
       } catch {
         case _: SQLException => None
@@ -476,7 +485,7 @@ object JdbcUtils extends Logging {
 
         case LongType if metadata.contains("binarylong") =>
           throw new IllegalArgumentException(s"Unsupported array element " +
-            s"type ${dt.simpleString} based on binary")
+            s"type ${dt.catalogString} based on binary")
 
         case ArrayType(_, _) =>
           throw new IllegalArgumentException("Nested arrays unsupported")
@@ -490,7 +499,7 @@ object JdbcUtils extends Logging {
           array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
-    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
+    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.catalogString}")
   }
 
   private def nullSafeConvert[T](input: T, f: T => Any): Any = {
@@ -596,7 +605,8 @@ object JdbcUtils extends Logging {
       insertStmt: String,
       batchSize: Int,
       dialect: JdbcDialect,
-      isolationLevel: Int): Iterator[Byte] = {
+      isolationLevel: Int,
+      options: JDBCOptions): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
 
@@ -637,6 +647,9 @@ object JdbcUtils extends Logging {
 
       try {
         var rowCount = 0
+
+        stmt.setQueryTimeout(options.queryTimeout)
+
         while (iterator.hasNext) {
           val row = iterator.next()
           var i = 0
@@ -801,7 +814,7 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      options: JDBCOptions): Unit = {
+      options: JdbcOptionsInWrite): Unit = {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
@@ -819,7 +832,8 @@ object JdbcUtils extends Logging {
       case _ => df
     }
     repartitionedDF.rdd.foreachPartition(iterator => savePartition(
-      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel)
+      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
+      options)
     )
   }
 
@@ -829,7 +843,7 @@ object JdbcUtils extends Logging {
   def createTable(
       conn: Connection,
       df: DataFrame,
-      options: JDBCOptions): Unit = {
+      options: JdbcOptionsInWrite): Unit = {
     val strSchema = schemaString(
       df, options.url, options.createTableColumnTypes)
     val table = options.table
@@ -841,6 +855,7 @@ object JdbcUtils extends Logging {
     val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
     val statement = conn.createStatement
     try {
+      statement.setQueryTimeout(options.queryTimeout)
       statement.executeUpdate(sql)
     } finally {
       statement.close()

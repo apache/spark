@@ -27,6 +27,8 @@ import org.scalatest.mockito.MockitoSugar._
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.Fabric8Aliases._
+import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -103,15 +105,11 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       .build()
   }
 
-  private type ResourceList = NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[
-      HasMetadata, Boolean]
-  private type Pods = MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
-
   @Mock
   private var kubernetesClient: KubernetesClient = _
 
   @Mock
-  private var podOperations: Pods = _
+  private var podOperations: PODS = _
 
   @Mock
   private var namedPods: PodResource[Pod, DoneablePod] = _
@@ -123,7 +121,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private var driverBuilder: KubernetesDriverBuilder = _
 
   @Mock
-  private var resourceList: ResourceList = _
+  private var resourceList: RESOURCE_LIST = _
 
   private var kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf] = _
 
@@ -136,13 +134,16 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     sparkConf = new SparkConf(false)
     kubernetesConf = KubernetesConf[KubernetesDriverSpecificConf](
       sparkConf,
-      KubernetesDriverSpecificConf(None, MAIN_CLASS, APP_NAME, APP_ARGS),
+      KubernetesDriverSpecificConf(JavaMainAppResource(None), MAIN_CLASS, APP_NAME, APP_ARGS),
       KUBERNETES_RESOURCE_PREFIX,
       APP_ID,
       Map.empty,
       Map.empty,
       Map.empty,
-      Map.empty)
+      Map.empty,
+      Map.empty,
+      Nil,
+      hadoopConfSpec = None)
     when(driverBuilder.buildFromFeatures(kubernetesConf)).thenReturn(BUILT_KUBERNETES_SPEC)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(POD_NAME)).thenReturn(namedPods)

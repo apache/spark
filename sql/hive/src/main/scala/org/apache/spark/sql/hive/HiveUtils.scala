@@ -62,7 +62,7 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        s"<code>0.12.0</code> through <code>2.3.2</code>.")
+        s"<code>0.12.0</code> through <code>2.3.3</code>.")
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
@@ -105,11 +105,10 @@ private[spark] object HiveUtils extends Logging {
       .createWithDefault(false)
 
   val CONVERT_METASTORE_ORC = buildConf("spark.sql.hive.convertMetastoreOrc")
-    .internal()
     .doc("When set to true, the built-in ORC reader and writer are used to process " +
       "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val HIVE_METASTORE_SHARED_PREFIXES = buildConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
@@ -253,7 +252,7 @@ private[spark] object HiveUtils extends Logging {
   /**
    * Create a [[HiveClient]] used for execution.
    *
-   * Currently this must always be Hive 13 as this is the version of Hive that is packaged
+   * Currently this must always be Hive 1.2.1 as this is the version of Hive that is packaged
    * with Spark SQL. This copy of the client is used for execution related tasks like
    * registering temporary functions or ensuring that the ThreadLocal SessionState is
    * correctly populated.  This copy of Hive is *not* used for storing persistent metadata,

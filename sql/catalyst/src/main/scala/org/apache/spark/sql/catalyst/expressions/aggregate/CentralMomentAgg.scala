@@ -67,35 +67,7 @@ abstract class CentralMomentAgg(child: Expression)
 
   override val initialValues: Seq[Expression] = Array.fill(momentOrder + 1)(Literal(0.0))
 
-  override val updateExpressions: Seq[Expression] = {
-    val newN = n + Literal(1.0)
-    val delta = child - avg
-    val deltaN = delta / newN
-    val newAvg = avg + deltaN
-    val newM2 = m2 + delta * (delta - deltaN)
-
-    val delta2 = delta * delta
-    val deltaN2 = deltaN * deltaN
-    val newM3 = if (momentOrder >= 3) {
-      m3 - Literal(3.0) * deltaN * newM2 + delta * (delta2 - deltaN2)
-    } else {
-      Literal(0.0)
-    }
-    val newM4 = if (momentOrder >= 4) {
-      m4 - Literal(4.0) * deltaN * newM3 - Literal(6.0) * deltaN2 * newM2 +
-        delta * (delta * delta2 - deltaN * deltaN2)
-    } else {
-      Literal(0.0)
-    }
-
-    trimHigherOrder(Seq(
-      If(IsNull(child), n, newN),
-      If(IsNull(child), avg, newAvg),
-      If(IsNull(child), m2, newM2),
-      If(IsNull(child), m3, newM3),
-      If(IsNull(child), m4, newM4)
-    ))
-  }
+  override lazy val updateExpressions: Seq[Expression] = updateExpressionsDef
 
   override val mergeExpressions: Seq[Expression] = {
 
@@ -103,7 +75,7 @@ abstract class CentralMomentAgg(child: Expression)
     val n2 = n.right
     val newN = n1 + n2
     val delta = avg.right - avg.left
-    val deltaN = If(newN === Literal(0.0), Literal(0.0), delta / newN)
+    val deltaN = If(newN === 0.0, 0.0, delta / newN)
     val newAvg = avg.left + deltaN * n2
 
     // higher order moments computed according to:
@@ -128,6 +100,36 @@ abstract class CentralMomentAgg(child: Expression)
 
     trimHigherOrder(Seq(newN, newAvg, newM2, newM3, newM4))
   }
+
+  protected def updateExpressionsDef: Seq[Expression] = {
+    val newN = n + 1.0
+    val delta = child - avg
+    val deltaN = delta / newN
+    val newAvg = avg + deltaN
+    val newM2 = m2 + delta * (delta - deltaN)
+
+    val delta2 = delta * delta
+    val deltaN2 = deltaN * deltaN
+    val newM3 = if (momentOrder >= 3) {
+      m3 - Literal(3.0) * deltaN * newM2 + delta * (delta2 - deltaN2)
+    } else {
+      Literal(0.0)
+    }
+    val newM4 = if (momentOrder >= 4) {
+      m4 - Literal(4.0) * deltaN * newM3 - Literal(6.0) * deltaN2 * newM2 +
+        delta * (delta * delta2 - deltaN * deltaN2)
+    } else {
+      Literal(0.0)
+    }
+
+    trimHigherOrder(Seq(
+      If(child.isNull, n, newN),
+      If(child.isNull, avg, newAvg),
+      If(child.isNull, m2, newM2),
+      If(child.isNull, m3, newM3),
+      If(child.isNull, m4, newM4)
+    ))
+  }
 }
 
 // Compute the population standard deviation of a column
@@ -140,8 +142,7 @@ case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
-    If(n === Literal(0.0), Literal.create(null, DoubleType),
-      Sqrt(m2 / n))
+    If(n === 0.0, Literal.create(null, DoubleType), sqrt(m2 / n))
   }
 
   override def prettyName: String = "stddev_pop"
@@ -157,9 +158,8 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
-    If(n === Literal(0.0), Literal.create(null, DoubleType),
-      If(n === Literal(1.0), Literal(Double.NaN),
-        Sqrt(m2 / (n - Literal(1.0)))))
+    If(n === 0.0, Literal.create(null, DoubleType),
+      If(n === 1.0, Double.NaN, sqrt(m2 / (n - 1.0))))
   }
 
   override def prettyName: String = "stddev_samp"
@@ -173,8 +173,7 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
-    If(n === Literal(0.0), Literal.create(null, DoubleType),
-      m2 / n)
+    If(n === 0.0, Literal.create(null, DoubleType), m2 / n)
   }
 
   override def prettyName: String = "var_pop"
@@ -188,9 +187,8 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
   override protected def momentOrder = 2
 
   override val evaluateExpression: Expression = {
-    If(n === Literal(0.0), Literal.create(null, DoubleType),
-      If(n === Literal(1.0), Literal(Double.NaN),
-        m2 / (n - Literal(1.0))))
+    If(n === 0.0, Literal.create(null, DoubleType),
+      If(n === 1.0, Double.NaN, m2 / (n - 1.0)))
   }
 
   override def prettyName: String = "var_samp"
@@ -205,9 +203,8 @@ case class Skewness(child: Expression) extends CentralMomentAgg(child) {
   override protected def momentOrder = 3
 
   override val evaluateExpression: Expression = {
-    If(n === Literal(0.0), Literal.create(null, DoubleType),
-      If(m2 === Literal(0.0), Literal(Double.NaN),
-        Sqrt(n) * m3 / Sqrt(m2 * m2 * m2)))
+    If(n === 0.0, Literal.create(null, DoubleType),
+      If(m2 === 0.0, Double.NaN, sqrt(n) * m3 / sqrt(m2 * m2 * m2)))
   }
 }
 
@@ -218,9 +215,8 @@ case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
   override protected def momentOrder = 4
 
   override val evaluateExpression: Expression = {
-    If(n === Literal(0.0), Literal.create(null, DoubleType),
-      If(m2 === Literal(0.0), Literal(Double.NaN),
-        n * m4 / (m2 * m2) - Literal(3.0)))
+    If(n === 0.0, Literal.create(null, DoubleType),
+      If(m2 === 0.0, Double.NaN, n * m4 / (m2 * m2) - 3.0))
   }
 
   override def prettyName: String = "kurtosis"

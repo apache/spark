@@ -108,7 +108,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         "spark.executor.cores" -> "1",
         "spark.executor.memory" -> "512m",
         "spark.executor.instances" -> "2",
-        // Sending some senstive information, which we'll make sure gets redacted
+        // Sending some sensitive information, which we'll make sure gets redacted
         "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
         "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
       ))
@@ -265,35 +265,32 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // needed locations.
     val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.10.6-src.zip",
+        s"$sparkHome/python/lib/py4j-0.10.8.1-src.zip",
         s"$sparkHome/python")
     val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
       "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
 
-    val moduleDir =
-      if (clientMode) {
-        // In client-mode, .py files added with --py-files are not visible in the driver.
-        // This is something that the launcher library would have to handle.
-        tempDir
-      } else {
-        val subdir = new File(tempDir, "pyModules")
-        subdir.mkdir()
-        subdir
-      }
+    val moduleDir = {
+      val subdir = new File(tempDir, "pyModules")
+      subdir.mkdir()
+      subdir
+    }
     val pyModule = new File(moduleDir, "mod1.py")
     Files.write(TEST_PYMODULE, pyModule, StandardCharsets.UTF_8)
 
     val mod2Archive = TestUtils.createJarWithFiles(Map("mod2.py" -> TEST_PYMODULE), moduleDir)
     val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
     val result = File.createTempFile("result", null, tempDir)
+    val outFile = Some(File.createTempFile("stdout", null, tempDir))
 
     val finalState = runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files" -> pyFiles),
       appArgs = Seq(result.getAbsolutePath()),
       extraEnv = extraEnvVars,
-      extraConf = extraConf)
-    checkResult(finalState, result)
+      extraConf = extraConf,
+      outFile = outFile)
+    checkResult(finalState, result, outFile = outFile)
   }
 
   private def testUseClassPathFirst(clientMode: Boolean): Unit = {

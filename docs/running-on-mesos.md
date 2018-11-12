@@ -13,6 +13,11 @@ The advantages of deploying Spark with Mesos include:
   [frameworks](https://mesos.apache.org/documentation/latest/frameworks/)
 - scalable partitioning between multiple instances of Spark
 
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
+
 # How it Works
 
 In a standalone cluster deployment, the cluster manager in the below diagram is a Spark master
@@ -174,6 +179,8 @@ can find the results of the driver from the Mesos Web UI.
 
 To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
 passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
+Note that the `MesosClusterDispatcher` does not support authentication.  You should ensure that all network access to it is
+protected (port 7077 by default).
 
 By setting the Mesos proxy config property (requires mesos version >= 1.4), `--conf spark.mesos.proxy.baseURL=http://localhost:5050` when launching the dispatcher, the mesos sandbox URI for each driver is added to the mesos dispatcher UI.
 
@@ -670,7 +677,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.dispatcher.historyServer.url</code></td>
   <td><code>(none)</code></td>
   <td>
-    Set the URL of the <a href="http://spark.apache.org/docs/latest/monitoring.html#viewing-after-the-fact">history
+    Set the URL of the <a href="monitoring.html#viewing-after-the-fact">history
     server</a>.  The dispatcher will then link each driver to its entry
     in the history server.
   </td>
@@ -751,6 +758,18 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Time to consider unused resources refused when maximum number of cores
     <code>spark.cores.max</code> is reached
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.appJar.local.resolution.mode</code></td>
+  <td><code>host</code></td>
+  <td>
+    Provides support for the `local:///` scheme to reference the app jar resource in cluster mode.
+    If user uses a local resource (`local:///path/to/jar`) and the config option is not used it defaults to `host` eg.
+    the mesos fetcher tries to get the resource from the host's file system.
+    If the value is unknown it prints a warning msg in the dispatcher logs and defaults to `host`.
+    If the value is `container` then spark submit in the container will use the jar in the container's path:
+    `/path/to/jar`.
   </td>
 </tr>
 </table>

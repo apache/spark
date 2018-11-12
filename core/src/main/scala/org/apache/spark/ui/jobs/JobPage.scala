@@ -195,7 +195,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           <p>No information to display for job {jobId}</p>
         </div>
       return UIUtils.headerSparkPage(
-        s"Details for Job $jobId", content, parent)
+        request, s"Details for Job $jobId", content, parent)
     }
     val isComplete = jobData.status != JobExecutionStatus.RUNNING
     val stages = jobData.stageIds.map { stageId =>
@@ -413,6 +413,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           {failedStagesTable.toNodeSeq}
         </div>
     }
-    UIUtils.headerSparkPage(s"Details for Job $jobId", content, parent, showVisualization = true)
+    UIUtils.headerSparkPage(
+      request, s"Details for Job $jobId", content, parent, showVisualization = true)
   }
 }

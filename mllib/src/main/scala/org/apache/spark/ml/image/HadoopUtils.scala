@@ -38,13 +38,17 @@ private object RecursiveFlag {
    */
   def withRecursiveFlag[T](value: Boolean, spark: SparkSession)(f: => T): T = {
     val flagName = FileInputFormat.INPUT_DIR_RECURSIVE
+    // scalastyle:off hadoopconfiguration
     val hadoopConf = spark.sparkContext.hadoopConfiguration
+    // scalastyle:on hadoopconfiguration
     val old = Option(hadoopConf.get(flagName))
     hadoopConf.set(flagName, value.toString)
     try f finally {
-      old match {
-        case Some(v) => hadoopConf.set(flagName, v)
-        case None => hadoopConf.unset(flagName)
+      // avoid false positive of DLS_DEAD_LOCAL_STORE_IN_RETURN by SpotBugs
+      if (old.isDefined) {
+        hadoopConf.set(flagName, old.get)
+      } else {
+        hadoopConf.unset(flagName)
       }
     }
   }
@@ -96,7 +100,9 @@ private object SamplePathFilter {
     val sampleImages = sampleRatio < 1
     if (sampleImages) {
       val flagName = FileInputFormat.PATHFILTER_CLASS
+      // scalastyle:off hadoopconfiguration
       val hadoopConf = spark.sparkContext.hadoopConfiguration
+      // scalastyle:on hadoopconfiguration
       val old = Option(hadoopConf.getClass(flagName, null))
       hadoopConf.setDouble(SamplePathFilter.ratioParam, sampleRatio)
       hadoopConf.setLong(SamplePathFilter.seedParam, seed)

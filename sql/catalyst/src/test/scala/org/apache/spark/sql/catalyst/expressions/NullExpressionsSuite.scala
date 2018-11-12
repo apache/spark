@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -86,6 +88,13 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Coalesce(Seq(nullLit, lit, lit)), value)
       checkEvaluation(Coalesce(Seq(nullLit, nullLit, lit)), value)
     }
+
+    val coalesce = Coalesce(Seq(
+      Literal.create(null, ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 2, 3, null), ArrayType(IntegerType, containsNull = true))))
+    assert(coalesce.dataType === ArrayType(IntegerType, containsNull = true))
+    checkEvaluation(coalesce, Seq(1, 2, 3))
   }
 
   test("SPARK-16602 Nvl should support numeric-string cases") {
@@ -100,8 +109,8 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nullLit = Literal.create(null, NullType)
     val floatNullLit = Literal.create(null, FloatType)
     val floatLit = Literal.create(1.01f, FloatType)
-    val timestampLit = Literal.create("2017-04-12", TimestampType)
-    val decimalLit = Literal.create(10.2, DecimalType(20, 2))
+    val timestampLit = Literal.create(Timestamp.valueOf("2017-04-12 00:00:00"), TimestampType)
+    val decimalLit = Literal.create(BigDecimal.valueOf(10.2), DecimalType(20, 2))
 
     assert(analyze(new Nvl(decimalLit, stringLit)).dataType == StringType)
     assert(analyze(new Nvl(doubleLit, decimalLit)).dataType == DoubleType)

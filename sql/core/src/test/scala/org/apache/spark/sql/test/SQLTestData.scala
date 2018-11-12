@@ -136,6 +136,19 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val lowerCaseDataWithDuplicates: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      LowerCaseData(1, "a") ::
+      LowerCaseData(2, "b") ::
+      LowerCaseData(2, "b") ::
+      LowerCaseData(3, "c") ::
+      LowerCaseData(3, "c") ::
+      LowerCaseData(3, "c") ::
+      LowerCaseData(4, "d") :: Nil).toDF()
+    df.createOrReplaceTempView("lowerCaseData")
+    df
+  }
+
   protected lazy val arrayData: RDD[ArrayData] = {
     val rdd = spark.sparkContext.parallelize(
       ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3))) ::
@@ -255,6 +268,17 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val trainingSales: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      TrainingSales("Experts", CourseSales("dotNET", 2012, 10000)) ::
+        TrainingSales("Experts", CourseSales("JAVA", 2012, 20000)) ::
+        TrainingSales("Dummies", CourseSales("dotNet", 2012, 5000)) ::
+        TrainingSales("Experts", CourseSales("dotNET", 2013, 48000)) ::
+        TrainingSales("Dummies", CourseSales("Java", 2013, 30000)) :: Nil).toDF()
+    df.createOrReplaceTempView("trainingSales")
+    df
+  }
+
   /**
    * Initialize all test data such that all temp tables are properly registered.
    */
@@ -310,4 +334,5 @@ private[sql] object SQLTestData {
   case class Salary(personId: Int, salary: Double)
   case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   case class CourseSales(course: String, year: Int, earnings: Double)
+  case class TrainingSales(training: String, sales: CourseSales)
 }

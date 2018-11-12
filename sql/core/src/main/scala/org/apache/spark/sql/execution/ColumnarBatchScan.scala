@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -32,8 +33,6 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
   def vectorTypes: Option[Seq[String]] = None
 
   protected def supportsBatch: Boolean = true
-
-  protected def needsUnsafeRowConversion: Boolean = true
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -58,14 +57,14 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
-      s"""
+    val code = code"${ctx.registerComment(str)}" + (if (nullable) {
+      code"""
         boolean $isNullVar = $columnVar.isNullAt($ordinal);
         $javaType $valueVar = $isNullVar ? ${CodeGenerator.defaultValue(dataType)} : ($value);
       """
     } else {
-      s"$javaType $valueVar = $value;"
-    }).trim
+      code"$javaType $valueVar = $value;"
+    })
     ExprCode(code, isNullVar, JavaCode.variable(valueVar, dataType))
   }
 
@@ -135,7 +134,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
        |if ($batch == null) {
        |  $nextBatchFuncName();
        |}
-       |while ($batch != null) {
+       |while ($limitNotReachedCond $batch != null) {
        |  int $numRows = $batch.numRows();
        |  int $localEnd = $numRows - $idx;
        |  for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
@@ -158,17 +157,11 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
     ctx.INPUT_ROW = row
     ctx.currentVars = null
-    // Always provide `outputVars`, so that the framework can help us build unsafe row if the input
-    // row is not unsafe row, i.e. `needsUnsafeRowConversion` is true.
-    val outputVars = output.zipWithIndex.map { case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable).genCode(ctx)
-    }
-    val inputRow = if (needsUnsafeRowConversion) null else row
     s"""
-       |while ($input.hasNext()) {
+       |while ($limitNotReachedCond $input.hasNext()) {
        |  InternalRow $row = (InternalRow) $input.next();
        |  $numOutputRows.add(1);
-       |  ${consume(ctx, outputVars, inputRow).trim}
+       |  ${consume(ctx, null, row).trim}
        |  if (shouldStop()) return;
        |}
      """.stripMargin

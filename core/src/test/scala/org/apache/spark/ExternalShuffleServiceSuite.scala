@@ -19,6 +19,7 @@ package org.apache.spark
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.internal.config
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.TransportServer
@@ -42,8 +43,8 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
     server = transportContext.createServer()
 
     conf.set("spark.shuffle.manager", "sort")
-    conf.set("spark.shuffle.service.enabled", "true")
-    conf.set("spark.shuffle.service.port", server.getPort.toString)
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
+    conf.set(config.SHUFFLE_SERVICE_PORT.key, server.getPort.toString)
   }
 
   override def afterAll() {

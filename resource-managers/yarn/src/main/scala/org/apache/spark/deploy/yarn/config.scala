@@ -152,6 +152,11 @@ package object config {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("100s")
 
+  private[spark] val YARN_METRICS_NAMESPACE = ConfigBuilder("spark.yarn.metrics.namespace")
+    .doc("The root namespace for AM metrics reporting.")
+    .stringConf
+    .createOptional
+
   private[spark] val AM_NODE_LABEL_EXPRESSION = ConfigBuilder("spark.yarn.am.nodeLabelExpression")
     .doc("Node label expression for the AM.")
     .stringConf
@@ -186,6 +191,12 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val AM_FINAL_MSG_LIMIT = ConfigBuilder("spark.yarn.am.finalMessageLimit")
+    .doc("The limit size of final diagnostic message for our ApplicationMaster to unregister from" +
+      " the ResourceManager.")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("1m")
 
   /* Client-mode AM configuration. */
 
@@ -314,10 +325,6 @@ package object config {
     .stringConf
     .createOptional
 
-  private[spark] val KERBEROS_RELOGIN_PERIOD = ConfigBuilder("spark.yarn.kerberos.relogin.period")
-    .timeConf(TimeUnit.SECONDS)
-    .createWithDefaultString("1m")
-
   // The list of cache-related config entries. This is used by Client and the AM to clean
   // up the environment so that these settings do not appear on the web UI.
   private[yarn] val CACHE_CONFIGS = Seq(
@@ -327,5 +334,15 @@ package object config {
     CACHED_FILES_VISIBILITIES,
     CACHED_FILES_TYPES,
     CACHED_CONF_ARCHIVE)
+
+  /* YARN allocator-level blacklisting related config entries. */
+  private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
+    ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
+  private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
+  private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."
 
 }

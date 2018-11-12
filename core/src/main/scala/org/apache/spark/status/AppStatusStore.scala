@@ -112,10 +112,12 @@ private[spark] class AppStatusStore(
     }
   }
 
-  def stageAttempt(stageId: Int, stageAttemptId: Int, details: Boolean = false): v1.StageData = {
+  def stageAttempt(stageId: Int, stageAttemptId: Int,
+      details: Boolean = false): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
-    val stage = store.read(classOf[StageDataWrapper], stageKey).info
-    if (details) stageWithDetails(stage) else stage
+    val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
+    val stage = if (details) stageWithDetails(stageDataWrapper.info) else stageDataWrapper.info
+    (stage, stageDataWrapper.jobIds.toSeq)
   }
 
   def taskCount(stageId: Int, stageAttemptId: Int): Long = {
@@ -471,7 +473,7 @@ private[spark] class AppStatusStore(
 
   def operationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = {
     val job = store.read(classOf[JobDataWrapper], jobId)
-    val stages = job.info.stageIds
+    val stages = job.info.stageIds.sorted
 
     stages.map { id =>
       val g = store.read(classOf[RDDOperationGraphWrapper], id).toRDDOperationGraph()
@@ -503,10 +505,11 @@ private[spark] object AppStatusStore {
   /**
    * Create an in-memory store for a live application.
    */
-  def createLiveStore(conf: SparkConf): AppStatusStore = {
+  def createLiveStore(
+      conf: SparkConf,
+      appStatusSource: Option[AppStatusSource] = None): AppStatusStore = {
     val store = new ElementTrackingStore(new InMemoryStore(), conf)
-    val listener = new AppStatusListener(store, conf, true)
+    val listener = new AppStatusListener(store, conf, true, appStatusSource)
     new AppStatusStore(store, listener = Some(listener))
   }
-
 }

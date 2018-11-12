@@ -36,7 +36,6 @@ import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
-
 /**
  * Parses and encapsulates arguments from the spark-submit script.
  * The env argument is used for testing.
@@ -76,13 +75,14 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var proxyUser: String = null
   var principal: String = null
   var keytab: String = null
+  private var dynamicAllocationEnabled: Boolean = false
 
   // Standalone cluster mode only
   var supervise: Boolean = false
   var driverCores: String = null
   var submissionToKill: String = null
   var submissionToRequestStatusFor: String = null
-  var useRest: Boolean = true // used internally
+  var useRest: Boolean = false // used internally
 
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
@@ -114,6 +114,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   ignoreNonSparkProperties()
   // Use `sparkProperties` map along with env vars to fill in any missing parameters
   loadEnvironmentArguments()
+
+  useRest = sparkProperties.getOrElse("spark.master.rest.enabled", "false").toBoolean
 
   validateArguments()
 
@@ -182,6 +184,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
     jars = Option(jars).orElse(sparkProperties.get("spark.jars")).orNull
     files = Option(files).orElse(sparkProperties.get("spark.files")).orNull
+    pyFiles = Option(pyFiles).orElse(sparkProperties.get("spark.submit.pyFiles")).orNull
     ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
     ivySettingsPath = sparkProperties.get("spark.jars.ivySettings")
     packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
@@ -196,8 +199,16 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
-    keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
-    principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
+    keytab = Option(keytab)
+      .orElse(sparkProperties.get("spark.kerberos.keytab"))
+      .orElse(sparkProperties.get("spark.yarn.keytab"))
+      .orNull
+    principal = Option(principal)
+      .orElse(sparkProperties.get("spark.kerberos.principal"))
+      .orElse(sparkProperties.get("spark.yarn.principal"))
+      .orNull
+    dynamicAllocationEnabled =
+      sparkProperties.get("spark.dynamicAllocation.enabled").exists("true".equalsIgnoreCase)
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && !isR && primaryResource != null) {
@@ -274,11 +285,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (totalExecutorCores != null && Try(totalExecutorCores.toInt).getOrElse(-1) <= 0) {
       error("Total executor cores must be a positive number")
     }
-    if (numExecutors != null && Try(numExecutors.toInt).getOrElse(-1) <= 0) {
+    if (!dynamicAllocationEnabled &&
+      numExecutors != null && Try(numExecutors.toInt).getOrElse(-1) <= 0) {
       error("Number of executors must be a positive number")
-    }
-    if (pyFiles != null && !isPython) {
-      error("--py-files given but primary resource is not a Python script")
     }
 
     if (master.startsWith("yarn")) {

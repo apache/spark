@@ -27,7 +27,7 @@ import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.Utils
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hive.service.{AbstractService, Service, ServiceException}
 import org.apache.hive.service.Service.STATE
 import org.apache.hive.service.auth.HiveAuthFactory
@@ -52,8 +52,22 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
 
     if (UserGroupInformation.isSecurityEnabled) {
       try {
-        HiveAuthFactory.loginFromKeytab(hiveConf)
-        sparkServiceUGI = Utils.getUGI()
+        val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
+        val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
+        if (principal.isEmpty || keyTabFile.isEmpty) {
+          throw new IOException(
+            "HiveServer2 Kerberos principal or keytab is not correctly configured")
+        }
+
+        val originalUgi = UserGroupInformation.getCurrentUser
+        sparkServiceUGI = if (HiveAuthFactory.needUgiLogin(originalUgi,
+          SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)) {
+          HiveAuthFactory.loginFromKeytab(hiveConf)
+          Utils.getUGI()
+        } else {
+          originalUgi
+        }
+
         setSuperField(this, "serviceUGI", sparkServiceUGI)
       } catch {
         case e @ (_: IOException | _: LoginException) =>

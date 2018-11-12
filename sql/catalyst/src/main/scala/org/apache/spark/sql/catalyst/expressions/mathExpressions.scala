@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.NumberConverter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -1191,11 +1192,11 @@ abstract class RoundBase(child: Expression, scale: Expression,
 
     val javaType = CodeGenerator.javaType(dataType)
     if (scaleV == null) { // if scale is null, no need to eval its child at all
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};""")
     } else {
-      ev.copy(code = s"""
+      ev.copy(code = code"""
         ${ce.code}
         boolean ${ev.isNull} = ${ce.isNull};
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};

@@ -28,9 +28,9 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.config.HISTORY_SERVER_UI_PORT
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.History.HISTORY_SERVER_UI_PORT
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
@@ -87,7 +87,7 @@ class HistoryServer(
       if (!loadAppUi(appId, None) && (!attemptId.isDefined || !loadAppUi(appId, attemptId))) {
         val msg = <div class="row-fluid">Application {appId} not found.</div>
         res.setStatus(HttpServletResponse.SC_NOT_FOUND)
-        UIUtils.basicSparkPage(msg, "Not Found").foreach { n =>
+        UIUtils.basicSparkPage(req, msg, "Not Found").foreach { n =>
           res.getWriter().write(n.toString)
         }
         return
@@ -124,7 +124,7 @@ class HistoryServer(
 
     attachHandler(ApiRootResource.getServletHandler(this))
 
-    attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
+    addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
 
     val contextHandler = new ServletContextHandler
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
@@ -152,7 +152,6 @@ class HistoryServer(
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     handlers.synchronized {
       ui.getHandlers.foreach(attachHandler)
-      addFilters(ui.getHandlers, conf)
     }
   }
 
