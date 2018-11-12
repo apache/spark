@@ -26,7 +26,6 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.assertHelper
 import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 
 class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
@@ -69,7 +68,9 @@ class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndA
     val kConfStep = new KerberosConfExecutorFeatureStep(kubernetesConf, hadoopBootstrapUtil)
     val pod = kConfStep.configurePod(sparkPod)
     KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-kerberos" -> "true"))
-    assertHelper(kConfStep.getAdditionalPodSystemProperties(), Map.empty)
-    assertHelper(kConfStep.getAdditionalKubernetesResources(), Seq.empty)
+    assert(kConfStep.getAdditionalPodSystemProperties() == Map.empty,
+      s"${kConfStep.getAdditionalPodSystemProperties()} is not empty")
+    assert(kConfStep.getAdditionalKubernetesResources() == Seq.empty,
+      s"${kConfStep.getAdditionalKubernetesResources()} is not empty")
   }
 }

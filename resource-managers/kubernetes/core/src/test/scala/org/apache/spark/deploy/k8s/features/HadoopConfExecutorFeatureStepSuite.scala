@@ -26,7 +26,6 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants.HADOOP_CONFIG_MAP_NAME
-import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.assertHelper
 import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 
 class HadoopConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
@@ -61,7 +60,9 @@ class HadoopConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAft
     val hConfStep = new HadoopConfExecutorFeatureStep(kubernetesConf, hadoopBootstrapUtil)
     val pod = hConfStep.configurePod(sparkPod)
     KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-hconf" -> "true"))
-    assertHelper(hConfStep.getAdditionalPodSystemProperties(), Map.empty)
-    assertHelper(hConfStep.getAdditionalKubernetesResources(), Seq.empty)
+    assert(hConfStep.getAdditionalPodSystemProperties() == Map.empty,
+      s"${hConfStep.getAdditionalPodSystemProperties()} is not empty")
+    assert(hConfStep.getAdditionalKubernetesResources() == Seq.empty,
+      s"${hConfStep.getAdditionalKubernetesResources()} is not empty")
   }
 }

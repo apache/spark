@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
+import scala.language.experimental.macros
 
 import io.fabric8.kubernetes.api.model.{Container, HasMetadata, Pod, PodBuilder, SecretBuilder, Volume}
 import org.mockito.Matchers
@@ -65,27 +66,29 @@ object KubernetesFeaturesTestUtils {
   }
 
   def containerHasEnvVars(container: Container, envs: Map[String, String]): Unit = {
-    assertHelper(envs.toSet,
-      container.getEnv.asScala
-        .map { e => (e.getName, e.getValue) }.toSet,
-      subsetOfTup, "a subset of")
+    val e = envs.toSet
+    val c = container.getEnv.asScala
+      .map { e => (e.getName, e.getValue) }.toSet
+    assert(e.subsetOf(c), s"$e is not a subset of $c")
   }
 
   def containerHasVolumeMounts(container: Container, vms: Map[String, String]): Unit = {
-    assertHelper(vms.toSet,
-      container.getVolumeMounts.asScala
-        .map { vm => (vm.getName, vm.getMountPath) }.toSet,
-      subsetOfTup, "a subset of")
+    val v = vms.toSet
+    val c = container.getVolumeMounts.asScala
+      .map { vm => (vm.getName, vm.getMountPath) }.toSet
+    assert(v.subsetOf(c), s"$v is not a subset of $c")
   }
 
   def podHasLabels(pod: Pod, labels: Map[String, String]): Unit = {
-    assertHelper(labels.toSet, pod.getMetadata.getLabels.asScala.toSet,
-      subsetOfTup, "a subset of")
+    val l = labels.toSet
+    val p = pod.getMetadata.getLabels.asScala.toSet
+    assert(l.subsetOf(p), s"$l is not a subset of $p")
   }
 
   def podHasVolumes(pod: Pod, volumes: Seq[Volume]): Unit = {
-    assertHelper(volumes.toSet, pod.getSpec.getVolumes.asScala.toSet,
-      subsetOfElem[Set[Volume], Volume], "a subset of")
+    val v = volumes.toSet
+    val p = pod.getSpec.getVolumes.asScala.toSet
+    assert(v.subsetOf(p), s"$v is not a subset of $p")
   }
 
   // Mocking bootstrapHadoopConfDir
@@ -117,13 +120,4 @@ object KubernetesFeaturesTestUtils {
           .endMetadata()
         .build(),
       inputPod.container)
-
-  private def subsetOfElem[T <: Set[B], B <: Any]: (T, T) => Boolean = (a, b) => a.subsetOf(b)
-  private def subsetOfTup: (Set[(String, String)], Set[(String, String)]) => Boolean =
-    (a, b) => a.subsetOf(b)
-
-  def assertHelper[T](con1: T, con2: T,
-      expr: (T, T) => Boolean = (a: T, b: T) => a == b, exprMsg: String = "equal to"): Unit = {
-    assert(expr(con1, con2), s"$con1 is not $exprMsg $con2 as expected")
-  }
 }

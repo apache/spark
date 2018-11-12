@@ -193,12 +193,14 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
       configMapName,
       tmpFile.getAbsolutePath
     )
-    assertHelper(resultingCMap, new ConfigMapBuilder()
+    val expectedCM = new ConfigMapBuilder()
       .withNewMetadata()
-        .withName(configMapName)
-        .endMetadata()
+      .withName(configMapName)
+      .endMetadata()
       .addToData(Map(tmpFile.getName -> "contents").asJava)
-    .build())
+      .build()
+    assert(resultingCMap === expectedCM,
+      s"$resultingCMap is not equal to $expectedCM")
   }
 
   test("buildHadoopConfigMap on simple file") {
@@ -206,11 +208,13 @@ class HadoopBootstrapUtilSuite extends SparkFunSuite with BeforeAndAfter{
       configMapName,
       Seq(tmpFile)
     )
-    assertHelper(resultingCMap, new ConfigMapBuilder()
+    val expectedCM = new ConfigMapBuilder()
       .withNewMetadata()
       .withName(configMapName)
       .endMetadata()
       .addToData(Map(tmpFile.getName -> "contents").asJava)
-      .build())
+      .build()
+    assert(resultingCMap === expectedCM,
+      s"$resultingCMap is not equal to $expectedCM")
   }
 }

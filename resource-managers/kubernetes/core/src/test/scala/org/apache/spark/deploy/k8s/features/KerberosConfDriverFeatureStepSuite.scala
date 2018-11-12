@@ -34,7 +34,6 @@ import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.HadoopConfSpec
-import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.assertHelper
 import org.apache.spark.deploy.k8s.features.hadooputils.{HadoopBootstrapUtil, HadoopKerberosLogin, KerberosConfigSpec}
 import org.apache.spark.deploy.k8s.security.KubernetesHadoopDelegationTokenManager
 
@@ -126,10 +125,12 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
     val pod = kConfStep.configurePod(sparkPod)
     KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
       Map("bootstrap-hconf" -> "true", "bootstrap-user" -> "true"))
-    assertHelper(kConfStep.getAdditionalPodSystemProperties(),
-      Map(KERBEROS_SPARK_USER_NAME -> jobUserName,
-        HADOOP_CONFIG_MAP_NAME -> newCMapName))
-    assertHelper(kConfStep.getAdditionalKubernetesResources(), List(newCMap))
+    val expectedProps = Map(KERBEROS_SPARK_USER_NAME -> jobUserName,
+      HADOOP_CONFIG_MAP_NAME -> newCMapName)
+    assert(kConfStep.getAdditionalPodSystemProperties() === expectedProps,
+      s"${kConfStep.getAdditionalPodSystemProperties()} is not equal to $expectedProps")
+    assert(kConfStep.getAdditionalKubernetesResources() === List(newCMap),
+      s"${kConfStep.getAdditionalKubernetesResources()} is not equal to ${List(newCMap)}")
   }
 
   test("running HadoopBootstrapUtil and HadoopKerberosLogin with" +
@@ -184,14 +185,16 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
     val pod = kConfStep.configurePod(sparkPod)
     KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
       Map("bootstrap-hconf" -> "true", "bootstrap-kerberos" -> "true"))
-    assertHelper(kConfStep.getAdditionalPodSystemProperties(),
-      Map(KERBEROS_DT_SECRET_NAME -> s"$dtSecretName-1",
-        KERBEROS_DT_SECRET_KEY -> s"$dtSecretKey-1",
-        KERBEROS_SPARK_USER_NAME -> jobUserName,
-        KRB5_CONFIG_MAP_NAME -> newKCMapName,
-        HADOOP_CONFIG_MAP_NAME -> newCMapName))
-    assertHelper(kConfStep.getAdditionalKubernetesResources(),
-      List(newCMap, krbMap, newDTSecret))
+    val expectedProps = Map(KERBEROS_DT_SECRET_NAME -> s"$dtSecretName-1",
+      KERBEROS_DT_SECRET_KEY -> s"$dtSecretKey-1",
+      KERBEROS_SPARK_USER_NAME -> jobUserName,
+      KRB5_CONFIG_MAP_NAME -> newKCMapName,
+      HADOOP_CONFIG_MAP_NAME -> newCMapName)
+    assert(kConfStep.getAdditionalPodSystemProperties() === expectedProps,
+      s"${kConfStep.getAdditionalPodSystemProperties()} is not equal to $expectedProps")
+    assert(kConfStep.getAdditionalKubernetesResources() === List(newCMap, krbMap, newDTSecret),
+      s"${kConfStep.getAdditionalKubernetesResources()} is not equal to" +
+        s"${List(newCMap, krbMap, newDTSecret)}")
   }
 
   test("running HadoopBootstrapUtil and HadoopKerberosLogin with" +
@@ -246,14 +249,16 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
     val pod = kConfStep.configurePod(sparkPod)
     KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
       Map("bootstrap-hconf" -> "true", "bootstrap-kerberos" -> "true"))
-    assertHelper(kConfStep.getAdditionalPodSystemProperties(),
-      Map(KERBEROS_DT_SECRET_NAME -> s"$dtSecretName-2",
-        KERBEROS_DT_SECRET_KEY -> s"$dtSecretKey-2",
-        KERBEROS_SPARK_USER_NAME -> jobUserName,
-        KRB5_CONFIG_MAP_NAME -> krbConfName,
-        HADOOP_CONFIG_MAP_NAME -> newCMapName))
-    assertHelper(kConfStep.getAdditionalKubernetesResources(),
-      List(newCMap, newDTSecret))
+    val expectedProps = Map(KERBEROS_DT_SECRET_NAME -> s"$dtSecretName-2",
+      KERBEROS_DT_SECRET_KEY -> s"$dtSecretKey-2",
+      KERBEROS_SPARK_USER_NAME -> jobUserName,
+      KRB5_CONFIG_MAP_NAME -> krbConfName,
+      HADOOP_CONFIG_MAP_NAME -> newCMapName)
+    assert(kConfStep.getAdditionalPodSystemProperties() === expectedProps,
+      s"${kConfStep.getAdditionalPodSystemProperties()} is not equal to $expectedProps")
+    assert(kConfStep.getAdditionalKubernetesResources() === List(newCMap, newDTSecret),
+      s"${kConfStep.getAdditionalKubernetesResources()} is not equal to" +
+        s"${List(newCMap, newDTSecret)}")
   }
 
   test("running HadoopBootstrapUtil with Secrets (krb5.conf cmap) (HADOOP_CONF_DIR cmap)") {
@@ -308,12 +313,14 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
     val pod = kConfStep.configurePod(sparkPod)
     KubernetesFeaturesTestUtils.podHasLabels(pod.pod,
       Map("bootstrap-hconf" -> "true"))
-    assertHelper(kConfStep.getAdditionalPodSystemProperties(),
-      Map(KERBEROS_DT_SECRET_NAME -> s"$dtSecretName-3",
-        KERBEROS_DT_SECRET_KEY -> s"$dtSecretKey-3",
-        KERBEROS_SPARK_USER_NAME -> jobUserName,
-        KRB5_CONFIG_MAP_NAME -> krbConfName,
-        HADOOP_CONFIG_MAP_NAME -> hConfName))
-    assertHelper(kConfStep.getAdditionalKubernetesResources(), List())
+    val expectedProps = Map(KERBEROS_DT_SECRET_NAME -> s"$dtSecretName-3",
+      KERBEROS_DT_SECRET_KEY -> s"$dtSecretKey-3",
+      KERBEROS_SPARK_USER_NAME -> jobUserName,
+      KRB5_CONFIG_MAP_NAME -> krbConfName,
+      HADOOP_CONFIG_MAP_NAME -> hConfName)
+    assert(kConfStep.getAdditionalPodSystemProperties() === expectedProps,
+      s"${kConfStep.getAdditionalPodSystemProperties()} is not equal to $expectedProps")
+    assert(kConfStep.getAdditionalKubernetesResources() === List(),
+      s"${kConfStep.getAdditionalKubernetesResources()} is not equal to ${List()}")
   }
 }
