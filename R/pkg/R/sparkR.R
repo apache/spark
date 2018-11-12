@@ -283,7 +283,7 @@ sparkR.session <- function(
   enableHiveSupport = TRUE,
   ...) {
 
-  if (utils::compareVersion(R.version$minor, "4.0") == -1) {
+  if (utils::compareVersion(paste0(R.version$major, ".", R.version$minor), "3.4.0") == -1) {
     warning("R prior to version 3.4 is deprecated as of Spark 3.0.")
   }
 
