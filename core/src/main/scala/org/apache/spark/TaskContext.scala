@@ -97,13 +97,6 @@ abstract class TaskContext extends Serializable {
   def isInterrupted(): Boolean
 
   /**
-   * Returns true if the task is running locally in the driver program.
-   * @return false
-   */
-  @deprecated("Local execution was removed, so this always returns false", "2.0.0")
-  def isRunningLocally(): Boolean
-
-  /**
    * Adds a (Java friendly) listener to be executed on task completion.
    * This will be called in all situations - success, failure, or cancellation. Adding a listener
    * to an already completed task will result in that listener being called immediately.

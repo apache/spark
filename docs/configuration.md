@@ -445,7 +445,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The directory which is used to dump the profile result before driver exiting.
     The results will be dumped as separated file for each RDD. They can be loaded
-    by ptats.Stats(). If this is specified, the profile result will not be displayed
+    by <code>pstats.Stats()</code>. If this is specified, the profile result will not be displayed
     automatically.
   </td>
 </tr>
@@ -759,6 +759,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
     Compression will use <code>spark.io.compression.codec</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.allowErasureCoding</code></td>
+  <td>false</td>
+  <td>
+    Whether to allow event logs to use erasure coding, or turn erasure coding off, regardless of
+    filesystem defaults.  On HDFS, erasure coded files will not update as quickly as regular
+    replicated files, so the application updates will take longer to appear in the History Server.
+    Note that even if this is true, Spark will still not force the file to use erasure coding, it
+    will simply use filesystem defaults.
   </td>
 </tr>
 <tr>
@@ -1597,6 +1608,14 @@ Apart from these, the following properties are also available, and may be useful
     Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
     value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
     driver using more memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.blacklist.unschedulableTaskSetTimeout</code></td>
+  <td>120s</td>
+  <td>
+    The timeout in seconds to wait to acquire a new executor and schedule a task before aborting a
+    TaskSet which is unschedulable because of being completely blacklisted.
   </td>
 </tr>
 <tr>

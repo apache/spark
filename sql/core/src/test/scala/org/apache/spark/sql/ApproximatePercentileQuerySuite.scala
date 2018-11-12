@@ -208,7 +208,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
 
   test("percentile_approx(col, ...), input rows contains null, with out group by") {
     withTempView(table) {
-      (1 to 1000).map(new Integer(_)).flatMap(Seq(null: Integer, _)).toDF("col")
+      (1 to 1000).map(Integer.valueOf(_)).flatMap(Seq(null: Integer, _)).toDF("col")
         .createOrReplaceTempView(table)
       checkAnswer(
         spark.sql(
@@ -226,8 +226,8 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
     withTempView(table) {
       val rand = new java.util.Random()
       (1 to 1000)
-        .map(new Integer(_))
-        .map(v => (new Integer(v % 2), v))
+        .map(Integer.valueOf(_))
+        .map(v => (Integer.valueOf(v % 2), v))
         // Add some nulls
         .flatMap(Seq(_, (null: Integer, null: Integer)))
         .toDF("key", "value").createOrReplaceTempView(table)

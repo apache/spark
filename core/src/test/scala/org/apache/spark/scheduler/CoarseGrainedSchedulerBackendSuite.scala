@@ -30,6 +30,8 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer}
 class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext
     with Eventually {
 
+  private val executorUpTimeout = 60.seconds
+
   test("serialized task larger than max RPC message size") {
     val conf = new SparkConf
     conf.set("spark.rpc.message.maxSize", "1")
@@ -51,7 +53,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)
-    eventually(timeout(10.seconds)) {
+    eventually(timeout(executorUpTimeout)) {
       // Ensure all executors have been launched.
       assert(sc.getExecutorIds().length == 4)
     }
@@ -64,7 +66,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)
-    eventually(timeout(10.seconds)) {
+    eventually(timeout(executorUpTimeout)) {
       // Ensure all executors have been launched.
       assert(sc.getExecutorIds().length == 4)
     }
@@ -96,7 +98,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     try {
       sc.addSparkListener(listener)
-      eventually(timeout(10.seconds)) {
+      eventually(timeout(executorUpTimeout)) {
         // Ensure all executors have been launched.
         assert(sc.getExecutorIds().length == 4)
       }

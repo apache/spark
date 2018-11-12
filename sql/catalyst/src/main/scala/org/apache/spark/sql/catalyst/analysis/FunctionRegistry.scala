@@ -300,6 +300,9 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
+    expression[EveryAgg]("every"),
+    expression[AnyAgg]("any"),
+    expression[SomeAgg]("some"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -523,7 +526,9 @@ object FunctionRegistry {
     castAlias("string", StringType),
 
     // csv
-    expression[CsvToStructs]("from_csv")
+    expression[CsvToStructs]("from_csv"),
+    expression[SchemaOfCsv]("schema_of_csv"),
+    expression[StructsToCsv]("to_csv")
   )
 
   val builtin: SimpleFunctionRegistry = {

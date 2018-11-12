@@ -172,7 +172,7 @@
     <jersey.version>2.22.2</jersey.version>
     <joda.version>2.9.3</joda.version>
     <jodd.version>3.5.2</jodd.version>
-    <jsr305.version>1.3.9</jsr305.version>
+    <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.9.3</libthrift.version>
     <antlr4.version>4.7</antlr4.version>
     <jpam.version>1.1</jpam.version>
@@ -311,13 +311,13 @@
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
       </dependency>
-      <!-- This artifact is a shaded version of ASM 6.x. The POM that was used to produce this
-           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm6-shaded
+      <!-- This artifact is a shaded version of ASM 7.x. The POM that was used to produce this
+           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm7-shaded
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
       <dependency>
         <groupId>org.apache.xbean</groupId>
-        <artifactId>xbean-asm6-shaded</artifactId>
-        <version>4.8</version>
+        <artifactId>xbean-asm7-shaded</artifactId>
+        <version>4.12</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -581,7 +581,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.17.Final</version>
+        <version>4.1.30.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -2656,6 +2656,13 @@
       <id>kubernetes</id>
       <modules>
         <module>resource-managers/kubernetes/core</module>
+      </modules>
+    </profile>
+
+    <!-- generally not enabled for automated builds, but will run k8s tests -->
+    <profile>
+      <id>kubernetes-integration-tests</id>
+      <modules>
         <module>resource-managers/kubernetes/integration-tests</module>
       </modules>
     </profile>

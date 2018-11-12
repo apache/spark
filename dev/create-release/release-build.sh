@@ -326,7 +326,7 @@ if [[ "$1" == "package" ]]; then
     svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
     cd svn-spark
-    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION"
+    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION" --no-auth-cache
     cd ..
     rm -rf svn-spark
   fi
@@ -354,7 +354,7 @@ if [[ "$1" == "docs" ]]; then
     svn add "svn-spark/${DEST_DIR_NAME}-docs"
 
     cd svn-spark
-    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION docs"
+    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION docs" --no-auth-cache
     cd ..
     rm -rf svn-spark
   fi
@@ -388,9 +388,6 @@ if [[ "$1" == "publish-snapshot" ]]; then
   #./dev/change-scala-version.sh 2.12
   #$MVN -DzincPort=$ZINC_PORT --settings $tmp_settings \
   #  -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
-
-  # Clean-up Zinc nailgun process
-  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   rm $tmp_settings
   cd ..
@@ -435,9 +432,6 @@ if [[ "$1" == "publish-release" ]]; then
     $MVN -DzincPort=$((ZINC_PORT + 2)) -Dmaven.repo.local=$tmp_repo -Dscala-2.12 \
       -DskipTests $PUBLISH_PROFILES $SCALA_2_12_PROFILES clean install
   fi
-
-  # Clean-up Zinc nailgun process
-  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   ./dev/change-scala-version.sh 2.11
 

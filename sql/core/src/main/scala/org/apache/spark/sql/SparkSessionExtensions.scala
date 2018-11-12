@@ -20,6 +20,10 @@ package org.apache.spark.sql
 import scala.collection.mutable
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -68,6 +72,7 @@ class SparkSessionExtensions {
   type CheckRuleBuilder = SparkSession => LogicalPlan => Unit
   type StrategyBuilder = SparkSession => Strategy
   type ParserBuilder = (SparkSession, ParserInterface) => ParserInterface
+  type FunctionDescription = (FunctionIdentifier, ExpressionInfo, FunctionBuilder)
 
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
 
@@ -170,5 +175,22 @@ class SparkSessionExtensions {
    */
   def injectParser(builder: ParserBuilder): Unit = {
     parserBuilders += builder
+  }
+
+  private[this] val injectedFunctions = mutable.Buffer.empty[FunctionDescription]
+
+  private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
+    for ((name, expressionInfo, function) <- injectedFunctions) {
+      functionRegistry.registerFunction(name, expressionInfo, function)
+    }
+    functionRegistry
+  }
+
+  /**
+  * Injects a custom function into the [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]]
+  * at runtime for all sessions.
+  */
+  def injectFunction(functionDescription: FunctionDescription): Unit = {
+    injectedFunctions += functionDescription
   }
 }
