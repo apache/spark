@@ -154,7 +154,7 @@ writeToTempFileInArrow <- function(rdf, numPartitions) {
   # This is a workaround to avoid this error. Otherwise, we should directly load 'withr'
   # package, which CRAN complains about.
   defer_parent <- function(x, ...) {
-  if (requireNamespace1("withr", quietly = TRUE)) {
+    if (requireNamespace1("withr", quietly = TRUE)) {
       defer_parent <- get("defer_parent", envir = asNamespace("withr"), inherits = FALSE)
       defer_parent(x, ...)
     } else {
@@ -209,7 +209,7 @@ writeToTempFileInArrow <- function(rdf, numPartitions) {
       }
     })
 
-    return(fileName)
+    fileName
   } else {
     stop("'arrow' package should be installed.")
   }
@@ -300,7 +300,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                        "'spark.sql.execution.arrow.enabled' is set to true; however, ",
                        "failed, attempting non-optimization. Reason: ",
                        e))
-        return(FALSE)
+        FALSE
       })
     }
 
