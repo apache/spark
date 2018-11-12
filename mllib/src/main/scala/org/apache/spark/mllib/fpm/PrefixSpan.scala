@@ -174,6 +174,7 @@ class PrefixSpan private (
     val freqSequences = results.map { case (seq: Array[Int], count: Long) =>
       new FreqSequence(toPublicRepr(seq), count)
     }
+    dataInternalRepr.unpersist(false)
     new PrefixSpanModel(freqSequences)
   }
 
