@@ -44,4 +44,13 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
       checkAnswer(spark.table("t4"), Row(0, 0))
     }
   }
+
+  test("Null and '' values should not cause dynamic partition failure of string types") {
+    withTable("t1", "t2") {
+      spark.range(3).write.saveAsTable("t1")
+      spark.sql("select id, cast(case when id = 1 then '' else null end as string) as p" +
+        " from t1").write.partitionBy("p").saveAsTable("t2")
+      checkAnswer(spark.table("t2").sort("id"), Seq(Row(0, null), Row(1, null), Row(2, null)))
+    }
+  }
 }

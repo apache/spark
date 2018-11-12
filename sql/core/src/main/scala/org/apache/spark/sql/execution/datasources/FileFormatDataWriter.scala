@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.internal.io.FileCommitProtocol
@@ -220,24 +220,37 @@ class DynamicPartitionDataWriter(
 
     val bucketIdStr = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
 
-    // This must be in a form that matches our bucketing format. See BucketingUtils.
-    val ext = f"$bucketIdStr.c$fileCounter%03d" +
-      description.outputWriterFactory.getFileExtension(taskAttemptContext)
+    def getPath(concurrent: String = "") : String = {
+      // This must be in a form that matches our bucketing format. See BucketingUtils.
+      val ext = f"$bucketIdStr.c$fileCounter%03d$concurrent" +
+        description.outputWriterFactory.getFileExtension(taskAttemptContext)
 
-    val customPath = partDir.flatMap { dir =>
-      description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
+      val customPath = partDir.flatMap { dir =>
+        description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
+      }
+      if (customPath.isDefined) {
+        committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
+      } else {
+        committer.newTaskTempFile(taskAttemptContext, partDir, ext)
+      }
     }
-    val currentPath = if (customPath.isDefined) {
-      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
-    } else {
-      committer.newTaskTempFile(taskAttemptContext, partDir, ext)
+
+    var currentPath = getPath()
+    currentWriter = try {
+      description.outputWriterFactory.newInstance(
+        path = currentPath,
+        dataSchema = description.dataColumns.toStructType,
+        context = taskAttemptContext)
+    } catch {
+      case _: FileAlreadyExistsException =>
+        fileCounter += 1
+        currentPath = getPath(".concurrent")
+
+        description.outputWriterFactory.newInstance(
+          path = currentPath,
+          dataSchema = description.dataColumns.toStructType,
+          context = taskAttemptContext)
     }
-
-    currentWriter = description.outputWriterFactory.newInstance(
-      path = currentPath,
-      dataSchema = description.dataColumns.toStructType,
-      context = taskAttemptContext)
-
     statsTrackers.foreach(_.newFile(currentPath))
   }
 
