@@ -155,7 +155,7 @@ object FileSourceStrategy extends Strategy with Logging {
           case a: AttributeReference =>
             a.withName(l.output.find(_.semanticEquals(a)).get.name)
         }
-      }
+      }.filterNot(SubqueryExpression.hasSubquery)
 
       val partitionColumns =
         l.resolve(
@@ -163,7 +163,6 @@ object FileSourceStrategy extends Strategy with Logging {
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
         ExpressionSet(normalizedFilters
-          .filterNot(SubqueryExpression.hasSubquery(_))
           .filter(_.references.subsetOf(partitionSet)))
 
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")

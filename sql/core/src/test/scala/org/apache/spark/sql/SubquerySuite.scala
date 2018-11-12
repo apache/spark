@@ -1278,7 +1278,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       val subqueries = plan.queryExecution.executedPlan.collect {
         case p => p.subqueries
       }.flatten
-      assert(subqueries.length == 2 && subqueries.head.eq(subqueries(1)))
+      assert(subqueries.length == 1)
     }
   }
 }

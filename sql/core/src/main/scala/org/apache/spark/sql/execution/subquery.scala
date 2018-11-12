@@ -53,7 +53,6 @@ case class ScalarSubquery(
   override def nullable: Boolean = true
   override def toString: String = plan.simpleString
   override def withNewPlan(query: SubqueryExec): ScalarSubquery = copy(plan = query)
-  override def withNewExprId(): ScalarSubquery = copy(exprId = NamedExpression.newExprId)
 
   override def semanticEquals(other: Expression): Boolean = other match {
     case s: ScalarSubquery => plan.sameResult(s.plan)
@@ -124,7 +123,7 @@ case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
         val sameSchema = subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[SubqueryExec]())
         val sameResult = sameSchema.find(_.sameResult(sub.plan))
         if (sameResult.isDefined) {
-          sub.withNewPlan(sameResult.get).withNewExprId()
+          sub.withNewPlan(sameResult.get)
         } else {
           sameSchema += sub.plan
           sub

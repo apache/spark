@@ -47,7 +47,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
           case a: AttributeReference =>
             a.withName(logicalRelation.output.find(_.semanticEquals(a)).get.name)
         }
-      }
+      }.filterNot(SubqueryExpression.hasSubquery)
+
 
       val sparkSession = fsRelation.sparkSession
       val partitionColumns =
@@ -56,7 +57,6 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
         ExpressionSet(normalizedFilters
-          .filterNot(SubqueryExpression.hasSubquery(_))
           .filter(_.references.subsetOf(partitionSet)))
 
       if (partitionKeyFilters.nonEmpty) {
