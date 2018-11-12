@@ -557,13 +557,11 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-18004 limit + aggregates") {
-    withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "true") {
-      val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value").repartition(1)
-      val limit2Df = df.limit(2)
-      checkAnswer(
-        limit2Df.groupBy("id").count().select($"id"),
-        limit2Df.select($"id"))
-    }
+    val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value")
+    val limit2Df = df.limit(2)
+    checkAnswer(
+      limit2Df.groupBy("id").count().select($"id"),
+      limit2Df.select($"id"))
   }
 
   test("SPARK-17237 remove backticks in a pivot result schema") {
@@ -671,23 +669,19 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  Seq(true, false).foreach { codegen =>
-    test("SPARK-22951: dropDuplicates on empty dataFrames should produce correct aggregate " +
-      s"results when codegen is enabled: $codegen") {
-      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, codegen.toString)) {
-        // explicit global aggregations
-        val emptyAgg = Map.empty[String, String]
-        checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.groupBy().agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.groupBy().agg(count("*")), Seq(Row(0)))
-        checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(count("*")), Seq(Row(0)))
+  testWithWholeStageCodegenOnAndOff("SPARK-22951: dropDuplicates on empty dataFrames " +
+    "should produce correct aggregate") { _ =>
+    // explicit global aggregations
+    val emptyAgg = Map.empty[String, String]
+    checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.groupBy().agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.groupBy().agg(count("*")), Seq(Row(0)))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(count("*")), Seq(Row(0)))
 
-        // global aggregation is converted to grouping aggregation:
-        assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
-      }
-    }
+    // global aggregation is converted to grouping aggregation:
+    assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
   }
 
   test("SPARK-21896: Window functions inside aggregate functions") {

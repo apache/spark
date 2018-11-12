@@ -67,6 +67,16 @@ private[sql] object OrcFilters {
     }
   }
 
+  // Since ORC 1.5.0 (ORC-323), we need to quote for column names with `.` characters
+  // in order to distinguish predicate pushdown for nested columns.
+  private def quoteAttributeNameIfNeeded(name: String) : String = {
+    if (!name.contains("`") && name.contains(".")) {
+      s"`$name`"
+    } else {
+      name
+    }
+  }
+
   /**
    * Create ORC filter as a SearchArgument instance.
    */
@@ -138,6 +148,23 @@ private[sql] object OrcFilters {
       dataTypeMap: Map[String, DataType],
       expression: Filter,
       builder: Builder): Option[Builder] = {
+    createBuilder(dataTypeMap, expression, builder, canPartialPushDownConjuncts = true)
+  }
+
+  /**
+   * @param dataTypeMap a map from the attribute name to its data type.
+   * @param expression the input filter predicates.
+   * @param builder the input SearchArgument.Builder.
+   * @param canPartialPushDownConjuncts whether a subset of conjuncts of predicates can be pushed
+   *                                    down safely. Pushing ONLY one side of AND down is safe to
+   *                                    do at the top level or none of its ancestors is NOT and OR.
+   * @return the builder so far.
+   */
+  private def createBuilder(
+      dataTypeMap: Map[String, DataType],
+      expression: Filter,
+      builder: Builder,
+      canPartialPushDownConjuncts: Boolean): Option[Builder] = {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute))
 
@@ -145,32 +172,52 @@ private[sql] object OrcFilters {
 
     expression match {
       case And(left, right) =>
-        // At here, it is not safe to just convert one side if we do not understand the
-        // other side. Here is an example used to explain the reason.
+        // At here, it is not safe to just convert one side and remove the other side
+        // if we do not understand what the parent filters are.
+        //
+        // Here is an example used to explain the reason.
         // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
         // convert b in ('1'). If we only convert a = 2, we will end up with a filter
         // NOT(a = 2), which will generate wrong results.
-        // Pushing one side of AND down is only safe to do at the top level.
-        // You can see ParquetRelation's initializeLocalJobFunc method as an example.
-        for {
-          _ <- buildSearchArgument(dataTypeMap, left, newBuilder)
-          _ <- buildSearchArgument(dataTypeMap, right, newBuilder)
-          lhs <- buildSearchArgument(dataTypeMap, left, builder.startAnd())
-          rhs <- buildSearchArgument(dataTypeMap, right, lhs)
-        } yield rhs.end()
+        //
+        // Pushing one side of AND down is only safe to do at the top level or in the child
+        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
+        // can be safely removed.
+        val leftBuilderOption =
+          createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts)
+        val rightBuilderOption =
+          createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts)
+        (leftBuilderOption, rightBuilderOption) match {
+          case (Some(_), Some(_)) =>
+            for {
+              lhs <- createBuilder(dataTypeMap, left,
+                builder.startAnd(), canPartialPushDownConjuncts)
+              rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts)
+            } yield rhs.end()
+
+          case (Some(_), None) if canPartialPushDownConjuncts =>
+            createBuilder(dataTypeMap, left, builder, canPartialPushDownConjuncts)
+
+          case (None, Some(_)) if canPartialPushDownConjuncts =>
+            createBuilder(dataTypeMap, right, builder, canPartialPushDownConjuncts)
+
+          case _ => None
+        }
 
       case Or(left, right) =>
         for {
-          _ <- buildSearchArgument(dataTypeMap, left, newBuilder)
-          _ <- buildSearchArgument(dataTypeMap, right, newBuilder)
-          lhs <- buildSearchArgument(dataTypeMap, left, builder.startOr())
-          rhs <- buildSearchArgument(dataTypeMap, right, lhs)
+          _ <- createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts = false)
+          _ <- createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts = false)
+          lhs <- createBuilder(dataTypeMap, left,
+            builder.startOr(), canPartialPushDownConjuncts = false)
+          rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts = false)
         } yield rhs.end()
 
       case Not(child) =>
         for {
-          _ <- buildSearchArgument(dataTypeMap, child, newBuilder)
-          negate <- buildSearchArgument(dataTypeMap, child, builder.startNot())
+          _ <- createBuilder(dataTypeMap, child, newBuilder, canPartialPushDownConjuncts = false)
+          negate <- createBuilder(dataTypeMap,
+            child, builder.startNot(), canPartialPushDownConjuncts = false)
         } yield negate.end()
 
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
@@ -178,38 +225,47 @@ private[sql] object OrcFilters {
       // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().equals(attribute, getType(attribute), castedValue).end())
+        Some(builder.startAnd().equals(quotedName, getType(attribute), castedValue).end())
 
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().nullSafeEquals(attribute, getType(attribute), castedValue).end())
+        Some(builder.startAnd().nullSafeEquals(quotedName, getType(attribute), castedValue).end())
 
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().lessThan(attribute, getType(attribute), castedValue).end())
+        Some(builder.startAnd().lessThan(quotedName, getType(attribute), castedValue).end())
 
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startAnd().lessThanEquals(attribute, getType(attribute), castedValue).end())
+        Some(builder.startAnd().lessThanEquals(quotedName, getType(attribute), castedValue).end())
 
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startNot().lessThanEquals(attribute, getType(attribute), castedValue).end())
+        Some(builder.startNot().lessThanEquals(quotedName, getType(attribute), castedValue).end())
 
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValue = castLiteralValue(value, dataTypeMap(attribute))
-        Some(builder.startNot().lessThan(attribute, getType(attribute), castedValue).end())
+        Some(builder.startNot().lessThan(quotedName, getType(attribute), castedValue).end())
 
       case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().isNull(attribute, getType(attribute)).end())
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        Some(builder.startAnd().isNull(quotedName, getType(attribute)).end())
 
       case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().isNull(attribute, getType(attribute)).end())
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
+        Some(builder.startNot().isNull(quotedName, getType(attribute)).end())
 
       case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
+        val quotedName = quoteAttributeNameIfNeeded(attribute)
         val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
-        Some(builder.startAnd().in(attribute, getType(attribute),
+        Some(builder.startAnd().in(quotedName, getType(attribute),
           castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None

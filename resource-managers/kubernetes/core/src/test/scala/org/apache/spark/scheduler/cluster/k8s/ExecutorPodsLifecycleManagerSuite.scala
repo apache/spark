@@ -46,9 +46,6 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
   private var podOperations: PODS = _
 
   @Mock
-  private var executorBuilder: KubernetesExecutorBuilder = _
-
-  @Mock
   private var schedulerBackend: KubernetesClusterSchedulerBackend = _
 
   private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
@@ -64,7 +61,6 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     when(podOperations.withName(any(classOf[String]))).thenAnswer(namedPodsAnswer())
     eventHandlerUnderTest = new ExecutorPodsLifecycleManager(
       new SparkConf(),
-      executorBuilder,
       kubernetesClient,
       snapshotsStore,
       removedExecutorsCache)

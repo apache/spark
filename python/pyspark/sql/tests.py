@@ -80,7 +80,7 @@ _have_pandas = _pandas_requirement_message is None
 _have_pyarrow = _pyarrow_requirement_message is None
 _test_compiled = _test_not_compiled_message is None
 
-from pyspark import SparkContext
+from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
@@ -225,6 +225,63 @@ class SQLTestUtils(object):
                 else:
                     self.spark.conf.set(key, old_value)
 
+    @contextmanager
+    def database(self, *databases):
+        """
+        A convenient context manager to test with some specific databases. This drops the given
+        databases if exist and sets current database to "default" when it exits.
+        """
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
+
+        try:
+            yield
+        finally:
+            for db in databases:
+                self.spark.sql("DROP DATABASE IF EXISTS %s CASCADE" % db)
+            self.spark.catalog.setCurrentDatabase("default")
+
+    @contextmanager
+    def table(self, *tables):
+        """
+        A convenient context manager to test with some specific tables. This drops the given tables
+        if exist when it exits.
+        """
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
+
+        try:
+            yield
+        finally:
+            for t in tables:
+                self.spark.sql("DROP TABLE IF EXISTS %s" % t)
+
+    @contextmanager
+    def tempView(self, *views):
+        """
+        A convenient context manager to test with some specific views. This drops the given views
+        if exist when it exits.
+        """
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
+
+        try:
+            yield
+        finally:
+            for v in views:
+                self.spark.catalog.dropTempView(v)
+
+    @contextmanager
+    def function(self, *functions):
+        """
+        A convenient context manager to test with some specific functions. This drops the given
+        functions if exist when it exits.
+        """
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
+
+        try:
+            yield
+        finally:
+            for f in functions:
+                self.spark.sql("DROP FUNCTION IF EXISTS %s" % f)
+
 
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
     @classmethod
@@ -283,11 +340,56 @@ class DataTypeTests(unittest.TestCase):
         self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
 
 
+class SparkSessionBuilderTests(unittest.TestCase):
+
+    def test_create_spark_context_first_then_spark_session(self):
+        sc = None
+        session = None
+        try:
+            conf = SparkConf().set("key1", "value1")
+            sc = SparkContext('local[4]', "SessionBuilderTests", conf=conf)
+            session = SparkSession.builder.config("key2", "value2").getOrCreate()
+
+            self.assertEqual(session.conf.get("key1"), "value1")
+            self.assertEqual(session.conf.get("key2"), "value2")
+            self.assertEqual(session.sparkContext, sc)
+
+            self.assertFalse(sc.getConf().contains("key2"))
+            self.assertEqual(sc.getConf().get("key1"), "value1")
+        finally:
+            if session is not None:
+                session.stop()
+            if sc is not None:
+                sc.stop()
+
+    def test_another_spark_session(self):
+        session1 = None
+        session2 = None
+        try:
+            session1 = SparkSession.builder.config("key1", "value1").getOrCreate()
+            session2 = SparkSession.builder.config("key2", "value2").getOrCreate()
+
+            self.assertEqual(session1.conf.get("key1"), "value1")
+            self.assertEqual(session2.conf.get("key1"), "value1")
+            self.assertEqual(session1.conf.get("key2"), "value2")
+            self.assertEqual(session2.conf.get("key2"), "value2")
+            self.assertEqual(session1.sparkContext, session2.sparkContext)
+
+            self.assertEqual(session1.sparkContext.getConf().get("key1"), "value1")
+            self.assertFalse(session1.sparkContext.getConf().contains("key2"))
+        finally:
+            if session1 is not None:
+                session1.stop()
+            if session2 is not None:
+                session2.stop()
+
+
 class SQLTests(ReusedSQLTestCase):
 
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()
+        cls.spark.catalog._reset()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
@@ -302,12 +404,6 @@ class SQLTests(ReusedSQLTestCase):
         sqlContext1 = SQLContext(self.sc)
         sqlContext2 = SQLContext(self.sc)
         self.assertTrue(sqlContext1.sparkSession is sqlContext2.sparkSession)
-
-    def tearDown(self):
-        super(SQLTests, self).tearDown()
-
-        # tear down test_bucketed_write state
-        self.spark.sql("DROP TABLE IF EXISTS pyspark_bucket")
 
     def test_row_should_be_read_only(self):
         row = Row(a=1, b=2)
@@ -429,11 +525,12 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(row[0], 4)
 
     def test_udf2(self):
-        self.spark.catalog.registerFunction("strlen", lambda string: len(string), IntegerType())
-        self.spark.createDataFrame(self.sc.parallelize([Row(a="test")]))\
-            .createOrReplaceTempView("test")
-        [res] = self.spark.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
-        self.assertEqual(4, res[0])
+        with self.tempView("test"):
+            self.spark.catalog.registerFunction("strlen", lambda string: len(string), IntegerType())
+            self.spark.createDataFrame(self.sc.parallelize([Row(a="test")]))\
+                .createOrReplaceTempView("test")
+            [res] = self.spark.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
+            self.assertEqual(4, res[0])
 
     def test_udf3(self):
         two_args = self.spark.catalog.registerFunction(
@@ -552,20 +649,86 @@ class SQLTests(ReusedSQLTestCase):
         df = left.crossJoin(right).filter(f("a", "b"))
         self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
+    def test_udf_in_join_condition(self):
+        # regression test for SPARK-25314
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1)])
+        right = self.spark.createDataFrame([Row(b=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, f("a", "b"))
+        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            self.assertEqual(df.collect(), [Row(a=1, b=1)])
+
+    def test_udf_in_left_semi_join_condition(self):
+        # regression test for SPARK-25314
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, f("a", "b"), "leftsemi")
+        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
+
+    def test_udf_and_common_filter_in_join_condition(self):
+        # regression test for SPARK-25314
+        # test the complex scenario with both udf and common filter
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, [f("a", "b"), left.a1 == right.b1])
+        # do not need spark.sql.crossJoin.enabled=true for udf is not the only join condition.
+        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1, b=1, b1=1, b2=1)])
+
+    def test_udf_and_common_filter_in_left_semi_join_condition(self):
+        # regression test for SPARK-25314
+        # test the complex scenario with both udf and common filter
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+        df = left.join(right, [f("a", "b"), left.a1 == right.b1], "left_semi")
+        # do not need spark.sql.crossJoin.enabled=true for udf is not the only join condition.
+        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1)])
+
+    def test_udf_not_supported_in_join_condition(self):
+        # regression test for SPARK-25314
+        # test python udf is not supported in join type besides left_semi and inner join.
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a, b: a == b, BooleanType())
+
+        def runWithJoinType(join_type, type_string):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    'Using PythonUDF.*%s is not supported.' % type_string):
+                left.join(right, [f("a", "b"), left.a1 == right.b1], join_type).collect()
+        runWithJoinType("full", "FullOuter")
+        runWithJoinType("left", "LeftOuter")
+        runWithJoinType("right", "RightOuter")
+        runWithJoinType("leftanti", "LeftAnti")
+
     def test_udf_without_arguments(self):
         self.spark.catalog.registerFunction("foo", lambda: "bar")
         [row] = self.spark.sql("SELECT foo()").collect()
         self.assertEqual(row[0], "bar")
 
     def test_udf_with_array_type(self):
-        d = [Row(l=list(range(3)), d={"key": list(range(5))})]
-        rdd = self.sc.parallelize(d)
-        self.spark.createDataFrame(rdd).createOrReplaceTempView("test")
-        self.spark.catalog.registerFunction("copylist", lambda l: list(l), ArrayType(IntegerType()))
-        self.spark.catalog.registerFunction("maplen", lambda d: len(d), IntegerType())
-        [(l1, l2)] = self.spark.sql("select copylist(l), maplen(d) from test").collect()
-        self.assertEqual(list(range(3)), l1)
-        self.assertEqual(1, l2)
+        with self.tempView("test"):
+            d = [Row(l=list(range(3)), d={"key": list(range(5))})]
+            rdd = self.sc.parallelize(d)
+            self.spark.createDataFrame(rdd).createOrReplaceTempView("test")
+            self.spark.catalog.registerFunction(
+                "copylist", lambda l: list(l), ArrayType(IntegerType()))
+            self.spark.catalog.registerFunction("maplen", lambda d: len(d), IntegerType())
+            [(l1, l2)] = self.spark.sql("select copylist(l), maplen(d) from test").collect()
+            self.assertEqual(list(range(3)), l1)
+            self.assertEqual(1, l2)
 
     def test_broadcast_in_udf(self):
         bar = {"a": "aa", "b": "bb", "c": "abc"}
@@ -953,10 +1116,11 @@ class SQLTests(ReusedSQLTestCase):
         self.assertTrue(df.is_cached)
         self.assertEqual(2, df.count())
 
-        df.createOrReplaceTempView("temp")
-        df = self.spark.sql("select foo from temp")
-        df.count()
-        df.collect()
+        with self.tempView("temp"):
+            df.createOrReplaceTempView("temp")
+            df = self.spark.sql("select foo from temp")
+            df.count()
+            df.collect()
 
     def test_apply_schema_to_row(self):
         df = self.spark.read.json(self.sc.parallelize(["""{"a":2}"""]))
@@ -1029,17 +1193,90 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(rdd)
         self.assertEqual([], df.rdd.map(lambda r: r.l).first())
         self.assertEqual([None, ""], df.rdd.map(lambda r: r.s).collect())
-        df.createOrReplaceTempView("test")
-        result = self.spark.sql("SELECT l[0].a from test where d['key'].d = '2'")
-        self.assertEqual(1, result.head()[0])
+
+        with self.tempView("test"):
+            df.createOrReplaceTempView("test")
+            result = self.spark.sql("SELECT l[0].a from test where d['key'].d = '2'")
+            self.assertEqual(1, result.head()[0])
 
         df2 = self.spark.createDataFrame(rdd, samplingRatio=1.0)
         self.assertEqual(df.schema, df2.schema)
         self.assertEqual({}, df2.rdd.map(lambda r: r.d).first())
         self.assertEqual([None, ""], df2.rdd.map(lambda r: r.s).collect())
-        df2.createOrReplaceTempView("test2")
-        result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
-        self.assertEqual(1, result.head()[0])
+
+        with self.tempView("test2"):
+            df2.createOrReplaceTempView("test2")
+            result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
+            self.assertEqual(1, result.head()[0])
+
+    def test_infer_schema_specification(self):
+        from decimal import Decimal
+
+        class A(object):
+            def __init__(self):
+                self.a = 1
+
+        data = [
+            True,
+            1,
+            "a",
+            u"a",
+            datetime.date(1970, 1, 1),
+            datetime.datetime(1970, 1, 1, 0, 0),
+            1.0,
+            array.array("d", [1]),
+            [1],
+            (1, ),
+            {"a": 1},
+            bytearray(1),
+            Decimal(1),
+            Row(a=1),
+            Row("a")(1),
+            A(),
+        ]
+
+        df = self.spark.createDataFrame([data])
+        actual = list(map(lambda x: x.dataType.simpleString(), df.schema))
+        expected = [
+            'boolean',
+            'bigint',
+            'string',
+            'string',
+            'date',
+            'timestamp',
+            'double',
+            'array<double>',
+            'array<bigint>',
+            'struct<_1:bigint>',
+            'map<string,bigint>',
+            'binary',
+            'decimal(38,18)',
+            'struct<a:bigint>',
+            'struct<a:bigint>',
+            'struct<a:bigint>',
+        ]
+        self.assertEqual(actual, expected)
+
+        actual = list(df.first())
+        expected = [
+            True,
+            1,
+            'a',
+            u"a",
+            datetime.date(1970, 1, 1),
+            datetime.datetime(1970, 1, 1, 0, 0),
+            1.0,
+            [1.0],
+            [1],
+            Row(_1=1),
+            {"a": 1},
+            bytearray(b'\x00'),
+            Decimal('1.000000000000000000'),
+            Row(a=1),
+            Row(a=1),
+            Row(a=1),
+        ]
+        self.assertEqual(actual, expected)
 
     def test_infer_schema_not_enough_names(self):
         df = self.spark.createDataFrame([["a", "b"]], ["col1"])
@@ -1109,12 +1346,13 @@ class SQLTests(ReusedSQLTestCase):
              datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
         self.assertEqual(r, results.first())
 
-        df.createOrReplaceTempView("table2")
-        r = self.spark.sql("SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, " +
-                           "short1 + 1 AS short1, short2 - 1 AS short2, int1 - 1 AS int1, " +
-                           "float1 + 1.5 as float1 FROM table2").first()
+        with self.tempView("table2"):
+            df.createOrReplaceTempView("table2")
+            r = self.spark.sql("SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, " +
+                               "short1 + 1 AS short1, short2 - 1 AS short2, int1 - 1 AS int1, " +
+                               "float1 + 1.5 as float1 FROM table2").first()
 
-        self.assertEqual((126, -127, -32767, 32766, 2147483646, 2.5), tuple(r))
+            self.assertEqual((126, -127, -32767, 32766, 2147483646, 2.5), tuple(r))
 
     def test_struct_in_map(self):
         d = [Row(m={Row(i=1): Row(s="")})]
@@ -1127,10 +1365,12 @@ class SQLTests(ReusedSQLTestCase):
         row = Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})
         self.assertEqual(1, row.asDict()['l'][0].a)
         df = self.sc.parallelize([row]).toDF()
-        df.createOrReplaceTempView("test")
-        row = self.spark.sql("select l, d from test").head()
-        self.assertEqual(1, row.asDict()["l"][0].a)
-        self.assertEqual(1.0, row.asDict()['d']['key'].c)
+
+        with self.tempView("test"):
+            df.createOrReplaceTempView("test")
+            row = self.spark.sql("select l, d from test").head()
+            self.assertEqual(1, row.asDict()["l"][0].a)
+            self.assertEqual(1.0, row.asDict()['d']['key'].c)
 
     def test_udt(self):
         from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
@@ -1168,7 +1408,7 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(
             [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
             schema=schema)
-        df.show()
+        df.collect()
 
     def test_nested_udt_in_df(self):
         schema = StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT()))
@@ -1224,18 +1464,22 @@ class SQLTests(ReusedSQLTestCase):
         schema = df.schema
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), ExamplePointUDT)
-        df.createOrReplaceTempView("labeled_point")
-        point = self.spark.sql("SELECT point FROM labeled_point").head().point
-        self.assertEqual(point, ExamplePoint(1.0, 2.0))
+
+        with self.tempView("labeled_point"):
+            df.createOrReplaceTempView("labeled_point")
+            point = self.spark.sql("SELECT point FROM labeled_point").head().point
+            self.assertEqual(point, ExamplePoint(1.0, 2.0))
 
         row = Row(label=1.0, point=PythonOnlyPoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
         schema = df.schema
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), PythonOnlyUDT)
-        df.createOrReplaceTempView("labeled_point")
-        point = self.spark.sql("SELECT point FROM labeled_point").head().point
-        self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
+
+        with self.tempView("labeled_point"):
+            df.createOrReplaceTempView("labeled_point")
+            point = self.spark.sql("SELECT point FROM labeled_point").head().point
+            self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
     def test_apply_schema_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
@@ -1366,7 +1610,7 @@ class SQLTests(ReusedSQLTestCase):
         from pyspark.sql import functions
         self.assertEqual((0, u'99'),
                          tuple(g.agg(functions.first(df.key), functions.last(df.value)).first()))
-        self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
+        self.assertTrue(95 < g.agg(functions.approx_count_distinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
     def test_first_last_ignorenulls(self):
@@ -1498,8 +1742,7 @@ class SQLTests(ReusedSQLTestCase):
         from pyspark.sql.functions import array_contains
 
         df = self.spark.createDataFrame([(["1", "2", "3"],), ([],)], ['data'])
-        actual = df.select(array_contains(df.data, 1).alias('b')).collect()
-        # The value argument can be implicitly castable to the element's type of the array.
+        actual = df.select(array_contains(df.data, "1").alias('b')).collect()
         self.assertEqual([Row(b=True), Row(b=False)], actual)
 
     def test_between_function(self):
@@ -1962,6 +2205,9 @@ class SQLTests(ReusedSQLTestCase):
         def __setstate__(self, state):
             self.open_events_dir, self.process_events_dir, self.close_events_dir = state
 
+    # Those foreach tests are failed in Python 3.6 and macOS High Sierra by defined rules
+    # at http://sealiesoftware.com/blog/archive/2017/6/5/Objective-C_and_fork_in_macOS_1013.html
+    # To work around this, OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES.
     def test_streaming_foreach_with_simple_function(self):
         tester = self.ForeachWriterTester(self.spark)
 
@@ -2874,187 +3120,199 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_current_database(self):
         spark = self.spark
-        spark.catalog._reset()
-        self.assertEquals(spark.catalog.currentDatabase(), "default")
-        spark.sql("CREATE DATABASE some_db")
-        spark.catalog.setCurrentDatabase("some_db")
-        self.assertEquals(spark.catalog.currentDatabase(), "some_db")
-        self.assertRaisesRegexp(
-            AnalysisException,
-            "does_not_exist",
-            lambda: spark.catalog.setCurrentDatabase("does_not_exist"))
+        with self.database("some_db"):
+            self.assertEquals(spark.catalog.currentDatabase(), "default")
+            spark.sql("CREATE DATABASE some_db")
+            spark.catalog.setCurrentDatabase("some_db")
+            self.assertEquals(spark.catalog.currentDatabase(), "some_db")
+            self.assertRaisesRegexp(
+                AnalysisException,
+                "does_not_exist",
+                lambda: spark.catalog.setCurrentDatabase("does_not_exist"))
 
     def test_list_databases(self):
         spark = self.spark
-        spark.catalog._reset()
-        databases = [db.name for db in spark.catalog.listDatabases()]
-        self.assertEquals(databases, ["default"])
-        spark.sql("CREATE DATABASE some_db")
-        databases = [db.name for db in spark.catalog.listDatabases()]
-        self.assertEquals(sorted(databases), ["default", "some_db"])
+        with self.database("some_db"):
+            databases = [db.name for db in spark.catalog.listDatabases()]
+            self.assertEquals(databases, ["default"])
+            spark.sql("CREATE DATABASE some_db")
+            databases = [db.name for db in spark.catalog.listDatabases()]
+            self.assertEquals(sorted(databases), ["default", "some_db"])
 
     def test_list_tables(self):
         from pyspark.sql.catalog import Table
         spark = self.spark
-        spark.catalog._reset()
-        spark.sql("CREATE DATABASE some_db")
-        self.assertEquals(spark.catalog.listTables(), [])
-        self.assertEquals(spark.catalog.listTables("some_db"), [])
-        spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")
-        spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
-        spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
-        tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
-        tablesDefault = sorted(spark.catalog.listTables("default"), key=lambda t: t.name)
-        tablesSomeDb = sorted(spark.catalog.listTables("some_db"), key=lambda t: t.name)
-        self.assertEquals(tables, tablesDefault)
-        self.assertEquals(len(tables), 2)
-        self.assertEquals(len(tablesSomeDb), 2)
-        self.assertEquals(tables[0], Table(
-            name="tab1",
-            database="default",
-            description=None,
-            tableType="MANAGED",
-            isTemporary=False))
-        self.assertEquals(tables[1], Table(
-            name="temp_tab",
-            database=None,
-            description=None,
-            tableType="TEMPORARY",
-            isTemporary=True))
-        self.assertEquals(tablesSomeDb[0], Table(
-            name="tab2",
-            database="some_db",
-            description=None,
-            tableType="MANAGED",
-            isTemporary=False))
-        self.assertEquals(tablesSomeDb[1], Table(
-            name="temp_tab",
-            database=None,
-            description=None,
-            tableType="TEMPORARY",
-            isTemporary=True))
-        self.assertRaisesRegexp(
-            AnalysisException,
-            "does_not_exist",
-            lambda: spark.catalog.listTables("does_not_exist"))
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            with self.table("tab1", "some_db.tab2"):
+                with self.tempView("temp_tab"):
+                    self.assertEquals(spark.catalog.listTables(), [])
+                    self.assertEquals(spark.catalog.listTables("some_db"), [])
+                    spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")
+                    spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+                    spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
+                    tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
+                    tablesDefault = \
+                        sorted(spark.catalog.listTables("default"), key=lambda t: t.name)
+                    tablesSomeDb = \
+                        sorted(spark.catalog.listTables("some_db"), key=lambda t: t.name)
+                    self.assertEquals(tables, tablesDefault)
+                    self.assertEquals(len(tables), 2)
+                    self.assertEquals(len(tablesSomeDb), 2)
+                    self.assertEquals(tables[0], Table(
+                        name="tab1",
+                        database="default",
+                        description=None,
+                        tableType="MANAGED",
+                        isTemporary=False))
+                    self.assertEquals(tables[1], Table(
+                        name="temp_tab",
+                        database=None,
+                        description=None,
+                        tableType="TEMPORARY",
+                        isTemporary=True))
+                    self.assertEquals(tablesSomeDb[0], Table(
+                        name="tab2",
+                        database="some_db",
+                        description=None,
+                        tableType="MANAGED",
+                        isTemporary=False))
+                    self.assertEquals(tablesSomeDb[1], Table(
+                        name="temp_tab",
+                        database=None,
+                        description=None,
+                        tableType="TEMPORARY",
+                        isTemporary=True))
+                    self.assertRaisesRegexp(
+                        AnalysisException,
+                        "does_not_exist",
+                        lambda: spark.catalog.listTables("does_not_exist"))
 
     def test_list_functions(self):
         from pyspark.sql.catalog import Function
         spark = self.spark
-        spark.catalog._reset()
-        spark.sql("CREATE DATABASE some_db")
-        functions = dict((f.name, f) for f in spark.catalog.listFunctions())
-        functionsDefault = dict((f.name, f) for f in spark.catalog.listFunctions("default"))
-        self.assertTrue(len(functions) > 200)
-        self.assertTrue("+" in functions)
-        self.assertTrue("like" in functions)
-        self.assertTrue("month" in functions)
-        self.assertTrue("to_date" in functions)
-        self.assertTrue("to_timestamp" in functions)
-        self.assertTrue("to_unix_timestamp" in functions)
-        self.assertTrue("current_database" in functions)
-        self.assertEquals(functions["+"], Function(
-            name="+",
-            description=None,
-            className="org.apache.spark.sql.catalyst.expressions.Add",
-            isTemporary=True))
-        self.assertEquals(functions, functionsDefault)
-        spark.catalog.registerFunction("temp_func", lambda x: str(x))
-        spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
-        spark.sql("CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'")
-        newFunctions = dict((f.name, f) for f in spark.catalog.listFunctions())
-        newFunctionsSomeDb = dict((f.name, f) for f in spark.catalog.listFunctions("some_db"))
-        self.assertTrue(set(functions).issubset(set(newFunctions)))
-        self.assertTrue(set(functions).issubset(set(newFunctionsSomeDb)))
-        self.assertTrue("temp_func" in newFunctions)
-        self.assertTrue("func1" in newFunctions)
-        self.assertTrue("func2" not in newFunctions)
-        self.assertTrue("temp_func" in newFunctionsSomeDb)
-        self.assertTrue("func1" not in newFunctionsSomeDb)
-        self.assertTrue("func2" in newFunctionsSomeDb)
-        self.assertRaisesRegexp(
-            AnalysisException,
-            "does_not_exist",
-            lambda: spark.catalog.listFunctions("does_not_exist"))
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            functions = dict((f.name, f) for f in spark.catalog.listFunctions())
+            functionsDefault = dict((f.name, f) for f in spark.catalog.listFunctions("default"))
+            self.assertTrue(len(functions) > 200)
+            self.assertTrue("+" in functions)
+            self.assertTrue("like" in functions)
+            self.assertTrue("month" in functions)
+            self.assertTrue("to_date" in functions)
+            self.assertTrue("to_timestamp" in functions)
+            self.assertTrue("to_unix_timestamp" in functions)
+            self.assertTrue("current_database" in functions)
+            self.assertEquals(functions["+"], Function(
+                name="+",
+                description=None,
+                className="org.apache.spark.sql.catalyst.expressions.Add",
+                isTemporary=True))
+            self.assertEquals(functions, functionsDefault)
+
+            with self.function("func1", "some_db.func2"):
+                spark.catalog.registerFunction("temp_func", lambda x: str(x))
+                spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
+                spark.sql("CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'")
+                newFunctions = dict((f.name, f) for f in spark.catalog.listFunctions())
+                newFunctionsSomeDb = \
+                    dict((f.name, f) for f in spark.catalog.listFunctions("some_db"))
+                self.assertTrue(set(functions).issubset(set(newFunctions)))
+                self.assertTrue(set(functions).issubset(set(newFunctionsSomeDb)))
+                self.assertTrue("temp_func" in newFunctions)
+                self.assertTrue("func1" in newFunctions)
+                self.assertTrue("func2" not in newFunctions)
+                self.assertTrue("temp_func" in newFunctionsSomeDb)
+                self.assertTrue("func1" not in newFunctionsSomeDb)
+                self.assertTrue("func2" in newFunctionsSomeDb)
+                self.assertRaisesRegexp(
+                    AnalysisException,
+                    "does_not_exist",
+                    lambda: spark.catalog.listFunctions("does_not_exist"))
 
     def test_list_columns(self):
         from pyspark.sql.catalog import Column
         spark = self.spark
-        spark.catalog._reset()
-        spark.sql("CREATE DATABASE some_db")
-        spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
-        spark.sql("CREATE TABLE some_db.tab2 (nickname STRING, tolerance FLOAT) USING parquet")
-        columns = sorted(spark.catalog.listColumns("tab1"), key=lambda c: c.name)
-        columnsDefault = sorted(spark.catalog.listColumns("tab1", "default"), key=lambda c: c.name)
-        self.assertEquals(columns, columnsDefault)
-        self.assertEquals(len(columns), 2)
-        self.assertEquals(columns[0], Column(
-            name="age",
-            description=None,
-            dataType="int",
-            nullable=True,
-            isPartition=False,
-            isBucket=False))
-        self.assertEquals(columns[1], Column(
-            name="name",
-            description=None,
-            dataType="string",
-            nullable=True,
-            isPartition=False,
-            isBucket=False))
-        columns2 = sorted(spark.catalog.listColumns("tab2", "some_db"), key=lambda c: c.name)
-        self.assertEquals(len(columns2), 2)
-        self.assertEquals(columns2[0], Column(
-            name="nickname",
-            description=None,
-            dataType="string",
-            nullable=True,
-            isPartition=False,
-            isBucket=False))
-        self.assertEquals(columns2[1], Column(
-            name="tolerance",
-            description=None,
-            dataType="float",
-            nullable=True,
-            isPartition=False,
-            isBucket=False))
-        self.assertRaisesRegexp(
-            AnalysisException,
-            "tab2",
-            lambda: spark.catalog.listColumns("tab2"))
-        self.assertRaisesRegexp(
-            AnalysisException,
-            "does_not_exist",
-            lambda: spark.catalog.listColumns("does_not_exist"))
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            with self.table("tab1", "some_db.tab2"):
+                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+                spark.sql(
+                    "CREATE TABLE some_db.tab2 (nickname STRING, tolerance FLOAT) USING parquet")
+                columns = sorted(spark.catalog.listColumns("tab1"), key=lambda c: c.name)
+                columnsDefault = \
+                    sorted(spark.catalog.listColumns("tab1", "default"), key=lambda c: c.name)
+                self.assertEquals(columns, columnsDefault)
+                self.assertEquals(len(columns), 2)
+                self.assertEquals(columns[0], Column(
+                    name="age",
+                    description=None,
+                    dataType="int",
+                    nullable=True,
+                    isPartition=False,
+                    isBucket=False))
+                self.assertEquals(columns[1], Column(
+                    name="name",
+                    description=None,
+                    dataType="string",
+                    nullable=True,
+                    isPartition=False,
+                    isBucket=False))
+                columns2 = \
+                    sorted(spark.catalog.listColumns("tab2", "some_db"), key=lambda c: c.name)
+                self.assertEquals(len(columns2), 2)
+                self.assertEquals(columns2[0], Column(
+                    name="nickname",
+                    description=None,
+                    dataType="string",
+                    nullable=True,
+                    isPartition=False,
+                    isBucket=False))
+                self.assertEquals(columns2[1], Column(
+                    name="tolerance",
+                    description=None,
+                    dataType="float",
+                    nullable=True,
+                    isPartition=False,
+                    isBucket=False))
+                self.assertRaisesRegexp(
+                    AnalysisException,
+                    "tab2",
+                    lambda: spark.catalog.listColumns("tab2"))
+                self.assertRaisesRegexp(
+                    AnalysisException,
+                    "does_not_exist",
+                    lambda: spark.catalog.listColumns("does_not_exist"))
 
     def test_cache(self):
         spark = self.spark
-        spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab1")
-        spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab2")
-        self.assertFalse(spark.catalog.isCached("tab1"))
-        self.assertFalse(spark.catalog.isCached("tab2"))
-        spark.catalog.cacheTable("tab1")
-        self.assertTrue(spark.catalog.isCached("tab1"))
-        self.assertFalse(spark.catalog.isCached("tab2"))
-        spark.catalog.cacheTable("tab2")
-        spark.catalog.uncacheTable("tab1")
-        self.assertFalse(spark.catalog.isCached("tab1"))
-        self.assertTrue(spark.catalog.isCached("tab2"))
-        spark.catalog.clearCache()
-        self.assertFalse(spark.catalog.isCached("tab1"))
-        self.assertFalse(spark.catalog.isCached("tab2"))
-        self.assertRaisesRegexp(
-            AnalysisException,
-            "does_not_exist",
-            lambda: spark.catalog.isCached("does_not_exist"))
-        self.assertRaisesRegexp(
-            AnalysisException,
-            "does_not_exist",
-            lambda: spark.catalog.cacheTable("does_not_exist"))
-        self.assertRaisesRegexp(
-            AnalysisException,
-            "does_not_exist",
-            lambda: spark.catalog.uncacheTable("does_not_exist"))
+        with self.tempView("tab1", "tab2"):
+            spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab1")
+            spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab2")
+            self.assertFalse(spark.catalog.isCached("tab1"))
+            self.assertFalse(spark.catalog.isCached("tab2"))
+            spark.catalog.cacheTable("tab1")
+            self.assertTrue(spark.catalog.isCached("tab1"))
+            self.assertFalse(spark.catalog.isCached("tab2"))
+            spark.catalog.cacheTable("tab2")
+            spark.catalog.uncacheTable("tab1")
+            self.assertFalse(spark.catalog.isCached("tab1"))
+            self.assertTrue(spark.catalog.isCached("tab2"))
+            spark.catalog.clearCache()
+            self.assertFalse(spark.catalog.isCached("tab1"))
+            self.assertFalse(spark.catalog.isCached("tab2"))
+            self.assertRaisesRegexp(
+                AnalysisException,
+                "does_not_exist",
+                lambda: spark.catalog.isCached("does_not_exist"))
+            self.assertRaisesRegexp(
+                AnalysisException,
+                "does_not_exist",
+                lambda: spark.catalog.cacheTable("does_not_exist"))
+            self.assertRaisesRegexp(
+                AnalysisException,
+                "does_not_exist",
+                lambda: spark.catalog.uncacheTable("does_not_exist"))
 
     def test_read_text_file_list(self):
         df = self.spark.read.text(['python/test_support/sql/text-test.txt',
@@ -3179,37 +3437,38 @@ class SQLTests(ReusedSQLTestCase):
             num = len([c for c in cols if c.name in names and c.isBucket])
             return num
 
-        # Test write with one bucketing column
-        df.write.bucketBy(3, "x").mode("overwrite").saveAsTable("pyspark_bucket")
-        self.assertEqual(count_bucketed_cols(["x"]), 1)
-        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+        with self.table("pyspark_bucket"):
+            # Test write with one bucketing column
+            df.write.bucketBy(3, "x").mode("overwrite").saveAsTable("pyspark_bucket")
+            self.assertEqual(count_bucketed_cols(["x"]), 1)
+            self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
-        # Test write two bucketing columns
-        df.write.bucketBy(3, "x", "y").mode("overwrite").saveAsTable("pyspark_bucket")
-        self.assertEqual(count_bucketed_cols(["x", "y"]), 2)
-        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+            # Test write two bucketing columns
+            df.write.bucketBy(3, "x", "y").mode("overwrite").saveAsTable("pyspark_bucket")
+            self.assertEqual(count_bucketed_cols(["x", "y"]), 2)
+            self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
-        # Test write with bucket and sort
-        df.write.bucketBy(2, "x").sortBy("z").mode("overwrite").saveAsTable("pyspark_bucket")
-        self.assertEqual(count_bucketed_cols(["x"]), 1)
-        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+            # Test write with bucket and sort
+            df.write.bucketBy(2, "x").sortBy("z").mode("overwrite").saveAsTable("pyspark_bucket")
+            self.assertEqual(count_bucketed_cols(["x"]), 1)
+            self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
-        # Test write with a list of columns
-        df.write.bucketBy(3, ["x", "y"]).mode("overwrite").saveAsTable("pyspark_bucket")
-        self.assertEqual(count_bucketed_cols(["x", "y"]), 2)
-        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+            # Test write with a list of columns
+            df.write.bucketBy(3, ["x", "y"]).mode("overwrite").saveAsTable("pyspark_bucket")
+            self.assertEqual(count_bucketed_cols(["x", "y"]), 2)
+            self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
-        # Test write with bucket and sort with a list of columns
-        (df.write.bucketBy(2, "x")
-            .sortBy(["y", "z"])
-            .mode("overwrite").saveAsTable("pyspark_bucket"))
-        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+            # Test write with bucket and sort with a list of columns
+            (df.write.bucketBy(2, "x")
+                .sortBy(["y", "z"])
+                .mode("overwrite").saveAsTable("pyspark_bucket"))
+            self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
-        # Test write with bucket and sort with multiple columns
-        (df.write.bucketBy(2, "x")
-            .sortBy("y", "z")
-            .mode("overwrite").saveAsTable("pyspark_bucket"))
-        self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+            # Test write with bucket and sort with multiple columns
+            (df.write.bucketBy(2, "x")
+                .sortBy("y", "z")
+                .mode("overwrite").saveAsTable("pyspark_bucket"))
+            self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
     def _to_pandas(self):
         from datetime import datetime, date
@@ -3493,6 +3752,31 @@ class SQLTests(ReusedSQLTestCase):
                     self.assertEquals(None, df._repr_html_())
                     self.assertEquals(expected, df.__repr__())
 
+    # SPARK-25591
+    def test_same_accumulator_in_udfs(self):
+        from pyspark.sql.functions import udf
+
+        data_schema = StructType([StructField("a", IntegerType(), True),
+                                  StructField("b", IntegerType(), True)])
+        data = self.spark.createDataFrame([[1, 2]], schema=data_schema)
+
+        test_accum = self.sc.accumulator(0)
+
+        def first_udf(x):
+            test_accum.add(1)
+            return x
+
+        def second_udf(x):
+            test_accum.add(100)
+            return x
+
+        func_udf = udf(first_udf, IntegerType())
+        func_udf2 = udf(second_udf, IntegerType())
+        data = data.withColumn("out1", func_udf(data["a"]))
+        data = data.withColumn("out2", func_udf2(data["b"]))
+        data.collect()
+        self.assertEqual(test_accum.value, 101)
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
@@ -3633,6 +3917,48 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                 "The callback from the query execution listener should be called after 'toPandas'")
 
 
+class SparkExtensionsTest(unittest.TestCase):
+    # These tests are separate because it uses 'spark.sql.extensions' which is
+    # static and immutable. This can't be set or unset, for example, via `spark.conf`.
+
+    @classmethod
+    def setUpClass(cls):
+        import glob
+        from pyspark.find_spark_home import _find_spark_home
+
+        SPARK_HOME = _find_spark_home()
+        filename_pattern = (
+            "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
+            "SparkSessionExtensionSuite.class")
+        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
+            raise unittest.SkipTest(
+                "'org.apache.spark.sql.SparkSessionExtensionSuite' is not "
+                "available. Will skip the related tests.")
+
+        # Note that 'spark.sql.extensions' is a static immutable configuration.
+        cls.spark = SparkSession.builder \
+            .master("local[4]") \
+            .appName(cls.__name__) \
+            .config(
+                "spark.sql.extensions",
+                "org.apache.spark.sql.MyExtensions") \
+            .getOrCreate()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.spark.stop()
+
+    def test_use_custom_class_for_extensions(self):
+        self.assertTrue(
+            self.spark._jsparkSession.sessionState().planner().strategies().contains(
+                self.spark._jvm.org.apache.spark.sql.MySparkStrategy(self.spark._jsparkSession)),
+            "MySparkStrategy not found in active planner strategies")
+        self.assertTrue(
+            self.spark._jsparkSession.sessionState().analyzer().extendedResolutionRules().contains(
+                self.spark._jvm.org.apache.spark.sql.MyRule(self.spark._jsparkSession)),
+            "MyRule not found in extended resolution rules")
+
+
 class SparkSessionTests(PySparkTestCase):
 
     # This test is separate because it's closely related with session's start and stop.
@@ -3657,6 +3983,157 @@ class SparkSessionTests(PySparkTestCase):
             self.assertTrue(jsession.equals(spark._jvm.SparkSession.getDefaultSession().get()))
         finally:
             spark.stop()
+
+
+class SparkSessionTests2(unittest.TestCase):
+
+    def test_active_session(self):
+        spark = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        try:
+            activeSession = SparkSession.getActiveSession()
+            df = activeSession.createDataFrame([(1, 'Alice')], ['age', 'name'])
+            self.assertEqual(df.collect(), [Row(age=1, name=u'Alice')])
+        finally:
+            spark.stop()
+
+    def test_get_active_session_when_no_active_session(self):
+        active = SparkSession.getActiveSession()
+        self.assertEqual(active, None)
+        spark = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        active = SparkSession.getActiveSession()
+        self.assertEqual(active, spark)
+        spark.stop()
+        active = SparkSession.getActiveSession()
+        self.assertEqual(active, None)
+
+    def test_SparkSession(self):
+        spark = SparkSession.builder \
+            .master("local") \
+            .config("some-config", "v2") \
+            .getOrCreate()
+        try:
+            self.assertEqual(spark.conf.get("some-config"), "v2")
+            self.assertEqual(spark.sparkContext._conf.get("some-config"), "v2")
+            self.assertEqual(spark.version, spark.sparkContext.version)
+            spark.sql("CREATE DATABASE test_db")
+            spark.catalog.setCurrentDatabase("test_db")
+            self.assertEqual(spark.catalog.currentDatabase(), "test_db")
+            spark.sql("CREATE TABLE table1 (name STRING, age INT) USING parquet")
+            self.assertEqual(spark.table("table1").columns, ['name', 'age'])
+            self.assertEqual(spark.range(3).count(), 3)
+        finally:
+            spark.stop()
+
+    def test_global_default_session(self):
+        spark = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        try:
+            self.assertEqual(SparkSession.builder.getOrCreate(), spark)
+        finally:
+            spark.stop()
+
+    def test_default_and_active_session(self):
+        spark = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        activeSession = spark._jvm.SparkSession.getActiveSession()
+        defaultSession = spark._jvm.SparkSession.getDefaultSession()
+        try:
+            self.assertEqual(activeSession, defaultSession)
+        finally:
+            spark.stop()
+
+    def test_config_option_propagated_to_existing_session(self):
+        session1 = SparkSession.builder \
+            .master("local") \
+            .config("spark-config1", "a") \
+            .getOrCreate()
+        self.assertEqual(session1.conf.get("spark-config1"), "a")
+        session2 = SparkSession.builder \
+            .config("spark-config1", "b") \
+            .getOrCreate()
+        try:
+            self.assertEqual(session1, session2)
+            self.assertEqual(session1.conf.get("spark-config1"), "b")
+        finally:
+            session1.stop()
+
+    def test_new_session(self):
+        session = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        newSession = session.newSession()
+        try:
+            self.assertNotEqual(session, newSession)
+        finally:
+            session.stop()
+            newSession.stop()
+
+    def test_create_new_session_if_old_session_stopped(self):
+        session = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        session.stop()
+        newSession = SparkSession.builder \
+            .master("local") \
+            .getOrCreate()
+        try:
+            self.assertNotEqual(session, newSession)
+        finally:
+            newSession.stop()
+
+    def test_active_session_with_None_and_not_None_context(self):
+        from pyspark.context import SparkContext
+        from pyspark.conf import SparkConf
+        sc = None
+        session = None
+        try:
+            sc = SparkContext._active_spark_context
+            self.assertEqual(sc, None)
+            activeSession = SparkSession.getActiveSession()
+            self.assertEqual(activeSession, None)
+            sparkConf = SparkConf()
+            sc = SparkContext.getOrCreate(sparkConf)
+            activeSession = sc._jvm.SparkSession.getActiveSession()
+            self.assertFalse(activeSession.isDefined())
+            session = SparkSession(sc)
+            activeSession = sc._jvm.SparkSession.getActiveSession()
+            self.assertTrue(activeSession.isDefined())
+            activeSession2 = SparkSession.getActiveSession()
+            self.assertNotEqual(activeSession2, None)
+        finally:
+            if session is not None:
+                session.stop()
+            if sc is not None:
+                sc.stop()
+
+
+class SparkSessionTests3(ReusedSQLTestCase):
+
+    def test_get_active_session_after_create_dataframe(self):
+        session2 = None
+        try:
+            activeSession1 = SparkSession.getActiveSession()
+            session1 = self.spark
+            self.assertEqual(session1, activeSession1)
+            session2 = self.spark.newSession()
+            activeSession2 = SparkSession.getActiveSession()
+            self.assertEqual(session1, activeSession2)
+            self.assertNotEqual(session2, activeSession2)
+            session2.createDataFrame([(1, 'Alice')], ['age', 'name'])
+            activeSession3 = SparkSession.getActiveSession()
+            self.assertEqual(session2, activeSession3)
+            session1.createDataFrame([(1, 'Alice')], ['age', 'name'])
+            activeSession4 = SparkSession.getActiveSession()
+            self.assertEqual(session1, activeSession4)
+        finally:
+            if session2 is not None:
+                session2.stop()
 
 
 class UDFInitializationTests(unittest.TestCase):
@@ -5415,32 +5892,81 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             .withColumn("v", explode(col('vs'))).drop('vs')
 
     def test_supported_types(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
-        df = self.data.withColumn("arr", array(col("id")))
+        from decimal import Decimal
+        from distutils.version import LooseVersion
+        import pyarrow as pa
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        values = [
+            1, 2, 3,
+            4, 5, 1.1,
+            2.2, Decimal(1.123),
+            [1, 2, 2], True, 'hello'
+        ]
+        output_fields = [
+            ('id', IntegerType()), ('byte', ByteType()), ('short', ShortType()),
+            ('int', IntegerType()), ('long', LongType()), ('float', FloatType()),
+            ('double', DoubleType()), ('decim', DecimalType(10, 3)),
+            ('array', ArrayType(IntegerType())), ('bool', BooleanType()), ('str', StringType())
+        ]
+
+        # TODO: Add BinaryType to variables above once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) >= LooseVersion("0.10.0"):
+            values.append(bytearray([0x01, 0x02]))
+            output_fields.append(('bin', BinaryType()))
+
+        output_schema = StructType([StructField(*x) for x in output_fields])
+        df = self.spark.createDataFrame([values], schema=output_schema)
 
         # Different forms of group map pandas UDF, results of these are the same
-
-        output_schema = StructType(
-            [StructField('id', LongType()),
-             StructField('v', IntegerType()),
-             StructField('arr', ArrayType(LongType())),
-             StructField('v1', DoubleType()),
-             StructField('v2', LongType())])
-
         udf1 = pandas_udf(
-            lambda pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            lambda pdf: pdf.assign(
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
+                bool=False if pdf.bool else True,
+                str=pdf.str + 'there',
+                array=pdf.array,
+            ),
             output_schema,
             PandasUDFType.GROUPED_MAP
         )
 
         udf2 = pandas_udf(
-            lambda _, pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            lambda _, pdf: pdf.assign(
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
+                bool=False if pdf.bool else True,
+                str=pdf.str + 'there',
+                array=pdf.array,
+            ),
             output_schema,
             PandasUDFType.GROUPED_MAP
         )
 
         udf3 = pandas_udf(
-            lambda key, pdf: pdf.assign(id=key[0], v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            lambda key, pdf: pdf.assign(
+                id=key[0],
+                byte=pdf.byte * 2,
+                short=pdf.short * 2,
+                int=pdf.int * 2,
+                long=pdf.long * 2,
+                float=pdf.float * 2,
+                double=pdf.double * 2,
+                decim=pdf.decim * 2,
+                bool=False if pdf.bool else True,
+                str=pdf.str + 'there',
+                array=pdf.array,
+            ),
             output_schema,
             PandasUDFType.GROUPED_MAP
         )
@@ -5483,8 +6009,9 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, 'f must be either SQL_BATCHED_UDF or '
-                                                     'SQL_SCALAR_PANDAS_UDF'):
+            with self.assertRaisesRegexp(
+                    ValueError,
+                    'f.*SQL_BATCHED_UDF.*SQL_SCALAR_PANDAS_UDF.*SQL_GROUPED_AGG_PANDAS_UDF.*'):
                 self.spark.catalog.registerFunction("foo_udf", foo_udf)
 
     def test_decorator(self):
@@ -5604,24 +6131,26 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
                     pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
+        from distutils.version import LooseVersion
+        import pyarrow as pa
         from pyspark.sql.functions import pandas_udf, PandasUDFType
-        schema = StructType(
-            [StructField("id", LongType(), True),
-             StructField("map", MapType(StringType(), IntegerType()), True)])
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    NotImplementedError,
-                    'Invalid returnType.*grouped map Pandas UDF.*MapType'):
-                pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
-        schema = StructType(
-            [StructField("id", LongType(), True),
-             StructField("arr_ts", ArrayType(TimestampType()), True)])
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    NotImplementedError,
-                    'Invalid returnType.*grouped map Pandas UDF.*ArrayType.*TimestampType'):
-                pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
+        common_err_msg = 'Invalid returnType.*grouped map Pandas UDF.*'
+        unsupported_types = [
+            StructField('map', MapType(StringType(), IntegerType())),
+            StructField('arr_ts', ArrayType(TimestampType())),
+            StructField('null', NullType()),
+        ]
+
+        # TODO: Remove this if-statement once minimum pyarrow version is 0.10.0
+        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
+            unsupported_types.append(StructField('bin', BinaryType()))
+
+        for unsupported_type in unsupported_types:
+            schema = StructType([StructField('id', LongType(), True), unsupported_type])
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(NotImplementedError, common_err_msg):
+                    pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
@@ -5800,7 +6329,8 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         import pandas as pd
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        with self.sql_conf({"spark.sql.execution.pandas.groupedMap.assignColumnsByPosition": True}):
+        with self.sql_conf({
+                "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}):
 
             @pandas_udf("a string, b float", PandasUDFType.GROUPED_MAP)
             def foo(_):
@@ -6296,6 +6826,21 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                     AnalysisException,
                     'mixture.*aggregate function.*group aggregate pandas UDF'):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
+
+    def test_register_vectorized_udf_basic(self):
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.rdd import PythonEvalType
+
+        sum_pandas_udf = pandas_udf(
+            lambda v: v.sum(), "integer", PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+
+        self.assertEqual(sum_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+        group_agg_pandas_udf = self.spark.udf.register("sum_pandas_udf", sum_pandas_udf)
+        self.assertEqual(group_agg_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+        q = "SELECT sum_pandas_udf(v1) FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2"
+        actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
+        expected = [1, 5]
+        self.assertEqual(actual, expected)
 
 
 @unittest.skipIf(

@@ -39,7 +39,7 @@ class ColumnStatsSuite extends SparkFunSuite {
     val columnStatsName = columnStatsClass.getSimpleName
 
     test(s"$columnStatsName: empty") {
-      val columnStats = columnStatsClass.newInstance()
+      val columnStats = columnStatsClass.getConstructor().newInstance()
       columnStats.collectedStatistics.zip(initialStatistics).foreach {
         case (actual, expected) => assert(actual === expected)
       }
@@ -48,7 +48,7 @@ class ColumnStatsSuite extends SparkFunSuite {
     test(s"$columnStatsName: non-empty") {
       import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 
-      val columnStats = columnStatsClass.newInstance()
+      val columnStats = columnStatsClass.getConstructor().newInstance()
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 

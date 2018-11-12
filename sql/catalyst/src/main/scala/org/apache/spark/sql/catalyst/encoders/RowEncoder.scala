@@ -58,12 +58,10 @@ object RowEncoder {
   def apply(schema: StructType): ExpressionEncoder[Row] = {
     val cls = classOf[Row]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    val serializer = serializerFor(AssertNotNull(inputObject, Seq("top level row object")), schema)
-    val deserializer = deserializerFor(schema)
+    val serializer = serializerFor(inputObject, schema)
+    val deserializer = deserializerFor(GetColumnByOrdinal(0, serializer.dataType), schema)
     new ExpressionEncoder[Row](
-      schema,
-      flat = false,
-      serializer.asInstanceOf[CreateNamedStruct].flatten,
+      serializer,
       deserializer,
       ClassTag(cls))
   }
@@ -171,7 +169,7 @@ object RowEncoder {
 
       if (inputObject.nullable) {
         If(IsNull(inputObject),
-          Literal.create(null, inputType),
+          Literal.create(null, nonNullOutput.dataType),
           nonNullOutput)
       } else {
         nonNullOutput
@@ -187,7 +185,9 @@ object RowEncoder {
         val convertedField = if (field.nullable) {
           If(
             Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
-            Literal.create(null, field.dataType),
+            // Because we strip UDTs, `field.dataType` can be different from `fieldValue.dataType`.
+            // We should use `fieldValue.dataType` here.
+            Literal.create(null, fieldValue.dataType),
             fieldValue
           )
         } else {
@@ -198,7 +198,7 @@ object RowEncoder {
 
       if (inputObject.nullable) {
         If(IsNull(inputObject),
-          Literal.create(null, inputType),
+          Literal.create(null, nonNullOutput.dataType),
           nonNullOutput)
       } else {
         nonNullOutput
@@ -235,13 +235,9 @@ object RowEncoder {
     case udt: UserDefinedType[_] => ObjectType(udt.userClass)
   }
 
-  private def deserializerFor(schema: StructType): Expression = {
+  private def deserializerFor(input: Expression, schema: StructType): Expression = {
     val fields = schema.zipWithIndex.map { case (f, i) =>
-      val dt = f.dataType match {
-        case p: PythonUserDefinedType => p.sqlType
-        case other => other
-      }
-      deserializerFor(GetColumnByOrdinal(i, dt))
+      deserializerFor(GetStructField(input, i))
     }
     CreateExternalRow(fields, schema)
   }

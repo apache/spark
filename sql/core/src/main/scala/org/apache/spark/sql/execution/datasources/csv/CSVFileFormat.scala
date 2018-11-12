@@ -26,6 +26,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityGenerator, UnivocityParser}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -130,7 +131,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
           "df.filter($\"_corrupt_record\".isNotNull).count()."
       )
     }
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
 
     (file: PartitionedFile) => {
@@ -139,14 +139,16 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         parsedOptions)
+      val schema = if (columnPruning) requiredSchema else dataSchema
+      val isStartOfFile = file.start == 0
+      val headerChecker = new CSVHeaderChecker(
+        schema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)
       CSVDataSource(parsedOptions).readFile(
         conf,
         file,
         parser,
-        requiredSchema,
-        dataSchema,
-        caseSensitive,
-        columnPruning)
+        headerChecker,
+        requiredSchema)
     }
   }
 

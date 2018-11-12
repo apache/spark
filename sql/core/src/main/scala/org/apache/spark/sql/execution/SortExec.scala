@@ -39,7 +39,7 @@ case class SortExec(
     global: Boolean,
     child: SparkPlan,
     testSpillFrequency: Int = 0)
-  extends UnaryExecNode with CodegenSupport {
+  extends UnaryExecNode with BlockingOperatorWithCodegen {
 
   override def output: Seq[Attribute] = child.output
 
@@ -124,14 +124,6 @@ case class SortExec(
   // Name of sorter variable used in codegen.
   private var sorterVariable: String = _
 
-  // The result rows come from the sort buffer, so this operator doesn't need to copy its result
-  // even if its child does.
-  override def needCopyResult: Boolean = false
-
-  // Sort operator always consumes all the input rows before outputting any result, so we don't need
-  // a stop check before sorting.
-  override def needStopCheck: Boolean = false
-
   override protected def doProduce(ctx: CodegenContext): String = {
     val needToSort =
       ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "needToSort", v => s"$v = true;")
@@ -172,7 +164,7 @@ case class SortExec(
        |   $needToSort = false;
        | }
        |
-       | while ($sortedIterator.hasNext()) {
+       | while ($limitNotReachedCond $sortedIterator.hasNext()) {
        |   UnsafeRow $outputRow = (UnsafeRow)$sortedIterator.next();
        |   ${consume(ctx, null, outputRow)}
        |   if (shouldStop()) return;

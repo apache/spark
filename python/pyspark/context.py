@@ -192,9 +192,7 @@ class SparkContext(object):
         # If encryption is enabled, we need to setup a server in the jvm to read broadcast
         # data via a socket.
         # scala's mangled names w/ $ in them require special treatment.
-        encryption_conf = self._jvm.org.apache.spark.internal.config.__getattr__("package$")\
-            .__getattr__("MODULE$").IO_ENCRYPTION_ENABLED()
-        self._encryption_enabled = self._jsc.sc().conf().get(encryption_conf)
+        self._encryption_enabled = self._jvm.PythonUtils.getEncryptionEnabled(self._jsc)
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
@@ -539,8 +537,10 @@ class SparkContext(object):
             # parallelize from there.
             tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
             try:
-                serializer.dump_stream(data, tempFile)
-                tempFile.close()
+                try:
+                    serializer.dump_stream(data, tempFile)
+                finally:
+                    tempFile.close()
                 return reader_func(tempFile.name)
             finally:
                 # we eagerily reads the file so we can delete right after.
@@ -834,9 +834,11 @@ class SparkContext(object):
         first_jrdd_deserializer = rdds[0]._jrdd_deserializer
         if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
             rdds = [x._reserialize() for x in rdds]
-        first = rdds[0]._jrdd
-        rest = [x._jrdd for x in rdds[1:]]
-        return RDD(self._jsc.union(first, rest), self, rdds[0]._jrdd_deserializer)
+        cls = SparkContext._jvm.org.apache.spark.api.java.JavaRDD
+        jrdds = SparkContext._gateway.new_array(cls, len(rdds))
+        for i in range(0, len(rdds)):
+            jrdds[i] = rdds[i]._jrdd
+        return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value):
         """
