@@ -265,7 +265,9 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
 
 private class UndeserializableException extends Exception {
   private def readObject(in: ObjectInputStream): Unit = {
+    // scalastyle:off throwerror
     throw new NoClassDefFoundError()
+    // scalastyle:on throwerror
   }
 }
 

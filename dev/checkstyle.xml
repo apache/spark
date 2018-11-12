@@ -65,8 +65,8 @@
     </module>
 
     <module name="RegexpSingleline">
-        <property name="format" value="throw new OutOfMemoryError"/>
-        <property name="message" value="Throw OutOfMemoryError will kill entire executor, replace it with SparkOutOfMemoryError."/>
+        <property name="format" value="throw new \w+Error\("/>
+        <property name="message" value="Avoid throwing error in application code."/>
     </module>
 
     <module name="NewlineAtEndOfFile"/>

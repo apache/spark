@@ -607,9 +607,11 @@ object DecisionTreeSuite extends SparkFunSuite {
       checkEqual(a.topNode, b.topNode)
     } catch {
       case ex: Exception =>
+        // scalastyle:off throwerror
         throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
           "TREE A:\n" + a.toDebugString + "\n" +
           "TREE B:\n" + b.toDebugString + "\n", ex)
+        // scalastyle:on throwerror
     }
   }
 
@@ -624,6 +626,7 @@ object DecisionTreeSuite extends SparkFunSuite {
     assert(a.impurity === b.impurity)
     assert(a.isLeaf === b.isLeaf)
     assert(a.split === b.split)
+    // scalastyle:off throwerror
     (a.stats, b.stats) match {
       // TODO: Check other fields besides the information gain.
       case (Some(aStats), Some(bStats)) => assert(aStats.gain === bStats.gain)
@@ -643,5 +646,6 @@ object DecisionTreeSuite extends SparkFunSuite {
       case _ => throw new AssertionError("Only one instance has rightNode defined. " +
         s"(a.rightNode: ${a.rightNode}, b.rightNode: ${b.rightNode})")
     }
+    // scalastyle:on throwerror
   }
 }

@@ -240,15 +240,14 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="notthrowoutofmemory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">throw new OutOfMemoryError</parameter></parameters>
+  <check customId="throwerror" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">throw new \w+Error\(</parameter></parameters>
     <customMessage><![CDATA[
-      Are you sure that you want to throw OutOfMemoryError? It will kill the hole executor, you should use
-      SparkOutOfMemoryError instead.
-      If you must throw OutOfMemoryError, wrap the code block with
-      // scalastyle:off notthrowoutofmemory
-      throw new OutOfMemoryError(...)
-      // scalastyle:on notthrowoutofmemory
+      Are you sure that you want to throw Error? In most cases, you should use appropriate Exception instead.
+      If you must throw Error, wrap the code block with
+      // scalastyle:off throwerror
+      throw new XXXError(...)
+      // scalastyle:on throwerror
     ]]></customMessage>
   </check>
 

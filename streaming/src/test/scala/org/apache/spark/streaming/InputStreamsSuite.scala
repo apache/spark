@@ -592,7 +592,9 @@ class TestServer(portToBind: Int = 0) extends Logging {
     servingThread.start()
     if (!waitForStart(10000)) {
       stop()
+      // scalastyle:off throwerror
       throw new AssertionError("Timeout: TestServer cannot start in 10 seconds")
+      // scalastyle:off throwerror
     }
   }
 

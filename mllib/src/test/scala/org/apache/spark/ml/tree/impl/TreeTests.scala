@@ -112,9 +112,11 @@ private[ml] object TreeTests extends SparkFunSuite {
       checkEqual(a.rootNode, b.rootNode)
     } catch {
       case ex: Exception =>
+        // scalastyle:off throwerror
         throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
           "TREE A:\n" + a.toDebugString + "\n" +
           "TREE B:\n" + b.toDebugString + "\n", ex)
+        // scalastyle:on throwerror
     }
   }
 
@@ -133,7 +135,9 @@ private[ml] object TreeTests extends SparkFunSuite {
         checkEqual(aye.rightChild, bee.rightChild)
       case (aye: LeafNode, bee: LeafNode) => // do nothing
       case _ =>
+        // scalastyle:off throwerror
         throw new AssertionError("Found mismatched nodes")
+        // scalastyle:on throwerror
     }
   }
 
@@ -148,8 +152,10 @@ private[ml] object TreeTests extends SparkFunSuite {
       }
       assert(a.treeWeights === b.treeWeights)
     } catch {
+      // scalastyle:off throwerror
       case ex: Exception => throw new AssertionError(
         "checkEqual failed since the two tree ensembles were not identical")
+      // scalastyle:on throwerror
     }
   }
 

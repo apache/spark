@@ -413,6 +413,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model = RandomForest.run(input, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = 42, instr = None, prune = false).head
 
+    // scalastyle:off throwerror
     model.rootNode match {
       case n: InternalNode => n.split match {
         case s: CategoricalSplit =>
@@ -421,6 +422,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       }
       case _ => throw new AssertionError("model.rootNode was not an InternalNode")
     }
+    // scalastyle:on throwerror
   }
 
   test("Second level node building with vs. without groups") {
@@ -444,7 +446,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(n.leftChild.isInstanceOf[InternalNode])
         assert(n.rightChild.isInstanceOf[InternalNode])
         Array(n.leftChild.asInstanceOf[InternalNode], n.rightChild.asInstanceOf[InternalNode])
+      // scalastyle:off throwerror
       case _ => throw new AssertionError("rootNode was not an InternalNode")
+      // scalastyle:on throwerror
     }
 
     // Single group second level tree construction.

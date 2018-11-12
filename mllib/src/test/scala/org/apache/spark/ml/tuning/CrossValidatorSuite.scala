@@ -190,8 +190,10 @@ class CrossValidatorSuite
         assert(lr.uid === lr2.uid)
         assert(lr.getMaxIter === lr2.getMaxIter)
       case other =>
+        // scalastyle:off throwerror
         throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
           s" LogisticRegression but found ${other.getClass.getName}")
+        // scalastyle:on throwerror
     }
 
     ValidatorParamsSuiteHelpers
@@ -273,6 +275,7 @@ class CrossValidatorSuite
     assert(evaluator.uid === evaluator2.uid)
     assert(evaluator.getMetricName === evaluator2.getMetricName)
 
+    // scalastyle:off throwerror
     cv2.getEstimator match {
       case ova2: OneVsRest =>
         assert(ova.uid === ova2.uid)
@@ -289,6 +292,7 @@ class CrossValidatorSuite
         throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
           s" OneVsRest but found ${other.getClass.getName}")
     }
+    // scalastyle:on throwerror
 
     ValidatorParamsSuiteHelpers
       .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
@@ -353,6 +357,7 @@ class CrossValidatorSuite
     ValidatorParamsSuiteHelpers
       .compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
 
+    // scalastyle:off throwerror
     cv2.getEstimator match {
       case pipeline2: Pipeline =>
         assert(pipeline.uid === pipeline2.uid)
@@ -380,6 +385,7 @@ class CrossValidatorSuite
         throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
           s" CrossValidator but found ${other.getClass.getName}")
     }
+    // scalastyle:on throwerror
   }
 
   test("read/write: CrossValidator fails for extraneous Param") {
@@ -433,8 +439,10 @@ class CrossValidatorSuite
         assert(lr.uid === lr2.uid)
         assert(lr.getThreshold === lr2.getThreshold)
       case other =>
+        // scalastyle:off throwerror
         throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
           s" LogisticRegression but found ${other.getClass.getName}")
+      // scalastyle:on throwerror
     }
 
    ValidatorParamsSuiteHelpers
@@ -447,8 +455,10 @@ class CrossValidatorSuite
         assert(lrModel.coefficients === lrModel2.coefficients)
         assert(lrModel.intercept === lrModel2.intercept)
       case other =>
+        // scalastyle:off throwerror
         throw new AssertionError(s"Loaded CrossValidator expected bestModel of type" +
           s" LogisticRegressionModel but found ${other.getClass.getName}")
+        // scalastyle:on throwerror
     }
     assert(cv.avgMetrics === cv2.avgMetrics)
   }
