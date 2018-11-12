@@ -283,6 +283,10 @@ sparkR.session <- function(
   enableHiveSupport = TRUE,
   ...) {
 
+  if (utils::compareVersion(R.version$minor, "4.0") == -1) {
+    warning("R prior to version 3.4 is deprecated as of Spark 3.0.")
+  }
+
   sparkConfigMap <- convertNamedListToEnv(sparkConfig)
   namedParams <- list(...)
   if (length(namedParams) > 0) {
