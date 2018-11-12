@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.Writer
 import java.util.Locale
 import java.util.function.Supplier
 
@@ -450,11 +451,11 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      writer: Writer,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
-    child.generateTreeString(depth, lastChildren, builder, verbose, "")
+      addSuffix: Boolean = false): Unit = {
+    child.generateTreeString(depth, lastChildren, writer, verbose, prefix = "", addSuffix = false)
   }
 
   override def needCopyResult: Boolean = false
@@ -726,11 +727,11 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      writer: Writer,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
-    child.generateTreeString(depth, lastChildren, builder, verbose, s"*($codegenStageId) ")
+      addSuffix: Boolean = false): Unit = {
+    child.generateTreeString(depth, lastChildren, writer, verbose, s"*($codegenStageId) ", false)
   }
 
   override def needStopCheck: Boolean = true
