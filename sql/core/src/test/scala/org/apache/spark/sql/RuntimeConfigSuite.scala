@@ -68,4 +68,13 @@ class RuntimeConfigSuite extends SparkFunSuite {
     assert(!conf.isModifiable(""))
     assert(!conf.isModifiable("invalid config parameter"))
   }
+
+  test("reject SparkConf entries") {
+    val conf = newConf()
+
+    val ex = intercept[AnalysisException] {
+      conf.set("spark.task.cpus", 4)
+    }
+    assert(ex.getMessage.contains("spark config"))
+  }
 }

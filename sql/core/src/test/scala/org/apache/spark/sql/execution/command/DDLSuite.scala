@@ -2715,4 +2715,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("set command rejects SparkConf entries") {
+    val ex = intercept[AnalysisException] {
+      sql("SET spark.task.cpus = 4")
+    }
+    assert(ex.getMessage.contains("spark config"))
+  }
 }

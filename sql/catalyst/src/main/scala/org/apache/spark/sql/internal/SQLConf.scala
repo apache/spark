@@ -28,7 +28,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.{SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
@@ -65,7 +65,7 @@ object SQLConf {
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)
 
   def buildStaticConf(key: String): ConfigBuilder = {
-    ConfigBuilder(key).onCreate { entry =>
+    SparkConf.buildConf(key).onCreate { entry =>
       staticConfKeys.add(entry.key)
       SQLConf.register(entry)
     }
@@ -1594,6 +1594,14 @@ object SQLConf {
         "WHERE, which does not follow SQL standard.")
       .booleanConf
       .createWithDefault(false)
+
+  val SET_COMMAND_REJECTS_SPARK_CONFS =
+    buildConf("spark.sql.execution.setCommandRejectsSparkConfs")
+      .internal()
+      .doc("If it is set to true, SET command will fail when the key is registered as " +
+        "an SparkConf entry.")
+      .booleanConf
+      .createWithDefault(true)
 }
 
 /**
@@ -2008,6 +2016,8 @@ class SQLConf extends Serializable with Logging {
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
+
+  def setCommandRejectsSparkConfs: Boolean = getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CONFS)
 
   /** ********************** SQLConf functionality methods ************ */
 
