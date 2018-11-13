@@ -42,12 +42,12 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
       // The attribute name of predicate could be different than the one in schema in case of
       // case insensitive, we should change them to match the one in schema, so we donot need to
       // worry about case sensitivity anymore.
-      val normalizedFilters = filters.map { e =>
+      val normalizedFilters = filters.filterNot(SubqueryExpression.hasSubquery).map { e =>
         e transform {
           case a: AttributeReference =>
             a.withName(logicalRelation.output.find(_.semanticEquals(a)).get.name)
         }
-      }.filterNot(SubqueryExpression.hasSubquery)
+      }
 
 
       val sparkSession = fsRelation.sparkSession
