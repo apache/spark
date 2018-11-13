@@ -516,7 +516,8 @@ object KubernetesIntegrationTests {
       s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"
     ),
     // Force packaging before building images, so that the latest code is tested.
-    dockerBuild := dockerBuild.dependsOn(packageBin in Compile in assembly).value
+    dockerBuild := dockerBuild.dependsOn(packageBin in Compile in assembly)
+      .dependsOn(packageBin in Compile in examples).value
   )
 }
 
