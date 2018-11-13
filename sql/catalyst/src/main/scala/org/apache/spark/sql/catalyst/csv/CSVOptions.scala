@@ -25,6 +25,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
@@ -36,8 +37,19 @@ class CSVOptions(
   def this(
     parameters: Map[String, String],
     columnPruning: Boolean,
+    defaultTimeZoneId: String) = {
+    this(
+      CaseInsensitiveMap(parameters),
+      columnPruning,
+      defaultTimeZoneId,
+      SQLConf.get.columnNameOfCorruptRecord)
+  }
+
+  def this(
+    parameters: Map[String, String],
+    columnPruning: Boolean,
     defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String = "") = {
+    defaultColumnNameOfCorruptRecord: String) = {
       this(
         CaseInsensitiveMap(parameters),
         columnPruning,
