@@ -231,7 +231,8 @@ case class AlterTableAddColumnsCommand(
     }
 
     if (DDLUtils.isDatasourceTable(catalogTable)) {
-      DataSource.lookupDataSource(catalogTable.provider.get, conf).newInstance() match {
+      DataSource.lookupDataSource(catalogTable.provider.get, conf).
+        getConstructor().newInstance() match {
         // For datasource table, this command can only support the following File format.
         // TextFileFormat only default to one column "value"
         // Hive type is already considered as hive serde table, so the logic will not
