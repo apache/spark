@@ -200,27 +200,27 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     }
   }
 
-  private def writePlans(writer: Writer, maxFields: Option[Int]): Unit = {
+  private def writePlans(writer: Writer): Unit = {
     val (verbose, addSuffix) = (true, false)
 
     writer.write("== Parsed Logical Plan ==\n")
-    writeOrError(writer)(logical.treeString(_, verbose, addSuffix, maxFields))
+    writeOrError(writer)(logical.treeString(_, verbose, addSuffix))
     writer.write("\n== Analyzed Logical Plan ==\n")
     val analyzedOutput = stringOrError(Utils.truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", "))
     writer.write(analyzedOutput)
     writer.write("\n")
-    writeOrError(writer)(analyzed.treeString(_, verbose, addSuffix, maxFields))
+    writeOrError(writer)(analyzed.treeString(_, verbose, addSuffix))
     writer.write("\n== Optimized Logical Plan ==\n")
-    writeOrError(writer)(optimizedPlan.treeString(_, verbose, addSuffix, maxFields))
+    writeOrError(writer)(optimizedPlan.treeString(_, verbose, addSuffix))
     writer.write("\n== Physical Plan ==\n")
-    writeOrError(writer)(executedPlan.treeString(_, verbose, addSuffix, maxFields))
+    writeOrError(writer)(executedPlan.treeString(_, verbose, addSuffix))
   }
 
   override def toString: String = withRedaction {
     val writer = new StringBuilderWriter()
     try {
-      writePlans(writer, None)
+      writePlans(writer)
       writer.toString
     } finally {
       writer.close()
@@ -279,7 +279,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
 
       try {
-        writePlans(writer, Some(Int.MaxValue))
+        writePlans(writer)
         writer.write("\n== Whole Stage Codegen ==\n")
         org.apache.spark.sql.execution.debug.writeCodegen(writer, executedPlan)
       } finally {
