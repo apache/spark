@@ -1270,7 +1270,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-25482: Forbid pushdown to dattasources of filters containing subqueries") {
+  test("SPARK-25482: Forbid pushdown to datasources of filters containing subqueries") {
     withTempView("t1", "t2") {
       sql("create temporary view t1(a int) using parquet")
       sql("create temporary view t2(b int) using parquet")
