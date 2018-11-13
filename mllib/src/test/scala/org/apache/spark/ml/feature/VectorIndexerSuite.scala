@@ -285,7 +285,7 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
             assert(orig.indices.length == indexed.indices.length)
           case _ =>
             // should never happen
-            throw new IllegalAccessException("Unit test has a bug in it.")
+            fail("Unit test has a bug in it.")
         }
       }
     }
