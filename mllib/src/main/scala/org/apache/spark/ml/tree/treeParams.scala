@@ -538,7 +538,7 @@ private[ml] object GBTClassifierParams {
     Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams with TreeRegressorParams {
+private[ml] trait GBTClassifierParams extends GBTParams {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
@@ -564,6 +564,41 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeRegressorParams
       case _ =>
         // Should never happen because of check in setter method.
         throw new RuntimeException(s"GBTClassifier was given bad loss type: $getLossType")
+    }
+  }
+
+  /**
+   * Criterion used for information gain calculation (case-insensitive).
+   * Supported: "variance".
+   * (default = variance)
+   * @group param
+   */
+  final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
+    " information gain calculation (case-insensitive). Supported options:" +
+    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
+    (value: String) =>
+      TreeRegressorParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
+
+  setDefault(impurity -> "variance")
+
+  /**
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
+   * @group setParam
+   */
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
+  def setImpurity(value: String): this.type = set(impurity, value)
+
+  /** @group getParam */
+  final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
+
+  /** Convert new impurity to old impurity. */
+  private[ml] def getOldImpurity: OldImpurity = {
+    getImpurity match {
+      case "variance" => OldVariance
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(
+          s"GBTClassifierParams was given unrecognized impurity: $impurity")
     }
   }
 }
