@@ -2,550 +2,739 @@
 In Expression Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 bytes:                                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  101 /  138         98.7          10.1       1.0X
-InSet expression                               125 /  136         79.7          12.5       0.8X
+In expression                                   38 /   48        260.1           3.8       1.0X
+InSet expression                                33 /   37        300.5           3.3       1.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 bytes:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  101 /  111         99.3          10.1       1.0X
-InSet expression                               126 /  133         79.6          12.6       0.8X
+In expression                                   44 /   47        226.6           4.4       1.0X
+InSet expression                                37 /   39        270.8           3.7       1.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 bytes:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  176 /  183         56.9          17.6       1.0X
-InSet expression                               174 /  184         57.4          17.4       1.0X
+In expression                                   74 /   78        135.6           7.4       1.0X
+InSet expression                                48 /   51        210.4           4.8       1.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 bytes:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  299 /  312         33.5          29.9       1.0X
-InSet expression                               243 /  246         41.2          24.3       1.2X
+In expression                                  121 /  127         82.6          12.1       1.0X
+InSet expression                                72 /   75        138.1           7.2       1.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 bytes:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  512 /  518         19.5          51.2       1.0X
-InSet expression                               388 /  400         25.8          38.8       1.3X
+In expression                                  210 /  223         47.7          21.0       1.0X
+InSet expression                               123 /  130         81.2          12.3       1.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 bytes:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  854 /  866         11.7          85.4       1.0X
-InSet expression                               686 /  694         14.6          68.6       1.2X
+In expression                                  381 /  393         26.2          38.1       1.0X
+InSet expression                               218 /  229         45.8          21.8       1.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 shorts:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   59 /   62        169.6           5.9       1.0X
-InSet expression                               163 /  168         61.3          16.3       0.4X
+In expression                                   25 /   27        394.9           2.5       1.0X
+InSet expression                                25 /   27        397.6           2.5       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 shorts:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   76 /   78        132.0           7.6       1.0X
-InSet expression                               182 /  186         54.9          18.2       0.4X
+In expression                                   32 /   34        312.0           3.2       1.0X
+InSet expression                                25 /   27        403.0           2.5       1.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 shorts:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  126 /  128         79.4          12.6       1.0X
-InSet expression                               190 /  193         52.7          19.0       0.7X
+In expression                                   48 /   50        206.3           4.8       1.0X
+InSet expression                                23 /   24        438.9           2.3       2.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 shorts:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  227 /  227         44.1          22.7       1.0X
-InSet expression                               232 /  235         43.1          23.2       1.0X
+In expression                                   79 /   80        126.7           7.9       1.0X
+InSet expression                                26 /   27        389.1           2.6       3.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 shorts:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  408 /  414         24.5          40.8       1.0X
-InSet expression                               203 /  209         49.3          20.3       2.0X
+In expression                                  135 /  138         74.1          13.5       1.0X
+InSet expression                                27 /   28        375.5           2.7       5.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 shorts:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  762 /  765         13.1          76.2       1.0X
-InSet expression                               192 /  196         52.1          19.2       4.0X
+In expression                                  254 /  262         39.4          25.4       1.0X
+InSet expression                                29 /   31        339.5           2.9       8.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+450 shorts:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  721 /  724         13.9          72.1       1.0X
+InSet expression                                36 /   38        275.0           3.6      19.8X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+500 shorts:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  806 /  812         12.4          80.6       1.0X
+InSet expression                                38 /   40        264.7           3.8      21.3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+550 shorts:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  828 /  845         12.1          82.8       1.0X
+InSet expression                               188 /  194         53.3          18.8       4.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+5 shorts (non-compact):                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                   24 /   25        415.0           2.4       1.0X
+InSet expression                                24 /   25        419.2           2.4       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+10 shorts (non-compact):                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                   31 /   33        322.8           3.1       1.0X
+InSet expression                                27 /   28        368.6           2.7       1.1X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+25 shorts (non-compact):                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                   48 /   50        209.0           4.8       1.0X
+InSet expression                                31 /   32        327.6           3.1       1.6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+50 shorts (non-compact):                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                   77 /   79        129.4           7.7       1.0X
+InSet expression                                34 /   35        294.5           3.4       2.3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+100 shorts (non-compact):                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  135 /  137         74.1          13.5       1.0X
+InSet expression                                37 /   39        266.7           3.7       3.6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+200 shorts (non-compact):                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  253 /  257         39.5          25.3       1.0X
+InSet expression                                43 /   45        232.4           4.3       5.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+450 shorts (non-compact):                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  705 /  713         14.2          70.5       1.0X
+InSet expression                                55 /   57        182.9           5.5      12.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+500 shorts (non-compact):                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  756 /  765         13.2          75.6       1.0X
+InSet expression                                57 /   60        176.2           5.7      13.3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+550 shorts (non-compact):                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                               20240 / 20331          0.5        2024.0       1.0X
+InSet expression                               187 /  193         53.5          18.7     108.3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 ints:                                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   53 /   57        187.3           5.3       1.0X
-InSet expression                               156 /  160         63.9          15.6       0.3X
+In expression                                   24 /   25        421.8           2.4       1.0X
+InSet expression                                24 /   25        425.2           2.4       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 ints:                                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   70 /   74        142.4           7.0       1.0X
-InSet expression                               170 /  176         58.9          17.0       0.4X
+In expression                                   31 /   32        325.9           3.1       1.0X
+InSet expression                                24 /   24        423.8           2.4       1.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 ints:                                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  125 /  126         80.2          12.5       1.0X
-InSet expression                               174 /  179         57.4          17.4       0.7X
+In expression                                   47 /   48        212.5           4.7       1.0X
+InSet expression                                22 /   23        460.8           2.2       2.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 ints:                                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  220 /  222         45.5          22.0       1.0X
-InSet expression                               215 /  221         46.6          21.5       1.0X
+In expression                                   75 /   78        132.6           7.5       1.0X
+InSet expression                                25 /   25        407.6           2.5       3.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 ints:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  404 /  407         24.8          40.4       1.0X
-InSet expression                               189 /  192         53.0          18.9       2.1X
+In expression                                  133 /  139         75.2          13.3       1.0X
+InSet expression                                25 /   27        392.6           2.5       5.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 ints:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  760 /  764         13.2          76.0       1.0X
-InSet expression                               176 /  179         56.8          17.6       4.3X
+In expression                                  249 /  255         40.1          24.9       1.0X
+InSet expression                                28 /   29        361.0           2.8       9.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+450 ints:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  719 /  720         13.9          71.9       1.0X
+InSet expression                                34 /   35        296.4           3.4      21.3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+500 ints:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  821 /  829         12.2          82.1       1.0X
+InSet expression                                35 /   37        285.1           3.5      23.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+550 ints:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  831 /  866         12.0          83.1       1.0X
+InSet expression                               179 /  184         55.7          17.9       4.6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+5 ints (non-compact):                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                   21 /   22        468.7           2.1       1.0X
+InSet expression                                19 /   20        526.2           1.9       1.1X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+10 ints (non-compact):                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                   31 /   32        321.0           3.1       1.0X
+InSet expression                                19 /   20        522.6           1.9       1.6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+25 ints (non-compact):                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                   67 /   68        150.0           6.7       1.0X
+InSet expression                                28 /   30        354.2           2.8       2.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+50 ints (non-compact):                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  122 /  123         82.0          12.2       1.0X
+InSet expression                                29 /   30        347.0           2.9       4.2X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+100 ints (non-compact):                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  238 /  240         42.1          23.8       1.0X
+InSet expression                                37 /   40        273.0           3.7       6.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+200 ints (non-compact):                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  475 /  484         21.1          47.5       1.0X
+InSet expression                                44 /   45        228.9           4.4      10.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+450 ints (non-compact):                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                  931 /  984         10.7          93.1       1.0X
+InSet expression                                62 /   64        162.5           6.2      15.1X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+500 ints (non-compact):                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                 1036 / 1078          9.6         103.6       1.0X
+InSet expression                                63 /   66        158.1           6.3      16.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+550 ints (non-compact):                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                 1089 / 1124          9.2         108.9       1.0X
+InSet expression                               178 /  186         56.3          17.8       6.1X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 longs:                                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   50 /   52        200.3           5.0       1.0X
-InSet expression                               147 /  151         68.1          14.7       0.3X
+In expression                                   23 /   25        434.4           2.3       1.0X
+InSet expression                                91 /   96        110.2           9.1       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 longs:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   65 /   66        154.8           6.5       1.0X
-InSet expression                               162 /  166         61.6          16.2       0.4X
+In expression                                   21 /   22        476.9           2.1       1.0X
+InSet expression                               106 /  112         94.2          10.6       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 longs:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  117 /  119         85.1          11.7       1.0X
-InSet expression                               170 /  175         58.8          17.0       0.7X
+In expression                                   40 /   41        252.7           4.0       1.0X
+InSet expression                               107 /  111         93.4          10.7       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 longs:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  207 /  208         48.3          20.7       1.0X
-InSet expression                               211 /  214         47.4          21.1       1.0X
+In expression                                   67 /   69        148.6           6.7       1.0X
+InSet expression                               142 /  147         70.5          14.2       0.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 longs:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  387 /  389         25.9          38.7       1.0X
-InSet expression                               185 /  187         54.2          18.5       2.1X
+In expression                                  126 /  128         79.6          12.6       1.0X
+InSet expression                               114 /  118         88.0          11.4       1.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 longs:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  742 /  744         13.5          74.2       1.0X
-InSet expression                               172 /  173         58.3          17.2       4.3X
+In expression                                  243 /  248         41.2          24.3       1.0X
+InSet expression                               108 /  112         92.3          10.8       2.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 floats:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   88 /   91        113.0           8.8       1.0X
-InSet expression                               170 /  171         58.9          17.0       0.5X
+In expression                                   34 /   35        297.3           3.4       1.0X
+InSet expression                               107 /  111         93.3          10.7       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 floats:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  129 /  132         77.5          12.9       1.0X
-InSet expression                               188 /  189         53.2          18.8       0.7X
+In expression                                   51 /   52        196.6           5.1       1.0X
+InSet expression                               125 /  129         80.3          12.5       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 floats:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  243 /  244         41.2          24.3       1.0X
-InSet expression                               192 /  194         52.2          19.2       1.3X
+In expression                                  107 /  110         93.5          10.7       1.0X
+InSet expression                               129 /  135         77.5          12.9       0.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 floats:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  421 /  424         23.7          42.1       1.0X
-InSet expression                               237 /  240         42.2          23.7       1.8X
+In expression                                  201 /  205         49.7          20.1       1.0X
+InSet expression                               167 /  171         60.0          16.7       1.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 floats:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  775 /  777         12.9          77.5       1.0X
-InSet expression                               205 /  209         48.8          20.5       3.8X
+In expression                                  386 /  390         25.9          38.6       1.0X
+InSet expression                               132 /  139         75.8          13.2       2.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 floats:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                 3052 / 3151          3.3         305.2       1.0X
-InSet expression                               197 /  199         50.8          19.7      15.5X
+In expression                                 1776 / 1824          5.6         177.6       1.0X
+InSet expression                               126 /  131         79.7          12.6      14.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 doubles:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   82 /   84        121.6           8.2       1.0X
-InSet expression                               167 /  169         60.0          16.7       0.5X
+In expression                                   33 /   34        303.4           3.3       1.0X
+InSet expression                               104 /  109         96.2          10.4       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 doubles:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  124 /  131         80.3          12.4       1.0X
-InSet expression                               186 /  187         53.9          18.6       0.7X
+In expression                                   50 /   51        201.7           5.0       1.0X
+InSet expression                               122 /  126         82.2          12.2       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 doubles:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  237 /  239         42.1          23.7       1.0X
-InSet expression                               193 /  194         51.8          19.3       1.2X
+In expression                                  105 /  109         95.0          10.5       1.0X
+InSet expression                               124 /  130         80.8          12.4       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 doubles:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  416 /  418         24.0          41.6       1.0X
-InSet expression                               239 /  241         41.8          23.9       1.7X
+In expression                                  200 /  206         50.1          20.0       1.0X
+InSet expression                               164 /  171         60.8          16.4       1.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 doubles:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  771 /  774         13.0          77.1       1.0X
-InSet expression                               204 /  207         49.1          20.4       3.8X
+In expression                                  384 /  389         26.1          38.4       1.0X
+InSet expression                               126 /  132         79.6          12.6       3.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 doubles:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                 3755 / 3801          2.7         375.5       1.0X
-InSet expression                               194 /  197         51.5          19.4      19.3X
+In expression                                 2066 / 2108          4.8         206.6       1.0X
+InSet expression                               121 /  129         82.5          12.1      17.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 small decimals:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   46 /   49         21.6          46.4       1.0X
-InSet expression                               136 /  141          7.4         135.7       0.3X
+In expression                                   20 /   22         49.2          20.3       1.0X
+InSet expression                                72 /   79         13.9          72.1       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 small decimals:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   57 /   61         17.5          57.1       1.0X
-InSet expression                               137 /  140          7.3         137.2       0.4X
+In expression                                   24 /   27         40.9          24.5       1.0X
+InSet expression                                76 /   85         13.2          75.6       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 small decimals:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   89 /   92         11.2          89.4       1.0X
-InSet expression                               139 /  141          7.2         138.7       0.6X
+In expression                                   38 /   42         26.2          38.2       1.0X
+InSet expression                                79 /   86         12.7          78.8       0.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 small decimals:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  170 /  171          5.9         169.5       1.0X
-InSet expression                               146 /  148          6.9         145.8       1.2X
+In expression                                   88 /   94         11.3          88.3       1.0X
+InSet expression                                83 /   88         12.0          83.2       1.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 small decimals:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  429 /  431          2.3         429.2       1.0X
-InSet expression                               145 /  148          6.9         144.9       3.0X
+In expression                                  236 /  242          4.2         235.6       1.0X
+InSet expression                                82 /   88         12.2          82.0       2.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 small decimals:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  995 / 1207          1.0         995.0       1.0X
-InSet expression                               154 /  158          6.5         154.1       6.5X
+In expression                                  532 /  541          1.9         531.8       1.0X
+InSet expression                                87 /   92         11.5          87.1       6.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 large decimals:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  268 /  307          3.7         268.3       1.0X
-InSet expression                               171 /  176          5.8         171.1       1.6X
+In expression                                  138 /  143          7.2         138.3       1.0X
+InSet expression                                99 /  106         10.1          99.2       1.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 large decimals:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  455 /  458          2.2         455.2       1.0X
-InSet expression                               173 /  176          5.8         173.1       2.6X
+In expression                                  237 /  250          4.2         237.1       1.0X
+InSet expression                               100 /  107         10.0         100.2       2.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 large decimals:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                 1095 / 1099          0.9        1095.2       1.0X
-InSet expression                               179 /  183          5.6         178.7       6.1X
+In expression                                  575 /  593          1.7         575.3       1.0X
+InSet expression                               104 /  109          9.7         103.5       5.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 large decimals:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                 2099 / 2110          0.5        2098.6       1.0X
-InSet expression                               183 /  187          5.5         183.2      11.5X
+In expression                                 1133 / 1144          0.9        1132.8       1.0X
+InSet expression                               110 /  116          9.1         110.5      10.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 large decimals:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                 3885 / 3911          0.3        3885.4       1.0X
-InSet expression                               207 /  223          4.8         206.6      18.8X
+In expression                                 2234 / 2280          0.4        2234.1       1.0X
+InSet expression                               124 /  131          8.1         124.2      18.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 large decimals:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                 7759 / 7867          0.1        7759.2       1.0X
-InSet expression                               214 /  217          4.7         214.4      36.2X
+In expression                                 4547 / 4576          0.2        4547.2       1.0X
+InSet expression                               128 /  134          7.8         127.8      35.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 strings:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  126 /  127          7.9         126.0       1.0X
-InSet expression                               139 /  142          7.2         139.0       0.9X
+In expression                                   71 /   77         14.0          71.3       1.0X
+InSet expression                                86 /   91         11.6          86.2       0.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 strings:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  128 /  132          7.8         128.2       1.0X
-InSet expression                               142 /  144          7.0         142.0       0.9X
+In expression                                   78 /   80         12.9          77.7       1.0X
+InSet expression                                88 /   91         11.4          87.5       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 strings:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  151 /  153          6.6         150.9       1.0X
-InSet expression                               150 /  152          6.7         150.1       1.0X
+In expression                                   87 /   92         11.5          87.2       1.0X
+InSet expression                                93 /   96         10.7          93.2       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 strings:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  238 /  240          4.2         238.5       1.0X
-InSet expression                               152 /  154          6.6         152.4       1.6X
+In expression                                  113 /  117          8.9         112.6       1.0X
+InSet expression                                94 /   98         10.7          93.7       1.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 strings:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  431 /  432          2.3         431.2       1.0X
-InSet expression                               149 /  151          6.7         148.8       2.9X
+In expression                                  161 /  166          6.2         161.1       1.0X
+InSet expression                                90 /   95         11.1          90.1       1.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 strings:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  822 / 1060          1.2         821.7       1.0X
-InSet expression                               153 /  162          6.5         152.9       5.4X
+In expression                                  453 /  461          2.2         452.9       1.0X
+InSet expression                                94 /   97         10.7          93.8       4.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 timestamps:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   42 /   44        240.5           4.2       1.0X
-InSet expression                               158 /  161         63.5          15.8       0.3X
+In expression                                   22 /   24        447.5           2.2       1.0X
+InSet expression                               100 /  103         99.8          10.0       0.2X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 timestamps:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   57 /   59        174.5           5.7       1.0X
-InSet expression                               173 /  176         57.8          17.3       0.3X
+In expression                                   32 /   35        312.0           3.2       1.0X
+InSet expression                               108 /  114         92.3          10.8       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 timestamps:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  110 /  113         91.1          11.0       1.0X
-InSet expression                               223 /  226         44.9          22.3       0.5X
+In expression                                   67 /   71        148.6           6.7       1.0X
+InSet expression                               151 /  154         66.3          15.1       0.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 timestamps:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  190 /  193         52.6          19.0       1.0X
-InSet expression                               238 /  240         42.1          23.8       0.8X
+In expression                                  118 /  125         84.7          11.8       1.0X
+InSet expression                               154 /  159         65.0          15.4       0.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 timestamps:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  355 /  367         28.2          35.5       1.0X
-InSet expression                               221 /  222         45.2          22.1       1.6X
+In expression                                  237 /  244         42.2          23.7       1.0X
+InSet expression                               122 /  129         82.3          12.2       1.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 timestamps:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  692 /  694         14.5          69.2       1.0X
-InSet expression                               220 /  222         45.4          22.0       3.1X
+In expression                                  463 /  476         21.6          46.3       1.0X
+InSet expression                               130 /  138         76.9          13.0       3.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 dates:                                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  143 /  145         70.0          14.3       1.0X
-InSet expression                               264 /  269         37.9          26.4       0.5X
+In expression                                  210 /  242         47.7          21.0       1.0X
+InSet expression                               211 /  244         47.3          21.1       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 dates:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  141 /  142         71.1          14.1       1.0X
-InSet expression                               268 /  269         37.3          26.8       0.5X
+In expression                                  244 /  262         41.0          24.4       1.0X
+InSet expression                               225 /  238         44.5          22.5       1.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 dates:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  196 /  196         51.1          19.6       1.0X
-InSet expression                               277 /  282         36.1          27.7       0.7X
+In expression                                  274 /  282         36.5          27.4       1.0X
+InSet expression                               241 /  268         41.4          24.1       1.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 dates:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  338 /  351         29.5          33.8       1.0X
-InSet expression                               287 /  290         34.9          28.7       1.2X
+In expression                                  304 /  353         32.9          30.4       1.0X
+InSet expression                               230 /  253         43.4          23.0       1.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 dates:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  541 /  542         18.5          54.1       1.0X
-InSet expression                               299 /  300         33.5          29.9       1.8X
+In expression                                  404 /  472         24.8          40.4       1.0X
+InSet expression                               240 /  266         41.7          24.0       1.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 dates:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  883 /  900         11.3          88.3       1.0X
-InSet expression                               296 /  298         33.8          29.6       3.0X
+In expression                                  664 /  681         15.1          66.4       1.0X
+InSet expression                               256 /  266         39.0          25.6       2.6X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+450 dates:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                 1149 / 1205          8.7         114.9       1.0X
+InSet expression                               260 /  273         38.5          26.0       4.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+500 dates:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                                 1148 / 1216          8.7         114.8       1.0X
+InSet expression                               256 /  262         39.0          25.6       4.5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+550 dates:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+In expression                               22914 / 23111          0.4        2291.4       1.0X
+InSet expression                               349 /  360         28.6          34.9      65.6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 arrays:                                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   51 /   53         19.6          51.0       1.0X
-InSet expression                                96 /   97         10.5          95.7       0.5X
+In expression                                   24 /   25         42.5          23.5       1.0X
+InSet expression                                47 /   50         21.4          46.8       0.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 arrays:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   77 /   79         13.1          76.6       1.0X
-InSet expression                                96 /   98         10.4          96.0       0.8X
+In expression                                   38 /   40         26.2          38.1       1.0X
+InSet expression                                47 /   49         21.1          47.3       0.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 arrays:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  275 /  276          3.6         274.6       1.0X
-InSet expression                               119 /  121          8.4         119.1       2.3X
+In expression                                  138 /  143          7.2         138.3       1.0X
+InSet expression                                60 /   62         16.8          59.6       2.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 arrays:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  592 /  663          1.7         592.1       1.0X
-InSet expression                               164 /  172          6.1         164.3       3.6X
+In expression                                  319 /  325          3.1         318.6       1.0X
+InSet expression                                85 /   88         11.8          85.0       3.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 arrays:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                 2555 / 2733          0.4        2554.7       1.0X
-InSet expression                               194 /  198          5.2         193.9      13.2X
+In expression                                  695 /  700          1.4         694.7       1.0X
+InSet expression                               100 /  106         10.0         100.5       6.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 arrays:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                 9215 / 9778          0.1        9214.8       1.0X
-InSet expression                               253 /  256          3.9         253.2      36.4X
+In expression                                 1758 / 1953          0.6        1757.6       1.0X
+InSet expression                               134 /  138          7.5         133.7      13.1X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 5 structs:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   46 /   47         22.0          45.5       1.0X
-InSet expression                               157 /  162          6.4         156.5       0.3X
+In expression                                   21 /   22         47.0          21.3       1.0X
+InSet expression                                80 /   84         12.5          79.7       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 10 structs:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                   61 /   63         16.5          60.7       1.0X
-InSet expression                               158 /  161          6.3         158.2       0.4X
+In expression                                   28 /   29         35.7          28.0       1.0X
+InSet expression                                80 /   84         12.5          80.2       0.3X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 25 structs:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  133 /  140          7.5         132.8       1.0X
-InSet expression                               199 /  202          5.0         198.8       0.7X
+In expression                                   69 /   71         14.6          68.5       1.0X
+InSet expression                               102 /  106          9.8         101.9       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 50 structs:                              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                  369 /  372          2.7         369.1       1.0X
-InSet expression                               283 /  294          3.5         282.7       1.3X
+In expression                                  202 /  210          4.9         202.2       1.0X
+InSet expression                               149 /  155          6.7         148.6       1.4X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 100 structs:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                 1570 / 1731          0.6        1569.8       1.0X
-InSet expression                               332 /  334          3.0         332.0       4.7X
+In expression                                  498 /  503          2.0         497.8       1.0X
+InSet expression                               172 /  179          5.8         171.7       2.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
-Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_192-b12 on Mac OS X 10.14.3
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 200 structs:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------
-In expression                                 6332 / 6794          0.2        6331.8       1.0X
-InSet expression                               441 /  444          2.3         440.9      14.4X
+In expression                                 1238 / 1405          0.8        1238.4       1.0X
+InSet expression                               230 /  242          4.3         230.1       5.4X
 
 
