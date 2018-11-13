@@ -254,6 +254,8 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.sql.tests.test_context import *
+
     try:
         import xmlrunner
         unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)

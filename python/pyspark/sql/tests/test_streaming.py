@@ -557,6 +557,8 @@ class StreamingTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
+    from pyspark.sql.tests.test_streaming import *
+
     try:
         import xmlrunner
         unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
