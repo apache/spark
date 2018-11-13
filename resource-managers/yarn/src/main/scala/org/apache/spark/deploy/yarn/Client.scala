@@ -370,8 +370,6 @@ private[spark] class Client(
     new Path(resolvedDestDir, qualifiedDestPath.getName())
   }
 
-
-
   /**
    * Upload any resources to the distributed cache if needed. If a resource is intended to be
    * consumed locally, set up the appropriate config for downstream code to handle it properly.
@@ -501,8 +499,6 @@ private[spark] class Client(
         appMasterOnly = true)
       require(localizedPath != null, "Keytab file already distributed.")
     }
-
-
 
     /**
      * Add Spark to the cache. There are two settings that control what files to add to the cache:
