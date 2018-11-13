@@ -57,9 +57,7 @@ class HadoopSparkUserExecutorFeatureStepSuite extends SparkFunSuite with BeforeA
     val sUserStep = new HadoopSparkUserExecutorFeatureStep(kubernetesConf, hadoopBootstrapUtil)
     val pod = sUserStep.configurePod(sparkPod)
     KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-user" -> "true"))
-    assert(sUserStep.getAdditionalPodSystemProperties() == Map.empty,
-      s"${sUserStep.getAdditionalPodSystemProperties()} is not empty")
-    assert(sUserStep.getAdditionalKubernetesResources() == Seq.empty,
-      s"${sUserStep.getAdditionalKubernetesResources()} is not empty")
+    assert(sUserStep.getAdditionalPodSystemProperties().isEmpty)
+    assert(sUserStep.getAdditionalKubernetesResources().isEmpty)
   }
 }

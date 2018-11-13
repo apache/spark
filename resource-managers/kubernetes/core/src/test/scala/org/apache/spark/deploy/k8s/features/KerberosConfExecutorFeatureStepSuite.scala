@@ -68,9 +68,7 @@ class KerberosConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndA
     val kConfStep = new KerberosConfExecutorFeatureStep(kubernetesConf, hadoopBootstrapUtil)
     val pod = kConfStep.configurePod(sparkPod)
     KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-kerberos" -> "true"))
-    assert(kConfStep.getAdditionalPodSystemProperties() == Map.empty,
-      s"${kConfStep.getAdditionalPodSystemProperties()} is not empty")
-    assert(kConfStep.getAdditionalKubernetesResources() == Seq.empty,
-      s"${kConfStep.getAdditionalKubernetesResources()} is not empty")
+    assert(kConfStep.getAdditionalPodSystemProperties().isEmpty)
+    assert(kConfStep.getAdditionalKubernetesResources().isEmpty)
   }
 }

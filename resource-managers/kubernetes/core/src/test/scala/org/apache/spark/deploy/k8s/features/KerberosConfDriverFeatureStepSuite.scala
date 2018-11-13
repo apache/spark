@@ -320,7 +320,6 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite with BeforeAndAft
       HADOOP_CONFIG_MAP_NAME -> hConfName)
     assert(kConfStep.getAdditionalPodSystemProperties() === expectedProps,
       s"${kConfStep.getAdditionalPodSystemProperties()} is not equal to $expectedProps")
-    assert(kConfStep.getAdditionalKubernetesResources() === List(),
-      s"${kConfStep.getAdditionalKubernetesResources()} is not equal to ${List()}")
+    assert(kConfStep.getAdditionalKubernetesResources().isEmpty)
   }
 }

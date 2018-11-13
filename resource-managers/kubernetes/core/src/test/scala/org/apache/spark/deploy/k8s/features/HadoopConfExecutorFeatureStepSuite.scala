@@ -60,9 +60,7 @@ class HadoopConfExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAft
     val hConfStep = new HadoopConfExecutorFeatureStep(kubernetesConf, hadoopBootstrapUtil)
     val pod = hConfStep.configurePod(sparkPod)
     KubernetesFeaturesTestUtils.podHasLabels(pod.pod, Map("bootstrap-hconf" -> "true"))
-    assert(hConfStep.getAdditionalPodSystemProperties() == Map.empty,
-      s"${hConfStep.getAdditionalPodSystemProperties()} is not empty")
-    assert(hConfStep.getAdditionalKubernetesResources() == Seq.empty,
-      s"${hConfStep.getAdditionalKubernetesResources()} is not empty")
+    assert(hConfStep.getAdditionalPodSystemProperties().isEmpty)
+    assert(hConfStep.getAdditionalKubernetesResources().isEmpty)
   }
 }
