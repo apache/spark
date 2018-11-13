@@ -140,6 +140,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val volumeSpec = KubernetesVolumeSpec(
       "volume",
       "/tmp",
+      "",
       false,
       KubernetesHostPathVolumeConf("/path"))
     val conf = KubernetesConf(
