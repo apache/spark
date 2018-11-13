@@ -16,11 +16,70 @@
  */
 package org.apache.spark.sql.execution
 
+import scala.io.Source
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class QueryExecutionSuite extends SharedSQLContext {
+  def checkDumpedPlans(path: String, expected: Int): Unit = {
+    assert(Source.fromFile(path).getLines.toList
+      .takeWhile(_ != "== Whole Stage Codegen ==") == List(
+      "== Parsed Logical Plan ==",
+      s"Range (0, $expected, step=1, splits=Some(2))",
+      "",
+      "== Analyzed Logical Plan ==",
+      "id: bigint",
+      s"Range (0, $expected, step=1, splits=Some(2))",
+      "",
+      "== Optimized Logical Plan ==",
+      s"Range (0, $expected, step=1, splits=Some(2))",
+      "",
+      "== Physical Plan ==",
+      s"*(1) Range (0, $expected, step=1, splits=2)",
+      ""))
+  }
+  test("dumping query execution info to a file") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath + "/plans.txt"
+      val df = spark.range(0, 10)
+      df.queryExecution.debug.toFile(path)
+
+      checkDumpedPlans(path, expected = 10)
+    }
+  }
+
+  test("dumping query execution info to an existing file") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath + "/plans.txt"
+      val df = spark.range(0, 10)
+      df.queryExecution.debug.toFile(path)
+
+      val df2 = spark.range(0, 1)
+      df2.queryExecution.debug.toFile(path)
+      checkDumpedPlans(path, expected = 1)
+    }
+  }
+
+  test("dumping query execution info to non-existing folder") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath + "/newfolder/plans.txt"
+      val df = spark.range(0, 100)
+      df.queryExecution.debug.toFile(path)
+      checkDumpedPlans(path, expected = 100)
+    }
+  }
+
+  test("dumping query execution info by invalid path") {
+    val path = "1234567890://plans.txt"
+    val exception = intercept[IllegalArgumentException] {
+      spark.range(0, 100).queryExecution.debug.toFile(path)
+    }
+
+    assert(exception.getMessage.contains("Illegal character in scheme name"))
+  }
+
   test("toString() exception/error handling") {
     spark.experimental.extraStrategies = Seq(
         new SparkStrategy {
