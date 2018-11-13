@@ -232,6 +232,8 @@ class KryoSerializer(conf: SparkConf)
       "org.apache.spark.ml.param.Param",
       "org.apache.spark.ml.param.Params",
       "org.apache.spark.ml.param.ParamMap",
+      "org.apache.spark.ml.param.ParamValidators",
+      "org.apache.spark.ml.param.ParamValidators$$anonfun$alwaysTrue$1",
       "org.apache.spark.ml.param.DoubleParam",
       "org.apache.spark.ml.param.IntParam",
       "org.apache.spark.ml.param.FloatParam",
