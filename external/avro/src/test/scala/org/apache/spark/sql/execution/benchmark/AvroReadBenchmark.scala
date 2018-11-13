@@ -20,9 +20,8 @@ import java.io.File
 
 import scala.util.Random
 
-import org.apache.spark.SparkConf
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.types._
 
@@ -37,16 +36,7 @@ import org.apache.spark.sql.types._
  *      Results will be written to "benchmarks/AvroReadBenchmark-results.txt".
  * }}}
  */
-object AvroReadBenchmark extends BenchmarkBase with SQLHelper {
-  val conf = new SparkConf()
-  conf.set("spark.sql.avro.compression.codec", "snappy")
-
-  private val spark = SparkSession.builder()
-    .master("local[1]")
-    .appName("AvroReadBenchmark")
-    .config(conf)
-    .getOrCreate()
-
+object AvroReadBenchmark extends SqlBasedBenchmark with SQLHelper {
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
