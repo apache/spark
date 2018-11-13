@@ -134,10 +134,8 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
         assert(lrModel1.coefficients ~== lrModel2.coefficients relTol 1E-3)
         assert(lrModel1.intercept ~== lrModel2.intercept relTol 1E-3)
       case other =>
-        // scalastyle:off throwerror
-        throw new AssertionError(s"Loaded OneVsRestModel expected model of type" +
-          s" LogisticRegressionModel but found ${other.getClass.getName}")
-        // scalastyle:on throwerror
+        fail("Loaded OneVsRestModel expected model of type LogisticRegressionModel " +
+          s"but found ${other.getClass.getName}")
     }
   }
 
@@ -249,10 +247,8 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
         assert(lr.getMaxIter === lr2.getMaxIter)
         assert(lr.getRegParam === lr2.getRegParam)
       case other =>
-        // scalastyle:off throwerror
-        throw new AssertionError(s"Loaded OneVsRest expected classifier of type" +
-          s" LogisticRegression but found ${other.getClass.getName}")
-        // scalastyle:on throwerror
+        fail("Loaded OneVsRest expected classifier of type LogisticRegression" +
+          s" but found ${other.getClass.getName}")
     }
   }
 
@@ -271,10 +267,8 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
           assert(classifier.getMaxIter === lr2.getMaxIter)
           assert(classifier.getRegParam === lr2.getRegParam)
         case other =>
-          // scalastyle:off throwerror
-          throw new AssertionError(s"Loaded OneVsRestModel expected classifier of type" +
-            s" LogisticRegression but found ${other.getClass.getName}")
-          // scalastyle:on throwerror
+          fail("Loaded OneVsRestModel expected classifier of type LogisticRegression" +
+            s" but found ${other.getClass.getName}")
       }
 
       assert(model.labelMetadata === model2.labelMetadata)
@@ -284,10 +278,8 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
           assert(lrModel1.coefficients === lrModel2.coefficients)
           assert(lrModel1.intercept === lrModel2.intercept)
         case other =>
-          // scalastyle:off throwerror
-          throw new AssertionError(s"Loaded OneVsRestModel expected model of type" +
-            s" LogisticRegressionModel but found ${other.getClass.getName}")
-          // scalastyle:on throwerror
+          fail(s"Loaded OneVsRestModel expected model of type LogisticRegressionModel" +
+            s" but found ${other.getClass.getName}")
       }
     }
 

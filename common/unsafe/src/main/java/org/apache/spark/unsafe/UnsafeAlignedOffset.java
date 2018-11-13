@@ -39,7 +39,7 @@ public class UnsafeAlignedOffset {
       case 8:
         return (int)Platform.getLong(object, offset);
       default:
-        throw new IllegalArgumentException("Illegal UAO_SIZE");
+        throw new AssertionError("Illegal UAO_SIZE");
     }
   }
 
@@ -52,7 +52,7 @@ public class UnsafeAlignedOffset {
         Platform.putLong(object, offset, value);
         break;
       default:
-        throw new IllegalArgumentException("Illegal UAO_SIZE");
+        throw new AssertionError("Illegal UAO_SIZE");
     }
   }
 }

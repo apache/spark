@@ -187,10 +187,8 @@ class TrainValidationSplitSuite
         assert(lr.uid === lr2.uid)
         assert(lr.getMaxIter === lr2.getMaxIter)
       case other =>
-        // scalastyle:off throwerror
-        throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
-          s" LogisticRegression but found ${other.getClass.getName}")
-        // scalastyle:on throwerror
+        fail("Loaded TrainValidationSplit expected estimator of type LogisticRegression" +
+          s" but found ${other.getClass.getName}")
     }
   }
 
@@ -258,7 +256,6 @@ class TrainValidationSplitSuite
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
     assert(tvs.getSeed === tvs2.getSeed)
 
-    // scalastyle:off throwerror
     tvs2.getEstimator match {
       case ova2: OneVsRest =>
         assert(ova.uid === ova2.uid)
@@ -267,15 +264,14 @@ class TrainValidationSplitSuite
             assert(ova.getClassifier.asInstanceOf[LogisticRegression].getMaxIter
               === lr.getMaxIter)
           case other =>
-            throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
-              s" LogisticRegression but found ${other.getClass.getName}")
+            fail(s"Loaded TrainValidationSplit expected estimator of type LogisticRegression" +
+              s" but found ${other.getClass.getName}")
         }
 
       case other =>
-        throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
-          s" OneVsRest but found ${other.getClass.getName}")
+        fail(s"Loaded TrainValidationSplit expected estimator of type OneVsRest" +
+          s" but found ${other.getClass.getName}")
     }
-    // scalastyle:on throwerror
 
     ValidatorParamsSuiteHelpers
       .compareParamMaps(tvs.getEstimatorParamMaps, tvs2.getEstimatorParamMaps)

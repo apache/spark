@@ -52,4 +52,6 @@
               files="core/src/main/java/org/apache/spark/memory/TaskMemoryManager.java"/>
     <suppress checks="RegexpSingleline"
               files="core/src/main/java/org/apache/spark/util/collection/unsafe/sort/UnsafeInMemorySorter.java"/>
+    <suppress checks="RegexpSingleline"
+              files="common/unsafe/src/main/java/org/apache/spark/unsafe/UnsafeAlignedOffset.java"/>
 </suppressions>

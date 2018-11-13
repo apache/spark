@@ -56,11 +56,9 @@ object KafkaUtils extends Logging {
     ): RDD[ConsumerRecord[K, V]] = {
     val preferredHosts = locationStrategy match {
       case PreferBrokers =>
-        // scalastyle:off throwerror
-        throw new AssertionError(
+        throw new IllegalArgumentException(
           "If you want to prefer brokers, you must provide a mapping using PreferFixed " +
           "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you.")
-        // scalastyle:on throwerror
       case PreferConsistent => ju.Collections.emptyMap[TopicPartition, String]()
       case PreferFixed(hostMap) => hostMap
     }

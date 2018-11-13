@@ -146,7 +146,7 @@ class NaiveBayes @Since("1.5.0") (
           requireZeroOneBernoulliValues
         case _ =>
           // This should never happen.
-          throw new InvalidException(s"Invalid modelType: ${$(modelType)}.")
+          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
       }
     }
 

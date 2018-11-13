@@ -19,6 +19,8 @@ package org.apache.spark.mllib.clustering
 
 import scala.util.Random
 
+import org.scalatest.Assertions
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
@@ -331,7 +333,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 }
 
-object KMeansSuite extends SparkFunSuite {
+object KMeansSuite extends SparkFunSuite with Assertions {
   def createModel(dim: Int, k: Int, isSparse: Boolean): KMeansModel = {
     val singlePoint = if (isSparse) {
       Vectors.sparse(dim, Array.empty[Int], Array.empty[Double])
@@ -349,9 +351,7 @@ object KMeansSuite extends SparkFunSuite {
       case (ca: DenseVector, cb: DenseVector) =>
         assert(ca === cb)
       case _ =>
-        // scalastyle:off throwerror
-        throw new AssertionError("checkEqual failed since the two clusters were not identical.\n")
-        // scalastyle:on throwerror
+        fail("checkEqual failed since the two clusters were not identical.\n")
     }
   }
 }
