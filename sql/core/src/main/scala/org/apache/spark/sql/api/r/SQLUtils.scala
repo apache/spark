@@ -250,8 +250,8 @@ private[sql] object SQLUtils extends Logging {
   }
 
   /**
-   * R callable function to read a file in Arrow stream format and create a `DataFrame`
-   * from an RDD.
+   * R callable function to create a `DataFrame` from a `JavaRDD` of serialized
+   * ArrowRecordBatches.
    */
   def toDataFrame(
       arrowBatchRDD: JavaRDD[Array[Byte]],

@@ -147,7 +147,7 @@ getDefaultSqlSource <- function() {
   l[["spark.sql.sources.default"]]
 }
 
-writeToTempFileInArrow <- function(rdf, numPartitions) {
+writeToFileInArrow <- function(fileName, rdf, numPartitions) {
   requireNamespace1 <- requireNamespace
 
   # For some reasons, Arrow R API requires to load 'defer_parent' which is from 'withr' package.
@@ -186,7 +186,6 @@ writeToTempFileInArrow <- function(rdf, numPartitions) {
       list(rdf)
     }
 
-    fileName <- tempfile(pattern = "spark-arrow", fileext = ".tmp")
     stream_writer <- NULL
     tryCatch({
       for (rdf_slice in rdf_slices) {
@@ -209,7 +208,6 @@ writeToTempFileInArrow <- function(rdf, numPartitions) {
       }
     })
 
-    fileName
   } else {
     stop("'arrow' package should be installed.")
   }
@@ -258,8 +256,9 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                             numPartitions = NULL) {
   sparkSession <- getSparkSession()
   arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
-  shouldUseArrow <- FALSE
+  useArrow <- FALSE
   firstRow <- NULL
+
   if (is.data.frame(data)) {
     # get the names of columns, they will be put into RDD
     if (is.null(schema)) {
@@ -278,16 +277,18 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
 
     args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
     if (arrowEnabled) {
-      shouldUseArrow <- tryCatch({
+      useArrow <- tryCatch({
         stopifnot(length(data) > 0)
         dataHead <- head(data, 1)
         checkTypeRequirementForArrow(data, schema)
-        fileName <- writeToTempFileInArrow(data, numPartitions)
-        tryCatch(
+        fileName <- tempfile(pattern = "sparwriteToFileInArrowk-arrow", fileext = ".tmp")
+        tryCatch({
+          writeToFileInArrow(fileName, data, numPartitions)
           jrddInArrow <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                                      "readArrowStreamFromFile",
                                      sparkSession,
-                                     fileName),
+                                     fileName)
+        },
         finally = {
           file.remove(fileName)
         })
@@ -304,7 +305,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
       })
     }
 
-    if (!shouldUseArrow) {
+    if (!useArrow) {
       # Convert data into a list of rows. Each row is a list.
       # drop factors and wrap lists
       data <- setNames(as.list(data), NULL)
@@ -320,7 +321,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
     }
   }
 
-  if (shouldUseArrow) {
+  if (useArrow) {
     rdd <- jrddInArrow
   } else if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
@@ -369,7 +370,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
 
   stopifnot(class(schema) == "structType")
 
-  if (shouldUseArrow) {
+  if (useArrow) {
     sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                        "toDataFrame", rdd, schema$jobj, sparkSession)
   } else {
