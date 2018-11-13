@@ -180,7 +180,7 @@ object DataType {
     ("pyClass", _),
     ("sqlType", _),
     ("type", JString("udt"))) =>
-      Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+      Utils.classForName(udtClass).getConstructor().newInstance().asInstanceOf[UserDefinedType[_]]
 
     // Python UDT
     case JSortedObject(

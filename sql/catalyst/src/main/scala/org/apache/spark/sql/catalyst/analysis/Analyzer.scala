@@ -824,7 +824,8 @@ class Analyzer(
     }
 
     private def dedupAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
-      attrMap.get(attr).getOrElse(attr).withQualifier(attr.qualifier)
+      val exprId = attrMap.getOrElse(attr, attr).exprId
+      attr.withExprId(exprId)
     }
 
     /**
@@ -951,6 +952,12 @@ class Analyzer(
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
+
+      // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
+      // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
+      // names leading to ambiguous references exception.
+      case a @ Aggregate(groupingExprs, aggExprs, appendColumns: AppendColumns) =>
+        a.mapExpressions(resolve(_, appendColumns))
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")

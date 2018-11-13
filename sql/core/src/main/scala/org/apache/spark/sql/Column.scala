@@ -74,6 +74,9 @@ class TypedColumn[-T, U](
       inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
     val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
+
+    // This only inserts inputs into typed aggregate expressions. For untyped aggregate expressions,
+    // the resolving is handled in the analyzer directly.
     val newExpr = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
         ta.withInputInfo(
@@ -301,24 +304,6 @@ class Column(val expr: Expression) extends Logging {
    * @since 2.0.0
     */
   def =!= (other: Any): Column = withExpr{ Not(EqualTo(expr, lit(other).expr)) }
-
-  /**
-   * Inequality test.
-   * {{{
-   *   // Scala:
-   *   df.select( df("colA") !== df("colB") )
-   *   df.select( !(df("colA") === df("colB")) )
-   *
-   *   // Java:
-   *   import static org.apache.spark.sql.functions.*;
-   *   df.filter( col("colA").notEqual(col("colB")) );
-   * }}}
-   *
-   * @group expr_ops
-   * @since 1.3.0
-    */
-  @deprecated("!== does not have the same precedence as ===, use =!= instead", "2.0.0")
-  def !== (other: Any): Column = this =!= other
 
   /**
    * Inequality test.

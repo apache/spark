@@ -77,7 +77,6 @@ target/
 unit-tests.log
 work/
 docs/.jekyll-metadata
-*.crc
 
 # For Hive
 TempStatsStore/
