@@ -318,6 +318,7 @@ private class LiveExecutorStageSummary(
   import LiveEntityHelpers._
 
   var taskTime = 0L
+  var activeTasks = 0
   var succeededTasks = 0
   var failedTasks = 0
   var killedTasks = 0
@@ -328,6 +329,7 @@ private class LiveExecutorStageSummary(
   override protected def doUpdate(): Any = {
     val info = new v1.ExecutorStageSummary(
       taskTime,
+      activeTasks,
       failedTasks,
       succeededTasks,
       killedTasks,

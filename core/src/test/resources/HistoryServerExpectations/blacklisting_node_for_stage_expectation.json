@@ -695,6 +695,7 @@
   "executorSummary" : {
     "4" : {
       "taskTime" : 1589,
+      "activeTasks" : 0,
       "failedTasks" : 2,
       "succeededTasks" : 0,
       "killedTasks" : 0,
