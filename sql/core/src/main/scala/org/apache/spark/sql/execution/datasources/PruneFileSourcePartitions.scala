@@ -49,7 +49,6 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         }
       }
 
-
       val sparkSession = fsRelation.sparkSession
       val partitionColumns =
         logicalRelation.resolve(
