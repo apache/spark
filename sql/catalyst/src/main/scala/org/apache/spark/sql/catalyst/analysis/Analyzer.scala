@@ -953,6 +953,12 @@ class Analyzer(
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
 
+      // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
+      // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
+      // names leading to ambiguous references exception.
+      case a @ Aggregate(groupingExprs, aggExprs, appendColumns: AppendColumns) =>
+        a.mapExpressions(resolve(_, appendColumns))
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q.mapExpressions(resolve(_, q))
