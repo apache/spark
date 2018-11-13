@@ -56,8 +56,14 @@ install:
 
 jobs:
   include:
-    - stage: core
-      script: ./build/sbt -mem 4096 -Phadoop-2.7 core/test
+    - stage: core-java-scala-test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 "core/testOnly  test.org.apache.spark.* org.apache.sparktest.*"
+    - stage: core-a-m-test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 "core/testOnly   org.apache.spark.a*  org.apache.spark.b* org.apache.spark.c* org.apache.spark.d* org.apache.spark.e* org.apache.spark.f* org.apache.spark.g* org.apache.spark.h* org.apache.spark.i* org.apache.spark.j* org.apache.spark.k* org.apache.spark.l* org.apache.spark.m*"
+    - stage: core-n-z-test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 "core/testOnly   org.apache.spark.n*  org.apache.spark.o* org.apache.spark.p* org.apache.spark.q* org.apache.spark.r* org.apache.spark.s* org.apache.spark.t* org.apache.spark.u* org.apache.spark.v* org.apache.spark.w* org.apache.spark.x* org.apache.spark.y* org.apache.spark.z*"
+    - stage: core-A-Z-test
+      script: ./build/sbt -mem 4096 -Phadoop-2.7 "core/testOnly   org.apache.spark.A*  org.apache.spark.B* org.apache.spark.C* org.apache.spark.D* org.apache.spark.E* org.apache.spark.F* org.apache.spark.G* org.apache.spark.H* org.apache.spark.I* org.apache.spark.J* org.apache.spark.K* org.apache.spark.L* org.apache.spark.M* org.apache.spark.N*  org.apache.spark.O* org.apache.spark.P* org.apache.spark.Q* org.apache.spark.R* org.apache.spark.S* org.apache.spark.T* org.apache.spark.U* org.apache.spark.V* org.apache.spark.W* org.apache.spark.X* org.apache.spark.Y* org.apache.spark.Z*"
     - stage: streaming
       script: ./build/sbt -mem 4096 -Phadoop-2.7 streaming/test
     - stage: ml

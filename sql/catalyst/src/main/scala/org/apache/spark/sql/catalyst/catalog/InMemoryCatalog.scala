@@ -166,6 +166,10 @@ class InMemoryCatalog(
     catalog.contains(db)
   }
 
+  override def databaseExists(db: String, compatible: Boolean): Boolean = {
+    databaseExists(db)
+  }
+
   override def listDatabases(): Seq[String] = synchronized {
     catalog.keySet.toSeq.sorted
   }

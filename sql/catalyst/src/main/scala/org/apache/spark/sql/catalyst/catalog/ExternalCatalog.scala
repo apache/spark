@@ -100,6 +100,8 @@ abstract class ExternalCatalog
 
   def databaseExists(db: String): Boolean
 
+  def databaseExists(db: String, compatible: Boolean): Boolean
+
   def listDatabases(): Seq[String]
 
   def listDatabases(pattern: String): Seq[String]

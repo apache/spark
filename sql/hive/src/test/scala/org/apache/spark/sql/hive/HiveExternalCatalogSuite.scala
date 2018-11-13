@@ -113,4 +113,21 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     catalog.createDatabase(newDb("dbWithNullDesc").copy(description = null), ignoreIfExists = false)
     assert(catalog.getDatabase("dbWithNullDesc").description == "")
   }
+
+  test( "NESPARK-147: modify the requireDBexists with keeping logical")  {
+    val catalog = newBasicCatalog()
+    val hiveTable = CatalogTable(
+      identifier = TableIdentifier("hive_tbl", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat,
+      schema = new StructType().add("col1", "int").add("col2", "string"),
+      provider = Some("hive"))
+    catalog.createTable(hiveTable, ignoreIfExists = false)
+    val dbName = "unknow_db_test"
+
+    val r = catalog.databaseExists(dbName, true)
+    assert(r == false)
+
+  }
+
 }
