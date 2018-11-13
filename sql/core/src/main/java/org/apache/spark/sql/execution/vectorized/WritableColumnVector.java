@@ -105,7 +105,7 @@ public abstract class WritableColumnVector extends ColumnVector {
         "from bucket table. For Parquet file format, refer to " +
         SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE().key() +
         " (default " + SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE().defaultValueString() +
-        ") and " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + "; for Orc file format, " +
+        ") and " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + "; for ORC file format, " +
         "refer to " + SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().key() +
         " (default " + SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().defaultValueString() +
         ") and " + SQLConf.ORC_VECTORIZED_READER_ENABLED().key() + ".";
