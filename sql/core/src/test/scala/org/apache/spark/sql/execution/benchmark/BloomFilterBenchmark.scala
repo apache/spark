@@ -80,7 +80,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+  override def runBenchmarkSuite(): Unit = {
     writeBenchmark()
     readBenchmark()
   }

@@ -140,18 +140,10 @@ private[yarn] class YarnAllocator(
   }
   // Number of cores per executor.
   protected val executorCores = sparkConf.get(EXECUTOR_CORES)
-
-  private val executorResourceRequests =
-    sparkConf.getAllWithPrefix(config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX).toMap
-
-  // Resource capability requested for each executor
-  private[yarn] val resource: Resource = {
-    val resource = Resource.newInstance(
-      executorMemory + memoryOverhead + pysparkWorkerMemory, executorCores)
-    ResourceRequestHelper.setResourceRequests(executorResourceRequests, resource)
-    logDebug(s"Created resource capability: $resource")
-    resource
-  }
+  // Resource capability requested for each executors
+  private[yarn] val resource = Resource.newInstance(
+    executorMemory + memoryOverhead + pysparkWorkerMemory,
+    executorCores)
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
     "ContainerLauncher", sparkConf.get(CONTAINER_LAUNCH_MAX_THREADS))
@@ -296,16 +288,9 @@ private[yarn] class YarnAllocator(
       s"executorsStarting: ${numExecutorsStarting.get}")
 
     if (missing > 0) {
-      if (log.isInfoEnabled()) {
-        var requestContainerMessage = s"Will request $missing executor container(s), each with " +
-            s"${resource.getVirtualCores} core(s) and " +
-            s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)"
-        if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
-            executorResourceRequests.nonEmpty) {
-          requestContainerMessage ++= s" with custom resources: " + resource.toString
-        }
-        logInfo(requestContainerMessage)
-      }
+      logInfo(s"Will request $missing executor container(s), each with " +
+        s"${resource.getVirtualCores} core(s) and " +
+        s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)")
 
       // Split the pending container request into three groups: locality matched list, locality
       // unmatched list and non-locality list. Take the locality matched container request into
@@ -471,20 +456,13 @@ private[yarn] class YarnAllocator(
     // memory, but use the asked vcore count for matching, effectively disabling matching on vcore
     // count.
     val matchingResource = Resource.newInstance(allocatedContainer.getResource.getMemory,
-      resource.getVirtualCores)
-
-    ResourceRequestHelper.setResourceRequests(executorResourceRequests, matchingResource)
-
-    logDebug(s"Calling amClient.getMatchingRequests with parameters: " +
-        s"priority: ${allocatedContainer.getPriority}, " +
-        s"location: $location, resource: $matchingResource")
+          resource.getVirtualCores)
     val matchingRequests = amClient.getMatchingRequests(allocatedContainer.getPriority, location,
       matchingResource)
 
     // Match the allocation to a request
     if (!matchingRequests.isEmpty) {
       val containerRequest = matchingRequests.get(0).iterator.next
-      logDebug(s"Removing container request via AM client: $containerRequest")
       amClient.removeContainerRequest(containerRequest)
       containersToUse += allocatedContainer
     } else {

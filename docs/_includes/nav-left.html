@@ -10,8 +10,7 @@
             {% endif %}
         </a>
     </li>
-    {% assign tag = item.url | remove: ".html" %}
-    {% if item.subitems and navurl contains tag %}
+    {% if item.subitems and navurl contains item.url %}
         {% include nav-left.html nav=item.subitems %}
     {% endif %}
 {% endfor %}

@@ -106,6 +106,8 @@ case class DataSourceV2ScanExec(
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
 
+  override protected def needsUnsafeRowConversion: Boolean = false
+
   override protected def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {
       WholeStageCodegenExec(this)(codegenStageId = 0).execute()

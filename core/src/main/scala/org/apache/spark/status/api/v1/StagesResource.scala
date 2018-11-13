@@ -56,7 +56,7 @@ private[v1] class StagesResource extends BaseAppResource {
       @PathParam("stageAttemptId") stageAttemptId: Int,
       @QueryParam("details") @DefaultValue("true") details: Boolean): StageData = withUI { ui =>
     try {
-      ui.store.stageAttempt(stageId, stageAttemptId, details = details)._1
+      ui.store.stageAttempt(stageId, stageAttemptId, details = details)
     } catch {
       case _: NoSuchElementException =>
         // Change the message depending on whether there are any attempts for the requested stage.

@@ -64,7 +64,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   }
 
   override def validConstraints: Set[Expression] =
-    getAllValidConstraints(projectList)
+    child.constraints.union(getAliasedConstraints(projectList))
 }
 
 /**
@@ -595,7 +595,7 @@ case class Aggregate(
 
   override def validConstraints: Set[Expression] = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
-    getAllValidConstraints(nonAgg)
+    child.constraints.union(getAliasedConstraints(nonAgg))
   }
 }
 

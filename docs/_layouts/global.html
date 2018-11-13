@@ -126,12 +126,8 @@
 
         <div class="container-wrapper">
 
-            {% if page.url contains "/ml" or page.url contains "/sql" %}
-                {% if page.url contains "/ml" %}
-                    {% include nav-left-wrapper-ml.html nav-mllib=site.data.menu-mllib nav-ml=site.data.menu-ml %}
-                {% else %}
-                    {% include nav-left-wrapper-sql.html nav-sql=site.data.menu-sql %}
-                {% endif %}
+            {% if page.url contains "/ml" %}
+                {% include nav-left-wrapper-ml.html nav-mllib=site.data.menu-mllib nav-ml=site.data.menu-ml %}
                 <input id="nav-trigger" class="nav-trigger" checked type="checkbox">
                 <label for="nav-trigger"></label>
                 <div class="content-with-sidebar" id="content">
@@ -188,8 +184,7 @@
                     });
                 };
                 script.src = ('https:' == document.location.protocol ? 'https://' : 'http://') +
-                    'cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js' +
-                    '?config=TeX-AMS-MML_HTMLorMML';
+                    'cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML';
                 d.getElementsByTagName('head')[0].appendChild(script);
             }(document));
         </script>

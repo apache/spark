@@ -21,9 +21,9 @@ import java.io.File
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s.{Config, KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
+import org.apache.spark.deploy.k8s.features.bindings._
 import org.apache.spark.util.Utils
 
 private[spark] class KubernetesDriverBuilder(
@@ -49,22 +49,15 @@ private[spark] class KubernetesDriverBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-    providePythonStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-      => PythonDriverFeatureStep) =
-      new PythonDriverFeatureStep(_),
-    provideRStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
+    providePythonStep: (KubernetesConf[KubernetesDriverSpecificConf]
+        => PythonDriverFeatureStep) =
+    new PythonDriverFeatureStep(_),
+    provideRStep: (KubernetesConf[KubernetesDriverSpecificConf]
         => RDriverFeatureStep) =
     new RDriverFeatureStep(_),
-    provideJavaStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
+    provideJavaStep: (KubernetesConf[KubernetesDriverSpecificConf]
         => JavaDriverFeatureStep) =
     new JavaDriverFeatureStep(_),
-    provideHadoopGlobalStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => KerberosConfDriverFeatureStep) =
-    new KerberosConfDriverFeatureStep(_),
     providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => PodTemplateConfigMapStep) =
     new PodTemplateConfigMapStep(_),
@@ -103,10 +96,6 @@ private[spark] class KubernetesDriverBuilder(
           provideRStep(kubernetesConf)}
       .getOrElse(provideJavaStep(kubernetesConf))
 
-    val maybeHadoopConfigStep =
-      kubernetesConf.hadoopConfSpec.map { _ =>
-        provideHadoopGlobalStep(kubernetesConf)}
-
     val localFiles = KubernetesUtils.submitterLocalFiles(kubernetesConf.sparkFiles)
       .map(new File(_))
     require(localFiles.forall(_.isFile), s"All submitted local files must be present and not" +
@@ -121,15 +110,12 @@ private[spark] class KubernetesDriverBuilder(
       Seq(provideMountLocalFilesStep(kubernetesConf))
     } else Nil
 
-    val allFeatures: Seq[KubernetesFeatureConfigStep] =
-      (baseFeatures :+ bindingsStep) ++
-        secretFeature ++ envSecretFeature ++ volumesFeature ++
-        maybeHadoopConfigStep.toSeq ++ podTemplateFeature ++
-        providedLocalFilesFeature
+    val allFeatures = (baseFeatures :+ bindingsStep) ++ secretFeature ++
+      envSecretFeature ++ volumesFeature ++ providedLocalFilesFeature ++ podTemplateFeature
 
     var spec = KubernetesDriverSpec(
       provideInitialPod(),
-      driverKubernetesResources = Seq.empty,
+      Seq.empty,
       kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
       val configuredPod = feature.configurePod(spec.pod)
@@ -153,10 +139,7 @@ private[spark] object KubernetesDriverBuilder {
     conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
       .map(new File(_))
       .map(file => new KubernetesDriverBuilder(provideInitialPod = () =>
-        KubernetesUtils.loadPodFromTemplate(
-          kubernetesClient,
-          file,
-          conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME))
+        KubernetesUtils.loadPodFromTemplate(kubernetesClient, file)
       ))
       .getOrElse(new KubernetesDriverBuilder())
   }

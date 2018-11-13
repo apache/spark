@@ -18,15 +18,14 @@ package org.apache.spark.deploy.k8s.features
 
 import java.io.File
 
-import scala.collection.JavaConverters._
-
 import com.google.common.base.Charsets
 import com.google.common.io.{BaseEncoding, Files}
 import io.fabric8.kubernetes.api.model.Secret
 import org.scalatest.BeforeAndAfter
+import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesExecutorSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.Utils
@@ -66,8 +65,7 @@ class MountLocalFilesFeatureStepSuite extends SparkFunSuite with BeforeAndAfter 
       Map.empty,
       Map.empty,
       Seq.empty,
-      sparkFiles,
-      None)
+      sparkFiles)
     stepUnderTest = new MountLocalFilesFeatureStep(kubernetesConf)
   }
 

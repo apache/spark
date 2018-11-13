@@ -39,28 +39,30 @@ public class JavaJdbcRDDSuite implements Serializable {
     sc = new JavaSparkContext("local", "JavaAPISuite");
 
     Class.forName("org.apache.derby.jdbc.EmbeddedDriver");
+    Connection connection =
+      DriverManager.getConnection("jdbc:derby:target/JavaJdbcRDDSuiteDb;create=true");
 
-    try (Connection connection = DriverManager.getConnection(
-        "jdbc:derby:target/JavaJdbcRDDSuiteDb;create=true")) {
+    try {
+      Statement create = connection.createStatement();
+      create.execute(
+        "CREATE TABLE FOO(" +
+        "ID INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)," +
+        "DATA INTEGER)");
+      create.close();
 
-      try (Statement create = connection.createStatement()) {
-        create.execute(
-          "CREATE TABLE FOO(ID INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY" +
-                  " (START WITH 1, INCREMENT BY 1), DATA INTEGER)");
+      PreparedStatement insert = connection.prepareStatement("INSERT INTO FOO(DATA) VALUES(?)");
+      for (int i = 1; i <= 100; i++) {
+        insert.setInt(1, i * 2);
+        insert.executeUpdate();
       }
-
-      try (PreparedStatement insert = connection.prepareStatement(
-          "INSERT INTO FOO(DATA) VALUES(?)")) {
-        for (int i = 1; i <= 100; i++) {
-          insert.setInt(1, i * 2);
-          insert.executeUpdate();
-        }
-      }
+      insert.close();
     } catch (SQLException e) {
       // If table doesn't exist...
       if (e.getSQLState().compareTo("X0Y32") != 0) {
         throw e;
       }
+    } finally {
+      connection.close();
     }
   }
 

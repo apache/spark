@@ -241,10 +241,10 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
     testStream(df, useV2Sink = true)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
-      Execute(waitForRateSourceTriggers(_, 10)),
+      Execute(waitForRateSourceTriggers(_, 201)),
       IncrementEpoch(),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_)))
+      CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_)))
     )
   }
 
@@ -259,10 +259,10 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
     testStream(df, useV2Sink = true)(
       StartStream(Trigger.Continuous(2012)),
       AwaitEpoch(0),
-      Execute(waitForRateSourceTriggers(_, 10)),
+      Execute(waitForRateSourceTriggers(_, 201)),
       IncrementEpoch(),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_))))
+      CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
   }
 
   test("restarts") {
@@ -274,27 +274,27 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .select('value)
 
     testStream(df, useV2Sink = true)(
-      StartStream(Trigger.Continuous(1012)),
-      AwaitEpoch(2),
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(10),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
-      AwaitEpoch(4),
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(20),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
-      AwaitEpoch(5),
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(21),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
-      AwaitEpoch(6),
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(22),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
-      AwaitEpoch(8),
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(25),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
+      StartStream(Trigger.Continuous(2012)),
       StopStream,
-      StartStream(Trigger.Continuous(1012)),
-      AwaitEpoch(15),
+      StartStream(Trigger.Continuous(2012)),
+      AwaitEpoch(50),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_))))
+      CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
   }
 }
 

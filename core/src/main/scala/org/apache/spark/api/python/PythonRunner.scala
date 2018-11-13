@@ -106,19 +106,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (memoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", memoryMb.get.toString)
     }
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap,
-      condaInstructions)
-    // Whether is the worker released into idle pool or closed. When any codes try to release or
-    // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
-    // sure there is only one winner that is going to release or close the worker.
-    val releasedOrClosed = new AtomicBoolean(false)
+    val worker: Socket = env.createPythonWorker(
+      pythonExec, envVars.asScala.toMap, condaInstructions)
+    // Whether is the worker released into idle pool
+    val released = new AtomicBoolean(false)
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = newWriterThread(env, worker, inputIterator, partitionIndex, context)
 
     context.addTaskCompletionListener[Unit] { _ =>
       writerThread.shutdownOnTaskCompletion()
-      if (!reuseWorker || releasedOrClosed.compareAndSet(false, true)) {
+      if (!reuseWorker || !released.get) {
         try {
           worker.close()
         } catch {
@@ -135,7 +133,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
 
     val stdoutIterator = newReaderIterator(
-      stream, writerThread, startTime, env, worker, releasedOrClosed, context)
+      stream, writerThread, startTime, env, worker, released, context)
     new InterruptibleIterator(context, stdoutIterator)
   }
 
@@ -152,7 +150,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       startTime: Long,
       env: SparkEnv,
       worker: Socket,
-      releasedOrClosed: AtomicBoolean,
+      released: AtomicBoolean,
       context: TaskContext): Iterator[OUT]
 
   /**
@@ -341,7 +339,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           }
         }
         dataOut.flush()
-
         dataOut.writeInt(evalType)
         writeCommand(dataOut)
         writeIteratorToStream(dataOut)
@@ -396,7 +393,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       startTime: Long,
       env: SparkEnv,
       worker: Socket,
-      releasedOrClosed: AtomicBoolean,
+      released: AtomicBoolean,
       context: TaskContext)
     extends Iterator[OUT] {
 
@@ -467,8 +464,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
-        if (reuseWorker && releasedOrClosed.compareAndSet(false, true)) {
+        if (reuseWorker) {
           env.releasePythonWorker(pythonExec, envVars.asScala.toMap, condaInstructions, worker)
+          released.set(true)
         }
       }
       eos = true
@@ -568,9 +566,9 @@ private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
       startTime: Long,
       env: SparkEnv,
       worker: Socket,
-      releasedOrClosed: AtomicBoolean,
+      released: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
-    new ReaderIterator(stream, writerThread, startTime, env, worker, releasedOrClosed, context) {
+    new ReaderIterator(stream, writerThread, startTime, env, worker, released, context) {
 
       protected override def read(): Array[Byte] = {
         if (writerThread.exception.isDefined) {

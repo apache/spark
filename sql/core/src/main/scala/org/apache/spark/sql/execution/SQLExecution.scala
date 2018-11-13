@@ -58,8 +58,7 @@ object SQLExecution {
    */
   def withNewExecutionId[T](
       sparkSession: SparkSession,
-      queryExecution: QueryExecution,
-      name: Option[String] = None)(body: => T): T = {
+      queryExecution: QueryExecution)(body: => T): T = {
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
@@ -72,35 +71,14 @@ object SQLExecution {
       val callSite = sc.getCallSite()
 
       withSQLConfPropagated(sparkSession) {
-        var ex: Option[Exception] = None
-        val startTime = System.nanoTime()
+        sc.listenerBus.post(SparkListenerSQLExecutionStart(
+          executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
+          SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
         try {
-          sc.listenerBus.post(SparkListenerSQLExecutionStart(
-            executionId = executionId,
-            description = callSite.shortForm,
-            details = callSite.longForm,
-            physicalPlanDescription = queryExecution.toString,
-            // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
-            // will be caught and reported in the `SparkListenerSQLExecutionEnd`
-            sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
-            time = System.currentTimeMillis()))
           body
-        } catch {
-          case e: Exception =>
-            ex = Some(e)
-            throw e
         } finally {
-          val endTime = System.nanoTime()
-          val event = SparkListenerSQLExecutionEnd(executionId, System.currentTimeMillis())
-          // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the `name`
-          // parameter. The `ExecutionListenerManager` only watches SQL executions with name. We
-          // can specify the execution name in more places in the future, so that
-          // `QueryExecutionListener` can track more cases.
-          event.executionName = name
-          event.duration = endTime - startTime
-          event.qe = queryExecution
-          event.executionFailure = ex
-          sc.listenerBus.post(event)
+          sc.listenerBus.post(SparkListenerSQLExecutionEnd(
+            executionId, System.currentTimeMillis()))
         }
       }
     } finally {

@@ -72,8 +72,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     if (sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
       KubernetesUtils.loadPodFromTemplate(
         kubernetesClient,
-        new File(sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get),
-        sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
+        new File(sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get))
     }
 
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(

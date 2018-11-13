@@ -19,10 +19,11 @@ package org.apache.spark.deploy.yarn.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
+import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class YARNHadoopDelegationTokenManagerSuite extends SparkFunSuite {
+class YARNHadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
   private var credentialManager: YARNHadoopDelegationTokenManager = null
   private var sparkConf: SparkConf = null
   private var hadoopConf: Configuration = null
@@ -35,7 +36,7 @@ class YARNHadoopDelegationTokenManagerSuite extends SparkFunSuite {
 
   test("Correctly loads credential providers") {
     credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf)
-    assert(credentialManager.isProviderLoaded("yarn-test"))
+    credentialManager.credentialProviders.get("yarn-test") should not be (None)
   }
 }
 

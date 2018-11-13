@@ -841,7 +841,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, String> flatMapped =
-      pairStream.flatMapValues(in -> Arrays.asList(in + "1", in + "2").iterator());
+      pairStream.flatMapValues(in -> Arrays.asList(in + "1", in + "2"));
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
     Assert.assertEquals(expected, result);

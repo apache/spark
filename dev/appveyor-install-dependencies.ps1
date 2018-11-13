@@ -95,8 +95,7 @@ $env:MAVEN_OPTS = "-Xmx2g -XX:ReservedCodeCacheSize=512m"
 Pop-Location
 
 # ========================== Hadoop bin package
-# This must match the version at https://github.com/steveloughran/winutils/tree/master/hadoop-2.7.1
-$hadoopVer = "2.7.1"
+$hadoopVer = "2.6.4"
 $hadoopPath = "$tools\hadoop"
 if (!(Test-Path $hadoopPath)) {
     New-Item -ItemType Directory -Force -Path $hadoopPath | Out-Null

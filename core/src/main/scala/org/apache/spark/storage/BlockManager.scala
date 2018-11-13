@@ -133,6 +133,8 @@ private[spark] class BlockManager(
 
   private[spark] val externalShuffleServiceEnabled =
     conf.get(config.SHUFFLE_SERVICE_ENABLED)
+  private val chunkSize =
+    conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests", Int.MaxValue.toString).toInt
   private val remoteReadNioBufferConversion =
     conf.getBoolean("spark.network.remoteReadNioBufferConversion", false)
 
@@ -455,7 +457,7 @@ private[spark] class BlockManager(
             new EncryptedBlockData(tmpFile, blockSize, conf, key).toChunkedByteBuffer(allocator)
 
           case None =>
-            ChunkedByteBuffer.fromFile(tmpFile)
+            ChunkedByteBuffer.fromFile(tmpFile, conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS).toInt)
         }
         putBytes(blockId, buffer, level)(classTag)
         tmpFile.delete()
@@ -727,7 +729,7 @@ private[spark] class BlockManager(
    * Get block from remote block managers as serialized bytes.
    */
   def getRemoteBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
-    // TODO SPARK-25905 if we change this method to return the ManagedBuffer, then getRemoteValues
+    // TODO if we change this method to return the ManagedBuffer, then getRemoteValues
     // could just use the inputStream on the temp file, rather than reading the file into memory.
     // Until then, replication can cause the process to use too much memory and get killed
     // even though we've read the data to disk.
@@ -801,7 +803,7 @@ private[spark] class BlockManager(
         if (remoteReadNioBufferConversion) {
           return Some(new ChunkedByteBuffer(data.nioByteBuffer()))
         } else {
-          return Some(ChunkedByteBuffer.fromManagedBuffer(data))
+          return Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
         }
       }
       logDebug(s"The value of block $blockId is null")
