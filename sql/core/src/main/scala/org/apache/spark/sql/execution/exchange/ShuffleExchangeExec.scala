@@ -228,8 +228,7 @@ object ShuffleExchangeExec {
         val orderingAttributes = sortingExpressions.zipWithIndex.map { case (ord, i) =>
           ord.copy(child = BoundReference(i, ord.dataType, ord.nullable))
         }
-        implicit val ordering: Ordering[InternalRow] =
-          new LazilyGeneratedOrdering(orderingAttributes)
+        implicit val ordering = new LazilyGeneratedOrdering(orderingAttributes)
         new RangePartitioner(
           numPartitions,
           rddForSampling,
@@ -256,8 +255,7 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
       case RangePartitioning(sortingExpressions, _) =>
-        val projection =
-          UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
+        val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
