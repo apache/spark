@@ -130,20 +130,6 @@ abstract class LogicalPlan
    * Returns the output ordering that this plan generates.
    */
   def outputOrdering: Seq[SortOrder] = Nil
-
-  /**
-   * Returns true iff `other`'s output is semantically the same, ie.:
-   *  - it contains the same number of `Attribute`s;
-   *  - references are the same;
-   *  - the order is equal too.
-   */
-  def sameOutput(other: LogicalPlan): Boolean = {
-    val thisOutput = this.output
-    val otherOutput = other.output
-    thisOutput.length == otherOutput.length && thisOutput.zip(otherOutput).forall {
-      case (a1, a2) => a1.semanticEquals(a2)
-    }
-  }
 }
 
 /**
@@ -166,10 +152,10 @@ abstract class UnaryNode extends LogicalPlan {
   override final def children: Seq[LogicalPlan] = child :: Nil
 
   /**
-   * Generates all valid constraints including an set of aliased constraints by replacing the
-   * original constraint expressions with the corresponding alias
+   * Generates an additional set of aliased constraints by replacing the original constraint
+   * expressions with the corresponding alias
    */
-  protected def getAllValidConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
+  protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
     var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
     projectList.foreach {
       case a @ Alias(l: Literal, _) =>
@@ -184,7 +170,7 @@ abstract class UnaryNode extends LogicalPlan {
       case _ => // Don't change.
     }
 
-    allConstraints
+    allConstraints -- child.constraints
   }
 
   override protected def validConstraints: Set[Expression] = child.constraints

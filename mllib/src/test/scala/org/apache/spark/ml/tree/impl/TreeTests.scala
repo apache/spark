@@ -159,7 +159,7 @@ private[ml] object TreeTests extends SparkFunSuite {
    * @param split  Split for parent node
    * @return  Parent node with children attached
    */
-  def buildParentNode(left: Node, right: Node, split: Split): Node = {
+  def buildParentNode(left: Node, right: Node, split: Split, isClassification: Boolean): Node = {
     val leftImp = left.impurityStats
     val rightImp = right.impurityStats
     val parentImp = leftImp.copy.add(rightImp)
@@ -168,7 +168,15 @@ private[ml] object TreeTests extends SparkFunSuite {
     val gain = parentImp.calculate() -
       (leftWeight * leftImp.calculate() + rightWeight * rightImp.calculate())
     val pred = parentImp.predict
-    new InternalNode(pred, parentImp.calculate(), gain, left, right, split, parentImp)
+    if (isClassification) {
+      new ClassificationInternalNode(pred, parentImp.calculate(), gain,
+        left.asInstanceOf[ClassificationNode], right.asInstanceOf[ClassificationNode],
+        split, parentImp)
+    } else {
+      new RegressionInternalNode(pred, parentImp.calculate(), gain,
+        left.asInstanceOf[RegressionNode], right.asInstanceOf[RegressionNode],
+        split, parentImp)
+    }
   }
 
   /**

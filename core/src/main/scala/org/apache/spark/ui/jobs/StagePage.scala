@@ -105,7 +105,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val stageAttemptId = parameterAttempt.toInt
 
     val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
-    val (stageData, stageJobIds) = parent.store
+    val stageData = parent.store
       .asOption(parent.store.stageAttempt(stageId, stageAttemptId, details = false))
       .getOrElse {
         val content =
@@ -181,15 +181,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
             <li>
               <strong>Shuffle Spill (Disk): </strong>
               {Utils.bytesToString(stageData.diskBytesSpilled)}
-            </li>
-          }}
-          {if (!stageJobIds.isEmpty) {
-            <li>
-              <strong>Associated Job Ids: </strong>
-              {stageJobIds.map(jobId => {val detailUrl = "%s/jobs/job/?id=%s".format(
-                UIUtils.prependBaseUri(request, parent.basePath), jobId)
-              <a href={s"${detailUrl}"}>{s"${jobId}"} &nbsp;&nbsp;</a>
-            })}
             </li>
           }}
         </ul>
@@ -1057,7 +1048,7 @@ private[ui] object ApiHelper {
   }
 
   def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
-    val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0)._1)
+    val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0))
     (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
   }
 

@@ -58,11 +58,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EVENT_LOG_ALLOW_EC =
-    ConfigBuilder("spark.eventLog.allowErasureCoding")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val EVENT_LOG_TESTING =
     ConfigBuilder("spark.eventLog.testing")
       .internal()
@@ -178,10 +173,6 @@ package object config {
   private[spark] val PRINCIPAL = ConfigBuilder("spark.kerberos.principal")
     .doc("Name of the Kerberos principal.")
     .stringConf.createOptional
-
-  private[spark] val KERBEROS_RELOGIN_PERIOD = ConfigBuilder("spark.kerberos.relogin.period")
-    .timeConf(TimeUnit.SECONDS)
-    .createWithDefaultString("1m")
 
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .intConf

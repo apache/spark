@@ -159,21 +159,15 @@ class AuthEngine implements Closeable {
     // accurately report the errors when they happen.
     RuntimeException error = null;
     byte[] dummy = new byte[8];
-    if (encryptor != null) {
-      try {
-        doCipherOp(Cipher.ENCRYPT_MODE, dummy, true);
-      } catch (Exception e) {
-        error = new RuntimeException(e);
-      }
-      encryptor = null;
+    try {
+      doCipherOp(encryptor, dummy, true);
+    } catch (Exception e) {
+      error = new RuntimeException(e);
     }
-    if (decryptor != null) {
-      try {
-        doCipherOp(Cipher.DECRYPT_MODE, dummy, true);
-      } catch (Exception e) {
-        error = new RuntimeException(e);
-      }
-      decryptor = null;
+    try {
+      doCipherOp(decryptor, dummy, true);
+    } catch (Exception e) {
+      error = new RuntimeException(e);
     }
     random.close();
 
@@ -195,11 +189,11 @@ class AuthEngine implements Closeable {
   }
 
   private byte[] decrypt(byte[] in) throws GeneralSecurityException {
-    return doCipherOp(Cipher.DECRYPT_MODE, in, false);
+    return doCipherOp(decryptor, in, false);
   }
 
   private byte[] encrypt(byte[] in) throws GeneralSecurityException {
-    return doCipherOp(Cipher.ENCRYPT_MODE, in, false);
+    return doCipherOp(encryptor, in, false);
   }
 
   private void initializeForAuth(String cipher, byte[] nonce, SecretKeySpec key)
@@ -211,13 +205,11 @@ class AuthEngine implements Closeable {
     byte[] iv = new byte[conf.ivLength()];
     System.arraycopy(nonce, 0, iv, 0, Math.min(nonce.length, iv.length));
 
-    CryptoCipher _encryptor = CryptoCipherFactory.getCryptoCipher(cipher, cryptoConf);
-    _encryptor.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
-    this.encryptor = _encryptor;
+    encryptor = CryptoCipherFactory.getCryptoCipher(cipher, cryptoConf);
+    encryptor.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
 
-    CryptoCipher _decryptor = CryptoCipherFactory.getCryptoCipher(cipher, cryptoConf);
-    _decryptor.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
-    this.decryptor = _decryptor;
+    decryptor = CryptoCipherFactory.getCryptoCipher(cipher, cryptoConf);
+    decryptor.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
   }
 
   /**
@@ -249,52 +241,29 @@ class AuthEngine implements Closeable {
     return new SecretKeySpec(key.getEncoded(), conf.keyAlgorithm());
   }
 
-  private byte[] doCipherOp(int mode, byte[] in, boolean isFinal)
+  private byte[] doCipherOp(CryptoCipher cipher, byte[] in, boolean isFinal)
     throws GeneralSecurityException {
 
-    CryptoCipher cipher;
-    switch (mode) {
-      case Cipher.ENCRYPT_MODE:
-        cipher = encryptor;
-        break;
-      case Cipher.DECRYPT_MODE:
-        cipher = decryptor;
-        break;
-      default:
-        throw new IllegalArgumentException(String.valueOf(mode));
-    }
+    Preconditions.checkState(cipher != null);
 
-    Preconditions.checkState(cipher != null, "Cipher is invalid because of previous error.");
-
-    try {
-      int scale = 1;
-      while (true) {
-        int size = in.length * scale;
-        byte[] buffer = new byte[size];
-        try {
-          int outSize = isFinal ? cipher.doFinal(in, 0, in.length, buffer, 0)
-            : cipher.update(in, 0, in.length, buffer, 0);
-          if (outSize != buffer.length) {
-            byte[] output = new byte[outSize];
-            System.arraycopy(buffer, 0, output, 0, output.length);
-            return output;
-          } else {
-            return buffer;
-          }
-        } catch (ShortBufferException e) {
-          // Try again with a bigger buffer.
-          scale *= 2;
+    int scale = 1;
+    while (true) {
+      int size = in.length * scale;
+      byte[] buffer = new byte[size];
+      try {
+        int outSize = isFinal ? cipher.doFinal(in, 0, in.length, buffer, 0)
+          : cipher.update(in, 0, in.length, buffer, 0);
+        if (outSize != buffer.length) {
+          byte[] output = new byte[outSize];
+          System.arraycopy(buffer, 0, output, 0, output.length);
+          return output;
+        } else {
+          return buffer;
         }
+      } catch (ShortBufferException e) {
+        // Try again with a bigger buffer.
+        scale *= 2;
       }
-    } catch (InternalError ie) {
-      // SPARK-25535. The commons-cryto library will throw InternalError if something goes wrong,
-      // and leave bad state behind in the Java wrappers, so it's not safe to use them afterwards.
-      if (mode == Cipher.ENCRYPT_MODE) {
-        this.encryptor = null;
-      } else {
-        this.decryptor = null;
-      }
-      throw ie;
     }
   }
 

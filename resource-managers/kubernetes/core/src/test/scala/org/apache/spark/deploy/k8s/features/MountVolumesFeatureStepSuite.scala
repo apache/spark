@@ -37,8 +37,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     roleSecretEnvNamesToKeyRefs = Map.empty,
     roleEnvs = Map.empty,
     roleVolumes = Nil,
-    sparkFiles = Nil,
-    hadoopConfSpec = None)
+    sparkFiles = Nil)
 
   test("Mounts hostPath volumes") {
     val volumeConf = KubernetesVolumeSpec(

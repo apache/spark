@@ -22,17 +22,16 @@ import java.util.{Locale, Properties}
 import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser}
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
@@ -446,7 +445,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val createParser = CreateJacksonParser.string _
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
-      val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = true)
+      val rawParser = new JacksonParser(actualSchema, parsedOptions)
       val parser = new FailureSafeParser[String](
         input => rawParser.parse(input, createParser, UTF8String.fromString),
         parsedOptions.parseMode,
@@ -507,11 +506,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
-      val headerChecker = new CSVHeaderChecker(
+      val parser = new CsvParser(parsedOptions.asParserSettings)
+      val columnNames = parser.parseLine(firstLine)
+      CSVDataSource.checkHeaderColumnNames(
         actualSchema,
-        parsedOptions,
-        source = s"CSV source: $csvDataset")
-      headerChecker.checkHeaderColumnNames(firstLine)
+        columnNames,
+        csvDataset.getClass.getCanonicalName,
+        parsedOptions.enforceSchema,
+        sparkSession.sessionState.conf.caseSensitiveAnalysis)
       filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
     }.getOrElse(filteredLines.rdd)
 

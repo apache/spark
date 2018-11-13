@@ -47,12 +47,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Specifies the behavior when data or table already exists. Options include:
-   * <ul>
-   * <li>`SaveMode.Overwrite`: overwrite the existing data.</li>
-   * <li>`SaveMode.Append`: append the data.</li>
-   * <li>`SaveMode.Ignore`: ignore the operation (i.e. no-op).</li>
-   * <li>`SaveMode.ErrorIfExists`: default option, throw an exception at runtime.</li>
-   * </ul>
+   *   - `SaveMode.Overwrite`: overwrite the existing data.
+   *   - `SaveMode.Append`: append the data.
+   *   - `SaveMode.Ignore`: ignore the operation (i.e. no-op).
+   *   - `SaveMode.ErrorIfExists`: default option, throw an exception at runtime.
    *
    * @since 1.4.0
    */
@@ -63,12 +61,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Specifies the behavior when data or table already exists. Options include:
-   * <ul>
-   * <li>`overwrite`: overwrite the existing data.</li>
-   * <li>`append`: append the data.</li>
-   * <li>`ignore`: ignore the operation (i.e. no-op).</li>
-   * <li>`error` or `errorifexists`: default option, throw an exception at runtime.</li>
-   * </ul>
+   *   - `overwrite`: overwrite the existing data.
+   *   - `append`: append the data.
+   *   - `ignore`: ignore the operation (i.e. no-op).
+   *   - `error` or `errorifexists`: default option, throw an exception at runtime.
    *
    * @since 1.4.0
    */
@@ -167,10 +163,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Partitions the output by the given columns on the file system. If specified, the output is
    * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
    * partition a dataset by year and then month, the directory layout would look like:
-   * <ul>
-   * <li>year=2016/month=01/</li>
-   * <li>year=2016/month=02/</li>
-   * </ul>
+   *
+   *   - year=2016/month=01/
+   *   - year=2016/month=02/
    *
    * Partitioning is one of the most widely used techniques to optimize physical data layout.
    * It provides a coarse-grained index for skipping unnecessary data reads when queries have
@@ -672,8 +667,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
-    // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(session, qe, Some(name))(qe.toRdd)
+    try {
+      val start = System.nanoTime()
+      // call `QueryExecution.toRDD` to trigger the execution of commands.
+      SQLExecution.withNewExecutionId(session, qe)(qe.toRdd)
+      val end = System.nanoTime()
+      session.listenerManager.onSuccess(name, qe, end - start)
+    } catch {
+      case e: Exception =>
+        session.listenerManager.onFailure(name, qe, e)
+        throw e
+    }
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

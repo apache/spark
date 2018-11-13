@@ -23,6 +23,7 @@ import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -31,10 +32,13 @@ import org.apache.spark.streaming.api.java.{ JavaInputDStream, JavaStreamingCont
 import org.apache.spark.streaming.dstream._
 
 /**
+ * :: Experimental ::
  * object for constructing Kafka streams and RDDs
  */
+@Experimental
 object KafkaUtils extends Logging {
   /**
+   * :: Experimental ::
    * Scala constructor for a batch-oriented interface for consuming from Kafka.
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
@@ -48,6 +52,7 @@ object KafkaUtils extends Logging {
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
+  @Experimental
   def createRDD[K, V](
       sc: SparkContext,
       kafkaParams: ju.Map[String, Object],
@@ -70,6 +75,7 @@ object KafkaUtils extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Java constructor for a batch-oriented interface for consuming from Kafka.
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
@@ -83,6 +89,7 @@ object KafkaUtils extends Logging {
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
+  @Experimental
   def createRDD[K, V](
       jsc: JavaSparkContext,
       kafkaParams: ju.Map[String, Object],
@@ -94,6 +101,7 @@ object KafkaUtils extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Scala constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
    * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
@@ -106,6 +114,7 @@ object KafkaUtils extends Logging {
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
+  @Experimental
   def createDirectStream[K, V](
       ssc: StreamingContext,
       locationStrategy: LocationStrategy,
@@ -116,6 +125,7 @@ object KafkaUtils extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Scala constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
@@ -127,6 +137,7 @@ object KafkaUtils extends Logging {
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
+  @Experimental
   def createDirectStream[K, V](
       ssc: StreamingContext,
       locationStrategy: LocationStrategy,
@@ -137,6 +148,7 @@ object KafkaUtils extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Java constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
@@ -146,6 +158,7 @@ object KafkaUtils extends Logging {
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
+  @Experimental
   def createDirectStream[K, V](
       jssc: JavaStreamingContext,
       locationStrategy: LocationStrategy,
@@ -157,6 +170,7 @@ object KafkaUtils extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Java constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
@@ -168,6 +182,7 @@ object KafkaUtils extends Logging {
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
+  @Experimental
   def createDirectStream[K, V](
       jssc: JavaStreamingContext,
       locationStrategy: LocationStrategy,

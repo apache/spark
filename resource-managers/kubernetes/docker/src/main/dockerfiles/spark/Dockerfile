@@ -18,9 +18,7 @@
 FROM openjdk:8-alpine
 
 ARG spark_jars=jars
-ARG example_jars=examples/jars
 ARG img_path=kubernetes/dockerfiles
-ARG k8s_tests=kubernetes/tests
 
 # Before building the docker image, first build and make a Spark distribution following
 # the instructions in http://spark.apache.org/docs/latest/building-spark.html.
@@ -31,7 +29,7 @@ ARG k8s_tests=kubernetes/tests
 
 RUN set -ex && \
     apk upgrade --no-cache && \
-    apk add --no-cache bash tini krb5 krb5-libs && \
+    apk add --no-cache bash tini && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/work-dir && \
     touch /opt/spark/RELEASE && \

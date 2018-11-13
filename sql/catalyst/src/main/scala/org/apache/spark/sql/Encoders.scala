@@ -203,10 +203,12 @@ object Encoders {
     validatePublicClass[T]()
 
     ExpressionEncoder[T](
-      objSerializer =
+      schema = new StructType().add("value", BinaryType),
+      flat = true,
+      serializer = Seq(
         EncodeUsingSerializer(
-          BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo),
-      objDeserializer =
+          BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo)),
+      deserializer =
         DecodeUsingSerializer[T](
           Cast(GetColumnByOrdinal(0, BinaryType), BinaryType),
           classTag[T],

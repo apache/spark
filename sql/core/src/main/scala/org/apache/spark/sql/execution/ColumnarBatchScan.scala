@@ -34,6 +34,8 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
   protected def supportsBatch: Boolean = true
 
+  protected def needsUnsafeRowConversion: Boolean = true
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
@@ -134,7 +136,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
        |if ($batch == null) {
        |  $nextBatchFuncName();
        |}
-       |while ($limitNotReachedCond $batch != null) {
+       |while ($batch != null) {
        |  int $numRows = $batch.numRows();
        |  int $localEnd = $numRows - $idx;
        |  for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
@@ -157,11 +159,17 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
     ctx.INPUT_ROW = row
     ctx.currentVars = null
+    // Always provide `outputVars`, so that the framework can help us build unsafe row if the input
+    // row is not unsafe row, i.e. `needsUnsafeRowConversion` is true.
+    val outputVars = output.zipWithIndex.map { case (a, i) =>
+      BoundReference(i, a.dataType, a.nullable).genCode(ctx)
+    }
+    val inputRow = if (needsUnsafeRowConversion) null else row
     s"""
-       |while ($limitNotReachedCond $input.hasNext()) {
+       |while ($input.hasNext()) {
        |  InternalRow $row = (InternalRow) $input.next();
        |  $numOutputRows.add(1);
-       |  ${consume(ctx, null, row).trim}
+       |  ${consume(ctx, outputVars, inputRow).trim}
        |  if (shouldStop()) return;
        |}
      """.stripMargin

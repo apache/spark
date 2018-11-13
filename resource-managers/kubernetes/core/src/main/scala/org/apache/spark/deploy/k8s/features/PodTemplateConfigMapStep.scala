@@ -48,7 +48,7 @@ private[spark] class PodTemplateConfigMapStep(
     val containerWithVolume = new ContainerBuilder(pod.container)
         .addNewVolumeMount()
           .withName(POD_TEMPLATE_VOLUME)
-          .withMountPath(EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH)
+          .withMountPath(EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH)
         .endVolumeMount()
       .build()
     SparkPod(podWithVolume, containerWithVolume)
@@ -56,7 +56,7 @@ private[spark] class PodTemplateConfigMapStep(
 
   def getAdditionalPodSystemProperties(): Map[String, String] = Map[String, String](
     KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key ->
-      (EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH + "/" + EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
+      (EXECUTOR_POD_SPEC_TEMPLATE_MOUNTHPATH + "/" + EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
 
   def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     require(conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined)

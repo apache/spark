@@ -529,7 +529,7 @@ case class JsonToStructs(
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
-      schema = ExprUtils.evalTypeExpr(schema),
+      schema = JsonExprUtils.evalSchemaExpr(schema),
       options = options,
       child = child,
       timeZoneId = None)
@@ -538,8 +538,8 @@ case class JsonToStructs(
 
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
-      schema = ExprUtils.evalTypeExpr(schema),
-      options = ExprUtils.convertToMapData(options),
+      schema = JsonExprUtils.evalSchemaExpr(schema),
+      options = JsonExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
 
@@ -554,36 +554,18 @@ case class JsonToStructs(
   @transient
   lazy val converter = nullableSchema match {
     case _: StructType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
+      (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
     case _: ArrayType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
+      (rows: Seq[InternalRow]) => rows.head.getArray(0)
     case _: MapType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
+      (rows: Seq[InternalRow]) => rows.head.getMap(0)
   }
 
-  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
-  @transient lazy val parser = {
-    val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
-    val mode = parsedOptions.parseMode
-    if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
-        s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
-    }
-    val rawParser = new JacksonParser(nullableSchema, parsedOptions, allowArrayAsStructs = false)
-    val createParser = CreateJacksonParser.utf8String _
-
-    val parserSchema = nullableSchema match {
-      case s: StructType => s
-      case other => StructType(StructField("value", other) :: Nil)
-    }
-
-    new FailureSafeParser[UTF8String](
-      input => rawParser.parse(input, createParser, identity[UTF8String]),
-      mode,
-      parserSchema,
-      parsedOptions.columnNameOfCorruptRecord,
-      parsedOptions.multiLine)
-  }
+  @transient
+  lazy val parser =
+    new JacksonParser(
+      nullableSchema,
+      new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
 
   override def dataType: DataType = nullableSchema
 
@@ -591,7 +573,35 @@ case class JsonToStructs(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
-    converter(parser.parse(json.asInstanceOf[UTF8String]))
+    // When input is,
+    //   - `null`: `null`.
+    //   - invalid json: `null`.
+    //   - empty string: `null`.
+    //
+    // When the schema is array,
+    //   - json array: `Array(Row(...), ...)`
+    //   - json object: `Array(Row(...))`
+    //   - empty json array: `Array()`.
+    //   - empty json object: `Array(Row(null))`.
+    //
+    // When the schema is a struct,
+    //   - json object/array with single element: `Row(...)`
+    //   - json array with multiple elements: `null`
+    //   - empty json array: `null`.
+    //   - empty json object: `Row(null)`.
+
+    // We need `null` if the input string is an empty string. `JacksonParser` can
+    // deal with this but produces `Nil`.
+    if (json.toString.trim.isEmpty) return null
+
+    try {
+      converter(parser.parse(
+        json.asInstanceOf[UTF8String],
+        CreateJacksonParser.utf8String,
+        identity[UTF8String]))
+    } catch {
+      case _: BadRecordException => null
+    }
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
@@ -600,8 +610,6 @@ case class JsonToStructs(
     case _: MapType => "entries"
     case _ => super.sql
   }
-
-  override def prettyName: String = "from_json"
 }
 
 /**
@@ -642,7 +650,7 @@ case class StructsToJson(
   def this(child: Expression) = this(Map.empty, child, None)
   def this(child: Expression, options: Expression) =
     this(
-      options = ExprUtils.convertToMapData(options),
+      options = JsonExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
 
@@ -722,8 +730,6 @@ case class StructsToJson(
   override def nullSafeEval(value: Any): Any = converter(value)
 
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
-
-  override def prettyName: String = "to_json"
 }
 
 /**
@@ -742,17 +748,13 @@ case class StructsToJson(
 case class SchemaOfJson(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback {
+  extends UnaryExpression with String2StringExpression with CodegenFallback {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
   def this(child: Expression, options: Expression) = this(
       child = child,
-      options = ExprUtils.convertToMapData(options))
-
-  override def dataType: DataType = StringType
-
-  override def nullable: Boolean = false
+      options = JsonExprUtils.convertToMapData(options))
 
   @transient
   private lazy val jsonOptions = new JSONOptions(options, "UTC")
@@ -764,23 +766,39 @@ case class SchemaOfJson(
     factory
   }
 
-  @transient
-  private lazy val json = child.eval().asInstanceOf[UTF8String]
-
-  override def checkInputDataTypes(): TypeCheckResult = child match {
-    case Literal(s, StringType) if s != null => super.checkInputDataTypes()
-    case _ => TypeCheckResult.TypeCheckFailure(
-      s"The input json should be a string literal and not null; however, got ${child.sql}.")
-  }
-
-  override def eval(v: InternalRow): Any = {
-    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+  override def convert(v: UTF8String): UTF8String = {
+    val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, v)) { parser =>
       parser.nextToken()
       inferField(parser, jsonOptions)
     }
 
     UTF8String.fromString(dt.catalogString)
   }
+}
 
-  override def prettyName: String = "schema_of_json"
+object JsonExprUtils {
+
+  def evalSchemaExpr(exp: Expression): DataType = exp match {
+    case Literal(s, StringType) => DataType.fromDDL(s.toString)
+    case e @ SchemaOfJson(_: Literal, _) =>
+      val ddlSchema = e.eval().asInstanceOf[UTF8String]
+      DataType.fromDDL(ddlSchema.toString)
+    case e => throw new AnalysisException(
+      "Schema should be specified in DDL format as a string literal" +
+      s" or output of the schema_of_json function instead of ${e.sql}")
+  }
+
+  def convertToMapData(exp: Expression): Map[String, String] = exp match {
+    case m: CreateMap
+        if m.dataType.acceptsType(MapType(StringType, StringType, valueContainsNull = false)) =>
+      val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
+      ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
+        key.toString -> value.toString
+      }
+    case m: CreateMap =>
+      throw new AnalysisException(
+        s"A type of keys and values in map() must be string, but got ${m.dataType.catalogString}")
+    case _ =>
+      throw new AnalysisException("Must use a map() function for options")
+  }
 }

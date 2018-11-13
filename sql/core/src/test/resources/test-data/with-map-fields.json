@@ -1,5 +1,0 @@
-{ "id": 1, "intervals": { "a": { "startTime": 111, "endTime": 211 }, "b": { "startTime": 121, "endTime": 221 }}}
-{ "id": 2, "intervals": { "a": { "startTime": 112, "endTime": 212 }, "b": { "startTime": 122, "endTime": 222 }}}
-{ "id": 3, "intervals": { "a": { "startTime": 113, "endTime": 213 }, "b": { "startTime": 123, "endTime": 223 }}}
-{ "id": 4, "intervals": { }}
-{ "id": 5 }

@@ -154,8 +154,6 @@ private[spark] class Client(
    * available in the alpha API.
    */
   def submitApplication(): ApplicationId = {
-    ResourceRequestHelper.validateResources(sparkConf)
-
     var appId: ApplicationId = null
     try {
       launcherBackend.connect()
@@ -236,13 +234,6 @@ private[spark] class Client(
   def createApplicationSubmissionContext(
       newApp: YarnClientApplication,
       containerContext: ContainerLaunchContext): ApplicationSubmissionContext = {
-    val amResources =
-      if (isClusterMode) {
-        sparkConf.getAllWithPrefix(config.YARN_DRIVER_RESOURCE_TYPES_PREFIX).toMap
-      } else {
-        sparkConf.getAllWithPrefix(config.YARN_AM_RESOURCE_TYPES_PREFIX).toMap
-      }
-    logDebug(s"AM resources: $amResources")
     val appContext = newApp.getApplicationSubmissionContext
     appContext.setApplicationName(sparkConf.get("spark.app.name", "Spark"))
     appContext.setQueue(sparkConf.get(QUEUE_NAME))
@@ -265,10 +256,6 @@ private[spark] class Client(
     val capability = Records.newRecord(classOf[Resource])
     capability.setMemory(amMemory + amMemoryOverhead)
     capability.setVirtualCores(amCores)
-    if (amResources.nonEmpty) {
-      ResourceRequestHelper.setResourceRequests(amResources, capability)
-    }
-    logDebug(s"Created resource capability for AM request: $capability")
 
     sparkConf.get(AM_NODE_LABEL_EXPRESSION) match {
       case Some(expr) =>
@@ -286,10 +273,19 @@ private[spark] class Client(
     sparkConf.get(ROLLED_LOG_INCLUDE_PATTERN).foreach { includePattern =>
       try {
         val logAggregationContext = Records.newRecord(classOf[LogAggregationContext])
-        logAggregationContext.setRolledLogsIncludePattern(includePattern)
+
+        // These two methods were added in Hadoop 2.6.4, so we still need to use reflection to
+        // avoid compile error when building against Hadoop 2.6.0 ~ 2.6.3.
+        val setRolledLogsIncludePatternMethod =
+          logAggregationContext.getClass.getMethod("setRolledLogsIncludePattern", classOf[String])
+        setRolledLogsIncludePatternMethod.invoke(logAggregationContext, includePattern)
+
         sparkConf.get(ROLLED_LOG_EXCLUDE_PATTERN).foreach { excludePattern =>
-          logAggregationContext.setRolledLogsExcludePattern(excludePattern)
+          val setRolledLogsExcludePatternMethod =
+            logAggregationContext.getClass.getMethod("setRolledLogsExcludePattern", classOf[String])
+          setRolledLogsExcludePatternMethod.invoke(logAggregationContext, excludePattern)
         }
+
         appContext.setLogAggregationContext(logAggregationContext)
       } catch {
         case NonFatal(e) =>
@@ -310,7 +306,7 @@ private[spark] class Client(
   private def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = {
     val credentials = UserGroupInformation.getCurrentUser().getCredentials()
     val credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf)
-    credentialManager.obtainDelegationTokens(credentials)
+    credentialManager.obtainDelegationTokens(hadoopConf, credentials)
 
     // When using a proxy user, copy the delegation tokens to the user's credentials. Avoid
     // that for regular users, since in those case the user already has access to the TGT,
@@ -1169,7 +1165,7 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.8.1-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.10.7-src.zip")
         require(py4jFile.exists(),
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())

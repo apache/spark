@@ -38,14 +38,18 @@ object TypedAggregateExpression {
     val bufferSerializer = bufferEncoder.namedExpressions
 
     val outputEncoder = encoderFor[OUT]
-    val outputType = outputEncoder.objSerializer.dataType
+    val outputType = if (outputEncoder.flat) {
+      outputEncoder.schema.head.dataType
+    } else {
+      outputEncoder.schema
+    }
 
     // Checks if the buffer object is simple, i.e. the buffer encoder is flat and the serializer
     // expression is an alias of `BoundReference`, which means the buffer object doesn't need
     // serialization.
     val isSimpleBuffer = {
       bufferSerializer.head match {
-        case Alias(_: BoundReference, _) if !bufferEncoder.isSerializedAsStruct => true
+        case Alias(_: BoundReference, _) if bufferEncoder.flat => true
         case _ => false
       }
     }
@@ -67,7 +71,7 @@ object TypedAggregateExpression {
         outputEncoder.serializer,
         outputEncoder.deserializer.dataType,
         outputType,
-        outputEncoder.objSerializer.nullable)
+        !outputEncoder.flat || outputEncoder.schema.head.nullable)
     } else {
       ComplexTypedAggregateExpression(
         aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
@@ -78,7 +82,7 @@ object TypedAggregateExpression {
         bufferEncoder.resolveAndBind().deserializer,
         outputEncoder.serializer,
         outputType,
-        outputEncoder.objSerializer.nullable)
+        !outputEncoder.flat || outputEncoder.schema.head.nullable)
     }
   }
 }

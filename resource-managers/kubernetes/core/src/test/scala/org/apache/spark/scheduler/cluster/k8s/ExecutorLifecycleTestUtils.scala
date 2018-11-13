@@ -82,7 +82,7 @@ object ExecutorLifecycleTestUtils {
   def deletedExecutor(executorId: Long): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId))
       .editOrNewMetadata()
-        .withDeletionTimestamp("523012521")
+        .withNewDeletionTimestamp("523012521")
         .endMetadata()
       .build()
   }

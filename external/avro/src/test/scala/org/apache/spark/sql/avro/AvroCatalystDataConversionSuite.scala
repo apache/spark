@@ -17,19 +17,14 @@
 
 package org.apache.spark.sql.avro
 
-import org.apache.avro.Schema
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class AvroCatalystDataConversionSuite extends SparkFunSuite
-  with SharedSQLContext
-  with ExpressionEvalHelper {
+class AvroCatalystDataConversionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private def roundTripTest(data: Literal): Unit = {
     val avroType = SchemaConverters.toAvroType(data.dataType, data.nullable)
@@ -38,26 +33,14 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
 
   private def checkResult(data: Literal, schema: String, expected: Any): Unit = {
     checkEvaluation(
-      AvroDataToCatalyst(CatalystDataToAvro(data), schema, Map.empty),
+      AvroDataToCatalyst(CatalystDataToAvro(data), schema),
       prepareExpectedResult(expected))
   }
 
-  protected def checkUnsupportedRead(data: Literal, schema: String): Unit = {
-    val binary = CatalystDataToAvro(data)
-    intercept[Exception] {
-      AvroDataToCatalyst(binary, schema, Map("mode" -> "FAILFAST")).eval()
+  private def assertFail(data: Literal, schema: String): Unit = {
+    intercept[java.io.EOFException] {
+      AvroDataToCatalyst(CatalystDataToAvro(data), schema).eval()
     }
-
-    val expected = {
-      val avroSchema = new Schema.Parser().parse(schema)
-      SchemaConverters.toSqlType(avroSchema).dataType match {
-        case st: StructType => Row.fromSeq((0 until st.length).map(_ => null))
-        case _ => null
-      }
-    }
-
-    checkEvaluation(AvroDataToCatalyst(binary, schema, Map("mode" -> "PERMISSIVE")),
-      expected)
   }
 
   private val testingTypes = Seq(
@@ -138,7 +121,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
        """.stripMargin
 
     // When read int as string, avro reader is not able to parse the binary and fail.
-    checkUnsupportedRead(data, avroTypeJson)
+    assertFail(data, avroTypeJson)
   }
 
   test("read string as int") {
@@ -168,7 +151,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
 
     // When read float data as double, avro reader fails(trying to read 8 bytes while the data have
     // only 4 bytes).
-    checkUnsupportedRead(data, avroTypeJson)
+    assertFail(data, avroTypeJson)
   }
 
   test("read double as float") {
@@ -183,30 +166,5 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
 
     // avro reader reads the first 4 bytes of a double as a float, the result is totally undefined.
     checkResult(data, avroTypeJson, 5.848603E35f)
-  }
-
-  test("Handle unsupported input of record type") {
-    val actualSchema = StructType(Seq(
-      StructField("col_0", StringType, false),
-      StructField("col_1", ShortType, false),
-      StructField("col_2", DecimalType(8, 4), false),
-      StructField("col_3", BooleanType, true),
-      StructField("col_4", DecimalType(38, 38), false)))
-
-    val expectedSchema = StructType(Seq(
-      StructField("col_0", BinaryType, false),
-      StructField("col_1", DoubleType, false),
-      StructField("col_2", DecimalType(18, 4), false),
-      StructField("col_3", StringType, true),
-      StructField("col_4", DecimalType(38, 38), false)))
-
-    val seed = scala.util.Random.nextLong()
-    withClue(s"create random record with seed $seed") {
-      val data = RandomDataGenerator.randomRow(new scala.util.Random(seed), actualSchema)
-      val converter = CatalystTypeConverters.createToCatalystConverter(actualSchema)
-      val input = Literal.create(converter(data), actualSchema)
-      val avroSchema = SchemaConverters.toAvroType(expectedSchema).toString
-      checkUnsupportedRead(input, avroSchema)
-    }
   }
 }

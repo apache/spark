@@ -88,10 +88,6 @@ a.kill-link {
   float: right;
 }
 
-a.name-link {
-  word-wrap: break-word;
-}
-
 span.expand-details {
   font-size: 10pt;
   cursor: pointer;
