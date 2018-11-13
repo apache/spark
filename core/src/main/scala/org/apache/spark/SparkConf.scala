@@ -93,16 +93,27 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     if (!silent) {
       logDeprecationWarning(key)
     }
+    val entry = sparkConfEntries.get(key)
+    if (entry != null) {
+      // Only verify configs in the SparkConf object
+      entry.valueConverter(value)
+    }
     settings.put(key, value)
     this
   }
 
   private[spark] def set[T](entry: ConfigEntry[T], value: T): SparkConf = {
+    require(entry != null, "entry cannot be null")
+    require(value != null, s"value cannot be null for key: ${entry.key}")
+    require(sparkConfEntries.get(entry.key) == entry, s"$entry is not registered")
     set(entry.key, entry.stringConverter(value))
     this
   }
 
   private[spark] def set[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
+    require(entry != null, "entry cannot be null")
+    require(value != null, s"value cannot be null for key: ${entry.key}")
+    require(sparkConfEntries.get(entry.key) == entry, s"$entry is not registered")
     set(entry.key, entry.rawStringConverter(value))
     this
   }
@@ -237,17 +248,37 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   private[spark] def remove(entry: ConfigEntry[_]): SparkConf = {
+    require(sparkConfEntries.get(entry.key) == entry, s"$entry is not registered")
     remove(entry.key)
   }
 
   /** Get a parameter; throws a NoSuchElementException if it's not set */
   def get(key: String): String = {
-    getOption(key).getOrElse(throw new NoSuchElementException(key))
+    getOption(key)
+      .orElse {
+        // Try to use the default value
+        Option(sparkConfEntries.get(key)).map { e => e.stringConverter(e.readFrom(reader)) }
+      }
+      .getOrElse(throw new NoSuchElementException(key))
   }
 
   /** Get a parameter, falling back to a default if not set */
   def get(key: String, defaultValue: String): String = {
-    getOption(key).getOrElse(defaultValue)
+    if (defaultValue != null && defaultValue != ConfigEntry.UNDEFINED) {
+      val entry = sparkConfEntries.get(key)
+      if (entry != null) {
+        // Only verify configs in the SQLConf object
+        entry.valueConverter(defaultValue)
+      }
+    }
+    getOption(key).getOrElse {
+      // If the key is not set, need to check whether the config entry is registered and is
+      // a fallback conf, so that we can check its parent.
+      sparkConfEntries.get(key) match {
+        case e: FallbackConfigEntry[_] => get(e.fallback.key, defaultValue)
+        case _ => defaultValue
+      }
+    }
   }
 
   /**
@@ -258,6 +289,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * - This will throw an exception is the config is not optional and the value is not set.
    */
   private[spark] def get[T](entry: ConfigEntry[T]): T = {
+    require(sparkConfEntries.get(entry.key) == entry, s"$entry is not registered")
     entry.readFrom(reader)
   }
 
@@ -630,6 +662,19 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 }
 
 private[spark] object SparkConf extends Logging {
+
+  private[spark] val sparkConfEntries = java.util.Collections.synchronizedMap(
+    new java.util.HashMap[String, ConfigEntry[_]]())
+
+  private def register(entry: ConfigEntry[_]): Unit = sparkConfEntries.synchronized {
+    require(!sparkConfEntries.containsKey(entry.key),
+      s"Duplicate SparkConfigEntry. ${entry.key} has been registered")
+    sparkConfEntries.put(entry.key, entry)
+  }
+
+  def buildConf(key: String): ConfigBuilder = {
+    ConfigBuilder(key).onCreate(register)
+  }
 
   /**
    * Maps deprecated config keys to information about the deprecation.

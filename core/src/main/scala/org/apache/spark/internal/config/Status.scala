@@ -19,38 +19,40 @@ package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.SparkConf.buildConf
+
 private[spark] object Status {
 
-  val ASYNC_TRACKING_ENABLED = ConfigBuilder("spark.appStateStore.asyncTracking.enable")
+  val ASYNC_TRACKING_ENABLED = buildConf("spark.appStateStore.asyncTracking.enable")
     .booleanConf
     .createWithDefault(true)
 
-  val LIVE_ENTITY_UPDATE_PERIOD = ConfigBuilder("spark.ui.liveUpdate.period")
+  val LIVE_ENTITY_UPDATE_PERIOD = buildConf("spark.ui.liveUpdate.period")
     .timeConf(TimeUnit.NANOSECONDS)
     .createWithDefaultString("100ms")
 
-  val MAX_RETAINED_JOBS = ConfigBuilder("spark.ui.retainedJobs")
+  val MAX_RETAINED_JOBS = buildConf("spark.ui.retainedJobs")
     .intConf
     .createWithDefault(1000)
 
-  val MAX_RETAINED_STAGES = ConfigBuilder("spark.ui.retainedStages")
+  val MAX_RETAINED_STAGES = buildConf("spark.ui.retainedStages")
     .intConf
     .createWithDefault(1000)
 
-  val MAX_RETAINED_TASKS_PER_STAGE = ConfigBuilder("spark.ui.retainedTasks")
+  val MAX_RETAINED_TASKS_PER_STAGE = buildConf("spark.ui.retainedTasks")
     .intConf
     .createWithDefault(100000)
 
-  val MAX_RETAINED_DEAD_EXECUTORS = ConfigBuilder("spark.ui.retainedDeadExecutors")
+  val MAX_RETAINED_DEAD_EXECUTORS = buildConf("spark.ui.retainedDeadExecutors")
     .intConf
     .createWithDefault(100)
 
-  val MAX_RETAINED_ROOT_NODES = ConfigBuilder("spark.ui.dagGraph.retainedRootRDDs")
+  val MAX_RETAINED_ROOT_NODES = buildConf("spark.ui.dagGraph.retainedRootRDDs")
     .intConf
     .createWithDefault(Int.MaxValue)
 
   val APP_STATUS_METRICS_ENABLED =
-    ConfigBuilder("spark.app.status.metrics.enabled")
+    buildConf("spark.app.status.metrics.enabled")
       .doc("Whether Dropwizard/Codahale metrics " +
         "will be reported for the status of the running spark app.")
       .booleanConf

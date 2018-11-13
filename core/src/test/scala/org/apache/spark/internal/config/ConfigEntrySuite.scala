@@ -21,6 +21,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkConf.buildConf
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.SparkConfWithEnv
 
@@ -32,7 +33,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: int") {
     val conf = new SparkConf()
-    val iConf = ConfigBuilder(testKey("int")).intConf.createWithDefault(1)
+    val iConf = buildConf(testKey("int")).intConf.createWithDefault(1)
     assert(conf.get(iConf) === 1)
     conf.set(iConf, 2)
     assert(conf.get(iConf) === 2)
@@ -40,21 +41,21 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: long") {
     val conf = new SparkConf()
-    val lConf = ConfigBuilder(testKey("long")).longConf.createWithDefault(0L)
+    val lConf = buildConf(testKey("long")).longConf.createWithDefault(0L)
     conf.set(lConf, 1234L)
     assert(conf.get(lConf) === 1234L)
   }
 
   test("conf entry: double") {
     val conf = new SparkConf()
-    val dConf = ConfigBuilder(testKey("double")).doubleConf.createWithDefault(0.0)
+    val dConf = buildConf(testKey("double")).doubleConf.createWithDefault(0.0)
     conf.set(dConf, 20.0)
     assert(conf.get(dConf) === 20.0)
   }
 
   test("conf entry: boolean") {
     val conf = new SparkConf()
-    val bConf = ConfigBuilder(testKey("boolean")).booleanConf.createWithDefault(false)
+    val bConf = buildConf(testKey("boolean")).booleanConf.createWithDefault(false)
     assert(!conf.get(bConf))
     conf.set(bConf, true)
     assert(conf.get(bConf))
@@ -62,7 +63,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: optional") {
     val conf = new SparkConf()
-    val optionalConf = ConfigBuilder(testKey("optional")).intConf.createOptional
+    val optionalConf = buildConf(testKey("optional")).intConf.createOptional
     assert(conf.get(optionalConf) === None)
     conf.set(optionalConf, 1)
     assert(conf.get(optionalConf) === Some(1))
@@ -70,8 +71,8 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: fallback") {
     val conf = new SparkConf()
-    val parentConf = ConfigBuilder(testKey("parent")).intConf.createWithDefault(1)
-    val confWithFallback = ConfigBuilder(testKey("fallback")).fallbackConf(parentConf)
+    val parentConf = buildConf(testKey("parent")).intConf.createWithDefault(1)
+    val confWithFallback = buildConf(testKey("fallback")).fallbackConf(parentConf)
     assert(conf.get(confWithFallback) === 1)
     conf.set(confWithFallback, 2)
     assert(conf.get(parentConf) === 1)
@@ -80,7 +81,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: time") {
     val conf = new SparkConf()
-    val time = ConfigBuilder(testKey("time")).timeConf(TimeUnit.SECONDS)
+    val time = buildConf(testKey("time")).timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
     assert(conf.get(time) === 3600L)
     conf.set(time.key, "1m")
@@ -89,7 +90,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: bytes") {
     val conf = new SparkConf()
-    val bytes = ConfigBuilder(testKey("bytes")).bytesConf(ByteUnit.KiB)
+    val bytes = buildConf(testKey("bytes")).bytesConf(ByteUnit.KiB)
       .createWithDefaultString("1m")
     assert(conf.get(bytes) === 1024L)
     conf.set(bytes.key, "1k")
@@ -98,7 +99,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: regex") {
     val conf = new SparkConf()
-    val rConf = ConfigBuilder(testKey("regex")).regexConf.createWithDefault(".*".r)
+    val rConf = buildConf(testKey("regex")).regexConf.createWithDefault(".*".r)
 
     conf.set(rConf, "[0-9a-f]{8}".r)
     assert(conf.get(rConf).toString === "[0-9a-f]{8}")
@@ -106,14 +107,13 @@ class ConfigEntrySuite extends SparkFunSuite {
     conf.set(rConf.key, "[0-9a-f]{4}")
     assert(conf.get(rConf).toString === "[0-9a-f]{4}")
 
-    conf.set(rConf.key, "[.")
-    val e = intercept[IllegalArgumentException](conf.get(rConf))
+    val e = intercept[IllegalArgumentException](conf.set(rConf.key, "[."))
     assert(e.getMessage.contains("regex should be a regex, but was"))
   }
 
   test("conf entry: string seq") {
     val conf = new SparkConf()
-    val seq = ConfigBuilder(testKey("seq")).stringConf.toSequence.createWithDefault(Seq())
+    val seq = buildConf(testKey("seq")).stringConf.toSequence.createWithDefault(Seq())
     conf.set(seq.key, "1,,2, 3 , , 4")
     assert(conf.get(seq) === Seq("1", "2", "3", "4"))
     conf.set(seq, Seq("1", "2"))
@@ -122,7 +122,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: int seq") {
     val conf = new SparkConf()
-    val seq = ConfigBuilder(testKey("intSeq")).intConf.toSequence.createWithDefault(Seq())
+    val seq = buildConf(testKey("intSeq")).intConf.toSequence.createWithDefault(Seq())
     conf.set(seq.key, "1,,2, 3 , , 4")
     assert(conf.get(seq) === Seq(1, 2, 3, 4))
     conf.set(seq, Seq(1, 2))
@@ -131,7 +131,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: transformation") {
     val conf = new SparkConf()
-    val transformationConf = ConfigBuilder(testKey("transformation"))
+    val transformationConf = buildConf(testKey("transformation"))
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
       .createWithDefault("FOO")
@@ -143,7 +143,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: checkValue()") {
     def createEntry(default: Int): ConfigEntry[Int] =
-      ConfigBuilder(testKey("checkValue"))
+      buildConf(testKey("checkValue"))
         .intConf
         .checkValue(value => value >= 0, "value must be non-negative")
         .createWithDefault(default)
@@ -151,9 +151,8 @@ class ConfigEntrySuite extends SparkFunSuite {
     val conf = new SparkConf()
 
     val entry = createEntry(10)
-    conf.set(entry, -1)
     val e1 = intercept[IllegalArgumentException] {
-      conf.get(entry)
+      conf.set(entry, -1)
     }
     assert(e1.getMessage == "value must be non-negative")
 
@@ -165,7 +164,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: valid values check") {
     val conf = new SparkConf()
-    val enum = ConfigBuilder(testKey("enum"))
+    val enum = buildConf(testKey("enum"))
       .stringConf
       .checkValues(Set("a", "b", "c"))
       .createWithDefault("a")
@@ -174,26 +173,24 @@ class ConfigEntrySuite extends SparkFunSuite {
     conf.set(enum, "b")
     assert(conf.get(enum) === "b")
 
-    conf.set(enum, "d")
     val enumError = intercept[IllegalArgumentException] {
-      conf.get(enum)
+      conf.set(enum, "d")
     }
     assert(enumError.getMessage === s"The value of ${enum.key} should be one of a, b, c, but was d")
   }
 
   test("conf entry: conversion error") {
     val conf = new SparkConf()
-    val conversionTest = ConfigBuilder(testKey("conversionTest")).doubleConf.createOptional
-    conf.set(conversionTest.key, "abc")
+    val conversionTest = buildConf(testKey("conversionTest")).doubleConf.createOptional
     val conversionError = intercept[IllegalArgumentException] {
-      conf.get(conversionTest)
+      conf.set(conversionTest.key, "abc")
     }
     assert(conversionError.getMessage === s"${conversionTest.key} should be double, but was abc")
   }
 
   test("default value handling is null-safe") {
     val conf = new SparkConf()
-    val stringConf = ConfigBuilder(testKey("string")).stringConf.createWithDefault(null)
+    val stringConf = buildConf(testKey("string")).stringConf.createWithDefault(null)
     assert(conf.get(stringConf) === null)
   }
 
@@ -201,19 +198,19 @@ class ConfigEntrySuite extends SparkFunSuite {
     val env = Map("ENV1" -> "env1")
     val conf = new SparkConfWithEnv(env)
 
-    val stringConf = ConfigBuilder(testKey("stringForExpansion"))
+    val stringConf = buildConf(testKey("stringForExpansion"))
       .stringConf
       .createWithDefault("string1")
-    val optionalConf = ConfigBuilder(testKey("optionForExpansion"))
+    val optionalConf = buildConf(testKey("optionForExpansion"))
       .stringConf
       .createOptional
-    val intConf = ConfigBuilder(testKey("intForExpansion"))
+    val intConf = buildConf(testKey("intForExpansion"))
       .intConf
       .createWithDefault(42)
-    val fallbackConf = ConfigBuilder(testKey("fallbackForExpansion"))
+    val fallbackConf = buildConf(testKey("fallbackForExpansion"))
       .fallbackConf(intConf)
 
-    val refConf = ConfigBuilder(testKey("configReferenceTest"))
+    val refConf = buildConf(testKey("configReferenceTest"))
       .stringConf
       .createWithDefault(null)
 
@@ -237,7 +234,7 @@ class ConfigEntrySuite extends SparkFunSuite {
     testEntryRef(optionalConf, "42")
 
     // Default string values with variable references.
-    val parameterizedStringConf = ConfigBuilder(testKey("stringWithParams"))
+    val parameterizedStringConf = buildConf(testKey("stringWithParams"))
       .stringConf
       .createWithDefault(ref(stringConf))
     assert(conf.get(parameterizedStringConf) === conf.get(stringConf))
@@ -247,7 +244,7 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(refConf) === env("ENV1"))
 
     // Conf with null default value is not expanded.
-    val nullConf = ConfigBuilder(testKey("nullString"))
+    val nullConf = buildConf(testKey("nullString"))
       .stringConf
       .createWithDefault(null)
     testEntryRef(nullConf, ref(nullConf))
@@ -256,7 +253,7 @@ class ConfigEntrySuite extends SparkFunSuite {
   test("conf entry : default function") {
     var data = 0
     val conf = new SparkConf()
-    val iConf = ConfigBuilder(testKey("intval")).intConf.createWithDefaultFunction(() => data)
+    val iConf = buildConf(testKey("intval")).intConf.createWithDefaultFunction(() => data)
     assert(conf.get(iConf) === 0)
     data = 2
     assert(conf.get(iConf) === 2)
@@ -264,7 +261,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: alternative keys") {
     val conf = new SparkConf()
-    val iConf = ConfigBuilder(testKey("a"))
+    val iConf = buildConf(testKey("a"))
       .withAlternative(testKey("b"))
       .withAlternative(testKey("c"))
       .intConf.createWithDefault(0)
@@ -291,21 +288,21 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("onCreate") {
     var onCreateCalled = false
-    ConfigBuilder(testKey("oc1")).onCreate(_ => onCreateCalled = true).intConf.createWithDefault(1)
+    buildConf(testKey("oc1")).onCreate(_ => onCreateCalled = true).intConf.createWithDefault(1)
     assert(onCreateCalled)
 
     onCreateCalled = false
-    ConfigBuilder(testKey("oc2")).onCreate(_ => onCreateCalled = true).intConf.createOptional
+    buildConf(testKey("oc2")).onCreate(_ => onCreateCalled = true).intConf.createOptional
     assert(onCreateCalled)
 
     onCreateCalled = false
-    ConfigBuilder(testKey("oc3")).onCreate(_ => onCreateCalled = true).intConf
+    buildConf(testKey("oc3")).onCreate(_ => onCreateCalled = true).intConf
       .createWithDefaultString("1.0")
     assert(onCreateCalled)
 
-    val fallback = ConfigBuilder(testKey("oc4")).intConf.createWithDefault(1)
+    val fallback = buildConf(testKey("oc4")).intConf.createWithDefault(1)
     onCreateCalled = false
-    ConfigBuilder(testKey("oc5")).onCreate(_ => onCreateCalled = true).fallbackConf(fallback)
+    buildConf(testKey("oc5")).onCreate(_ => onCreateCalled = true).fallbackConf(fallback)
     assert(onCreateCalled)
   }
 }
