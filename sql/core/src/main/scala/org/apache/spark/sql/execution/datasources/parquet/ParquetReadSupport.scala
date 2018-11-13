@@ -113,7 +113,7 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
       } else {
         parquetClippedSchema
       }
-    log.info {
+    log.debug {
       s"""Going to read the following fields from the Parquet file with the following schema:
          |Parquet file schema:
          |$parquetFileSchema
@@ -138,10 +138,8 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
       keyValueMetaData: JMap[String, String],
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[UnsafeRow] = {
-    log.debug(s"Preparing for read Parquet file with message type: $fileSchema")
     val parquetRequestedSchema = readContext.getRequestedSchema
-
-    log.info {
+    log.debug {
       s"""Going to read the following fields from the Parquet file with the following schema:
          |Parquet file schema:
          |$fileSchema
