@@ -614,6 +614,21 @@ class TaskContextTests(PySparkTestCase):
         times = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
         self.assertTrue(max(times) - min(times) < 1)
 
+    def test_barrier_with_python_worker_reuse(self):
+        """
+        Verify that BarrierTaskContext.barrier() with reused python worker.
+        """
+        self.sc._conf.set("spark.python.work.reuse", "true")
+        rdd = self.sc.parallelize(range(4), 4)
+        # start a normal job first to start all worker
+        result = rdd.map(lambda x: x ** 2).collect()
+        self.assertEqual([0, 1, 4, 9], result)
+        # make sure `spark.python.work.reuse=true`
+        self.assertEqual(self.sc._conf.get("spark.python.work.reuse"), "true")
+
+        # worker will be reused in this barrier job
+        self.test_barrier()
+
     def test_barrier_infos(self):
         """
         Verify that BarrierTaskContext.getTaskInfos() returns a list of all task infos in the
