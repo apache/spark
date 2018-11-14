@@ -42,7 +42,7 @@ private[spark] class DelegationTokenFeatureStep(conf: KubernetesConf[_], isDrive
   private val existingSecret = conf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
   private val existingItemKey = conf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
   private val shouldCreateTokens = isDriver && !conf.sparkConf.contains(KEYTAB) &&
-    existingSecret.isEmpty && UserGroupInformation.isSecurityEnabled()
+    existingSecret.isEmpty && isSecurityEnabled
 
   KubernetesUtils.requireBothOrNeitherDefined(
     existingSecret,
@@ -87,11 +87,7 @@ private[spark] class DelegationTokenFeatureStep(conf: KubernetesConf[_], isDrive
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (shouldCreateTokens) {
-      val tokenManager = new HadoopDelegationTokenManager(conf.sparkConf,
-        SparkHadoopUtil.get.newConfiguration(conf.sparkConf))
-      val creds = UserGroupInformation.getCurrentUser().getCredentials()
-      tokenManager.obtainDelegationTokens(creds)
-      val tokenData = SparkHadoopUtil.get.serialize(creds)
+      val tokenData = createDelegationTokens()
       Seq(new SecretBuilder()
         .withNewMetadata()
           .withName(dtSecretName)
@@ -101,6 +97,18 @@ private[spark] class DelegationTokenFeatureStep(conf: KubernetesConf[_], isDrive
     } else {
       Nil
     }
+  }
+
+  // Visible for testing.
+  def isSecurityEnabled: Boolean = UserGroupInformation.isSecurityEnabled()
+
+  // Visible for testing.
+  def createDelegationTokens(): Array[Byte] = {
+    val tokenManager = new HadoopDelegationTokenManager(conf.sparkConf,
+      SparkHadoopUtil.get.newConfiguration(conf.sparkConf))
+    val creds = UserGroupInformation.getCurrentUser().getCredentials()
+    tokenManager.obtainDelegationTokens(creds)
+    SparkHadoopUtil.get.serialize(creds)
   }
 
 }

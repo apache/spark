@@ -33,8 +33,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
- * Runs the necessary Hadoop-based logic based on Kerberos configs and the presence of the
- * HADOOP_CONF_DIR. This runs various bootstrap methods defined in HadoopBootstrapUtil.
+ * Mount the kerberos configuration defined by the user in the driver pod, and make the
+ * user's keytab available to the driver if provided.
  */
 private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesConf[_])
   extends KubernetesFeatureConfigStep with Logging {
