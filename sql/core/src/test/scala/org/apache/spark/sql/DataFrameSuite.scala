@@ -2554,4 +2554,34 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(swappedDf.filter($"key"($"map") > "a"), Row(2, Map(2 -> "b")))
   }
+
+  test("SPARK-26057: attribute deduplication on already analyzed plans") {
+    withTempView("cc", "p", "c") {
+      val df1 = Seq(("1-1", "sp", 6)).toDF("id", "layout", "n")
+      df1.createOrReplaceTempView("cc")
+      val df2 = Seq(("sp", 1)).toDF("layout", "ts")
+      df2.createOrReplaceTempView("p")
+      val df3 = Seq(("1-1", "sp", 3)).toDF("id", "layout", "ts")
+      df3.createOrReplaceTempView("c")
+      spark.sql(
+        """
+          |SELECT cc.id, cc.layout, count(*) as m
+          |FROM cc
+          |JOIN p USING(layout)
+          |WHERE EXISTS(
+          |  SELECT 1
+          |  FROM c
+          |  WHERE c.id = cc.id AND c.layout = cc.layout AND c.ts > p.ts)
+          |GROUP BY cc.id, cc.layout
+        """.stripMargin).createOrReplaceTempView("pcc")
+      val res = spark.sql(
+        """
+          |SELECT cc.id, cc.layout, n, m
+          |  FROM cc
+          |  LEFT OUTER JOIN pcc ON pcc.id = cc.id AND pcc.layout = cc.layout
+        """.stripMargin)
+      checkAnswer(res, Row("1-1", "sp", 6, 1))
+
+    }
+  }
 }
