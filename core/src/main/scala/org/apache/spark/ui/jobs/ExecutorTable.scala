@@ -93,7 +93,7 @@ private[ui] class ExecutorTable(stage: StageData, store: AppStatusStore) {
     executorSummary.toSeq.sortBy(_._1).map { case (k, v) =>
       val executor = store.asOption(store.executorSummary(k))
       <tr>
-        <td>k</td>
+        <td>{k}</td>
         <td>{executor.map { e => e.hostPort }.getOrElse("CANNOT FIND ADDRESS")}</td>
         <td sorttable_customkey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
         <td>{v.failedTasks + v.succeededTasks + v.killedTasks}</td>
