@@ -88,7 +88,7 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("simplify Like into EqualTo") {
+  test("simplify Like into EqualTo (Like(input, literal) case)") {
     val originalQuery =
       testRelation
         .where(('a like "") || ('a like "abc"))
@@ -101,8 +101,27 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("null pattern") {
+  test("simplify Like into EqualTo (Like(literal, input) case)") {
+    val originalQuery =
+      testRelation
+        .where(("" like 'a) || ("abc" like 'a))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(("" === 'a) || ("abc" === 'a))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("null pattern (Like(input, literal) case)") {
     val originalQuery = testRelation.where('a like Literal(null, StringType)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, testRelation.where(Literal(null, BooleanType)).analyze)
+  }
+
+  test("null pattern (Like(literal, input) case)") {
+    val originalQuery = testRelation.where(Literal(null, StringType) like 'a).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, testRelation.where(Literal(null, BooleanType)).analyze)
   }

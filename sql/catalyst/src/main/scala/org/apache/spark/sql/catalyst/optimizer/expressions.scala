@@ -504,6 +504,19 @@ object LikeSimplification extends Rule[LogicalPlan] {
             Like(input, Literal.create(pattern, StringType))
         }
       }
+
+    case Like(Literal(pattern, StringType), input) =>
+      if (pattern == null) {
+        // If pattern is null, return null value directly, since "null like col" == null.
+        Literal(null, BooleanType)
+      } else {
+        pattern.toString match {
+          case equalTo(str) =>
+            EqualTo(Literal(str), input)
+          case _ =>
+            Like(Literal.create(pattern, StringType), input)
+        }
+      }
   }
 }
 
