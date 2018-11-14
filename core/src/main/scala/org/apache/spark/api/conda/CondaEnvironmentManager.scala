@@ -20,7 +20,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.PosixFilePermission
-import java.util.concurrent.locks.ReentrantLock
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
@@ -213,7 +212,6 @@ object CondaEnvironmentManager extends Logging {
   private[this] val httpUrlToken =
     Pattern.compile("(\\b\\w+://[^:/@]*:)([^/@]+)(?=@([\\w-.]+)(:\\d+)?\\b)")
 
-  private[this] val initializedEnvironmentsLock = new ReentrantLock()
   private[this] val initializedEnvironments =
     mutable.HashMap[CondaSetupInstructions, CondaEnvironment]()
 
@@ -249,8 +247,7 @@ object CondaEnvironmentManager extends Logging {
    * a new one if none exists.
    */
   def getOrCreateCondaEnvironment(instructions: CondaSetupInstructions): CondaEnvironment = {
-    initializedEnvironmentsLock.lock()
-    try {
+    this.synchronized {
       initializedEnvironments.get(instructions) match {
         case Some(condaEnv) => condaEnv
         case None =>
@@ -258,8 +255,6 @@ object CondaEnvironmentManager extends Logging {
           initializedEnvironments.put(instructions, condaEnv)
           condaEnv
       }
-    } finally {
-      initializedEnvironmentsLock.unlock()
     }
   }
 
