@@ -723,4 +723,32 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       "grouping expressions: [current_date(None)], value: [key: int, value: string], " +
         "type: GroupBy]"))
   }
+
+  test("SPARK-26021: Double and Float 0.0/-0.0 should be equal when grouping") {
+    val colName = "i"
+    def groupByCollect(df: DataFrame): Array[Row] = {
+      df.groupBy(colName).count().collect()
+    }
+    def assertResult[T](result: Array[Row], zero: T)(implicit ordering: Ordering[T]): Unit = {
+      assert(result.length == 1)
+      // using compare since 0.0 == -0.0 is true
+      assert(ordering.compare(result(0).getAs[T](0), zero) == 0)
+      assert(result(0).getLong(1) == 3)
+    }
+
+    spark.conf.set("spark.sql.codegen.wholeStage", "false")
+    val doubles =
+      groupByCollect(Seq(0.0d, 0.0d, -0.0d).toDF(colName))
+    val doublesBoxed =
+      groupByCollect(Seq(Double.box(0.0d), Double.box(0.0d), Double.box(-0.0d)).toDF(colName))
+    val floats =
+      groupByCollect(Seq(0.0f, -0.0f, 0.0f).toDF(colName))
+    val floatsBoxed =
+      groupByCollect(Seq(Float.box(0.0f), Float.box(-0.0f), Float.box(0.0f)).toDF(colName))
+
+    assertResult(doubles, 0.0d)
+    assertResult(doublesBoxed, 0.0d)
+    assertResult(floats, 0.0f)
+    assertResult(floatsBoxed, 0.0f)
+  }
 }

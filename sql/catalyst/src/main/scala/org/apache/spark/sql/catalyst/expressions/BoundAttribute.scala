@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{Block, CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
@@ -56,16 +56,31 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
       val javaType = JavaCode.javaType(dataType)
       val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
       if (nullable) {
-        ev.copy(code =
+        var codeBlock =
           code"""
              |boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
              |$javaType ${ev.value} = ${ev.isNull} ?
              |  ${CodeGenerator.defaultValue(dataType)} : ($value);
-           """.stripMargin)
+           """.stripMargin
+        codeBlock = codeBlock + genReplaceMinusZeroWithZeroCode(javaType.codeString, ev.value)
+        ev.copy(code = codeBlock)
       } else {
-        ev.copy(code = code"$javaType ${ev.value} = $value;", isNull = FalseLiteral)
+        var codeBlock = code"$javaType ${ev.value} = $value;"
+        codeBlock = codeBlock + genReplaceMinusZeroWithZeroCode(javaType.codeString, ev.value)
+        ev.copy(code = codeBlock, isNull = FalseLiteral)
       }
     }
+  }
+
+  private def genReplaceMinusZeroWithZeroCode(javaType: String, value: String): Block = {
+    val code: String = s"\nif ($value == -0.0%c) $value = 0.0%c;"
+    var formattedCode: String = ""
+    javaType match {
+      case "double" | "java.lang.Double" => formattedCode = code.format('d', 'd')
+      case "float" | "java.lang.Float" => formattedCode = code.format('f', 'f')
+      case _ =>
+    }
+    code"$formattedCode"
   }
 }
 
