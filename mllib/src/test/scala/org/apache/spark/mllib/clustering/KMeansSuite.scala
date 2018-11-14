@@ -19,8 +19,6 @@ package org.apache.spark.mllib.clustering
 
 import scala.util.Random
 
-import org.scalatest.Assertions
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
@@ -333,7 +331,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 }
 
-object KMeansSuite extends SparkFunSuite with Assertions {
+object KMeansSuite extends SparkFunSuite {
   def createModel(dim: Int, k: Int, isSparse: Boolean): KMeansModel = {
     val singlePoint = if (isSparse) {
       Vectors.sparse(dim, Array.empty[Int], Array.empty[Double])
