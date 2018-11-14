@@ -398,8 +398,13 @@ pyspark_streaming = Module(
         "python/pyspark/streaming"
     ],
     python_test_goals=[
+        # doctests
         "pyspark.streaming.util",
-        "pyspark.streaming.tests",
+        # unittests
+        "pyspark.streaming.tests.test_context",
+        "pyspark.streaming.tests.test_dstream",
+        "pyspark.streaming.tests.test_kinesis",
+        "pyspark.streaming.tests.test_listener",
     ]
 )
 
