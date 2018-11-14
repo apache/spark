@@ -634,10 +634,15 @@ $(document).ready(function () {
                             data.columnIndexToSort = columnIndexToSort;
                             data.columnNameToSort = columnNameToSort;
                         },
-                        "dataSrc": function ( jsons ) {
+                        "dataSrc": function (jsons) {
                             var jsonStr = JSON.stringify(jsons);
                             var tasksToShow = JSON.parse(jsonStr);
                             return tasksToShow.aaData;
+                        },
+                        "error": function (jqXHR, textStatus, errorThrown) {
+                            alert("Unable to connect to the server. Looks like the Spark " +
+                              "application must have ended. Please Switch to the history UI.");
+                            $("#active-tasks-table_processing").css("display","none");
                         }
                     },
                     "columns": [
