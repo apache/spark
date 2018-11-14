@@ -160,8 +160,6 @@ trait CodegenSupport extends SparkPlan {
         }
       }
 
-    val rowVar = prepareRowVar(ctx, row, outputVars)
-
     // Set up the `currentVars` in the codegen context, as we generate the code of `inputVars`
     // before calling `parent.doConsume`. We can't set up `INPUT_ROW`, because parent needs to
     // generate code of `rowVar` manually.
@@ -185,6 +183,7 @@ trait CodegenSupport extends SparkPlan {
         && CodeGenerator.isValidParamLength(paramLength)) {
       constructDoConsumeFunction(ctx, inputVars, row)
     } else {
+      val rowVar = prepareRowVar(ctx, row, outputVars)
       parent.doConsume(ctx, inputVars, rowVar)
     }
     s"""
