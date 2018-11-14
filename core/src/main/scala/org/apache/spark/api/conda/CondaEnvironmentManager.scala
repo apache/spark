@@ -23,6 +23,7 @@ import java.nio.file.attribute.PosixFilePermission
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.sys.process.BasicIO
 import scala.sys.process.Process
 import scala.sys.process.ProcessBuilder
@@ -211,6 +212,9 @@ object CondaEnvironmentManager extends Logging {
   private[this] val httpUrlToken =
     Pattern.compile("(\\b\\w+://[^:/@]*:)([^/@]+)(?=@([\\w-.]+)(:\\d+)?\\b)")
 
+  private[this] val initializedEnvironments =
+    mutable.HashMap[CondaSetupInstructions, CondaEnvironment]()
+
   private[conda] def redactCredentials(line: String): String = {
     httpUrlToken.matcher(line).replaceAll("$1<password>")
   }
@@ -223,11 +227,8 @@ object CondaEnvironmentManager extends Logging {
     new CondaEnvironmentManager(condaBinaryPath, verbosity, packageDirs)
   }
 
-  /**
-   * Helper method to create a conda environment from [[CondaEnvironment.CondaSetupInstructions]].
-   * This is intended to be called on the executor with serialized instructions.
-   */
-  def createCondaEnvironment(instructions: CondaSetupInstructions): CondaEnvironment = {
+  private[this] def createCondaEnvironment(
+            instructions: CondaSetupInstructions): CondaEnvironment = {
     val condaPackages = instructions.packages
     val env = SparkEnv.get
     val condaEnvManager = CondaEnvironmentManager.fromConf(env.conf)
@@ -239,6 +240,22 @@ object CondaEnvironmentManager extends Logging {
       Utils.createTempDir(localDirs(dirId).getAbsolutePath, "conda").getAbsolutePath
     }
     condaEnvManager.create(envDir, condaPackages, instructions.channels, instructions.extraArgs)
+  }
+
+  /**
+   * Gets the conda environment for [[CondaEnvironment.CondaSetupInstructions]]. This will create
+   * a new one if none exists.
+   */
+  def getOrCreateCondaEnvironment(instructions: CondaSetupInstructions): CondaEnvironment = {
+    this.synchronized {
+      initializedEnvironments.get(instructions) match {
+        case Some(condaEnv) => condaEnv
+        case None =>
+          val condaEnv = createCondaEnvironment(instructions)
+          initializedEnvironments.put(instructions, condaEnv)
+          condaEnv
+      }
+    }
   }
 
 }
