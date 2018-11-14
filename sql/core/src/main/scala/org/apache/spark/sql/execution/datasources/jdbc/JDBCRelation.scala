@@ -27,7 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.maxNumToStringFields
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampType}
@@ -159,6 +159,7 @@ private[sql] object JDBCRelation extends Logging {
     val column = schema.find { f =>
       resolver(f.name, columnName) || resolver(dialect.quoteIdentifier(f.name), columnName)
     }.getOrElse {
+      val maxNumToStringFields = SQLConf.get.maxToStringFields
       throw new AnalysisException(s"User-defined partition column $columnName not " +
         s"found in the JDBC relation: ${schema.simpleString(maxNumToStringFields)}")
     }

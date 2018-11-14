@@ -21,13 +21,12 @@ import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-import org.apache.spark.util.Utils.logWarning
 
 package object util extends Logging {
 
@@ -171,21 +170,6 @@ package object util extends Logging {
     builder.toString()
   }
 
-  /**
-   * The performance overhead of creating and logging strings for wide schemas can be large. To
-   * limit the impact, we bound the number of fields to include by default. This can be overridden
-   * by setting the 'spark.debug.maxToStringFields' conf in SparkEnv.
-   */
-  val DEFAULT_MAX_TO_STRING_FIELDS = 25
-
-  private[spark] def maxNumToStringFields = {
-    if (SparkEnv.get != null) {
-      SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
-    } else {
-      DEFAULT_MAX_TO_STRING_FIELDS
-    }
-  }
-
   /** Whether we have warned about plan string truncation yet. */
   private val truncationWarningPrinted = new AtomicBoolean(false)
 
@@ -200,12 +184,12 @@ package object util extends Logging {
       start: String,
       sep: String,
       end: String,
-      maxNumFields: Int = maxNumToStringFields): String = {
+      maxNumFields: Int = SQLConf.get.maxToStringFields): String = {
     if (seq.length > maxNumFields) {
       if (truncationWarningPrinted.compareAndSet(false, true)) {
         logWarning(
           "Truncated the string representation of a plan since it was too large. This " +
-            "behavior can be adjusted by setting 'spark.debug.maxToStringFields' in SparkEnv.conf.")
+            s"behavior can be adjusted by setting '${SQLConf.MAX_TO_STRING_FIELDS.key}'.")
       }
       val numFields = math.max(0, maxNumFields - 1)
       seq.take(numFields).mkString(
