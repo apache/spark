@@ -45,14 +45,19 @@ case class ResolvedHint(child: LogicalPlan, hints: HintInfo = HintInfo())
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 
+/**
+ * Hint that is associated with a [[Join]] node, with [[HintInfo]] on its left child and on its
+ * right child respectively.
+ */
 case class JoinHint(
     leftHint: Option[HintInfo],
     rightHint: Option[HintInfo]) {
 
   override def toString: String = {
     Seq(
-      leftHint.map("left: " + _),
-      rightHint.map("right: " + _)).filter(_.isDefined).mkString(", ")
+      leftHint.map("leftHint=" + _),
+      rightHint.map("rightHint=" + _))
+      .filter(_.isDefined).map(_.get).mkString(", ")
   }
 }
 
@@ -86,7 +91,7 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
         val rightHint = mergeHints(collectHints(j.right))
         j.copy(hint = JoinHint(leftHint, rightHint))
     }
-    pulledUp.transformUp {
+    pulledUp.transform {
       case h: ResolvedHint => h.child
     }
   }
@@ -100,6 +105,9 @@ object EliminateResolvedHint extends Rule[LogicalPlan] {
     plan match {
       case h: ResolvedHint => collectHints(h.child) :+ h.hints
       case u: UnaryNode => collectHints(u.child)
+      // TODO revisit this logic:
+      // except and intersect are semi/anti-joins which won't return more data then
+      // their left argument, so the broadcast hint should be propagated here
       case i: Intersect => collectHints(i.left)
       case e: Except => collectHints(e.left)
       case _ => Seq.empty

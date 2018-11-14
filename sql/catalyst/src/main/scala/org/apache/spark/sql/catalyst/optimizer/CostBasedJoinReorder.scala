@@ -40,6 +40,8 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {
       plan
     } else {
+      // Use a map to track the hints on the join items. If a join relation turns out unchanged
+      // at the end of the join reorder, we can apply the original hint back to it if any.
       val hintMap = new mutable.HashMap[LogicalPlan, HintInfo]
       val result = plan transformDown {
         // Start reordering with a joinable item, which is an InnerLike join with conditions.
@@ -49,7 +51,9 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
           if projectList.forall(_.isInstanceOf[Attribute]) =>
           reorder(p, p.output, hintMap)
       }
-      // After reordering is finished, convert OrderedJoin back to Join
+      // After reordering is finished, convert OrderedJoin back to Join.
+      // Note that this needs to be done bottom-up to make sure the hints can be mapped to any
+      // unchanged relations.
       result transformUp {
         case OrderedJoin(left, right, jt, cond) =>
           Join(left, right, jt, cond,

@@ -561,6 +561,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new IllegalStateException(
           "logical except (all) operator should have been replaced by union, aggregate" +
             " and generate operators in the optimizer")
+      case logical.ResolvedHint(child, hints) =>
+        throw new IllegalStateException(
+          "ResolvedHint operator should have been replaced by join hint in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
