@@ -20,7 +20,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.PosixFilePermission
-import java.util.concurrent.locks.{Lock, ReentrantLock}
+import java.util.concurrent.locks.ReentrantLock
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
@@ -213,8 +213,9 @@ object CondaEnvironmentManager extends Logging {
   private[this] val httpUrlToken =
     Pattern.compile("(\\b\\w+://[^:/@]*:)([^/@]+)(?=@([\\w-.]+)(:\\d+)?\\b)")
 
-  private val initializedEnvironmentsLock = new ReentrantLock()
-  private val initializedEnvironments = mutable.HashMap[CondaSetupInstructions, CondaEnvironment]()
+  private[this] val initializedEnvironmentsLock = new ReentrantLock()
+  private[this] val initializedEnvironments =
+    mutable.HashMap[CondaSetupInstructions, CondaEnvironment]()
 
   private[conda] def redactCredentials(line: String): String = {
     httpUrlToken.matcher(line).replaceAll("$1<password>")
@@ -228,11 +229,8 @@ object CondaEnvironmentManager extends Logging {
     new CondaEnvironmentManager(condaBinaryPath, verbosity, packageDirs)
   }
 
-  /**
-   * Helper method to create a conda environment from [[CondaEnvironment.CondaSetupInstructions]].
-   * This is intended to be called on the executor with serialized instructions.
-   */
-  def createCondaEnvironment(instructions: CondaSetupInstructions): CondaEnvironment = {
+  private[this] def createCondaEnvironment(
+            instructions: CondaSetupInstructions): CondaEnvironment = {
     val condaPackages = instructions.packages
     val env = SparkEnv.get
     val condaEnvManager = CondaEnvironmentManager.fromConf(env.conf)
@@ -247,9 +245,10 @@ object CondaEnvironmentManager extends Logging {
   }
 
   /**
-   * Helper method that will cache precreated conda environments.
+   * Gets the conda environment for [[CondaEnvironment.CondaSetupInstructions]]. This will create
+   * a new one if none exists.
    */
-  def createOrGetCondaEnvironment(instructions: CondaSetupInstructions): CondaEnvironment = {
+  def getOrCreateCondaEnvironment(instructions: CondaSetupInstructions): CondaEnvironment = {
     initializedEnvironmentsLock.lock()
     try {
       initializedEnvironments.get(instructions) match {
