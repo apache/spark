@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import java.math.BigDecimal
+import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
+import java.util.Locale
+
 object CSVExprUtils {
   /**
    * Filter ignorable rows for CSV iterator (lines empty and starting with `comment`).
@@ -77,6 +81,24 @@ object CSVExprUtils {
         throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
       case _ =>
         throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
+    }
+  }
+
+  def getDecimalParser(useLegacyParser: Boolean, locale: Locale): String => java.math.BigDecimal = {
+    if (useLegacyParser) {
+      (s: String) => new BigDecimal(s.replaceAll(",", ""))
+    } else {
+      val df = new DecimalFormat("", new DecimalFormatSymbols(locale))
+      df.setParseBigDecimal(true)
+      (s: String) => {
+        val pos = new ParsePosition(0)
+        val result = df.parse(s, pos).asInstanceOf[BigDecimal]
+        if (pos.getIndex() != s.length() || pos.getErrorIndex() != -1) {
+          throw new IllegalArgumentException("Cannot parse any decimal");
+        } else {
+          result
+        }
+      }
     }
   }
 }

@@ -18,8 +18,6 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.io.InputStream
-import java.math.BigDecimal
-import java.text.{DecimalFormat, DecimalFormatSymbols}
 
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -106,12 +104,8 @@ class UnivocityParser(
     requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
   }
 
-  private val decimalParser = if (SQLConf.get.legacyDecimalParsing) {
-    (s: String) => new BigDecimal(s.replaceAll(",", ""))
-  } else {
-    val df = new DecimalFormat("", new DecimalFormatSymbols(options.locale))
-    df.setParseBigDecimal(true)
-    (s: String) => df.parse(s).asInstanceOf[BigDecimal]
+  private val decimalParser = {
+    CSVExprUtils.getDecimalParser(SQLConf.get.legacyDecimalParsing, options.locale)
   }
 
   /**
