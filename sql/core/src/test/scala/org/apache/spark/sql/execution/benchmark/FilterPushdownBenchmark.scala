@@ -29,6 +29,7 @@ import org.apache.spark.sql.functions.monotonically_increasing_id
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Benchmark to measure read performance with Filter pushdown.
@@ -104,6 +105,8 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     df.write.mode("overwrite")
       .option("parquet.block.size", blockSize).parquet(parquetPath)
     spark.read.parquet(parquetPath).createOrReplaceTempView("parquetTable")
+
+    df.persist(StorageLevel.DISK_ONLY).createOrReplaceTempView("inMemoryTable")
   }
 
   def filterPushDownBenchmark(
@@ -127,6 +130,15 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       benchmark.addCase(name) { _ =>
         withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled") {
           spark.sql(s"SELECT $selectExpr FROM orcTable WHERE $whereExpr").collect()
+        }
+      }
+    }
+
+    Seq(false, true).foreach { pushDownEnabled =>
+      val name = s"InMemoryTable Vectorized ${if (pushDownEnabled) s"(Pushdown)" else ""}"
+      benchmark.addCase(name) { _ =>
+        withSQLConf(SQLConf.IN_MEMORY_PARTITION_PRUNING.key -> s"$pushDownEnabled") {
+          spark.sql(s"SELECT $selectExpr FROM inMemoryTable WHERE $whereExpr").collect()
         }
       }
     }
@@ -201,7 +213,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Pushdown for many distinct value case") {
       withTempPath { dir =>
-        withTempTable("orcTable", "parquetTable") {
+        withTempTable("orcTable", "parquetTable", "inMemoryTable") {
           Seq(true, false).foreach { useStringForValue =>
             prepareTable(dir, numRows, width, useStringForValue)
             if (useStringForValue) {
@@ -218,7 +230,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       withTempPath { dir =>
         val numDistinctValues = 200
 
-        withTempTable("orcTable", "parquetTable") {
+        withTempTable("orcTable", "parquetTable", "inMemoryTable") {
           prepareStringDictTable(dir, numRows, numDistinctValues, width)
           runStringBenchmark(numRows, width, numDistinctValues / 2, "distinct string")
         }
@@ -227,7 +239,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 
     runBenchmark("Pushdown benchmark for StringStartsWith") {
       withTempPath { dir =>
-        withTempTable("orcTable", "parquetTable") {
+        withTempTable("orcTable", "parquetTable", "inMemoryTable") {
           prepareTable(dir, numRows, width, true)
           Seq(
             "value like '10%'",
@@ -256,7 +268,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
           }
           val df = spark.range(numRows)
             .selectExpr(columns: _*).withColumn("value", valueCol.cast(dt))
-          withTempTable("orcTable", "parquetTable") {
+          withTempTable("orcTable", "parquetTable", "inMemoryTable") {
             saveAsTable(df, dir)
 
             Seq(s"value = $mid").foreach { whereExpr =>
@@ -280,7 +292,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 
     runBenchmark("Pushdown benchmark for InSet -> InFilters") {
       withTempPath { dir =>
-        withTempTable("orcTable", "parquetTable") {
+        withTempTable("orcTable", "parquetTable", "inMemoryTable") {
           prepareTable(dir, numRows, width, false)
           Seq(5, 10, 50, 100).foreach { count =>
             Seq(10, 50, 90).foreach { distribution =>
@@ -301,7 +313,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
         val df = spark.range(numRows).selectExpr(columns: _*)
           .withColumn("value", (monotonically_increasing_id() % Byte.MaxValue).cast(ByteType))
           .orderBy("value")
-        withTempTable("orcTable", "parquetTable") {
+        withTempTable("orcTable", "parquetTable", "inMemoryTable") {
           saveAsTable(df, dir)
 
           Seq(s"value = CAST(${Byte.MaxValue / 2} AS ${ByteType.simpleString})")
@@ -333,7 +345,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
               val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
               val df = spark.range(numRows).selectExpr(columns: _*)
                 .withColumn("value", monotonically_increasing_id().cast(TimestampType))
-              withTempTable("orcTable", "parquetTable") {
+              withTempTable("orcTable", "parquetTable", "inMemoryTable") {
                 saveAsTable(df, dir)
 
                 Seq(s"value = CAST($mid AS timestamp)").foreach { whereExpr =>
@@ -367,7 +379,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       withTempPath { dir =>
         val columns = (1 to width).map(i => s"id c$i")
         val df = spark.range(1).selectExpr(columns: _*)
-        withTempTable("orcTable", "parquetTable") {
+        withTempTable("orcTable", "parquetTable", "inMemoryTable") {
           saveAsTable(df, dir)
           Seq(1, 250, 500).foreach { numFilter =>
             val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" and ")
