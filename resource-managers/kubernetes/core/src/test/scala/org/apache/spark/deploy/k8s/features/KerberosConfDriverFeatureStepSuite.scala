@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMap, Secret}
+import org.apache.commons.codec.binary.Base64
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -109,13 +110,14 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
   }
 
   test("create delegation tokens if needed") {
+    val tokens = Array[Byte](0x4, 0x2)
     val step = spy(createStep(new SparkConf(false)))
-    doReturn(Array[Byte](0x4, 0x2)).when(step).createDelegationTokens()
+    doReturn(tokens).when(step).createDelegationTokens()
 
-    val dtSecret = filter[Secret](step.getAdditionalKubernetesResources())
-    assert(dtSecret.size === 1)
-    checkPodForTokens(step.configurePod(SparkPod.initialPod()),
-      dtSecret.head.getMetadata().getName())
+    val dtSecret = filter[Secret](step.getAdditionalKubernetesResources()).head
+    assert(dtSecret.getData().get(KERBEROS_SECRET_KEY) === Base64.encodeBase64String(tokens))
+
+    checkPodForTokens(step.configurePod(SparkPod.initialPod()), dtSecret.getMetadata().getName())
 
     assert(step.getAdditionalPodSystemProperties().isEmpty)
   }
