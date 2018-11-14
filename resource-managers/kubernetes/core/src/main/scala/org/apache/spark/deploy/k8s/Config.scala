@@ -18,8 +18,8 @@ package org.apache.spark.deploy.k8s
 
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.SparkConf.buildConf
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 
 private[spark] object Config extends Logging {
