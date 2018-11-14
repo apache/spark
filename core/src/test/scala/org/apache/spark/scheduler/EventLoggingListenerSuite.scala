@@ -473,7 +473,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
               assert(executorMetrics.execId === expectedMetrics.execId)
               assert(executorMetrics.stageId === expectedMetrics.stageId)
               assert(executorMetrics.stageAttemptId === expectedMetrics.stageAttemptId)
-              ExecutorMetricType.definedMetricsAndOffset.foreach { metric =>
+              ExecutorMetricType.metricToOffset.foreach { metric =>
                 assert(executorMetrics.executorMetrics.getMetricValue(metric._1) ===
                   expectedMetrics.executorMetrics.getMetricValue(metric._1))
               }

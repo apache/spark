@@ -28,62 +28,50 @@ import org.apache.spark.memory.MemoryManager
  * Executor metric types for executor-level metrics stored in ExecutorMetrics.
  */
 sealed trait ExecutorMetricType {
-  private[spark] def getMetricValue(memoryManager: MemoryManager): Long = 0
-  private[spark] def getMetricSet(memoryManager: MemoryManager): Array[Long] = {
+  private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     new Array[Long](0)
   }
-  private[spark] def names = Seq(getClass().getName().stripSuffix("$").split("""\.""").last)
+  private[spark] def names: Seq[String] = Seq()
+}
+
+sealed trait SingleValueExecutorMetricType extends ExecutorMetricType {
+  override private[spark] def names = Seq(getClass().getName().
+    stripSuffix("$").split("""\.""").last)
+
+  override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
+    val metrics = new Array[Long](1)
+    metrics(0) = getMetricValue(memoryManager)
+    metrics
+  }
+
+  private[spark] def getMetricValue(memoryManager: MemoryManager): Long = 0
 }
 
 private[spark] abstract class MemoryManagerExecutorMetricType(
-    f: MemoryManager => Long) extends ExecutorMetricType {
-  override private[spark] def getMetricSet(memoryManager: MemoryManager): Array[Long] = {
-    val metricAsSet = new Array[Long](names.length)
-    (0 until names.length ).foreach { idx =>
-      metricAsSet(idx) = (f(memoryManager))
-    }
-    metricAsSet
-  }
+    f: MemoryManager => Long) extends SingleValueExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     f(memoryManager)
   }
 }
 
 private[spark] abstract class MBeanExecutorMetricType(mBeanName: String)
-  extends ExecutorMetricType {
+  extends SingleValueExecutorMetricType {
   private val bean = ManagementFactory.newPlatformMXBeanProxy(
     ManagementFactory.getPlatformMBeanServer,
     new ObjectName(mBeanName).toString, classOf[BufferPoolMXBean])
-
-  override private[spark] def getMetricSet(memoryManager: MemoryManager): Array[Long] = {
-    val metricAsSet = new Array[Long](1)
-    metricAsSet(0) = bean.getMemoryUsed
-    metricAsSet
-  }
 
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     bean.getMemoryUsed
   }
 }
 
-case object JVMHeapMemory extends ExecutorMetricType {
-
-  override private[spark] def getMetricSet(memoryManager: MemoryManager): Array[Long] = {
-    val metricAsSet = new Array[Long](1)
-    metricAsSet(0) = ( ManagementFactory.getMemoryMXBean.getHeapMemoryUsage().getUsed())
-    metricAsSet
-  }
+case object JVMHeapMemory extends SingleValueExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     ManagementFactory.getMemoryMXBean.getHeapMemoryUsage().getUsed()
   }
 }
 
-case object JVMOffHeapMemory extends ExecutorMetricType {
-  override private[spark] def getMetricSet(memoryManager: MemoryManager): Array[Long] = {
-    val metricAsSet = new Array[ Long](1)
-    metricAsSet(0) = ( ManagementFactory.getMemoryMXBean.getNonHeapMemoryUsage().getUsed())
-    metricAsSet
-  }
+case object JVMOffHeapMemory extends SingleValueExecutorMetricType {
   override private[spark] def getMetricValue(memoryManager: MemoryManager): Long = {
     ManagementFactory.getMemoryMXBean.getNonHeapMemoryUsage().getUsed()
   }
@@ -97,7 +85,7 @@ case object ProcessTreeMetrics extends ExecutorMetricType {
     "ProcessTreePythonRSSMemory",
     "ProcessTreeOtherVMemory",
     "ProcessTreeOtherRSSMemory")
-  override private[spark] def getMetricSet(memoryManager: MemoryManager): Array[Long] = {
+  override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     val allMetrics = ExecutorMetricType.pTreeInfo.computeAllMetrics()
     val processTreeMetrics = new Array[Long](names.length)
     processTreeMetrics(0) = allMetrics.jvmVmemTotal
@@ -152,14 +140,18 @@ private[spark] object ExecutorMetricType {
     ProcessTreeMetrics
   )
 
-  var definedMetricsAndOffset = mutable.LinkedHashMap.empty[String, Int]
-  var numberOfMetrics = 0
-  metricGetters.foreach { m =>
-    var metricInSet = 0
-    while (metricInSet < m.names.length) {
-      definedMetricsAndOffset += (m.names(metricInSet) -> (metricInSet + numberOfMetrics) )
-      metricInSet += 1
+
+  val (metricToOffset, numMetrics) = {
+    var numberOfMetrics = 0
+    val definedMetricsAndOffset = mutable.LinkedHashMap.empty[String, Int]
+    metricGetters.foreach { m =>
+      var metricInSet = 0
+      while (metricInSet < m.names.length) {
+        definedMetricsAndOffset += (m.names(metricInSet) -> (metricInSet + numberOfMetrics))
+        metricInSet += 1
+      }
+      numberOfMetrics += m.names.length
     }
-    numberOfMetrics += m.names.length
+    (definedMetricsAndOffset, numberOfMetrics)
   }
 }

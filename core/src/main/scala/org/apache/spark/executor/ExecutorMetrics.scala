@@ -28,14 +28,14 @@ import org.apache.spark.metrics.ExecutorMetricType
 @DeveloperApi
 class ExecutorMetrics private[spark] extends Serializable {
 
-  private val metrics = new Array[Long](ExecutorMetricType.numberOfMetrics)
+  private val metrics = new Array[Long](ExecutorMetricType.numMetrics)
   // the first element is initialized to -1, indicating that the values for the array
   // haven't been set yet.
   metrics(0) = -1
 
   /** Returns the value for the specified metric. */
   def getMetricValue(metricName: String): Long = {
-    metrics(ExecutorMetricType.definedMetricsAndOffset.get(metricName).get)
+    metrics(ExecutorMetricType.metricToOffset.get(metricName).get)
   }
 
   /** Returns true if the values for the metrics have been set, false otherwise. */
@@ -53,7 +53,7 @@ class ExecutorMetrics private[spark] extends Serializable {
    */
   private[spark] def this(executorMetrics: Map[String, Long]) {
     this()
-    ExecutorMetricType.definedMetricsAndOffset.map { m =>
+    ExecutorMetricType.metricToOffset.map { m =>
       metrics(m._2) = executorMetrics.getOrElse(m._1, 0L)
     }
   }
@@ -67,10 +67,10 @@ class ExecutorMetrics private[spark] extends Serializable {
    */
   private[spark] def compareAndUpdatePeakValues(executorMetrics: ExecutorMetrics): Boolean = {
     var updated = false
-    ExecutorMetricType.definedMetricsAndOffset.map {m =>
-      if (executorMetrics.metrics(m._2) > metrics(m._2)) {
+    ExecutorMetricType.metricToOffset.map { case (_, idx) =>
+      if (executorMetrics.metrics(idx) > metrics(idx)) {
         updated = true
-        metrics(m._2) = executorMetrics.metrics(m._2)
+        metrics(idx) = executorMetrics.metrics(idx)
       }
     }
     updated

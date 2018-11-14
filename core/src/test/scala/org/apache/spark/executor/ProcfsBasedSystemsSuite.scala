@@ -26,16 +26,17 @@ class ProcfsBasedSystemsSuite extends SparkFunSuite {
   p.pageSize = 4096L
 
   test("testGetProcessInfo") {
-    p.computeProcessInfo(26109)
-    assert(p.allMetrics.jvmVmemTotal == 4769947648L)
-    assert(p.allMetrics.jvmRSSTotal == 262610944)
-    assert(p.allMetrics.pythonVmemTotal == 0)
-    assert(p.allMetrics.pythonRSSTotal == 0)
+    var r = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
+    r = p.computeProcessInfo(r, 26109)
+    assert(r.jvmVmemTotal == 4769947648L)
+    assert(r.jvmRSSTotal == 262610944)
+    assert(r.pythonVmemTotal == 0)
+    assert(r.pythonRSSTotal == 0)
 
-    p.computeProcessInfo(22763)
-    assert(p.allMetrics.pythonVmemTotal == 360595456)
-    assert(p.allMetrics.pythonRSSTotal == 7831552)
-    assert(p.allMetrics.jvmVmemTotal == 4769947648L)
-    assert(p.allMetrics.jvmRSSTotal == 262610944)
+    r = p.computeProcessInfo(r, 22763)
+    assert(r.pythonVmemTotal == 360595456)
+    assert(r.pythonRSSTotal == 7831552)
+    assert(r.jvmVmemTotal == 4769947648L)
+    assert(r.jvmRSSTotal == 262610944)
   }
 }

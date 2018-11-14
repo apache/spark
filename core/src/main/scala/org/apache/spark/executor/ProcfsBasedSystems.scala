@@ -45,29 +45,33 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
   var pageSize = computePageSize()
   var isAvailable: Boolean = isProcfsAvailable
   private val pid = computePid()
-  private var ptree = mutable.Map[ Int, Set[Int]]()
 
-  var allMetrics: ProcfsBasedSystemsMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
+  // var allMetrics: ProcfsBasedSystemsMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
 
   computeProcessTree()
 
-  private def isProcfsAvailable: Boolean = {
+  private lazy val isProcfsAvailable: Boolean = {
     if (testing) {
-      return true
+       true
     }
-    try {
-      if (!Files.exists(Paths.get(procfsDir))) {
-        return false
+    else {
+      var procDirExists = true
+      try {
+        if (!Files.exists(Paths.get(procfsDir))) {
+          procDirExists = false
+        }
       }
+      catch {
+        case f: IOException =>
+          logWarning("It seems that procfs isn't supported", f)
+          procDirExists = false
+      }
+      val shouldLogStageExecutorMetrics =
+        SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
+      val shouldLogStageExecutorProcessTreeMetrics =
+        SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
+      procDirExists && shouldLogStageExecutorProcessTreeMetrics && shouldLogStageExecutorMetrics
     }
-    catch {
-      case f: FileNotFoundException => return false
-    }
-    val shouldLogStageExecutorMetrics =
-      SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
-    val shouldLogStageExecutorProcessTreeMetrics =
-      SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
-    shouldLogStageExecutorProcessTreeMetrics && shouldLogStageExecutorMetrics
   }
 
   private def computePid(): Int = {
@@ -78,13 +82,13 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
       // This can be simplified in java9:
       // https://docs.oracle.com/javase/9/docs/api/java/lang/ProcessHandle.html
       val cmd = Array("bash", "-c", "echo $PPID")
-      val length = 10
       val out2 = Utils.executeAndGetOutput(cmd)
       val pid = Integer.parseInt(out2.split("\n")(0))
       return pid;
     }
     catch {
-      case e: SparkException => logWarning("Exception when trying to compute process tree." +
+      case e: SparkException =>
+        logWarning("Exception when trying to compute process tree." +
         " As a result reporting of ProcessTree metrics is stopped", e)
         isAvailable = false
         return -1
@@ -97,8 +101,8 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
     }
     try {
       val cmd = Array("getconf", "PAGESIZE")
-      val out2 = Utils.executeAndGetOutput(cmd)
-      return Integer.parseInt(out2.split("\n")(0))
+      val out = Utils.executeAndGetOutput(cmd)
+      return Integer.parseInt(out.split("\n")(0))
     } catch {
       case e: Exception => logWarning("Exception when trying to compute pagesize, as a" +
         " result reporting of ProcessTree metrics is stopped")
@@ -107,11 +111,12 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
     }
   }
 
-  private def computeProcessTree(): Unit = {
+  private def computeProcessTree(): Set[Int] = {
     if (!isAvailable || testing) {
-      return
+      return Set()
     }
-    ptree = mutable.Map[ Int, Set[Int]]()
+    var ptree: Set[Int] = Set()
+    ptree += pid
     val queue = mutable.Queue.empty[Int]
     queue += pid
     while( !queue.isEmpty ) {
@@ -119,12 +124,10 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
       val c = getChildPids(p)
       if(!c.isEmpty) {
         queue ++= c
-        ptree += (p -> c.toSet)
-      }
-      else {
-        ptree += (p -> Set[Int]())
+        ptree ++= c.toSet
       }
     }
+    ptree
   }
 
   private def getChildPids(pid: Int): ArrayBuffer[Int] = {
@@ -162,8 +165,9 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
     }
   }
 
-  def computeProcessInfo(pid: Int): Unit = {
-    /*
+  def computeProcessInfo(allMetrics: ProcfsBasedSystemsMetrics, pid: Int):
+  ProcfsBasedSystemsMetrics = {
+  /*
    * Hadoop ProcfsBasedProcessTree class used regex and pattern matching to retrive the memory
    * info. I tried that but found it not correct during tests, so I used normal string analysis
    * instead. The computation of RSS and Vmem are based on proc(5):
@@ -171,6 +175,7 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
    */
     try {
       val pidDir = new File(procfsDir, pid.toString)
+      var allMetricsUpdated = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
       Utils.tryWithResource( new InputStreamReader(
         new FileInputStream(
           new File(pidDir, procfsStatFile)), Charset.forName("UTF-8"))) { fReader =>
@@ -181,19 +186,19 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
             val vmem = procInfoSplit(22).toLong
             val rssPages = procInfoSplit(23).toLong
             if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
-              allMetrics = allMetrics.copy(
+              allMetricsUpdated = allMetrics.copy(
                 jvmVmemTotal = allMetrics.jvmVmemTotal + vmem,
                 jvmRSSTotal = allMetrics.jvmRSSTotal + (rssPages*pageSize)
               )
             }
             else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
-              allMetrics = allMetrics.copy(
+              allMetricsUpdated = allMetrics.copy(
                 pythonVmemTotal = allMetrics.pythonVmemTotal + vmem,
                 pythonRSSTotal = allMetrics.pythonRSSTotal + (rssPages*pageSize)
               )
             }
             else {
-              allMetrics = allMetrics.copy(
+              allMetricsUpdated = allMetrics.copy(
                 otherVmemTotal = allMetrics.otherVmemTotal + vmem,
                 otherRSSTotal = allMetrics.otherRSSTotal + (rssPages*pageSize)
               )
@@ -201,9 +206,11 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
           }
         }
       }
+      allMetricsUpdated
     } catch {
       case f: FileNotFoundException => logWarning("There was a problem with reading" +
         " the stat file of the process. ", f)
+        ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
     }
   }
 
@@ -211,11 +218,10 @@ private[spark] class ProcfsBasedSystems(val procfsDir: String = "/proc/") extend
     if (!isAvailable) {
       return ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
     }
-    computeProcessTree
-    val pids = ptree.keySet
-    allMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
+    val pids = computeProcessTree
+    var allMetrics = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
     for (p <- pids) {
-      computeProcessInfo(p)
+      allMetrics = computeProcessInfo(allMetrics, p)
     }
     return allMetrics
   }
