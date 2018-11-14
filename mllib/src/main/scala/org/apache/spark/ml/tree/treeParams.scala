@@ -258,11 +258,7 @@ private[ml] object TreeClassifierParams {
 private[ml] trait DecisionTreeClassifierParams
   extends DecisionTreeParams with TreeClassifierParams
 
-/**
- * Parameters for Decision Tree-based regression algorithms.
- */
-private[ml] trait TreeRegressorParams extends Params {
-
+private[ml] trait HasVarianceImpurity extends Params {
   /**
    * Criterion used for information gain calculation (case-insensitive).
    * Supported: "variance".
@@ -271,9 +267,9 @@ private[ml] trait TreeRegressorParams extends Params {
    */
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
-    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
+    s" ${HasVarianceImpurity.supportedImpurities.mkString(", ")}",
     (value: String) =>
-      TreeRegressorParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
+      HasVarianceImpurity.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(impurity -> "variance")
 
@@ -299,11 +295,16 @@ private[ml] trait TreeRegressorParams extends Params {
   }
 }
 
-private[ml] object TreeRegressorParams {
+private[ml] object HasVarianceImpurity {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] =
     Array("variance").map(_.toLowerCase(Locale.ROOT))
 }
+
+/**
+ * Parameters for Decision Tree-based regression algorithms.
+ */
+private[ml] trait TreeRegressorParams extends HasVarianceImpurity
 
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
   with TreeRegressorParams with HasVarianceCol {
@@ -538,7 +539,7 @@ private[ml] object GBTClassifierParams {
     Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams {
+private[ml] trait GBTClassifierParams extends GBTParams with HasVarianceImpurity {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
@@ -564,41 +565,6 @@ private[ml] trait GBTClassifierParams extends GBTParams {
       case _ =>
         // Should never happen because of check in setter method.
         throw new RuntimeException(s"GBTClassifier was given bad loss type: $getLossType")
-    }
-  }
-
-  /**
-   * Criterion used for information gain calculation (case-insensitive).
-   * Supported: "variance".
-   * (default = variance)
-   * @group param
-   */
-  final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
-    " information gain calculation (case-insensitive). Supported options:" +
-    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
-    (value: String) =>
-      TreeRegressorParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
-
-  setDefault(impurity -> "variance")
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setImpurity(value: String): this.type = set(impurity, value)
-
-  /** @group getParam */
-  final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
-
-  /** Convert new impurity to old impurity. */
-  private[ml] def getOldImpurity: OldImpurity = {
-    getImpurity match {
-      case "variance" => OldVariance
-      case _ =>
-        // Should never happen because of check in setter method.
-        throw new RuntimeException(
-          s"GBTClassifierParams was given unrecognized impurity: $impurity")
     }
   }
 }
