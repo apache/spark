@@ -44,22 +44,17 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
   private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
-  private val dtokenConfStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    DELEGATION_TOKEN_CONF_STEP_TYPE, classOf[DelegationTokenFeatureStep])
   private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
 
-  private val ALWAYS_ON_STEPS = Seq(BASIC_STEP_TYPE,
-    LOCAL_DIRS_STEP_TYPE,
-    DELEGATION_TOKEN_CONF_STEP_TYPE)
+  private val ALWAYS_ON_STEPS = Seq(BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
 
   private val builderUnderTest = new KubernetesExecutorBuilder(
     _ => basicFeatureStep,
     _ => mountSecretsStep,
     _ => envSecretsStep,
     _ => localDirsStep,
-    _ => mountVolumesStep,
-    _ => dtokenConfStep)
+    _ => mountVolumesStep)
 
   test("Basic steps are consistently applied.") {
     val conf = KubernetesConf(

@@ -67,9 +67,6 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val kerberosStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     KERBEROS_CONF_STEP_TYPE, classOf[KerberosConfDriverFeatureStep])
 
-  private val delegationTokenStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    DELEGATION_TOKEN_CONF_STEP_TYPE, classOf[DelegationTokenFeatureStep])
-
   private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
 
@@ -83,8 +80,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     LOCAL_DIRS_STEP_TYPE,
     DRIVER_CMD_STEP_TYPE,
     HADOOP_CONF_STEP_TYPE,
-    KERBEROS_CONF_STEP_TYPE,
-    DELEGATION_TOKEN_CONF_STEP_TYPE)
+    KERBEROS_CONF_STEP_TYPE)
 
   private val builderUnderTest: KubernetesDriverBuilder =
     new KubernetesDriverBuilder(
@@ -98,7 +94,6 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => driverCommandStep,
       _ => hadoopConfStep,
       _ => kerberosStep,
-      _ => delegationTokenStep,
       _ => templateVolumeStep)
 
   test("Apply fundamental steps all the time.") {

@@ -52,8 +52,6 @@ private[spark] class KubernetesDriverBuilder(
       new HadoopConfDriverFeatureStep(_),
     provideKerberosConfStep: (KubernetesConf[_] => KerberosConfDriverFeatureStep) =
       new KerberosConfDriverFeatureStep(_),
-    provideDelegationTokenStep: (KubernetesConf[_] => DelegationTokenFeatureStep) =
-      new DelegationTokenFeatureStep(_, true),
     providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => PodTemplateConfigMapStep) =
     new PodTemplateConfigMapStep(_),
@@ -85,8 +83,7 @@ private[spark] class KubernetesDriverBuilder(
 
     val otherSteps = Seq(
       provideHadoopConfStep(kubernetesConf),
-      provideKerberosConfStep(kubernetesConf),
-      provideDelegationTokenStep(kubernetesConf))
+      provideKerberosConfStep(kubernetesConf))
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       baseFeatures ++ Seq(driverCommandStep) ++

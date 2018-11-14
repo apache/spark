@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMap, Secret}
+import org.mockito.Mockito._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
@@ -41,13 +42,12 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
   test("mount krb5 config map if defined") {
     val configMap = "testConfigMap"
-    val conf = createConf(
+    val step = createStep(
       new SparkConf(false).set(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP, configMap))
-    val step = new KerberosConfDriverFeatureStep(conf)
 
     checkPodForKrbConf(step.configurePod(SparkPod.initialPod()), configMap)
     assert(step.getAdditionalPodSystemProperties().isEmpty)
-    assert(step.getAdditionalKubernetesResources().isEmpty)
+    assert(filter[ConfigMap](step.getAdditionalKubernetesResources()).isEmpty)
   }
 
   test("create krb5.conf config map if local config provided") {
@@ -56,9 +56,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
     val sparkConf = new SparkConf(false)
       .set(KUBERNETES_KERBEROS_KRB5_FILE, krbConf.getAbsolutePath())
-    val conf = createConf(sparkConf)
-
-    val step = new KerberosConfDriverFeatureStep(conf)
+    val step = createStep(sparkConf)
 
     val confMap = filter[ConfigMap](step.getAdditionalKubernetesResources()).head
     assert(confMap.getData().keySet().asScala === Set(krbConf.getName()))
@@ -74,8 +72,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     val sparkConf = new SparkConf(false)
       .set(KEYTAB, keytab.getAbsolutePath())
       .set(PRINCIPAL, "alice")
-    val conf = createConf(sparkConf)
-    val step = new KerberosConfDriverFeatureStep(conf)
+    val step = createStep(sparkConf)
 
     val pod = step.configurePod(SparkPod.initialPod())
     assert(podHasVolume(pod.pod, KERBEROS_KEYTAB_VOLUME))
@@ -91,9 +88,40 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     val sparkConf = new SparkConf(false)
       .set(KEYTAB, "local:/my.keytab")
       .set(PRINCIPAL, "alice")
-    val conf = createConf(sparkConf)
-    val step = new KerberosConfDriverFeatureStep(conf)
+    val step = createStep(sparkConf)
 
+    val initial = SparkPod.initialPod()
+    assert(step.configurePod(initial) === initial)
+    assert(step.getAdditionalPodSystemProperties().isEmpty)
+    assert(step.getAdditionalKubernetesResources().isEmpty)
+  }
+
+  test("mount delegation tokens if provided") {
+    val dtSecret = "tokenSecret"
+    val sparkConf = new SparkConf(false)
+      .set(KUBERNETES_KERBEROS_DT_SECRET_NAME, dtSecret)
+      .set(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY, "dtokens")
+    val step = createStep(sparkConf)
+
+    checkPodForTokens(step.configurePod(SparkPod.initialPod()), dtSecret)
+    assert(step.getAdditionalPodSystemProperties().isEmpty)
+    assert(step.getAdditionalKubernetesResources().isEmpty)
+  }
+
+  test("create delegation tokens if needed") {
+    val step = spy(createStep(new SparkConf(false)))
+    doReturn(Array[Byte](0x4, 0x2)).when(step).createDelegationTokens()
+
+    val dtSecret = filter[Secret](step.getAdditionalKubernetesResources())
+    assert(dtSecret.size === 1)
+    checkPodForTokens(step.configurePod(SparkPod.initialPod()),
+      dtSecret.head.getMetadata().getName())
+
+    assert(step.getAdditionalPodSystemProperties().isEmpty)
+  }
+
+  test("do nothing if no config and no tokens") {
+    val step = createStep(new SparkConf(false))
     val initial = SparkPod.initialPod()
     assert(step.configurePod(initial) === initial)
     assert(step.getAdditionalPodSystemProperties().isEmpty)
@@ -107,8 +135,18 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     assert(podVolume.get.getConfigMap().getName() === confMapName)
   }
 
-  private def createConf(conf: SparkConf): KubernetesConf[_] = {
-    KubernetesConf(
+  private def checkPodForTokens(pod: SparkPod, dtSecretName: String): Unit = {
+    val podVolume = pod.pod.getSpec().getVolumes().asScala
+      .find(_.getName() == SPARK_APP_HADOOP_SECRET_VOLUME_NAME)
+    assert(podVolume.isDefined)
+    assert(containerHasVolume(pod.container, SPARK_APP_HADOOP_SECRET_VOLUME_NAME,
+      SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR))
+    assert(containerHasEnvVar(pod.container, ENV_HADOOP_TOKEN_FILE_LOCATION))
+    assert(podVolume.get.getSecret().getSecretName() === dtSecretName)
+  }
+
+  private def createStep(conf: SparkConf): KerberosConfDriverFeatureStep = {
+    val kconf = KubernetesConf(
       conf,
       KubernetesDriverSpecificConf(JavaMainAppResource(None), "class", "name", Nil),
       "resource-name-prefix",
@@ -120,6 +158,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
       Map.empty,
       Nil,
       None)
+    new KerberosConfDriverFeatureStep(kconf)
   }
 
 }

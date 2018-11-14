@@ -41,8 +41,6 @@ private[spark] class KubernetesExecutorBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-    provideDelegationTokenStep: (KubernetesConf[_] => DelegationTokenFeatureStep) =
-      new DelegationTokenFeatureStep(_, false),
     provideInitialPod: () => SparkPod = SparkPod.initialPod) {
 
   def buildFromFeatures(
@@ -59,14 +57,11 @@ private[spark] class KubernetesExecutorBuilder(
       Seq(provideVolumesStep(kubernetesConf))
     } else Nil
 
-    val dtSecretStep = Seq(provideDelegationTokenStep(kubernetesConf))
-
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       baseFeatures ++
       secretFeature ++
       secretEnvFeature ++
-      volumesFeature ++
-      dtSecretStep
+      volumesFeature
 
     var executorPod = provideInitialPod()
     for (feature <- allFeatures) {
