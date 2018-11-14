@@ -99,11 +99,11 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
           .reduce(And), child)
       case sample: Sample =>
         sample.copy(seed = 0L)
-      case Join(left, right, joinType, condition) if condition.isDefined =>
+      case Join(left, right, joinType, condition, hint) if condition.isDefined =>
         val newCondition =
           splitConjunctivePredicates(condition.get).map(rewriteEqual).sortBy(_.hashCode())
             .reduce(And)
-        Join(left, right, joinType, Some(newCondition))
+        Join(left, right, joinType, Some(newCondition), hint)
     }
   }
 

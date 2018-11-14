@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -100,10 +102,11 @@ object PhysicalOperation extends PredicateHelper {
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */
   type ReturnType =
-    (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
+    (JoinType, Seq[Expression], Seq[Expression],
+      Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case join @ Join(left, right, joinType, condition) =>
+    case join @ Join(left, right, joinType, condition, hint) =>
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
@@ -133,7 +136,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       if (joinKeys.nonEmpty) {
         val (leftKeys, rightKeys) = joinKeys.unzip
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
-        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
+        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right, hint))
       } else {
         None
       }
@@ -164,25 +167,35 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    * was involved in an explicit cross join. Also returns the entire list of join conditions for
    * the left-deep tree.
    */
-  def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
+  def flattenJoin(
+      plan: LogicalPlan,
+      hintMap: mutable.HashMap[Seq[LogicalPlan], HintInfo],
+      parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
-    case Join(left, right, joinType: InnerLike, cond) =>
-      val (plans, conditions) = flattenJoin(left, joinType)
+    case Join(left, right, joinType: InnerLike, cond, hint) =>
+      val (plans, conditions) = flattenJoin(left, hintMap, joinType)
+      hint.leftHint.map(hintMap.put(plans.map(_._1), _))
+      hint.rightHint.map(hintMap.put(Seq(right), _))
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
-    case Filter(filterCondition, j @ Join(left, right, _: InnerLike, joinCondition)) =>
-      val (plans, conditions) = flattenJoin(j)
+    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, _)) =>
+      val (plans, conditions) = flattenJoin(j, hintMap)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
     case _ => (Seq((plan, parentJoinType)), Seq.empty)
   }
 
-  def unapply(plan: LogicalPlan): Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
+  def unapply(plan: LogicalPlan)
+      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression], Map[Seq[LogicalPlan], HintInfo])]
       = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _)) =>
-      Some(flattenJoin(f))
-    case j @ Join(_, _, joinType, _) =>
-      Some(flattenJoin(j))
+    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, _)) =>
+      val hintMap = new mutable.HashMap[Seq[LogicalPlan], HintInfo]
+      val flattened = flattenJoin(f, hintMap)
+      Some((flattened._1, flattened._2, hintMap.toMap))
+    case j @ Join(_, _, joinType, _, _) =>
+      val hintMap = new mutable.HashMap[Seq[LogicalPlan], HintInfo]
+      val flattened = flattenJoin(j, hintMap)
+      Some((flattened._1, flattened._2, hintMap.toMap))
     case _ => None
   }
 }

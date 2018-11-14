@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.logical.JoinHint
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -453,6 +454,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case Some(serde) => table.identifier :: serde :: Nil
         case _ => table.identifier :: Nil
       }
+    case hint: JoinHint if hint.leftHint.isEmpty && hint.rightHint.isEmpty => Nil
     case other => other :: Nil
   }.mkString(", ")
 

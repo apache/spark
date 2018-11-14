@@ -43,10 +43,15 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
    *
    * @param input a list of LogicalPlans to inner join and the type of inner join.
    * @param conditions a list of condition for join.
+   * @param leftPlans a list of LogicalPlans contained in the left join child.
+   * @param hintMap a map of relations to their corresponding hints.
    */
   @tailrec
-  final def createOrderedJoin(input: Seq[(LogicalPlan, InnerLike)], conditions: Seq[Expression])
-    : LogicalPlan = {
+  final def createOrderedJoin(
+      input: Seq[(LogicalPlan, InnerLike)],
+      conditions: Seq[Expression],
+      leftPlans: Seq[LogicalPlan],
+      hintMap: Map[Seq[LogicalPlan], HintInfo]): LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
       val (joinConditions, others) = conditions.partition(canEvaluateWithinJoin)
@@ -55,7 +60,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         case (Inner, Inner) => Inner
         case (_, _) => Cross
       }
-      val join = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And))
+      val join = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And),
+        JoinHint(hintMap.get(leftPlans), hintMap.get(Seq(right))))
       if (others.nonEmpty) {
         Filter(others.reduceLeft(And), join)
       } else {
@@ -78,26 +84,28 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val joinedRefs = left.outputSet ++ right.outputSet
       val (joinConditions, others) = conditions.partition(
         e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
-      val joined = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And))
+      val joined = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And),
+        JoinHint(hintMap.get(leftPlans), hintMap.get(Seq(right))))
 
       // should not have reference to same logical plan
-      createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right), others)
+      createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right),
+        others, leftPlans :+ right, hintMap)
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case ExtractFiltersAndInnerJoins(input, conditions)
+    case ExtractFiltersAndInnerJoins(input, conditions, hintMap)
         if input.size > 2 && conditions.nonEmpty =>
       if (SQLConf.get.starSchemaDetection && !SQLConf.get.cboEnabled) {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
           val rest = input.filterNot(starJoinPlan.contains(_))
-          createOrderedJoin(starJoinPlan ++ rest, conditions)
+          createOrderedJoin(starJoinPlan ++ rest, conditions, Seq(starJoinPlan.head._1), hintMap)
         } else {
-          createOrderedJoin(input, conditions)
+          createOrderedJoin(input, conditions, Seq(input.head._1), hintMap)
         }
       } else {
-        createOrderedJoin(input, conditions)
+        createOrderedJoin(input, conditions, Seq(input.head._1), hintMap)
       }
   }
 }
@@ -148,7 +156,7 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
+    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
   }
@@ -166,7 +174,7 @@ object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateH
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case j @ Join(_, _, joinType, condition)
+    case j @ Join(_, _, joinType, condition, _)
         if condition.isDefined && hasPythonUDF(condition.get) =>
       if (!joinType.isInstanceOf[InnerLike] && joinType != LeftSemi) {
         // The current strategy only support InnerLike and LeftSemi join because for other type,
