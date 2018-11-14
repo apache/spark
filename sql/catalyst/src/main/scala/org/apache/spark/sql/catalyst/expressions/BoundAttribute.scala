@@ -73,8 +73,8 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   }
 
   private def genReplaceMinusZeroWithZeroCode(javaType: String, value: String): Block = {
-    val code: String = s"\nif ($value == -0.0%c) $value = 0.0%c;"
-    var formattedCode: String = ""
+    val code = s"\nif ($value == -0.0%c) $value = 0.0%c;"
+    var formattedCode = ""
     javaType match {
       case "double" | "java.lang.Double" => formattedCode = code.format('d', 'd')
       case "float" | "java.lang.Float" => formattedCode = code.format('f', 'f')
