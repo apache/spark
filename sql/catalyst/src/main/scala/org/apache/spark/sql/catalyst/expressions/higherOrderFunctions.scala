@@ -512,7 +512,7 @@ case class TransformKeys(
 
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
-  override def dataType: DataType = MapType(function.dataType, valueType, valueContainsNull)
+  override def dataType: MapType = MapType(function.dataType, valueType, valueContainsNull)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     TypeUtils.checkForMapKeyType(function.dataType)
@@ -525,6 +525,7 @@ case class TransformKeys(
   @transient lazy val LambdaFunction(
     _, (keyVar: NamedLambdaVariable) :: (valueVar: NamedLambdaVariable) :: Nil, _) = function
 
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val map = argumentValue.asInstanceOf[MapData]
@@ -534,13 +535,11 @@ case class TransformKeys(
       keyVar.value.set(map.keyArray().get(i, keyVar.dataType))
       valueVar.value.set(map.valueArray().get(i, valueVar.dataType))
       val result = functionForEval.eval(inputRow)
-      if (result == null) {
-        throw new RuntimeException("Cannot use null as map key!")
-      }
       resultKeys.update(i, result)
       i += 1
     }
-    new ArrayBasedMapData(resultKeys, map.valueArray())
+    mapBuilder.reset()
+    mapBuilder.from(resultKeys, map.valueArray())
   }
 
   override def prettyName: String = "transform_keys"

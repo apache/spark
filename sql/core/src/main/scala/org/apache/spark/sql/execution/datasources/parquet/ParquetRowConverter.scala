@@ -558,8 +558,11 @@ private[parquet] class ParquetRowConverter(
 
     override def getConverter(fieldIndex: Int): Converter = keyValueConverter
 
-    override def end(): Unit =
+    override def end(): Unit = {
+      // The parquet map may contains null or duplicated map keys. When it happens, the behavior is
+      // undefined.
       updater.set(ArrayBasedMapData(currentKeys.toArray, currentValues.toArray))
+    }
 
     // NOTE: We can't reuse the mutable Map here and must instantiate a new `Map` for the next
     // value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored in row

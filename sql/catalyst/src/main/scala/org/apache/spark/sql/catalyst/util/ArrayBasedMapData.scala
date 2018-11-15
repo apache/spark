@@ -19,6 +19,12 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.{Map => JavaMap}
 
+/**
+ * A simple `MapData` implementation which is backed by 2 arrays.
+ *
+ * Note that, user is responsible to guarantee that the key array does not have duplicated
+ * elements, otherwise the behavior is undefined.
+ */
 class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) extends MapData {
   require(keyArray.numElements() == valueArray.numElements())
 
