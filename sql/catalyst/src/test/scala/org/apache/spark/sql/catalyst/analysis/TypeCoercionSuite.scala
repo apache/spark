@@ -1490,6 +1490,10 @@ class TypeCoercionSuite extends AnalysisTest {
       GreaterThan(Literal("1.5"), Literal(BigDecimal("0.5"))),
       GreaterThan(Cast(Literal("1.5"), DoubleType), Cast(Literal(BigDecimal("0.5")),
         DoubleType)))
+    ruleTest(rule,
+      GreaterThan(Literal("22222222222222222224"), Literal(Decimal("22222222222222222223"))),
+      GreaterThan(Cast(Literal("22222222222222222224"), DecimalType(20, 0)),
+        Literal(Decimal("22222222222222222223"))))
     Seq(true, false).foreach { convertToTS =>
       withSQLConf(
         "spark.sql.legacy.compareDateTimestampInTimestamp" -> convertToTS.toString) {
