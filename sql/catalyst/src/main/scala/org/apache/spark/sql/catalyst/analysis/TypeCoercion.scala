@@ -138,6 +138,11 @@ object TypeCoercion {
     case (DateType, TimestampType)
       => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
 
+    // to support a popular use case of tables using Decimal(X, 0) for long IDs instead of strings
+    // see SPARK-26070 for more details
+    case (n: DecimalType, s: StringType) if n.scale == 0 => Some(DecimalType(n.precision, n.scale))
+    case (s: StringType, n: DecimalType) if n.scale == 0 => Some(DecimalType(n.precision, n.scale))
+
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
     // See SPARK-22469 for details.
