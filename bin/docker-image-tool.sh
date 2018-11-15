@@ -41,6 +41,18 @@ function image_ref {
   echo "$image"
 }
 
+function docker_push {
+  local image_name="$1"
+  if [ ! -z $(docker images -q "$(image_ref ${image_name})") ]; then
+    docker push "$(image_ref ${image_name})"
+    if [ $? -ne 0 ]; then
+      error "Failed to push $image_name Docker image."
+    fi
+  else
+    echo "$(image_ref ${image_name}) image not found. Skipping push for this image."
+  fi
+}
+
 function build {
   local BUILD_ARGS
   local IMG_PATH
@@ -102,33 +114,33 @@ function build {
     error "Failed to build Spark JVM Docker image, please refer to Docker build output for details."
   fi
 
-  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-    -t $(image_ref spark-py) \
-    -f "$PYDOCKERFILE" .
+  if [ "${PYDOCKERFILE}" != "skip" ]; then
+    docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+      -t $(image_ref spark-py) \
+      -f "$PYDOCKERFILE" .
+      if [ $? -ne 0 ]; then
+        error "Failed to build PySpark Docker image, please refer to Docker build output for details."
+      fi
+  else
+    echo "Skipped building PySpark docker image."
+  fi
+
+  if [ "${RDOCKERFILE}" != "skip" ] && [ -d "${SPARK_HOME}/R/lib" ]; then
+    docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+      -t $(image_ref spark-r) \
+      -f "$RDOCKERFILE" .
     if [ $? -ne 0 ]; then
-      error "Failed to build PySpark Docker image, please refer to Docker build output for details."
+      error "Failed to build SparkR Docker image, please refer to Docker build output for details."
     fi
-  docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-    -t $(image_ref spark-r) \
-    -f "$RDOCKERFILE" .
-  if [ $? -ne 0 ]; then
-    error "Failed to build SparkR Docker image, please refer to Docker build output for details."
+  else
+    echo "Skipped building SparkR docker image."
   fi
 }
 
 function push {
-  docker push "$(image_ref spark)"
-  if [ $? -ne 0 ]; then
-    error "Failed to push Spark JVM Docker image."
-  fi
-  docker push "$(image_ref spark-py)"
-  if [ $? -ne 0 ]; then
-    error "Failed to push PySpark Docker image."
-  fi
-  docker push "$(image_ref spark-r)"
-  if [ $? -ne 0 ]; then
-    error "Failed to push SparkR Docker image."
-  fi
+  docker_push "spark"
+  docker_push "spark-py"
+  docker_push "spark-r"
 }
 
 function usage {
@@ -145,6 +157,8 @@ Options:
   -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
   -p file               Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
   -R file               Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
+  -pskip                Skip building PySpark docker image.
+  -Rskip                Skip building SparkR docker image.
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
