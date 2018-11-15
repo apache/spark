@@ -17,7 +17,7 @@
 
 package org.apache.spark.annotation;
 
-import java.lang.annotation.Documented;
+import java.lang.annotation.*;
 
 /**
  * Annotation to inform users of how much to rely on a particular package,
@@ -31,6 +31,9 @@ public class InterfaceStability {
    * (e.g. from 1.0 to 2.0).
    */
   @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
+    ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
   public @interface Stable {};
 
   /**
@@ -38,6 +41,9 @@ public class InterfaceStability {
    * Evolving interfaces can change from one feature release to another release (i.e. 2.1 to 2.2).
    */
   @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
+    ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
   public @interface Evolving {};
 
   /**
@@ -45,5 +51,8 @@ public class InterfaceStability {
    * Classes that are unannotated are considered Unstable.
    */
   @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
+    ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
   public @interface Unstable {};
 }
