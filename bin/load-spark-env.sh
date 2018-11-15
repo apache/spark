@@ -42,19 +42,20 @@ fi
 # Setting SPARK_SCALA_VERSION if not already set.
 
 if [ -z "$SPARK_SCALA_VERSION" ]; then
+  SCALA_VERSION1=2.12
+  SCALA_VERSION2=2.11
 
-  ASSEMBLY_DIR2="${SPARK_HOME}/assembly/target/scala-2.11"
-  ASSEMBLY_DIR1="${SPARK_HOME}/assembly/target/scala-2.12"
-
-  if [[ -d "$ASSEMBLY_DIR2" && -d "$ASSEMBLY_DIR1" ]]; then
-    echo -e "Presence of build for both scala versions(SCALA 2.11 and SCALA 2.12) detected." 1>&2
-    echo -e 'Either clean one of them or, export SPARK_SCALA_VERSION=2.12 in load-spark-env.sh.' 1>&2
+  ASSEMBLY_DIR1="${SPARK_HOME}/assembly/target/scala-${SCALA_VERSION1}"
+  ASSEMBLY_DIR2="${SPARK_HOME}/assembly/target/scala-${SCALA_VERSION2}"
+  if [[ -d "$ASSEMBLY_DIR1" && -d "$ASSEMBLY_DIR2" ]]; then
+    echo -e "Presence of build for multiple Scala versions detected($ASSEMBLY_DIR1 and $ASSEMBLY_DIR2)." 1>&2
+    echo -e "Remove one of them, or export SPARK_SCALA_VERSION=$SCALA_VERSION1 in load-spark-env.sh." 1>&2
     exit 1
   fi
 
-  if [ -d "$ASSEMBLY_DIR2" ]; then
-    export SPARK_SCALA_VERSION="2.11"
+  if [ -d "$ASSEMBLY_DIR1" ]; then
+    export SPARK_SCALA_VERSION=$SCALA_VERSION1
   else
-    export SPARK_SCALA_VERSION="2.12"
+    export SPARK_SCALA_VERSION=$SCALA_VERSION2
   fi
 fi
