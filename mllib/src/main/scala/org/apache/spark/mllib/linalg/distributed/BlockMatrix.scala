@@ -276,7 +276,7 @@ class BlockMatrix @Since("1.3.0") (
       mat.rowIter.zipWithIndex.filter(_._1.size > 0).map {
         case (vector, rowIdx) =>
           blockRowIdx * rowsPerBlock + rowIdx -> ((blockColIdx, vector))
-      }.filter(_._2._2.size > 0)
+      }
     }.groupByKey().map { case (rowIdx, vectors) =>
       val numberNonZero = vectors.map(_._2.numActives).sum
       val numberNonZeroPerRow = numberNonZero.toDouble / cols.toDouble
