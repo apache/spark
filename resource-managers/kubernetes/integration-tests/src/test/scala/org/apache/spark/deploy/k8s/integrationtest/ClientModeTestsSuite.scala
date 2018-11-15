@@ -17,13 +17,13 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import org.scalatest.concurrent.Eventually
-import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
+import org.scalatest.Tag
 
 private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
 
-  test("Run in client mode.", k8sTestTag) {
+  test("Run in client mode.", k8sTestTag, Tag("k8s-client-mode")) {
     val labels = Map("spark-app-selector" -> driverPodName)
     val driverPort = 7077
     val blockManagerPort = 10000
@@ -62,11 +62,12 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
           .endMetadata()
         .withNewSpec()
           .withServiceAccountName(kubernetesTestComponents.serviceAccountName)
+          .withRestartPolicy("Never")
           .addNewContainer()
             .withName("spark-example")
             .withImage(image)
             .withImagePullPolicy("IfNotPresent")
-            .withCommand("/opt/spark/bin/run-example")
+            .addToArgs("/opt/spark/bin/run-example")
             .addToArgs("--master", s"k8s://https://kubernetes.default.svc")
             .addToArgs("--deploy-mode", "client")
             .addToArgs("--conf", s"spark.kubernetes.container.image=$image")
