@@ -2577,7 +2577,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           |  LEFT OUTER JOIN v ON v.id = a.id
         """.stripMargin)
       checkAnswer(res, Row("1-1", 6, 6))
-
     }
   }
 }
