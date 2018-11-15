@@ -478,25 +478,25 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 }
 
 object DDLPreprocessingUtils {
-  private def isSafeToCast(
+  private def noReorderedStructs(
     expected: DataType,
     actual: DataType): Boolean = {
     (expected, actual) match {
       case (StructType(expectedTypes), StructType(actualTypes)) =>
         expectedTypes.zip(actualTypes).forall {
           case (left, right) =>
-            left.name.equals(right.name) && isSafeToCast(left.dataType, right.dataType)
+            left.name.equals(right.name) && noReorderedStructs(left.dataType, right.dataType)
         }
       case (ArrayType(expectedType, _), ArrayType(actualType, _)) =>
-        isSafeToCast(expectedType, actualType)
+        noReorderedStructs(expectedType, actualType)
       case (MapType(expectedKey, expectedValue, _), MapType(actualKey, actualValue, _)) =>
-        isSafeToCast(expectedKey, actualKey) && isSafeToCast(expectedValue, actualValue)
-      case (x, y) => Cast.canCast(x, y)
+        noReorderedStructs(expectedKey, actualKey) && noReorderedStructs(expectedValue, actualValue)
+      case (x, y) => true
     }
   }
 
-  private def failIfNotSafeToCast(expected: DataType, actual: DataType): Unit = {
-    if (!isSafeToCast(expected, actual)) {
+  private def failIfHasReorderedStructs(expected: DataType, actual: DataType): Unit = {
+    if (!noReorderedStructs(expected, actual)) {
       throw new AnalysisException(s"It is not safe to write out datatype $actual " +
         s"into a table of type $expected, because struct columns would be in the wrong order.")
     }
@@ -516,7 +516,7 @@ object DDLPreprocessingUtils {
           expected.metadata == actual.metadata) {
           actual
         } else {
-          failIfNotSafeToCast(expected.dataType, actual.dataType)
+          failIfHasReorderedStructs(expected.dataType, actual.dataType)
           // Renaming is needed for handling the following cases like
           // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
           // 2) Target tables have column metadata
