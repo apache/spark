@@ -25,7 +25,7 @@
     <version>18</version>
   </parent>
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-parent_2.11</artifactId>
+  <artifactId>spark-parent_2.12</artifactId>
   <version>3.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
@@ -154,8 +154,8 @@
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.11.12</scala.version>
-    <scala.binary.version>2.11</scala.binary.version>
+    <scala.version>2.12.7</scala.version>
+    <scala.binary.version>2.12</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.9.6</fasterxml.jackson.version>
     <snappy.version>1.1.7.1</snappy.version>
@@ -1998,6 +1998,7 @@
                       -->
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
+                      <exclude>*:*_2.11</exclude>
                       <exclude>*:*_2.10</exclude>
                     </excludes>
                     <searchTransitive>true</searchTransitive>
@@ -2705,14 +2706,14 @@
 
     <!-- Exists for backwards compatibility; profile doesn't do anything -->
     <profile>
-      <id>scala-2.11</id>
+      <id>scala-2.12</id>
     </profile>
 
     <profile>
-      <id>scala-2.12</id>
+      <id>scala-2.11</id>
       <properties>
-        <scala.version>2.12.7</scala.version>
-        <scala.binary.version>2.12</scala.binary.version>
+        <scala.version>2.11.12</scala.version>
+        <scala.binary.version>2.11</scala.binary.version>
       </properties>
       <build>
         <plugins>
@@ -2728,8 +2729,9 @@
                 <configuration>
                   <rules>
                     <bannedDependencies>
-                      <excludes combine.children="append">
-                        <exclude>*:*_2.11</exclude>
+                      <excludes combine.self="override">
+                        <exclude>org.jboss.netty</exclude>
+                        <exclude>org.codehaus.groovy</exclude>
                         <exclude>*:*_2.10</exclude>
                       </excludes>
                     </bannedDependencies>

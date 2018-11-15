@@ -133,7 +133,7 @@ specifying `--packages` with `spark-submit` or `sparkR` commands, or if initiali
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
+sparkR.session(sparkPackages = "org.apache.spark:spark-avro_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION}}")
 {% endhighlight %}
 </div>
 
