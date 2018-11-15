@@ -598,13 +598,24 @@ private[yarn] class YarnAllocator(
             (false, s"Container ${containerId}${onHostStr} was preempted.")
           // Should probably still count memory exceeded exit codes towards task failures
           case VMEM_EXCEEDED_EXIT_CODE =>
-            (true, memLimitExceededLogMessage(
-              completedContainer.getDiagnostics,
-              VMEM_EXCEEDED_PATTERN))
+            val suggestion = if (conf.getBoolean(YarnConfiguration.NM_VMEM_CHECK_ENABLED,
+              YarnConfiguration.DEFAULT_NM_VMEM_CHECK_ENABLED)) {
+              s"Consider disabling ${YarnConfiguration.NM_VMEM_CHECK_ENABLED} because of YARN-4714"
+            } else {
+              ""
+            }
+            val matcher = VMEM_EXCEEDED_PATTERN.matcher(completedContainer.getDiagnostics)
+            val diag = if (matcher.find()) " " + matcher.group() + "." else ""
+            val message =
+              s"Container killed by YARN for exceeding virtual memory limits.$diag $suggestion."
+            (true, message)
           case PMEM_EXCEEDED_EXIT_CODE =>
-            (true, memLimitExceededLogMessage(
-              completedContainer.getDiagnostics,
-              PMEM_EXCEEDED_PATTERN))
+            val suggestion = s"Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}"
+            val matcher = PMEM_EXCEEDED_PATTERN.matcher(completedContainer.getDiagnostics)
+            val diag = if (matcher.find()) " " + matcher.group() + "." else ""
+            val message =
+              s"Container killed by YARN for exceeding physical memory limits.$diag $suggestion."
+            (true, message)
           case _ =>
             // all the failures which not covered above, like:
             // disk failure, kill by app master or resource manager, ...
@@ -741,16 +752,4 @@ private object YarnAllocator {
     Pattern.compile(s"$MEM_REGEX of $MEM_REGEX virtual memory used")
   val VMEM_EXCEEDED_EXIT_CODE = -103
   val PMEM_EXCEEDED_EXIT_CODE = -104
-
-  def memLimitExceededLogMessage(diagnostics: String, pattern: Pattern): String = {
-    val matcher = pattern.matcher(diagnostics)
-    val diag = if (matcher.find()) " " + matcher.group() + "." else ""
-    val additional = if (pattern == VMEM_EXCEEDED_PATTERN) {
-      s" or disabling ${YarnConfiguration.NM_VMEM_CHECK_ENABLED} because of YARN-4714"
-    } else {
-      ""
-    }
-    s"Container killed by YARN for exceeding memory limits. $diag " +
-      s"Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}$additional."
-  }
 }

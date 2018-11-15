@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util.regex.Pattern
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
@@ -378,14 +380,16 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("memory exceeded diagnostic regexes") {
-    val diagnostics =
-      "Container [pid=12465,containerID=container_1412887393566_0003_01_000002] is running " +
-        "beyond physical memory limits. Current usage: 2.1 MB of 2 GB physical memory used; " +
-        "5.8 GB of 4.2 GB virtual memory used. Killing container."
-    val vmemMsg = memLimitExceededLogMessage(diagnostics, VMEM_EXCEEDED_PATTERN)
-    val pmemMsg = memLimitExceededLogMessage(diagnostics, PMEM_EXCEEDED_PATTERN)
-    assert(vmemMsg.contains("5.8 GB of 4.2 GB virtual memory used."))
-    assert(pmemMsg.contains("2.1 MB of 2 GB physical memory used."))
+    def logMessage(pattern: Pattern): String = {
+      val diagnostics =
+        "Container [pid=12465,containerID=container_1412887393566_0003_01_000002] is running " +
+          "beyond physical memory limits. Current usage: 2.1 MB of 2 GB physical memory used; " +
+          "5.8 GB of 4.2 GB virtual memory used. Killing container."
+      val matcher = pattern.matcher(diagnostics)
+      if (matcher.find()) " " + matcher.group() + "." else ""
+    }
+    assert(logMessage(VMEM_EXCEEDED_PATTERN).contains("5.8 GB of 4.2 GB virtual memory used."))
+    assert(logMessage(PMEM_EXCEEDED_PATTERN).contains("2.1 MB of 2 GB physical memory used."))
   }
 
   test("window based failure executor counting") {
