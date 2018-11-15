@@ -234,7 +234,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
     assert(data.length == 4)
   }
 
-  test("do not produce empty files") {
+  test("do not produce empty files for empty partitions") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       spark.emptyDataset[String].write.text(path)
