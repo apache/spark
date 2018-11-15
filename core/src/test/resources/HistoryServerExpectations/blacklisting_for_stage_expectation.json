@@ -620,6 +620,7 @@
     },
     "1": {
       "taskTime": 708,
+      "activeTasks" : 0,
       "failedTasks": 0,
       "succeededTasks": 10,
       "killedTasks": 0,
