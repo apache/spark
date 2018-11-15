@@ -70,6 +70,7 @@ private[ui] class ExecutorTable(stage: StageData, store: AppStatusStore) {
           Blacklisted
           </span>
         </th>
+        <th>Logs</th>
       </thead>
       <tbody>
         {createExecutorTable(stage)}
@@ -92,16 +93,7 @@ private[ui] class ExecutorTable(stage: StageData, store: AppStatusStore) {
     executorSummary.toSeq.sortBy(_._1).map { case (k, v) =>
       val executor = store.asOption(store.executorSummary(k))
       <tr>
-        <td>
-          <div style="float: left">{k}</div>
-          <div style="float: right">
-          {
-            executor.map(_.executorLogs).getOrElse(Map.empty).map {
-              case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
-            }
-          }
-          </div>
-        </td>
+        <td>{k}</td>
         <td>{executor.map { e => e.hostPort }.getOrElse("CANNOT FIND ADDRESS")}</td>
         <td sorttable_customkey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
         <td>{v.failedTasks + v.succeededTasks + v.killedTasks}</td>
@@ -145,6 +137,11 @@ private[ui] class ExecutorTable(stage: StageData, store: AppStatusStore) {
             <td>false</td>
           }
         }
+        <td> {executor.map(_.executorLogs).getOrElse(Map.empty).map {
+          case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
+        }}
+        </td>
+
       </tr>
     }
   }
