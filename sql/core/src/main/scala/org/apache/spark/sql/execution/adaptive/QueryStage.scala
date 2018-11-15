@@ -61,7 +61,7 @@ abstract class QueryStage extends UnaryExecNode {
     }
     val broadcastFutures = broadcastQueryStages.map { queryStage =>
       Future {
-        SQLExecution.withExecutionId(sqlContext.sparkContext, executionId) {
+        SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
           queryStage.prepareBroadcast()
         }
       }(QueryStage.executionContext)
