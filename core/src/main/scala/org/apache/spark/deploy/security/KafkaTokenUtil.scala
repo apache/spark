@@ -98,8 +98,6 @@ private[spark] object KafkaTokenUtil extends Logging {
     if (keytab.isDefined) {
       val serviceName = sparkConf.get(KAFKA_KERBEROS_SERVICE_NAME)
       require(serviceName.nonEmpty, "Kerberos service name must be defined")
-      val principal = sparkConf.get(PRINCIPAL)
-      require(principal.nonEmpty, "Principal must be defined")
 
       val params =
         s"""
@@ -107,7 +105,7 @@ private[spark] object KafkaTokenUtil extends Logging {
         | useKeyTab=true
         | serviceName="${serviceName.get}"
         | keyTab="${keytab.get}"
-        | principal="${principal.get}";
+        | principal="${sparkConf.get(PRINCIPAL).get}";
         """.stripMargin.replace("\n", "")
       logDebug(s"Krb JAAS params: $params")
       Some(params)

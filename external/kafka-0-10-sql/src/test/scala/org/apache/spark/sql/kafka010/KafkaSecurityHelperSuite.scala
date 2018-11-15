@@ -26,7 +26,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.security.KafkaTokenUtil
 import org.apache.spark.deploy.security.KafkaTokenUtil.KafkaDelegationTokenIdentifier
-import org.apache.spark.internal.config.{KAFKA_KERBEROS_SERVICE_NAME, KEYTAB, PRINCIPAL}
+import org.apache.spark.internal.config.{KAFKA_KERBEROS_SERVICE_NAME}
 
 class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
   private val keytab = "/path/to/keytab"

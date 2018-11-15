@@ -127,17 +127,6 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(thrown.getMessage contains "Kerberos service name must be defined")
   }
 
-  test("getKeytabJaasParams with keytab no principal should throw exception") {
-    sparkConf.set(KEYTAB, keytab)
-    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
-
-    val thrown = intercept[IllegalArgumentException] {
-      KafkaTokenUtil.getKeytabJaasParams(sparkConf)
-    }
-
-    assert(thrown.getMessage contains "Principal must be defined")
-  }
-
   test("getKeytabJaasParams with keytab should return kerberos module") {
     sparkConf.set(KEYTAB, keytab)
     sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
