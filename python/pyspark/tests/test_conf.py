@@ -14,29 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import random
+import unittest
 
-from pyspark.sql import Row
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark import SparkContext, SparkConf
 
 
-class GroupTests(ReusedSQLTestCase):
-
-    def test_aggregator(self):
-        df = self.df
-        g = df.groupBy()
-        self.assertEqual([99, 100], sorted(g.agg({'key': 'max', 'value': 'count'}).collect()[0]))
-        self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
-
-        from pyspark.sql import functions
-        self.assertEqual((0, u'99'),
-                         tuple(g.agg(functions.first(df.key), functions.last(df.value)).first()))
-        self.assertTrue(95 < g.agg(functions.approx_count_distinct(df.key)).first()[0])
-        self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
+class ConfTests(unittest.TestCase):
+    def test_memory_conf(self):
+        memoryList = ["1T", "1G", "1M", "1024K"]
+        for memory in memoryList:
+            sc = SparkContext(conf=SparkConf().set("spark.python.worker.memory", memory))
+            l = list(range(1024))
+            random.shuffle(l)
+            rdd = sc.parallelize(l, 4)
+            self.assertEqual(sorted(l), rdd.sortBy(lambda x: x).collect())
+            sc.stop()
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.test_group import *
+    from pyspark.tests.test_conf import *
 
     try:
         import xmlrunner

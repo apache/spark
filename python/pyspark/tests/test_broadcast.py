@@ -14,20 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import os
 import random
 import tempfile
 import unittest
 
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
-
-from pyspark.broadcast import Broadcast
-from pyspark.conf import SparkConf
-from pyspark.context import SparkContext
+from pyspark import SparkConf, SparkContext
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import ChunkedStream
 
@@ -118,9 +110,13 @@ class BroadcastFrameProtocolTest(unittest.TestCase):
             for buffer_length in [1, 2, 5, 8192]:
                 self._test_chunked_stream(random_bytes(data_length), buffer_length)
 
+
 if __name__ == '__main__':
-    from pyspark.test_broadcast import *
-    if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
-    else:
-        unittest.main(verbosity=2)
+    from pyspark.tests.test_broadcast import *
+
+    try:
+        import xmlrunner
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

@@ -21,7 +21,7 @@ import unittest
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.tests import PySparkTestCase
+from pyspark.testing.utils import PySparkTestCase
 
 
 class SparkSessionTests(ReusedSQLTestCase):
@@ -315,6 +315,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
     except ImportError:
-        unittest.main(verbosity=2)
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

@@ -23,7 +23,7 @@ from contextlib import contextmanager
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
-from pyspark.tests import ReusedPySparkTestCase
+from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.util import _exception_message
 
 

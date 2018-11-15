@@ -310,6 +310,7 @@ pyspark_core = Module(
         "python/(?!pyspark/(ml|mllib|sql|streaming))"
     ],
     python_test_goals=[
+        # doctests
         "pyspark.rdd",
         "pyspark.context",
         "pyspark.conf",
@@ -318,10 +319,22 @@ pyspark_core = Module(
         "pyspark.serializers",
         "pyspark.profiler",
         "pyspark.shuffle",
-        "pyspark.tests",
-        "pyspark.test_broadcast",
-        "pyspark.test_serializers",
         "pyspark.util",
+        # unittests
+        "pyspark.tests.test_appsubmit",
+        "pyspark.tests.test_broadcast",
+        "pyspark.tests.test_conf",
+        "pyspark.tests.test_context",
+        "pyspark.tests.test_daemon",
+        "pyspark.tests.test_join",
+        "pyspark.tests.test_profiler",
+        "pyspark.tests.test_rdd",
+        "pyspark.tests.test_readwrite",
+        "pyspark.tests.test_serializers",
+        "pyspark.tests.test_shuffle",
+        "pyspark.tests.test_taskcontext",
+        "pyspark.tests.test_util",
+        "pyspark.tests.test_worker",
     ]
 )
 
