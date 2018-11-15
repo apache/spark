@@ -216,11 +216,13 @@ private[spark] class ExecutorAllocationManager(
     if (cachedExecutorIdleTimeoutS < 0) {
       throw new SparkException(s"${DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT.key} must be >= 0!")
     }
-    // Require external shuffle service for dynamic allocation
+    // Require external shuffle for dynamic allocation
     // Otherwise, we may lose shuffle files when killing executors
-    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !testing) {
-      throw new SparkException("Dynamic allocation of executors requires the external " +
-        "shuffle service. You may enable this through spark.shuffle.service.enabled.")
+    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) &&
+        !conf.get(config.EXTERNAL_SHUFFLE_ENABLED) && !testing) {
+      throw new SparkException("Dynamic allocation of executors requires external " +
+        "shuffle. You may enable this through spark.shuffle.service.enabled or" +
+        "spark.shuffle.external.enabled.")
     }
 
     if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {

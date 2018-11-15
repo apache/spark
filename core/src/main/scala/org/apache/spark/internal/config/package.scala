@@ -366,6 +366,12 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val EXTERNAL_SHUFFLE_ENABLED =
+    ConfigBuilder("spark.shuffle.external.enabled")
+      .doc("Whether the shuffle manager is running externally to the Spark deployment.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").intConf.createWithDefault(7337)
 
