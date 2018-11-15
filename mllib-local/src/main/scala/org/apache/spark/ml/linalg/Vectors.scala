@@ -370,14 +370,19 @@ object Vectors {
       case (v1: DenseVector, v2: SparseVector) =>
         squaredDistance = sqdist(v2, v1)
 
-      case (DenseVector(vv1), DenseVector(vv2)) =>
-        var kv = 0
+      case (DenseVector(vv1), DenseVector(vv2)) => {
         val sz = vv1.length
-        while (kv < sz) {
-          val score = vv1(kv) - vv2(kv)
-          squaredDistance += score * score
-          kv += 1
+        @annotation.tailrec
+        def go(d: Double, kv: Int): Double = {
+          if (kv < sz) {
+            val score = vv1(kv) - vv2(kv)
+            go(d + score * score, kv + 1)
+          }
+          else d
         }
+        go(0D, 0)
+      }
+
       case _ =>
         throw new IllegalArgumentException("Do not support vector type " + v1.getClass +
           " and " + v2.getClass)
