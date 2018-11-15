@@ -2556,7 +2556,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-26057: attribute deduplication on already analyzed plans") {
-    withTempView("a", "b", "c", "v") {
+    withTempView("a", "b", "v") {
       val df1 = Seq(("1-1", 6)).toDF("id", "n")
       df1.createOrReplaceTempView("a")
       val df3 = Seq("1-1").toDF("id")
