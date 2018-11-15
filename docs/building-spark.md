@@ -96,9 +96,9 @@ It's possible to build Spark submodules using the `mvn -pl` option.
 
 For instance, you can build the Spark Streaming module using:
 
-    ./build/mvn -pl :spark-streaming_2.11 clean install
+    ./build/mvn -pl :spark-streaming_{{site.SCALA_BINARY_VERSION}} clean install
 
-where `spark-streaming_2.11` is the `artifactId` as defined in `streaming/pom.xml` file.
+where `spark-streaming_{{site.SCALA_BINARY_VERSION}}` is the `artifactId` as defined in `streaming/pom.xml` file.
 
 ## Continuous Compilation
 
@@ -230,7 +230,7 @@ Once installed, the `docker` service needs to be started, if not already running
 On Linux, this can be done by `sudo service docker start`.
 
     ./build/mvn install -DskipTests
-    ./build/mvn test -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
+    ./build/mvn test -Pdocker-integration-tests -pl :spark-docker-integration-tests_{{site.SCALA_BINARY_VERSION}}
 
 or
 
@@ -238,17 +238,17 @@ or
 
 ## Change Scala Version
 
-To build Spark using another supported Scala version, please change the major Scala version using (e.g. 2.12):
+To build Spark using another supported Scala version, please change the major Scala version using (e.g. 2.11):
 
-    ./dev/change-scala-version.sh 2.12
+    ./dev/change-scala-version.sh 2.11
 
-For Maven, please enable the profile (e.g. 2.12):
+For Maven, please enable the profile (e.g. 2.11):
 
-    ./build/mvn -Pscala-2.12 compile
+    ./build/mvn -Pscala-2.11 compile
 
-For SBT, specify a complete scala version using (e.g. 2.12.6):
+For SBT, specify a complete scala version using (e.g. 2.11.12):
 
-    ./build/sbt -Dscala.version=2.12.6
+    ./build/sbt -Dscala.version=2.11.12
 
 Otherwise, the sbt-pom-reader plugin will use the `scala.version` specified in the spark-parent pom.
 

@@ -387,7 +387,7 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
     >>> summary.clusterSizes
     [2, 2]
     >>> summary.trainingCost
-    2.000...
+    2.0
     >>> kmeans_path = temp_path + "/kmeans"
     >>> kmeans.save(kmeans_path)
     >>> kmeans2 = KMeans.load(kmeans_path)
@@ -579,7 +579,7 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
     >>> len(centers)
     2
     >>> model.computeCost(df)
-    2.000...
+    2.0
     >>> model.hasSummary
     True
     >>> summary = model.summary

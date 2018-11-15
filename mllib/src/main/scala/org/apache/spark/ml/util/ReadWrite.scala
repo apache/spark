@@ -256,7 +256,7 @@ class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
           s"Multiple writers found for $source+$stageName, try using the class name of the writer")
     }
     if (classOf[MLWriterFormat].isAssignableFrom(writerCls)) {
-      val writer = writerCls.newInstance().asInstanceOf[MLWriterFormat]
+      val writer = writerCls.getConstructor().newInstance().asInstanceOf[MLWriterFormat]
       writer.write(path, sparkSession, optionMap, stage)
     } else {
       throw new SparkException(s"ML source $source is not a valid MLWriterFormat")

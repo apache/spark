@@ -97,7 +97,7 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
       case m: Matrix =>
         JsonMatrixConverter.toJson(m)
       case _ =>
-        throw new NotImplementedError(
+        throw new UnsupportedOperationException(
           "The default jsonEncode only supports string, vector and matrix. " +
             s"${this.getClass.getName} must override jsonEncode for ${value.getClass.getName}.")
     }
@@ -151,7 +151,7 @@ private[ml] object Param {
         }
 
       case _ =>
-        throw new NotImplementedError(
+        throw new UnsupportedOperationException(
           "The default jsonDecode only supports string, vector and matrix. " +
             s"${this.getClass.getName} must override jsonDecode to support its value type.")
     }

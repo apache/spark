@@ -871,7 +871,7 @@ class Analyzer(
     private def dedupOuterReferencesInSubquery(
         plan: LogicalPlan,
         attrMap: AttributeMap[Attribute]): LogicalPlan = {
-      plan resolveOperatorsDown { case currentFragment =>
+      plan transformDown { case currentFragment =>
         currentFragment transformExpressions {
           case OuterReference(a: Attribute) =>
             OuterReference(dedupAttr(a, attrMap))
@@ -952,6 +952,12 @@ class Analyzer(
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
+
+      // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
+      // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
+      // names leading to ambiguous references exception.
+      case a @ Aggregate(groupingExprs, aggExprs, appendColumns: AppendColumns) =>
+        a.mapExpressions(resolve(_, appendColumns))
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
