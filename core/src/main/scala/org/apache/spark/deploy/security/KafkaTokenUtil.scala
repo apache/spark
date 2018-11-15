@@ -33,11 +33,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
 private[spark] object KafkaTokenUtil extends Logging {
-  private[spark] val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
-  private[spark] val TOKEN_SERVICE = new Text("kafka.server.delegation.token")
+  val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
+  val TOKEN_SERVICE = new Text("kafka.server.delegation.token")
 
   private[spark] class KafkaDelegationTokenIdentifier extends AbstractDelegationTokenIdentifier {
-    override def getKind: Text = TOKEN_KIND;
+    override def getKind: Text = TOKEN_KIND
   }
 
   private[security] def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
@@ -66,7 +66,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     val protocol = sparkConf.get(KAFKA_SECURITY_PROTOCOL)
     adminClientProperties.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, protocol)
     if (protocol.endsWith("SSL")) {
-      logInfo("SSL protocol detected.")
+      logDebug("SSL protocol detected.")
       sparkConf.get(KAFKA_TRUSTSTORE_LOCATION).foreach { truststoreLocation =>
         adminClientProperties.put("ssl.truststore.location", truststoreLocation)
       }

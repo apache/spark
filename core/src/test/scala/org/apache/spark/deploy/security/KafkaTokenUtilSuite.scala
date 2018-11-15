@@ -49,7 +49,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
       "Tried to obtain kafka delegation token but bootstrap servers not configured.")
   }
 
-  test("createAdminClientProperties without SSL protocol should not take over truststore config") {
+  test("createAdminClientProperties without SSL protocol should not include truststore config") {
     sparkConf.set(KAFKA_BOOTSTRAP_SERVERS, bootStrapServers)
     sparkConf.set(KAFKA_SECURITY_PROTOCOL, plainSecurityProtocol)
     sparkConf.set(KAFKA_TRUSTSTORE_LOCATION, trustStoreLocation)
@@ -65,7 +65,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(!adminClientProperties.containsKey("ssl.truststore.password"))
   }
 
-  test("createAdminClientProperties with SSL protocol should take over truststore config") {
+  test("createAdminClientProperties with SSL protocol should include truststore config") {
     sparkConf.set(KAFKA_BOOTSTRAP_SERVERS, bootStrapServers)
     sparkConf.set(KAFKA_SECURITY_PROTOCOL, sslSecurityProtocol)
     sparkConf.set(KAFKA_TRUSTSTORE_LOCATION, trustStoreLocation)

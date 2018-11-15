@@ -51,7 +51,7 @@ private[security] class KafkaDelegationTokenProvider
   override def delegationTokensRequired(
       sparkConf: SparkConf,
       hadoopConf: Configuration): Boolean = {
-    sparkConf.get(KAFKA_BOOTSTRAP_SERVERS).isDefined &&
+    sparkConf.contains(KAFKA_BOOTSTRAP_SERVERS) &&
       sparkConf.get(KAFKA_SECURITY_PROTOCOL).startsWith("SASL")
   }
 }
