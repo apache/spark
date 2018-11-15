@@ -273,7 +273,7 @@ class BlockMatrix @Since("1.3.0") (
     require(cols < Int.MaxValue, s"The number of columns should be less than Int.MaxValue ($cols).")
 
     val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
-      mat.rowIter.zipWithIndex.map {
+      mat.rowIter.zipWithIndex.filter(_._1.size > 0).map {
         case (vector, rowIdx) =>
           blockRowIdx * rowsPerBlock + rowIdx -> ((blockColIdx, vector))
       }.filter(_._2._2.size > 0)
@@ -286,10 +286,12 @@ class BlockMatrix @Since("1.3.0") (
           val arrBufferIndices = new ArrayBuffer[Int](numberNonZero)
           val arrBufferValues = new ArrayBuffer[Double](numberNonZero)
 
-          vectors.foreach { case (blockColIdx: Int, vec: SparseVector) =>
-            val offset = colsPerBlock * blockColIdx
-            arrBufferIndices ++= vec.indices.map(_ + offset)
-            arrBufferValues  ++= vec.values
+          vectors.foreach { case (blockColIdx: Int, vec: Vector) =>
+              val offset = colsPerBlock * blockColIdx
+              vec.foreachActive { case (colIdx: Int, value: Double) =>
+                arrBufferIndices += offset + colIdx
+                arrBufferValues  += value
+              }
           }
           Vectors.sparse(cols, arrBufferIndices.toArray, arrBufferValues.toArray)
         } else {
