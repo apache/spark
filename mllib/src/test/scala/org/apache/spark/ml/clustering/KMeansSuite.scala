@@ -22,7 +22,7 @@ import scala.util.Random
 
 import org.dmg.pmml.{ClusteringModel, PMML}
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils, PMMLReadWriteTest}
@@ -30,7 +30,6 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans,
   KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
-import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
 private[clustering] case class TestRow(features: Vector)
@@ -246,30 +245,6 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       assert(pmmlClusteringModel.getNumberOfClusters === clusterCenters.length)
     }
     testPMMLWrite(sc, kmeansModel, checkModel)
-  }
-
-  test("Kryo class register") {
-    val conf = new SparkConf(false)
-    conf.set("spark.kryo.registrationRequired", "true")
-
-    val ser = new KryoSerializer(conf).newInstance()
-
-    val oldModel1 = new MLlibKMeansModel(
-      Array(MLlibVectors.dense(1.0, 2.0, 6.0),
-        MLlibVectors.dense(1.0, 3.0, 0.0),
-        MLlibVectors.dense(1.0, 4.0, 6.0)))
-    val model1 = new KMeansModel("", oldModel1)
-
-    val oldModel2 = new MLlibKMeansModel(
-      Array(MLlibVectors.dense(3.0, 2.0, 5.0),
-        MLlibVectors.dense(1.0, 4.0, 6.0)))
-    val model2 = new KMeansModel("", oldModel2)
-
-    Seq(model1, model2).foreach { o =>
-      val o2 = ser.deserialize[KMeansModel](ser.serialize(o))
-      assert(o.uid === o2.uid)
-      assert(o.parentModel.clusterCenters === o2.parentModel.clusterCenters)
-    }
   }
 }
 
