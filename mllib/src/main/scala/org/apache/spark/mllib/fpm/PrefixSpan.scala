@@ -174,7 +174,10 @@ class PrefixSpan private (
     val freqSequences = results.map { case (seq: Array[Int], count: Long) =>
       new FreqSequence(toPublicRepr(seq), count)
     }
+    // Cache the final RDD to the same storage level as input
+    freqSequences.persist(data.getStorageLevel)
     dataInternalRepr.unpersist(false)
+
     new PrefixSpanModel(freqSequences)
   }
 
