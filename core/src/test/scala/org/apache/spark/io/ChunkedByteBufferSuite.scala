@@ -90,7 +90,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
     val empty = ByteBuffer.wrap(Array.empty[Byte])
     val bytes1 = ByteBuffer.wrap(Array.tabulate(256)(_.toByte))
     val bytes2 = ByteBuffer.wrap(Array.tabulate(128)(_.toByte))
-    val chunkedByteBuffer = new ChunkedByteBuffer(Array(bytes1, empty, empty, bytes2))
+    val chunkedByteBuffer = new ChunkedByteBuffer(Array(empty, bytes1, empty, bytes2))
     assert(chunkedByteBuffer.size === bytes1.limit() + bytes2.limit())
 
     val inputStream = chunkedByteBuffer.toInputStream(dispose = false)
@@ -98,14 +98,5 @@ class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
     ByteStreams.readFully(inputStream, bytesFromStream)
     assert(bytesFromStream === bytes1.array() ++ bytes2.array())
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
-
-    // test skip
-    val skippableInputStream = chunkedByteBuffer.toInputStream(dispose = false)
-    // occurred first empty chunk, skip will return bytes1.limit()
-    assert(skippableInputStream.skip(chunkedByteBuffer.size) === bytes1.limit())
-    // empty chunks will be skipped, next skill will return bytes2.limit()
-    assert(skippableInputStream.skip(chunkedByteBuffer.size) === bytes2.limit())
-    // all data has been skipped. No more data will be skipped.
-    assert(skippableInputStream.skip(chunkedByteBuffer.size) === 0)
   }
 }

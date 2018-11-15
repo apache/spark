@@ -222,7 +222,7 @@ private[spark] class ChunkedByteBufferInputStream(
     dispose: Boolean)
   extends InputStream {
 
-  private[this] var chunks = chunkedByteBuffer.getChunks().iterator
+  private[this] var chunks = chunkedByteBuffer.getChunks().filter(_.hasRemaining).iterator
   private[this] var currentChunk: ByteBuffer = {
     if (chunks.hasNext) {
       chunks.next()
@@ -232,8 +232,7 @@ private[spark] class ChunkedByteBufferInputStream(
   }
 
   override def read(): Int = {
-    // skip empty chunks
-    while (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
+    if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
       currentChunk = chunks.next()
     }
     if (currentChunk != null && currentChunk.hasRemaining) {
@@ -245,8 +244,7 @@ private[spark] class ChunkedByteBufferInputStream(
   }
 
   override def read(dest: Array[Byte], offset: Int, length: Int): Int = {
-    // skip empty chunks
-    while (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
+    if (currentChunk != null && !currentChunk.hasRemaining && chunks.hasNext) {
       currentChunk = chunks.next()
     }
     if (currentChunk != null && currentChunk.hasRemaining) {
@@ -265,10 +263,7 @@ private[spark] class ChunkedByteBufferInputStream(
       currentChunk.position(currentChunk.position() + amountToSkip)
       if (currentChunk.remaining() == 0) {
         if (chunks.hasNext) {
-          // skip empty chunks
-          while (chunks.hasNext && currentChunk.remaining() == 0) {
-            currentChunk = chunks.next()
-          }
+          currentChunk = chunks.next()
         } else {
           close()
         }
