@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
-import breeze.linalg.{VectorBuilder, DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
+import breeze.linalg.{VectorBuilder, DenseMatrix => BDM, DenseVector => BDV, Matrix => BM, SparseVector => BSV, Vector => BV}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
@@ -274,20 +274,23 @@ class BlockMatrix @Since("1.3.0") (
     val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
       mat.rowIter.zipWithIndex.map {
         case (vector, rowIdx) =>
-          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector)
-      }
+          blockRowIdx * rowsPerBlock + rowIdx -> ((blockColIdx, vector))
+      }.filter(_._2._2.size > 0)
     }.groupByKey().map { case (rowIdx, vectors) =>
-      val numberNonZeroPerRow = vectors.map(_._2.numActives).sum.toDouble / cols.toDouble
+      val numberNonZero = vectors.map(_._2.numActives).sum
+      val numberNonZeroPerRow = numberNonZero.toDouble / cols.toDouble
 
       val wholeVector =
         if (numberNonZeroPerRow <= 0.1) { // Sparse at 1/10th nnz
-        val wholeVectorBuf = VectorBuilder.zeros[Double](cols)
-          vectors.foreach { case (blockColIdx: Int, vec: Vector) =>
+          val arrBufferIndices = new ArrayBuffer[Int](numberNonZero)
+          val arrBufferValues = new ArrayBuffer[Double](numberNonZero)
+
+          vectors.foreach { case (blockColIdx: Int, vec: SparseVector) =>
             val offset = colsPerBlock * blockColIdx
-            vec.foreachActive { case (colIdx: Int, value: Double) =>
-              wholeVectorBuf.add(offset + colIdx, value) }
+            arrBufferIndices ++= vec.indices.map(_ + offset)
+            arrBufferValues  ++= vec.values
           }
-          Vectors.fromBreeze(wholeVectorBuf.toSparseVector)
+          Vectors.sparse(cols, arrBufferIndices.toArray, arrBufferValues.toArray)
         } else {
           val wholeVectorBuf = BDV.zeros[Double](cols)
           vectors.foreach { case (blockColIdx: Int, vec: Vector) =>
