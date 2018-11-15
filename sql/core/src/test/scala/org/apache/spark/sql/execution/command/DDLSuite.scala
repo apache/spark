@@ -668,6 +668,19 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-25943: Writing data into a catalog table with a different struct schema") {
+    withTable("t") {
+      sql(s"CREATE TABLE t USING ${dataSource} AS SELECT STRUCT('d1' AS `first`) AS `a`")
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT INTO t SELECT STRUCT('d3' AS `second`) AS `a`")
+      }
+      assert(e.message.contains("It is not safe to write out datatype " +
+        "StructType(StructField(second,StringType,false)) " +
+        "into a column of type StructType(StructField(first,StringType,true)), " +
+        "because struct columns are not identical."))
+    }
+  }
+
   test("Refresh table after changing the data source table partitioning") {
     import testImplicits._
 
