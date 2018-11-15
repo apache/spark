@@ -89,7 +89,17 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesCon
   // since it's not clear based solely on available configuration options that delegation
   // tokens are needed when other credentials are not available.
   private lazy val delegationTokens: Array[Byte] = if (keytab.isEmpty && existingDtSecret.isEmpty) {
-    createDelegationTokens()
+    val tokenManager = new HadoopDelegationTokenManager(conf,
+      SparkHadoopUtil.get.newConfiguration(conf))
+    val creds = UserGroupInformation.getCurrentUser().getCredentials()
+    tokenManager.obtainDelegationTokens(creds)
+    // If no tokens and no secrets are stored in the credentials, make sure nothing is returned, to
+    // avoid creating an unnecessary secret.
+    if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
+      SparkHadoopUtil.get.serialize(creds)
+    } else {
+      null
+    }
   } else {
     null
   }
@@ -245,18 +255,4 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesCon
     }
   }
 
-  // Visible for testing.
-  def createDelegationTokens(): Array[Byte] = {
-    val tokenManager = new HadoopDelegationTokenManager(conf,
-      SparkHadoopUtil.get.newConfiguration(conf))
-    val creds = UserGroupInformation.getCurrentUser().getCredentials()
-    tokenManager.obtainDelegationTokens(creds)
-    // If no tokens and no secrets are stored in the credentials, make sure nothing is returned, to
-    // avoid creating an unnecessary secret.
-    if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
-      SparkHadoopUtil.get.serialize(creds)
-    } else {
-      null
-    }
-  }
 }
