@@ -33,7 +33,7 @@ import org.apache.spark.storage.BlockId
 import org.apache.spark.util.NextIterator
 
 
-/** Class representing a range of Kinesis sequence numbers. Both sequence numbers are inclusive. */
+/** Class representing a range of Kinesis sequence numbers. Both sequence numbers are inclusive */
 private[kinesis]
 case class SequenceNumberRange(
     streamName: String,
