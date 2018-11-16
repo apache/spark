@@ -54,10 +54,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         val aliasMap = AttributeMap(duplicates.map { dup =>
           dup -> Alias(dup, dup.toString)()
         }.toSeq)
-        val aliasedExpressions = right.output.map { ref =>
-          aliasMap.getOrElse(ref, ref)
-        }
-        val newRight = Project(aliasedExpressions, right)
+        val newRight = rewriteDedupPlan(right, aliasMap)
         val newJoinCond = joinCond.map { condExpr =>
           condExpr transform {
             case a: Attribute => aliasMap.getOrElse(a, a).toAttribute
@@ -68,6 +65,27 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         j
       }
     case _ => joinPlan
+  }
+
+  private def rewriteDedupPlan(plan: LogicalPlan, rewrites: AttributeMap[Alias]): LogicalPlan = {
+    val aliasedExpressions = plan.output.map { ref =>
+      rewrites.getOrElse(ref, ref)
+    }
+    Project(aliasedExpressions, plan)
+  }
+
+  private def dedupSubqueryOnSelfJoin(values: Seq[Expression], sub: LogicalPlan): LogicalPlan = {
+    val leftRefs = AttributeSet.fromAttributeSets(values.map(_.references))
+    val rightRefs = AttributeSet(sub.output)
+    val duplicates = leftRefs.intersect(rightRefs)
+    if (duplicates.isEmpty) {
+      sub
+    } else {
+      val aliasMap = AttributeMap(duplicates.map { dup =>
+        dup -> Alias(dup, dup.toString)()
+      }.toSeq)
+      rewriteDedupPlan(sub, aliasMap)
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -92,10 +110,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // Deduplicate conflicting attributes if any.
           dedupJoin(Join(outerPlan, sub, LeftAnti, joinCond))
         case (p, InSubquery(values, ListQuery(sub, conditions, _, _))) =>
-          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
+          val newSub = dedupSubqueryOnSelfJoin(values, sub)
+          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
           // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftSemi, joinCond))
+          dedupJoin(Join(outerPlan, newSub, LeftSemi, joinCond))
         case (p, Not(InSubquery(values, ListQuery(sub, conditions, _, _)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
@@ -103,7 +122,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
           // Note that will almost certainly be planned as a Broadcast Nested Loop join.
           // Use EXISTS if performance matters to you.
-          val inConditions = values.zip(sub.output).map(EqualTo.tupled)
+          val newSub = dedupSubqueryOnSelfJoin(values, sub)
+          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions, p)
           // Expand the NOT IN expression with the NULL-aware semantic
           // to its full form. That is from:
@@ -119,7 +139,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
           val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
           // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftAnti, Option(finalJoinCond)))
+          dedupJoin(Join(outerPlan, newSub, LeftAnti, Option(finalJoinCond)))
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
