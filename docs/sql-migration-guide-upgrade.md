@@ -17,7 +17,7 @@ displayTitle: Spark SQL Upgrading Guide
 
   - The `ADD JAR` command previously returned a result set with the single value 0. It now returns an empty result set.
 
-  - In Spark version 2.4 and earlier, users can create map values with map type key via built-in function like `CreateMap`, `MapFromArrays`, etc. Since Spark 3.0, it's not allowed to create map values with map type key.
+  - In Spark version 2.4 and earlier, users can create map values with map type key via built-in function like `CreateMap`, `MapFromArrays`, etc. Since Spark 3.0, it's not allowed to create map values with map type key with these built-in functions. Users can still read map values with map type key from data source or Java/Scala collections, though they are not very useful.
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 
