@@ -384,7 +384,7 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     map.checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
       case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("The key of map cannot be/contains map"))
+        assert(msg.contains("The key of map cannot be/contain map"))
     }
   }
 
