@@ -125,12 +125,16 @@ function build {
     echo "Skipped building PySpark docker image."
   fi
 
-  if [ "${RDOCKERFILE}" != "skip" ] && [ -d "${SPARK_HOME}/R/lib" ]; then
-    docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-      -t $(image_ref spark-r) \
-      -f "$RDOCKERFILE" .
-    if [ $? -ne 0 ]; then
-      error "Failed to build SparkR Docker image, please refer to Docker build output for details."
+  if [ "${RDOCKERFILE}" != "skip" ]; then
+    if [ -d "${SPARK_HOME}/R/lib" ]; then
+      docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+        -t $(image_ref spark-r) \
+        -f "$RDOCKERFILE" .
+      if [ $? -ne 0 ]; then
+        error "Failed to build SparkR Docker image, please refer to Docker build output for details."
+      fi
+    else
+      echo "SparkR artifacts not found. Skipped building SparkR docker image."
     fi
   else
     echo "Skipped building SparkR docker image."
@@ -156,9 +160,9 @@ Commands:
 Options:
   -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
   -p file               Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
+                        Specify 'skip' to skip building PySpark docker image.
   -R file               Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
-  -pskip                Skip building PySpark docker image.
-  -Rskip                Skip building SparkR docker image.
+                        Specify 'skip' to skip building SparkR docker image.
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
@@ -177,6 +181,9 @@ Check the following documentation for more information on using the minikube Doc
 Examples:
   - Build image in minikube with tag "testing"
     $0 -m -t testing build
+
+  - Skip building SparkR docker image
+    $0 -r repo -t tag -R skip build
 
   - Build and push image with tag "v2.3.0" to docker.io/myrepo
     $0 -r docker.io/myrepo -t v2.3.0 build
