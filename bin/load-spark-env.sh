@@ -26,15 +26,17 @@ if [ -z "${SPARK_HOME}" ]; then
   source "$(dirname "$0")"/find-spark-home
 fi
 
+SPARK_ENV_SH="spark-env.sh"
 if [ -z "$SPARK_ENV_LOADED" ]; then
   export SPARK_ENV_LOADED=1
 
   export SPARK_CONF_DIR="${SPARK_CONF_DIR:-"${SPARK_HOME}"/conf}"
 
-  if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
+  SPARK_ENV_SH="${SPARK_CONF_DIR}/${SPARK_ENV_SH}"
+  if [[ -f "${SPARK_ENV_SH}" ]]; then
     # Promote all variable declarations to environment (exported) variables
     set -a
-    . "${SPARK_CONF_DIR}/spark-env.sh"
+    . ${SPARK_ENV_SH}
     set +a
   fi
 fi
@@ -49,7 +51,7 @@ if [ -z "$SPARK_SCALA_VERSION" ]; then
   ASSEMBLY_DIR_2="${SPARK_HOME}/assembly/target/scala-${SCALA_VERSION_2}"
   if [[ -d "$ASSEMBLY_DIR_1" && -d "$ASSEMBLY_DIR_2" ]]; then
     echo "Presence of build for multiple Scala versions detected ($ASSEMBLY_DIR_1 and $ASSEMBLY_DIR_2)." 1>&2
-    echo "Remove one of them or, export SPARK_SCALA_VERSION=$SCALA_VERSION_1 in ${SPARK_CONF_DIR}/spark-env.sh." 1>&2
+    echo "Remove one of them or, export SPARK_SCALA_VERSION=$SCALA_VERSION_1 in ${SPARK_ENV_SH}." 1>&2
     exit 1
   fi
 
