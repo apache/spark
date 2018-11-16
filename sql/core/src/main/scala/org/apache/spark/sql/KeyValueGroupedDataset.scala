@@ -459,7 +459,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       columns.map(_.withInputType(vExprEnc, dataAttributes).named)
     val keyColumn = if (!kExprEnc.isSerializedAsStruct) {
       assert(groupingAttributes.length == 1)
-      groupingAttributes.head
+      Alias(groupingAttributes.head, "key")()
     } else {
       Alias(CreateStruct(groupingAttributes), "key")()
     }

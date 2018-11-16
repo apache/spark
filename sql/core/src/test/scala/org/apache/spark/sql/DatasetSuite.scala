@@ -1570,6 +1570,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val agg = ds.groupByKey(x => x).agg(sum("_1").as[Long], sum($"_2" + 1).as[Long])
     checkDatasetUnorderly(agg, ((1, 2), 1L, 3L), ((2, 3), 2L, 4L), ((3, 4), 3L, 5L))
   }
+
+  test("key attribute of primitive type under typed aggregation should be named as key") {
+    val ds = Seq(1, 2, 3).toDS()
+    assert(ds.groupByKey(x => x).count().schema.head.name == "key")
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
