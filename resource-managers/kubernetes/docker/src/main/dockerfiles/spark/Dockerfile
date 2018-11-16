@@ -54,5 +54,4 @@ RUN chmod g+w /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]
 
 # Specify the User that the actual main process will run as
-
 USER ${spark_uid}
