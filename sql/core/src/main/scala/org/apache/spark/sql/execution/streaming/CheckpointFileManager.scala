@@ -56,7 +56,7 @@ trait CheckpointFileManager {
    * @param overwriteIfPossible If true, then the implementations must do a best-effort attempt to
    *                            overwrite the file if it already exists. It should not throw
    *                            any exception if the file exists. However, if false, then the
-   *                            implementation must not overwrite if the file alraedy exists and
+   *                            implementation must not overwrite if the file already exists and
    *                            must throw `FileAlreadyExistsException` in that case.
    */
   def createAtomic(path: Path, overwriteIfPossible: Boolean): CancellableFSDataOutputStream
