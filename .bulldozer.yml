@@ -1,0 +1,9 @@
+version: 1
+merge:
+  blacklist:
+    labels: ["do not merge"]
+  method: squash
+  options:
+    squash:
+      body: pull_request_body
+  delete_after_merge: true
