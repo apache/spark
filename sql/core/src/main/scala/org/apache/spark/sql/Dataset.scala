@@ -2793,7 +2793,7 @@ class Dataset[T] private[sql](
    * [SPARK-26024] Note that due to performance reasons this method uses sampling to
    * estimate the ranges. Hence, the output may not be consistent, since sampling can return
    * different values. The sample size can be controlled by setting the value of the parameter
-   * {{spark.sql.execution.rangeExchange.sampleSizePerPartition}}.
+   * `spark.sql.execution.rangeExchange.sampleSizePerPartition`.
    *
    * @group typedrel
    * @since 2.3.0
@@ -2819,10 +2819,10 @@ class Dataset[T] private[sql](
    * When no explicit sort order is specified, "ascending nulls first" is assumed.
    * Note, the rows are not sorted in each partition of the resulting Dataset.
    *
-   * [SPARK-26024] Note that due to performance reasons this method uses sampling to
-   * estimate the ranges. Hence, the output may not be consistent, since sampling can return
-   * different values. The sample size can be controlled by setting the value of the parameter
-   * {{spark.sql.execution.rangeExchange.sampleSizePerPartition}}.
+   * Note that due to performance reasons this method uses sampling to estimate the ranges.
+   * Hence, the output may not be consistent, since sampling can return different values.
+   * The sample size can be controlled by setting the value of the parameter
+   * `spark.sql.execution.rangeExchange.sampleSizePerPartition`.
    *
    * @group typedrel
    * @since 2.3.0
