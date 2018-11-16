@@ -453,8 +453,6 @@ private[spark] class AppStatusListener(
         maybeUpdate(job, now)
       }
 
-
-
       if (stage.savedTasks.incrementAndGet() > maxTasksPerStage && !stage.cleaning) {
         stage.cleaning = true
         kvstore.doAsync {
