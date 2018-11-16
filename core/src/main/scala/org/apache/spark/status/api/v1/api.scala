@@ -63,7 +63,6 @@ case class ApplicationAttemptInfo private[spark](
 
 class ExecutorStageSummary private[spark](
     val taskTime : Long,
-    val activeTasks: Int,
     val failedTasks : Int,
     val succeededTasks : Int,
     val killedTasks : Int,

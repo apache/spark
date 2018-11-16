@@ -409,7 +409,6 @@
   "executorSummary" : {
     "<driver>" : {
       "taskTime" : 3624,
-      "activeTasks" : 0,
       "failedTasks" : 0,
       "succeededTasks" : 8,
       "killedTasks" : 0,
