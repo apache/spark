@@ -283,7 +283,9 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
         points.zip(rows.map(_(0))).foreach {
           case (orig: SparseVector, indexed: SparseVector) =>
             assert(orig.indices.length == indexed.indices.length)
-          case _ => throw new UnknownError("Unit test has a bug in it.") // should never happen
+          case _ =>
+            // should never happen
+            fail("Unit test has a bug in it.")
         }
       }
     }

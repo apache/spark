@@ -49,6 +49,19 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
+  private[spark] val DRIVER_LOG_DFS_DIR =
+    ConfigBuilder("spark.driver.log.dfsDir").stringConf.createOptional
+
+  private[spark] val DRIVER_LOG_LAYOUT =
+    ConfigBuilder("spark.driver.log.layout")
+      .stringConf
+      .createOptional
+
+  private[spark] val DRIVER_LOG_PERSISTTODFS =
+    ConfigBuilder("spark.driver.log.persistToDfs.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
       .booleanConf

@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.Writer
 import java.util.Collections
 
 import scala.collection.JavaConverters._
+
+import org.apache.commons.io.output.StringBuilderWriter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -30,7 +33,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, Codegen
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
-import org.apache.spark.sql.execution.streaming.continuous.WriteToContinuousDataSourceExec
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
@@ -70,15 +72,25 @@ package object debug {
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(plan: SparkPlan): String = {
-    val codegenSeq = codegenStringSeq(plan)
-    var output = s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n"
-    for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
-      output += s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n"
-      output += subtree
-      output += "\nGenerated code:\n"
-      output += s"${code}\n"
+    val writer = new StringBuilderWriter()
+
+    try {
+      writeCodegen(writer, plan)
+      writer.toString
+    } finally {
+      writer.close()
     }
-    output
+  }
+
+  def writeCodegen(writer: Writer, plan: SparkPlan): Unit = {
+    val codegenSeq = codegenStringSeq(plan)
+    writer.write(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
+    for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
+      writer.write(s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n")
+      writer.write(subtree)
+      writer.write("\nGenerated code:\n")
+      writer.write(s"${code}\n")
+    }
   }
 
   /**
