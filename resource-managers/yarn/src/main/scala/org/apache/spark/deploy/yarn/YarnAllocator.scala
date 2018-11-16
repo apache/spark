@@ -597,7 +597,8 @@ private[yarn] class YarnAllocator(
             (false, s"Container ${containerId}${onHostStr} was preempted.")
           // Should probably still count memory exceeded exit codes towards task failures
           case VMEM_EXCEEDED_EXIT_CODE =>
-            val diag = VMEM_EXCEEDED_PATTERN.findFirstIn(completedContainer.getDiagnostics)
+            val vmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX virtual memory used".r
+            val diag = vmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
             val additional = if (conf.getBoolean(YarnConfiguration.NM_VMEM_CHECK_ENABLED,
               YarnConfiguration.DEFAULT_NM_VMEM_CHECK_ENABLED)) {
@@ -609,7 +610,8 @@ private[yarn] class YarnAllocator(
               s" $diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key} $additional."
             (true, message)
           case PMEM_EXCEEDED_EXIT_CODE =>
-            val diag = PMEM_EXCEEDED_PATTERN.findFirstIn(completedContainer.getDiagnostics)
+            val pmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX physical memory used".r
+            val diag = pmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
             val message = "Container killed by YARN for exceeding physical memory limits." +
               s" $diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
@@ -744,8 +746,6 @@ private[yarn] class YarnAllocator(
 
 private object YarnAllocator {
   val MEM_REGEX = "[0-9.]+ [KMG]B"
-  val PMEM_EXCEEDED_PATTERN = raw"$MEM_REGEX of $MEM_REGEX physical memory used".r
-  val VMEM_EXCEEDED_PATTERN = raw"$MEM_REGEX of $MEM_REGEX virtual memory used".r
   val VMEM_EXCEEDED_EXIT_CODE = -103
   val PMEM_EXCEEDED_EXIT_CODE = -104
 }
