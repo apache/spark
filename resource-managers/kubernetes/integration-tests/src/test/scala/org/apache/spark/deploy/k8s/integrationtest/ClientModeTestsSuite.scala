@@ -19,11 +19,10 @@ package org.apache.spark.deploy.k8s.integrationtest
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
-import org.scalatest.Tag
 
 private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
 
-  test("Run in client mode.", k8sTestTag, Tag("k8s-client-mode")) {
+  test("Run in client mode.", k8sTestTag) {
     val labels = Map("spark-app-selector" -> driverPodName)
     val driverPort = 7077
     val blockManagerPort = 10000
