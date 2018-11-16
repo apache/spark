@@ -1276,16 +1276,13 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-25451: total tasks in the executor summary should match total stage tasks") {
-
     val testConf = conf.clone()
       .set("spark.ui.liveUpdate.period", s"${Int.MaxValue}s")
 
     val listener = new AppStatusListener(store, testConf, true)
 
-    val stage = new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1")
-
+    val stage = new StageInfo(1, 0, "stage", 4, Nil, Nil, "details")
     listener.onJobStart(SparkListenerJobStart(1, time, Seq(stage), null))
-
     listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
 
     val tasks = createTasks(4, Array("1", "2"))
@@ -1316,7 +1313,6 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
 
     val esummary = store.view(classOf[ExecutorStageSummaryWrapper]).asScala.map(_.info)
-
     esummary.foreach {
       execSummary => assert(execSummary.failedTasks == 2)
     }
