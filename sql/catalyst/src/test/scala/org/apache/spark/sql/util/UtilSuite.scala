@@ -20,7 +20,7 @@ package org.apache.spark.sql.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.truncatedString
 
-class UtilsSuite extends SparkFunSuite {
+class UtilSuite extends SparkFunSuite {
   test("truncatedString") {
     assert(truncatedString(Nil, "[", ", ", "]", 2) == "[]")
     assert(truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
