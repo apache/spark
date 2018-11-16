@@ -376,7 +376,7 @@ private class LiveStage extends LiveEntity {
 
   val executorSummaries = new HashMap[String, LiveExecutorStageSummary]()
 
-  val activeTaskPerExecutor = new HashMap[String, Int]().withDefaultValue(0)
+  val activeTasksPerExecutor = new HashMap[String, Int]().withDefaultValue(0)
 
   var blackListedExecutors = new HashSet[String]()
 
