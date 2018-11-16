@@ -20,7 +20,7 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -30,11 +30,11 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
 private[spark] class BasicExecutorFeatureStep(
-    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf],
+    secMgr: SecurityManager)
   extends KubernetesFeatureConfigStep {
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
-  private val executorExtraClasspath = kubernetesConf.get(EXECUTOR_CLASS_PATH)
   private val executorContainerImage = kubernetesConf
     .get(EXECUTOR_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the executor container image"))
@@ -88,44 +88,61 @@ private[spark] class BasicExecutorFeatureStep(
     val executorCpuQuantity = new QuantityBuilder(false)
       .withAmount(executorCoresRequest)
       .build()
-    val executorExtraClasspathEnv = executorExtraClasspath.map { cp =>
-      new EnvVarBuilder()
-        .withName(ENV_CLASSPATH)
-        .withValue(cp)
-        .build()
-    }
-    val executorExtraJavaOptionsEnv = kubernetesConf
-      .get(EXECUTOR_JAVA_OPTIONS)
-      .map { opts =>
-        val subsOpts = Utils.substituteAppNExecIds(opts, kubernetesConf.appId,
-          kubernetesConf.roleSpecificConf.executorId)
-        val delimitedOpts = Utils.splitCommandString(subsOpts)
-        delimitedOpts.zipWithIndex.map {
-          case (opt, index) =>
-            new EnvVarBuilder().withName(s"$ENV_JAVA_OPT_PREFIX$index").withValue(opt).build()
+
+    val executorEnv: Seq[EnvVar] = {
+        (Seq(
+          (ENV_DRIVER_URL, driverUrl),
+          (ENV_EXECUTOR_CORES, executorCores.toString),
+          (ENV_EXECUTOR_MEMORY, executorMemoryString),
+          (ENV_APPLICATION_ID, kubernetesConf.appId),
+          // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
+          (ENV_SPARK_CONF_DIR, SPARK_CONF_DIR_INTERNAL),
+          (ENV_EXECUTOR_ID, kubernetesConf.roleSpecificConf.executorId)
+        ) ++ kubernetesConf.roleEnvs).map { case (k, v) =>
+          new EnvVarBuilder()
+            .withName(k)
+            .withValue(v)
+            .build()
         }
-      }.getOrElse(Seq.empty[EnvVar])
-    val executorEnv = (Seq(
-      (ENV_DRIVER_URL, driverUrl),
-      (ENV_EXECUTOR_CORES, executorCores.toString),
-      (ENV_EXECUTOR_MEMORY, executorMemoryString),
-      (ENV_APPLICATION_ID, kubernetesConf.appId),
-      // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
-      (ENV_SPARK_CONF_DIR, SPARK_CONF_DIR_INTERNAL),
-      (ENV_EXECUTOR_ID, kubernetesConf.roleSpecificConf.executorId)) ++
-      kubernetesConf.roleEnvs)
-      .map(env => new EnvVarBuilder()
-        .withName(env._1)
-        .withValue(env._2)
-        .build()
-      ) ++ Seq(
-      new EnvVarBuilder()
-        .withName(ENV_EXECUTOR_POD_IP)
-        .withValueFrom(new EnvVarSourceBuilder()
-          .withNewFieldRef("v1", "status.podIP")
+      } ++ {
+        Seq(new EnvVarBuilder()
+          .withName(ENV_EXECUTOR_POD_IP)
+          .withValueFrom(new EnvVarSourceBuilder()
+            .withNewFieldRef("v1", "status.podIP")
+            .build())
           .build())
-        .build()
-    ) ++ executorExtraJavaOptionsEnv ++ executorExtraClasspathEnv.toSeq
+      } ++ {
+        Option(secMgr.getSecretKey()).map { authSecret =>
+          new EnvVarBuilder()
+            .withName(SecurityManager.ENV_AUTH_SECRET)
+            .withValue(authSecret)
+            .build()
+        }
+      } ++ {
+        kubernetesConf.get(EXECUTOR_CLASS_PATH).map { cp =>
+          new EnvVarBuilder()
+            .withName(ENV_CLASSPATH)
+            .withValue(cp)
+            .build()
+        }
+      } ++ {
+        val userOpts = kubernetesConf.get(EXECUTOR_JAVA_OPTIONS).toSeq.flatMap { opts =>
+          val subsOpts = Utils.substituteAppNExecIds(opts, kubernetesConf.appId,
+            kubernetesConf.roleSpecificConf.executorId)
+          Utils.splitCommandString(subsOpts)
+        }
+
+        val sparkOpts = Utils.sparkJavaOpts(kubernetesConf.sparkConf,
+          SparkConf.isExecutorStartupConf)
+
+        (userOpts ++ sparkOpts).zipWithIndex.map { case (opt, index) =>
+          new EnvVarBuilder()
+            .withName(s"$ENV_JAVA_OPT_PREFIX$index")
+            .withValue(opt)
+            .build()
+        }
+      }
+
     val requiredPorts = Seq(
       (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
       .map { case (name, port) =>

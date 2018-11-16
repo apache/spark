@@ -395,15 +395,23 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
   }
 
-  test("secret key generation") {
-    Seq(
-      ("yarn", true),
-      ("local", true),
-      ("local[*]", true),
-      ("local[1, 2]", true),
-      ("local-cluster[2, 1, 1024]", false),
-      ("invalid", false)
-    ).foreach { case (master, shouldGenerateSecret) =>
+  // How is the secret expected to be generated and stored.
+  object SecretTestType extends Enumeration {
+    val MANUAL, AUTO, UGI = Value
+  }
+
+  import SecretTestType._
+
+  Seq(
+    ("yarn", UGI),
+    ("local", UGI),
+    ("local[*]", UGI),
+    ("local[1, 2]", UGI),
+    ("k8s://127.0.0.1", AUTO),
+    ("local-cluster[2, 1, 1024]", MANUAL),
+    ("invalid", MANUAL)
+  ).foreach { case (master, secretType) =>
+    test(s"secret key generation: master '$master'") {
       val conf = new SparkConf()
         .set(NETWORK_AUTH_ENABLED, true)
         .set(SparkLauncher.SPARK_MASTER, master)
@@ -412,19 +420,26 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
       UserGroupInformation.createUserForTesting("authTest", Array()).doAs(
         new PrivilegedExceptionAction[Unit]() {
           override def run(): Unit = {
-            if (shouldGenerateSecret) {
-              mgr.initializeAuth()
-              val creds = UserGroupInformation.getCurrentUser().getCredentials()
-              val secret = creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY)
-              assert(secret != null)
-              assert(new String(secret, UTF_8) === mgr.getSecretKey())
-            } else {
-              intercept[IllegalArgumentException] {
+            secretType match {
+              case UGI =>
                 mgr.initializeAuth()
-              }
-              intercept[IllegalArgumentException] {
-                mgr.getSecretKey()
-              }
+                val creds = UserGroupInformation.getCurrentUser().getCredentials()
+                val secret = creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY)
+                assert(secret != null)
+                assert(new String(secret, UTF_8) === mgr.getSecretKey())
+
+              case AUTO =>
+                mgr.initializeAuth()
+                val creds = UserGroupInformation.getCurrentUser().getCredentials()
+                assert(creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY) === null)
+
+              case MANUAL =>
+                intercept[IllegalArgumentException] {
+                  mgr.initializeAuth()
+                }
+                intercept[IllegalArgumentException] {
+                  mgr.getSecretKey()
+                }
             }
           }
         }
