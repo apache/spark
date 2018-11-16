@@ -1596,7 +1596,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val MAX_TO_STRING_FIELDS = buildConf("spark.sql.debug.maxToStringFields")
-    .doc("Maximum number of fields of sequence-like entries that can be converted to strings " +
+    .doc("Maximum number of fields of sequence-like entries can be converted to strings " +
       "in debug output. Any elements beyond the limit will be dropped and replaced by a" +
       """ "... N more fields" placeholder.""")
     .intConf
