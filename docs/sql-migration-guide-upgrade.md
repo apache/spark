@@ -17,6 +17,8 @@ displayTitle: Spark SQL Upgrading Guide
 
   - The `ADD JAR` command previously returned a result set with the single value 0. It now returns an empty result set.
 
+  - In Spark version 2.4 and earlier, the key attribute is wrongly named as "value" for primitive key type when doing typed aggregation on Dataset. This attribute is now named as "key" since Spark 3.0 like complex key type.
+
 ## Upgrading From Spark SQL 2.3 to 2.4
 
   - In Spark version 2.3 and earlier, the second parameter to array_contains function is implicitly promoted to the element type of first array type parameter. This type promotion can be lossy and may cause `array_contains` function to return wrong result. This problem has been addressed in 2.4 by employing a safer type promotion mechanism. This can cause some change in behavior and are illustrated in the table below.
