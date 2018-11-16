@@ -75,6 +75,6 @@ class RuntimeConfigSuite extends SparkFunSuite {
     val ex = intercept[AnalysisException] {
       conf.set("spark.task.cpus", 4)
     }
-    assert(ex.getMessage.contains("spark config"))
+    assert(ex.getMessage.contains("Spark config"))
   }
 }

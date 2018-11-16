@@ -17,7 +17,7 @@ displayTitle: Spark SQL Upgrading Guide
 
   - The `ADD JAR` command previously returned a result set with the single value 0. It now returns an empty result set.
 
-  - In Spark version 2.4 and earlier, the `SET` command works without any warnings even if the specified key is for `SparkConf` entries and it has no effect because the command does not update `SparkConf`, but the behavior might confuse users. Since 3.0, the command fails if the key is for `SparkConf` as same as for static sql config keys. You can disable such a check by setting `spark.sql.execution.setCommandRejectsSparkConfs` to `false`.
+  - In Spark version 2.4 and earlier, the `SET` command works without any warnings even if the specified key is for `SparkConf` entries and it has no effect because the command does not update `SparkConf`, but the behavior might confuse users. Since 3.0, the command fails if a non-SQL or static SQL config key is used. You can disable such a check by setting `spark.sql.execution.setCommandRejectsSparkConfs` to `false`.
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 

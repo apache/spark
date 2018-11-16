@@ -2720,6 +2720,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val ex = intercept[AnalysisException] {
       sql("SET spark.task.cpus = 4")
     }
-    assert(ex.getMessage.contains("spark config"))
+    assert(ex.getMessage.contains("Spark config"))
   }
 }
