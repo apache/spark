@@ -97,6 +97,7 @@ test_that("spark.prefixSpan", {
                                             list(list(list(1L, 2L)), 3L),
                                             list(list(list(1L), list(3L)), 2L)),
                                             schema = c("sequence", "freq"))
+    expect_equivalent(expected_result, result1)
   })
 
 sparkR.session.stop()
