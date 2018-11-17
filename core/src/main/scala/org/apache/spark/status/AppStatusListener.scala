@@ -568,8 +568,7 @@ private[spark] class AppStatusListener(
         esummary.metrics = LiveEntityHelpers.addMetrics(esummary.metrics, metricsDelta)
       }
 
-      val isLastTask = (stage.activeTasksPerExecutor(event.taskInfo.executorId) == 0) &&
-        ((stage.status == v1.StageStatus.COMPLETE) || (stage.status == v1.StageStatus.FAILED))
+      val isLastTask = stage.activeTasksPerExecutor(event.taskInfo.executorId) == 0
 
       conditionalLiveUpdate(esummary, now, isLastTask)
 
