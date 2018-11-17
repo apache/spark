@@ -601,7 +601,8 @@ private[yarn] class YarnAllocator(
             val diag = vmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
             val message = "Container killed by YARN for exceeding virtual memory limits. " +
-              s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key} or disabling " +
+              s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key} or boosting " +
+              s"${YarnConfiguration.NM_VMEM_PMEM_RATIO} or disabling " +
               s"${YarnConfiguration.NM_VMEM_CHECK_ENABLED} because of YARN-4714."
             (true, message)
           case PMEM_EXCEEDED_EXIT_CODE =>
