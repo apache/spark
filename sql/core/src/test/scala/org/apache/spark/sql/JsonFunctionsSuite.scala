@@ -163,11 +163,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsT
   }
 
   test("to_json - struct") {
-    val df = Seq(Tuple1(Tuple1(1))).toDF("a")
-
-    checkAnswer(
-      df.select(to_json($"a")),
-      Row("""{"_1":1}""") :: Nil)
+    testToStruct(to_json, """{"_1":1}""")
   }
 
   test("to_json - array") {
@@ -195,12 +191,10 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsT
   }
 
   test("to_json with option") {
-    val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
-    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
-
-    checkAnswer(
-      df.select(to_json($"a", options)),
-      Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
+    testToStructOpts(
+      to_json,
+      input = "2015-08-26 18:00:00.0",
+      expected = """{"_1":"26/08/2015 18:00"}""")
   }
 
   test("to_json - key types of map don't matter") {
@@ -549,32 +543,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsT
   }
 
   test("from_json invalid json - check modes") {
-    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
-      val schema = new StructType()
-        .add("a", IntegerType)
-        .add("b", IntegerType)
-        .add("_unparsed", StringType)
-      val badRec = """{"a" 1, "b": 11}"""
-      val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
-
-      checkAnswer(
-        df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
-        Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
-
-      val exception1 = intercept[SparkException] {
-        df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }.getMessage
-      assert(exception1.contains(
-        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
-
-      val exception2 = intercept[SparkException] {
-        df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED")))
-          .collect()
-      }.getMessage
-      assert(exception2.contains(
-        "from_json() doesn't support the DROPMALFORMED mode. " +
-          "Acceptable modes are PERMISSIVE and FAILFAST."))
-    }
+    testModesInFrom(from_json, """{"a": 2, "b": 12}""", """{"a" 1, "b": 11}""")
   }
 
   test("corrupt record column in the middle") {

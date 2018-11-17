@@ -40,17 +40,8 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsTe
   }
 
   test("checking the columnNameOfCorruptRecord option") {
-    val columnNameOfCorruptRecord = "_unparsed"
-    val df = Seq("0,2013-111-11 12:13:14", "1,1983-08-04").toDS()
-    val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
-    val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
-    val df2 = df
-      .select(from_csv($"value", schemaWithCorrField1, Map(
-        "mode" -> "Permissive", "columnNameOfCorruptRecord" -> columnNameOfCorruptRecord)))
-
-    checkAnswer(df2, Seq(
-      Row(Row(null, null, "0,2013-111-11 12:13:14")),
-      Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
+    val invalid = "2013-111-11 12:13:14"
+    testCorruptColumn(from_csv, corrupted = invalid, corruptColumn = invalid)
   }
 
   test("schema_of_csv - infers schemas") {
@@ -63,45 +54,15 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsTe
   }
 
   test("to_csv - struct") {
-    val df = Seq(Tuple1(Tuple1(1))).toDF("a")
-
-    checkAnswer(df.select(to_csv($"a")), Row("1") :: Nil)
+    testToStruct(to_csv, "1")
   }
 
   test("to_csv with option") {
-    val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
-    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm").asJava
-
-    checkAnswer(df.select(to_csv($"a", options)), Row("26/08/2015 18:00") :: Nil)
+    testToStructOpts(to_csv, input = "2015-08-26 18:00:00.0", expected = "26/08/2015 18:00")
   }
 
   test("from_csv invalid csv - check modes") {
-    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
-      val schema = new StructType()
-        .add("a", IntegerType)
-        .add("b", IntegerType)
-        .add("_unparsed", StringType)
-      val badRec = "\""
-      val df = Seq(badRec, "2,12").toDS()
-
-      checkAnswer(
-        df.select(from_csv($"value", schema, Map("mode" -> "PERMISSIVE"))),
-        Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
-
-      val exception1 = intercept[SparkException] {
-        df.select(from_csv($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }.getMessage
-      assert(exception1.contains(
-        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
-
-      val exception2 = intercept[SparkException] {
-        df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED")))
-          .collect()
-      }.getMessage
-      assert(exception2.contains(
-        "from_csv() doesn't support the DROPMALFORMED mode. " +
-          "Acceptable modes are PERMISSIVE and FAILFAST."))
-    }
+    testModesInFrom(from_csv, "2,12", "\"")
   }
 
   test("from_csv uses DDL strings for defining a schema - java") {

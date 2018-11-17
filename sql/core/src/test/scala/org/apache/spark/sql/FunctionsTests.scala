@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
+import org.apache.spark.SparkException
 
+import scala.collection.JavaConverters._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StructType, TimestampType}
+import org.apache.spark.sql.types._
 
 trait FunctionsTests extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -71,5 +73,66 @@ trait FunctionsTests extends QueryTest with SharedSQLContext {
       .select(schema_of(lit(input), options.asJava))
 
     checkAnswer(df, Seq(Row("struct<_c0:double,_c1:bigint>")))
+  }
+
+  def testCorruptColumn(
+      from: (Column, StructType, Map[String, String]) => Column,
+      corrupted: String,
+      corruptColumn: String): Unit = {
+    val columnNameOfCorruptRecord = "_unparsed"
+    val df = Seq(corrupted).toDS()
+    val schema = new StructType().add("b", TimestampType)
+    val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
+    val df2 = df
+      .select(from($"value", schemaWithCorrField1, Map(
+        "mode" -> "Permissive", "columnNameOfCorruptRecord" -> columnNameOfCorruptRecord)))
+
+    checkAnswer(df2, Seq(Row(Row(null, corruptColumn))))
+  }
+
+  def testToStruct(to: Column => Column, expected: String): Unit = {
+    val df = Seq(Tuple1(Tuple1(1))).toDF("a")
+
+    checkAnswer(df.select(to($"a")), Row(expected) :: Nil)
+  }
+
+  def testToStructOpts(
+      to: (Column, java.util.Map[String, String]) => Column,
+      input: String,
+      expected: String): Unit = {
+    val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf(input)))).toDF("a")
+    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm").asJava
+
+    checkAnswer(df.select(to($"a", options)), Row(expected) :: Nil)
+  }
+
+  def testModesInFrom(
+      from: (Column, StructType, Map[String, String]) => Column,
+      input: String,
+      badRec: String): Unit = {
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      val schema = new StructType()
+        .add("a", IntegerType)
+        .add("b", IntegerType)
+        .add("_unparsed", StringType)
+      val df = Seq(badRec, input).toDS()
+
+      checkAnswer(
+        df.select(from($"value", schema, Map("mode" -> "PERMISSIVE"))),
+        Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
+
+      val exception1 = intercept[SparkException] {
+        df.select(from($"value", schema, Map("mode" -> "FAILFAST"))).collect()
+      }.getMessage
+      assert(exception1.contains(
+        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+
+      val exception2 = intercept[SparkException] {
+        df.select(from($"value", schema, Map("mode" -> "DROPMALFORMED")))
+          .collect()
+      }.getMessage
+      assert(exception2.contains(
+        "doesn't support the DROPMALFORMED mode. Acceptable modes are PERMISSIVE and FAILFAST."))
+    }
   }
 }
