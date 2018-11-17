@@ -56,6 +56,11 @@ private[spark] class AppStatusStore(
     store.read(classOf[JobDataWrapper], jobId).info
   }
 
+  def jobWithAssociatedSql(jobId: Int): (v1.JobData, Option[Long]) = {
+    val data = store.read(classOf[JobDataWrapper], jobId)
+    (data.info, data.sqlExecutionId)
+  }
+
   def executorList(activeOnly: Boolean): Seq[v1.ExecutorSummary] = {
     val base = store.view(classOf[ExecutorSummaryWrapper])
     val filtered = if (activeOnly) {
