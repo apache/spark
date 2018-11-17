@@ -14,31 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.examples.streaming;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import scala.reflect.ClassTag$;
+import scala.Tuple2;
+
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.client.builder.AwsClientBuilder;
+import com.amazonaws.services.kinesis.AmazonKinesis;
+import com.amazonaws.services.kinesis.AmazonKinesisClientBuilder;
+import org.apache.spark.streaming.kinesis.KinesisInitialPositions;
+
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.function.FlatMapFunction;
-import org.apache.spark.api.java.function.Function2;
-import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.kinesis.KinesisUtils;
-
-import scala.Tuple2;
-
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.services.kinesis.AmazonKinesisClient;
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
+import org.apache.spark.streaming.kinesis.KinesisInputDStream;
 
 /**
  * Consumes messages from a Amazon Kinesis streams and does wordcount.
@@ -105,24 +105,21 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     String endpointUrl = args[2];
 
     // Create a Kinesis client in order to determine the number of shards for the given stream
-    AmazonKinesisClient kinesisClient =
-        new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain());
-    kinesisClient.setEndpoint(endpointUrl);
-    int numShards =
-        kinesisClient.describeStream(streamName).getStreamDescription().getShards().size();
-
+    AmazonKinesis kinesisClient = AmazonKinesisClientBuilder.standard()
+        .withCredentials(new DefaultAWSCredentialsProviderChain())
+        .withEndpointConfiguration(
+            new AwsClientBuilder.EndpointConfiguration(endpointUrl, "us-east-1"))
+        .build();
 
     // In this example, we're going to create 1 Kinesis Receiver/input DStream for each shard.
     // This is not a necessity; if there are less receivers/DStreams than the number of shards,
     // then the shards will be automatically distributed among the receivers and each receiver
     // will receive data from multiple shards.
-    int numStreams = numShards;
+    int numStreams =
+        kinesisClient.describeStream(streamName).getStreamDescription().getShards().size();
 
-    // Spark Streaming batch interval
+    // Spark Streaming batch interval. Same as Kinesis checkpoint interval.
     Duration batchInterval = new Duration(2000);
-
-    // Kinesis checkpoint interval.  Same as batchInterval for this example.
-    Duration kinesisCheckpointInterval = batchInterval;
 
     // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
     // DynamoDB of the same region as the Kinesis stream
@@ -136,46 +133,35 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     List<JavaDStream<byte[]>> streamsList = new ArrayList<>(numStreams);
     for (int i = 0; i < numStreams; i++) {
       streamsList.add(
-          KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,
-              InitialPositionInStream.LATEST, kinesisCheckpointInterval,
-              StorageLevel.MEMORY_AND_DISK_2())
-      );
+          JavaDStream.fromDStream(KinesisInputDStream.builder()
+              .streamingContext(jssc)
+              .checkpointAppName(kinesisAppName).streamName(streamName)
+              .endpointUrl(endpointUrl).regionName(regionName)
+              .initialPosition(new KinesisInitialPositions.Latest())
+              .checkpointInterval(batchInterval).storageLevel(StorageLevel.MEMORY_AND_DISK_2())
+              .build(), ClassTag$.MODULE$.apply(byte[].class)));
     }
 
     // Union all the streams if there is more than 1 stream
     JavaDStream<byte[]> unionStreams;
     if (streamsList.size() > 1) {
-      unionStreams = jssc.union(streamsList.toArray(new JavaDStream[0]));
+      @SuppressWarnings("unchecked")
+      JavaDStream<byte[]>[] array = (JavaDStream<byte[]>[]) streamsList.toArray();
+      unionStreams = jssc.union(array);
     } else {
       // Otherwise, just use the 1 stream
       unionStreams = streamsList.get(0);
     }
 
     // Convert each line of Array[Byte] to String, and split into words
-    JavaDStream<String> words = unionStreams.flatMap(new FlatMapFunction<byte[], String>() {
-      @Override
-      public Iterator<String> call(byte[] line) {
-        String s = new String(line, StandardCharsets.UTF_8);
-        return Arrays.asList(WORD_SEPARATOR.split(s)).iterator();
-      }
+    JavaDStream<String> words = unionStreams.flatMap(line -> {
+      String s = new String(line, StandardCharsets.UTF_8);
+      return Arrays.asList(WORD_SEPARATOR.split(s)).iterator();
     });
 
     // Map each word to a (word, 1) tuple so we can reduce by key to count the words
-    JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
-        new PairFunction<String, String, Integer>() {
-          @Override
-          public Tuple2<String, Integer> call(String s) {
-            return new Tuple2<>(s, 1);
-          }
-        }
-    ).reduceByKey(
-        new Function2<Integer, Integer, Integer>() {
-          @Override
-          public Integer call(Integer i1, Integer i2) {
-            return i1 + i2;
-          }
-        }
-    );
+    JavaPairDStream<String, Integer> wordCounts =
+        words.mapToPair(s -> new Tuple2<>(s, 1)).reduceByKey((i1, i2) -> i1 + i2);
 
     // Print the first 10 wordCounts
     wordCounts.print();

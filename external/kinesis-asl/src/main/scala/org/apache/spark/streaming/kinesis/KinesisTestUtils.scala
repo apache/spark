@@ -26,11 +26,11 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
 
-import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
+import com.amazonaws.auth.{AWSCredentialsProvider, DefaultAWSCredentialsProviderChain}
+import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.regions.RegionUtils
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
-import com.amazonaws.services.dynamodbv2.document.DynamoDB
-import com.amazonaws.services.kinesis.{AmazonKinesis, AmazonKinesisClient}
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder
+import com.amazonaws.services.kinesis.{AmazonKinesis, AmazonKinesisClientBuilder}
 import com.amazonaws.services.kinesis.model._
 
 import org.apache.spark.internal.Logging
@@ -55,15 +55,18 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
   private var _streamName: String = _
 
   protected lazy val kinesisClient = {
-    val client = new AmazonKinesisClient(KinesisTestUtils.getAWSCredentials())
-    client.setEndpoint(endpointUrl)
-    client
+    AmazonKinesisClientBuilder.standard().
+      withCredentials(KinesisTestUtils.getAWSCredentials()).
+      withEndpointConfiguration(new EndpointConfiguration(
+        endpointUrl, KinesisTestUtils.getRegionNameByEndpoint(endpointUrl))).
+      build()
   }
 
   private lazy val dynamoDB = {
-    val dynamoDBClient = new AmazonDynamoDBClient(new DefaultAWSCredentialsProviderChain())
-    dynamoDBClient.setRegion(RegionUtils.getRegion(regionName))
-    new DynamoDB(dynamoDBClient)
+    AmazonDynamoDBClientBuilder.standard().
+      withCredentials(new DefaultAWSCredentialsProviderChain()).
+      withRegion(regionName).
+      build()
   }
 
   protected def getProducer(aggregate: Boolean): KinesisDataGenerator = {
@@ -130,7 +133,7 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
     val producer = getProducer(aggregate)
     val shardIdToSeqNumbers = producer.sendData(streamName, testData)
     logInfo(s"Pushed $testData:\n\t ${shardIdToSeqNumbers.mkString("\n\t")}")
-    shardIdToSeqNumbers.toMap
+    shardIdToSeqNumbers
   }
 
   /**
@@ -153,9 +156,7 @@ private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Loggi
 
   def deleteDynamoDBTable(tableName: String): Unit = {
     try {
-      val table = dynamoDB.getTable(tableName)
-      table.delete()
-      table.waitForDelete()
+      dynamoDB.deleteTable(tableName)
     } catch {
       case e: Exception =>
         logWarning(s"Could not delete DynamoDB table $tableName")
@@ -248,12 +249,13 @@ private[kinesis] object KinesisTestUtils {
     Try { new DefaultAWSCredentialsProviderChain().getCredentials() }.isSuccess
   }
 
-  def getAWSCredentials(): AWSCredentials = {
+  def getAWSCredentials(): AWSCredentialsProvider = {
     assert(shouldRunTests,
       "Kinesis test not enabled, should not attempt to get AWS credentials")
-    Try { new DefaultAWSCredentialsProviderChain().getCredentials() } match {
-      case Success(cred) => cred
-      case Failure(e) =>
+    val provider = new DefaultAWSCredentialsProviderChain()
+    Try { provider.getCredentials() } match {
+      case Success(_) => provider
+      case Failure(_) =>
         throw new Exception(
           s"""
              |Kinesis tests enabled using environment variable $envVarNameForEnablingTests
@@ -272,7 +274,7 @@ private[kinesis] trait KinesisDataGenerator {
 }
 
 private[kinesis] class SimpleDataGenerator(
-    client: AmazonKinesisClient) extends KinesisDataGenerator {
+    client: AmazonKinesis) extends KinesisDataGenerator {
   override def sendData(streamName: String, data: Seq[Int]): Map[String, Seq[(Int, String)]] = {
     val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
     data.foreach { num =>
