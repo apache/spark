@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
+class JsonFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsTests {
   import testImplicits._
 
   test("function get_json_object") {
@@ -104,22 +104,11 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("from_json") {
-    val df = Seq("""{"a": 1}""").toDS()
-    val schema = new StructType().add("a", IntegerType)
-
-    checkAnswer(
-      df.select(from_json($"value", schema)),
-      Row(Row(1)) :: Nil)
+    testEmptyOptions(from_json, """{"a": 1}""")
   }
 
   test("from_json with option") {
-    val df = Seq("""{"time": "26/08/2015 18:00"}""").toDS()
-    val schema = new StructType().add("time", TimestampType)
-    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
-
-    checkAnswer(
-      df.select(from_json($"value", schema, options)),
-      Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+    testOptions(from_json, """{"time": "26/08/2015 18:00"}""")
   }
 
   test("from_json missing columns") {
@@ -409,10 +398,16 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out.schema == expected)
   }
 
+  test("infer schemas") {
+    val json = """{"_c0": 0.1, "_c1": 1234567890123}"""
+    testSchemaInferring(schema_of_json, lit(json), schema_of_json, json)
+  }
+
   test("infers schemas using options") {
-    val df = spark.range(1)
-      .select(schema_of_json(lit("{a:1}"), Map("allowUnquotedFieldNames" -> "true").asJava))
-    checkAnswer(df, Seq(Row("struct<a:bigint>")))
+    testSchemaInferringOpts(
+      schema_of_json,
+      options = Map("allowUnquotedFieldNames" -> "true"),
+      input = "{_c0:0.1, _c1:1234567890123}")
   }
 
   test("from_json - array of primitive types") {

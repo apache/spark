@@ -28,26 +28,15 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
+class CsvFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsTests {
   import testImplicits._
 
   test("from_csv with empty options") {
-    val df = Seq("1").toDS()
-    val schema = "a int"
-
-    checkAnswer(
-      df.select(from_csv($"value", lit(schema), Map[String, String]().asJava)),
-      Row(Row(1)) :: Nil)
+    testEmptyOptions(from_csv, "1")
   }
 
   test("from_csv with option") {
-    val df = Seq("26/08/2015 18:00").toDS()
-    val schema = new StructType().add("time", TimestampType)
-    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
-
-    checkAnswer(
-      df.select(from_csv($"value", schema, options)),
-      Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+    testOptions(from_csv, "26/08/2015 18:00")
   }
 
   test("checking the columnNameOfCorruptRecord option") {
@@ -65,18 +54,12 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("schema_of_csv - infers schemas") {
-    checkAnswer(
-      spark.range(1).select(schema_of_csv(lit("0.1,1"))),
-      Seq(Row("struct<_c0:double,_c1:int>")))
-    checkAnswer(
-      spark.range(1).select(schema_of_csv("0.1,1")),
-      Seq(Row("struct<_c0:double,_c1:int>")))
+    val csv = "0.1,1234567890123"
+    testSchemaInferring(schema_of_csv, lit(csv), schema_of_csv, csv)
   }
 
   test("schema_of_csv - infers schemas using options") {
-    val df = spark.range(1)
-      .select(schema_of_csv(lit("0.1 1"), Map("sep" -> " ").asJava))
-    checkAnswer(df, Seq(Row("struct<_c0:double,_c1:int>")))
+    testSchemaInferringOpts(schema_of_csv, Map("sep" -> " "), input = "0.1 1234567890123")
   }
 
   test("to_csv - struct") {
