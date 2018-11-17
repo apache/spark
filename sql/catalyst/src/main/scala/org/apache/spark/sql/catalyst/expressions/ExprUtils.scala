@@ -68,11 +68,10 @@ object ExprUtils {
       throw new AnalysisException("Must use a map() function for options")
   }
 
-
   /**
-    * A convenient function for schema validation in datasources supporting
-    * `columnNameOfCorruptRecord` as an option.
-    */
+   * A convenient function for schema validation in datasources supporting
+   * `columnNameOfCorruptRecord` as an option.
+   */
   def verifyColumnNameOfCorruptRecord(
       schema: StructType,
       columnNameOfCorruptRecord: String): Unit = {
