@@ -68,22 +68,6 @@ class GenerateUnsafeProjectionSuite extends SparkFunSuite {
     assert(!result3.getStruct(0, 2).isNullAt(0))
     assert(!result3.getStruct(0, 3).isNullAt(0))
   }
-
-  test("SPARK-26021: Test replacing -0.0 with 0.0") {
-    val exprs =
-      BoundReference(0, DoubleType, nullable = false) ::
-      BoundReference(1, DoubleType, nullable = true) ::
-      BoundReference(2, FloatType, nullable = false) ::
-      BoundReference(3, FloatType, nullable = true) ::
-      Nil
-    val projection = GenerateUnsafeProjection.generate(exprs)
-    val result = projection.apply(InternalRow(-0.0d, Double.box(-0.0d), -0.0f, Float.box(-0.0f)))
-    // using compare since 0.0 == -0.0 is true
-    assert(result.getDouble(0).compareTo(0.0d) == 0)
-    assert(result.getDouble(1).compareTo(0.0d) == 0)
-    assert(result.getFloat(2).compareTo(0.0f) == 0)
-    assert(result.getFloat(3).compareTo(0.0f) == 0)
-  }
 }
 
 object AlwaysNull extends InternalRow {

@@ -24,6 +24,8 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.nio.ByteBuffer;
+
 public class PlatformUtilSuite {
 
   @Test
@@ -156,5 +158,16 @@ public class PlatformUtilSuite {
     MemoryBlock onheap4 = heapMem.allocate(1024 * 1024 + 7);
     Assert.assertEquals(onheap4.size(), 1024 * 1024 + 7);
     Assert.assertEquals(obj3, onheap4.getBaseObject());
+  }
+
+  @Test
+  // SPARK-26021
+  public void writeMinusZeroIsReplacedWithZero() {
+    byte[] doubleBytes = new byte[Double.BYTES];
+    byte[] floatBytes = new byte[Float.BYTES];
+    Platform.putDouble(doubleBytes, Platform.BYTE_ARRAY_OFFSET, -0.0d);
+    Platform.putFloat(floatBytes, Platform.BYTE_ARRAY_OFFSET, -0.0f);
+    Assert.assertEquals(0, Double.compare(0.0d, ByteBuffer.wrap(doubleBytes).getDouble()));
+    Assert.assertEquals(0, Float.compare(0.0f, ByteBuffer.wrap(floatBytes).getFloat()));
   }
 }
