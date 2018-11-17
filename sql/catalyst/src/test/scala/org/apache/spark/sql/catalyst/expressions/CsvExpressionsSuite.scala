@@ -228,7 +228,6 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     }
   }
 
-
   test("verify corrupt column") {
     checkExceptionInExpression[AnalysisException](
       CsvToStructs(
