@@ -600,21 +600,16 @@ private[yarn] class YarnAllocator(
             val vmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX virtual memory used".r
             val diag = vmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
-            val additional = if (conf.getBoolean(YarnConfiguration.NM_VMEM_CHECK_ENABLED,
-              YarnConfiguration.DEFAULT_NM_VMEM_CHECK_ENABLED)) {
-              s"or disabling ${YarnConfiguration.NM_VMEM_CHECK_ENABLED} because of YARN-4714"
-            } else {
-              s"or boosting ${YarnConfiguration.NM_VMEM_PMEM_RATIO}"
-            }
-            val message = "Container killed by YARN for exceeding virtual memory limits." +
-              s" $diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key} $additional."
+            val message = "Container killed by YARN for exceeding virtual memory limits. " +
+              s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key} or disabling " +
+              s"${YarnConfiguration.NM_VMEM_CHECK_ENABLED} because of YARN-4714."
             (true, message)
           case PMEM_EXCEEDED_EXIT_CODE =>
             val pmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX physical memory used".r
             val diag = pmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
-            val message = "Container killed by YARN for exceeding physical memory limits." +
-              s" $diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
+            val message = "Container killed by YARN for exceeding physical memory limits. " +
+              s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
             (true, message)
           case _ =>
             // all the failures which not covered above, like:
