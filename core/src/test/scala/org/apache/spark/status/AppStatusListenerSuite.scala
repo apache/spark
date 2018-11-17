@@ -1276,8 +1276,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-25451: total tasks in the executor summary should match total stage tasks") {
-    val testConf = conf.clone()
-      .set("spark.ui.liveUpdate.period", s"${Int.MaxValue}s")
+    val testConf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, Long.MaxValue)
 
     val listener = new AppStatusListener(store, testConf, true)
 
@@ -1290,31 +1289,32 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       listener.onTaskStart(SparkListenerTaskStart(stage.stageId, stage.attemptNumber, task))
     }
 
-    tasks.filter(_.index < 2).foreach { task =>
-        time += 1
-        var execId = (task.index % 2 + 1).toString
-        tasks(task.index).markFinished(TaskState.FAILED, time)
-        listener.onTaskEnd(
-          SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
-            ExecutorLostFailure(execId, true, Some("Lost executor")), tasks(task.index), null))
-    }
+    time += 1
+    tasks(0).markFinished(TaskState.FAILED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
+      ExecutorLostFailure("1", true, Some("Lost executor")), tasks(0), null))
+    time += 1
+    tasks(1).markFinished(TaskState.FAILED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
+      ExecutorLostFailure("2", true, Some("Lost executor")), tasks(1), null))
 
     stage.failureReason = Some("Failed")
     listener.onStageCompleted(SparkListenerStageCompleted(stage))
     time += 1
     listener.onJobEnd(SparkListenerJobEnd(1, time, JobFailed(new RuntimeException("Bad Executor"))))
 
-    tasks.filter(_.index >= 2).foreach { task =>
-        time += 1
-        var execId = (task.index % 2 + 1).toString
-        tasks(task.index).markFinished(TaskState.FAILED, time)
-        listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
-          ExecutorLostFailure(execId, true, Some("Lost executor")), tasks(task.index), null))
-    }
+    time += 1
+    tasks(2).markFinished(TaskState.FAILED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
+      ExecutorLostFailure("1", true, Some("Lost executor")), tasks(2), null))
+    time += 1
+    tasks(3).markFinished(TaskState.FAILED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
+      ExecutorLostFailure("2", true, Some("Lost executor")), tasks(3), null))
 
     val esummary = store.view(classOf[ExecutorStageSummaryWrapper]).asScala.map(_.info)
-    esummary.foreach {
-      execSummary => assert(execSummary.failedTasks == 2)
+    esummary.foreach { execSummary =>
+      assert(execSummary.failedTasks == 2)
     }
   }
 
