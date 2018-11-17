@@ -15,26 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql;
+package org.apache.spark.annotation;
 
-import org.apache.spark.annotation.Stable;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import java.lang.annotation.*;
 
 /**
- * A factory class used to construct {@link Row} objects.
- *
- * @since 1.3.0
+ * Stable APIs that retain source and binary compatibility within a major release.
+ * These interfaces can change from one major release to another major release
+ * (e.g. from 1.0 to 2.0).
  */
-@Stable
-public class RowFactory {
-
-  /**
-   * Create a {@link Row} from the given arguments. Position i in the argument list becomes
-   * position i in the created {@link Row} object.
-   *
-   * @since 1.3.0
-   */
-  public static Row create(Object ... values) {
-    return new GenericRow(values);
-  }
-}
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
+  ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
+public @interface Stable {}

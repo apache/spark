@@ -2016,7 +2016,6 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <!-- 3.3.1 won't work with zinc; fails to find javac from java.home -->
           <version>3.4.4</version>
           <executions>
             <execution>
@@ -2035,6 +2034,13 @@
               <id>scala-test-compile-first</id>
               <goals>
                 <goal>testCompile</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>attach-scaladocs</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>doc-jar</goal>
               </goals>
             </execution>
           </executions>
