@@ -181,14 +181,4 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
       checkAnswer(df, Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
     }
   }
-
-  test("verify corrupt column") {
-    val df = Seq("a").toDS()
-    val errMsg = intercept[AnalysisException] {
-      val schema = new StructType().add("i", IntegerType).add("_unparsed", BooleanType)
-      val options = Map("mode" -> "PERMISSIVE", "columnNameOfCorruptRecord" -> "_unparsed")
-      df.select(from_csv($"value", schema, options)).collect()
-    }.getMessage
-    assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
-  }
 }
