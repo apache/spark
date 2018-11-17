@@ -1276,7 +1276,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-25451: total tasks in the executor summary should match total stage tasks") {
-    val testConf = new SparkConf().set(LIVE_ENTITY_UPDATE_PERIOD, Long.MaxValue)
+    val testConf = conf.clone.set(LIVE_ENTITY_UPDATE_PERIOD, Long.MaxValue)
 
     val listener = new AppStatusListener(store, testConf, true)
 
