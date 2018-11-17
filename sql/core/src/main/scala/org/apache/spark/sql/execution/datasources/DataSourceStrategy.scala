@@ -223,8 +223,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
-    val catalog = sparkSession.sessionState.catalog
-    catalog.getCachedPlan(qualifiedTableName, new Callable[LogicalPlan]() {
+    val tableRelationCache = sparkSession.sessionState.catalog.tableRelationCache
+    tableRelationCache.getCachedPlan(qualifiedTableName, new Callable[LogicalPlan]() {
       override def call(): LogicalPlan = {
         val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
         val dataSource =

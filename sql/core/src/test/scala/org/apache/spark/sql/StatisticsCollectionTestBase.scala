@@ -226,7 +226,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   def getTableFromCatalogCache(tableName: String): LogicalPlan = {
     val catalog = spark.sessionState.catalog
     val qualifiedTableName = QualifiedTableName(catalog.getCurrentDatabase, tableName)
-    catalog.getCachedTable(qualifiedTableName)
+    catalog.tableRelationCache.getCachedTable(qualifiedTableName)
   }
 
   def isTableInCatalogCache(tableName: String): Boolean = {

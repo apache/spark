@@ -69,6 +69,42 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
     }
   }
 
+
+  test("multisession refresh") {
+    withTable("view_table") {
+        // Create a Parquet directory
+        spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
+          .write.saveAsTable("view_table")
+
+        val spark2 = spark.newSession()
+
+        for (session <- Seq(spark, spark2)) {
+          assert(session.sql("select count(*) from view_table").first().getLong(0) == 100)
+        }
+
+        // Delete a file using the Hadoop file system interface since the path returned by
+        // inputFiles is not recognizable by Java IO.
+        val p = new Path(spark.table("view_table").inputFiles.head)
+        assert(p.getFileSystem(hiveContext.sessionState.newHadoopConf()).delete(p, false))
+
+        // Read it again and now we should see a FileNotFoundException
+        for (session <- Seq(spark, spark2)) {
+          val e = intercept[SparkException] {
+            session.sql("select count(*) from view_table").first()
+          }
+          assert(e.getMessage.contains("FileNotFoundException"))
+          assert(e.getMessage.contains("REFRESH"))
+        }
+        // Refresh on first session and we should be able to read it again on both session
+        spark.catalog.refreshTable("view_table")
+
+        for (session <- Seq(spark, spark2)) {
+          val newCount = session.sql("select count(*) from view_table").first().getLong(0)
+          assert(newCount > 0 && newCount < 100)
+        }
+    }
+  }
+
   def testCaching(pruningEnabled: Boolean): Unit = {
     test(s"partitioned table is cached when partition pruning is $pruningEnabled") {
       withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> pruningEnabled.toString) {

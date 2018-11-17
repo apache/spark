@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
-import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -498,6 +498,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       // Cache it again.
       sparkSession.sharedState.cacheManager.cacheQuery(table, Some(tableIdent.table))
     }
+
+    // invalidate relationtable cache
+    val tableRelationCache = sparkSession.sharedState.tableRelationCache
+    tableRelationCache.invalidate(
+      QualifiedTableName(tableMetadata.identifier.database.getOrElse(""),
+        tableMetadata.identifier.table))
   }
 
   /**

@@ -133,6 +133,7 @@ abstract class BaseSessionStateBuilder(
     val catalog = new SessionCatalog(
       () => session.sharedState.externalCatalog,
       () => session.sharedState.globalTempViewManager,
+      () => session.sharedState.tableRelationCache,
       functionRegistry,
       conf,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),

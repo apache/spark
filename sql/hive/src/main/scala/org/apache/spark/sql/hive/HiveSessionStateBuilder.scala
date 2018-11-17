@@ -53,6 +53,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
     val catalog = new HiveSessionCatalog(
       () => externalCatalog,
       () => session.sharedState.globalTempViewManager,
+      () => session.sharedState.tableRelationCache,
       new HiveMetastoreCatalog(session),
       functionRegistry,
       conf,

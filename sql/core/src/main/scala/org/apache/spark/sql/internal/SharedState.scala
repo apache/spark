@@ -84,6 +84,11 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   val cacheManager: CacheManager = new CacheManager
 
   /**
+   * Class for caching Logical Plans resolved by session catalogs
+   */
+  val tableRelationCache: TableRelationCache = new TableRelationCache()
+
+  /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
    * [[org.apache.spark.scheduler.SparkListenerEvent]]s.
    */

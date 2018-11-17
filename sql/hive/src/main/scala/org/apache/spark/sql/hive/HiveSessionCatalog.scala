@@ -30,7 +30,7 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, ExternalCatalog, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -41,6 +41,7 @@ import org.apache.spark.sql.types.{DecimalType, DoubleType}
 private[sql] class HiveSessionCatalog(
     externalCatalogBuilder: () => ExternalCatalog,
     globalTempViewManagerBuilder: () => GlobalTempViewManager,
+    tableRelationCacheBuilder: () => TableRelationCache,
     val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
@@ -50,6 +51,7 @@ private[sql] class HiveSessionCatalog(
   extends SessionCatalog(
       externalCatalogBuilder,
       globalTempViewManagerBuilder,
+      tableRelationCacheBuilder,
       functionRegistry,
       conf,
       hadoopConf,

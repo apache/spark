@@ -56,6 +56,7 @@ object SessionCatalog {
 class SessionCatalog(
     externalCatalogBuilder: () => ExternalCatalog,
     globalTempViewManagerBuilder: () => GlobalTempViewManager,
+    tableRelationCacheBuilder: () => TableRelationCache,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
     hadoopConf: Configuration,
@@ -72,6 +73,7 @@ class SessionCatalog(
     this(
       () => externalCatalog,
       () => new GlobalTempViewManager("global_temp"),
+      () => new TableRelationCache(),
       functionRegistry,
       conf,
       new Configuration(),
@@ -89,6 +91,7 @@ class SessionCatalog(
 
   lazy val externalCatalog = externalCatalogBuilder()
   lazy val globalTempViewManager = globalTempViewManagerBuilder()
+  lazy val tableRelationCache = tableRelationCacheBuilder()
 
   /** List of temporary views, mapping from table name to their logical plan. */
   @GuardedBy("this")
@@ -129,36 +132,6 @@ class SessionCatalog(
    */
   protected[this] def formatDatabaseName(name: String): String = {
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
-  }
-
-  private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
-    val cacheSize = conf.tableRelationCacheSize
-    CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
-  }
-
-  /** This method provides a way to get a cached plan. */
-  def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
-    tableRelationCache.get(t, c)
-  }
-
-  /** This method provides a way to get a cached plan if the key exists. */
-  def getCachedTable(key: QualifiedTableName): LogicalPlan = {
-    tableRelationCache.getIfPresent(key)
-  }
-
-  /** This method provides a way to cache a plan. */
-  def cacheTable(t: QualifiedTableName, l: LogicalPlan): Unit = {
-    tableRelationCache.put(t, l)
-  }
-
-  /** This method provides a way to invalidate a cached plan. */
-  def invalidateCachedTable(key: QualifiedTableName): Unit = {
-    tableRelationCache.invalidate(key)
-  }
-
-  /** This method provides a way to invalidate all the cached plans. */
-  def invalidateAllCachedTables(): Unit = {
-    tableRelationCache.invalidateAll()
   }
 
   /**
@@ -771,7 +744,7 @@ class SessionCatalog(
   }
 
   /**
-   * Refresh the cache entry for a metastore table, if any.
+   *  Refresh the cache entry for a metastore table, if any.
    */
   def refreshTable(name: TableIdentifier): Unit = synchronized {
     val dbName = formatDatabaseName(name.database.getOrElse(currentDb))
