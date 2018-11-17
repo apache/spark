@@ -54,7 +54,7 @@ case class ShuffleExchangeExec(
     val extraInfo = coordinator match {
       case Some(exchangeCoordinator) =>
         s"(coordinator id: ${System.identityHashCode(exchangeCoordinator)})"
-      case _ => ""
+      case _ => " " + this.newPartitioning.toString
     }
 
     val simpleNodeName = "Exchange"
