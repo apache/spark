@@ -31,7 +31,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.log4j.{AppenderSkeleton, LogManager}
 import org.apache.log4j.spi.LoggingEvent
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -1870,4 +1870,51 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       assert(df.schema === expectedSchema)
     }
   }
+
+  def testLineSeparator(lineSep: String): Unit = {
+    test(s"Support line separator - lineSep: '$lineSep'") {
+      // Read
+      val data =
+        s"""
+           |  "a",
+           |  1$lineSep
+           | "c", 2$lineSep"d",3
+        """.stripMargin
+      val dataWithTrailingLineSep = s"$data$lineSep"
+
+      Seq(data, dataWithTrailingLineSep).foreach { lines =>
+        withTempPath { path =>
+          Files.write(path.toPath, lines.getBytes(StandardCharsets.UTF_8))
+          val schema = StructType(StructField("f", StringType)
+            :: StructField("f0", LongType) :: Nil)
+          val df = spark.read.schema(schema).option("lineSep", lineSep).json(path.getAbsolutePath)
+          checkAnswer(df, Seq(("a", 1), ("c", 2), ("d", 3)).toDF())
+        }
+      }
+
+//      // Write
+//      withTempPath { path =>
+//        Seq("a", "b", "c").toDF("value").coalesce(1)
+//          .write.option("lineSep", lineSep).json(path.getAbsolutePath)
+//        val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+//        val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
+//        assert(
+//          readBack === s"""{"value":"a"}$lineSep{"value":"b"}$lineSep{"value":"c"}$lineSep""")
+//      }
+//
+//      // Roundtrip
+//      withTempPath { path =>
+//        val df = Seq("a", "b", "c").toDF()
+//        df.write.option("lineSep", lineSep).json(path.getAbsolutePath)
+//        val readBack = spark.read.option("lineSep", lineSep).json(path.getAbsolutePath)
+//        checkAnswer(df, readBack)
+//      }
+    }
+  }
+
+  // scalastyle:off nonascii
+  Seq("|"/*, "^", "::", "!!!@3", 0x1E.toChar.toString, "아"*/).foreach { lineSep =>
+    testLineSeparator(lineSep)
+  }
+  // scalastyle:on nonascii
 }
