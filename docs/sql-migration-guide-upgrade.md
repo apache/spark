@@ -17,7 +17,8 @@ displayTitle: Spark SQL Upgrading Guide
 
   - The `ADD JAR` command previously returned a result set with the single value 0. It now returns an empty result set.
 
-  - In Spark version 2.4 and earlier, the key attribute is wrongly named as "value" for primitive key type when doing typed aggregation on Dataset. This attribute is now named as "key" since Spark 3.0 like complex key type.
+  - In Spark version 2.4 and earlier, `Dataset.groupByKey` results to a grouped dataset with key attribute wrongly named as "value", if the key is atomic type, e.g. int, string, etc. This is counterintuitive and makes the schema of aggregation queries weird. For example, the schema of `ds.groupByKey(...).count()` is `(value, count)`. Since Spark 3.0, we name the grouping attribute to "key".
+
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 
