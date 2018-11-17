@@ -230,11 +230,12 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
 
 
   test("verify corrupt column") {
-    val schema = new StructType().add("i", IntegerType).add("_unparsed", BooleanType)
-    val options = Map("mode" -> "PERMISSIVE", "columnNameOfCorruptRecord" -> "_unparsed")
-
     checkExceptionInExpression[AnalysisException](
-      CsvToStructs(schema, options, Literal.create("a"), gmtId),
-      "The field for corrupt records must be string type and nullable")
+      CsvToStructs(
+        schema = StructType.fromDDL("i int, _unparsed boolean"),
+        options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
+        child = Literal.create("a"),
+        timeZoneId = gmtId),
+      expectedErrMsg = "The field for corrupt records must be string type and nullable")
   }
 }
