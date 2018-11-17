@@ -175,7 +175,10 @@ class PrefixSpan private (
       new FreqSequence(toPublicRepr(seq), count)
     }
     // Cache the final RDD to the same storage level as input
-    freqSequences.persist(data.getStorageLevel)
+    if (data.getStorageLevel != StorageLevel.NONE) {
+      freqSequences.persist(data.getStorageLevel)
+      freqSequences.count()
+    }
     dataInternalRepr.unpersist(false)
 
     new PrefixSpanModel(freqSequences)
