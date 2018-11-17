@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.text.SimpleDateFormat
-import java.util.Locale
-
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -152,10 +149,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsT
   }
 
   test("from_json uses DDL strings for defining a schema - scala") {
-    val df = Seq("""{"a": 1, "b": "haa"}""").toDS()
-    checkAnswer(
-      df.select(from_json($"value", "a INT, b STRING", Map[String, String]())),
-      Row(Row(1, "haa")) :: Nil)
+    testDDLSchema(from_json, """{"a": 1, "b": "haa"}""")
   }
 
   test("to_json - struct") {
@@ -222,18 +216,12 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsT
     assert(e2.getMessage.contains("Unable to convert column col1 of type calendarinterval to JSON"))
   }
 
-  test("roundtrip in to_json and from_json - struct") {
-    val dfOne = Seq(Tuple1(Tuple1(1)), Tuple1(null)).toDF("struct")
-    val schemaOne = dfOne.schema(0).dataType.asInstanceOf[StructType]
-    val readBackOne = dfOne.select(to_json($"struct").as("json"))
-      .select(from_json($"json", schemaOne).as("struct"))
-    checkAnswer(dfOne, readBackOne)
+  test("roundtrip to_json -> from_json") {
+    testToFrom(to_json, from_json)
+  }
 
-    val dfTwo = Seq(Some("""{"a":1}"""), None).toDF("json")
-    val schemaTwo = new StructType().add("a", IntegerType)
-    val readBackTwo = dfTwo.select(from_json($"json", schemaTwo).as("struct"))
-      .select(to_json($"struct").as("json"))
-    checkAnswer(dfTwo, readBackTwo)
+  test("roundtrip from_json -> to_json") {
+    testFromTo(from_json, to_json, """{"a":1}""")
   }
 
   test("roundtrip in to_json and from_json - array") {
@@ -376,16 +364,11 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsT
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
-    val in = Seq("""{"a": [1, 2, 3]}""").toDS()
-    val out = in.select(from_json('value, schema_of_json("""{"a": [1]}""")) as "parsed")
-    val expected = StructType(StructField(
-      "parsed",
-      StructType(StructField(
-        "a",
-        ArrayType(LongType, true), true) :: Nil),
-      true) :: Nil)
-
-    assert(out.schema == expected)
+    testFromSchemaOf(
+      from_json,
+      schema_of_json,
+      input = """{"_c0":0.123456789,"_c1":1,"_c2":"San Francisco"""",
+      example = """{"_c0":0.1,"_c1":9876543210123456,"_c2":"a"}""")
   }
 
   test("infer schemas") {
@@ -556,16 +539,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext with FunctionsT
   }
 
   test("parse timestamps with locale") {
-    Seq("en-US", "ko-KR", "zh-CN", "ru-RU").foreach { langTag =>
-      val locale = Locale.forLanguageTag(langTag)
-      val ts = new SimpleDateFormat("dd/MM/yyyy HH:mm").parse("06/11/2018 18:00")
-      val timestampFormat = "dd MMM yyyy HH:mm"
-      val sdf = new SimpleDateFormat(timestampFormat, locale)
-      val input = Seq(s"""{"time": "${sdf.format(ts)}"}""").toDS()
-      val options = Map("timestampFormat" -> timestampFormat, "locale" -> langTag)
-      val df = input.select(from_json($"value", "time timestamp", options))
-
-      checkAnswer(df, Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
-    }
+    testLocaleTimestamp(from_json, (s: String) => s"""{"time": "$s"}""")
   }
 }

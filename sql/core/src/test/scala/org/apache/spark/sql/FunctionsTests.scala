@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkException
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 import scala.collection.JavaConverters._
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -133,6 +136,75 @@ trait FunctionsTests extends QueryTest with SharedSQLContext {
       }.getMessage
       assert(exception2.contains(
         "doesn't support the DROPMALFORMED mode. Acceptable modes are PERMISSIVE and FAILFAST."))
+    }
+  }
+
+  def testDDLSchema(
+      from: (Column, Column, java.util.Map[String, String]) => Column,
+      input: String): Unit = {
+    val df = Seq(input).toDS()
+    checkAnswer(
+      df.select(
+        from($"value", lit("a INT, b STRING"), new java.util.HashMap[String, String]())),
+      Row(Row(1, "haa")) :: Nil)
+  }
+
+  def testToFrom(
+      to: Column => Column,
+      from: (Column, StructType, Map[String, String]) => Column): Unit = {
+    val df = Seq(Tuple1(Tuple1(1)), Tuple1(null)).toDF("struct")
+    val schema = df.schema(0).dataType.asInstanceOf[StructType]
+    val options = Map.empty[String, String]
+    val readback = df.select(to($"struct").as("to"))
+      .select(from($"to", schema, options).as("struct"))
+
+    checkAnswer(df, readback)
+  }
+
+  def testFromTo(
+      from: (Column, StructType, Map[String, String]) => Column,
+      to: Column => Column,
+      input: String): Unit = {
+    val df = Seq(Some(input), None).toDF("from")
+    val schema = new StructType().add("a", IntegerType)
+    val options = Map.empty[String, String]
+    val readback = df.select(from($"from", schema, options).as("struct"))
+      .select(to($"struct").as("from"))
+
+    checkAnswer(df, readback)
+  }
+
+  def testFromSchemaOf(
+      from: (Column, Column, java.util.Map[String, String]) => Column,
+      schema_of: String => Column,
+      input: String,
+      example: String): Unit = {
+    val in = Seq(input).toDS()
+    val options = Map.empty[String, String].asJava
+    val out = in.select(from('value, schema_of(example), options) as "parsed")
+    val expected = StructType(Seq(StructField(
+      "parsed",
+      StructType(Seq(
+        StructField("_c0", DoubleType, true),
+        StructField("_c1", LongType, true),
+        StructField("_c2", StringType, true))))))
+
+    assert(out.schema == expected)
+  }
+
+  def testLocaleTimestamp(
+      from: (Column, Column, java.util.Map[String, String]) => Column,
+      wrap: String => String): Unit = {
+    Seq("en-US", "ko-KR", "zh-CN", "ru-RU").foreach { langTag =>
+      val locale = Locale.forLanguageTag(langTag)
+      val ts = new SimpleDateFormat("dd/MM/yyyy HH:mm").parse("06/11/2018 18:00")
+      val timestampFormat = "dd MMM yyyy HH:mm"
+      val sdf = new SimpleDateFormat(timestampFormat, locale)
+      val input = Seq(wrap(s"""${sdf.format(ts)}""")).toDS()
+      val options = Map("timestampFormat" -> timestampFormat, "locale" -> langTag)
+      val df = input.select(from($"value", lit("time timestamp"), options.asJava))
+
+      checkAnswer(df, Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
     }
   }
 }
