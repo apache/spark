@@ -556,7 +556,11 @@ private[spark] class AppStatusListener(
         if (killedDelta > 0) {
           job.killedSummary = killedTasksSummary(event.reason, job.killedSummary)
         }
-        conditionalLiveUpdate(job, now, removeStage)
+        if (removeStage) {
+          update(job, now)
+        } else {
+          maybeUpdate(job, now)
+        }
       }
 
       val esummary = stage.executorSummary(event.taskInfo.executorId)
@@ -570,7 +574,13 @@ private[spark] class AppStatusListener(
 
       val isLastTask = stage.activeTasksPerExecutor(event.taskInfo.executorId) == 0
 
-      conditionalLiveUpdate(esummary, now, isLastTask)
+      // If the last task of the executor finished, then update the esummary
+      // for both live and history events.
+      if (isLastTask) {
+         update(esummary, now)
+      } else {
+        maybeUpdate(esummary, now)
+      }
 
       if (!stage.cleaning && stage.savedTasks.get() > maxTasksPerStage) {
         stage.cleaning = true
