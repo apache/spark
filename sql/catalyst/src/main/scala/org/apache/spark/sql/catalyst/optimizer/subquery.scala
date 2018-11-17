@@ -76,8 +76,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
   private def dedupSubqueryOnSelfJoin(values: Seq[Expression], sub: LogicalPlan): LogicalPlan = {
     val leftRefs = AttributeSet.fromAttributeSets(values.map(_.references))
-    val rightRefs = AttributeSet(sub.output)
-    val duplicates = leftRefs.intersect(rightRefs)
+    val duplicates = leftRefs.intersect(sub.outputSet)
     if (duplicates.isEmpty) {
       sub
     } else {

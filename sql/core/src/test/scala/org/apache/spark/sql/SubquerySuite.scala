@@ -1284,12 +1284,14 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-26078: deduplicate fake self joins for IN subqueries") {
     withTempView("a", "b") {
-      val a = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row("a", 2), Row("b", 1))),
-        StructType(Seq(StructField("id", StringType), StructField("num", IntegerType))))
-      val b = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row("a", 2), Row("b", 1))),
-        StructType(Seq(StructField("id", StringType), StructField("num", IntegerType))))
-      a.createOrReplaceTempView("a")
-      b.createOrReplaceTempView("b")
+      def genTestViewWithName(name: String): Unit = {
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row("a", 2), Row("b", 1))),
+          StructType(Seq(StructField("id", StringType), StructField("num", IntegerType))))
+        df.createOrReplaceTempView(name)
+      }
+      genTestViewWithName("a")
+      genTestViewWithName("b")
 
       val df1 = spark.sql(
         """
