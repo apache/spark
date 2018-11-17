@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.nio.charset.{Charset, UnsupportedCharsetException}
+import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
@@ -26,18 +26,16 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.util.Properties
-
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.log4j.{AppenderSkeleton, LogManager}
 import org.apache.log4j.spi.LoggingEvent
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
 import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
@@ -1857,6 +1855,19 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .csv(Seq(csv).toDS())
 
       checkAnswer(df, Row(null, csv))
+    }
+  }
+
+  test("""Support line separator - default value \r, \r\n and \n""") {
+    val data = "\"a\",1\r\"c\",2\r\n\"d\",3\n"
+
+    withTempPath { path =>
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+      val df = spark.read.option("inferSchema", true).csv(path.getAbsolutePath)
+      val expectedSchema =
+        StructType(StructField("_c0", StringType) :: StructField("_c1", IntegerType) :: Nil)
+      checkAnswer(df, Seq(("a", 1), ("c", 2), ("d", 3)).toDF())
+      assert(df.schema === expectedSchema)
     }
   }
 }
