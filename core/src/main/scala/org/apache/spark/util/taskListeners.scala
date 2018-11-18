@@ -44,7 +44,9 @@ trait TaskFailureListener extends EventListener {
   def onTaskFailure(context: TaskContext, error: Throwable): Unit
 }
 
-
+/**
+ * TaskCompletionListener that wraps a Scala-like function.
+ */
 private[spark]
 case class TaskCompletionListenerWrapper[U](f: (TaskContext) => U)
   extends TaskCompletionListener {

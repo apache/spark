@@ -127,7 +127,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     context.remoteTaskCompletionListener(javaListener)
     context.remoteTaskCompletionListener(scalaListener)
 
-    // fails in case the TaskCompletionListener is called
+    // fails in case a TaskCompletionListener is called
     context.markTaskCompleted(None)
   }
 
