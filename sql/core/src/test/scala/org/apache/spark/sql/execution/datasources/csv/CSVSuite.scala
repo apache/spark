@@ -1909,6 +1909,14 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         assert(
           readBack === s"a${lineSep}b${lineSep}c${lineSep}")
       }
+
+      // Roundtrip
+      withTempPath { path =>
+        val df = Seq("a", "b", "c").toDF()
+        df.write.option("lineSep", lineSep).csv(path.getAbsolutePath)
+        val readBack = spark.read.option("lineSep", lineSep).csv(path.getAbsolutePath)
+        checkAnswer(df, readBack)
+      }
     }
   }
 
