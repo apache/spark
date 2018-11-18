@@ -483,14 +483,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Log
     }
   }
 
-	def treeString(
+  def treeString(
       writer: Writer,
       verbose: Boolean,
       addSuffix: Boolean): Unit = {
   	  treeString(writer, verbose, addSuffix, TreeNode.maxTreeToStringDepth)
-	}
+  }
 
-	def treeString(
+  def treeString(
       writer: Writer,
       verbose: Boolean,
       addSuffix: Boolean,
