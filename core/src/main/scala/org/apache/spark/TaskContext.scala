@@ -25,7 +25,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
+import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskCompletionListenerWrapper, TaskFailureListener}
 
 
 object TaskContext {
@@ -127,12 +127,22 @@ abstract class TaskContext extends Serializable {
     // Note that due to this scala bug: https://github.com/scala/bug/issues/11016, we need to make
     // this function polymorphic for every scala version >= 2.12, otherwise an overloaded method
     // resolution error occurs at compile time.
-    addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = f(context)
-    })
+    addTaskCompletionListener(TaskCompletionListenerWrapper(f))
   }
 
+  /**
+   * Removes a (Java friendly) listener that is no longer needed to be executed on task completion.
+   */
   def remoteTaskCompletionListener(listener: TaskCompletionListener): TaskContext
+
+
+  /**
+   * Removes a listener in the form of a Scala closure that is no longer needed to be executed
+   * on task completion.
+   */
+  def remoteTaskCompletionListener[U](f: (TaskContext) => U): TaskContext = {
+    remoteTaskCompletionListener(TaskCompletionListenerWrapper(f))
+  }
 
   /**
    * Adds a listener to be executed on task failure. Adding a listener to an already failed task

@@ -230,14 +230,10 @@ public class TaskMemoryManager {
    * Release N bytes of execution memory for a MemoryConsumer.
    */
   public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
-    releaseExecutionMemory(size, consumer, false);
-  }
-
-  public void releaseExecutionMemory(long size, MemoryConsumer consumer, boolean stopTracking) {
     logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size), consumer);
     memoryManager.releaseExecutionMemory(size, taskAttemptId, consumer.getMode());
-    if (stopTracking) {
-      synchronized (this) {
+    synchronized (this) {
+      if (size == consumer.getUsed()) {
         consumers.remove(consumer);
       }
     }
@@ -468,5 +464,12 @@ public class TaskMemoryManager {
    */
   public MemoryMode getTungstenMemoryMode() {
     return tungstenMemoryMode;
+  }
+
+  @VisibleForTesting
+  int getNumConsumers() {
+    synchronized (this) {
+      return consumers.size();
+    }
   }
 }
