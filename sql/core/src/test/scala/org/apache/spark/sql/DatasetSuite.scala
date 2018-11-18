@@ -1571,9 +1571,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDatasetUnorderly(agg, ((1, 2), 1L, 3L), ((2, 3), 2L, 4L), ((3, 4), 3L, 5L))
   }
 
-  test("key attribute of primitive type under typed aggregation should be named as key") {
+  test("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
     val ds = Seq(1, 2, 3).toDS()
     assert(ds.groupByKey(x => x).count().schema.head.name == "key")
+
+    // Enable legacy flag to follow previous Spark behavior
+    withSQLConf(SQLConf.LEGACY_ATOMIC_KEY_ATTRIBUTE_GROUP_BY_KEY.key -> "true") {
+      assert(ds.groupByKey(x => x).count().schema.head.name == "value")
+    }
   }
 }
 

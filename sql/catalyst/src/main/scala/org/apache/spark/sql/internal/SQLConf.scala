@@ -1594,6 +1594,15 @@ object SQLConf {
         "WHERE, which does not follow SQL standard.")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_ATOMIC_KEY_ATTRIBUTE_GROUP_BY_KEY =
+    buildConf("spark.sql.legacy.atomicKeyAttributeGroupByKey")
+      .internal()
+      .doc("When set to true, the key attribute resulted from running `Dataset.groupByKey` " +
+        "for atomic key type, will be named as `value`, following the behavior of Spark " +
+        "version 2.4 and earlier.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -2008,6 +2017,8 @@ class SQLConf extends Serializable with Logging {
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
+
+  def legacyAtomicKeyAttribute: Boolean = getConf(SQLConf.LEGACY_ATOMIC_KEY_ATTRIBUTE_GROUP_BY_KEY)
 
   /** ********************** SQLConf functionality methods ************ */
 
