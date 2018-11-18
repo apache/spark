@@ -1878,7 +1878,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       // Read
       val data =
         s""""a",1$lineSep
-           |"c",2$lineSep"
+           |c,2$lineSep"
            |d",3""".stripMargin
       val dataWithTrailingLineSep = s"$data$lineSep"
 
@@ -1888,7 +1888,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
           val schema = StructType(StructField("f", StringType)
             :: StructField("f0", LongType) :: Nil)
 
-          val expected = Seq(("a", 1), ("\n\"c\"", 2), ("\nd", 3)).toDF()
+          val expected = Seq(("a", 1), ("\nc", 2), ("\nd", 3)).toDF()
           Seq(false, true).foreach { multiLine =>
             val df = spark.read
               .schema(schema)
