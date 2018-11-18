@@ -206,10 +206,7 @@ class UnivocityParser(
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  def parse(input: String): InternalRow = {
-    val parsed = tokenizer.parseLine(input)
-    convert(parsed)
-  }
+  def parse(input: String): InternalRow = convert(tokenizer.parseLine(input))
 
   private val getToken = if (options.columnPruning) {
     (tokens: Array[String], index: Int) => tokens(index)
