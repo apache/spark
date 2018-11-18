@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Expression, GreaterThan, If, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
-class ReplaceNullWithFalseSuite extends PlanTest {
+class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -36,10 +36,11 @@ class ReplaceNullWithFalseSuite extends PlanTest {
         ConstantFolding,
         BooleanSimplification,
         SimplifyConditionals,
-        ReplaceNullWithFalse) :: Nil
+        ReplaceNullWithFalseInPredicate) :: Nil
   }
 
-  private val testRelation = LocalRelation('i.int, 'b.boolean)
+  private val testRelation =
+    LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
   private val anotherTestRelation = LocalRelation('d.int)
 
   test("replace null inside filter and join conditions") {
@@ -296,6 +297,45 @@ class ReplaceNullWithFalseSuite extends PlanTest {
       If(UnresolvedAttribute("b"), Literal(null, IntegerType), Literal(4)))
     val column = CaseWhen(Seq(condition -> Literal(5)), Literal(2)).as("out")
     testProjection(originalExpr = column, expectedExpr = column)
+  }
+
+  test("replace nulls in lambda function of ArrayFilter") {
+    val cond = GreaterThan(UnresolvedAttribute("e"), Literal(0))
+    val lambda1 = LambdaFunction(
+      function = If(cond, Literal(null, BooleanType), TrueLiteral),
+      arguments = Seq(UnresolvedAttribute("e")))
+    val lambda2 = LambdaFunction(
+      function = If(cond, FalseLiteral, TrueLiteral),
+      arguments = Seq(UnresolvedAttribute("e")))
+    testProjection(
+      originalExpr = ArrayFilter('a, lambda1) as 'x,
+      expectedExpr = ArrayFilter('a, lambda2) as 'x)
+  }
+
+  test("replace nulls in lambda function of ArrayExists") {
+    val cond = GreaterThan(UnresolvedAttribute("e"), Literal(0))
+    val lambda1 = LambdaFunction(
+      function = If(cond, Literal(null, BooleanType), TrueLiteral),
+      arguments = Seq(UnresolvedAttribute("e")))
+    val lambda2 = LambdaFunction(
+      function = If(cond, FalseLiteral, TrueLiteral),
+      arguments = Seq(UnresolvedAttribute("e")))
+    testProjection(
+      originalExpr = ArrayExists('a, lambda1) as 'x,
+      expectedExpr = ArrayExists('a, lambda2) as 'x)
+  }
+
+  test("replace nulls in lambda function of MapFilter") {
+    val cond = GreaterThan(UnresolvedAttribute("k"), Literal(0))
+    val lambda1 = LambdaFunction(
+      function = If(cond, Literal(null, BooleanType), TrueLiteral),
+      arguments = Seq(UnresolvedAttribute("k"), UnresolvedAttribute("v")))
+    val lambda2 = LambdaFunction(
+      function = If(cond, FalseLiteral, TrueLiteral),
+      arguments = Seq(UnresolvedAttribute("k"), UnresolvedAttribute("v")))
+    testProjection(
+      originalExpr = MapFilter('m, lambda1) as 'x,
+      expectedExpr = MapFilter('m, lambda2) as 'x)
   }
 
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {
