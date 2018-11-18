@@ -203,7 +203,7 @@ class CSVOptions(
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
     lineSep.getBytes("UTF-8")
   }
-  val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
+  val lineSeparatorInWrite: Option[String] = lineSeparator
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
@@ -213,6 +213,8 @@ class CSVOptions(
     format.setQuoteEscape(escape)
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
+    lineSeparatorInWrite.foreach(format.setLineSeparator)
+
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
@@ -232,6 +234,7 @@ class CSVOptions(
     lineSeparatorInRead.foreach(sep => format.setLineSeparator(sep.map(_.toChar)))
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
+
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
