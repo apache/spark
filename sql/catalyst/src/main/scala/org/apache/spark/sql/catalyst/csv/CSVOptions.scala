@@ -231,7 +231,10 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    lineSeparatorInRead.foreach(sep => format.setLineSeparator(sep.map(_.toChar)))
+    lineSeparatorInRead.foreach {sep =>
+      format.setLineSeparator(sep.map(_.toChar))
+      format.setNormalizedNewline(sep.head.toChar)
+    }
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
 

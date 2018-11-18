@@ -1921,7 +1921,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   // scalastyle:off nonascii
-  Seq("!", 0x1E.toChar.toString).foreach { lineSep =>
+  Seq("|", "^", "::", 0x1E.toChar.toString).foreach { lineSep =>
     testLineSeparator(lineSep)
   }
   // scalastyle:on nonascii
