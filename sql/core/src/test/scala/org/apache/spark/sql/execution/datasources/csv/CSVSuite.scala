@@ -1925,4 +1925,16 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     testLineSeparator(lineSep)
   }
   // scalastyle:on nonascii
+
+  test("lineSep restrictions") {
+    val errMsg1 = intercept[IllegalArgumentException] {
+      spark.read.option("lineSep", "").csv(testFile(carsFile)).collect
+    }.getMessage
+    assert(errMsg1.contains("'lineSep' cannot be an empty string"))
+
+    val errMsg2 = intercept[IllegalArgumentException] {
+      spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect
+    }.getMessage
+    assert(errMsg2.contains("'lineSep' can contain 1 or 2 characters"))
+  }
 }
