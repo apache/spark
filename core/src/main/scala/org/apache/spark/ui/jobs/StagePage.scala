@@ -352,7 +352,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       val deserializationQuantiles = titleCell("Task Deserialization Time",
         ToolTips.TASK_DESERIALIZATION_TIME) ++ timeQuantiles(metrics.executorDeserializeTime)
 
-      val serviceQuantiles = simpleTitleCell("Duration") ++ timeQuantiles(metrics.executorRunTime)
+      val serviceQuantiles = simpleTitleCell("Duration") ++ timeQuantiles(metrics.duration)
 
       val gcQuantiles = titleCell("GC Time", ToolTips.GC_TIME) ++ timeQuantiles(metrics.jvmGcTime)
 
