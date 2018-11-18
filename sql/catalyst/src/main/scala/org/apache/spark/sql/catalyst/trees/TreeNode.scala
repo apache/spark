@@ -75,7 +75,7 @@ object CurrentOrigin {
 }
 
 // scalastyle:off
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
+abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Logging {
 // scalastyle:on
   self: BaseType =>
 
