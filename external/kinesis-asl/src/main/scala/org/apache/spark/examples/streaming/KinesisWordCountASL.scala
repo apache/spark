@@ -23,8 +23,7 @@ import java.nio.ByteBuffer
 import scala.util.Random
 
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
-import com.amazonaws.services.kinesis.AmazonKinesisClientBuilder
+import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model.PutRecordRequest
 import org.apache.log4j.{Level, Logger}
 
@@ -101,14 +100,12 @@ object KinesisWordCountASL extends Logging {
 
     // Determine the number of shards from the stream using the low-level Kinesis Client
     // from the AWS Java SDK.
-    val provider = new DefaultAWSCredentialsProviderChain()
-    require(provider.getCredentials != null,
+    val credentials = new DefaultAWSCredentialsProviderChain().getCredentials()
+    require(credentials != null,
       "No AWS credentials found. Please specify credentials using one of the methods specified " +
         "in http://docs.aws.amazon.com/AWSSdkDocsJava/latest/DeveloperGuide/credentials.html")
-    val kinesisClient = AmazonKinesisClientBuilder.standard()
-      .withCredentials(provider)
-      .withEndpointConfiguration(new EndpointConfiguration(endpointUrl, "us-east-1"))
-      .build()
+    val kinesisClient = new AmazonKinesisClient(credentials)
+    kinesisClient.setEndpoint(endpointUrl)
     val numShards = kinesisClient.describeStream(streamName).getStreamDescription().getShards().size
 
 
@@ -223,10 +220,8 @@ object KinesisWordProducerASL {
     val totals = scala.collection.mutable.Map[String, Int]()
 
     // Create the low-level Kinesis Client from the AWS Java SDK.
-    val kinesisClient = AmazonKinesisClientBuilder.standard()
-      .withCredentials(new DefaultAWSCredentialsProviderChain())
-      .withEndpointConfiguration(new EndpointConfiguration(endpoint, "us-east-1"))
-      .build()
+    val kinesisClient = new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain())
+    kinesisClient.setEndpoint(endpoint)
 
     println(s"Putting records onto stream $stream and endpoint $endpoint at a rate of" +
         s" $recordsPerSecond records per second and $wordsPerRecord words per record")

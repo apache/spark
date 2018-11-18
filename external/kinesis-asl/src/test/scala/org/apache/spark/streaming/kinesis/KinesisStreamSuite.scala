@@ -231,7 +231,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.start()
 
     val testData = 1 to 10
-    eventually(timeout(5 minutes), interval(10 second)) {
+    eventually(timeout(120 seconds), interval(10 second)) {
       testUtils.pushData(testData, aggregateTestData)
       val modData = testData.map(_ + 5)
       assert(collected.synchronized { collected === modData.toSet },
@@ -361,6 +361,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
   }
 
   testIfEnabled("failure recovery") {
+    val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
     val checkpointDir = Utils.createTempDir().getAbsolutePath
 
     ssc = new StreamingContext(sc, Milliseconds(1000))
@@ -398,7 +399,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     // Run until there are at least 10 batches with some data in them
     // If this times out because numBatchesWithData is empty, then its likely that foreachRDD
     // function failed with exceptions, and nothing got added to `collectedData`
-    eventually(timeout(5 minutes), interval(10 seconds)) {
+    eventually(timeout(2 minutes), interval(1 seconds)) {
       testUtils.pushData(1 to 5, aggregateTestData)
       assert(isCheckpointPresent && numBatchesWithData > 10)
     }

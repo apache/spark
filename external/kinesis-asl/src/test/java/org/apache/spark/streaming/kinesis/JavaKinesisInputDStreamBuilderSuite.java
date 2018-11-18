@@ -18,14 +18,12 @@
 package org.apache.spark.streaming.kinesis;
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
-import org.junit.Assert;
-import org.junit.Test;
-
 import org.apache.spark.streaming.kinesis.KinesisInitialPositions.TrimHorizon;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.Seconds;
+import org.junit.Test;
 
 public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingContext {
   /**
@@ -51,14 +49,13 @@ public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingConte
       .checkpointInterval(checkpointInterval)
       .storageLevel(storageLevel)
       .build();
-    Assert.assertEquals(streamName, kinesisDStream.streamName());
-    Assert.assertEquals(endpointUrl, kinesisDStream.endpointUrl());
-    Assert.assertEquals(region, kinesisDStream.regionName());
-    Assert.assertEquals(initialPosition.getPosition(),
-        kinesisDStream.initialPosition().getPosition());
-    Assert.assertEquals(appName, kinesisDStream.checkpointAppName());
-    Assert.assertEquals(checkpointInterval, kinesisDStream.checkpointInterval());
-    Assert.assertEquals(storageLevel, kinesisDStream._storageLevel());
+    assert(kinesisDStream.streamName() == streamName);
+    assert(kinesisDStream.endpointUrl() == endpointUrl);
+    assert(kinesisDStream.regionName() == region);
+    assert(kinesisDStream.initialPosition().getPosition() == initialPosition.getPosition());
+    assert(kinesisDStream.checkpointAppName() == appName);
+    assert(kinesisDStream.checkpointInterval() == checkpointInterval);
+    assert(kinesisDStream._storageLevel() == storageLevel);
     ssc.stop();
   }
 
@@ -86,12 +83,13 @@ public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingConte
       .checkpointInterval(checkpointInterval)
       .storageLevel(storageLevel)
       .build();
-    Assert.assertEquals(streamName, kinesisDStream.streamName());
-    Assert.assertEquals(endpointUrl, kinesisDStream.endpointUrl());
-    Assert.assertEquals(region, kinesisDStream.regionName());
-    Assert.assertEquals(appName, kinesisDStream.checkpointAppName());
-    Assert.assertEquals(checkpointInterval, kinesisDStream.checkpointInterval());
-    Assert.assertEquals(storageLevel, kinesisDStream._storageLevel());
+    assert(kinesisDStream.streamName() == streamName);
+    assert(kinesisDStream.endpointUrl() == endpointUrl);
+    assert(kinesisDStream.regionName() == region);
+    assert(kinesisDStream.initialPosition().getPosition() == InitialPositionInStream.LATEST);
+    assert(kinesisDStream.checkpointAppName() == appName);
+    assert(kinesisDStream.checkpointInterval() == checkpointInterval);
+    assert(kinesisDStream._storageLevel() == storageLevel);
     ssc.stop();
   }
 }

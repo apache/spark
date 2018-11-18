@@ -21,9 +21,8 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.amazonaws.auth.AWSCredentialsProvider
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
-import com.amazonaws.services.kinesis.AmazonKinesisClientBuilder
+import com.amazonaws.auth.AWSCredentials
+import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.clientlibrary.types.UserRecord
 import com.amazonaws.services.kinesis.model._
 
@@ -110,8 +109,9 @@ class KinesisBackedBlockRDD[T: ClassTag](
     }
 
     def getBlockFromKinesis(): Iterator[T] = {
+      val credentials = kinesisCreds.provider.getCredentials
       partition.seqNumberRanges.ranges.iterator.flatMap { range =>
-        new KinesisSequenceRangeIterator(kinesisCreds.provider, endpointUrl, regionName,
+        new KinesisSequenceRangeIterator(credentials, endpointUrl, regionName,
           range, kinesisReadConfigs).map(messageHandler)
       }
     }
@@ -131,17 +131,13 @@ class KinesisBackedBlockRDD[T: ClassTag](
  */
 private[kinesis]
 class KinesisSequenceRangeIterator(
-    credentialsProvider: AWSCredentialsProvider,
+    credentials: AWSCredentials,
     endpointUrl: String,
     regionId: String,
     range: SequenceNumberRange,
     kinesisReadConfigs: KinesisReadConfigurations) extends NextIterator[Record] with Logging {
 
-  private val client = AmazonKinesisClientBuilder.standard().
-    withCredentials(credentialsProvider).
-    withEndpointConfiguration(new EndpointConfiguration(endpointUrl, regionId)).
-    build()
-
+  private val client = new AmazonKinesisClient(credentials)
   private val streamName = range.streamName
   private val shardId = range.shardId
   // AWS limits to maximum of 10k records per get call
@@ -150,6 +146,8 @@ class KinesisSequenceRangeIterator(
   private var toSeqNumberReceived = false
   private var lastSeqNumber: String = null
   private var internalIterator: Iterator[Record] = null
+
+  client.setEndpoint(endpointUrl)
 
   override protected def getNext(): Record = {
     var nextRecord: Record = null
@@ -218,7 +216,7 @@ class KinesisSequenceRangeIterator(
       shardIterator: String,
       recordCount: Int): (Iterator[Record], String) = {
     val getRecordsRequest = new GetRecordsRequest
-    getRecordsRequest.setRequestCredentialsProvider(credentialsProvider)
+    getRecordsRequest.setRequestCredentials(credentials)
     getRecordsRequest.setShardIterator(shardIterator)
     getRecordsRequest.setLimit(Math.min(recordCount, this.maxGetRecordsLimit))
     val getRecordsResult = retryOrTimeout[GetRecordsResult](
@@ -239,7 +237,7 @@ class KinesisSequenceRangeIterator(
       iteratorType: ShardIteratorType,
       sequenceNumber: String): String = {
     val getShardIteratorRequest = new GetShardIteratorRequest
-    getShardIteratorRequest.setRequestCredentialsProvider(credentialsProvider)
+    getShardIteratorRequest.setRequestCredentials(credentials)
     getShardIteratorRequest.setStreamName(streamName)
     getShardIteratorRequest.setShardId(shardId)
     getShardIteratorRequest.setShardIteratorType(iteratorType.toString)

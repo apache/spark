@@ -47,6 +47,8 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     val cloudWatchCreds: Option[SparkAWSCredentials]
   ) extends ReceiverInputDStream[T](_ssc) {
 
+  import KinesisReadConfigurations._
+
   private[streaming]
   override def createBlockRDD(time: Time, blockInfos: Seq[ReceivedBlockInfo]): RDD[T] = {
 
@@ -235,7 +237,7 @@ object KinesisInputDStream {
 
     /**
      * Sets the [[SparkAWSCredentials]] to use for authenticating to the AWS Kinesis
-     * endpoint. Defaults to `DefaultCredentialsProvider` if no custom value is specified.
+     * endpoint. Defaults to [[DefaultCredentialsProvider]] if no custom value is specified.
      *
      * @param credentials [[SparkAWSCredentials]] to use for Kinesis authentication
      */
