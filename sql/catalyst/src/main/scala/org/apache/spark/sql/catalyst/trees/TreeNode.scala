@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.trees
 
 import java.io.Writer
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.Map
 import scala.reflect.ClassTag
@@ -29,6 +30,8 @@ import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.ScalaReflection._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -480,14 +483,22 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Log
     }
   }
 
-  def treeString(
+	def treeString(
+		              writer: Writer,
+		              verbose: Boolean,
+		              addSuffix: Boolean): Unit = {
+		treeString(writer, verbose, addSuffix, TreeNode.maxTreeToStringDepth)
+	}
+
+	def treeString(
       writer: Writer,
       verbose: Boolean,
-      addSuffix: Boolean): Unit = {
-    generateTreeString(0, Nil, writer, verbose, "", addSuffix)
+      addSuffix: Boolean,
+      maxDepth: Int): Unit = {
+    generateTreeString(0, Nil, writer, verbose, "", addSuffix, maxDepth)
   }
 
-  /**
+	/**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
    * The numbers can be used with [[TreeNode.apply]] to easily access specific subtrees.
    *
@@ -550,7 +561,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Log
       writer: Writer,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): Unit = {
+      addSuffix: Boolean = false,
+      maxDepth: Int = TreeNode.maxTreeToStringDepth): Unit = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -559,30 +571,42 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Log
       writer.write(if (lastChildren.last) "+- " else ":- ")
     }
 
-    val str = if (verbose) {
-      if (addSuffix) verboseStringWithSuffix else verboseString
-    } else {
-      simpleString
-    }
-    writer.write(prefix)
-    writer.write(str)
-    writer.write("\n")
+	  if (depth < maxDepth) {
+	    val str = if (verbose) {
+	      if (addSuffix) verboseStringWithSuffix else verboseString
+	    } else {
+	      simpleString
+	    }
+	    writer.write(prefix)
+	    writer.write(str)
+	    writer.write("\n")
 
-    if (innerChildren.nonEmpty) {
-      innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ false, writer, verbose,
-        addSuffix = addSuffix))
-      innerChildren.last.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ true, writer, verbose,
-        addSuffix = addSuffix)
-    }
+	    if (innerChildren.nonEmpty) {
+	      innerChildren.init.foreach(_.generateTreeString(
+	        depth + 2, lastChildren :+ children.isEmpty :+ false, writer, verbose,
+	        addSuffix = addSuffix, maxDepth = maxDepth))
+	      innerChildren.last.generateTreeString(
+	        depth + 2, lastChildren :+ children.isEmpty :+ true, writer, verbose,
+	        addSuffix = addSuffix, maxDepth = maxDepth)
+	    }
 
-    if (children.nonEmpty) {
-      children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, writer, verbose, prefix, addSuffix))
-      children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, writer, verbose, prefix, addSuffix)
-    }
+	    if (children.nonEmpty) {
+	      children.init.foreach(_.generateTreeString(
+	        depth + 1, lastChildren :+ false, writer, verbose, prefix, addSuffix, maxDepth))
+	      children.last.generateTreeString(
+	        depth + 1, lastChildren :+ true, writer, verbose, prefix, addSuffix, maxDepth)
+	    }
+	  }
+	  else {
+		  if (TreeNode.treeDepthWarningPrinted.compareAndSet(false, true)) {
+			  logWarn(
+				  "Truncated the string representation of a plan since it was nested too deeply. " +
+					  "This behavior can be adjusted by setting 'spark.debug.maxToStringTreeDepth' in " +
+					  "SparkEnv.conf.")
+		  }
+		  writer.write(prefix)
+		  writer.write("...\n")
+	  }
   }
 
   /**
@@ -700,4 +724,24 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Log
     case storage: CatalogStorageFormat => true
     case _ => false
   }
+}
+
+object TreeNode {
+  /**
+    * Query plans for large, deeply nested plans can get extremely large. To limit the impact,
+    * we add a parameter that limits the logging to the top layers if the tree gets too deep.
+    * This can be overridden by setting the 'spark.debug.maxToStringTreeDepth' conf in SparkEnv.
+    */
+  val DEFAULT_MAX_TO_STRING_TREE_DEPTH = 15
+
+  def maxTreeToStringDepth: Int = {
+    if (SparkEnv.get != null) {
+      SparkEnv.get.conf.getInt("spark.debug.maxToStringTreeDepth", DEFAULT_MAX_TO_STRING_TREE_DEPTH)
+    } else {
+      DEFAULT_MAX_TO_STRING_TREE_DEPTH
+    }
+  }
+
+  /** Whether we have warned about plan string truncation yet. */
+  private val treeDepthWarningPrinted = new AtomicBoolean(false)
 }

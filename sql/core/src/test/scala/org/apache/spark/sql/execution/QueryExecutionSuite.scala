@@ -22,6 +22,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.test.SharedSQLContext
 
+case class Simple(a: String, b: Int)
+
 class QueryExecutionSuite extends SharedSQLContext {
   def checkDumpedPlans(path: String, expected: Int): Unit = {
     assert(Source.fromFile(path).getLines.toList
@@ -107,5 +109,17 @@ class QueryExecutionSuite extends SharedSQLContext {
       })
     val error = intercept[Error](qe.toString)
     assert(error.getMessage.contains("error"))
+  }
+
+  test("toString() tree depth") {
+    import testImplicits._
+
+    val s = Seq(Simple("a", 1), Simple("b", 3), Simple("c", 4))
+    val ds = (1 until 30).foldLeft(s.toDF()) { case (newDs, _) =>
+      newDs.join(s.toDF(), "a")
+    }
+
+    val nLines = ds.queryExecution.optimizedPlan.toString.split("\n").length
+    assert(nLines < 30)
   }
 }

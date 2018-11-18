@@ -190,13 +190,23 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   }
 
   override def toString: String = withRedaction {
-    val writer = new StringBuilderWriter()
-    try {
-      writePlans(writer)
-      writer.toString
-    } finally {
-      writer.close()
-    }
+    def output = Utils.truncatedString(
+      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
+    val analyzedPlan = Seq(
+      stringOrError(output),
+      stringOrError(analyzed.treeString(verbose = true))
+    ).filter(_.nonEmpty).mkString("\n")
+
+    val builder = new StringBuilder
+    builder.append("== Parsed Logical Plan ==\n")
+    builder.append(stringOrError(logical.treeString(verbose = true)))
+    builder.append("== Analyzed Logical Plan ==\n")
+    builder.append(analyzedPlan)
+    builder.append("== Optimized Logical Plan ==\n")
+    builder.append(stringOrError(optimizedPlan.treeString(verbose = true)))
+    builder.append("== Physical Plan ==\n")
+    builder.append(stringOrError(executedPlan.treeString(verbose = true)))
+    builder.toString
   }
 
   def stringWithStats: String = withRedaction {
