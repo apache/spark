@@ -452,6 +452,7 @@ pyspark_ml = Module(
         "python/pyspark/ml/"
     ],
     python_test_goals=[
+        # doctests
         "pyspark.ml.classification",
         "pyspark.ml.clustering",
         "pyspark.ml.evaluation",
@@ -463,7 +464,20 @@ pyspark_ml = Module(
         "pyspark.ml.regression",
         "pyspark.ml.stat",
         "pyspark.ml.tuning",
-        "pyspark.ml.tests",
+        # unittests
+        "pyspark.ml.tests.test_algorithms",
+        "pyspark.ml.tests.test_base",
+        "pyspark.ml.tests.test_evaluation",
+        "pyspark.ml.tests.test_feature",
+        "pyspark.ml.tests.test_image",
+        "pyspark.ml.tests.test_linalg",
+        "pyspark.ml.tests.test_param",
+        "pyspark.ml.tests.test_persistence",
+        "pyspark.ml.tests.test_pipeline",
+        "pyspark.ml.tests.test_stat",
+        "pyspark.ml.tests.test_training_summary",
+        "pyspark.ml.tests.test_tuning",
+        "pyspark.ml.tests.test_wrapper",
     ],
     blacklisted_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
