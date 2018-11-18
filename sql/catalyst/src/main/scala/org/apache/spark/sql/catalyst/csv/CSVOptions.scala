@@ -192,6 +192,19 @@ class CSVOptions(
    */
   val emptyValueInWrite = emptyValue.getOrElse("\"\"")
 
+  /**
+   * A string between two consecutive JSON records.
+   */
+  val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
+    require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
+    sep
+  }
+
+  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
+    lineSep.getBytes("UTF-8")
+  }
+  val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -216,6 +229,7 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
+    lineSeparatorInRead.foreach(sep => format.setLineSeparator(sep.map(_.toChar)))
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
@@ -227,7 +241,10 @@ class CSVOptions(
     settings.setEmptyValue(emptyValueInRead)
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
-    settings.setLineSeparatorDetectionEnabled(multiLine == true)
+    settings.setLineSeparatorDetectionEnabled(lineSeparatorInRead.isEmpty && multiLine)
+    lineSeparatorInRead.foreach { _ =>
+      settings.setNormalizeLineEndingsWithinQuotes(!multiLine)
+    }
 
     settings
   }
