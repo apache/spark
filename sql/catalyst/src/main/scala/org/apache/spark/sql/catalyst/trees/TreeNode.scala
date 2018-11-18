@@ -484,9 +484,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Log
   }
 
 	def treeString(
-		              writer: Writer,
-		              verbose: Boolean,
-		              addSuffix: Boolean): Unit = {
+		writer: Writer,
+		verbose: Boolean,
+		addSuffix: Boolean): Unit = {
 		treeString(writer, verbose, addSuffix, TreeNode.maxTreeToStringDepth)
 	}
 
@@ -498,7 +498,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Log
     generateTreeString(0, Nil, writer, verbose, "", addSuffix, maxDepth)
   }
 
-	/**
+  /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
    * The numbers can be used with [[TreeNode.apply]] to easily access specific subtrees.
    *
@@ -599,7 +599,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Log
 	  }
 	  else {
 		  if (TreeNode.treeDepthWarningPrinted.compareAndSet(false, true)) {
-			  logWarn(
+			  logWarning(
 				  "Truncated the string representation of a plan since it was nested too deeply. " +
 					  "This behavior can be adjusted by setting 'spark.debug.maxToStringTreeDepth' in " +
 					  "SparkEnv.conf.")
