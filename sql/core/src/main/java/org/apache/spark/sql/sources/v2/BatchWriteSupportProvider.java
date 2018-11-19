@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources.v2;
 
 import java.util.Optional;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.sources.v2.writer.BatchWriteSupport;
 import org.apache.spark.sql.types.StructType;
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType;
  * This interface is used to create {@link BatchWriteSupport} instances when end users run
  * {@code Dataset.write.format(...).option(...).save()}.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface BatchWriteSupportProvider extends DataSourceV2 {
 
   /**

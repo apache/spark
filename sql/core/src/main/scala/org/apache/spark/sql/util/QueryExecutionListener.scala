@@ -19,7 +19,7 @@ package org.apache.spark.sql.util
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
+import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.SparkSession
@@ -36,7 +36,7 @@ import org.apache.spark.util.{ListenerBus, Utils}
  * multiple different threads.
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 trait QueryExecutionListener {
 
   /**
@@ -73,7 +73,7 @@ trait QueryExecutionListener {
  * Manager for [[QueryExecutionListener]]. See `org.apache.spark.sql.SQLContext.listenerManager`.
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 // The `session` is used to indicate which session carries this listener manager, and we only
 // catch SQL executions which are launched by the same session.
 // The `loadExtensions` flag is used to indicate whether we should load the pre-defined,
