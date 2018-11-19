@@ -27,6 +27,7 @@ import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.memory.TestMemoryConsumer;
 import org.apache.spark.memory.TestMemoryManager;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -178,8 +179,8 @@ public class UnsafeInMemorySorterSuite {
     testMemoryManager.markExecutionAsOutOfMemoryOnce();
     try {
       sorter.reset();
-      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
-    } catch (OutOfMemoryError oom) {
+      fail("expected SparkOutOfMemoryError but it seems operation surprisingly succeeded");
+    } catch (SparkOutOfMemoryError oom) {
       // as expected
     }
     // [SPARK-21907] this failed on NPE at
