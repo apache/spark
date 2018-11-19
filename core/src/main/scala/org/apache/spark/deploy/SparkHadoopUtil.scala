@@ -18,10 +18,9 @@
 package org.apache.spark.deploy
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
-import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Comparator, Date, Locale}
+import java.util.{Arrays, Date, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -38,17 +37,13 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
- * :: DeveloperApi ::
  * Contains util methods to interact with Hadoop from Spark.
  */
-@DeveloperApi
-class SparkHadoopUtil extends Logging {
+private[spark] class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
@@ -274,11 +269,10 @@ class SparkHadoopUtil extends Logging {
             name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
           }
         })
-      Arrays.sort(fileStatuses, new Comparator[FileStatus] {
-        override def compare(o1: FileStatus, o2: FileStatus): Int = {
+      Arrays.sort(fileStatuses,
+        (o1: FileStatus, o2: FileStatus) => {
           Longs.compare(o1.getModificationTime, o2.getModificationTime)
-        }
-      })
+        })
       fileStatuses
     } catch {
       case NonFatal(e) =>
@@ -388,7 +382,7 @@ class SparkHadoopUtil extends Logging {
 
 }
 
-object SparkHadoopUtil {
+private[spark] object SparkHadoopUtil {
 
   private lazy val instance = new SparkHadoopUtil
 
