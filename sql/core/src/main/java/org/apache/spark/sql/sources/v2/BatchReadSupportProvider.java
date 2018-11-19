@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils;
 import org.apache.spark.sql.sources.v2.reader.BatchReadSupport;
 import org.apache.spark.sql.types.StructType;
@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.StructType;
  * This interface is used to create {@link BatchReadSupport} instances when end users run
  * {@code SparkSession.read.format(...).option(...).load()}.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface BatchReadSupportProvider extends DataSourceV2 {
 
   /**

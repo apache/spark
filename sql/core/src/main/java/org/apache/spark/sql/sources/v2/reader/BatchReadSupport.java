@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * An interface that defines how to load the data from data source for batch processing.
@@ -29,7 +29,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * {@link ScanConfig}. The {@link ScanConfig} will be used to create input partitions and reader
  * factory to scan data from the data source with a Spark job.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface BatchReadSupport extends ReadSupport {
 
   /**

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.reader.partitioning;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.reader.InputPartition;
 import org.apache.spark.sql.sources.v2.reader.ScanConfig;
 import org.apache.spark.sql.sources.v2.reader.SupportsReportPartitioning;
@@ -28,7 +28,7 @@ import org.apache.spark.sql.sources.v2.reader.SupportsReportPartitioning;
  * like a snapshot. Once created, it should be deterministic and always report the same number of
  * partitions and the same "satisfy" result for a certain distribution.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface Partitioning {
 
   /**

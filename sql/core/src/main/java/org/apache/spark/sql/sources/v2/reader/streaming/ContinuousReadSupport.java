@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 import org.apache.spark.sql.sources.v2.reader.InputPartition;
 import org.apache.spark.sql.sources.v2.reader.ScanConfig;
@@ -36,7 +36,7 @@ import org.apache.spark.sql.sources.v2.reader.ScanConfigBuilder;
  * {@link #stop()} will be called when the streaming execution is completed. Note that a single
  * query may have multiple executions due to restart or failure recovery.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface ContinuousReadSupport extends StreamingReadSupport, BaseStreamingSource {
 
   /**

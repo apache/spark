@@ -24,10 +24,10 @@ import scala.util.control.NonFatal
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.util.Utils
 
 /**
@@ -95,7 +95,7 @@ import org.apache.spark.util.Utils
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
   /** No-arg constructor for kryo. */
@@ -422,7 +422,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object StructType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = new StructType

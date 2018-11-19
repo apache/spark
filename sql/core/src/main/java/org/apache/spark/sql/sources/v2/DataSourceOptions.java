@@ -26,7 +26,7 @@ import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * An immutable string-to-string map in which keys are case-insensitive. This is used to represent
@@ -73,7 +73,7 @@ import org.apache.spark.annotation.InterfaceStability;
  *   </tr>
  * </table>
  */
-@InterfaceStability.Evolving
+@Evolving
 public class DataSourceOptions {
   private final Map<String, String> keyLowerCasedMap;
 

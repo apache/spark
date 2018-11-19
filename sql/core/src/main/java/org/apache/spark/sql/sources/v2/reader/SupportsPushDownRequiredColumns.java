@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.StructType;
  * interface to push down required columns to the data source and only read these columns during
  * scan to reduce the size of the data to be read.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface SupportsPushDownRequiredColumns extends ScanConfigBuilder {
 
   /**

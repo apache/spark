@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLo
  * Builder that produces a Hive-aware `SessionState`.
  */
 @Experimental
-@InterfaceStability.Unstable
+@Unstable
 class HiveSessionStateBuilder(session: SparkSession, parentState: Option[SessionState] = None)
   extends BaseSessionStateBuilder(session, parentState) {
 
