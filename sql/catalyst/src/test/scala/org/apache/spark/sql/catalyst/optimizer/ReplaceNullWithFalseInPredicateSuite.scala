@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -300,42 +300,23 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   test("replace nulls in lambda function of ArrayFilter") {
-    val cond = GreaterThan(UnresolvedAttribute("e"), Literal(0))
-    val lambda1 = LambdaFunction(
-      function = If(cond, Literal(null, BooleanType), TrueLiteral),
-      arguments = Seq(UnresolvedAttribute("e")))
-    val lambda2 = LambdaFunction(
-      function = If(cond, FalseLiteral, TrueLiteral),
-      arguments = Seq(UnresolvedAttribute("e")))
-    testProjection(
-      originalExpr = ArrayFilter('a, lambda1) as 'x,
-      expectedExpr = ArrayFilter('a, lambda2) as 'x)
+    testHigherOrderFunc('a, ArrayFilter, Seq('e))
   }
 
   test("replace nulls in lambda function of ArrayExists") {
-    val cond = GreaterThan(UnresolvedAttribute("e"), Literal(0))
-    val lambda1 = LambdaFunction(
-      function = If(cond, Literal(null, BooleanType), TrueLiteral),
-      arguments = Seq(UnresolvedAttribute("e")))
-    val lambda2 = LambdaFunction(
-      function = If(cond, FalseLiteral, TrueLiteral),
-      arguments = Seq(UnresolvedAttribute("e")))
-    testProjection(
-      originalExpr = ArrayExists('a, lambda1) as 'x,
-      expectedExpr = ArrayExists('a, lambda2) as 'x)
+    testHigherOrderFunc('a, ArrayExists, Seq('e))
   }
 
   test("replace nulls in lambda function of MapFilter") {
-    val cond = GreaterThan(UnresolvedAttribute("k"), Literal(0))
-    val lambda1 = LambdaFunction(
-      function = If(cond, Literal(null, BooleanType), TrueLiteral),
-      arguments = Seq(UnresolvedAttribute("k"), UnresolvedAttribute("v")))
-    val lambda2 = LambdaFunction(
-      function = If(cond, FalseLiteral, TrueLiteral),
-      arguments = Seq(UnresolvedAttribute("k"), UnresolvedAttribute("v")))
-    testProjection(
-      originalExpr = MapFilter('m, lambda1) as 'x,
-      expectedExpr = MapFilter('m, lambda2) as 'x)
+    testHigherOrderFunc('m, MapFilter, Seq('k, 'v))
+  }
+
+  test("inability to replace nulls in arbitrary higher-order function") {
+    val lambdaFunc = LambdaFunction(
+      function = If('e > 0, Literal(null, BooleanType), TrueLiteral),
+      arguments = Seq[NamedExpression]('e))
+    val column = ArrayTransform('a, lambdaFunc)
+    testProjection(originalExpr = column, expectedExpr = column)
   }
 
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {
@@ -348,6 +329,25 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
 
   private def testProjection(originalExpr: Expression, expectedExpr: Expression): Unit = {
     test((rel, exp) => rel.select(exp), originalExpr, expectedExpr)
+  }
+
+  private def testHigherOrderFunc(
+      argument: Expression,
+      createExpr: (Expression, Expression) => Expression,
+      lambdaArgs: Seq[NamedExpression]): Unit = {
+    val condArg = lambdaArgs.last
+    // the lambda body is: if(arg > 0, null, true)
+    val cond = GreaterThan(condArg, Literal(0))
+    val lambda1 = LambdaFunction(
+      function = If(cond, Literal(null, BooleanType), TrueLiteral),
+      arguments = lambdaArgs)
+    // the optimized lambda body is: if(arg > 0, false, true)
+    val lambda2 = LambdaFunction(
+      function = If(cond, FalseLiteral, TrueLiteral),
+      arguments = lambdaArgs)
+    testProjection(
+      originalExpr = createExpr(argument, lambda1) as 'x,
+      expectedExpr = createExpr(argument, lambda2) as 'x)
   }
 
   private def test(
