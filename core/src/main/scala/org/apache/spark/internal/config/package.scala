@@ -576,7 +576,6 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("8k")
 
-
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
     .doc("Class names of listeners to add to SparkContext during initialization.")
     .stringConf

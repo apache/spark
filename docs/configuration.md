@@ -981,7 +981,6 @@ Apart from these, the following properties are also available, and may be useful
     This setting applied for the Spark History Server too.
   <td>
 </tr>
-
 </table>
 
 ### Compression and Serialization
