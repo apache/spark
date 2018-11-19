@@ -35,7 +35,8 @@ import org.apache.spark.storage.StorageLevel
  * Benchmark to measure read performance with Filter pushdown.
  * To run this benchmark:
  * {{{
- *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   1. without sbt: bin/spark-submit --class <this class>
+ *     --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
  *      Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
@@ -95,6 +96,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
   private def saveAsTable(df: DataFrame, dir: File, useDictionary: Boolean = false): Unit = {
     val orcPath = dir.getCanonicalPath + "/orc"
     val parquetPath = dir.getCanonicalPath + "/parquet"
+    val inMemoryTablePath = dir.getCanonicalPath + "inMemory"
 
     df.write.mode("overwrite")
       .option("orc.dictionary.key.threshold", if (useDictionary) 1.0 else 0.8)
@@ -106,7 +108,9 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       .option("parquet.block.size", blockSize).parquet(parquetPath)
     spark.read.parquet(parquetPath).createOrReplaceTempView("parquetTable")
 
-    df.persist(StorageLevel.DISK_ONLY).createOrReplaceTempView("inMemoryTable")
+    df.write.mode("overwrite").save(inMemoryTablePath)
+    spark.read.load(inMemoryTablePath).persist(StorageLevel.DISK_ONLY)
+      .createOrReplaceTempView("inMemoryTable")
   }
 
   def filterPushDownBenchmark(
