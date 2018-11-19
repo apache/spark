@@ -138,7 +138,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("test NULL avro type") {
     withTempPath { dir =>
       val fields =
-        Seq(new Field("null", Schema.create(Type.NULL), "doc", null)).asJava
+        Seq(new Field("null", Schema.create(Type.NULL), "doc", null.asInstanceOf[AnyVal])).asJava
       val schema = Schema.createRecord("name", "docs", "namespace", false)
       schema.setFields(fields)
       val datumWriter = new GenericDatumWriter[GenericRecord](schema)
@@ -161,7 +161,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val avroSchema: Schema = {
         val union =
           Schema.createUnion(List(Schema.create(Type.INT), Schema.create(Type.LONG)).asJava)
-        val fields = Seq(new Field("field1", union, "doc", null)).asJava
+        val fields = Seq(new Field("field1", union, "doc", null.asInstanceOf[AnyVal])).asJava
         val schema = Schema.createRecord("name", "docs", "namespace", false)
         schema.setFields(fields)
         schema
@@ -189,7 +189,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val avroSchema: Schema = {
         val union =
           Schema.createUnion(List(Schema.create(Type.FLOAT), Schema.create(Type.DOUBLE)).asJava)
-        val fields = Seq(new Field("field1", union, "doc", null)).asJava
+        val fields = Seq(new Field("field1", union, "doc", null.asInstanceOf[AnyVal])).asJava
         val schema = Schema.createRecord("name", "docs", "namespace", false)
         schema.setFields(fields)
         schema
@@ -221,7 +221,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
             Schema.create(Type.NULL)
           ).asJava
         )
-        val fields = Seq(new Field("field1", union, "doc", null)).asJava
+        val fields = Seq(new Field("field1", union, "doc", null.asInstanceOf[AnyVal])).asJava
         val schema = Schema.createRecord("name", "docs", "namespace", false)
         schema.setFields(fields)
         schema
@@ -247,7 +247,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("Union of a single type") {
     withTempPath { dir =>
       val UnionOfOne = Schema.createUnion(List(Schema.create(Type.INT)).asJava)
-      val fields = Seq(new Field("field1", UnionOfOne, "doc", null)).asJava
+      val fields = Seq(new Field("field1", UnionOfOne, "doc", null.asInstanceOf[AnyVal])).asJava
       val schema = Schema.createRecord("name", "docs", "namespace", false)
       schema.setFields(fields)
 
@@ -274,10 +274,10 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val complexUnionType = Schema.createUnion(
         List(Schema.create(Type.INT), Schema.create(Type.STRING), fixedSchema, enumSchema).asJava)
       val fields = Seq(
-        new Field("field1", complexUnionType, "doc", null),
-        new Field("field2", complexUnionType, "doc", null),
-        new Field("field3", complexUnionType, "doc", null),
-        new Field("field4", complexUnionType, "doc", null)
+        new Field("field1", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
+        new Field("field2", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
+        new Field("field3", complexUnionType, "doc", null.asInstanceOf[AnyVal]),
+        new Field("field4", complexUnionType, "doc", null.asInstanceOf[AnyVal])
       ).asJava
       val schema = Schema.createRecord("name", "docs", "namespace", false)
       schema.setFields(fields)
@@ -941,7 +941,7 @@ class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val avroArrayType = resolveNullable(Schema.createArray(avroType), nullable)
       val avroMapType = resolveNullable(Schema.createMap(avroType), nullable)
       val name = "foo"
-      val avroField = new Field(name, avroType, "", null)
+      val avroField = new Field(name, avroType, "", null.asInstanceOf[AnyVal])
       val recordSchema = Schema.createRecord("name", "doc", "space", true, Seq(avroField).asJava)
       val avroRecordType = resolveNullable(recordSchema, nullable)
 

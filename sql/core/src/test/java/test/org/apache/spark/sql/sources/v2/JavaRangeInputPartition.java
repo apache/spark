@@ -15,26 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.feature
+package test.org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.sql.sources.v2.reader.InputPartition;
 
-/**
- *
- * Class that represents the features and label of a data point.
- *
- * @param label Label for this data point.
- * @param features List of features for this data point.
- */
-@Since("2.0.0")
-case class LabeledPoint(@Since("2.0.0") label: Double, @Since("2.0.0") features: Vector) {
+class JavaRangeInputPartition implements InputPartition {
+  int start;
+  int end;
 
-  def getLabel: Double = label
-
-  def getFeatures: Vector = features
-
-  override def toString: String = {
-    s"($label,$features)"
+  JavaRangeInputPartition(int start, int end) {
+    this.start = start;
+    this.end = end;
   }
 }
