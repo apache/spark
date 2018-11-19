@@ -17,7 +17,11 @@
 
 package org.apache.spark.internal
 
-import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.JavaConverters._
+
+import org.apache.log4j._
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
@@ -143,13 +147,25 @@ trait Logging {
         // overriding the root logger's config if they're different.
         val replLogger = LogManager.getLogger(logName)
         val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
+        // Update the consoleAppender threshold to replLevel
         if (replLevel != rootLogger.getEffectiveLevel()) {
           if (!silent) {
             System.err.printf("Setting default log level to \"%s\".\n", replLevel)
             System.err.println("To adjust logging level use sc.setLogLevel(newLevel). " +
               "For SparkR, use setLogLevel(newLevel).")
           }
-          rootLogger.setLevel(replLevel)
+          rootLogger.getAllAppenders().asScala.foreach {
+            case ca: ConsoleAppender =>
+              Option(ca.getThreshold()) match {
+                case Some(t) =>
+                  Logging.consoleAppenderToThreshold.put(ca, t)
+                  if (!t.isGreaterOrEqual(replLevel)) {
+                    ca.setThreshold(replLevel)
+                  }
+                case None => ca.setThreshold(replLevel)
+              }
+            case _ => // no-op
+          }
         }
       }
       // scalastyle:on println
@@ -166,6 +182,7 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
+  private val consoleAppenderToThreshold = new ConcurrentHashMap[ConsoleAppender, Priority]()
 
   val initLock = new Object()
   try {
@@ -192,7 +209,13 @@ private[spark] object Logging {
         defaultSparkLog4jConfig = false
         LogManager.resetConfiguration()
       } else {
-        LogManager.getRootLogger().setLevel(defaultRootLevel)
+        val rootLogger = LogManager.getRootLogger()
+        rootLogger.setLevel(defaultRootLevel)
+        rootLogger.getAllAppenders().asScala.foreach {
+          case ca: ConsoleAppender =>
+            ca.setThreshold(consoleAppenderToThreshold.get(ca))
+          case _ => // no-op
+        }
       }
     }
     this.initialized = false

@@ -58,5 +58,12 @@ abstract class BenchmarkBase {
         o.close()
       }
     }
+
+    afterAll()
   }
+
+  /**
+   * Any shutdown code to ensure a clean shutdown
+   */
+  def afterAll(): Unit = {}
 }

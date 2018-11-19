@@ -821,3 +821,14 @@ should correspond to the super user who is running the Spark History Server.
 This will allow all users to write to the directory but will prevent unprivileged users from
 reading, removing or renaming a file unless they own it. The event log files will be created by
 Spark with permissions such that only the user and group have read and write access.
+
+# Persisting driver logs in client mode
+
+If your applications persist driver logs in client mode by enabling `spark.driver.log.persistToDfs.enabled`,
+the directory where the driver logs go (`spark.driver.log.dfsDir`) should be manually created with proper
+permissions. To secure the log files, the directory permissions should be set to `drwxrwxrwxt`. The owner
+and group of the directory should correspond to the super user who is running the Spark History Server.
+
+This will allow all users to write to the directory but will prevent unprivileged users from
+reading, removing or renaming a file unless they own it. The driver log files will be created by
+Spark with permissions such that only the user and group have read and write access.

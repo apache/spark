@@ -194,8 +194,10 @@ public class TaskMemoryManager {
             throw new RuntimeException(e.getMessage());
           } catch (IOException e) {
             logger.error("error while calling spill() on " + c, e);
+            // checkstyle.off: RegexpSinglelineJava
             throw new SparkOutOfMemoryError("error while calling spill() on " + c + " : "
               + e.getMessage());
+            // checkstyle.on: RegexpSinglelineJava
           }
         }
       }
@@ -215,8 +217,10 @@ public class TaskMemoryManager {
           throw new RuntimeException(e.getMessage());
         } catch (IOException e) {
           logger.error("error while calling spill() on " + consumer, e);
+          // checkstyle.off: RegexpSinglelineJava
           throw new SparkOutOfMemoryError("error while calling spill() on " + consumer + " : "
             + e.getMessage());
+          // checkstyle.on: RegexpSinglelineJava
         }
       }
 

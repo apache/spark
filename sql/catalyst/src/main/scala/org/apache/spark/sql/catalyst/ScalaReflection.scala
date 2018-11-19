@@ -357,7 +357,8 @@ object ScalaReflection extends ScalaReflection {
         )
 
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
-        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().
+          getConstructor().newInstance()
         val obj = NewInstance(
           udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
           Nil,
@@ -365,8 +366,8 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
 
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
-        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
-          .asInstanceOf[UserDefinedType[_]]
+        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.getConstructor().
+          newInstance().asInstanceOf[UserDefinedType[_]]
         val obj = NewInstance(
           udt.getClass,
           Nil,
@@ -601,7 +602,7 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t)
-          .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+          .getAnnotation(classOf[SQLUserDefinedType]).udt().getConstructor().newInstance()
         val obj = NewInstance(
           udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
           Nil,
@@ -609,8 +610,8 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "serialize", udt, inputObject :: Nil)
 
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
-        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
-          .asInstanceOf[UserDefinedType[_]]
+        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.getConstructor().
+          newInstance().asInstanceOf[UserDefinedType[_]]
         val obj = NewInstance(
           udt.getClass,
           Nil,
@@ -721,11 +722,12 @@ object ScalaReflection extends ScalaReflection {
       // Null type would wrongly match the first of them, which is Option as of now
       case t if t <:< definitions.NullTpe => Schema(NullType, nullable = true)
       case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
-        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().
+          getConstructor().newInstance()
         Schema(udt, nullable = true)
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
-        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
-          .asInstanceOf[UserDefinedType[_]]
+        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.getConstructor().
+          newInstance().asInstanceOf[UserDefinedType[_]]
         Schema(udt, nullable = true)
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t

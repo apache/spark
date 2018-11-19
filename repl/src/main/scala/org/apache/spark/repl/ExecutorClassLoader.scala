@@ -22,8 +22,8 @@ import java.net.{URI, URL, URLEncoder}
 import java.nio.channels.Channels
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.xbean.asm6._
-import org.apache.xbean.asm6.Opcodes._
+import org.apache.xbean.asm7._
+import org.apache.xbean.asm7.Opcodes._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -187,7 +187,7 @@ class ExecutorClassLoader(
 }
 
 class ConstructorCleaner(className: String, cv: ClassVisitor)
-extends ClassVisitor(ASM6, cv) {
+extends ClassVisitor(ASM7, cv) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     val mv = cv.visitMethod(access, name, desc, sig, exceptions)
