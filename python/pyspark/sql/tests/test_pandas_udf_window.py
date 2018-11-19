@@ -294,13 +294,13 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         result1 = df.withColumn('mean_v', mean_udf(plus_one(df['v'])).over(w1)) \
             .withColumn('count_v', count_udf(df['v']).over(w2)) \
             .withColumn('max_v',  max_udf(df['v']).over(w2)) \
-            .withColumn('min_v', min_udf(df['v']).over(w1)) \
- \
+            .withColumn('min_v', min_udf(df['v']).over(w1))
+
         expected1 = df.withColumn('mean_v', mean(plus_one(df['v'])).over(w1)) \
             .withColumn('count_v', count(df['v']).over(w2)) \
             .withColumn('max_v', max(df['v']).over(w2)) \
-            .withColumn('min_v', min(df['v']).over(w1)) \
- \
+            .withColumn('min_v', min(df['v']).over(w1))
+
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
     def test_growing_window(self):
