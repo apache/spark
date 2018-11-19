@@ -514,6 +514,10 @@ case class TransformKeys(
 
   override def dataType: DataType = MapType(function.dataType, valueType, valueContainsNull)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    TypeUtils.checkForMapKeyType(function.dataType)
+  }
+
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): TransformKeys = {
     copy(function = f(function, (keyType, false) :: (valueType, valueContainsNull) :: Nil))
   }
