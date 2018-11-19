@@ -42,9 +42,6 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   private val dep = handle.dependency
 
-  private val mapSideIndeterminate =
-    dep.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
-
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
     val wrappedStreams = new ShuffleBlockFetcherIterator(
@@ -52,7 +49,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
       blockManager.shuffleClient,
       blockManager,
       mapOutputTracker.getMapSizesByExecutorId(
-        handle.shuffleId, startPartition, endPartition, mapSideIndeterminate),
+        handle.shuffleId, startPartition, endPartition, dep.mapSideIndeterminate),
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.get(config.REDUCER_MAX_SIZE_IN_FLIGHT) * 1024 * 1024,

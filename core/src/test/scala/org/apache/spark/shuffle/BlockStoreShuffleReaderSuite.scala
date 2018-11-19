@@ -25,7 +25,6 @@ import org.mockito.Mockito.{mock, when}
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.{BlockManager, BlockManagerId, ShuffleBlockId}
 
@@ -116,12 +115,9 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     // Create a mocked shuffle handle to pass into HashShuffleReader.
     val shuffleHandle = {
       val dependency = mock(classOf[ShuffleDependency[Int, Int, Int]])
-      val rdd = mock(classOf[RDD[Product2[Int, Int]]])
-      when(rdd.outputDeterministicLevel).thenReturn(DeterministicLevel.DETERMINATE)
       when(dependency.serializer).thenReturn(serializer)
       when(dependency.aggregator).thenReturn(None)
       when(dependency.keyOrdering).thenReturn(None)
-      when(dependency.rdd).thenReturn(rdd)
       new BaseShuffleHandle(shuffleId, numMaps, dependency)
     }
 
