@@ -96,7 +96,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
   private def saveAsTable(df: DataFrame, dir: File, useDictionary: Boolean = false): Unit = {
     val orcPath = dir.getCanonicalPath + "/orc"
     val parquetPath = dir.getCanonicalPath + "/parquet"
-    val inMemoryTablePath = dir.getCanonicalPath + "inMemory"
+    val inMemoryTablePath = dir.getCanonicalPath + "/inMemory"
 
     df.write.mode("overwrite")
       .option("orc.dictionary.key.threshold", if (useDictionary) 1.0 else 0.8)
@@ -109,8 +109,8 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     spark.read.parquet(parquetPath).createOrReplaceTempView("parquetTable")
 
     df.write.mode("overwrite").save(inMemoryTablePath)
-    spark.read.load(inMemoryTablePath).persist(StorageLevel.DISK_ONLY)
-      .createOrReplaceTempView("inMemoryTable")
+    spark.read.load(inMemoryTablePath)
+      .persist(StorageLevel.DISK_ONLY).createOrReplaceTempView("inMemoryTable")
   }
 
   def filterPushDownBenchmark(
