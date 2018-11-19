@@ -67,7 +67,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(dependency.partitioner).thenReturn(new HashPartitioner(7))
     when(dependency.serializer).thenReturn(new JavaSerializer(conf))
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
-    when(blockResolver.getDataFile(0, 0)).thenReturn(outputFile)
+    when(taskContext.getIndeterminateAttemptId).thenReturn(None)
+    when(blockResolver.getDataFile(0, 0, None)).thenReturn(outputFile)
     doAnswer { (invocationOnMock: InvocationOnMock) =>
       val tmp = invocationOnMock.getArguments()(3).asInstanceOf[File]
       if (tmp != null) {
@@ -76,7 +77,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       }
       null
     }.when(blockResolver)
-      .writeIndexFileAndCommit(anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File]))
+      .writeIndexFileAndCommit(
+        anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File]), any(classOf[Option[Int]]))
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(blockManager.getDiskWriter(
       any[BlockId],

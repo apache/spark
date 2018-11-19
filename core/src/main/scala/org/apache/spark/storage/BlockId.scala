@@ -51,19 +51,49 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
 
 // Format of the shuffle block ids (including data and index) should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
+// IndeterminateAttemptId is only set when the ShuffleMapStage's [[DeterministicLevel]] is
+// INDETERMINATE and fetch fail triggered whole map stage rerun.
 @DeveloperApi
-case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
-  override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
+case class ShuffleBlockId(
+    shuffleId: Int,
+    mapId: Int,
+    reduceId: Int,
+    indeterminateAttemptId: Option[Int] = None)
+  extends BlockId {
+  override def name: String = {
+    val nameStr = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
+    if (indeterminateAttemptId.isEmpty) nameStr else nameStr + "_" + indeterminateAttemptId.get
+  }
 }
 
 @DeveloperApi
-case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
-  override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"
+case class ShuffleDataBlockId(
+    shuffleId: Int,
+    mapId: Int,
+    reduceId: Int,
+    indeterminateAttemptId: Option[Int] = None)
+  extends BlockId {
+  override def name: String = {
+    val nameStr = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
+    val nameStrWithIndeterminateAttempt =
+      if (indeterminateAttemptId.isEmpty) nameStr else nameStr + "_" + indeterminateAttemptId.get
+    nameStrWithIndeterminateAttempt + ".data"
+  }
 }
 
 @DeveloperApi
-case class ShuffleIndexBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
-  override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
+case class ShuffleIndexBlockId(
+    shuffleId: Int,
+    mapId: Int,
+    reduceId: Int,
+    indeterminateAttemptId: Option[Int] = None)
+  extends BlockId {
+  override def name: String = {
+    val nameStr = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
+    val nameStrWithIndeterminateAttempt =
+      if (indeterminateAttemptId.isEmpty) nameStr else nameStr + "_" + indeterminateAttemptId.get
+    nameStrWithIndeterminateAttempt + ".index"
+  }
 }
 
 @DeveloperApi
@@ -106,6 +136,10 @@ object BlockId {
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
+  // the extend shuffle/data/index is only used when INDETERMINATE stage rerun
+  val EXTEND_SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
+  val EXTEND_SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+).data".r
+  val EXTEND_SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+).index".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
@@ -122,6 +156,12 @@ object BlockId {
       ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
     case SHUFFLE_INDEX(shuffleId, mapId, reduceId) =>
       ShuffleIndexBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
+    case EXTEND_SHUFFLE(shuffleId, mapId, reduceId, stageAttemptId) =>
+      ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(stageAttemptId.toInt))
+    case EXTEND_SHUFFLE_DATA(shuffleId, mapId, reduceId, stageAttemptId) =>
+      ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(stageAttemptId.toInt))
+    case EXTEND_SHUFFLE_INDEX(shuffleId, mapId, reduceId, stageAttemptId) =>
+      ShuffleIndexBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt, Some(stageAttemptId.toInt))
     case BROADCAST(broadcastId, field) =>
       BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
     case TASKRESULT(taskId) =>

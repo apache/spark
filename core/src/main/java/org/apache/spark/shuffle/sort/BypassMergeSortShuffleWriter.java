@@ -83,6 +83,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final int mapId;
   private final Serializer serializer;
   private final IndexShuffleBlockResolver shuffleBlockResolver;
+  private final Option<Object> indeterminateAttemptId;
 
   /** Array of file writers, one for each partition */
   private DiskBlockObjectWriter[] partitionWriters;
@@ -116,6 +117,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleBlockResolver = shuffleBlockResolver;
+    this.indeterminateAttemptId = taskContext.getIndeterminateAttemptId();
   }
 
   @Override
@@ -123,7 +125,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     assert (partitionWriters == null);
     if (!records.hasNext()) {
       partitionLengths = new long[numPartitions];
-      shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, null);
+      shuffleBlockResolver.writeIndexFileAndCommit(
+        shuffleId, mapId, partitionLengths, null, indeterminateAttemptId);
       mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
       return;
     }
@@ -156,11 +159,12 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
 
-    File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    File output = shuffleBlockResolver.getDataFile(shuffleId, mapId, indeterminateAttemptId);
     File tmp = Utils.tempFileWith(output);
     try {
       partitionLengths = writePartitionedFile(tmp);
-      shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
+      shuffleBlockResolver.writeIndexFileAndCommit(
+        shuffleId, mapId, partitionLengths, tmp, indeterminateAttemptId);
     } finally {
       if (tmp.exists() && !tmp.delete()) {
         logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());

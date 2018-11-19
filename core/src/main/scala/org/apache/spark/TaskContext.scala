@@ -223,9 +223,20 @@ abstract class TaskContext extends Serializable {
   /** Marks the task as completed and triggers the completion listeners. */
   private[spark] def markTaskCompleted(error: Option[Throwable]): Unit
 
+  /** Marks the task as indeterminate task. */
+  private[spark] def markAsIndeterminate(): Unit
+
   /** Optionally returns the stored fetch failure in the task. */
   private[spark] def fetchFailed: Option[FetchFailedException]
 
   /** Gets local properties set upstream in the driver. */
   private[spark] def getLocalProperties: Properties
+
+  /**
+   * Get the indeterminate stage attempt id, it will return None in following two case:
+   * 1. The task is determinate.
+   * 2. The task is indeterminate but no retry occurred.
+   * Otherwise it return the stage attempt number.
+   */
+  private[spark] def getIndeterminateAttemptId: Option[Int]
 }

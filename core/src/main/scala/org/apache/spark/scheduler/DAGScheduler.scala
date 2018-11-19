@@ -1205,7 +1205,8 @@ private[spark] class DAGScheduler(
             stage.pendingPartitions += id
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
-              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier())
+              Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier(),
+              stage.isDeterminate())
           }
 
         case stage: ResultStage =>
@@ -1547,7 +1548,6 @@ private[spark] class DAGScheduler(
             }
             abortStage(failedStage, abortMessage, None)
           } else { // update failedStages and make sure a ResubmitFailedStages event is enqueued
-            // TODO: Cancel running tasks in the failed stage -- cf. SPARK-17064
             val noResubmitEnqueued = !failedStages.contains(failedStage)
             failedStages += failedStage
             failedStages += mapStage
@@ -1591,11 +1591,12 @@ private[spark] class DAGScheduler(
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
                     if (numMissingPartitions < mapStage.numTasks) {
-                      // TODO: support to rollback shuffle files.
-                      // Currently the shuffle writing is "first write wins", so we can't re-run a
-                      // shuffle map stage and overwrite existing shuffle files. We have to finish
-                      // SPARK-8029 first.
-                      abortStage(mapStage, generateErrorMessage(mapStage), None)
+                      // Mark all the map as broken in the map stage, to ensure retry all the
+                      // tasks on resubmitted stage attempt. Also mark this map stage as
+                      // indeterminate, will rerun all its task and generate new intermediate
+                      // shuffle file.
+                      mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
+                      mapStage.markAsInDeterminate()
                     }
 
                   case resultStage: ResultStage if resultStage.activeJob.isDefined =>

@@ -51,6 +51,7 @@ import org.apache.spark.util._
  * @param appAttemptId attempt id of the app this task belongs to
  * @param isBarrier whether this task belongs to a barrier stage. Spark must launch all the tasks
  *                  at the same time for a barrier stage.
+ * @param isDeterminate whether this task is determinate.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
@@ -63,7 +64,8 @@ private[spark] abstract class Task[T](
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
     val appAttemptId: Option[String] = None,
-    val isBarrier: Boolean = false) extends Serializable {
+    val isBarrier: Boolean = false,
+    val isDeterminate: Boolean = true) extends Serializable {
 
   @transient lazy val metrics: TaskMetrics =
     SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
@@ -98,6 +100,8 @@ private[spark] abstract class Task[T](
     } else {
       taskContext
     }
+
+    if (!isDeterminate) context.markAsIndeterminate()
 
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()

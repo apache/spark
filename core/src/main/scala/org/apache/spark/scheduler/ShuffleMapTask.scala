@@ -63,9 +63,10 @@ private[spark] class ShuffleMapTask(
     jobId: Option[Int] = None,
     appId: Option[String] = None,
     appAttemptId: Option[String] = None,
-    isBarrier: Boolean = false)
+    isBarrier: Boolean = false,
+    isDeterminate: Boolean = true)
   extends Task[MapStatus](stageId, stageAttemptId, partition.index, localProperties,
-    serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier)
+    serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier, isDeterminate)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */

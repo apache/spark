@@ -90,6 +90,48 @@ class BlockIdSuite extends SparkFunSuite {
     assertSame(id, BlockId(id.toString))
   }
 
+  test("extend shuffle") {
+    val id = ShuffleBlockId(1, 2, 3, Some(4))
+    assertSame(id, ShuffleBlockId(1, 2, 3, Some(4)))
+    assertDifferent(id, ShuffleBlockId(3, 2, 3, Some(5)))
+    assert(id.name === "shuffle_1_2_3_4")
+    assert(id.asRDDId === None)
+    assert(id.shuffleId === 1)
+    assert(id.mapId === 2)
+    assert(id.reduceId === 3)
+    assert(id.indeterminateAttemptId.get === 4)
+    assert(id.isShuffle)
+    assertSame(id, BlockId(id.toString))
+  }
+
+  test("extend shuffle data") {
+    val id = ShuffleDataBlockId(4, 5, 6, Some(7))
+    assertSame(id, ShuffleDataBlockId(4, 5, 6, Some(7)))
+    assertDifferent(id, ShuffleDataBlockId(6, 5, 6, Some(8)))
+    assert(id.name === "shuffle_4_5_6_7.data")
+    assert(id.asRDDId === None)
+    assert(id.shuffleId === 4)
+    assert(id.mapId === 5)
+    assert(id.reduceId === 6)
+    assert(id.indeterminateAttemptId.get === 7)
+    assert(!id.isShuffle)
+    assertSame(id, BlockId(id.toString))
+  }
+
+  test("extend shuffle index") {
+    val id = ShuffleIndexBlockId(7, 8, 9, Some(10))
+    assertSame(id, ShuffleIndexBlockId(7, 8, 9, Some(10)))
+    assertDifferent(id, ShuffleIndexBlockId(9, 8, 9, Some(11)))
+    assert(id.name === "shuffle_7_8_9_10.index")
+    assert(id.asRDDId === None)
+    assert(id.shuffleId === 7)
+    assert(id.mapId === 8)
+    assert(id.reduceId === 9)
+    assert(id.indeterminateAttemptId.get === 10)
+    assert(!id.isShuffle)
+    assertSame(id, BlockId(id.toString))
+  }
+
   test("broadcast") {
     val id = BroadcastBlockId(42)
     assertSame(id, BroadcastBlockId(42))

@@ -89,6 +89,9 @@ private[scheduler] abstract class Stage(
    */
   val failedAttemptIds = new HashSet[Int]
 
+  /** The identification of this stage is a determinate stage and being retried. */
+  private var determinate: Boolean = true
+
   private[scheduler] def clearFailures() : Unit = {
     failedAttemptIds.clear()
   }
@@ -116,4 +119,10 @@ private[scheduler] abstract class Stage(
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int]
+
+  def markAsInDeterminate(): Unit = {
+    determinate = false
+  }
+
+  def isDeterminate(): Boolean = determinate
 }

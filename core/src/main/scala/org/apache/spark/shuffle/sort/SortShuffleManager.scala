@@ -75,9 +75,10 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   }
 
   /**
-   * A mapping from shuffle ids to the number of mappers producing output for those shuffles.
+   * A mapping from shuffle ids to the tuple of number of mappers producing output and
+   * indeterminate stage attempt id for those shuffles.
    */
-  private[this] val numMapsForShuffle = new ConcurrentHashMap[Int, Int]()
+  private[this] val numMapsForShuffle = new ConcurrentHashMap[Int, (Int, Option[Int])]()
 
   override val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
 
@@ -128,7 +129,9 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
     numMapsForShuffle.putIfAbsent(
-      handle.shuffleId, handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
+      handle.shuffleId,
+      (handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps,
+        context.getIndeterminateAttemptId))
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
@@ -156,10 +159,11 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
-    Option(numMapsForShuffle.remove(shuffleId)).foreach { numMaps =>
-      (0 until numMaps).foreach { mapId =>
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId)
-      }
+    Option(numMapsForShuffle.remove(shuffleId)).foreach {
+      case (numMaps, indeterminateAttemptId) =>
+        (0 until numMaps).foreach { mapId =>
+          shuffleBlockResolver.removeDataByMap(shuffleId, mapId, indeterminateAttemptId)
+        }
     }
     true
   }
