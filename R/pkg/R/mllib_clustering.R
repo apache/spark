@@ -649,14 +649,15 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #' @note spark.assignClusters(SparkDataFrame) since 3.0.0
 setMethod("spark.assignClusters",
           signature(data = "SparkDataFrame"),
-          function(data, k = 2L, initMode = "random", maxIter = 20L, srcCol = "src",
-            dstCol = "dst", weightCol = NULL) {
+          function(data, k = 2L, initMode = c("random", "degree"), maxIter = 20L,
+             sourceCol = "src", destinationCol = "dst", weightCol = NULL) {
             if (!is.numeric(k) || k < 1) {
               stop("k should be a number with value >= 1.")
             }
             if (!is.integer(maxIter) || maxIter <= 0) {
               stop("maxIter should be a number with value > 0.")
             }
+            initMode <- match.arg(initMode)
             if (!is.null(weightCol) && weightCol == "") {
               weightCol <- NULL
             } else if (!is.null(weightCol)) {
@@ -664,9 +665,9 @@ setMethod("spark.assignClusters",
             }
             jobj <- callJStatic("org.apache.spark.ml.r.PowerIterationClusteringWrapper",
                                 "getPowerIterationClustering",
-                                as.integer(k), as.character(initMode),
-                                as.integer(maxIter), as.character(srcCol),
-                                as.character(dstCol), weightCol)
+                                as.integer(k), initMode,
+                                as.integer(maxIter), as.character(sourceCol),
+                                as.character(destinationCol), weightCol)
             object <- new("PowerIterationClustering", jobj = jobj)
             dataFrame(callJMethod(object@jobj, "assignClusters", data@sdf))
           })
