@@ -236,6 +236,13 @@ private class ShuffleStatus(numPartitions: Int) {
   def indeterminateAttemptId: Option[Int] = synchronized {
     _indeterminateAttemptId
   }
+
+  /**
+    * Reset the indeterminate attempt id to None.
+    */
+  def resetIndeterminateAttemptId(): Unit = synchronized {
+    _indeterminateAttemptId = None
+  }
 }
 
 private[spark] sealed trait MapOutputTrackerMessage
@@ -712,6 +719,10 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses(shuffleId).setAndCheckIndeterminateAttemptId(stageAttemptId)
   }
 
+  def unregisterIndeterminateShuffle(shuffleId: Int): Unit = {
+    shuffleStatuses(shuffleId).resetIndeterminateAttemptId()
+  }
+
   override def stop() {
     mapOutputRequests.offer(PoisonPill)
     threadpool.shutdown()
@@ -768,6 +779,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     if (id == null) {
       val fetchedId = askTracker[Option[Int]](GetIndeterminateAttemptId(shuffleId))
       indeterminateAttemptIds.put(shuffleId, fetchedId)
+      logInfo(s"Getting the indeterminate attempt id $id for" +
+        s" shuffleId: $shuffleId, and update local cache.")
       fetchedId
     } else {
       id
@@ -853,6 +866,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         logInfo("Updating epoch to " + newEpoch + " and clearing cache")
         epoch = newEpoch
         mapStatuses.clear()
+        indeterminateAttemptIds.clear()
       }
     }
   }

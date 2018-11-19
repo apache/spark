@@ -51,17 +51,10 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-  private def checkStageAttemptId(stageAttemptId: Option[Int]): Unit = {
-    require(stageAttemptId.isEmpty || (stageAttemptId.isDefined && stageAttemptId.get > 0),
-      "Setting stage attempt id here represent for rerunning indeterminate stage/task," +
-        "so it must > 0, otherwise it kept None as default.")
-  }
-
   def getDataFile(
       shuffleId: Int,
       mapId: Int,
       stageAttemptId: Option[Int] = None): File = {
-    checkStageAttemptId(stageAttemptId)
     blockManager.diskBlockManager.getFile(
       ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID, stageAttemptId))
   }
@@ -70,7 +63,6 @@ private[spark] class IndexShuffleBlockResolver(
       shuffleId: Int,
       mapId: Int,
       stageAttemptId: Option[Int] = None): File = {
-    checkStageAttemptId(stageAttemptId)
     blockManager.diskBlockManager.getFile(
       ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID, stageAttemptId))
   }

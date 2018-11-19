@@ -55,11 +55,15 @@ private[spark] class ResultStage(
 
   /**
    * Returns the sequence of partition ids that are missing (i.e. needs to be computed).
+   * If the current stage is indeterminate, missing partition is all partitions every time.
    *
    * This can only be called when there is an active job.
    */
   override def findMissingPartitions(): Seq[Int] = {
     val job = activeJob.get
+    if (isIndeterminate()) {
+      job.resetAllPartitions()
+    }
     (0 until job.numPartitions).filter(id => !job.finished(id))
   }
 

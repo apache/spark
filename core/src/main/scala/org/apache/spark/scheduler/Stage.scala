@@ -21,7 +21,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.util.CallSite
 
 /**
@@ -89,9 +89,6 @@ private[scheduler] abstract class Stage(
    */
   val failedAttemptIds = new HashSet[Int]
 
-  /** The identification of this stage is a determinate stage and being retried. */
-  private var determinate: Boolean = true
-
   private[scheduler] def clearFailures() : Unit = {
     failedAttemptIds.clear()
   }
@@ -117,12 +114,12 @@ private[scheduler] abstract class Stage(
     case _ => false
   }
 
-  /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
+  /**
+   * Returns the sequence of partition ids that are missing (i.e. needs to be computed).
+   * If the current stage is indeterminate, missing partition is all partitions every time.
+   */
   def findMissingPartitions(): Seq[Int]
 
-  def markAsInDeterminate(): Unit = {
-    determinate = false
-  }
-
-  def isDeterminate(): Boolean = determinate
+  def isIndeterminate(): Boolean =
+    rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
 }

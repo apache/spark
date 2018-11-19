@@ -1206,7 +1206,7 @@ private[spark] class DAGScheduler(
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
               Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier(),
-              stage.isDeterminate())
+              !stage.isIndeterminate())
           }
 
         case stage: ResultStage =>
@@ -1451,6 +1451,10 @@ private[spark] class DAGScheduler(
               // available.
               mapOutputTracker.registerMapOutput(
                 shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
+              if (stage.isIndeterminate()) {
+                mapOutputTracker.registerIndeterminateShuffle(
+                  shuffleStage.shuffleDep.shuffleId, smt.stageAttemptId)
+              }
             }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
@@ -1559,7 +1563,7 @@ private[spark] class DAGScheduler(
               // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
-              if (mapStage.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
+              if (mapStage.isIndeterminate()) {
                 // It's a little tricky to find all the succeeding stages of `failedStage`, because
                 // each stage only know its parents not children. Here we traverse the stages from
                 // the leaf nodes (the result stages of active jobs), and rollback all the stages
@@ -1591,12 +1595,9 @@ private[spark] class DAGScheduler(
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
                     if (numMissingPartitions < mapStage.numTasks) {
-                      // Mark all the map as broken in the map stage, to ensure retry all the
-                      // tasks on resubmitted stage attempt. Also mark this map stage as
-                      // indeterminate, will rerun all its task and generate new intermediate
-                      // shuffle file.
-                      mapOutputTracker.unregisterAllMapOutput(mapStage.shuffleDep.shuffleId)
-                      mapStage.markAsInDeterminate()
+                      logInfo(s"The indeterminate stage $mapStage will be resubmitted," +
+                        " the stage self and all indeterminate parent stage will be" +
+                        " rollback and whole stage rerun.")
                     }
 
                   case resultStage: ResultStage if resultStage.activeJob.isDefined =>
