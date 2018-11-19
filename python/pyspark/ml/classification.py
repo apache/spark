@@ -1333,14 +1333,14 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         """
         return self._set(featureSubsetStrategy=value)
 
-    @since("2.4.0")
+    @since("3.0.0")
     def setValidationTol(self, value):
         """
         Sets the value of :py:attr:`validationTol`.
         """
         return self._set(validationTol=value)
 
-    @since("2.4.0")
+    @since("3.0.0")
     def getValidationTol(self):
         """
         Gets the value of validationTol or its default value.
