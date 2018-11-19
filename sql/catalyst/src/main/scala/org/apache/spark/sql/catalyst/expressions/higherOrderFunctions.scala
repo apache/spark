@@ -264,13 +264,13 @@ case class ArrayTransform(
  * Filters entries in a map using the provided function.
  */
 @ExpressionDescription(
-usage = "_FUNC_(expr, func) - Filters entries in a map using the function.",
-examples = """
+  usage = "_FUNC_(expr, func) - Filters entries in a map using the function.",
+  examples = """
     Examples:
       > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
        {1:0,3:-1}
   """,
-since = "2.4.0")
+  since = "3.0.0")
 case class MapFilter(
     argument: Expression,
     function: Expression)
@@ -504,7 +504,7 @@ case class ArrayAggregate(
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
        {2:1,4:2,6:3}
   """,
-  since = "2.4.0")
+  since = "3.0.0")
 case class TransformKeys(
     argument: Expression,
     function: Expression)
@@ -554,7 +554,7 @@ case class TransformKeys(
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
        {1:2,2:4,3:6}
   """,
-  since = "2.4.0")
+  since = "3.0.0")
 case class TransformValues(
     argument: Expression,
     function: Expression)
@@ -605,7 +605,7 @@ case class TransformValues(
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2));
        {1:"ax",2:"by"}
   """,
-  since = "2.4.0")
+  since = "3.0.0")
 case class MapZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {
 

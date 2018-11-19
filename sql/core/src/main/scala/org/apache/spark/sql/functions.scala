@@ -3731,7 +3731,7 @@ object functions {
   /**
    * Returns an unordered array of all entries in the given map.
    * @group collection_funcs
-   * @since 2.4.0
+   * @since 3.0.0
    */
   def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
 
