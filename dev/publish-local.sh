@@ -5,7 +5,7 @@ version=$(git describe --tags --first-parent)
 
 PALANTIR_FLAGS=(-Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Psparkr)
 
-MVN_LOCAL="~/.m2/repository"
+MVN_LOCAL=~/.m2/repository
 
 publish_artifacts() {
   ./build/mvn versions:set -DnewVersion=$version
