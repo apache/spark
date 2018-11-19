@@ -222,6 +222,7 @@ private[spark] class ChunkedByteBufferInputStream(
     dispose: Boolean)
   extends InputStream {
 
+  // Filter out empty chunks since `read()` assumes all chunks are non-empty.
   private[this] var chunks = chunkedByteBuffer.getChunks().filter(_.hasRemaining).iterator
   private[this] var currentChunk: ByteBuffer = {
     if (chunks.hasNext) {
