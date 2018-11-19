@@ -85,7 +85,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Specifies the underlying output data source. Built-in options include "parquet", "json", etc.
+   * Specifies the underlying output data source. Built-in options include "parquet", "json", "csv", "orc", and "text".
    *
    * @since 1.4.0
    */
