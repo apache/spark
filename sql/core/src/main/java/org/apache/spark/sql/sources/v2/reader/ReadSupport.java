@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType;
  * If Spark fails to execute any methods in the implementations of this interface (by throwing an
  * exception), the read action will fail and no Spark job will be submitted.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface ReadSupport {
 
   /**

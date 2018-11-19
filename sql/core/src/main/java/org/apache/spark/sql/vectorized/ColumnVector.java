@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.vectorized;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -47,7 +47,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * format. Since it is expected to reuse the ColumnVector instance while loading data, the storage
  * footprint is negligible.
  */
-@InterfaceStability.Evolving
+@Evolving
 public abstract class ColumnVector implements AutoCloseable {
 
   /**

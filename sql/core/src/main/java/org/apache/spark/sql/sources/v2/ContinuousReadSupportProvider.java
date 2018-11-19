@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils;
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport;
 import org.apache.spark.sql.types.StructType;
@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.StructType;
  * This interface is used to create {@link ContinuousReadSupport} instances when end users run
  * {@code SparkSession.readStream.format(...).option(...).load()} with a continuous trigger.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface ContinuousReadSupportProvider extends DataSourceV2 {
 
   /**

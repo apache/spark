@@ -21,7 +21,7 @@ import scala.math.{Fractional, Numeric, Ordering}
 import scala.math.Numeric.FloatAsIfIntegral
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.util.Utils
 
 /**
@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class FloatType private() extends FractionalType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "FloatType$" in byte code.
@@ -55,5 +55,5 @@ class FloatType private() extends FractionalType {
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case object FloatType extends FloatType

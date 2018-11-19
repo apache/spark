@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.vectorized;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.*;
@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * Row abstraction in {@link ColumnVector}.
  */
-@InterfaceStability.Evolving
+@Evolving
 public final class ColumnarRow extends InternalRow {
   // The data for this row.
   // E.g. the value of 3rd int field is `data.getChild(3).getInt(rowId)`.
