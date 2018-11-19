@@ -650,7 +650,7 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 setMethod("spark.assignClusters",
           signature(data = "SparkDataFrame"),
           function(data, k = 2L, initMode = c("random", "degree"), maxIter = 20L,
-             sourceCol = "src", destinationCol = "dst", weightCol = NULL) {
+            sourceCol = "src", destinationCol = "dst", weightCol = NULL) {
             if (!is.numeric(k) || k < 1) {
               stop("k should be a number with value >= 1.")
             }
