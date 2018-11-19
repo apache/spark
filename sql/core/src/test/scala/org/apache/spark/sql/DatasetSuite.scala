@@ -1576,7 +1576,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.groupByKey(x => x).count().schema.head.name == "key")
 
     // Enable legacy flag to follow previous Spark behavior
-    withSQLConf(SQLConf.LEGACY_ATOMIC_KEY_ATTRIBUTE_GROUP_BY_KEY.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_ALIAS_NON_STRUCT_GROUPING_KEY.key -> "true") {
       assert(ds.groupByKey(x => x).count().schema.head.name == "value")
     }
   }

@@ -1595,11 +1595,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_ATOMIC_KEY_ATTRIBUTE_GROUP_BY_KEY =
-    buildConf("spark.sql.legacy.atomicKeyAttributeGroupByKey")
+  val LEGACY_ALIAS_NON_STRUCT_GROUPING_KEY =
+    buildConf("spark.sql.legacy.dataset.aliasNonStructGroupingKey")
       .internal()
       .doc("When set to true, the key attribute resulted from running `Dataset.groupByKey` " +
-        "for atomic key type, will be named as `value`, following the behavior of Spark " +
+        "for non-struct key type, will be named as `value`, following the behavior of Spark " +
         "version 2.4 and earlier.")
       .booleanConf
       .createWithDefault(false)
@@ -2018,7 +2018,7 @@ class SQLConf extends Serializable with Logging {
 
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
 
-  def legacyAtomicKeyAttribute: Boolean = getConf(SQLConf.LEGACY_ATOMIC_KEY_ATTRIBUTE_GROUP_BY_KEY)
+  def aliasNonStructGroupingKey: Boolean = getConf(SQLConf.LEGACY_ALIAS_NON_STRUCT_GROUPING_KEY)
 
   /** ********************** SQLConf functionality methods ************ */
 
