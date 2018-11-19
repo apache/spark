@@ -1859,4 +1859,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       checkAnswer(df, Row(null, csv))
     }
   }
+
+  test("encoding in multiLine mode") {
+    withTempPath { path =>
+      val df = spark.range(3).toDF()
+      df.write
+        .option("encoding", "UTF-16BE")
+        .csv(path.getCanonicalPath)
+      val readback = spark.read
+        .option("multiLine", true)
+        .option("encoding", "UTF-16BE")
+        .csv(path.getCanonicalPath)
+      checkAnswer(df, readback)
+    }
+  }
 }
