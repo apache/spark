@@ -302,3 +302,63 @@ a.expandbutton {
 .peak-execution-memory-checkbox-div {
   width: 170px;
 }
+
+#active-tasks-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#active-tasks-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#accumulator-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#accumulator-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-executor-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-executor-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-metrics-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-metrics-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#summary-execs-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#summary-execs-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
+
+#active-executors-table th {
+  border-top: 1px solid #dddddd;
+  border-bottom: 1px solid #dddddd;
+  border-right: 1px solid #dddddd;
+}
+
+#active-executors-table th:first-child {
+  border-left: 1px solid #dddddd;
+}
