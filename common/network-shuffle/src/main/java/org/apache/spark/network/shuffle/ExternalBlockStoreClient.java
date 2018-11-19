@@ -94,6 +94,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       String host,
       int port,
       String execId,
+      int shuffleGenerationId,
       String[] blockIds,
       BlockFetchingListener listener,
       DownloadFileManager downloadFileManager) {
@@ -103,7 +104,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
           (blockIds1, listener1) -> {
             TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockFetcher(client, appId, execId,
+            new OneForOneBlockFetcher(client, appId, execId, shuffleGenerationId,
               blockIds1, listener1, conf, downloadFileManager).start();
           };
 

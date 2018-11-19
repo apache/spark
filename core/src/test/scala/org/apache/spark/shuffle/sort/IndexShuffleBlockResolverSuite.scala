@@ -46,8 +46,11 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     MockitoAnnotations.initMocks(this)
 
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
-    when(diskBlockManager.getFile(any[BlockId])).thenAnswer(
-      (invocation: InvocationOnMock) => new File(tempDir, invocation.getArguments.head.toString))
+    when(diskBlockManager.getFile(any[String])).thenAnswer(
+      (invocation: InvocationOnMock) => {
+        new File(tempDir, invocation.getArguments.head.asInstanceOf[String])
+      }
+    )
   }
 
   override def afterEach(): Unit = {
@@ -58,10 +61,8 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     }
   }
 
-  test("commit shuffle files multiple times") {
-    val shuffleId = 1
-    val mapId = 2
-    val idxName = s"shuffle_${shuffleId}_${mapId}_0.index"
+  private def testWithIndexShuffleBlockResolver(
+      shuffleId: Int, mapId: Int, idxName: String, generationId: Int): Unit = {
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     val lengths = Array[Long](10, 0, 20)
     val dataTmp = File.createTempFile("shuffle", null, tempDir)
@@ -71,10 +72,10 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
+    resolver.writeIndexFileAndCommit(shuffleId, generationId, mapId, lengths, dataTmp)
 
     val indexFile = new File(tempDir.getAbsolutePath, idxName)
-    val dataFile = resolver.getDataFile(shuffleId, mapId)
+    val dataFile = resolver.getDataFile(shuffleId, generationId, mapId)
 
     assert(indexFile.exists())
     assert(indexFile.length() === (lengths.length + 1) * 8)
@@ -91,7 +92,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out2.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
+    resolver.writeIndexFileAndCommit(shuffleId, generationId, mapId, lengths2, dataTmp2)
 
     assert(indexFile.length() === (lengths.length + 1) * 8)
     assert(lengths2.toSeq === lengths.toSeq)
@@ -130,7 +131,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out3.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths3, dataTmp3)
+    resolver.writeIndexFileAndCommit(shuffleId, generationId, mapId, lengths3, dataTmp3)
     assert(indexFile.length() === (lengths3.length + 1) * 8)
     assert(lengths3.toSeq != lengths.toSeq)
     assert(dataFile.exists())
@@ -153,6 +154,71 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
       assert(indexIn2.readLong() === 7, "The index file should be updated")
     } {
       indexIn2.close()
+    }
+  }
+
+  test("commit shuffle files multiple times") {
+    val shuffleId = 1
+    val mapId = 2
+    val idxName = s"shuffle_${shuffleId}_${mapId}_0.index"
+    testWithIndexShuffleBlockResolver(shuffleId, mapId, idxName, -1)
+  }
+
+  test("commit shuffle files with shuffle generation id multiple times") {
+    val shuffleId = 1
+    val mapId = 2
+    val generationId = 1
+    val idxName = s"shuffle_${shuffleId}_${mapId}_0_1.index"
+    testWithIndexShuffleBlockResolver(shuffleId, mapId, idxName, generationId)
+  }
+
+  test("commit shuffle files with different shuffle generation id multiple times") {
+    val shuffleId = 1
+    val mapId = 2
+    val resolver = new IndexShuffleBlockResolver(conf, blockManager)
+    // write index file and commit with different generation ids
+    (1 to 3).foreach { i =>
+      val generationId = i
+      // Use generation id * 10 as the lengths in index file
+      val lengths = Array[Long](i * 10)
+      val dataTmp = File.createTempFile("shuffle", null, tempDir)
+      val out = new FileOutputStream(dataTmp)
+      Utils.tryWithSafeFinally {
+        // Use generation id as the first byte in data file
+        out.write(Array[Byte](i.toByte))
+        out.write(new Array[Byte](29))
+      } {
+        out.close()
+      }
+      resolver.writeIndexFileAndCommit(shuffleId, generationId, mapId, lengths, dataTmp)
+    }
+    // Check all data files and index files
+    val firstByte = new Array[Byte](1)
+    (1 to 3).foreach { i =>
+      val generationId = i
+      val indexFile = new File(
+        tempDir.getAbsolutePath, s"shuffle_${shuffleId}_${mapId}_0_${generationId}.index")
+      val dataFile = resolver.getDataFile(shuffleId, generationId, mapId)
+
+      // Check the dataFile, it should be the new one for each generation id
+      assert(dataFile.exists())
+      assert(dataFile.length() === 30)
+      val dataIn = new FileInputStream(dataFile)
+      Utils.tryWithSafeFinally {
+        dataIn.read(firstByte)
+      } {
+        dataIn.close()
+      }
+      assert(firstByte(0) === i)
+
+      // The index file should be the new one for each generation id
+      val indexIn = new DataInputStream(new FileInputStream(indexFile))
+      Utils.tryWithSafeFinally {
+        indexIn.readLong() // the first offset is always 0
+        assert(indexIn.readLong() === i * 10, "The index file should be the new one")
+      } {
+        indexIn.close()
+      }
     }
   }
 }

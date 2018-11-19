@@ -97,15 +97,15 @@ public class ExternalBlockHandlerSuite {
 
   @Test
   public void testFetchShuffleBlocks() {
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(blockMarkers[0]);
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(blockMarkers[1]);
+    when(blockResolver.getBlockData("app0", "exec1", 0, 1, 0, 0)).thenReturn(blockMarkers[0]);
+    when(blockResolver.getBlockData("app0", "exec1", 0, 1, 0, 1)).thenReturn(blockMarkers[1]);
 
     FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
-      "app0", "exec1", 0, new int[] { 0 }, new int[][] {{ 0, 1 }});
+      "app0", "exec1", 0, 1, new int[] { 0 }, new int[][] {{ 0, 1 }});
     checkOpenBlocksReceive(fetchShuffleBlocks, blockMarkers);
 
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 1, 0, 0);
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 1, 0, 1);
     verifyOpenBlockLatencyMetrics();
   }
 

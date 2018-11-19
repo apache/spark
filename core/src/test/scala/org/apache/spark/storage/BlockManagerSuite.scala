@@ -1650,6 +1650,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         host: String,
         port: Int,
         execId: String,
+        shuffleGenerationId: Int,
         blockIds: Array[String],
         listener: BlockFetchingListener,
         tempFileManager: DownloadFileManager): Unit = {

@@ -311,7 +311,8 @@ public class ExternalBlockHandler extends RpcHandler {
       assert(idx == 2 * numBlockIds);
       size = mapIdAndReduceIds.length;
       blockDataForIndexFn = index -> blockManager.getBlockData(msg.appId, msg.execId,
-        msg.shuffleId, mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
+        msg.shuffleId, msg.shuffleGenerationId, mapIdAndReduceIds[index],
+        mapIdAndReduceIds[index + 1]);
     }
 
     @Override

@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
+import java.util.Properties
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
@@ -202,7 +203,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       config.CPUS_PER_TASK.key -> taskCpus.toString)
     val numFreeCores = 1
     val taskSet = new TaskSet(
-      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
+      0, 0, 0, new Properties())
     val multiCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", taskCpus),
       new WorkerOffer("executor1", "host1", numFreeCores))
     taskScheduler.submitTasks(taskSet)
@@ -216,7 +218,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // still be processed without error
     taskScheduler.submitTasks(FakeTask.createTaskSet(1))
     val taskSet2 = new TaskSet(
-      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 1, 0, 0, null)
+      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
+      1, 0, 0, new Properties())
     taskScheduler.submitTasks(taskSet2)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(taskDescriptions.map(_.executorId) === Seq("executor0"))

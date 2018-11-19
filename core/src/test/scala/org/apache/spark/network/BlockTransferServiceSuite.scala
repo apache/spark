@@ -51,6 +51,7 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
           host: String,
           port: Int,
           execId: String,
+          shuffleGenerationId: Int,
           blockIds: Array[String],
           listener: BlockFetchingListener,
           tempFileManager: DownloadFileManager): Unit = {
@@ -96,7 +97,7 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
     val e = intercept[SparkException] {
       failAfter(10.seconds) {
         blockTransferService.fetchBlockSync(
-          "localhost-unused", 0, "exec-id-unused", "block-id-unused", null)
+          "localhost-unused", 0, "exec-id-unused", "test_block-id-unused", null)
       }
     }
     assert(e.getCause.isInstanceOf[IllegalArgumentException])

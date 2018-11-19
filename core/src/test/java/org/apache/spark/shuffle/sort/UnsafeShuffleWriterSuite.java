@@ -131,15 +131,17 @@ public class UnsafeShuffleWriterSuite {
         );
       });
 
-    when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
+    when(shuffleBlockResolver.getDataFile(
+      anyInt(), anyInt(), anyInt())).thenReturn(mergedOutputFile);
     doAnswer(invocationOnMock -> {
-      partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
-      File tmp = (File) invocationOnMock.getArguments()[3];
+      partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[3];
+      File tmp = (File) invocationOnMock.getArguments()[4];
       mergedOutputFile.delete();
       tmp.renameTo(mergedOutputFile);
       return null;
     }).when(shuffleBlockResolver)
-      .writeIndexFileAndCommit(anyInt(), anyInt(), any(long[].class), any(File.class));
+      .writeIndexFileAndCommit(
+        anyInt(), anyInt(), anyInt(), any(long[].class), any(File.class));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());

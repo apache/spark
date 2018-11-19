@@ -548,7 +548,11 @@ private[spark] class BlockManager(
    */
   override def getBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+      // This branch is for the compatibility of the old shuffle protocol, which using OpenBlock
+      // to fetch shuffle blocks. After Spark 3.0, all shuffle block fetching will use new
+      // protocol FetchShuffleBlocks and use getShuffleBlockData in BlockManager.
+      // See more details in SPARK-27665.
+      shuffleManager.shuffleBlockResolver.getBlockData(-1, blockId.asInstanceOf[ShuffleBlockId])
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
@@ -561,6 +565,19 @@ private[spark] class BlockManager(
           throw new BlockNotFoundException(blockId.toString)
       }
     }
+  }
+
+  /**
+   * Interface to get shuffle block data. Throws an exception if the block cannot be found or
+   * cannot be read successfully.
+   */
+  override def getShuffleBlockData(
+      shuffleId: Int,
+      shuffleGenerationId: Int,
+      mapId: Int,
+      reduceId: Int): ManagedBuffer = {
+    val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
+    shuffleManager.shuffleBlockResolver.getBlockData(shuffleGenerationId, shuffleBlockId)
   }
 
   /**

@@ -75,6 +75,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final Partitioner partitioner;
   private final ShuffleWriteMetricsReporter writeMetrics;
   private final int shuffleId;
+  private final int shuffleGenerationId;
   private final int mapId;
   private final TaskContext taskContext;
   private final SparkConf sparkConf;
@@ -137,6 +138,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.mapId = mapId;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.shuffleId = dep.shuffleId();
+    this.shuffleGenerationId = taskContext.getShuffleGenerationId(dep.shuffleId());
     this.serializer = dep.serializer().newInstance();
     this.partitioner = dep.partitioner();
     this.writeMetrics = writeMetrics;
@@ -231,7 +233,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
     final long[] partitionLengths;
-    final File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final File output = shuffleBlockResolver.getDataFile(
+      shuffleId, shuffleGenerationId, mapId);
     final File tmp = Utils.tempFileWith(output);
     try {
       try {
@@ -243,7 +246,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           }
         }
       }
-      shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
+      shuffleBlockResolver.writeIndexFileAndCommit(
+        shuffleId, shuffleGenerationId, mapId, partitionLengths, tmp);
     } finally {
       if (tmp.exists() && !tmp.delete()) {
         logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());

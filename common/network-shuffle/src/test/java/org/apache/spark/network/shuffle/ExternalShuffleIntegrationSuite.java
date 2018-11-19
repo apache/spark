@@ -101,7 +101,8 @@ public class ExternalShuffleIntegrationSuite {
 
     dataContext0 = new TestShuffleDataContext(2, 5);
     dataContext0.create();
-    dataContext0.insertSortShuffleData(0, 0, exec0Blocks);
+    dataContext0.insertSortShuffleData(0, 0, exec0Blocks, false);
+    dataContext0.insertSortShuffleData(0, 0, exec0Blocks, true);
     dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK, exec0RddBlockValid);
     dataContext0.insertCachedRddData(RDD_ID, SPLIT_INDEX_VALID_BLOCK_TO_RM, exec0RddBlockToRemove);
 
@@ -159,7 +160,13 @@ public class ExternalShuffleIntegrationSuite {
 
   // Fetch a set of blocks from a pre-registered executor.
   private FetchResult fetchBlocks(String execId, String[] blockIds) throws Exception {
-    return fetchBlocks(execId, blockIds, conf, server.getPort());
+    return fetchBlocks(execId, blockIds, conf, server.getPort(), -1);
+  }
+
+  // Fetch a set of blocks from a pre-registered executor.
+  private FetchResult fetchBlocks(
+      String execId, String[] blockIds, int shuffleGenerationId) throws Exception {
+    return fetchBlocks(execId, blockIds, conf, server.getPort(), shuffleGenerationId);
   }
 
   // Fetch a set of blocks from a pre-registered executor. Connects to the server on the given port,
@@ -168,7 +175,8 @@ public class ExternalShuffleIntegrationSuite {
       String execId,
       String[] blockIds,
       TransportConf clientConf,
-      int port) throws Exception {
+      int port,
+      int shuffleGenerationId) throws Exception {
     final FetchResult res = new FetchResult();
     res.successBlocks = Collections.synchronizedSet(new HashSet<String>());
     res.failedBlocks = Collections.synchronizedSet(new HashSet<String>());
@@ -179,7 +187,7 @@ public class ExternalShuffleIntegrationSuite {
     try (ExternalBlockStoreClient client = new ExternalBlockStoreClient(
         clientConf, null, false, 5000)) {
       client.init(APP_ID);
-      client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
+      client.fetchBlocks(TestUtils.getLocalHost(), port, execId, shuffleGenerationId, blockIds,
         new BlockFetchingListener() {
           @Override
           public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
@@ -226,6 +234,28 @@ public class ExternalShuffleIntegrationSuite {
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult exec0Fetch = fetchBlocks("exec-0",
       new String[] { "shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2" });
+    assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
+      exec0Fetch.successBlocks);
+    assertTrue(exec0Fetch.failedBlocks.isEmpty());
+    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks));
+    exec0Fetch.releaseBuffers();
+  }
+
+  @Test
+  public void testFetchOneSortWithShuffleGenerationId() throws Exception {
+    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+    FetchResult exec0Fetch = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" }, 0);
+    assertEquals(Sets.newHashSet("shuffle_0_0_0"), exec0Fetch.successBlocks);
+    assertTrue(exec0Fetch.failedBlocks.isEmpty());
+    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks[0]));
+    exec0Fetch.releaseBuffers();
+  }
+
+  @Test
+  public void testFetchThreeSortWithShuffleGenerationId() throws Exception {
+    registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
+    FetchResult exec0Fetch = fetchBlocks("exec-0",
+      new String[] { "shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2" }, 0);
     assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
       exec0Fetch.successBlocks);
     assertTrue(exec0Fetch.failedBlocks.isEmpty());
@@ -325,7 +355,7 @@ public class ExternalShuffleIntegrationSuite {
       new MapConfigProvider(ImmutableMap.of("spark.shuffle.io.maxRetries", "0")));
     registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
     FetchResult execFetch = fetchBlocks("exec-0",
-      new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);
+      new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */, -1);
     assertTrue(execFetch.successBlocks.isEmpty());
     assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
   }

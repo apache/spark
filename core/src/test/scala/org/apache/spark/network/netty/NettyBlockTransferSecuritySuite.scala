@@ -122,7 +122,8 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     val blockString = "Hello, world!"
     val blockBuffer = new NioManagedBuffer(ByteBuffer.wrap(
       blockString.getBytes(StandardCharsets.UTF_8)))
-    when(blockManager.getBlockData(blockId)).thenReturn(blockBuffer)
+    when(blockManager.getShuffleBlockData(blockId.shuffleId, -1, blockId.mapId, blockId.reduceId))
+      .thenReturn(blockBuffer)
 
     val securityManager0 = new SecurityManager(conf0)
     val exec0 = new NettyBlockTransferService(conf0, securityManager0, "localhost", "localhost", 0,
@@ -158,7 +159,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
 
     val promise = Promise[ManagedBuffer]()
 
-    self.fetchBlocks(from.hostName, from.port, execId, Array(blockId.toString),
+    self.fetchBlocks(from.hostName, from.port, execId, -1, Array(blockId.toString),
       new BlockFetchingListener {
         override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
           promise.failure(exception)

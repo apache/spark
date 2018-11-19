@@ -51,26 +51,47 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-  def getDataFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+  def getDataFile(
+      shuffleId: Int,
+      shuffleGenerationId: Int,
+      mapId: Int): File = {
+    blockManager.diskBlockManager.getFile(
+      generateFileName(shuffleGenerationId, ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)))
   }
 
-  private def getIndexFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+  private def getIndexFile(
+      shuffleId: Int,
+      shuffleGenerationId: Int,
+      mapId: Int): File = {
+    blockManager.diskBlockManager.getFile(
+      generateFileName(shuffleGenerationId, ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)))
+  }
+
+  /**
+   * Generate the file name from shuffle generation id and block id.
+   */
+  private def generateFileName(shuffleGenerationId: Int, blockId: BlockId): String = {
+    val generationId = if (shuffleGenerationId != -1) {
+      "_" + shuffleGenerationId
+    } else {
+      ""
+    }
+    blockId.name.replace(".", generationId + ".")
   }
 
   /**
    * Remove data file and index file that contain the output data from one map.
    */
-  def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
-    var file = getDataFile(shuffleId, mapId)
+  def removeDataByMap(
+      shuffleId: Int, shuffleGenerationId: Int, mapId: Int): Unit = {
+    var file = getDataFile(shuffleId, shuffleGenerationId, mapId)
     if (file.exists()) {
       if (!file.delete()) {
         logWarning(s"Error deleting data ${file.getPath()}")
       }
     }
 
-    file = getIndexFile(shuffleId, mapId)
+    file = getIndexFile(shuffleId, shuffleGenerationId, mapId)
     if (file.exists()) {
       if (!file.delete()) {
         logWarning(s"Error deleting index ${file.getPath()}")
@@ -135,13 +156,14 @@ private[spark] class IndexShuffleBlockResolver(
    */
   def writeIndexFileAndCommit(
       shuffleId: Int,
+      shuffleGenerationId: Int,
       mapId: Int,
       lengths: Array[Long],
       dataTmp: File): Unit = {
-    val indexFile = getIndexFile(shuffleId, mapId)
+    val indexFile = getIndexFile(shuffleId, shuffleGenerationId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
     try {
-      val dataFile = getDataFile(shuffleId, mapId)
+      val dataFile = getDataFile(shuffleId, shuffleGenerationId, mapId)
       // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
       // the following check and rename are atomic.
       synchronized {
@@ -190,10 +212,10 @@ private[spark] class IndexShuffleBlockResolver(
     }
   }
 
-  override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
+  override def getBlockData(shuffleGenerationId: Int, blockId: ShuffleBlockId): ManagedBuffer = {
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
-    val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
+    val indexFile = getIndexFile(blockId.shuffleId, shuffleGenerationId, blockId.mapId)
 
     // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
     // which is incorrectly using our file descriptor then this code will fetch the wrong offsets
@@ -215,7 +237,7 @@ private[spark] class IndexShuffleBlockResolver(
       }
       new FileSegmentManagedBuffer(
         transportConf,
-        getDataFile(blockId.shuffleId, blockId.mapId),
+        getDataFile(blockId.shuffleId, shuffleGenerationId, blockId.mapId),
         offset,
         nextOffset - offset)
     } finally {

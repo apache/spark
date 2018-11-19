@@ -60,6 +60,7 @@ import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
  * @param detectCorrupt whether to detect any corruption in fetched blocks.
  * @param shuffleMetrics used to report shuffle metrics.
+ * @param shuffleGenerationId used to fetch shuffle blocks for indeterminate stage.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
@@ -74,7 +75,8 @@ final class ShuffleBlockFetcherIterator(
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean,
     detectCorruptUseExtraMemory: Boolean,
-    shuffleMetrics: ShuffleReadMetricsReporter)
+    shuffleMetrics: ShuffleReadMetricsReporter,
+    shuffleGenerationId: Int = -1)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
@@ -257,11 +259,11 @@ final class ShuffleBlockFetcherIterator(
     // already encrypted and compressed over the wire(w.r.t. the related configs), we can just fetch
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
-      shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, this)
+      shuffleClient.fetchBlocks(address.host, address.port, address.executorId,
+        shuffleGenerationId, blockIds.toArray, blockFetchingListener, this)
     } else {
-      shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, null)
+      shuffleClient.fetchBlocks(address.host, address.port, address.executorId,
+        shuffleGenerationId, blockIds.toArray, blockFetchingListener, null)
     }
   }
 
@@ -342,7 +344,10 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val blockId = iter.next()
       try {
-        val buf = blockManager.getBlockData(blockId)
+        val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
+        val buf = blockManager.getShuffleBlockData(
+          shuffleBlockId.shuffleId, shuffleGenerationId,
+          shuffleBlockId.mapId, shuffleBlockId.reduceId)
         shuffleMetrics.incLocalBlocksFetched(1)
         shuffleMetrics.incLocalBytesRead(buf.size)
         buf.retain()

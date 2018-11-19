@@ -68,13 +68,14 @@ public class OneForOneBlockFetcher {
     String[] blockIds,
     BlockFetchingListener listener,
     TransportConf transportConf) {
-    this(client, appId, execId, blockIds, listener, transportConf, null);
+    this(client, appId, execId, -1, blockIds, listener, transportConf, null);
   }
 
   public OneForOneBlockFetcher(
       TransportClient client,
       String appId,
       String execId,
+      int shuffleGenerationId,
       String[] blockIds,
       BlockFetchingListener listener,
       TransportConf transportConf,
@@ -89,7 +90,7 @@ public class OneForOneBlockFetcher {
       throw new IllegalArgumentException("Zero-sized blockIds array");
     }
     if (!transportConf.useOldFetchProtocol() && isShuffleBlocks(blockIds)) {
-      this.message = createFetchShuffleBlocksMsg(appId, execId, blockIds);
+      this.message = createFetchShuffleBlocksMsg(appId, execId, shuffleGenerationId, blockIds);
     } else {
       this.message = new OpenBlocks(appId, execId, blockIds);
     }
@@ -110,7 +111,7 @@ public class OneForOneBlockFetcher {
    * org.apache.spark.MapOutputTracker.convertMapStatuses.
    */
   private FetchShuffleBlocks createFetchShuffleBlocksMsg(
-      String appId, String execId, String[] blockIds) {
+      String appId, String execId, int shuffleGenerationId, String[] blockIds) {
     int shuffleId = splitBlockId(blockIds[0])[0];
     HashMap<Integer, ArrayList<Integer>> mapIdToReduceIds = new HashMap<>();
     for (String blockId : blockIds) {
@@ -130,7 +131,8 @@ public class OneForOneBlockFetcher {
     for (int i = 0; i < mapIds.length; i++) {
       reduceIdArr[i] = Ints.toArray(mapIdToReduceIds.get(mapIds[i]));
     }
-    return new FetchShuffleBlocks(appId, execId, shuffleId, mapIds, reduceIdArr);
+    return new FetchShuffleBlocks(
+      appId, execId, shuffleId, shuffleGenerationId, mapIds, reduceIdArr);
   }
 
   /** Split the shuffleBlockId and return shuffleId, mapId and reduceId. */

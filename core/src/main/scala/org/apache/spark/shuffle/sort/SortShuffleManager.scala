@@ -19,6 +19,8 @@ package org.apache.spark.shuffle.sort
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.shuffle._
@@ -79,9 +81,10 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   }
 
   /**
-   * A mapping from shuffle ids to the number of mappers producing output for those shuffles.
+   * A mapping from shuffle ids to the tuple of number of mappers producing output and
+   * shuffle generation id for those shuffles.
    */
-  private[this] val numMapsForShuffle = new ConcurrentHashMap[Int, Int]()
+  private[this] val infoMapsForShuffle = new ConcurrentHashMap[Int, (Int, Int)]()
 
   private lazy val shuffleExecutorComponents = loadShuffleExecutorComponents(conf)
 
@@ -133,8 +136,10 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       mapId: Int,
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
-    numMapsForShuffle.putIfAbsent(
-      handle.shuffleId, handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
+    infoMapsForShuffle.putIfAbsent(
+      handle.shuffleId,
+      (handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps,
+        context.getShuffleGenerationId(handle.shuffleId)))
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
@@ -152,7 +157,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           env.blockManager,
           bypassMergeSortHandle,
           mapId,
-          context.taskAttemptId(),
+          context,
           env.conf,
           metrics,
           shuffleExecutorComponents)
@@ -163,10 +168,11 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
-    Option(numMapsForShuffle.remove(shuffleId)).foreach { numMaps =>
-      (0 until numMaps).foreach { mapId =>
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId)
-      }
+    Option(infoMapsForShuffle.remove(shuffleId)).foreach {
+      case (numMaps, shuffleGenerationId) =>
+        (0 until numMaps).foreach { mapId =>
+          shuffleBlockResolver.removeDataByMap(shuffleId, shuffleGenerationId, mapId)
+        }
     }
     true
   }

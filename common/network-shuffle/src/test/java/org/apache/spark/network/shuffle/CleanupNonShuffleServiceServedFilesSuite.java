@@ -243,7 +243,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     Random rand = new Random(123);
     dataContext.insertSortShuffleData(rand.nextInt(1000), rand.nextInt(1000), new byte[][] {
         "ABC".getBytes(StandardCharsets.UTF_8),
-        "DEF".getBytes(StandardCharsets.UTF_8)});
+        "DEF".getBytes(StandardCharsets.UTF_8)}, false);
     dataContext.insertCachedRddData(12, 34, new byte[] { 42 });
   }
 

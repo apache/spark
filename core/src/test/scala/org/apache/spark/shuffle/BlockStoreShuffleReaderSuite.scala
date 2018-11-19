@@ -94,8 +94,8 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
 
       // Setup the blockManager mock so the buffer gets returned when the shuffle code tries to
       // fetch shuffle data.
-      val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
-      when(blockManager.getBlockData(shuffleBlockId)).thenReturn(managedBuffer)
+      when(blockManager.getShuffleBlockData(shuffleId, -1, mapId, reduceId))
+        .thenReturn(managedBuffer)
       managedBuffer
     }
 

@@ -110,6 +110,7 @@ private[spark] class NettyBlockTransferService(
       host: String,
       port: Int,
       execId: String,
+      shuffleGenerationId: Int,
       blockIds: Array[String],
       listener: BlockFetchingListener,
       tempFileManager: DownloadFileManager): Unit = {
@@ -119,8 +120,8 @@ private[spark] class NettyBlockTransferService(
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
           try {
-            new OneForOneBlockFetcher(client, appId, execId, blockIds, listener,
-              transportConf, tempFileManager).start()
+            new OneForOneBlockFetcher(client, appId, execId, shuffleGenerationId, blockIds,
+              listener, transportConf, tempFileManager).start()
           } catch {
             case e: IOException =>
               Try {

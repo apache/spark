@@ -38,6 +38,7 @@ public abstract class BlockStoreClient implements Closeable {
    * @param host the host of the remote node.
    * @param port the port of the remote node.
    * @param execId the executor id.
+   * @param shuffleGenerationId the shuffle generation id for all block ids to fetch.
    * @param blockIds block ids to fetch.
    * @param listener the listener to receive block fetching status.
    * @param downloadFileManager DownloadFileManager to create and clean temp files.
@@ -49,6 +50,7 @@ public abstract class BlockStoreClient implements Closeable {
       String host,
       int port,
       String execId,
+      int shuffleGenerationId,
       String[] blockIds,
       BlockFetchingListener listener,
       DownloadFileManager downloadFileManager);

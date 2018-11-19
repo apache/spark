@@ -73,14 +73,15 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(dependency.partitioner).thenReturn(new HashPartitioner(7))
     when(dependency.serializer).thenReturn(new JavaSerializer(conf))
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
-    when(blockResolver.getDataFile(0, 0)).thenReturn(outputFile)
+    when(taskContext.getShuffleGenerationId(any[Int])).thenReturn(-1)
+    when(blockResolver.getDataFile(0, -1, 0)).thenReturn(outputFile)
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
 
     when(blockResolver.writeIndexFileAndCommit(
-      anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File])))
+      anyInt, anyInt, anyInt(), any(classOf[Array[Long]]), any(classOf[File])))
       .thenAnswer { invocationOnMock =>
-        val tmp = invocationOnMock.getArguments()(3).asInstanceOf[File]
+        val tmp = invocationOnMock.getArguments()(4).asInstanceOf[File]
         if (tmp != null) {
           outputFile.delete
           tmp.renameTo(outputFile)
@@ -140,7 +141,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockManager,
       shuffleHandle,
       0, // MapId
-      0L, // MapTaskAttemptId
+      taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics,
       shuffleExecutorComponents)
@@ -167,7 +168,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
         blockManager,
         shuffleHandle,
         0, // MapId
-        0L,
+        taskContext,
         transferConf,
         taskContext.taskMetrics().shuffleWriteMetrics,
         shuffleExecutorComponents)
@@ -203,7 +204,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockManager,
       shuffleHandle,
       0, // MapId
-      0L,
+      taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics,
       shuffleExecutorComponents)
@@ -225,7 +226,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       blockManager,
       shuffleHandle,
       0, // MapId
-      0L,
+      taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics,
       shuffleExecutorComponents)

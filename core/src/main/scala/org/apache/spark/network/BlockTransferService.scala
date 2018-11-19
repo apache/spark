@@ -54,6 +54,23 @@ abstract class BlockTransferService extends BlockStoreClient with Logging {
   def hostName: String
 
   /**
+   * Fetch a sequence of blocks from a remote node asynchronously,
+   * available only after [[init]] is invoked.
+   *
+   * Note that this API takes a sequence so the implementation can batch requests, and does not
+   * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
+   * the data of a block is fetched, rather than waiting for all blocks to be fetched.
+   */
+  override def fetchBlocks(
+      host: String,
+      port: Int,
+      execId: String,
+      shuffleGenerationId: Int,
+      blockIds: Array[String],
+      listener: BlockFetchingListener,
+      tempFileManager: DownloadFileManager): Unit
+
+  /**
    * Upload a single block to a remote node, available only after [[init]] is invoked.
    */
   def uploadBlock(
@@ -76,9 +93,12 @@ abstract class BlockTransferService extends BlockStoreClient with Logging {
       execId: String,
       blockId: String,
       tempFileManager: DownloadFileManager): ManagedBuffer = {
+    // Make sure ShuffleBlockId will not enter this function, so we call fetchBlocks with the
+    // invalid shuffleGenerationId -1 here for this special case of fetching a non-shuffle block.
+    assert(!BlockId.apply(blockId).isShuffle)
     // A monitor for the thread to wait on.
     val result = Promise[ManagedBuffer]()
-    fetchBlocks(host, port, execId, Array(blockId),
+    fetchBlocks(host, port, execId, -1, Array(blockId),
       new BlockFetchingListener {
         override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
           result.failure(exception)

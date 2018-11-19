@@ -185,6 +185,15 @@ abstract class TaskContext extends Serializable {
   @Evolving
   def resources(): Map[String, ResourceInformation]
 
+  /**
+   * The shuffle generation ID of the stage that this task belongs to, it returns the stage
+   * attempt number while the stage is not determinate and returns -1 on the contrary.
+   */
+  private[spark] def getShuffleGenerationId(shuffleId: Int): Int = {
+    Option(getLocalProperty(SparkContext.SHUFFLE_GENERATION_ID_PREFIX + shuffleId))
+      .map(_.toInt).getOrElse(-1)
+  }
+
   @DeveloperApi
   def taskMetrics(): TaskMetrics
 

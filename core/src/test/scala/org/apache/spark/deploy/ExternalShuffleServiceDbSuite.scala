@@ -59,7 +59,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
     // Write some sort data.
     dataContext.insertSortShuffleData(0, 0,
       Array[Array[Byte]](sortBlock0.getBytes(StandardCharsets.UTF_8),
-        sortBlock1.getBytes(StandardCharsets.UTF_8)))
+        sortBlock1.getBytes(StandardCharsets.UTF_8)), false)
     registerExecutor()
   }
 

@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
+import org.apache.spark.TaskContext;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
@@ -85,6 +86,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final Partitioner partitioner;
   private final ShuffleWriteMetricsReporter writeMetrics;
   private final int shuffleId;
+  private final int shuffleGenerationId;
   private final int mapId;
   private final long mapTaskAttemptId;
   private final Serializer serializer;
@@ -107,7 +109,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       BlockManager blockManager,
       BypassMergeSortShuffleHandle<K, V> handle,
       int mapId,
-      long mapTaskAttemptId,
+      TaskContext taskContext,
       SparkConf conf,
       ShuffleWriteMetricsReporter writeMetrics,
       ShuffleExecutorComponents shuffleExecutorComponents) {
@@ -117,8 +119,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;
-    this.mapTaskAttemptId = mapTaskAttemptId;
+    this.mapTaskAttemptId = taskContext.taskAttemptId();
     this.shuffleId = dep.shuffleId();
+    this.shuffleGenerationId = taskContext.getShuffleGenerationId(dep.shuffleId());
     this.partitioner = dep.partitioner();
     this.numPartitions = partitioner.numPartitions();
     this.writeMetrics = writeMetrics;

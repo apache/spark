@@ -67,8 +67,10 @@ public class TestShuffleDataContext {
   }
 
   /** Creates reducer blocks in a sort-based data format within our local dirs. */
-  public void insertSortShuffleData(int shuffleId, int mapId, byte[][] blocks) throws IOException {
+  public void insertSortShuffleData(
+      int shuffleId, int mapId, byte[][] blocks, boolean indeterminateBlock) throws IOException {
     String blockId = "shuffle_" + shuffleId + "_" + mapId + "_0";
+    if (indeterminateBlock) blockId += "_0";
 
     OutputStream dataStream = null;
     DataOutputStream indexStream = null;

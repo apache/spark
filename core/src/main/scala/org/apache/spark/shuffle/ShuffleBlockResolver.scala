@@ -34,7 +34,7 @@ trait ShuffleBlockResolver {
    * Retrieve the data for the specified block. If the data for that block is not available,
    * throws an unspecified exception.
    */
-  def getBlockData(blockId: ShuffleBlockId): ManagedBuffer
+  def getBlockData(shuffleGenerationId: Int, blockId: ShuffleBlockId): ManagedBuffer
 
   def stop(): Unit
 }
