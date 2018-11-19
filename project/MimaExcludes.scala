@@ -197,6 +197,11 @@ object MimaExcludes {
     // [SPARK-23781][CORE] Merge token renewer functionality into HadoopDelegationTokenManager
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.nextCredentialRenewalTime"),
 
+    // [SPARK-26141] Enable custom metrics implementation in shuffle write
+    // Following are Java private classes
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.shuffle.sort.UnsafeShuffleWriter.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.storage.TimeTrackingOutputStream.this"),
+
     // Data Source V2 API changes
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.v2.ContinuousReadSupport"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.v2.ReadSupport"),
@@ -243,7 +248,8 @@ object MimaExcludes {
     // [SPARK-26141] Enable custom metrics implementation in shuffle write
     // Following are Java private classes
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.shuffle.sort.UnsafeShuffleWriter.this"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.storage.TimeTrackingOutputStream.this")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.storage.TimeTrackingOutputStream.this"),
+    ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.sql.sources.v2.reader.ScanBuilder.build")
   )
 
   // Exclude rules for 2.4.x

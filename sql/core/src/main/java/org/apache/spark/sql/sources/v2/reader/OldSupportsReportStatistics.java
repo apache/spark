@@ -18,20 +18,21 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
 
 /**
- * A mix in interface for {@link Scan}. Data sources can implement this interface to
- * report data partitioning and try to avoid shuffle at Spark side.
+ * A mix in interface for {@link BatchReadSupport}. Data sources can implement this interface to
+ * report statistics to Spark.
  *
- * Note that, when a {@link Scan} implementation creates exactly one {@link InputPartition},
- * Spark may avoid adding a shuffle even if the reader does not implement this interface.
+ * As of Spark 2.4, statistics are reported to the optimizer before any operator is pushed to the
+ * data source. Implementations that return more accurate statistics based on pushed operators will
+ * not improve query performance until the planner can push operators before getting stats.
  */
 @Evolving
-public interface SupportsReportPartitioning extends Scan {
+// TODO: remove it, after we finish the API refactor completely.
+public interface OldSupportsReportStatistics extends ReadSupport {
 
   /**
-   * Returns the output data partitioning that this reader guarantees.
+   * Returns the estimated statistics of this data source scan.
    */
-  Partitioning outputPartitioning();
+  Statistics estimateStatistics(ScanConfig config);
 }

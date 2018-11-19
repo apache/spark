@@ -23,20 +23,23 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReaderFactory, ContinuousReadSupport, MicroBatchReadSupport}
 
 /**
- * Physical plan node for scanning a batch of data from a data source.
+ * Physical plan node for scanning data from a data source.
  */
-case class DataSourceV2ScanExec(
+// TODO: micro-batch should be handled by `DataSourceV2ScanExec`, after we finish the API refactor
+// completely.
+case class DataSourceV2StreamingScanExec(
     output: Seq[AttributeReference],
     @transient source: DataSourceV2,
     @transient options: Map[String, String],
     @transient pushedFilters: Seq[Expression],
-    @transient scan: Scan,
-    @transient partitions: Array[InputPartition],
-    @transient readerFactory: PartitionReaderFactory)
+    @transient readSupport: ReadSupport,
+    @transient scanConfig: ScanConfig)
   extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
 
   override def simpleString: String = "ScanV2 " + metadataString
@@ -44,7 +47,7 @@ case class DataSourceV2ScanExec(
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: DataSourceV2StreamingScanExec =>
-      output == other.output && source.getClass == other.source.getClass &&
+      output == other.output && readSupport.getClass == other.readSupport.getClass &&
         options == other.options
     case _ => false
   }
@@ -53,15 +56,23 @@ case class DataSourceV2ScanExec(
     Seq(output, source, options).hashCode()
   }
 
-  override def outputPartitioning: physical.Partitioning = scan match {
+  override def outputPartitioning: physical.Partitioning = readSupport match {
     case _ if partitions.length == 1 =>
       SinglePartition
 
-    case s: SupportsReportPartitioning =>
+    case s: OldSupportsReportPartitioning =>
       new DataSourcePartitioning(
-        s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
+        s.outputPartitioning(scanConfig), AttributeMap(output.map(a => a -> a.name)))
 
     case _ => super.outputPartitioning
+  }
+
+  private lazy val partitions: Seq[InputPartition] = readSupport.planInputPartitions(scanConfig)
+
+  private lazy val readerFactory = readSupport match {
+    case r: MicroBatchReadSupport => r.createReaderFactory(scanConfig)
+    case r: ContinuousReadSupport => r.createContinuousReaderFactory(scanConfig)
+    case _ => throw new IllegalStateException("unknown read support: " + readSupport)
   }
 
   override val supportsBatch: Boolean = {
@@ -72,8 +83,25 @@ case class DataSourceV2ScanExec(
     partitions.exists(readerFactory.supportColumnarReads)
   }
 
-  private lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
+  private lazy val inputRDD: RDD[InternalRow] = readSupport match {
+    case _: ContinuousReadSupport =>
+      assert(!supportsBatch,
+        "continuous stream reader does not support columnar read yet.")
+      EpochCoordinatorRef.get(
+          sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
+          sparkContext.env)
+        .askSync[Unit](SetReaderPartitions(partitions.size))
+      new ContinuousDataSourceRDD(
+        sparkContext,
+        sqlContext.conf.continuousStreamingExecutorQueueSize,
+        sqlContext.conf.continuousStreamingExecutorPollIntervalMs,
+        partitions,
+        schema,
+        readerFactory.asInstanceOf[ContinuousPartitionReaderFactory])
+
+    case _ =>
+      new DataSourceRDD(
+        sparkContext, partitions, readerFactory.asInstanceOf[PartitionReaderFactory], supportsBatch)
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)

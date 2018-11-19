@@ -37,9 +37,9 @@ object DataSourceV2Strategy extends Strategy {
    * @return pushed filter and post-scan filters.
    */
   private def pushFilters(
-      configBuilder: ScanConfigBuilder,
+      scanBuilder: ScanBuilder,
       filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
-    configBuilder match {
+    scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source filters to original catalyst filter expressions.
         val translatedFilterToExpr = mutable.HashMap.empty[sources.Filter, Expression]
@@ -76,10 +76,10 @@ object DataSourceV2Strategy extends Strategy {
    */
   // TODO: nested column pruning.
   private def pruneColumns(
-      configBuilder: ScanConfigBuilder,
+      scanBuilder: ScanBuilder,
       relation: DataSourceV2Relation,
-      exprs: Seq[Expression]): (ScanConfig, Seq[AttributeReference]) = {
-    configBuilder match {
+      exprs: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
+    scanBuilder match {
       case r: SupportsPushDownRequiredColumns =>
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
@@ -95,19 +95,19 @@ object DataSourceV2Strategy extends Strategy {
           r.build() -> relation.output
         }
 
-      case _ => configBuilder.build() -> relation.output
+      case _ => scanBuilder.build() -> relation.output
     }
   }
 
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
-      val configBuilder = relation.readSupport.newScanConfigBuilder()
+      val scanBuilder = relation.newScanBuilder()
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val (pushedFilters, postScanFilters) = pushFilters(configBuilder, filters)
-      val (config, output) = pruneColumns(configBuilder, relation, project ++ postScanFilters)
+      val (pushedFilters, postScanFilters) = pushFilters(scanBuilder, filters)
+      val (scan, output) = pruneColumns(scanBuilder, relation, project ++ postScanFilters)
       logInfo(
         s"""
            |Pushing operators to ${relation.source.getClass}
@@ -116,16 +116,20 @@ object DataSourceV2Strategy extends Strategy {
            |Output: ${output.mkString(", ")}
          """.stripMargin)
 
-      val scan = DataSourceV2ScanExec(
+      val batch = scan.toBatch
+      val partitions = batch.planInputPartitions()
+      val readerFactory = batch.createReaderFactory()
+      val plan = DataSourceV2ScanExec(
         output,
         relation.source,
         relation.options,
         pushedFilters,
-        relation.readSupport,
-        config)
+        scan,
+        partitions,
+        readerFactory)
 
       val filterCondition = postScanFilters.reduceLeftOption(And)
-      val withFilter = filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
+      val withFilter = filterCondition.map(FilterExec(_, plan)).getOrElse(plan)
 
       // always add the projection, which will produce unsafe rows required by some operators
       ProjectExec(project, withFilter) :: Nil
@@ -135,7 +139,7 @@ object DataSourceV2Strategy extends Strategy {
       val scanConfig = r.scanConfigBuilder.build()
       // ensure there is a projection, which will produce unsafe rows required by some operators
       ProjectExec(r.output,
-        DataSourceV2ScanExec(
+        DataSourceV2StreamingScanExec(
           r.output, r.source, r.options, r.pushedFilters, r.readSupport, scanConfig)) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
