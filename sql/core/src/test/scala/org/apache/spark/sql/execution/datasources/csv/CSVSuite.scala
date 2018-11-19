@@ -1861,16 +1861,19 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("encoding in multiLine mode") {
-    withTempPath { path =>
-      val df = spark.range(3).toDF()
-      df.write
-        .option("encoding", "UTF-16BE")
-        .csv(path.getCanonicalPath)
-      val readback = spark.read
-        .option("multiLine", true)
-        .option("encoding", "UTF-16BE")
-        .csv(path.getCanonicalPath)
-      checkAnswer(df, readback)
+    val df = spark.range(3).toDF()
+    Seq("UTF-8", "ISO-8859-1", "CP1251", "US-ASCII", "UTF-16BE", "UTF-32LE").foreach { encoding =>
+      withTempPath { path =>
+        df.write
+          .option("encoding", encoding)
+          .csv(path.getCanonicalPath)
+        val readback = spark.read
+          .option("multiLine", true)
+          .option("encoding", encoding)
+          .option("inferSchema", true)
+          .csv(path.getCanonicalPath)
+        checkAnswer(readback, df)
+      }
     }
   }
 }
