@@ -1595,8 +1595,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_ALIAS_NON_STRUCT_GROUPING_KEY =
-    buildConf("spark.sql.legacy.dataset.aliasNonStructGroupingKey")
+  val ALIAS_NON_STRUCT_GROUPING_KEY_AS_VALUE =
+    buildConf("spark.sql.legacy.dataset.aliasNonStructGroupingKeyAsValue")
       .internal()
       .doc("When set to true, the key attribute resulted from running `Dataset.groupByKey` " +
         "for non-struct key type, will be named as `value`, following the behavior of Spark " +
@@ -2018,7 +2018,8 @@ class SQLConf extends Serializable with Logging {
 
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
 
-  def aliasNonStructGroupingKey: Boolean = getConf(SQLConf.LEGACY_ALIAS_NON_STRUCT_GROUPING_KEY)
+  def aliasNonStructGroupingKeyAsValue: Boolean =
+    getConf(SQLConf.ALIAS_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
   /** ********************** SQLConf functionality methods ************ */
 
