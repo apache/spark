@@ -25,8 +25,8 @@ from pyspark.testing.utils import QuietTest
 
 
 @unittest.skipIf(
-    not _have_pandas or not _have_pyarrow,
-    _pandas_requirement_message or _pyarrow_requirement_message)
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message)
 class WindowPandasUDFTests(ReusedSQLTestCase):
     @property
     def data(self):
@@ -334,9 +334,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
         expected1 = df.withColumn('m1', mean(df['v']).over(w1)) \
             .withColumn('m2', mean(df['v']).over(w2))
-
-        result1.show()
-        expected1.show()
 
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 

@@ -37,14 +37,14 @@ import org.apache.spark.util.Utils
 /**
  * This class calculates and outputs windowed aggregates over the rows in a single partition.
  *
- * It is very similar to [[WindowExec]] and has similar logic. The main difference is that this
- * node doesn't not compute any window aggregation values. Instead, it computes the lower and
- * upper bound for each window (i.e. window bounds) and pass the data and indices to python work
- * to do the actual window aggregation.
+ * This is similar to [[WindowExec]]. The main difference is that this node doesn't not compute
+ * any window aggregation values. Instead, it computes the lower and upper bound for each window
+ * (i.e. window bounds) and pass the data and indices to python work to do the actual window
+ * aggregation.
  *
- * It currently materialize all data associated with the same partition key and pass them to
- * Python. This is not strictly necessary for sliding windows and can be improved (by slicing
- * data into overlapping small chunks and stitch them together).
+ * It currently materializes all data associated with the same partition key and passes them to
+ * Python worker. This is not strictly necessary for sliding windows and can be improved (by
+ * possibly slicing data into overlapping chunks and stitch them together).
  *
  * This class groups window expressions by their window boundaries so that window expressions
  * with the same window boundaries can share the same window bounds. The window bounds are
@@ -105,6 +105,18 @@ case class WindowInPandasExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
+  /**
+   * Helper functions and data structures for window bounds
+   *
+   * It contains:
+   * (1) Total number of window bound indices in the python input row
+   * (2) Function from frame index to its lower bound column index in the python input row
+   * (3) Function from frame index to its upper bound column index in the python input row
+   * (4) Function indicates whether a frame requires window bound indices
+   * (5) Function from frame index to its eval type
+   */
+  type WindowBoundHelpers = (Int, Int => Int, Int => Int, Int => Boolean, Int => Int)
+
   private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
     udf.children match {
       case Seq(u: PythonUDF) =>
@@ -118,18 +130,11 @@ case class WindowInPandasExec(
   }
 
   /**
-   * Get all relevant helper functions and data structures for window bounds
-   *
-   * This function returns:
-   * (1) Total number of window bound indices in the python input row
-   * (2) Function from frame index to its lower bound column index in the python input row
-   * (3) Function from frame index to its upper bound column index in the python input row
-   * (4) Function indicates whether a frame requires window bound indices
-   * (5) Function from frame index to its eval type
+   * See [[WindowBoundHelpers]] for details.
    */
   private def computeWindowBoundHelpers(
       factories: Seq[InternalRow => WindowFunctionFrame]
-  ): (Int, Int => Int, Int => Int, Int => Boolean, Int => Int) = {
+  ): WindowBoundHelpers = {
     val dummyRow = new SpecificInternalRow()
     val functionFrames = factories.map(_(dummyRow))
 
