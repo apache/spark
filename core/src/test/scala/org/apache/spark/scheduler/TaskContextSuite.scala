@@ -116,18 +116,12 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
 
   test("unregistered TaskCompletionListener should not be called") {
     val context = TaskContext.empty()
-    val javaListener = new TaskCompletionListener {
+    val listener = new TaskCompletionListener {
       override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("blah")
     }
-    val scalaListener = (_: TaskContext) => throw new Exception("blah")
-
-    context.addTaskCompletionListener(javaListener)
-    context.addTaskCompletionListener(scalaListener)
-
-    context.remoteTaskCompletionListener(javaListener)
-    context.remoteTaskCompletionListener(scalaListener)
-
-    // fails in case a TaskCompletionListener is called
+    context.addTaskCompletionListener(listener)
+    context.remoteTaskCompletionListener(listener)
+    // fails in case a TaskCompletionListener is ever called
     context.markTaskCompleted(None)
   }
 
