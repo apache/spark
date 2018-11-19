@@ -767,6 +767,14 @@ setMethod("repartition",
 #'                      using \code{spark.sql.shuffle.partitions} as number of partitions.}
 #'}
 #'
+#' At least one partition-by expression must be specified.
+#' When no explicit sort order is specified, "ascending nulls first" is assumed.
+#'
+#' Note that due to performance reasons this method uses sampling to estimate the ranges.
+#' Hence, the output may not be consistent, since sampling can return different values.
+#' The sample size can be controlled by the config
+#' \code{spark.sql.execution.rangeExchange.sampleSizePerPartition}.
+#'
 #' @param x a SparkDataFrame.
 #' @param numPartitions the number of partitions to use.
 #' @param col the column by which the range partitioning will be performed.
