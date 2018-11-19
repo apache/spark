@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.beans.{BeanInfo, BeanProperty}
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, GenericInternalRow, Literal}
@@ -28,10 +26,10 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-@BeanInfo
-private[sql] case class MyLabeledPoint(
-  @BeanProperty label: Double,
-  @BeanProperty features: UDT.MyDenseVector)
+private[sql] case class MyLabeledPoint(label: Double, features: UDT.MyDenseVector) {
+  def getLabel: Double = label
+  def getFeatures: UDT.MyDenseVector = features
+}
 
 // Wrapped in an object to check Scala compatibility. See SPARK-13929
 object UDT {

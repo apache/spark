@@ -190,8 +190,11 @@ private[spark] class Executor(
   private val HEARTBEAT_INTERVAL_MS = conf.get(EXECUTOR_HEARTBEAT_INTERVAL)
 
   // Executor for the heartbeat task.
-  private val heartbeater = new Heartbeater(env.memoryManager, reportHeartBeat,
-    "executor-heartbeater", HEARTBEAT_INTERVAL_MS)
+  private val heartbeater = new Heartbeater(
+    env.memoryManager,
+    () => Executor.this.reportHeartBeat(),
+    "executor-heartbeater",
+    HEARTBEAT_INTERVAL_MS)
 
   // must be initialized before running startDriverHeartbeat()
   private val heartbeatReceiverRef =
