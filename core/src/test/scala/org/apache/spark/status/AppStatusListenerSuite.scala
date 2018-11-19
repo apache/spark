@@ -1290,13 +1290,13 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
 
     time += 1
-    tasks(0).markFinished(TaskState.FAILED, time)
+    tasks(0).markFinished(TaskState.FINISHED, time)
     listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
-      ExecutorLostFailure("1", true, Some("Lost executor")), tasks(0), null))
+      Success, tasks(0), null))
     time += 1
-    tasks(1).markFinished(TaskState.FAILED, time)
+    tasks(1).markFinished(TaskState.FINISHED, time)
     listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
-      ExecutorLostFailure("2", true, Some("Lost executor")), tasks(1), null))
+      Success, tasks(1), null))
 
     stage.failureReason = Some("Failed")
     listener.onStageCompleted(SparkListenerStageCompleted(stage))
@@ -1314,7 +1314,9 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     val esummary = store.view(classOf[ExecutorStageSummaryWrapper]).asScala.map(_.info)
     esummary.foreach { execSummary =>
-      assert(execSummary.failedTasks == 2)
+      assert(execSummary.failedTasks === 1)
+      assert(execSummary.succeededTasks === 1)
+      assert(execSummary.killedTasks === 0)
     }
   }
 
