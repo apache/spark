@@ -296,7 +296,6 @@ class ShuffleWriteMetrics private[spark](
 class TaskMetricDistributions private[spark](
     val quantiles: IndexedSeq[Double],
 
-    val duration: IndexedSeq[Double],
     val executorDeserializeTime: IndexedSeq[Double],
     val executorDeserializeCpuTime: IndexedSeq[Double],
     val executorRunTime: IndexedSeq[Double],

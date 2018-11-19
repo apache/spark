@@ -352,7 +352,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       val deserializationQuantiles = titleCell("Task Deserialization Time",
         ToolTips.TASK_DESERIALIZATION_TIME) ++ timeQuantiles(metrics.executorDeserializeTime)
 
-      val serviceQuantiles = simpleTitleCell("Duration") ++ timeQuantiles(metrics.duration)
+      val serviceQuantiles = simpleTitleCell("Duration") ++ timeQuantiles(metrics.executorRunTime)
 
       val gcQuantiles = titleCell("GC Time", ToolTips.GC_TIME) ++ timeQuantiles(metrics.jvmGcTime)
 
@@ -843,7 +843,7 @@ private[ui] class TaskPagedTable(
         </div>
       </td>
       <td>{UIUtils.formatDate(task.launchTime)}</td>
-      <td>{formatDuration(task.duration)}</td>
+      <td>{formatDuration(task.taskMetrics.map(_.executorRunTime))}</td>
       <td class={TaskDetailsClassNames.SCHEDULER_DELAY}>
         {UIUtils.formatDuration(AppStatusUtils.schedulerDelay(task))}
       </td>
@@ -996,7 +996,7 @@ private[ui] object ApiHelper {
     HEADER_EXECUTOR -> TaskIndexNames.EXECUTOR,
     HEADER_HOST -> TaskIndexNames.HOST,
     HEADER_LAUNCH_TIME -> TaskIndexNames.LAUNCH_TIME,
-    HEADER_DURATION -> TaskIndexNames.DURATION,
+    HEADER_DURATION -> TaskIndexNames.EXEC_RUN_TIME,
     HEADER_SCHEDULER_DELAY -> TaskIndexNames.SCHEDULER_DELAY,
     HEADER_DESER_TIME -> TaskIndexNames.DESER_TIME,
     HEADER_GC_TIME -> TaskIndexNames.GC_TIME,

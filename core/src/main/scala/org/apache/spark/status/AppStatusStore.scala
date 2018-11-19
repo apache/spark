@@ -181,7 +181,6 @@ private[spark] class AppStatusStore(
 
       val distributions = new v1.TaskMetricDistributions(
         quantiles = quantiles,
-        duration = toValues(_.duration),
         executorDeserializeTime = toValues(_.executorDeserializeTime),
         executorDeserializeCpuTime = toValues(_.executorDeserializeCpuTime),
         executorRunTime = toValues(_.executorRunTime),
@@ -251,9 +250,6 @@ private[spark] class AppStatusStore(
 
     val computedQuantiles = new v1.TaskMetricDistributions(
       quantiles = quantiles,
-      duration = scanTasks(TaskIndexNames.DURATION) { t =>
-        t.duration
-      },
       executorDeserializeTime = scanTasks(TaskIndexNames.DESER_TIME) { t =>
         t.executorDeserializeTime
       },
@@ -305,7 +301,6 @@ private[spark] class AppStatusStore(
       .filter { case (q, _) => quantiles.contains(q) && shouldCacheQuantile(q) }
       .foreach { case (q, idx) =>
         val cached = new CachedQuantile(stageId, stageAttemptId, quantileToString(q), count,
-          duration = computedQuantiles.duration(idx),
           executorDeserializeTime = computedQuantiles.executorDeserializeTime(idx),
           executorDeserializeCpuTime = computedQuantiles.executorDeserializeCpuTime(idx),
           executorRunTime = computedQuantiles.executorRunTime(idx),
