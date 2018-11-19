@@ -977,8 +977,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.requestHeaderSize</code></td>
   <td>8k</td>
   <td>
-    The HTTP request header size, in bytes unless otherwise specified.
-    This setting applied for the Spark History Server too.
+    The maximum allowed size for a HTTP request header, in bytes unless otherwise specified.
+    This setting applies for the Spark History Server too.
   <td>
 </tr>
 </table>
