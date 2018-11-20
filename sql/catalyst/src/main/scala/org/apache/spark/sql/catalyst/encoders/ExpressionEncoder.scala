@@ -247,12 +247,12 @@ case class ExpressionEncoder[T](
   })
 
   /**
-   * Returns true if the type `T` is serialized as a struct.
+   * Returns true if the type `T` is serialized as a struct by `objSerializer`.
    */
   def isSerializedAsStruct: Boolean = objSerializer.dataType.isInstanceOf[StructType]
 
   /**
-   * Returns true if the type `T` is `Option`.
+   * Returns true if the type `T` is an `Option` type.
    */
   def isOptionType: Boolean = classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)
 

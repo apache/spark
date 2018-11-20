@@ -1584,21 +1584,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-24762: Resolving Option[Product] field") {
-    val ds = Seq((1, ("a", 1.0)), (2, ("b", 2.0))).toDS().as[(Int, Option[(String, Double)])]
+    val ds = Seq((1, ("a", 1.0)), (2, ("b", 2.0)), (3, null)).toDS()
+      .as[(Int, Option[(String, Double)])]
     checkDataset(ds,
-      (1, Some(("a", 1.0))), (2, Some(("b", 2.0))))
+      (1, Some(("a", 1.0))), (2, Some(("b", 2.0))), (3, None))
   }
 
   test("SPARK-24762: select Option[Product] field") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-      .select(expr("struct(_2, _2 + 1)").as[Option[(Int, Int)]])
-    checkDataset(ds,
+    val ds1 = ds.select(expr("struct(_2, _2 + 1)").as[Option[(Int, Int)]])
+    checkDataset(ds1,
       Some((1, 2)), Some((2, 3)), Some((3, 4)))
+
+    val ds2 = ds.select(expr("if(_2 > 2, struct(_2, _2 + 1), null)").as[Option[(Int, Int)]])
+    checkDataset(ds2,
+      None, None, Some((3, 4)))
   }
 
   test("SPARK-24762: joinWith on Option[Product]") {
-    val ds1 = Seq(Some((1, 2)), Some((2, 3))).toDS().as("a")
-    val ds2 = Seq(Some((1, 2)), Some((2, 3))).toDS().as("b")
+    val ds1 = Seq(Some((1, 2)), Some((2, 3)), None).toDS().as("a")
+    val ds2 = Seq(Some((1, 2)), Some((2, 3)), None).toDS().as("b")
     val joined = ds1.joinWith(ds2, $"a.value._1" === $"b.value._2", "inner")
     checkDataset(joined, (Some((2, 3)), Some((1, 2))))
   }

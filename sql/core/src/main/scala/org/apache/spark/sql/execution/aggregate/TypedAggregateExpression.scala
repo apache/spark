@@ -40,9 +40,9 @@ object TypedAggregateExpression {
     val outputEncoder = encoderFor[OUT]
     val outputType = outputEncoder.objSerializer.dataType
 
-    // Checks if the buffer object is simple, i.e. the buffer encoder is flat and the serializer
-    // expression is an alias of `BoundReference`, which means the buffer object doesn't need
-    // serialization.
+    // Checks if the buffer object is simple, i.e. the `BUF` type is not serialized as struct
+    // and the serializer expression is an alias of `BoundReference`, which means the buffer
+    // object doesn't need serialization.
     val isSimpleBuffer = {
       bufferSerializer.head match {
         case Alias(_: BoundReference, _) if !bufferEncoder.isSerializedAsStruct => true
