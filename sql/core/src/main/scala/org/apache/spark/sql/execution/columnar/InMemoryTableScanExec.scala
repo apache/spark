@@ -194,7 +194,7 @@ case class InMemoryTableScanExec(
   }
 
   // Returned filter predicate should return false iff it is impossible for the input expression
-  // to evaluate to `true' based on statistics collected about this partition batch.
+  // to evaluate to `true` based on statistics collected about this partition batch.
   @transient lazy val buildFilter: PartialFunction[Expression, Expression] = {
     case And(lhs: Expression, rhs: Expression)
       if buildFilter.isDefinedAt(lhs) || buildFilter.isDefinedAt(rhs) =>
@@ -239,9 +239,6 @@ case class InMemoryTableScanExec(
         l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
 
     case StartsWith(a: AttributeReference, ExtractableLiteral(l)) =>
-      statsFor(a).lowerBound.substr(0, Length(l)) <= l &&
-        l <= statsFor(a).upperBound.substr(0, Length(l))
-    case StartsWith(ExtractableLiteral(l), a: AttributeReference) =>
       statsFor(a).lowerBound.substr(0, Length(l)) <= l &&
         l <= statsFor(a).upperBound.substr(0, Length(l))
   }
