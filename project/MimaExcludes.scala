@@ -270,6 +270,22 @@ object MimaExcludes {
     // [SPARK-26457] Show hadoop configurations in HistoryServer environment tab
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationEnvironmentInfo.this"),
 
+    // [SPARK-25341][CORE] Support rolling back a shuffle map stage and re-generate the shuffle files
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getIndeterminateAttemptId"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.markAsIndeterminate"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleIndexBlockId.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleIndexBlockId.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleDataBlockId.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleDataBlockId.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleBlockId.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleBlockId.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.storage.ShuffleIndexBlockId$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleIndexBlockId.apply"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.storage.ShuffleDataBlockId$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleDataBlockId.apply"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.storage.ShuffleBlockId$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleBlockId.apply"),
+
     // Data Source V2 API changes
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) =>
