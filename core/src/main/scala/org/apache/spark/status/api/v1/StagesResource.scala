@@ -117,7 +117,7 @@ private[v1] class StagesResource extends BaseAppResource {
       val uriQueryParameters = uriInfo.getQueryParameters(true)
       val totalRecords = uriQueryParameters.getFirst("numTasks")
       var isSearch = false
-      var searchValue: Option[String] = None
+      var searchValue: String = null
       var filteredRecords = totalRecords
       // The datatables client API sends a list of query parameters to the server which contain
       // information like the columns to be sorted, search value typed by the user in the search
@@ -126,7 +126,7 @@ private[v1] class StagesResource extends BaseAppResource {
       if (uriQueryParameters.getFirst("search[value]") != null &&
         uriQueryParameters.getFirst("search[value]").length > 0) {
         isSearch = true
-        searchValue = Some(uriQueryParameters.getFirst("search[value]"))
+        searchValue = uriQueryParameters.getFirst("search[value]")
       }
       val _tasksToShow: Seq[TaskData] = doPagination(uriQueryParameters, stageId, stageAttemptId,
         isSearch, totalRecords.toInt)
@@ -134,7 +134,7 @@ private[v1] class StagesResource extends BaseAppResource {
       if (_tasksToShow.nonEmpty) {
         // Performs server-side search based on input from user
         if (isSearch) {
-          val filteredTaskList = filterTaskList(_tasksToShow, searchValue.get)
+          val filteredTaskList = filterTaskList(_tasksToShow, searchValue)
           filteredRecords = filteredTaskList.length.toString
           if (filteredTaskList.length > 0) {
             val pageStartIndex = uriQueryParameters.getFirst("start").toInt
