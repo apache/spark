@@ -785,6 +785,7 @@ private[spark] class BlockManager(
       }
 
       if (data != null) {
+        assert(!data.isInstanceOf[BlockManagerManagedBuffer])
         return Some(data)
       }
       logDebug(s"The value of block $blockId is null")
