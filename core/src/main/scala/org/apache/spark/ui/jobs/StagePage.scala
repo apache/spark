@@ -278,8 +278,15 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
   }
 
-  def makeTimeline(tasks: Seq[TaskData], currentTime: Long, page: Int, pageSize: Int,
-    totalPages: Int, stageId: Int, stageAttemptId: Int, totalTasks: Int): Seq[Node] = {
+  def makeTimeline(
+      tasks: Seq[TaskData],
+      currentTime: Long,
+      page: Int,
+      pageSize: Int,
+      totalPages: Int,
+      stageId: Int,
+      stageAttemptId: Int,
+      totalTasks: Int): Seq[Node] = {
     val executorsSet = new HashSet[(String, String)]
     var minLaunchTime = Long.MaxValue
     var maxFinishTime = Long.MinValue
