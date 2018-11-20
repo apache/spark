@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.ScalaUDF
@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.DataType
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,

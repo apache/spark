@@ -56,7 +56,7 @@ trait KafkaContinuousTest extends KafkaSourceTest {
   }
 
   // Continuous processing tasks end asynchronously, so test that they actually end.
-  private val tasksEndedListener = new SparkListener() {
+  private class TasksEndedListener extends SparkListener {
     val activeTaskIdCount = new AtomicInteger(0)
 
     override def onTaskStart(start: SparkListenerTaskStart): Unit = {
@@ -67,6 +67,8 @@ trait KafkaContinuousTest extends KafkaSourceTest {
       activeTaskIdCount.decrementAndGet()
     }
   }
+
+  private val tasksEndedListener = new TasksEndedListener()
 
   override def beforeEach(): Unit = {
     super.beforeEach()

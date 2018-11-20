@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
@@ -38,7 +38,7 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
  * @since 2.0.0
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 class KeyValueGroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
     vEncoder: Encoder[V],
@@ -238,7 +238,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def mapGroupsWithState[S: Encoder, U: Encoder](
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
     val flatMapFunc = (key: K, it: Iterator[V], s: GroupState[S]) => Iterator(func(key, it, s))
@@ -273,7 +273,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def mapGroupsWithState[S: Encoder, U: Encoder](
       timeoutConf: GroupStateTimeout)(
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
@@ -310,7 +310,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def mapGroupsWithState[S, U](
       func: MapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
@@ -341,7 +341,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def mapGroupsWithState[S, U](
       func: MapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
@@ -372,7 +372,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
       timeoutConf: GroupStateTimeout)(
@@ -414,7 +414,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def flatMapGroupsWithState[S, U](
       func: FlatMapGroupsWithStateFunction[K, V, S, U],
       outputMode: OutputMode,

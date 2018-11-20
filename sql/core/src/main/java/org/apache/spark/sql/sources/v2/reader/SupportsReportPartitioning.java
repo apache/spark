@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
 
 /**
@@ -27,7 +27,7 @@ import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
  * Note that, when a {@link ReadSupport} implementation creates exactly one {@link InputPartition},
  * Spark may avoid adding a shuffle even if the reader does not implement this interface.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface SupportsReportPartitioning extends ReadSupport {
 
   /**

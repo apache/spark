@@ -408,6 +408,11 @@
         <version>${commons-lang3.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-text</artifactId>
+        <version>1.6</version>
+      </dependency>
+      <dependency>
         <groupId>commons-lang</groupId>
         <artifactId>commons-lang</artifactId>
         <version>${commons-lang2.version}</version>
@@ -2016,7 +2021,6 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <!-- 3.3.1 won't work with zinc; fails to find javac from java.home -->
           <version>3.4.4</version>
           <executions>
             <execution>
@@ -2035,6 +2039,13 @@
               <id>scala-test-compile-first</id>
               <goals>
                 <goal>testCompile</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>attach-scaladocs</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>doc-jar</goal>
               </goals>
             </execution>
           </executions>

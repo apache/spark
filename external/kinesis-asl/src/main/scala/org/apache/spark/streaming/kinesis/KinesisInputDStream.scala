@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.Record
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
@@ -84,14 +84,14 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
   }
 }
 
-@InterfaceStability.Evolving
+@Evolving
 object KinesisInputDStream {
   /**
    * Builder for [[KinesisInputDStream]] instances.
    *
    * @since 2.2.0
    */
-  @InterfaceStability.Evolving
+  @Evolving
   class Builder {
     // Required params
     private var streamingContext: Option[StreamingContext] = None
