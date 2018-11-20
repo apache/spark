@@ -102,29 +102,34 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
-  def executeAndCheck(plan: LogicalPlan): LogicalPlan = AnalysisHelper.markInAnalyzer {
-    val analyzed = execute(plan)
-    try {
-      checkAnalysis(analyzed)
-      analyzed
-    } catch {
-      case e: AnalysisException =>
-        val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
-        ae.setStackTrace(e.getStackTrace)
-        throw ae
+  def executeAndCheck(plan: LogicalPlan, tracker: Option[QueryPlanningTracker]): LogicalPlan = {
+    AnalysisHelper.markInAnalyzer {
+      val analyzed = execute(plan, tracker)
+      try {
+        checkAnalysis(analyzed)
+        analyzed
+      } catch {
+        case e: AnalysisException =>
+          val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
+          ae.setStackTrace(e.getStackTrace)
+          throw ae
+      }
     }
   }
 
-  override def execute(plan: LogicalPlan): LogicalPlan = {
+  override def execute(plan: LogicalPlan, tracker: Option[QueryPlanningTracker]): LogicalPlan = {
     AnalysisContext.reset()
     try {
-      executeSameContext(plan)
+      executeSameContext(plan, tracker)
     } finally {
       AnalysisContext.reset()
     }
   }
 
-  private def executeSameContext(plan: LogicalPlan): LogicalPlan = super.execute(plan)
+  private def executeSameContext(
+      plan: LogicalPlan, tracker: Option[QueryPlanningTracker]): LogicalPlan = {
+    super.execute(plan, tracker)
+  }
 
   def resolver: Resolver = conf.resolver
 
@@ -211,7 +216,7 @@ class Analyzer(
       case With(child, relations) =>
         substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
           case (resolved, (name, relation)) =>
-            resolved :+ name -> executeSameContext(substituteCTE(relation, resolved))
+            resolved :+ name -> executeSameContext(substituteCTE(relation, resolved), None)
         })
       case other => other
     }
@@ -696,7 +701,7 @@ class Analyzer(
               s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
               "around this.")
           }
-          executeSameContext(child)
+          executeSameContext(child, None)
         }
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
@@ -1405,7 +1410,7 @@ class Analyzer(
       do {
         // Try to resolve the subquery plan using the regular analyzer.
         previous = current
-        current = executeSameContext(current)
+        current = executeSameContext(current, None)
 
         // Use the outer references to resolve the subquery plan if it isn't resolved yet.
         val i = plans.iterator
@@ -1527,7 +1532,7 @@ class Analyzer(
               grouping,
               Alias(cond, "havingCondition")() :: Nil,
               child)
-          val resolvedOperator = executeSameContext(aggregatedCondition)
+          val resolvedOperator = executeSameContext(aggregatedCondition, None)
           def resolvedAggregateFilter =
             resolvedOperator
               .asInstanceOf[Aggregate]
@@ -1588,7 +1593,7 @@ class Analyzer(
             unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate =
-            executeSameContext(aggregatedOrdering).asInstanceOf[Aggregate]
+            executeSameContext(aggregatedOrdering, None).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =
             resolvedAggregate.aggregateExpressions.asInstanceOf[Seq[Alias]]
 

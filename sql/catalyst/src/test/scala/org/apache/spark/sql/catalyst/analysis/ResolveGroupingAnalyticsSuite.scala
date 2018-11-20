@@ -109,7 +109,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq(UnresolvedAlias(Multiply(unresolved_a, Literal(2))),
         unresolved_b, UnresolvedAlias(count(unresolved_c))))
 
-    val resultPlan = getAnalyzer(true).executeAndCheck(originalPlan2)
+    val resultPlan = getAnalyzer(true).executeAndCheck(originalPlan2, None)
     val gExpressions = resultPlan.asInstanceOf[Aggregate].groupingExpressions
     assert(gExpressions.size == 3)
     val firstGroupingExprAttrName =

@@ -47,7 +47,7 @@ class ResolvedUuidExpressionsSuite extends AnalysisTest {
 
   test("analyzed plan sets random seed for Uuid expression") {
     val plan = r.select(a, uuid1)
-    val resolvedPlan = analyzer.executeAndCheck(plan)
+    val resolvedPlan = analyzer.executeAndCheck(plan, None)
     getUuidExpressions(resolvedPlan).foreach { u =>
       assert(u.resolved)
       assert(u.randomSeed.isDefined)
@@ -56,14 +56,14 @@ class ResolvedUuidExpressionsSuite extends AnalysisTest {
 
   test("Uuid expressions should have different random seeds") {
     val plan = r.select(a, uuid1).groupBy(uuid1Ref)(uuid2, uuid3)
-    val resolvedPlan = analyzer.executeAndCheck(plan)
+    val resolvedPlan = analyzer.executeAndCheck(plan, None)
     assert(getUuidExpressions(resolvedPlan).map(_.randomSeed.get).distinct.length == 3)
   }
 
   test("Different analyzed plans should have different random seeds in Uuids") {
     val plan = r.select(a, uuid1).groupBy(uuid1Ref)(uuid2, uuid3)
-    val resolvedPlan1 = analyzer.executeAndCheck(plan)
-    val resolvedPlan2 = analyzer.executeAndCheck(plan)
+    val resolvedPlan1 = analyzer.executeAndCheck(plan, None)
+    val resolvedPlan2 = analyzer.executeAndCheck(plan, None)
     val uuids1 = getUuidExpressions(resolvedPlan1)
     val uuids2 = getUuidExpressions(resolvedPlan2)
     assert(uuids1.distinct.length == 3)

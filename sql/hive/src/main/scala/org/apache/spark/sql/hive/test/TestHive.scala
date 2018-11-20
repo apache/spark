@@ -586,7 +586,7 @@ private[hive] class TestHiveQueryExecution(
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.
-    sparkSession.sessionState.analyzer.executeAndCheck(logical)
+    sparkSession.sessionState.analyzer.executeAndCheck(logical, None)
   }
 }
 
