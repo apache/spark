@@ -29,9 +29,10 @@ import org.apache.spark.annotation.InterfaceStability
  *
  * @param message A human readable description of what the stream is currently doing.
  * @param isDataAvailable True when there is new data to be processed. Doesn't apply
- *                        to ContinuousExecution and always false.
+ *                        to ContinuousExecution where it is always false.
  * @param isTriggerActive True when the trigger is actively firing, false when waiting for the
- *                        next trigger time. Doesn't apply to ContinuousExecution and always false.
+ *                        next trigger time. Doesn't apply to ContinuousExecution where it is
+ *                        always false.
  *
  * @since 2.1.0
  */
