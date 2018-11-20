@@ -61,7 +61,7 @@ class QueryExecution(
 
   lazy val analyzed: LogicalPlan = tracker.measureTime(QueryPlanningTracker.ANALYSIS) {
     SparkSession.setActiveSession(sparkSession)
-    sparkSession.sessionState.analyzer.executeAndCheck(logical, Option(tracker))
+    sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
   lazy val withCachedData: LogicalPlan = {
@@ -71,7 +71,7 @@ class QueryExecution(
   }
 
   lazy val optimizedPlan: LogicalPlan = tracker.measureTime(QueryPlanningTracker.OPTIMIZATION) {
-    sparkSession.sessionState.optimizer.execute(withCachedData, Option(tracker))
+    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData, tracker)
   }
 
   lazy val sparkPlan: SparkPlan = tracker.measureTime(QueryPlanningTracker.PLANNING) {

@@ -67,17 +67,26 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    */
   protected def isPlanIntegral(plan: TreeType): Boolean = true
 
-  /** A special overload (as opposed to default parameter values) to allow execute in a closure. */
-  def execute(plan: TreeType): TreeType = execute(plan, None)
+  /**
+   * Executes the batches of rules defined by the subclass, and also tracks timing info for each
+   * rule using the provided tracker.
+   * @see [[execute]]
+   */
+  def executeAndTrack(plan: TreeType, tracker: QueryPlanningTracker): TreeType = {
+    QueryPlanningTracker.withTracker(tracker) {
+      execute(plan)
+    }
+  }
 
   /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
    * using the defined execution strategy. Within each batch, rules are also executed serially.
    */
-  def execute(plan: TreeType, tracker: Option[QueryPlanningTracker]): TreeType = {
+  def execute(plan: TreeType): TreeType = {
     var curPlan = plan
     val queryExecutionMetrics = RuleExecutor.queryExecutionMeter
     val planChangeLogger = new PlanChangeLogger()
+    val tracker = QueryPlanningTracker.get
 
     batches.foreach { batch =>
       val batchStartPlan = curPlan
@@ -102,7 +111,9 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             queryExecutionMetrics.incExecutionTimeBy(rule.ruleName, runTime)
             queryExecutionMetrics.incNumExecution(rule.ruleName)
 
-            tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
+            if (tracker ne null) {
+              tracker.recordRuleInvocation(rule.ruleName, runTime, effective)
+            }
 
             // Run the structural integrity checker against the plan after each rule.
             if (!isPlanIntegral(result)) {

@@ -50,6 +50,24 @@ object QueryPlanningTracker {
       s"RuleSummary($totalTimeNs, $numInvocations, $numEffectiveInvocations)"
     }
   }
+
+  /**
+   * A thread local variable to implicitly pass the tracker around. This assumes the query planner
+   * is single-threaded, and avoids passing the same tracker context in every function call.
+   */
+  private val localTracker = new ThreadLocal[QueryPlanningTracker]() {
+    override def initialValue: QueryPlanningTracker = null
+  }
+
+  /** Returns the current tracker in scope, based on the thread local variable. */
+  def get: QueryPlanningTracker = localTracker.get()
+
+  /** Sets the current tracker for the execution of function f. We assume f is single-threaded. */
+  def withTracker[T](tracker: QueryPlanningTracker)(f: => T): T = {
+    val originalTracker = localTracker.get()
+    localTracker.set(tracker)
+    try f finally { localTracker.set(originalTracker) }
+  }
 }
 
 
@@ -74,7 +92,7 @@ class QueryPlanningTracker {
   }
 
   /**
-   * Reecord a specific invocation of a rule.
+   * Record a specific invocation of a rule.
    *
    * @param rule name of the rule
    * @param timeNs time taken to run this invocation
