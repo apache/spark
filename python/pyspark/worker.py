@@ -166,11 +166,28 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
     def wrapped(begin_index, end_index, *series):
         import pandas as pd
         result = []
-        for i in range(0, len(begin_index)):
-            # Note: Create a slice from a series is actually pretty expensive to
-            #       do for each window. However, there is no way to reduce
-            #       the cost of creating sub series here AFAIK.
-            series_slices = [s[begin_index[i]: end_index[i]] for s in series]
+
+        # Index operation is faster on np.ndarray,
+        # So we turn the index series into np array
+        # here for performance
+        begin_array = begin_index.values
+        end_array = end_index.values
+
+        for i in range(len(begin_index)):
+            # Note: Create a slice from a series for each window is
+            #       actually pretty expensive. However, there
+            #       is no easy way to reduce cost here.
+            # Note: s.iloc[i : j] is about 30% faster than s[i: j], with
+            #       the caveat that the created slices shares the same
+            #       memory with s. Therefore, user are not allowed to
+            #       change the value of input series inside the window
+            #       function. It is rare that user needs to modify the
+            #       input series in the window function, and therefore,
+            #       it is be a reasonable restriction.
+            # Note: Calling reset_index on the slices will increase the cost
+            #       of creating slices by about 100%. Therefore, for performance
+            #       reasons we don't do it here.
+            series_slices = [s.iloc[begin_array[i]: end_array[i]] for s in series]
             result.append(f(*series_slices))
         return pd.Series(result)
 

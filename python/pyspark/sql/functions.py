@@ -2982,8 +2982,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  2|        6.0|
        +---+-----------+
 
-       This example shows using grouped aggregated UDFs as window functions. Note that only
-       unbounded window frame is supported at the moment:
+       This example shows using grouped aggregated UDFs as window functions.
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> from pyspark.sql import Window
@@ -2993,19 +2992,24 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
        ... def mean_udf(v):
        ...     return v.mean()
-       >>> w = Window \\
-       ...     .partitionBy('id') \\
-       ...     .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+       >>> w = (Window.partitionBy('id')
+       ...            .orderBy('v')
+       ...            .rowsBetween(-1, 0))
        >>> df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()  # doctest: +SKIP
        +---+----+------+
        | id|   v|mean_v|
        +---+----+------+
-       |  1| 1.0|   1.5|
+       |  1| 1.0|   1.0|
        |  1| 2.0|   1.5|
-       |  2| 3.0|   6.0|
-       |  2| 5.0|   6.0|
-       |  2|10.0|   6.0|
+       |  2| 3.0|   3.0|
+       |  2| 5.0|   4.0|
+       |  2|10.0|   7.5|
        +---+----+------+
+
+       .. warning:: For performance reasons, the input series to window functions are not copied.
+                    Therefore, changing the value of the input series is not allowed and will
+                    result incorrect results. For the same reason, users should also not rely
+                    on the index of the input series.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
 
