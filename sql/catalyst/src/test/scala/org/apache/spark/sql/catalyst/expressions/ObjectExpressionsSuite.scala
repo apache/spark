@@ -29,6 +29,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer, UnresolvedDeserializer}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.encoders._
@@ -412,7 +413,6 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkObjectExprEvaluation(newInst2, new outerObj.Inner(1))
 
     // SPARK-8288: A class with only a companion object constructor
-    import org.apache.spark.sql.catalyst.ScroogeLikeExample
     val newInst3 = NewInstance(
       cls = classOf[ScroogeLikeExample],
       arguments = Literal(1) :: Nil,
