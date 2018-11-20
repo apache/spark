@@ -339,8 +339,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           }
         }
         dataOut.flush()
-        dataOut.writeInt(evalType)
 
+        dataOut.writeInt(evalType)
         writeCommand(dataOut)
         writeIteratorToStream(dataOut)
 

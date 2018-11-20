@@ -258,7 +258,6 @@ def read_udfs(pickleSer, infile, eval_type):
         ser = BatchedSerializer(PickleSerializer(), 100)
 
     num_udfs = read_int(infile)
-
     udfs = {}
     call_udf = []
     mapper_str = ""

@@ -77,11 +77,8 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
     }.grouped(100).map(x => pickle.dumps(x.toArray))
 
     // Output iterator for results from Python.
-    val outputIterator = new PythonUDFRunner(
-      funcs,
-      PythonEvalType.SQL_BATCHED_UDF,
-      argOffsets
-    ).compute(inputIterator, context.partitionId(), context)
+    val outputIterator = new PythonUDFRunner(funcs, PythonEvalType.SQL_BATCHED_UDF, argOffsets)
+      .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
     val mutableRow = new GenericInternalRow(1)
