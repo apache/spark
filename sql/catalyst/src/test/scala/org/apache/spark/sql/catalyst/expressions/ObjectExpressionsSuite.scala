@@ -411,7 +411,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       outerPointer = Some(() => outerObj))
     checkObjectExprEvaluation(newInst2, new outerObj.Inner(1))
 
-    // SPARK-8288 Test
+    // SPARK-8288: A class with only a companion object constructor
     import org.apache.spark.sql.catalyst.ScroogeLikeExample
     val newInst3 = NewInstance(
       cls = classOf[ScroogeLikeExample],

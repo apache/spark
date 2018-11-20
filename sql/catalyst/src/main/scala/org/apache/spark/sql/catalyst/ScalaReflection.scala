@@ -801,14 +801,14 @@ object ScalaReflection extends ScalaReflection {
         val moduleMirror = mirror.reflectModule(companion.asModule)
         val applyMethods = companion.asTerm.typeSignature
           .member(universe.TermName("apply")).asTerm.alternatives
-        applyMethods.filter{ method =>
+        applyMethods.find { method =>
           val params = method.typeSignature.paramLists.head
           // Check that the needed params are the same length and of matching types
           params.size == paramTypes.tail.size &&
-          params.zip(paramTypes.tail).map{case(ps, pc) =>
+          params.zip(paramTypes.tail).forall { case(ps, pc) =>
             ps.typeSignature.typeSymbol == mirror.classSymbol(pc)
-          }.reduce(_&&_)
-        }.headOption.map{ applyMethodSymbol =>
+          }
+        }.map { applyMethodSymbol =>
           val expectedArgsCount = applyMethodSymbol.typeSignature.paramLists.head.size
           val instanceMirror = mirror.reflect(moduleMirror.instance)
           val method = instanceMirror.reflectMethod(applyMethodSymbol.asMethod)
@@ -1025,4 +1025,5 @@ trait ScalaReflection extends Logging {
     }
     params.flatten
   }
+
 }

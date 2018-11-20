@@ -109,12 +109,43 @@ object TestingUDT {
   }
 }
 
-trait ScroogeLikeExample extends Product1[Int] with java.io.Serializable {
+/** An example derived from Twitter/Scrooge codegen for thrift  */
+object ScroogeLikeExample {
+  def apply(
+    x: Int
+  ): ScroogeLikeExample =
+    new Immutable(
+      x
+    )
+
+  def unapply(_item: ScroogeLikeExample): _root_.scala.Option[Int] = _root_.scala.Some(_item.x)
+
+  class Immutable(val x: Int) extends ScroogeLikeExample
+
+  trait Proxy extends ScroogeLikeExample {
+    protected def _underlying_ScroogeLikeExample: ScroogeLikeExample
+    override def x: Int = _underlying_ScroogeLikeExample.x
+  }
+}
+
+trait ScroogeLikeExample
+  extends _root_.scala.Product1[Int]
+  with java.io.Serializable
+{
   import ScroogeLikeExample._
 
-  def _1: Int
+  def x: Int
 
-  def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
+  def _1: Int = x
+
+  def copy(
+    x: Int = this.x
+  ): ScroogeLikeExample =
+    new Immutable(
+      x
+    )
+
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
 
   private def _equals(x: ScroogeLikeExample, y: ScroogeLikeExample): Boolean =
       x.productArity == y.productArity &&
@@ -128,15 +159,12 @@ trait ScroogeLikeExample extends Product1[Int] with java.io.Serializable {
     var hash = _root_.scala.runtime.ScalaRunTime._hashCode(this)
     hash
   }
-  override def toString: String = s"ScroogeLikeExample(${_1})"
-}
 
+  override def productArity: Int = 1
 
-object ScroogeLikeExample {
-  def apply(x: Int): ScroogeLikeExample = new Immutable(x)
-
-  class Immutable(x: Int) extends ScroogeLikeExample {
-    def _1: Int = x
+  override def productElement(n: Int): Any = n match {
+    case 0 => this.x
+    case _ => throw new IndexOutOfBoundsException(n.toString)
   }
 }
 
@@ -393,7 +421,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
   }
 
-  test("SPARK-8288") {
+  test("SPARK-8288: schemaFor works for a class with only a companion object constructor") {
     val schema = schemaFor[ScroogeLikeExample]
     assert(schema === Schema(
       StructType(Seq(

@@ -453,7 +453,7 @@ case class NewInstance(
   @transient private lazy val constructor: (Seq[AnyRef]) => Any = {
     val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
     val getConstructor = (paramClazz: Seq[Class[_]]) => {
-      ScalaReflection.findConstructor(cls, paramClazz).getOrElse{
+      ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
         sys.error(s"Couldn't find a valid constructor on $cls")
       }
     }
@@ -504,7 +504,6 @@ case class NewInstance(
       final $javaType ${ev.value} = ${ev.isNull} ?
         ${CodeGenerator.defaultValue(dataType)} : $constructorCall;
     """
-
     ev.copy(code = code)
   }
 
