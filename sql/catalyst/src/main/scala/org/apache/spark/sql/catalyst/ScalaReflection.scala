@@ -793,9 +793,9 @@ object ScalaReflection extends ScalaReflection {
    * matching constructor is returned if it exists. Otherwise, we check for additional compatible
    * constructors defined in the companion object as `apply` methods. Otherwise, it returns `None`.
    */
-  def findConstructor(cls: Class[_], paramTypes: Seq[Class[_]]): Option[Seq[AnyRef] => Any] = {
+  def findConstructor[T](cls: Class[T], paramTypes: Seq[Class[_]]): Option[Seq[AnyRef] => T] = {
     Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*)) match {
-      case Some(c) => Some(x => c.newInstance(x: _*))
+      case Some(c) => Some(x => c.newInstance(x: _*).asInstanceOf[T])
       case None =>
         val companion = mirror.staticClass(cls.getName).companion
         val moduleMirror = mirror.reflectModule(companion.asModule)
@@ -815,7 +815,7 @@ object ScalaReflection extends ScalaReflection {
           (_args: Seq[AnyRef]) => {
             // Drop the "outer" argument if it is provided
             val args = if (_args.size == expectedArgsCount) _args else _args.tail
-            method.apply(args: _*)
+            method.apply(args: _*).asInstanceOf[T]
           }
         }
     }

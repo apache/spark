@@ -123,20 +123,15 @@ trait ScroogeLikeExample extends Product1[Int] with Serializable {
 
   def x: Int
 
-  override def _1: Int = x
-
-  def copy(x: Int = this.x): ScroogeLikeExample = new Immutable(x)
+  def _1: Int = x
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
 
-  private def _equals(x: ScroogeLikeExample, y: ScroogeLikeExample): Boolean =
-      x.productArity == y.productArity &&
-      x.productIterator.sameElements(y.productIterator)
+  private def _equals(x: ScroogeLikeExample, y: ScroogeLikeExample): Boolean = x.x == y.x
 
   override def equals(other: Any): Boolean =
     canEqual(other) &&
-      _equals(this, other.asInstanceOf[ScroogeLikeExample])
-
+  _equals(this, other.asInstanceOf[ScroogeLikeExample])
 }
 
 class ScalaReflectionSuite extends SparkFunSuite {
