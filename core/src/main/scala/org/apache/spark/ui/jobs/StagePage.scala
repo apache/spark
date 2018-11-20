@@ -92,6 +92,14 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val parameterTaskSortDesc = UIUtils.stripXSS(request.getParameter("task.desc"))
     val parameterTaskPageSize = UIUtils.stripXSS(request.getParameter("task.pageSize"))
 
+    val eventTimelineParameterTaskPage = UIUtils.stripXSS(
+      request.getParameter("task.eventTimelinePageNumber"))
+    val eventTimelineParameterTaskPageSize = UIUtils.stripXSS(
+      request.getParameter("task.eventTimelinePageSize"))
+    var eventTimelineTaskPage = Option(eventTimelineParameterTaskPage).map(_.toInt).getOrElse(1)
+    var eventTimelineTaskPageSize = Option(
+      eventTimelineParameterTaskPageSize).map(_.toInt).getOrElse(100)
+
     val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
     val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
       UIUtils.decodeURLParameter(sortColumn)
@@ -131,6 +139,14 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       s"$totalTasks"
     } else {
       s"$totalTasks, showing $storedTasks"
+    }
+    if (eventTimelineTaskPageSize < 1 || eventTimelineTaskPageSize > totalTasks) {
+      eventTimelineTaskPageSize = totalTasks
+    }
+    val eventTimelineTotalPages =
+      (totalTasks + eventTimelineTaskPageSize - 1) / eventTimelineTaskPageSize
+    if (eventTimelineTaskPage < 1 || eventTimelineTaskPage > eventTimelineTotalPages) {
+      eventTimelineTaskPage = 1
     }
 
     val summary =
@@ -247,9 +263,12 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       makeTimeline(
         // Only show the tasks in the table
         Option(taskTable).map({ taskPagedTable =>
-          val from = (taskPage - 1) * taskPageSize
-          val to = taskPagedTable.dataSource.dataSize.min(taskPage * taskPageSize)
-          taskPagedTable.dataSource.sliceData(from, to)}).getOrElse(Nil), currentTime) ++
+          val from = (eventTimelineTaskPage - 1) * eventTimelineTaskPageSize
+          val to = taskPagedTable.dataSource.dataSize.min(
+            eventTimelineTaskPage * eventTimelineTaskPageSize)
+          taskPagedTable.dataSource.sliceData(from, to)}).getOrElse(Nil), currentTime,
+        eventTimelineTaskPage, eventTimelineTaskPageSize, eventTimelineTotalPages, stageId,
+        stageAttemptId, totalTasks) ++
         <div id="parent-container">
           <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script>
           <script src={UIUtils.prependBaseUri(request, "/static/stagepage.js")}></script>
@@ -259,7 +278,8 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
   }
 
-  def makeTimeline(tasks: Seq[TaskData], currentTime: Long): Seq[Node] = {
+  def makeTimeline(tasks: Seq[TaskData], currentTime: Long, page: Int, pageSize: Int,
+    totalPages: Int, stageId: Int, stageAttemptId: Int, totalTasks: Int): Seq[Node] = {
     val executorsSet = new HashSet[(String, String)]
     var minLaunchTime = Long.MaxValue
     var maxFinishTime = Long.MinValue
@@ -417,6 +437,31 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         <div id="task-assignment-timeline-zoom-lock">
           <input type="checkbox"></input>
           <span>Enable zooming</span>
+        </div>
+        <div>
+          <form id={s"form-event-timeline-page"}
+                method="get"
+                action=""
+                class="form-inline pull-right"
+                style="margin-bottom: 0px;">
+            <label>Tasks: {totalTasks}. {totalPages} Pages. Jump to</label>
+            <input type="hidden" name="id" value={stageId.toString} />
+            <input type="hidden" name="attempt" value={stageAttemptId.toString} />
+            <input type="text"
+                   name="task.eventTimelinePageNumber"
+                   id={s"form-event-timeline-page-no"}
+                   value={page.toString} class="span1" />
+
+            <label>. Show </label>
+            <input type="text"
+                   id={s"form-event-timeline-page-size"}
+                   name="task.eventTimelinePageSize"
+                   value={pageSize.toString}
+                   class="span1" />
+            <label>items in a page.</label>
+
+            <button type="submit" class="btn">Go</button>
+          </form>
         </div>
       </div>
       {TIMELINE_LEGEND}
