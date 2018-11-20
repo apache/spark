@@ -132,6 +132,8 @@ trait ScroogeLikeExample extends Product1[Int] with Serializable {
   override def equals(other: Any): Boolean =
     canEqual(other) &&
   _equals(this, other.asInstanceOf[ScroogeLikeExample])
+
+  override def hashCode: Int = x
 }
 
 class ScalaReflectionSuite extends SparkFunSuite {
