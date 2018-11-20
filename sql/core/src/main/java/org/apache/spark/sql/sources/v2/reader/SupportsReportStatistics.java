@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * A mix in interface for {@link BatchReadSupport}. Data sources can implement this interface to
@@ -27,7 +27,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * data source. Implementations that return more accurate statistics based on pushed operators will
  * not improve query performance until the planner can push operators before getting stats.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface SupportsReportStatistics extends ReadSupport {
 
   /**
