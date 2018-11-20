@@ -127,11 +127,9 @@ trait ScroogeLikeExample extends Product1[Int] with Serializable {
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
 
-  private def _equals(x: ScroogeLikeExample, y: ScroogeLikeExample): Boolean = x.x == y.x
-
   override def equals(other: Any): Boolean =
     canEqual(other) &&
-  _equals(this, other.asInstanceOf[ScroogeLikeExample])
+      this.x ==  other.asInstanceOf[ScroogeLikeExample].x
 
   override def hashCode: Int = x
 }
