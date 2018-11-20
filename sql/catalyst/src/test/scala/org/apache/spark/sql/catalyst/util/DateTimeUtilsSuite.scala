@@ -411,8 +411,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("SPARK-26002: correct day of year calculations for Julian calendar years") {
-    TimeZone.setDefault(TimeZoneUTC)
-    val c = Calendar.getInstance(TimeZoneUTC)
+    val c = Calendar.getInstance()
     c.set(Calendar.MILLISECOND, 0)
     (1000 to 1600 by 100).foreach { year =>
       // January 1 is the 1st day of year.
@@ -432,6 +431,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       c.set(year + 1, 2, 1, 0, 0, 0)
       assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
     }
+
+    c.set(1582, 2, 1, 0, 0, 0)
+    assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
   }
 
   test("get year") {
