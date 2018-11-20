@@ -726,29 +726,15 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-26021: Double and Float 0.0/-0.0 should be equal when grouping") {
     val colName = "i"
-    def groupByCollect(df: DataFrame): Array[Row] = {
-      df.groupBy(colName).count().collect()
-    }
-    def assertResult[T](result: Array[Row], zero: T)(implicit ordering: Ordering[T]): Unit = {
-      assert(result.length == 1)
-      // using compare since 0.0 == -0.0 is true
-      assert(ordering.compare(result(0).getAs[T](0), zero) == 0)
-      assert(result(0).getLong(1) == 3)
-    }
+    val doubles = Seq(0.0d, 0.0d, -0.0d).toDF(colName).groupBy(colName).count().collect()
+    val floats = Seq(0.0f, -0.0f, 0.0f).toDF(colName).groupBy(colName).count().collect()
 
-    spark.conf.set("spark.sql.codegen.wholeStage", "false")
-    val doubles =
-      groupByCollect(Seq(0.0d, 0.0d, -0.0d).toDF(colName))
-    val doublesBoxed =
-      groupByCollect(Seq(Double.box(0.0d), Double.box(0.0d), Double.box(-0.0d)).toDF(colName))
-    val floats =
-      groupByCollect(Seq(0.0f, -0.0f, 0.0f).toDF(colName))
-    val floatsBoxed =
-      groupByCollect(Seq(Float.box(0.0f), Float.box(-0.0f), Float.box(0.0f)).toDF(colName))
-
-    assertResult(doubles, 0.0d)
-    assertResult(doublesBoxed, 0.0d)
-    assertResult(floats, 0.0f)
-    assertResult(floatsBoxed, 0.0f)
+    assert(doubles.length == 1)
+    assert(floats.length == 1)
+    // using compare since 0.0 == -0.0 is true
+    assert(java.lang.Double.compare(doubles(0).getDouble(0), 0.0d) == 0)
+    assert(java.lang.Float.compare(floats(0).getFloat(0), 0.0f) == 0)
+    assert(doubles(0).getLong(1) == 3)
+    assert(floats(0).getLong(1) == 3)
   }
 }
