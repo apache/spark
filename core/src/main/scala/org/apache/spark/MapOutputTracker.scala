@@ -238,8 +238,8 @@ private class ShuffleStatus(numPartitions: Int) {
   }
 
   /**
-    * Reset the indeterminate attempt id to None.
-    */
+   * Reset the indeterminate attempt id to None.
+   */
   def resetIndeterminateAttemptId(): Unit = synchronized {
     _indeterminateAttemptId = None
   }

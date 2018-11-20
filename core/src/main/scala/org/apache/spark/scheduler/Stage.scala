@@ -114,12 +114,15 @@ private[scheduler] abstract class Stage(
     case _ => false
   }
 
-  /**
-   * Returns the sequence of partition ids that are missing (i.e. needs to be computed).
-   * If the current stage is indeterminate, missing partition is all partitions every time.
-   */
+  /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int]
 
-  def isIndeterminate(): Boolean =
+  def isIndeterminate: Boolean =
     rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+
+  /**
+   * Clear the intermediate status (e.g. map status, success task, etc) for the stage, currently
+   * we call the function before indeterminate stage rerunning.
+   */
+  def clearIntermediateState(): Unit = {}
 }

@@ -2750,8 +2750,33 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0, 0, "ignored"),
       null))
 
-    // The job should fail because Spark can't rollback the shuffle map stage.
-    assert(failure != null && failure.getMessage.contains("Spark cannot rollback"))
+    val newFailedStages = scheduler.failedStages.toSeq
+    assert(newFailedStages.map(_.id) == Seq(0, 1))
+
+    scheduler.resubmitFailedStages()
+
+    // First shuffle map stage resubmitted and reran all tasks.
+    assert(taskSets(4).stageId == 0)
+    assert(taskSets(4).stageAttemptId == 1)
+    assert(taskSets(4).tasks.length == 2)
+
+    // Finish all stage.
+    complete(taskSets(4), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    complete(taskSets(5), Seq(
+      (Success, makeMapStatus("hostC", 2)),
+      (Success, makeMapStatus("hostD", 2))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
+    complete(taskSets(6), Seq((Success, 11), (Success, 12)))
+
+    // Job successful ended.
+    assert(results === Map(0 -> 11, 1 -> 12))
+    results.clear()
+    assertDataStructuresEmpty()
   }
 
   private def assertResultStageFailToRollback(mapRdd: MyRDD): Unit = {

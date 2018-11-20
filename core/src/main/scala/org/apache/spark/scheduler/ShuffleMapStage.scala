@@ -92,12 +92,19 @@ private[spark] class ShuffleMapStage(
    * If the current stage is indeterminate, missing partition is all partitions every time.
    */
   override def findMissingPartitions(): Seq[Int] = {
-    if (isIndeterminate()) {
-      mapOutputTrackerMaster.unregisterIndeterminateShuffle(shuffleDep.shuffleId)
-      mapOutputTrackerMaster.unregisterAllMapOutput(shuffleDep.shuffleId)
-    }
     mapOutputTrackerMaster
       .findMissingPartitions(shuffleDep.shuffleId)
       .getOrElse(0 until numPartitions)
+  }
+
+  /**
+   * Clear the intermediate status including shuffle status and indeterminate attempt id for
+   * shuffle map stage.
+   */
+  override def clearIntermediateState(): Unit = {
+    if (isIndeterminate) {
+      mapOutputTrackerMaster.unregisterIndeterminateShuffle(shuffleDep.shuffleId)
+      mapOutputTrackerMaster.unregisterAllMapOutput(shuffleDep.shuffleId)
+    }
   }
 }

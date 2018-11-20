@@ -1098,7 +1098,10 @@ private[spark] class DAGScheduler(
   private def submitMissingTasks(stage: Stage, jobId: Int) {
     logDebug("submitMissingTasks(" + stage + ")")
 
-    // First figure out the indexes of partition ids to compute.
+    // Before find missing partition, do the intermediate state clean work first.
+    stage.clearIntermediateState()
+
+    // Figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
 
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
@@ -1206,7 +1209,7 @@ private[spark] class DAGScheduler(
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptNumber,
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
               Option(sc.applicationId), sc.applicationAttemptId, stage.rdd.isBarrier(),
-              !stage.isIndeterminate())
+              stage.isIndeterminate)
           }
 
         case stage: ResultStage =>
@@ -1451,7 +1454,7 @@ private[spark] class DAGScheduler(
               // available.
               mapOutputTracker.registerMapOutput(
                 shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
-              if (stage.isIndeterminate()) {
+              if (stage.isIndeterminate) {
                 mapOutputTracker.registerIndeterminateShuffle(
                   shuffleStage.shuffleDep.shuffleId, smt.stageAttemptId)
               }
@@ -1563,7 +1566,7 @@ private[spark] class DAGScheduler(
               // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
-              if (mapStage.isIndeterminate()) {
+              if (mapStage.isIndeterminate) {
                 // It's a little tricky to find all the succeeding stages of `failedStage`, because
                 // each stage only know its parents not children. Here we traverse the stages from
                 // the leaf nodes (the result stages of active jobs), and rollback all the stages

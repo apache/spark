@@ -233,10 +233,8 @@ abstract class TaskContext extends Serializable {
   private[spark] def getLocalProperties: Properties
 
   /**
-   * Get the indeterminate stage attempt id, it will return None in following two case:
-   * 1. The task is determinate.
-   * 2. The task is indeterminate but no retry occurred.
-   * Otherwise it return the stage attempt number.
+   * Get the indeterminate stage attempt id, it will return None if the task is determinate.
+   * While the task is indeterminate it return the stage attempt number.
    */
   private[spark] def getIndeterminateAttemptId: Option[Int]
 }
