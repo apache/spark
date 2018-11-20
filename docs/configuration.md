@@ -973,6 +973,14 @@ Apart from these, the following properties are also available, and may be useful
     <br /><code>spark.com.test.filter1.param.name2=bar</code>
   </td>
 </tr>
+<tr>
+  <td><code>spark.ui.requestHeaderSize</code></td>
+  <td>8k</td>
+  <td>
+    The maximum allowed size for a HTTP request header, in bytes unless otherwise specified.
+    This setting applies for the Spark History Server too.
+  <td>
+</tr>
 </table>
 
 ### Compression and Serialization

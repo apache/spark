@@ -570,6 +570,12 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val UI_REQUEST_HEADER_SIZE =
+    ConfigBuilder("spark.ui.requestHeaderSize")
+      .doc("Value for HTTP request header size in bytes.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("8k")
+
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
     .doc("Class names of listeners to add to SparkContext during initialization.")
     .stringConf
