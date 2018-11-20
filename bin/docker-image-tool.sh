@@ -104,8 +104,8 @@ function build {
     base_img=$(image_ref spark)
   )
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
-  local PYDOCKERFILE=${PYDOCKERFILE:-"$IMG_PATH/spark/bindings/python/Dockerfile"}
-  local RDOCKERFILE=${RDOCKERFILE:-"$IMG_PATH/spark/bindings/R/Dockerfile"}
+  local PYDOCKERFILE=${PYDOCKERFILE:-false}
+  local RDOCKERFILE=${RDOCKERFILE:-false}
 
   docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
@@ -114,30 +114,22 @@ function build {
     error "Failed to build Spark JVM Docker image, please refer to Docker build output for details."
   fi
 
-  if [ "${PYDOCKERFILE}" != "skip" ]; then
+  if [ "${PYDOCKERFILE}" != "false" ]; then
     docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
       -t $(image_ref spark-py) \
       -f "$PYDOCKERFILE" .
       if [ $? -ne 0 ]; then
         error "Failed to build PySpark Docker image, please refer to Docker build output for details."
       fi
-  else
-    echo "Skipped building PySpark docker image."
   fi
 
-  if [ "${RDOCKERFILE}" != "skip" ]; then
-    if [ -d "${SPARK_HOME}/R/lib" ]; then
-      docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-        -t $(image_ref spark-r) \
-        -f "$RDOCKERFILE" .
-      if [ $? -ne 0 ]; then
-        error "Failed to build SparkR Docker image, please refer to Docker build output for details."
-      fi
-    else
-      echo "SparkR artifacts not found. Skipped building SparkR docker image."
+  if [ "${RDOCKERFILE}" != "false" ]; then
+    docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+      -t $(image_ref spark-r) \
+      -f "$RDOCKERFILE" .
+    if [ $? -ne 0 ]; then
+      error "Failed to build SparkR Docker image, please refer to Docker build output for details."
     fi
-  else
-    echo "Skipped building SparkR docker image."
   fi
 }
 
@@ -159,10 +151,10 @@ Commands:
 
 Options:
   -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
-  -p file               Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
-                        Specify 'skip' to skip building PySpark docker image.
-  -R file               Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
-                        Specify 'skip' to skip building SparkR docker image.
+  -p file               (Optional) Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
+                        Skips building PySpark docker image if not specified.
+  -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
+                        Skips building SparkR docker image if not specified.
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
