@@ -84,7 +84,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         SimplifyConditionals,
         RemoveDispensableExpressions,
         SimplifyBinaryComparison,
-        ReplaceNullWithFalse,
+        ReplaceNullWithFalseInPredicate,
         PruneFilters,
         EliminateSorts,
         SimplifyCasts,
