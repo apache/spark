@@ -95,7 +95,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }
 
-  test("Run bin/pyspark in client mode", k8sTestTag) {
+  test("Run PySpark shell", k8sTestTag) {
     val labels = Map("spark-app-selector" -> driverPodName)
     val driverPort = 7077
     val blockManagerPort = 10000
@@ -135,8 +135,8 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
         .withNewSpec()
         .withServiceAccountName(kubernetesTestComponents.serviceAccountName)
         .addNewContainer()
-        .withName("pyspark-example")
-        .withImage(image)
+        .withName("pyspark-shell")
+        .withImage(pyImage)
         .withImagePullPolicy("IfNotPresent")
         .withCommand("/opt/spark/bin/pyspark")
         .addToArgs("--master", s"k8s://https://kubernetes.default.svc")
