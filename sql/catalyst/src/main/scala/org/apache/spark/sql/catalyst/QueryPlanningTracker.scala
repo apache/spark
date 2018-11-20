@@ -36,7 +36,6 @@ import org.apache.spark.util.BoundedPriorityQueue
 object QueryPlanningTracker {
 
   // Define a list of common phases here.
-  // TODO: Implement parsing time.
   val PARSING = "parsing"
   val ANALYSIS = "analysis"
   val OPTIMIZATION = "optimization"

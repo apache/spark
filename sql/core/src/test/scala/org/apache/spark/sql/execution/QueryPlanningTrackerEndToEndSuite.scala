@@ -21,12 +21,27 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
 
-  test("basic measurement") {
+  test("programmatic API") {
     val df = spark.range(1000).selectExpr("count(*)")
     df.collect()
     val tracker = df.queryExecution.tracker
 
     assert(tracker.phases.size == 3)
+    assert(tracker.phases("analysis") > 0)
+    assert(tracker.phases("optimization") > 0)
+    assert(tracker.phases("planning") > 0)
+
+    assert(tracker.rules.nonEmpty)
+  }
+
+  test("sql") {
+    val df = spark.sql("select * from range(1)")
+    df.collect()
+
+    val tracker = df.queryExecution.tracker
+
+    assert(tracker.phases.size == 4)
+    assert(tracker.phases("parsing") > 0)
     assert(tracker.phases("analysis") > 0)
     assert(tracker.phases("optimization") > 0)
     assert(tracker.phases("planning") > 0)

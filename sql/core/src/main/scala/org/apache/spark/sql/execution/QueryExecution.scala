@@ -43,7 +43,10 @@ import org.apache.spark.util.Utils
  * While this is not a public class, we should avoid changing the function names for the sake of
  * changing them, because a lot of developers use the feature for debugging.
  */
-class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
+class QueryExecution(
+    val sparkSession: SparkSession,
+    val logical: LogicalPlan,
+    val tracker: QueryPlanningTracker = new QueryPlanningTracker) {
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
@@ -55,8 +58,6 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       UnsupportedOperationChecker.checkForBatch(analyzed)
     }
   }
-
-  val tracker: QueryPlanningTracker = new QueryPlanningTracker
 
   lazy val analyzed: LogicalPlan = tracker.measureTime(QueryPlanningTracker.ANALYSIS) {
     SparkSession.setActiveSession(sparkSession)
