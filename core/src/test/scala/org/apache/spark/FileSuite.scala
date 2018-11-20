@@ -202,7 +202,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext("local", "test")
       val objs = sc.makeRDD(1 to 3).map { x =>
         val loader = Thread.currentThread().getContextClassLoader
-        Class.forName(className, true, loader).newInstance()
+        Class.forName(className, true, loader).getConstructor().newInstance()
       }
       val outputDir = new File(tempDir, "output").getAbsolutePath
       objs.saveAsObjectFile(outputDir)
@@ -318,6 +318,19 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     for (p <- Seq(1, 2, 8)) {
       assert(sc.binaryFiles(tempDirPath, minPartitions = p).getNumPartitions === p)
     }
+  }
+
+  test("minimum split size per node and per rack should be less than or equal to maxSplitSize") {
+    sc = new SparkContext("local", "test")
+    val testOutput = Array[Byte](1, 2, 3, 4, 5)
+    val outFile = writeBinaryData(testOutput, 1)
+    sc.hadoopConfiguration.setLong(
+      "mapreduce.input.fileinputformat.split.minsize.per.node", 5123456)
+    sc.hadoopConfiguration.setLong(
+      "mapreduce.input.fileinputformat.split.minsize.per.rack", 5123456)
+
+    val (_, data) = sc.binaryFiles(outFile.getAbsolutePath).collect().head
+    assert(data.toArray === testOutput)
   }
 
   test("fixed record length binary file as byte array") {

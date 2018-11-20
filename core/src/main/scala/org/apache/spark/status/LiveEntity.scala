@@ -61,7 +61,7 @@ private[spark] abstract class LiveEntity {
 private class LiveJob(
     val jobId: Int,
     name: String,
-    submissionTime: Option[Date],
+    val submissionTime: Option[Date],
     val stageIds: Seq[Int],
     jobGroup: Option[String],
     numTasks: Int) extends LiveEntity {

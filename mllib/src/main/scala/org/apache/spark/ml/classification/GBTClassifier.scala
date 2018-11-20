@@ -412,14 +412,14 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
     override def load(path: String): GBTClassificationModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
-        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName, false)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
       val numFeatures = (metadata.metadata \ numFeaturesKey).extract[Int]
       val numTrees = (metadata.metadata \ numTreesKey).extract[Int]
 
       val trees: Array[DecisionTreeRegressionModel] = treesData.map {
         case (treeMetadata, root) =>
-          val tree = new DecisionTreeRegressionModel(treeMetadata.uid,
-            root.asInstanceOf[RegressionNode], numFeatures)
+          val tree =
+            new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
           treeMetadata.getAndSetParams(tree)
           tree
       }
@@ -427,7 +427,9 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
         s" trees based on metadata but found ${trees.length} trees.")
       val model = new GBTClassificationModel(metadata.uid,
         trees, treeWeights, numFeatures)
-      metadata.getAndSetParams(model)
+      // We ignore the impurity while loading models because in previous models it was wrongly
+      // set to gini (see SPARK-25959).
+      metadata.getAndSetParams(model, Some(List("impurity")))
       model
     }
   }

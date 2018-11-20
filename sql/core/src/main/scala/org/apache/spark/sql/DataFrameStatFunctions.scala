@@ -21,7 +21,7 @@ import java.{lang => jl, util => ju}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.functions.col
@@ -33,7 +33,7 @@ import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
  *
  * @since 1.4.0
  */
-@InterfaceStability.Stable
+@Stable
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
@@ -414,7 +414,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    +-----+---+
    * }}}
    *
-   * @since 2.5.0
+   * @since 3.0.0
    */
   def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame = {
     require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
@@ -437,7 +437,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @tparam T stratum type
    * @return a new `DataFrame` that represents the stratified sample
    *
-   * @since 2.5.0
+   * @since 3.0.0
    */
   def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)

@@ -638,6 +638,20 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         Row(3) :: Row(3) :: Nil)
     }
   }
+
+  test("SPARK-25768 constant argument expecting Hive UDF") {
+    withTempView("inputTable") {
+      spark.range(10).createOrReplaceTempView("inputTable")
+      withUserDefinedFunction("testGenericUDAFPercentileApprox" -> false) {
+        val numFunc = spark.catalog.listFunctions().count()
+        sql(s"CREATE FUNCTION testGenericUDAFPercentileApprox AS '" +
+          s"${classOf[GenericUDAFPercentileApprox].getName}'")
+        checkAnswer(
+          sql("SELECT testGenericUDAFPercentileApprox(id, 0.5) FROM inputTable"),
+          Seq(Row(4.0)))
+      }
+    }
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {

@@ -133,8 +133,6 @@ private[spark] class BlockManager(
 
   private[spark] val externalShuffleServiceEnabled =
     conf.get(config.SHUFFLE_SERVICE_ENABLED)
-  private val chunkSize =
-    conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests", Int.MaxValue.toString).toInt
   private val remoteReadNioBufferConversion =
     conf.getBoolean("spark.network.remoteReadNioBufferConversion", false)
 
@@ -239,7 +237,7 @@ private[spark] class BlockManager(
       val priorityClass = conf.get(
         "spark.storage.replication.policy", classOf[RandomBlockReplicationPolicy].getName)
       val clazz = Utils.classForName(priorityClass)
-      val ret = clazz.newInstance.asInstanceOf[BlockReplicationPolicy]
+      val ret = clazz.getConstructor().newInstance().asInstanceOf[BlockReplicationPolicy]
       logInfo(s"Using $priorityClass for block replication policy")
       ret
     }
@@ -438,10 +436,8 @@ private[spark] class BlockManager(
         // stream.
         channel.close()
         // TODO SPARK-25035 Even if we're only going to write the data to disk after this, we end up
-        // using a lot of memory here.  With encryption, we'll read the whole file into a regular
-        // byte buffer and OOM.  Without encryption, we'll memory map the file and won't get a jvm
-        // OOM, but might get killed by the OS / cluster manager.  We could at least read the tmp
-        // file as a stream in both cases.
+        // using a lot of memory here. We'll read the whole file into a regular
+        // byte buffer and OOM.  We could at least read the tmp file as a stream.
         val buffer = securityManager.getIOEncryptionKey() match {
           case Some(key) =>
             // we need to pass in the size of the unencrypted block
@@ -453,7 +449,7 @@ private[spark] class BlockManager(
             new EncryptedBlockData(tmpFile, blockSize, conf, key).toChunkedByteBuffer(allocator)
 
           case None =>
-            ChunkedByteBuffer.map(tmpFile, conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS).toInt)
+            ChunkedByteBuffer.fromFile(tmpFile)
         }
         putBytes(blockId, buffer, level)(classTag)
         tmpFile.delete()
@@ -725,11 +721,10 @@ private[spark] class BlockManager(
    * Get block from remote block managers as serialized bytes.
    */
   def getRemoteBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
-    // TODO if we change this method to return the ManagedBuffer, then getRemoteValues
-    // could just use the inputStream on the temp file, rather than memory-mapping the file.
+    // TODO SPARK-25905 if we change this method to return the ManagedBuffer, then getRemoteValues
+    // could just use the inputStream on the temp file, rather than reading the file into memory.
     // Until then, replication can cause the process to use too much memory and get killed
-    // by the OS / cluster manager (not a java OOM, since it's a memory-mapped file) even though
-    // we've read the data to disk.
+    // even though we've read the data to disk.
     logDebug(s"Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
     var runningFailureCount = 0
@@ -800,7 +795,7 @@ private[spark] class BlockManager(
         if (remoteReadNioBufferConversion) {
           return Some(new ChunkedByteBuffer(data.nioByteBuffer()))
         } else {
-          return Some(ChunkedByteBuffer.fromManagedBuffer(data, chunkSize))
+          return Some(ChunkedByteBuffer.fromManagedBuffer(data))
         }
       }
       logDebug(s"The value of block $blockId is null")

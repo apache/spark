@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.roaringbitmap.RoaringBitmap
 
@@ -49,10 +48,16 @@ private[spark] sealed trait MapStatus {
 
 private[spark] object MapStatus {
 
+  /**
+   * Min partition number to use [[HighlyCompressedMapStatus]]. A bit ugly here because in test
+   * code we can't assume SparkEnv.get exists.
+   */
+  private lazy val minPartitionsToUseHighlyCompressMapStatus = Option(SparkEnv.get)
+    .map(_.conf.get(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS))
+    .getOrElse(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS.defaultValue.get)
+
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
-    if (uncompressedSizes.length >  Option(SparkEnv.get)
-      .map(_.conf.get(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS))
-      .getOrElse(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS.defaultValue.get)) {
+    if (uncompressedSizes.length > minPartitionsToUseHighlyCompressMapStatus) {
       HighlyCompressedMapStatus(loc, uncompressedSizes)
     } else {
       new CompressedMapStatus(loc, uncompressedSizes)
@@ -143,7 +148,7 @@ private[spark] class HighlyCompressedMapStatus private (
     private[this] var numNonEmptyBlocks: Int,
     private[this] var emptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long,
-    private var hugeBlockSizes: Map[Int, Byte])
+    private[this] var hugeBlockSizes: scala.collection.Map[Int, Byte])
   extends MapStatus with Externalizable {
 
   // loc could be null when the default constructor is called during deserialization
@@ -183,13 +188,13 @@ private[spark] class HighlyCompressedMapStatus private (
     emptyBlocks.readExternal(in)
     avgSize = in.readLong()
     val count = in.readInt()
-    val hugeBlockSizesArray = mutable.ArrayBuffer[Tuple2[Int, Byte]]()
+    val hugeBlockSizesImpl = mutable.Map.empty[Int, Byte]
     (0 until count).foreach { _ =>
       val block = in.readInt()
       val size = in.readByte()
-      hugeBlockSizesArray += Tuple2(block, size)
+      hugeBlockSizesImpl(block) = size
     }
-    hugeBlockSizes = hugeBlockSizesArray.toMap
+    hugeBlockSizes = hugeBlockSizesImpl
   }
 }
 
@@ -209,7 +214,7 @@ private[spark] object HighlyCompressedMapStatus {
     val threshold = Option(SparkEnv.get)
       .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD))
       .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get)
-    val hugeBlockSizesArray = ArrayBuffer[Tuple2[Int, Byte]]()
+    val hugeBlockSizes = mutable.Map.empty[Int, Byte]
     while (i < totalNumBlocks) {
       val size = uncompressedSizes(i)
       if (size > 0) {
@@ -220,7 +225,7 @@ private[spark] object HighlyCompressedMapStatus {
           totalSmallBlockSize += size
           numSmallBlocks += 1
         } else {
-          hugeBlockSizesArray += Tuple2(i, MapStatus.compressSize(uncompressedSizes(i)))
+          hugeBlockSizes(i) = MapStatus.compressSize(uncompressedSizes(i))
         }
       } else {
         emptyBlocks.add(i)
@@ -235,6 +240,6 @@ private[spark] object HighlyCompressedMapStatus {
     emptyBlocks.trim()
     emptyBlocks.runOptimize()
     new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize,
-      hugeBlockSizesArray.toMap)
+      hugeBlockSizes)
   }
 }

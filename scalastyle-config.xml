@@ -227,6 +227,30 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
+  <check customId="caselocale" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">(\.toUpperCase|\.toLowerCase)(?!(\(|\(Locale.ROOT\)))</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use toUpperCase or toLowerCase without the root locale? In most cases, you
+      should use toUpperCase(Locale.ROOT) or toLowerCase(Locale.ROOT) instead.
+      If you must use toUpperCase or toLowerCase without the root locale, wrap the code block with
+      // scalastyle:off caselocale
+      .toUpperCase
+      .toLowerCase
+      // scalastyle:on caselocale
+    ]]></customMessage>
+  </check>
+
+  <check customId="throwerror" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">throw new \w+Error\(</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to throw Error? In most cases, you should use appropriate Exception instead.
+      If you must throw Error, wrap the code block with
+      // scalastyle:off throwerror
+      throw new XXXError(...)
+      // scalastyle:on throwerror
+    ]]></customMessage>
+  </check>
+
   <!-- As of SPARK-9613 JavaConversions should be replaced with JavaConverters -->
   <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">JavaConversions</parameter></parameters>
