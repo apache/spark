@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.types._
 
@@ -310,13 +311,13 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("TransformKeys") {
     val ai0 = Literal.create(
-      Map(1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4),
+      create_map(1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
     val ai1 = Literal.create(
       Map.empty[Int, Int],
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val ai2 = Literal.create(
-      Map(1 -> 1, 2 -> null, 3 -> 3),
+      create_map(1 -> 1, 2 -> null, 3 -> 3),
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val ai3 = Literal.create(null, MapType(IntegerType, IntegerType, valueContainsNull = false))
 
@@ -324,26 +325,27 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val plusValue: (Expression, Expression) => Expression = (k, v) => k + v
     val modKey: (Expression, Expression) => Expression = (k, v) => k % 3
 
-    checkEvaluation(transformKeys(ai0, plusOne), Map(2 -> 1, 3 -> 2, 4 -> 3, 5 -> 4))
-    checkEvaluation(transformKeys(ai0, plusValue), Map(2 -> 1, 4 -> 2, 6 -> 3, 8 -> 4))
+    checkEvaluation(transformKeys(ai0, plusOne), create_map(2 -> 1, 3 -> 2, 4 -> 3, 5 -> 4))
+    checkEvaluation(transformKeys(ai0, plusValue), create_map(2 -> 1, 4 -> 2, 6 -> 3, 8 -> 4))
     checkEvaluation(
-      transformKeys(transformKeys(ai0, plusOne), plusValue), Map(3 -> 1, 5 -> 2, 7 -> 3, 9 -> 4))
+      transformKeys(transformKeys(ai0, plusOne), plusValue),
+      create_map(3 -> 1, 5 -> 2, 7 -> 3, 9 -> 4))
     checkEvaluation(transformKeys(ai0, modKey),
       ArrayBasedMapData(Array(1, 2, 0, 1), Array(1, 2, 3, 4)))
     checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
     checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
     checkEvaluation(
       transformKeys(transformKeys(ai1, plusOne), plusValue), Map.empty[Int, Int])
-    checkEvaluation(transformKeys(ai2, plusOne), Map(2 -> 1, 3 -> null, 4 -> 3))
+    checkEvaluation(transformKeys(ai2, plusOne), create_map(2 -> 1, 3 -> null, 4 -> 3))
     checkEvaluation(
-      transformKeys(transformKeys(ai2, plusOne), plusOne), Map(3 -> 1, 4 -> null, 5 -> 3))
+      transformKeys(transformKeys(ai2, plusOne), plusOne), create_map(3 -> 1, 4 -> null, 5 -> 3))
     checkEvaluation(transformKeys(ai3, plusOne), null)
 
     val as0 = Literal.create(
-      Map("a" -> "xy", "bb" -> "yz", "ccc" -> "zx"),
+      create_map("a" -> "xy", "bb" -> "yz", "ccc" -> "zx"),
       MapType(StringType, StringType, valueContainsNull = false))
     val as1 = Literal.create(
-      Map("a" -> "xy", "bb" -> "yz", "ccc" -> null),
+      create_map("a" -> "xy", "bb" -> "yz", "ccc" -> null),
       MapType(StringType, StringType, valueContainsNull = true))
     val as2 = Literal.create(null,
       MapType(StringType, StringType, valueContainsNull = false))
@@ -355,26 +357,35 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       (k, v) => Length(k) + 1
 
     checkEvaluation(
-      transformKeys(as0, concatValue), Map("axy" -> "xy", "bbyz" -> "yz", "ccczx" -> "zx"))
+      transformKeys(as0, concatValue), create_map("axy" -> "xy", "bbyz" -> "yz", "ccczx" -> "zx"))
     checkEvaluation(
       transformKeys(transformKeys(as0, concatValue), concatValue),
-      Map("axyxy" -> "xy", "bbyzyz" -> "yz", "ccczxzx" -> "zx"))
+      create_map("axyxy" -> "xy", "bbyzyz" -> "yz", "ccczxzx" -> "zx"))
     checkEvaluation(transformKeys(as3, concatValue), Map.empty[String, String])
     checkEvaluation(
       transformKeys(transformKeys(as3, concatValue), convertKeyToKeyLength),
       Map.empty[Int, String])
     checkEvaluation(transformKeys(as0, convertKeyToKeyLength),
-      Map(2 -> "xy", 3 -> "yz", 4 -> "zx"))
+      create_map(2 -> "xy", 3 -> "yz", 4 -> "zx"))
     checkEvaluation(transformKeys(as1, convertKeyToKeyLength),
-      Map(2 -> "xy", 3 -> "yz", 4 -> null))
+      create_map(2 -> "xy", 3 -> "yz", 4 -> null))
     checkEvaluation(transformKeys(as2, convertKeyToKeyLength), null)
     checkEvaluation(transformKeys(as3, convertKeyToKeyLength), Map.empty[Int, String])
 
     val ax0 = Literal.create(
-      Map(1 -> "x", 2 -> "y", 3 -> "z"),
+      create_map(1 -> "x", 2 -> "y", 3 -> "z"),
       MapType(IntegerType, StringType, valueContainsNull = false))
 
-    checkEvaluation(transformKeys(ax0, plusOne), Map(2 -> "x", 3 -> "y", 4 -> "z"))
+    checkEvaluation(transformKeys(ax0, plusOne), create_map(2 -> "x", 3 -> "y", 4 -> "z"))
+
+    // map key can't be map
+    val makeMap: (Expression, Expression) => Expression = (k, v) => CreateMap(Seq(k, v))
+    val map = transformKeys(ai0, makeMap)
+    map.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("The key of map cannot be/contain map"))
+    }
   }
 
   test("TransformValues") {

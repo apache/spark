@@ -30,7 +30,6 @@ class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
 
-
   override protected def sparkConf: SparkConf =
     super.sparkConf.set("spark.sql.streaming.streamingQueryListeners",
       "org.apache.spark.sql.streaming.TestListener")
@@ -40,6 +39,8 @@ class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
       StartStream(),
       StopStream
     )
+
+    spark.sparkContext.listenerBus.waitUntilEmpty(5000)
 
     assert(TestListener.queryStartedEvent != null)
     assert(TestListener.queryTerminatedEvent != null)

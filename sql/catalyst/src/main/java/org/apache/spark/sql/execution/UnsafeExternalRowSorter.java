@@ -50,7 +50,7 @@ public final class UnsafeExternalRowSorter {
   private long numRowsInserted = 0;
 
   private final StructType schema;
-  private final PrefixComputer prefixComputer;
+  private final UnsafeExternalRowSorter.PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
   public abstract static class PrefixComputer {
@@ -74,7 +74,7 @@ public final class UnsafeExternalRowSorter {
       StructType schema,
       Supplier<RecordComparator> recordComparatorSupplier,
       PrefixComparator prefixComparator,
-      PrefixComputer prefixComputer,
+      UnsafeExternalRowSorter.PrefixComputer prefixComputer,
       long pageSizeBytes,
       boolean canUseRadixSort) throws IOException {
     return new UnsafeExternalRowSorter(schema, recordComparatorSupplier, prefixComparator,
@@ -85,7 +85,7 @@ public final class UnsafeExternalRowSorter {
       StructType schema,
       Ordering<InternalRow> ordering,
       PrefixComparator prefixComparator,
-      PrefixComputer prefixComputer,
+      UnsafeExternalRowSorter.PrefixComputer prefixComputer,
       long pageSizeBytes,
       boolean canUseRadixSort) throws IOException {
     Supplier<RecordComparator> recordComparatorSupplier =
@@ -98,9 +98,9 @@ public final class UnsafeExternalRowSorter {
       StructType schema,
       Supplier<RecordComparator> recordComparatorSupplier,
       PrefixComparator prefixComparator,
-      PrefixComputer prefixComputer,
+      UnsafeExternalRowSorter.PrefixComputer prefixComputer,
       long pageSizeBytes,
-      boolean canUseRadixSort) throws IOException {
+      boolean canUseRadixSort) {
     this.schema = schema;
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
