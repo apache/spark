@@ -79,7 +79,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
     // Output iterator for results from Python.
     val outputIterator = new PythonUDFRunner(
       funcs,
-      Array.fill(funcs.length)(PythonEvalType.SQL_BATCHED_UDF),
+      PythonEvalType.SQL_BATCHED_UDF,
       argOffsets
     ).compute(inputIterator, context.partitionId(), context)
 

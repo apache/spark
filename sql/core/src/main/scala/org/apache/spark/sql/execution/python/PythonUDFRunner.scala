@@ -29,10 +29,10 @@ import org.apache.spark.api.python._
  */
 class PythonUDFRunner(
     funcs: Seq[ChainedPythonFunctions],
-    evalTypes: Seq[Int],
+    evalType: Int,
     argOffsets: Array[Array[Int]])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, evalTypes, argOffsets) {
+    funcs, evalType, argOffsets) {
 
   protected override def newWriterThread(
       env: SparkEnv,

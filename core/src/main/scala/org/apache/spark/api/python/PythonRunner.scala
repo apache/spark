@@ -43,8 +43,7 @@ private[spark] object PythonEvalType {
   val SQL_SCALAR_PANDAS_UDF = 200
   val SQL_GROUPED_MAP_PANDAS_UDF = 201
   val SQL_GROUPED_AGG_PANDAS_UDF = 202
-  val SQL_UNBOUNDED_WINDOW_AGG_PANDAS_UDF = 203
-  val SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF = 204
+  val SQL_WINDOW_AGG_PANDAS_UDF = 203
 
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
@@ -52,8 +51,7 @@ private[spark] object PythonEvalType {
     case SQL_SCALAR_PANDAS_UDF => "SQL_SCALAR_PANDAS_UDF"
     case SQL_GROUPED_MAP_PANDAS_UDF => "SQL_GROUPED_MAP_PANDAS_UDF"
     case SQL_GROUPED_AGG_PANDAS_UDF => "SQL_GROUPED_AGG_PANDAS_UDF"
-    case SQL_UNBOUNDED_WINDOW_AGG_PANDAS_UDF => "SQL_UNBOUNDED_WINDOW_AGG_PANDAS_UDF"
-    case SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF => "SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF"
+    case SQL_WINDOW_AGG_PANDAS_UDF => "SQL_WINDOW_AGG_PANDAS_UDF"
   }
 }
 
@@ -65,7 +63,7 @@ private[spark] object PythonEvalType {
  */
 private[spark] abstract class BasePythonRunner[IN, OUT](
     funcs: Seq[ChainedPythonFunctions],
-    evalTypes: Seq[Int],
+    evalType: Int,
     argOffsets: Array[Array[Int]])
   extends Logging {
 
@@ -341,11 +339,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           }
         }
         dataOut.flush()
-
-        dataOut.writeInt(evalTypes.length)
-        for (evalType <- evalTypes) {
-          dataOut.writeInt(evalType)
-        }
+        dataOut.writeInt(evalType)
 
         writeCommand(dataOut)
         writeIteratorToStream(dataOut)
@@ -543,7 +537,7 @@ private[spark] object PythonRunner {
  */
 private[spark] class PythonRunner(funcs: Seq[ChainedPythonFunctions])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs, Seq(PythonEvalType.NON_UDF), Array(Array(0))) {
+    funcs, PythonEvalType.NON_UDF, Array(Array(0))) {
 
   protected override def newWriterThread(
       env: SparkEnv,

@@ -139,7 +139,7 @@ case class FlatMapGroupsInPandasExec(
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc,
-        Seq(PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF),
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         argOffsets,
         dedupSchema,
         sessionLocalTimeZone,

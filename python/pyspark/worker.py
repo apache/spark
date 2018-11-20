@@ -145,6 +145,17 @@ def wrap_grouped_agg_pandas_udf(f, return_type):
     return lambda *a: (wrapped(*a), arrow_return_type)
 
 
+def wrap_window_agg_pandas_udf(f, return_type, runner_conf, udf_index):
+    window_bound_types_str = runner_conf.get('pandas_window_bound_types')
+    window_bound_type = [t.strip() for t in window_bound_types_str.split(',')][udf_index]
+    if window_bound_type == 'bounded':
+        return wrap_bounded_window_agg_pandas_udf(f, return_type)
+    elif window_bound_type == 'unbounded':
+        return wrap_unbounded_window_agg_pandas_udf(f, return_type)
+    else:
+        raise RuntimeError("Invalid window bound type: {} ".format(window_bound_type))
+
+
 def wrap_unbounded_window_agg_pandas_udf(f, return_type):
     # This is similar to grouped_agg_pandas_udf, the only difference
     # is that window_agg_pandas_udf needs to repeat the return value
@@ -173,7 +184,7 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
         begin_array = begin_index.values
         end_array = end_index.values
 
-        for i in range(len(begin_index)):
+        for i in range(len(begin_array)):
             # Note: Create a slice from a series for each window is
             #       actually pretty expensive. However, there
             #       is no easy way to reduce cost here.
@@ -194,7 +205,7 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
     return lambda *a: (wrapped(*a), arrow_return_type)
 
 
-def read_single_udf(pickleSer, infile, eval_type, runner_conf):
+def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
     row_func = None
@@ -217,26 +228,21 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf):
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
-    elif eval_type == PythonEvalType.SQL_UNBOUNDED_WINDOW_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_unbounded_window_agg_pandas_udf(func, return_type)
-    elif eval_type == PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF:
-        return arg_offsets, wrap_bounded_window_agg_pandas_udf(func, return_type)
+    elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
+        return arg_offsets, wrap_window_agg_pandas_udf(func, return_type, runner_conf, udf_index)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return arg_offsets, wrap_udf(func, return_type)
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
-def read_udfs(pickleSer, infile, eval_types):
+def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
-    first_eval_type = eval_types[0]
-
-    if first_eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-                           PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                           PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-                           PythonEvalType.SQL_UNBOUNDED_WINDOW_AGG_PANDAS_UDF,
-                           PythonEvalType.SQL_BOUNDED_WINDOW_AGG_PANDAS_UDF):
+    if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                     PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF):
 
         # Load conf used for pandas_udf evaluation
         num_conf = read_int(infile)
@@ -252,12 +258,11 @@ def read_udfs(pickleSer, infile, eval_types):
         ser = BatchedSerializer(PickleSerializer(), 100)
 
     num_udfs = read_int(infile)
-    assert num_udfs == len(eval_types)
 
     udfs = {}
     call_udf = []
     mapper_str = ""
-    if first_eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         # Create function like this:
         #   lambda a: f([a[0]], [a[0], a[1]])
 
@@ -267,7 +272,8 @@ def read_udfs(pickleSer, infile, eval_types):
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, udf = read_single_udf(pickleSer, infile, first_eval_type, runner_conf)
+        arg_offsets, udf = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0)
         udfs['f'] = udf
         split_offset = arg_offsets[0] + 1
         arg0 = ["a[%d]" % o for o in arg_offsets[1: split_offset]]
@@ -279,7 +285,8 @@ def read_udfs(pickleSer, infile, eval_types):
         # In the special case of a single UDF this will return a single result rather
         # than a tuple of results; this is the format that the JVM side expects.
         for i in range(num_udfs):
-            arg_offsets, udf = read_single_udf(pickleSer, infile, eval_types[i], runner_conf)
+            arg_offsets, udf = read_single_udf(
+                pickleSer, infile, eval_type, runner_conf, udf_index=i)
             udfs['f%d' % i] = udf
             args = ["a[%d]" % o for o in arg_offsets]
             call_udf.append("f%d(%s)" % (i, ", ".join(args)))
@@ -400,12 +407,11 @@ def main(infile, outfile):
             broadcast_sock_file.close()
 
         _accumulatorRegistry.clear()
-        num_eval_types = read_int(infile)
-        eval_types = list(read_int(infile) for i in range(0, num_eval_types))
-        if eval_types[0] == PythonEvalType.NON_UDF:
+        eval_type = read_int(infile)
+        if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
         else:
-            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_types)
+            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
 
         init_time = time.time()
 
