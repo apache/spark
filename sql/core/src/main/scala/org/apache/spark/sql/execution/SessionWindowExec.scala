@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.types.{LongType, TimestampType}
 
 /**
  * Used for calculating the session window start and end for each row, so this plan requires
@@ -45,9 +44,6 @@ case class SessionWindowExec(
     windowGap: Long,
     child: SparkPlan)
   extends UnaryExecNode {
-
-  private final val WINDOW_START = "start"
-  private final val WINDOW_END = "end"
 
   override def requiredChildDistribution: Seq[Distribution] = {
     ClusteredDistribution(sessionSpec) :: Nil
@@ -107,17 +103,11 @@ case class SessionWindowExec(
         var rowIndexWithinPartition = 0
         var lastTime: Long = _
         var windowStartTime: Long = _
-        var windowResultWithBoundary = mutable.ArrayBuffer.empty[(Int, CreateNamedStruct)]
+        var windowResultWithBoundary = mutable.ArrayBuffer.empty[(Int, (Long, Long))]
         var windowResultIndex = 0
 
         private[this] def addWindowValueAndBoundary(rowIndex: Int) {
-          val windowValue = CreateNamedStruct(
-            Seq(Literal(WINDOW_START),
-              PreciseTimestampConversion(Literal(windowStartTime), LongType, TimestampType),
-              Literal(WINDOW_END),
-              PreciseTimestampConversion(
-                Literal(lastTime + windowGap), LongType, TimestampType)))
-          windowResultWithBoundary.append((rowIndex, windowValue))
+          windowResultWithBoundary.append((rowIndex, (windowStartTime, lastTime + windowGap)))
         }
 
         private[this] def getTimeFromRow(row: InternalRow) = getTime.apply(row).getLong(0)
@@ -196,10 +186,13 @@ case class SessionWindowExec(
             }
             rowIndexWithinPartition += 1
 
-            // 'Merge' the input row with the session window struct
-            join(current,
-              UnsafeProjection.create(
-                windowResultWithBoundary(windowResultIndex)._2).apply(InternalRow.empty))
+            val (currentWindowStart, currentWindowEnd) =
+              windowResultWithBoundary(windowResultIndex)._2
+            val currentWindow = InternalRow(currentWindowStart, currentWindowEnd)
+
+            // 'Merge' the input row with the session window struct. Since session window
+            // processed as a column, so wrap the struct with another InternalRow.
+            join(current, InternalRow(currentWindow))
           } else {
             throw new NoSuchElementException
           }
