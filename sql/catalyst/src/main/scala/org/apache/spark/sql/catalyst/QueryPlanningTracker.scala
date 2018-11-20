@@ -46,14 +46,6 @@ object QueryPlanningTracker {
 
     def this() = this(totalTimeNs = 0, numInvocations = 0, numEffectiveInvocations = 0)
 
-    def merge(other: RuleSummary): RuleSummary = {
-      new RuleSummary(
-        this.totalTimeNs + other.totalTimeNs,
-        this.numInvocations + other.numInvocations,
-        this.numEffectiveInvocations + other.numEffectiveInvocations
-      )
-    }
-
     override def toString: String = {
       s"RuleSummary($totalTimeNs, $numInvocations, $numEffectiveInvocations)"
     }
