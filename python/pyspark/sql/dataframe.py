@@ -485,7 +485,7 @@ class DataFrame(object):
         if not isinstance(name, str):
             raise TypeError("name should be provided as str, got {0}".format(type(name)))
 
-        allowed_types = (basestring, list, float, int, dict)
+        allowed_types = (basestring, list, float, int)
         for p in parameters:
             if not isinstance(p, allowed_types):
                 raise TypeError(
