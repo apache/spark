@@ -21,6 +21,7 @@ import java.sql.{Connection, DriverManager}
 import java.util.{Locale, Properties}
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -81,7 +82,8 @@ class JDBCOptions(
       if (name.isEmpty) {
         throw new IllegalArgumentException(s"Option '$JDBC_TABLE_NAME' can not be empty.")
       } else {
-        name.trim
+        val dialect = JdbcDialects.get(url)
+        dialect.quoteIdentifier(name.trim)
       }
     case (None, Some(subquery)) =>
       if (subquery.isEmpty) {

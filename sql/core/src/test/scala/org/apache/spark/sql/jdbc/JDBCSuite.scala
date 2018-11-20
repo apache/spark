@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils.getInsertStatement
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -506,7 +507,7 @@ class JDBCSuite extends QueryTest
   test("Partitioning on column where numPartitions is zero") {
     val res = spark.read.jdbc(
       url = urlWithUserAndPass,
-      table = "TEST.seq",
+      table = "TEST.SEQ",
       columnName = "id",
       lowerBound = 0,
       upperBound = 4,
@@ -520,7 +521,7 @@ class JDBCSuite extends QueryTest
   test("Partitioning on column where numPartitions are more than the number of total rows") {
     val res = spark.read.jdbc(
       url = urlWithUserAndPass,
-      table = "TEST.seq",
+      table = "TEST.SEQ",
       columnName = "id",
       lowerBound = 1,
       upperBound = 5,
@@ -534,7 +535,7 @@ class JDBCSuite extends QueryTest
   test("Partitioning on column where lowerBound is equal to upperBound") {
     val res = spark.read.jdbc(
       url = urlWithUserAndPass,
-      table = "TEST.seq",
+      table = "TEST.SEQ",
       columnName = "id",
       lowerBound = 5,
       upperBound = 5,
@@ -549,7 +550,7 @@ class JDBCSuite extends QueryTest
     val e = intercept[IllegalArgumentException] {
       spark.read.jdbc(
         url = urlWithUserAndPass,
-        table = "TEST.seq",
+        table = "TEST.SEQ",
         columnName = "id",
         lowerBound = 5,
         upperBound = 1,
@@ -941,7 +942,7 @@ class JDBCSuite extends QueryTest
     // test the JdbcRelation toString output
     df.queryExecution.analyzed.collect {
       case r: LogicalRelation =>
-        assert(r.relation.toString == "JDBCRelation(TEST.PEOPLE) [numPartitions=3]")
+        assert(r.relation.toString == """JDBCRelation("TEST"."PEOPLE") [numPartitions=3]""")
     }
   }
 
@@ -1038,6 +1039,24 @@ class JDBCSuite extends QueryTest
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
     val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
+  }
+
+  test("SPARK-26077: Reserved SQL words are not escaped by JDBC writer for table name") {
+    val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
+    val url = "jdbc:mysql://localhost:3306/temp"
+    val table = "temp.test"
+    val rddSchema = df.schema
+    val dialect = JdbcDialects.get(url)
+
+    val options1 = new JDBCOptions(Map("url" -> url, "dbtable" -> table))
+    assert(options1.tableOrQuery == "`temp`.`test`")
+
+    val t2 = "(SELECT 1) as t2"
+    val options2 = new JDBCOptions(Map("url" -> url, "dbtable" -> t2))
+    assert(options2.tableOrQuery == t2)
+
+    val insertStmt = getInsertStatement(table, rddSchema, None, isCaseSensitive = true, dialect)
+    assert(insertStmt.contains("`temp`.`test`"))
   }
 
   test("SPARK-18141: Predicates on quoted column names in the jdbc data source") {
@@ -1144,7 +1163,7 @@ class JDBCSuite extends QueryTest
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {
     def testJdbcOptions(options: JDBCOptions): Unit = {
       // Spark JDBC data source options are case-insensitive
-      assert(options.tableOrQuery == "t1")
+      assert(options.tableOrQuery == """"t1"""")
       // When we convert it to properties, it should be case-sensitive.
       assert(options.asProperties.size == 3)
       assert(options.asProperties.get("customkey") == null)
@@ -1454,7 +1473,7 @@ class JDBCSuite extends QueryTest
   }
 
   test("SPARK-24288: Enable preventing predicate pushdown") {
-    val table = "test.people"
+    val table = "TEST.PEOPLE"
 
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)

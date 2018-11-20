@@ -74,7 +74,8 @@ object JdbcUtils extends Logging {
     // SQL database systems using JDBC meta data calls, considering "table" could also include
     // the database name. Query used to find table exists can be overridden by the dialects.
     Try {
-      val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
+      val table = dialect.quoteIdentifier(options.table)
+      val statement = conn.prepareStatement(dialect.getTableExistsQuery(table))
       try {
         statement.setQueryTimeout(options.queryTimeout)
         statement.executeQuery()
@@ -88,10 +89,11 @@ object JdbcUtils extends Logging {
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(s"DROP TABLE $table")
+      statement.executeUpdate(s"DROP TABLE ${dialect.quoteIdentifier(table)}")
     } finally {
       statement.close()
     }
@@ -105,10 +107,11 @@ object JdbcUtils extends Logging {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
+      val table = dialect.quoteIdentifier(options.table)
       val truncateQuery = if (options.isCascadeTruncate.isDefined) {
-        dialect.getTruncateQuery(options.table, options.isCascadeTruncate)
+        dialect.getTruncateQuery(table, options.isCascadeTruncate)
       } else {
-        dialect.getTruncateQuery(options.table)
+        dialect.getTruncateQuery(table)
       }
       statement.executeUpdate(truncateQuery)
     } finally {
@@ -150,7 +153,7 @@ object JdbcUtils extends Logging {
       }.mkString(",")
     }
     val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
-    s"INSERT INTO $table ($columns) VALUES ($placeholders)"
+    s"INSERT INTO ${dialect.quoteIdentifier(table)} ($columns) VALUES ($placeholders)"
   }
 
   /**
@@ -848,11 +851,12 @@ object JdbcUtils extends Logging {
       df, options.url, options.createTableColumnTypes)
     val table = options.table
     val createTableOptions = options.createTableOptions
+    val dialect = JdbcDialects.get(options.url)
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-    val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
+    val sql = s"CREATE TABLE ${dialect.quoteIdentifier(table)} ($strSchema) $createTableOptions"
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)

@@ -42,8 +42,16 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }
 
+  override def getIdentifierQuoteCharacter: String = {
+    dialects.head.getIdentifierQuoteCharacter
+  }
+
   override def quoteIdentifier(colName: String): String = {
     dialects.head.quoteIdentifier(colName)
+  }
+
+  override def quoteSingleIdentifier(colName: String): String = {
+    dialects.head.quoteSingleIdentifier(colName)
   }
 
   override def getTableExistsQuery(table: String): String = {

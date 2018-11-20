@@ -87,11 +87,32 @@ abstract class JdbcDialect extends Serializable {
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
   /**
-   * Quotes the identifier. This is used to put quotes around the identifier in case the column
-   * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
+   * Gets the character used for identifier quoting.
+   */
+  def getIdentifierQuoteCharacter: String = """""""
+
+  /**
+   * Quotes the identifier. This is used to put quotes around the identifier in case
+   * the table or column name is a reserved keyword, or in case it contains characters
+   * that require quotes (e.g. space).
    */
   def quoteIdentifier(colName: String): String = {
-    s""""$colName""""
+    if (colName.startsWith("(")) {
+      // assuming this is a subquery and do nothing in this case
+      colName
+    } else if (colName.contains(".")) {
+      colName.split("\\.").map(quoteSingleIdentifier).mkString(".")
+    } else {
+      quoteSingleIdentifier(colName)
+    }
+  }
+
+  /**
+   * Quotes a single identifier (no dot chain separation).
+   */
+  def quoteSingleIdentifier(colName: String): String = {
+    val quoteChar = getIdentifierQuoteCharacter
+    quoteChar + colName.replace(quoteChar, "") + quoteChar
   }
 
   /**
