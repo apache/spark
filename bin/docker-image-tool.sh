@@ -174,8 +174,8 @@ Examples:
   - Build image in minikube with tag "testing"
     $0 -m -t testing build
 
-  - Skip building SparkR docker image
-    $0 -r repo -t tag -R skip build
+  - Build PySpark docker image
+    $0 -r docker.io/myrepo -t v2.3.0 -p kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
 
   - Build and push image with tag "v2.3.0" to docker.io/myrepo
     $0 -r docker.io/myrepo -t v2.3.0 build
