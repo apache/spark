@@ -996,6 +996,8 @@ private[ui] object ApiHelper {
     HEADER_EXECUTOR -> TaskIndexNames.EXECUTOR,
     HEADER_HOST -> TaskIndexNames.HOST,
     HEADER_LAUNCH_TIME -> TaskIndexNames.LAUNCH_TIME,
+    // SPARK-26109:  Duration of task as executorRunTime to make it consistent with the
+    // aggregated tasks summary metrics table and the previous versions of Spark.
     HEADER_DURATION -> TaskIndexNames.EXEC_RUN_TIME,
     HEADER_SCHEDULER_DELAY -> TaskIndexNames.SCHEDULER_DELAY,
     HEADER_DESER_TIME -> TaskIndexNames.DESER_TIME,
