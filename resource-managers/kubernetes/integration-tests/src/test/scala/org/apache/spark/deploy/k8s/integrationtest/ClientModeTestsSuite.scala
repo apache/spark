@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import org.scalatest.concurrent.Eventually
+import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
 
