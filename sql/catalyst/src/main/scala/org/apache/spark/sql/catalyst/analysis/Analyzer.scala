@@ -126,9 +126,7 @@ class Analyzer(
     }
   }
 
-  private def executeSameContext(plan: LogicalPlan): LogicalPlan = {
-    super.execute(plan)
-  }
+  private def executeSameContext(plan: LogicalPlan): LogicalPlan = super.execute(plan)
 
   def resolver: Resolver = conf.resolver
 

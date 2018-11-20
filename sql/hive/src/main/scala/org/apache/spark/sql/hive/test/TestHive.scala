@@ -34,6 +34,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, ExternalCatalogWithListener}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
@@ -586,7 +587,7 @@ private[hive] class TestHiveQueryExecution(
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.
-    sparkSession.sessionState.analyzer.executeAndCheck(logical, None)
+    sparkSession.sessionState.analyzer.executeAndCheck(logical, new QueryPlanningTracker)
   }
 }
 
