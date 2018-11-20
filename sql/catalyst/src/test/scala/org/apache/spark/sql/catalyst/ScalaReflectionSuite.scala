@@ -111,39 +111,21 @@ object TestingUDT {
 
 /** An example derived from Twitter/Scrooge codegen for thrift  */
 object ScroogeLikeExample {
-  def apply(
-    x: Int
-  ): ScroogeLikeExample =
-    new Immutable(
-      x
-    )
+  def apply(x: Int): ScroogeLikeExample = new Immutable(x)
 
-  def unapply(_item: ScroogeLikeExample): _root_.scala.Option[Int] = _root_.scala.Some(_item.x)
+  def unapply(_item: ScroogeLikeExample): Option[Int] = Some(_item.x)
 
   class Immutable(val x: Int) extends ScroogeLikeExample
-
-  trait Proxy extends ScroogeLikeExample {
-    protected def _underlying_ScroogeLikeExample: ScroogeLikeExample
-    override def x: Int = _underlying_ScroogeLikeExample.x
-  }
 }
 
-trait ScroogeLikeExample
-  extends _root_.scala.Product1[Int]
-  with java.io.Serializable
-{
+trait ScroogeLikeExample extends Product1[Int] with Serializable {
   import ScroogeLikeExample._
 
   def x: Int
 
-  def _1: Int = x
+  override def _1: Int = x
 
-  def copy(
-    x: Int = this.x
-  ): ScroogeLikeExample =
-    new Immutable(
-      x
-    )
+  def copy(x: Int = this.x): ScroogeLikeExample = new Immutable(x)
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
 
@@ -155,17 +137,6 @@ trait ScroogeLikeExample
     canEqual(other) &&
       _equals(this, other.asInstanceOf[ScroogeLikeExample])
 
-  override def hashCode: Int = {
-    var hash = _root_.scala.runtime.ScalaRunTime._hashCode(this)
-    hash
-  }
-
-  override def productArity: Int = 1
-
-  override def productElement(n: Int): Any = n match {
-    case 0 => this.x
-    case _ => throw new IndexOutOfBoundsException(n.toString)
-  }
 }
 
 class ScalaReflectionSuite extends SparkFunSuite {

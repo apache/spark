@@ -462,12 +462,12 @@ case class NewInstance(
       val d = outerObj.getClass +: paramTypes
       val c = getConstructor(outerObj.getClass +: paramTypes)
       (args: Seq[AnyRef]) => {
-        c(Seq(outerObj +: args: _*))
+        c(outerObj +: args)
       }
     }.getOrElse {
       val c = getConstructor(paramTypes)
       (args: Seq[AnyRef]) => {
-        c(Seq(args: _*))
+        c(args)
       }
     }
   }

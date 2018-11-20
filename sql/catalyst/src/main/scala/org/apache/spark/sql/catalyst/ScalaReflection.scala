@@ -795,7 +795,7 @@ object ScalaReflection extends ScalaReflection {
    */
   def findConstructor(cls: Class[_], paramTypes: Seq[Class[_]]): Option[Seq[AnyRef] => Any] = {
     Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*)) match {
-      case Some(c) => Some((x: Seq[AnyRef]) => c.newInstance(x: _*))
+      case Some(c) => Some(x => c.newInstance(x: _*))
       case None =>
         val companion = mirror.staticClass(cls.getName).companion
         val moduleMirror = mirror.reflectModule(companion.asModule)
@@ -1002,7 +1002,7 @@ trait ScalaReflection extends Logging {
    * If our type is a Scala trait it may have a companion object that
    * only defines a constructor via `apply` method.
    */
-  def getCompanionConstructor(tpe: Type): Symbol = {
+  private def getCompanionConstructor(tpe: Type): Symbol = {
     tpe.typeSymbol.asClass.companion.asTerm.typeSignature.member(universe.TermName("apply"))
   }
 
