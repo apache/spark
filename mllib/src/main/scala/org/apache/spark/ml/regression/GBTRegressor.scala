@@ -110,7 +110,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * @group setParam
    */
   @Since("1.4.0")
-  override def setImpurity(value: String): this.type = {
+  def setImpurity(value: String): this.type = {
     logWarning("GBTRegressor.setImpurity should NOT be used")
     this
   }

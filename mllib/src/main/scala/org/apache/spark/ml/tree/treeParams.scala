@@ -226,13 +226,6 @@ private[ml] trait TreeClassifierParams extends Params {
 
   setDefault(impurity -> "gini")
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setImpurity(value: String): this.type = set(impurity, value)
-
   /** @group getParam */
   final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
 
@@ -272,13 +265,6 @@ private[ml] trait HasVarianceImpurity extends Params {
       HasVarianceImpurity.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(impurity -> "variance")
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 3.0.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
-  def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
   final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)

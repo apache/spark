@@ -110,7 +110,7 @@ class GBTClassifier @Since("1.4.0") (
    * @group setParam
    */
   @Since("1.4.0")
-  override def setImpurity(value: String): this.type = {
+  def setImpurity(value: String): this.type = {
     logWarning("GBTClassifier.setImpurity should NOT be used")
     this
   }

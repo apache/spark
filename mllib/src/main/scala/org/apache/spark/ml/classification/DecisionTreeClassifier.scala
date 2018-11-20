@@ -91,7 +91,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setImpurity(value: String): this.type = set(impurity, value)
+  def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group setParam */
   @Since("1.6.0")

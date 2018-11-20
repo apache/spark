@@ -93,7 +93,7 @@ class RandomForestClassifier @Since("1.4.0") (
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setImpurity(value: String): this.type = set(impurity, value)
+  def setImpurity(value: String): this.type = set(impurity, value)
 
   // Parameters from TreeEnsembleParams:
 
