@@ -755,7 +755,7 @@ object CombineConcats extends Rule[LogicalPlan] {
  *
  * As a result, many unnecessary computations can be removed in the query optimization phase.
  */
-object ReplaceNullWithFalse extends Rule[LogicalPlan] {
+object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
@@ -767,6 +767,15 @@ object ReplaceNullWithFalse extends Rule[LogicalPlan] {
           replaceNullWithFalse(cond) -> value
         }
         cw.copy(branches = newBranches)
+      case af @ ArrayFilter(_, lf @ LambdaFunction(func, _, _)) =>
+        val newLambda = lf.copy(function = replaceNullWithFalse(func))
+        af.copy(function = newLambda)
+      case ae @ ArrayExists(_, lf @ LambdaFunction(func, _, _)) =>
+        val newLambda = lf.copy(function = replaceNullWithFalse(func))
+        ae.copy(function = newLambda)
+      case mf @ MapFilter(_, lf @ LambdaFunction(func, _, _)) =>
+        val newLambda = lf.copy(function = replaceNullWithFalse(func))
+        mf.copy(function = newLambda)
     }
   }
 
