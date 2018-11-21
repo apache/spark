@@ -626,7 +626,6 @@ abstract class OrcQueryTest extends OrcTest {
         checkAnswer(
           sql(s"SELECT * FROM ${tableName2}"),
           (1 to 2).map(i => Row(i, i, s"orc$i")))
-
       }
     }
   }
