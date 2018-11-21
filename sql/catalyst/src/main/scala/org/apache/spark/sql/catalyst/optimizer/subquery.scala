@@ -75,6 +75,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def dedupSubqueryOnSelfJoin(values: Seq[Expression], sub: LogicalPlan): LogicalPlan = {
+    // SPARK-26078: it may happen that the subquery has conflicting attributes with the outer
+    // values. In this case, the resulting join would contain trivially true conditions (eg.
+    // id#3 = id#3) which cannot be de-duplicated after. In this method, if there are conflicting
+    // attributes in the join condition, the subquery's conflicting attributes are changed using
+    // a projection which aliases them and resolves the problem.
     val leftRefs = AttributeSet.fromAttributeSets(values.map(_.references))
     val duplicates = leftRefs.intersect(sub.outputSet)
     if (duplicates.isEmpty) {
