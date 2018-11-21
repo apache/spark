@@ -316,7 +316,7 @@ private class ScriptTransformationWriterThread(
         // Javadoc this call will not throw an exception:
         _exception = t
         proc.destroy()
-        logError(s"Thread-ScriptTransformation-Feed exit cause by: ", t)
+        logError("Thread-ScriptTransformation-Feed exit cause by: ", t)
     } finally {
       try {
         Utils.tryLogNonFatalError(outputStream.close())

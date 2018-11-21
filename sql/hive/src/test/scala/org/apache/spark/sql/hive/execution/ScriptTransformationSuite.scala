@@ -199,7 +199,7 @@ private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExe
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
-private class TestUncaughtExceptionHandler extends Thread.UncaughtExceptionHandler with Logging {
+private class TestUncaughtExceptionHandler extends Thread.UncaughtExceptionHandler {
 
   @volatile private var _exception: Throwable = _
 
@@ -208,7 +208,6 @@ private class TestUncaughtExceptionHandler extends Thread.UncaughtExceptionHandl
   def cleanStatus: Unit = _exception = null
 
   override def uncaughtException(t: Thread, e: Throwable): Unit = {
-    logError(s"Thread ${t.getName} handle by TestUncaughtExceptionHandler")
     _exception = e
   }
 }
