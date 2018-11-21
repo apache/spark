@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * An abstract representation of progress through a {@link MicroBatchReadSupport} or
@@ -30,7 +30,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * maintain compatibility with DataSource V1 APIs. This extension will be removed once we
  * get rid of V1 completely.
  */
-@InterfaceStability.Evolving
+@Evolving
 public abstract class Offset extends org.apache.spark.sql.execution.streaming.Offset {
     /**
      * A JSON-serialized representation of an Offset that is

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.sources.v2.reader.InputPartition;
 import org.apache.spark.sql.sources.v2.reader.PartitionReaderFactory;
@@ -28,7 +28,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * instead of {@link org.apache.spark.sql.sources.v2.reader.PartitionReader}. It's used for
  * continuous streaming processing.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface ContinuousPartitionReaderFactory extends PartitionReaderFactory {
   @Override
   ContinuousPartitionReader<InternalRow> createReader(InputPartition partition);

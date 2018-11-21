@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.spark.annotation.{DeveloperApi, InterfaceStability}
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
 import org.apache.spark.sql.execution.SparkStrategy
 
 /**
@@ -40,7 +40,7 @@ package object sql {
    * [[org.apache.spark.sql.sources]]
    */
   @DeveloperApi
-  @InterfaceStability.Unstable
+  @Unstable
   type Strategy = SparkStrategy
 
   type DataFrame = Dataset[Row]

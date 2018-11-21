@@ -143,8 +143,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
       })
     ctx.currentVars = oldCurrentVars
     ctx.INPUT_ROW = oldInputRow
-    // make sure INPUT_ROW is declared even if splitExpressions
-    // returns an inlined block
     code
   }
 
