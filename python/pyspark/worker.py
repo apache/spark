@@ -22,12 +22,12 @@ from __future__ import print_function
 import os
 import sys
 import time
-# 'resource' is a Unix specific package.
-has_resource_package = True
+# 'resource' is a Unix specific module.
+has_resource_module = True
 try:
     import resource
 except ImportError:
-    has_resource_package = False
+    has_resource_module = False
 import socket
 import traceback
 
@@ -274,8 +274,8 @@ def main(infile, outfile):
         # set up memory limits
         memory_limit_mb = int(os.environ.get('PYSPARK_EXECUTOR_MEMORY_MB', "-1"))
         # 'PYSPARK_EXECUTOR_MEMORY_MB' should be undefined on Windows because it depends on
-        # resource package which is a Unix specific package.
-        if memory_limit_mb > 0 and has_resource_package:
+        # resource module which is a Unix specific module.
+        if memory_limit_mb > 0 and has_resource_module:
             total_memory = resource.RLIMIT_AS
             try:
                 (soft_limit, hard_limit) = resource.getrlimit(total_memory)
