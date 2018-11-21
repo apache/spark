@@ -52,16 +52,19 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton wit
     outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
   )
 
+  private var defaultUncaughtExceptionHandler: Thread.UncaughtExceptionHandler = _
+
   private val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
+    defaultUncaughtExceptionHandler = Thread.getDefaultUncaughtExceptionHandler
     Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
   }
 
   protected override def afterAll(): Unit = {
     super.afterAll()
-    Thread.setDefaultUncaughtExceptionHandler(null)
+    Thread.setDefaultUncaughtExceptionHandler(defaultUncaughtExceptionHandler)
   }
 
   override protected def afterEach(): Unit = {
