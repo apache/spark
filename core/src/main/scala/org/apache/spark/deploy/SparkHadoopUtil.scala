@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Date, Locale}
+import java.util.{Arrays, Comparator, Date, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -269,10 +269,11 @@ private[spark] class SparkHadoopUtil extends Logging {
             name.startsWith(prefix) && !name.endsWith(exclusionSuffix)
           }
         })
-      Arrays.sort(fileStatuses,
-        (o1: FileStatus, o2: FileStatus) => {
+      Arrays.sort(fileStatuses, new Comparator[FileStatus] {
+        override def compare(o1: FileStatus, o2: FileStatus): Int = {
           Longs.compare(o1.getModificationTime, o2.getModificationTime)
-        })
+        }
+      })
       fileStatuses
     } catch {
       case NonFatal(e) =>
