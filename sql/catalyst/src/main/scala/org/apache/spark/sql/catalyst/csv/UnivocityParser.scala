@@ -271,11 +271,12 @@ private[sql] object UnivocityParser {
   def tokenizeStream(
       inputStream: InputStream,
       shouldDropHeader: Boolean,
-      tokenizer: CsvParser): Iterator[Array[String]] = {
+      tokenizer: CsvParser,
+      encoding: String): Iterator[Array[String]] = {
     val handleHeader: () => Unit =
       () => if (shouldDropHeader) tokenizer.parseNext
 
-    convertStream(inputStream, tokenizer, handleHeader)(tokens => tokens)
+    convertStream(inputStream, tokenizer, handleHeader, encoding)(tokens => tokens)
   }
 
   /**
@@ -297,7 +298,7 @@ private[sql] object UnivocityParser {
     val handleHeader: () => Unit =
       () => headerChecker.checkHeaderColumnNames(tokenizer)
 
-    convertStream(inputStream, tokenizer, handleHeader) { tokens =>
+    convertStream(inputStream, tokenizer, handleHeader, parser.options.charset) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
@@ -305,9 +306,10 @@ private[sql] object UnivocityParser {
   private def convertStream[T](
       inputStream: InputStream,
       tokenizer: CsvParser,
-      handleHeader: () => Unit)(
+      handleHeader: () => Unit,
+      encoding: String)(
       convert: Array[String] => T) = new Iterator[T] {
-    tokenizer.beginParsing(inputStream)
+    tokenizer.beginParsing(inputStream, encoding)
 
     // We can handle header here since here the stream is open.
     handleHeader()

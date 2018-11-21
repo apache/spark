@@ -41,9 +41,9 @@ class PercentileSuite extends SparkFunSuite {
     val buffer = new OpenHashMap[AnyRef, Long]()
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
 
-    // Check non-empty buffer serializa and deserialize.
+    // Check non-empty buffer serialize and deserialize.
     data.foreach { key =>
-      buffer.changeValue(new Integer(key), 1L, _ + 1L)
+      buffer.changeValue(Integer.valueOf(key), 1L, _ + 1L)
     }
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }

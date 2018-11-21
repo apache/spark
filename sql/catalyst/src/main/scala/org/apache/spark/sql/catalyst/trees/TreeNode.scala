@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.trees
 
+import java.io.Writer
 import java.util.UUID
 
 import scala.collection.Map
 import scala.reflect.ClassTag
 
+import org.apache.commons.io.output.StringBuilderWriter
 import org.apache.commons.lang3.ClassUtils
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -469,7 +471,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def treeString: String = treeString(verbose = true)
 
   def treeString(verbose: Boolean, addSuffix: Boolean = false): String = {
-    generateTreeString(0, Nil, new StringBuilder, verbose = verbose, addSuffix = addSuffix).toString
+    val writer = new StringBuilderWriter()
+    try {
+      treeString(writer, verbose, addSuffix)
+      writer.toString
+    } finally {
+      writer.close()
+    }
+  }
+
+  def treeString(
+      writer: Writer,
+      verbose: Boolean,
+      addSuffix: Boolean): Unit = {
+    generateTreeString(0, Nil, writer, verbose, "", addSuffix)
   }
 
   /**
@@ -521,7 +536,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   protected def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
   /**
-   * Appends the string representation of this node and its children to the given StringBuilder.
+   * Appends the string representation of this node and its children to the given Writer.
    *
    * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
    * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and
@@ -532,16 +547,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      writer: Writer,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
+      addSuffix: Boolean = false): Unit = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
-        builder.append(if (isLast) "   " else ":  ")
+        writer.write(if (isLast) "   " else ":  ")
       }
-      builder.append(if (lastChildren.last) "+- " else ":- ")
+      writer.write(if (lastChildren.last) "+- " else ":- ")
     }
 
     val str = if (verbose) {
@@ -549,27 +564,25 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     } else {
       simpleString
     }
-    builder.append(prefix)
-    builder.append(str)
-    builder.append("\n")
+    writer.write(prefix)
+    writer.write(str)
+    writer.write("\n")
 
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ false, builder, verbose,
+        depth + 2, lastChildren :+ children.isEmpty :+ false, writer, verbose,
         addSuffix = addSuffix))
       innerChildren.last.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ true, builder, verbose,
+        depth + 2, lastChildren :+ children.isEmpty :+ true, writer, verbose,
         addSuffix = addSuffix)
     }
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, builder, verbose, prefix, addSuffix))
+        depth + 1, lastChildren :+ false, writer, verbose, prefix, addSuffix))
       children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, builder, verbose, prefix, addSuffix)
+        depth + 1, lastChildren :+ true, writer, verbose, prefix, addSuffix)
     }
-
-    builder
   }
 
   /**

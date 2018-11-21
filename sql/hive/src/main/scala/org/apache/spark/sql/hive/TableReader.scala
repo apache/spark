@@ -132,7 +132,7 @@ class HadoopTableReader(
 
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
       val hconf = broadcastedHadoopConf.value.value
-      val deserializer = deserializerClass.newInstance()
+      val deserializer = deserializerClass.getConstructor().newInstance()
       deserializer.initialize(hconf, localTableDesc.getProperties)
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
     }
@@ -245,7 +245,7 @@ class HadoopTableReader(
       val localTableDesc = tableDesc
       createHadoopRdd(localTableDesc, inputPathStr, ifc).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
-        val deserializer = localDeserializer.newInstance()
+        val deserializer = localDeserializer.getConstructor().newInstance()
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
         // information) may be defined in table properties. Here we should merge table properties
         // and partition properties before initializing the deserializer. Note that partition
@@ -257,7 +257,7 @@ class HadoopTableReader(
         }
         deserializer.initialize(hconf, props)
         // get the table deserializer
-        val tableSerDe = localTableDesc.getDeserializerClass.newInstance()
+        val tableSerDe = localTableDesc.getDeserializerClass.getConstructor().newInstance()
         tableSerDe.initialize(hconf, localTableDesc.getProperties)
 
         // fill the non partition key attributes

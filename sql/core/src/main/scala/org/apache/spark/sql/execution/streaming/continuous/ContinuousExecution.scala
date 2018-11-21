@@ -262,7 +262,12 @@ class ContinuousExecution(
 
       reportTimeTaken("runContinuous") {
         SQLExecution.withNewExecutionId(
-          sparkSessionForQuery, lastExecution)(lastExecution.toRdd)
+          sparkSessionForQuery, lastExecution) {
+          // Materialize `executedPlan` so that accessing it when `toRdd` is running doesn't need to
+          // wait for a lock
+          lastExecution.executedPlan
+          lastExecution.toRdd
+        }
       }
     } catch {
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&

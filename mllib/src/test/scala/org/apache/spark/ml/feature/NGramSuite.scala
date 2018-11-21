@@ -17,14 +17,13 @@
 
 package org.apache.spark.ml.feature
 
-import scala.beans.BeanInfo
-
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.{DataFrame, Row}
 
-
-@BeanInfo
-case class NGramTestData(inputTokens: Array[String], wantedNGrams: Array[String])
+case class NGramTestData(inputTokens: Array[String], wantedNGrams: Array[String]) {
+  def getInputTokens: Array[String] = inputTokens
+  def getWantedNGrams: Array[String] = wantedNGrams
+}
 
 class NGramSuite extends MLTest with DefaultReadWriteTest {
 

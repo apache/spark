@@ -388,7 +388,7 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
     >>> len(centers)
     2
     >>> model.computeCost(df)
-    2.000...
+    2.0
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[0].prediction == rows[1].prediction
@@ -403,7 +403,7 @@ class KMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPredictionCol
     >>> summary.clusterSizes
     [2, 2]
     >>> summary.trainingCost
-    2.000...
+    2.0
     >>> kmeans_path = temp_path + "/kmeans"
     >>> kmeans.save(kmeans_path)
     >>> kmeans2 = KMeans.load(kmeans_path)
@@ -540,7 +540,14 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Computes the sum of squared distances between the input points
         and their corresponding cluster centers.
+
+        ..note:: Deprecated in 3.0.0. It will be removed in future versions. Use
+           ClusteringEvaluator instead. You can also get the cost on the training dataset in the
+           summary.
         """
+        warnings.warn("Deprecated in 3.0.0. It will be removed in future versions. Use "
+                      "ClusteringEvaluator instead. You can also get the cost on the training "
+                      "dataset in the summary.", DeprecationWarning)
         return self._call_java("computeCost", dataset)
 
     @property
@@ -588,7 +595,7 @@ class BisectingKMeans(JavaEstimator, HasDistanceMeasure, HasFeaturesCol, HasPred
     >>> len(centers)
     2
     >>> model.computeCost(df)
-    2.000...
+    2.0
     >>> model.hasSummary
     True
     >>> summary = model.summary

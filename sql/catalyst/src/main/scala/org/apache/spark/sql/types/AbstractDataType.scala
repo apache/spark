@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
@@ -134,7 +134,7 @@ object AtomicType {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 abstract class NumericType extends AtomicType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
