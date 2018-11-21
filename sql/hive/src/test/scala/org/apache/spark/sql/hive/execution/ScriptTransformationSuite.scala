@@ -54,12 +54,10 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton wit
 
   private val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
 
-
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
   }
-
 
   protected override def afterAll(): Unit = {
     super.afterAll()
