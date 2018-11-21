@@ -202,7 +202,7 @@ class CSVOptions(
   }
 
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
-    lineSep.getBytes("UTF-8")
+    lineSep.getBytes(charset)
   }
   val lineSeparatorInWrite: Option[String] = lineSeparator
 
@@ -232,9 +232,9 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    lineSeparatorInRead.foreach {sep =>
-      format.setLineSeparator(sep.map(_.toChar))
-      format.setNormalizedNewline(sep.head.toChar)
+    lineSeparator.foreach {sep =>
+      format.setLineSeparator(sep)
+      format.setNormalizedNewline(0x00.toChar)
     }
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
