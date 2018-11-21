@@ -18,7 +18,7 @@
 package org.apache.spark.executor
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.shuffle.TempShuffleReadMetrics
+import org.apache.spark.shuffle.ShuffleMetricsReporter
 import org.apache.spark.util.LongAccumulator
 
 
@@ -122,4 +122,36 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
       _recordsRead.add(metric.recordsRead)
     }
   }
+}
+
+
+/**
+ * A temporary shuffle read metrics holder that is used to collect shuffle read metrics for each
+ * shuffle dependency, and all temporary metrics will be merged into the [[ShuffleReadMetrics]] at
+ * last.
+ */
+private[spark] class TempShuffleReadMetrics extends ShuffleMetricsReporter {
+  private[this] var _remoteBlocksFetched = 0L
+  private[this] var _localBlocksFetched = 0L
+  private[this] var _remoteBytesRead = 0L
+  private[this] var _remoteBytesReadToDisk = 0L
+  private[this] var _localBytesRead = 0L
+  private[this] var _fetchWaitTime = 0L
+  private[this] var _recordsRead = 0L
+
+  override def incRemoteBlocksFetched(v: Long): Unit = _remoteBlocksFetched += v
+  override def incLocalBlocksFetched(v: Long): Unit = _localBlocksFetched += v
+  override def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead += v
+  override def incRemoteBytesReadToDisk(v: Long): Unit = _remoteBytesReadToDisk += v
+  override def incLocalBytesRead(v: Long): Unit = _localBytesRead += v
+  override def incFetchWaitTime(v: Long): Unit = _fetchWaitTime += v
+  override def incRecordsRead(v: Long): Unit = _recordsRead += v
+
+  def remoteBlocksFetched: Long = _remoteBlocksFetched
+  def localBlocksFetched: Long = _localBlocksFetched
+  def remoteBytesRead: Long = _remoteBytesRead
+  def remoteBytesReadToDisk: Long = _remoteBytesReadToDisk
+  def localBytesRead: Long = _localBytesRead
+  def fetchWaitTime: Long = _fetchWaitTime
+  def recordsRead: Long = _recordsRead
 }
