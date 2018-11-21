@@ -539,13 +539,9 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .build()
 
   /**
-    * Returns a unique consumer group (group.id), allowing the user to set the prefix of
-    * the consumer group
-    *
-    * @param parameters Input parameters
-    * @param metadataPath Metadata Path
-    * @return
-    */
+   * Returns a unique consumer group (group.id), allowing the user to set the prefix of
+   * the consumer group
+   */
   private def streamingUniqueGroupId(parameters: Map[String, String],
                                      metadataPath: String): String = {
     val groupIdPrefix = parameters
