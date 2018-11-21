@@ -1603,6 +1603,13 @@ object SQLConf {
         "version 2.4 and earlier.")
       .booleanConf
       .createWithDefault(false)
+
+  val MAX_TO_STRING_FIELDS = buildConf("spark.sql.debug.maxToStringFields")
+    .doc("Maximum number of fields of sequence-like entries can be converted to strings " +
+      "in debug output. Any elements beyond the limit will be dropped and replaced by a" +
+      """ "... N more fields" placeholder.""")
+    .intConf
+    .createWithDefault(25)
 }
 
 /**
@@ -2020,6 +2027,8 @@ class SQLConf extends Serializable with Logging {
 
   def nameNonStructGroupingKeyAsValue: Boolean =
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
+
+  def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
   /** ********************** SQLConf functionality methods ************ */
 

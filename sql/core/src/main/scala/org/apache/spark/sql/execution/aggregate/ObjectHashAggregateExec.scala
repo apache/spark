@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.util.Utils
 
 /**
  * A hash-based aggregate operator that supports [[TypedImperativeAggregate]] functions that may
@@ -143,9 +143,9 @@ case class ObjectHashAggregateExec(
 
   private def toString(verbose: Boolean): String = {
     val allAggregateExpressions = aggregateExpressions
-    val keyString = Utils.truncatedString(groupingExpressions, "[", ", ", "]")
-    val functionString = Utils.truncatedString(allAggregateExpressions, "[", ", ", "]")
-    val outputString = Utils.truncatedString(output, "[", ", ", "]")
+    val keyString = truncatedString(groupingExpressions, "[", ", ", "]")
+    val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]")
+    val outputString = truncatedString(output, "[", ", ", "]")
     if (verbose) {
       s"ObjectHashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
     } else {
