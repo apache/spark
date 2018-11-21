@@ -1894,8 +1894,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
   }
 
-  def testLineSeparator(lineSep: String): Unit = {
-    test(s"Support line separator - lineSep: '$lineSep'") {
+  def testLineSeparator(lineSep: String, encoding: String, inferSchema: Boolean, id: Int): Unit = {
+    test(s"Support line separator in ${encoding} #${id}") {
       // Read
       val data =
         s""""a",1$lineSep
@@ -1905,17 +1905,23 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
       Seq(data, dataWithTrailingLineSep).foreach { lines =>
         withTempPath { path =>
-          Files.write(path.toPath, lines.getBytes(StandardCharsets.UTF_8))
-          val schema = StructType(StructField("f", StringType)
-            :: StructField("f0", LongType) :: Nil)
+          Files.write(path.toPath, lines.getBytes(encoding))
+          val schema = StructType(StructField("_c0", StringType)
+            :: StructField("_c1", LongType) :: Nil)
 
-          val expected = Seq(("a", 1), ("\nc", 2), ("\nd", 3)).toDF()
+          val expected = Seq(("a", 1), ("\nc", 2), ("\nd", 3))
+            .toDF("_c0", "_c1")
           Seq(false, true).foreach { multiLine =>
-            val df = spark.read
-              .schema(schema)
+            val reader = spark
+              .read
               .option("lineSep", lineSep)
               .option("multiLine", multiLine)
-              .csv(path.getAbsolutePath)
+              .option("encoding", encoding)
+            val df = if (inferSchema) {
+              reader.option("inferSchema", true).csv(path.getAbsolutePath)
+            } else {
+              reader.schema(schema).csv(path.getAbsolutePath)
+            }
             checkAnswer(df, expected)
           }
         }
@@ -1924,9 +1930,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       // Write
       withTempPath { path =>
         Seq("a", "b", "c").toDF("value").coalesce(1)
-          .write.option("lineSep", lineSep).csv(path.getAbsolutePath)
+          .write
+          .option("lineSep", lineSep)
+          .option("encoding", encoding)
+          .csv(path.getAbsolutePath)
         val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
-        val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
+        val readBack = new String(Files.readAllBytes(partFile.toPath), encoding)
         assert(
           readBack === s"a${lineSep}b${lineSep}c${lineSep}")
       }
@@ -1934,16 +1943,37 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       // Roundtrip
       withTempPath { path =>
         val df = Seq("a", "b", "c").toDF()
-        df.write.option("lineSep", lineSep).csv(path.getAbsolutePath)
-        val readBack = spark.read.option("lineSep", lineSep).csv(path.getAbsolutePath)
+        df.write
+          .option("lineSep", lineSep)
+          .option("encoding", encoding)
+          .csv(path.getAbsolutePath)
+        val readBack = spark
+          .read
+          .option("lineSep", lineSep)
+          .option("encoding", encoding)
+          .csv(path.getAbsolutePath)
         checkAnswer(df, readBack)
       }
     }
   }
 
   // scalastyle:off nonascii
-  Seq("|", "^", "::", 0x1E.toChar.toString).foreach { lineSep =>
-    testLineSeparator(lineSep)
+  List(
+    (0, "|", "UTF-8", false),
+    (1, "^", "UTF-16BE", true),
+    (2, "::", "ISO-8859-1", true),
+    (3, "!!", "UTF-32LE", false),
+    (4, 0x1E.toChar.toString, "UTF-8", true),
+    (5, "아", "UTF-32BE", false),
+    (6, "ку", "CP1251", true),
+    (8, "\r\n", "UTF-16LE", true),
+    (9, "\r\n", "utf-16be", false),
+    (10, "\u000d\u000a", "UTF-32BE", false),
+    (11, "\u000a\u000d", "UTF-8", true),
+    (12, "==", "US-ASCII", false),
+    (13, "$^", "utf-32le", true)
+  ).foreach { case (testNum, sep, encoding, inferSchema) =>
+    testLineSeparator(sep, encoding, inferSchema, testNum)
   }
   // scalastyle:on nonascii
 
