@@ -60,7 +60,7 @@ object QueryPlanningTracker {
   }
 
   /** Returns the current tracker in scope, based on the thread local variable. */
-  def get: QueryPlanningTracker = localTracker.get()
+  def get: Option[QueryPlanningTracker] = Option(localTracker.get())
 
   /** Sets the current tracker for the execution of function f. We assume f is single-threaded. */
   def withTracker[T](tracker: QueryPlanningTracker)(f: => T): T = {

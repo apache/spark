@@ -86,7 +86,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     var curPlan = plan
     val queryExecutionMetrics = RuleExecutor.queryExecutionMeter
     val planChangeLogger = new PlanChangeLogger()
-    val tracker = QueryPlanningTracker.get
+    val tracker: Option[QueryPlanningTracker] = QueryPlanningTracker.get
 
     batches.foreach { batch =>
       val batchStartPlan = curPlan
@@ -111,9 +111,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             queryExecutionMetrics.incExecutionTimeBy(rule.ruleName, runTime)
             queryExecutionMetrics.incNumExecution(rule.ruleName)
 
-            if (tracker ne null) {
-              tracker.recordRuleInvocation(rule.ruleName, runTime, effective)
-            }
+            // Record timing information using QueryPlanningTracker
+            tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
 
             // Run the structural integrity checker against the plan after each rule.
             if (!isPlanIntegral(result)) {
