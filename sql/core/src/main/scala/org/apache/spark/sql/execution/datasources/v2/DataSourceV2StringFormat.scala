@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.util.Utils
@@ -72,10 +73,10 @@ trait DataSourceV2StringFormat {
       }.mkString("[", ",", "]")
     }
 
-    val outputStr = Utils.truncatedString(output, "[", ", ", "]")
+    val outputStr = truncatedString(output, "[", ", ", "]")
 
     val entriesStr = if (entries.nonEmpty) {
-      Utils.truncatedString(entries.map {
+      truncatedString(entries.map {
         case (key, value) => key + ": " + StringUtils.abbreviate(value, 100)
       }, " (", ", ", ")")
     } else {
