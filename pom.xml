@@ -156,6 +156,7 @@
     <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.12.7</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
+    <scalafmt.version>1.5.1</scalafmt.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.9.6</fasterxml.jackson.version>
     <snappy.version>1.1.7.1</snappy.version>
@@ -2597,6 +2598,26 @@
                 <exclude>log4j.properties</exclude>
               </excludes>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.antipathy</groupId>
+        <artifactId>mvn-scalafmt_2.12</artifactId>
+        <version>0.9_${scalafmt.version}</version>
+        <configuration>
+          <parameters>--diff --test</parameters> <!-- (Optional) Additional command line arguments -->
+          <skip>false</skip> <!-- (Optional) skip formatting -->
+          <skiptest>false</skiptest> <!-- (Optional) Skip formatting test sources -->
+          <skipmain>false</skipmain> <!-- (Optional) Skip formatting main sources -->
+          <configLocation>.scalafmt.conf</configLocation> <!-- (Optional) config locataion -->
+        </configuration>
+        <executions>
+          <execution>
+            <phase>validate</phase>
+            <goals>
+              <goal>format</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>
