@@ -790,6 +790,6 @@ private case class DummySparkPlan(
     override val requiredChildDistribution: Seq[Distribution] = Nil,
     override val requiredChildOrdering: Seq[Seq[SortOrder]] = Nil
   ) extends SparkPlan {
-  override protected def doExecute(): RDD[InternalRow] = throw new NotImplementedError
+  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
   override def output: Seq[Attribute] = Seq.empty
 }

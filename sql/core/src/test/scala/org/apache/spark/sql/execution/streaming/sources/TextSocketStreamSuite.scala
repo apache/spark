@@ -382,10 +382,9 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     tasks.foreach {
       case t: TextSocketContinuousInputPartition =>
         val r = readerFactory.createReader(t).asInstanceOf[TextSocketContinuousPartitionReader]
-        for (i <- 0 until numRecords / 2) {
+        for (_ <- 0 until numRecords / 2) {
           r.next()
-          assert(r.get().get(0, TextSocketReader.SCHEMA_TIMESTAMP)
-            .isInstanceOf[(String, Timestamp)])
+          assert(r.get().get(0, TextSocketReader.SCHEMA_TIMESTAMP).isInstanceOf[(_, _)])
         }
       case _ => throw new IllegalStateException("Unexpected task type")
     }
