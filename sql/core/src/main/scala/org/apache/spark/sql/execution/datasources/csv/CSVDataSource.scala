@@ -192,7 +192,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
       UnivocityParser.tokenizeStream(
         CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
         shouldDropHeader = false,
-        new CsvParser(parsedOptions.asParserSettings))
+        new CsvParser(parsedOptions.asParserSettings),
+        encoding = parsedOptions.charset)
     }.take(1).headOption match {
       case Some(firstRow) =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
@@ -203,7 +204,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
               lines.getConfiguration,
               new Path(lines.getPath())),
             parsedOptions.headerFlag,
-            new CsvParser(parsedOptions.asParserSettings))
+            new CsvParser(parsedOptions.asParserSettings),
+            encoding = parsedOptions.charset)
         }
         val sampled = CSVUtils.sample(tokenRDD, parsedOptions)
         CSVInferSchema.infer(sampled, header, parsedOptions)
