@@ -44,8 +44,7 @@ __all__ = ['Binarizer',
            'MinMaxScaler', 'MinMaxScalerModel',
            'NGram',
            'Normalizer',
-           'OneHotEncoder',
-           'OneHotEncoderEstimator', 'OneHotEncoderModel',
+           'OneHotEncoder', 'OneHotEncoderModel',
            'PCA', 'PCAModel',
            'PolynomialExpansion',
            'QuantileDiscretizer',
@@ -1642,91 +1641,8 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
 
 @inherit_doc
-class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
-    """
-    A one-hot encoder that maps a column of category indices to a
-    column of binary vectors, with at most a single one-value per row
-    that indicates the input category index.
-    For example with 5 categories, an input value of 2.0 would map to
-    an output vector of `[0.0, 0.0, 1.0, 0.0]`.
-    The last category is not included by default (configurable via
-    :py:attr:`dropLast`) because it makes the vector entries sum up to
-    one, and hence linearly dependent.
-    So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
-
-    .. note:: This is different from scikit-learn's OneHotEncoder,
-        which keeps all categories. The output vectors are sparse.
-
-    .. note:: Deprecated in 2.3.0. :py:class:`OneHotEncoderEstimator` will be renamed to
-        :py:class:`OneHotEncoder` and this :py:class:`OneHotEncoder` will be removed in 3.0.0.
-
-    .. seealso::
-
-       :py:class:`StringIndexer` for converting categorical values into
-       category indices
-
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
-    >>> model = stringIndexer.fit(stringIndDf)
-    >>> td = model.transform(stringIndDf)
-    >>> encoder = OneHotEncoder(inputCol="indexed", outputCol="features")
-    >>> encoder.transform(td).head().features
-    SparseVector(2, {0: 1.0})
-    >>> encoder.setParams(outputCol="freqs").transform(td).head().freqs
-    SparseVector(2, {0: 1.0})
-    >>> params = {encoder.dropLast: False, encoder.outputCol: "test"}
-    >>> encoder.transform(td, params).head().test
-    SparseVector(3, {0: 1.0})
-    >>> onehotEncoderPath = temp_path + "/onehot-encoder"
-    >>> encoder.save(onehotEncoderPath)
-    >>> loadedEncoder = OneHotEncoder.load(onehotEncoderPath)
-    >>> loadedEncoder.getDropLast() == encoder.getDropLast()
-    True
-
-    .. versionadded:: 1.4.0
-    """
-
-    dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category",
-                     typeConverter=TypeConverters.toBoolean)
-
-    @keyword_only
-    def __init__(self, dropLast=True, inputCol=None, outputCol=None):
-        """
-        __init__(self, dropLast=True, inputCol=None, outputCol=None)
-        """
-        super(OneHotEncoder, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.OneHotEncoder", self.uid)
-        self._setDefault(dropLast=True)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
-
-    @keyword_only
-    @since("1.4.0")
-    def setParams(self, dropLast=True, inputCol=None, outputCol=None):
-        """
-        setParams(self, dropLast=True, inputCol=None, outputCol=None)
-        Sets params for this OneHotEncoder.
-        """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
-
-    @since("1.4.0")
-    def setDropLast(self, value):
-        """
-        Sets the value of :py:attr:`dropLast`.
-        """
-        return self._set(dropLast=value)
-
-    @since("1.4.0")
-    def getDropLast(self):
-        """
-        Gets the value of dropLast or its default value.
-        """
-        return self.getOrDefault(self.dropLast)
-
-
-@inherit_doc
-class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHandleInvalid,
-                             JavaMLReadable, JavaMLWritable):
+class OneHotEncoder(JavaEstimator, HasInputCols, HasOutputCols, HasHandleInvalid,
+                    JavaMLReadable, JavaMLWritable):
     """
     A one-hot encoder that maps a column of category indices to a column of binary vectors, with
     at most a single one-value per row that indicates the input category index.
@@ -1751,13 +1667,13 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
-    >>> ohe = OneHotEncoderEstimator(inputCols=["input"], outputCols=["output"])
+    >>> ohe = OneHotEncoder(inputCols=["input"], outputCols=["output"])
     >>> model = ohe.fit(df)
     >>> model.transform(df).head().output
     SparseVector(2, {0: 1.0})
     >>> ohePath = temp_path + "/oheEstimator"
     >>> ohe.save(ohePath)
-    >>> loadedOHE = OneHotEncoderEstimator.load(ohePath)
+    >>> loadedOHE = OneHotEncoder.load(ohePath)
     >>> loadedOHE.getInputCols() == ohe.getInputCols()
     True
     >>> modelPath = temp_path + "/ohe-model"
@@ -1784,9 +1700,9 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
         """
         __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
         """
-        super(OneHotEncoderEstimator, self).__init__()
+        super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj(
-            "org.apache.spark.ml.feature.OneHotEncoderEstimator", self.uid)
+            "org.apache.spark.ml.feature.OneHotEncoder", self.uid)
         self._setDefault(handleInvalid="error", dropLast=True)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -1796,7 +1712,7 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
     def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
         """
         setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
-        Sets params for this OneHotEncoderEstimator.
+        Sets params for this OneHotEncoder.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -1821,7 +1737,7 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
 
 class OneHotEncoderModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
-    Model fitted by :py:class:`OneHotEncoderEstimator`.
+    Model fitted by :py:class:`OneHotEncoder`.
 
     .. versionadded:: 2.3.0
     """

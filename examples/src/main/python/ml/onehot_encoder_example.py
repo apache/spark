@@ -18,14 +18,14 @@
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.feature import OneHotEncoderEstimator
+from pyspark.ml.feature import OneHotEncoder
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("OneHotEncoderEstimatorExample")\
+        .appName("OneHotEncoderExample")\
         .getOrCreate()
 
     # Note: categorical features are usually first encoded with StringIndexer
@@ -39,8 +39,8 @@ if __name__ == "__main__":
         (2.0, 0.0)
     ], ["categoryIndex1", "categoryIndex2"])
 
-    encoder = OneHotEncoderEstimator(inputCols=["categoryIndex1", "categoryIndex2"],
-                                     outputCols=["categoryVec1", "categoryVec2"])
+    encoder = OneHotEncoder(inputCols=["categoryIndex1", "categoryIndex2"],
+                            outputCols=["categoryVec1", "categoryVec2"])
     model = encoder.fit(df)
     encoded = model.transform(df)
     encoded.show()
