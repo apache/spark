@@ -24,8 +24,6 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.nio.ByteBuffer;
-
 public class PlatformUtilSuite {
 
   @Test
@@ -167,7 +165,10 @@ public class PlatformUtilSuite {
     byte[] floatBytes = new byte[Float.BYTES];
     Platform.putDouble(doubleBytes, Platform.BYTE_ARRAY_OFFSET, -0.0d);
     Platform.putFloat(floatBytes, Platform.BYTE_ARRAY_OFFSET, -0.0f);
-    Assert.assertEquals(0, Double.compare(0.0d, ByteBuffer.wrap(doubleBytes).getDouble()));
-    Assert.assertEquals(0, Float.compare(0.0f, ByteBuffer.wrap(floatBytes).getFloat()));
+    double doubleFromPlatform = Platform.getDouble(doubleBytes, Platform.BYTE_ARRAY_OFFSET);
+    float floatFromPlatform = Platform.getFloat(floatBytes, Platform.BYTE_ARRAY_OFFSET);
+
+    Assert.assertEquals(Double.doubleToLongBits(0.0d), Double.doubleToLongBits(doubleFromPlatform));
+    Assert.assertEquals(Float.floatToIntBits(0.0f), Float.floatToIntBits(floatFromPlatform));
   }
 }
