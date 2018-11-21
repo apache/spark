@@ -87,6 +87,18 @@ $ ./bin/docker-image-tool.sh -r <repo> -t my-tag build
 $ ./bin/docker-image-tool.sh -r <repo> -t my-tag push
 ```
 
+By default `bin/docker-image-tool.sh` builds docker image for running JVM jobs. You need to opt-in to build additional 
+language binding docker images.
+
+Example usage is
+```bash
+# To build additional PySpark docker image
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
+
+# To build additional SparkR docker image
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile build
+```
+
 ## Cluster Mode
 
 To launch Spark Pi in cluster mode,
