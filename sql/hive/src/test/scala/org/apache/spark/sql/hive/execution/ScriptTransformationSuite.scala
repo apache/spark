@@ -18,9 +18,11 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -29,7 +31,8 @@ import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.StringType
 
-class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
+class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton with
+  BeforeAndAfterEach {
   import spark.implicits._
 
   private val noSerdeIOSchema = HiveScriptIOSchema(
@@ -49,6 +52,25 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
   )
 
+  private val uncaughtExceptionHandler = new TestUncaughtExceptionHandler
+
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
+  }
+
+
+  protected override def afterAll(): Unit = {
+    super.afterAll()
+    Thread.setDefaultUncaughtExceptionHandler(null)
+  }
+
+  override protected def afterEach(): Unit = {
+    super.afterEach()
+    uncaughtExceptionHandler.cleanStatus
+  }
+
   test("cat without SerDe") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
 
@@ -63,6 +85,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         ioschema = noSerdeIOSchema
       ),
       rowsDf.collect())
+    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
   test("cat with LazySimpleSerDe") {
@@ -79,6 +102,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         ioschema = serdeIOSchema
       ),
       rowsDf.collect())
+    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
   test("script transformation should not swallow errors from upstream operators (no serde)") {
@@ -98,6 +122,8 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         rowsDf.collect())
     }
     assert(e.getMessage().contains("intentional exception"))
+    // Before SPARK-25158, uncaughtExceptionHandler will catch IllegalArgumentException
+    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
   test("script transformation should not swallow errors from upstream operators (with serde)") {
@@ -117,6 +143,8 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         rowsDf.collect())
     }
     assert(e.getMessage().contains("intentional exception"))
+    // Before SPARK-25158, uncaughtExceptionHandler will catch IllegalArgumentException
+    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
   test("SPARK-14400 script transformation should fail for bad script command") {
@@ -135,6 +163,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
       SparkPlanTest.executePlan(plan, hiveContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
+    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
   test("SPARK-24339 verify the result after pruning the unused columns") {
@@ -154,6 +183,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         ioschema = serdeIOSchema
       ),
       rowsDf.select("name").collect())
+    assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 }
 
@@ -169,4 +199,18 @@ private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExe
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+}
+
+private class TestUncaughtExceptionHandler extends Thread.UncaughtExceptionHandler with Logging {
+
+  @volatile private var _exception: Throwable = _
+
+  def exception: Option[Throwable] = Option(_exception)
+
+  def cleanStatus: Unit = _exception = null
+
+  override def uncaughtException(t: Thread, e: Throwable): Unit = {
+    logError(s"Thread ${t.getName} handle by TestUncaughtExceptionHandler")
+    _exception = e
+  }
 }
