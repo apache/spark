@@ -23,7 +23,7 @@ from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel, \
-    RandomForestParams, TreeEnsembleModel, TreeEnsembleParams
+    GBTParams, RandomForestParams, TreeEnsembleModel, TreeEnsembleParams
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.wrapper import JavaWrapper
@@ -895,15 +895,6 @@ class TreeClassifierParams(object):
         return self.getOrDefault(self.impurity)
 
 
-class GBTParams(TreeEnsembleParams):
-    """
-    Private class to track supported GBT params.
-
-    .. versionadded:: 1.4.0
-    """
-    supportedLossTypes = ["logistic"]
-
-
 @inherit_doc
 class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                              HasProbabilityCol, HasRawPredictionCol, DecisionTreeParams,
@@ -1175,9 +1166,8 @@ class RandomForestClassificationModel(TreeEnsembleModel, JavaClassificationModel
 
 
 @inherit_doc
-class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed,
-                    HasValidationIndicatorCol, JavaMLWritable, JavaMLReadable):
+class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, GBTParams,
+                    HasCheckpointInterval, HasSeed, JavaMLWritable, JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for classification.
@@ -1256,17 +1246,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                      "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
                      typeConverter=TypeConverters.toString)
 
-    stepSize = Param(Params._dummy(), "stepSize",
-                     "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
-                     "the contribution of each estimator.",
-                     typeConverter=TypeConverters.toFloat)
-
-    validationTol = Param(Params._dummy(), "validationTol",
-                          "Threshold for stopping early when fit with validation is used. " +
-                          "If the error rate on the validation input changes by less than the " +
-                          "validationTol, then learning will stop early (before `maxIter`). " +
-                          "This parameter is ignored when fit without validation is used.",
-                          typeConverter=TypeConverters.toFloat)
+    supportedLossTypes = ["logistic"]
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -1334,18 +1314,11 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self._set(featureSubsetStrategy=value)
 
     @since("3.0.0")
-    def setValidationTol(self, value):
+    def setValidationIndicatorCol(self, value):
         """
-        Sets the value of :py:attr:`validationTol`.
+        Sets the value of :py:attr:`validationIndicatorCol`.
         """
-        return self._set(validationTol=value)
-
-    @since("3.0.0")
-    def getValidationTol(self):
-        """
-        Gets the value of validationTol or its default value.
-        """
-        return self.getOrDefault(self.validationTol)
+        return self._set(validationIndicatorCol=value)
 
 
 class GBTClassificationModel(TreeEnsembleModel, JavaClassificationModel, JavaMLWritable,

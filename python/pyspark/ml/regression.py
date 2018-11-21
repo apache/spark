@@ -705,11 +705,37 @@ class RandomForestParams(TreeEnsembleParams):
         return self.getOrDefault(self.numTrees)
 
 
-class GBTParams(TreeEnsembleParams):
+class GBTParams(TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndicatorCol):
     """
     Private class to track supported GBT params.
     """
     supportedLossTypes = ["squared", "absolute"]
+
+    stepSize = Param(Params._dummy(), "stepSize",
+                     "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
+                     "the contribution of each estimator.",
+                     typeConverter=TypeConverters.toFloat)
+
+    validationTol = Param(Params._dummy(), "validationTol",
+                          "Threshold for stopping early when fit with validation is used. " +
+                          "If the error rate on the validation input changes by less than the " +
+                          "validationTol, then learning will stop early (before `maxIter`). " +
+                          "This parameter is ignored when fit without validation is used.",
+                          typeConverter=TypeConverters.toFloat)
+
+    @since("3.0.0")
+    def setValidationTol(self, value):
+        """
+        Sets the value of :py:attr:`validationTol`.
+        """
+        return self._set(validationTol=value)
+
+    @since("3.0.0")
+    def getValidationTol(self):
+        """
+        Gets the value of validationTol or its default value.
+        """
+        return self.getOrDefault(self.validationTol)
 
 
 @inherit_doc
@@ -1030,9 +1056,9 @@ class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaML
 
 
 @inherit_doc
-class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed,
-                   HasValidationIndicatorCol, JavaMLWritable, JavaMLReadable, TreeRegressorParams):
+class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, GBTParams,
+                   HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable, JavaMLReadable,
+                   TreeRegressorParams):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
@@ -1093,17 +1119,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                      "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
                      typeConverter=TypeConverters.toString)
 
-    stepSize = Param(Params._dummy(), "stepSize",
-                     "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
-                     "the contribution of each estimator.",
-                     typeConverter=TypeConverters.toFloat)
-
-    validationTol = Param(Params._dummy(), "validationTol",
-                          "Threshold for stopping early when fit with validation is used. " +
-                          "If the error rate on the validation input changes by less than the " +
-                          "validationTol, then learning will stop early (before `maxIter`). " +
-                          "This parameter is ignored when fit without validation is used.",
-                          typeConverter=TypeConverters.toFloat)
+    supportedLossTypes = ["squared", "absolute"]
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -1174,18 +1190,11 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self._set(featureSubsetStrategy=value)
 
     @since("3.0.0")
-    def setValidationTol(self, value):
+    def setValidationIndicatorCol(self, value):
         """
-        Sets the value of :py:attr:`validationTol`.
+        Sets the value of :py:attr:`validationIndicatorCol`.
         """
-        return self._set(validationTol=value)
-
-    @since("3.0.0")
-    def getValidationTol(self):
-        """
-        Gets the value of validationTol or its default value.
-        """
-        return self.getOrDefault(self.validationTol)
+        return self._set(validationIndicatorCol=value)
 
 
 class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
