@@ -65,7 +65,7 @@ private[hive] object IsolatedClientLoader extends Logging {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
-            val fallbackVersion = "2.7.3"
+            val fallbackVersion = "2.7.4"
             logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
               s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +
               "again. Hadoop classes will not be shared between Spark and Hive metastore client. " +
