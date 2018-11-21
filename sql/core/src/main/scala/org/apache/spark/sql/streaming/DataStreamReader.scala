@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  *
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 final class DataStreamReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Specifies the input data source format.
