@@ -19,6 +19,7 @@ package org.apache.spark.deploy
 
 import java.io.File
 import java.net.URI
+import java.util.regex.Pattern
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
@@ -61,11 +62,12 @@ private[deploy] object DependencyUtils extends Logging {
       hadoopConf: Configuration,
       secMgr: SecurityManager): String = {
     val targetDir = Utils.createTempDir()
+    val fileSeparator = Pattern.quote(System.getProperty("file.separator"))
     Option(jars)
       .map {
         resolveGlobPaths(_, hadoopConf)
           .split(",")
-          .filterNot(_.contains(userJar.split("/").last))
+          .filterNot(_.contains(userJar.split(fileSeparator).last))
           .mkString(",")
       }
       .filterNot(_ == "")
