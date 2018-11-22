@@ -434,6 +434,9 @@ def post_python_tests_results():
         "clone",
         "https://spark-test:%s@github.com/spark-test/pyspark-coverage-site.git" % spark_test_key],
 
+        # Remove existing reports
+        ["rm", "-fr", "pyspark-coverage-site/*"],
+
         # Copy generated coverage HTML.
         ["cp", "-r", "%s/python/test_coverage/htmlcov/*" % SPARK_HOME, "pyspark-coverage-site/"],
 
