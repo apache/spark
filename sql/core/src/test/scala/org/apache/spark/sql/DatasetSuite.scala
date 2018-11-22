@@ -1572,6 +1572,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDatasetUnorderly(agg, ((1, 2), 1L, 3L), ((2, 3), 2L, 4L), ((3, 4), 3L, 5L))
   }
 
+  test("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
+    val ds = Seq(1, 2, 3).toDS()
+    assert(ds.groupByKey(x => x).count().schema.head.name == "key")
+
+    // Enable legacy flag to follow previous Spark behavior
+    withSQLConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE.key -> "true") {
+      assert(ds.groupByKey(x => x).count().schema.head.name == "value")
+    }
+  }
+
   test("SPARK-8288: class with only a companion object constructor") {
     val data = Seq(ScroogeLikeExample(1), ScroogeLikeExample(2))
     val ds = data.toDS
