@@ -721,9 +721,32 @@ package object config {
 
   private[spark] val KAFKA_TRUSTSTORE_PASSWORD =
     ConfigBuilder("spark.kafka.ssl.truststore.password")
+      .doc("The store password for the trust store file. This is optional for client and only " +
+        "needed if ssl.truststore.location is configured. For further details please see kafka " +
+        "documentation. Only used to obtain delegation token.")
+      .stringConf
+      .createOptional
+
+  private[spark] val KAFKA_KEYSTORE_LOCATION =
+    ConfigBuilder("spark.kafka.ssl.keystore.location")
+      .doc("The location of the key store file. This is optional for client and can be used for " +
+        "two-way authentication for client. For further details please see kafka documentation. " +
+        "Only used to obtain delegation token.")
+      .stringConf
+      .createOptional
+
+  private[spark] val KAFKA_KEYSTORE_PASSWORD =
+    ConfigBuilder("spark.kafka.ssl.keystore.password")
       .doc("The store password for the key store file. This is optional for client and only " +
         "needed if ssl.keystore.location is configured. For further details please see kafka " +
         "documentation. Only used to obtain delegation token.")
+      .stringConf
+      .createOptional
+
+  private[spark] val KAFKA_KEY_PASSWORD =
+    ConfigBuilder("spark.kafka.ssl.key.password")
+      .doc("The password of the private key in the key store file. This is optional for client. " +
+        "For further details please see kafka documentation. Only used to obtain delegation token.")
       .stringConf
       .createOptional
 }

@@ -22,6 +22,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
+import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -51,7 +52,10 @@ private[security] class KafkaDelegationTokenProvider
   override def delegationTokensRequired(
       sparkConf: SparkConf,
       hadoopConf: Configuration): Boolean = {
+    val protocol = sparkConf.get(KAFKA_SECURITY_PROTOCOL)
     sparkConf.contains(KAFKA_BOOTSTRAP_SERVERS) &&
-      sparkConf.get(KAFKA_SECURITY_PROTOCOL).startsWith("SASL")
+      (protocol == SASL_SSL.name ||
+        protocol == SSL.name ||
+        protocol == SASL_PLAINTEXT.name)
   }
 }

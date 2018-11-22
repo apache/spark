@@ -26,6 +26,7 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.{AdminClient, CreateDelegationTokenOptions}
 import org.apache.kafka.common.config.SaslConfigs
+import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, SASL_SSL, SSL}
 import org.apache.kafka.common.security.token.delegation.DelegationToken
 
 import org.apache.spark.SparkConf
@@ -65,17 +66,19 @@ private[spark] object KafkaTokenUtil extends Logging {
 
     val protocol = sparkConf.get(KAFKA_SECURITY_PROTOCOL)
     adminClientProperties.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, protocol)
-    if (protocol.endsWith("SSL")) {
-      logDebug("SSL protocol detected.")
-      sparkConf.get(KAFKA_TRUSTSTORE_LOCATION).foreach { truststoreLocation =>
-        adminClientProperties.put("ssl.truststore.location", truststoreLocation)
-      }
-      sparkConf.get(KAFKA_TRUSTSTORE_PASSWORD).foreach { truststorePassword =>
-        adminClientProperties.put("ssl.truststore.password", truststorePassword)
-      }
-    } else {
-      logWarning("Obtaining kafka delegation token through plain communication channel. Please " +
-        "consider the security impact.")
+    protocol match {
+      case SASL_SSL.name =>
+        setTrustStoreProperties(sparkConf, adminClientProperties)
+
+      case SSL.name =>
+        setTrustStoreProperties(sparkConf, adminClientProperties)
+        setKeyStoreProperties(sparkConf, adminClientProperties)
+        logWarning("Obtaining kafka delegation token with SSL protocol. Please " +
+          "configure 2-way authentication on the broker side.")
+
+      case SASL_PLAINTEXT.name =>
+        logWarning("Obtaining kafka delegation token through plain communication channel. Please " +
+          "consider the security impact.")
     }
 
     // There are multiple possibilities to log in:
@@ -91,6 +94,27 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
 
     adminClientProperties
+  }
+
+  private def setTrustStoreProperties(sparkConf: SparkConf, properties: Properties): Unit = {
+    sparkConf.get(KAFKA_TRUSTSTORE_LOCATION).foreach { truststoreLocation =>
+      properties.put("ssl.truststore.location", truststoreLocation)
+    }
+    sparkConf.get(KAFKA_TRUSTSTORE_PASSWORD).foreach { truststorePassword =>
+      properties.put("ssl.truststore.password", truststorePassword)
+    }
+  }
+
+  private def setKeyStoreProperties(sparkConf: SparkConf, properties: Properties): Unit = {
+    sparkConf.get(KAFKA_KEYSTORE_LOCATION).foreach { keystoreLocation =>
+      properties.put("ssl.keystore.location", keystoreLocation)
+    }
+    sparkConf.get(KAFKA_KEYSTORE_PASSWORD).foreach { keystorePassword =>
+      properties.put("ssl.keystore.password", keystorePassword)
+    }
+    sparkConf.get(KAFKA_KEY_PASSWORD).foreach { keyPassword =>
+      properties.put("ssl.key.password", keyPassword)
+    }
   }
 
   private[security] def getKeytabJaasParams(sparkConf: SparkConf): Option[String] = {
