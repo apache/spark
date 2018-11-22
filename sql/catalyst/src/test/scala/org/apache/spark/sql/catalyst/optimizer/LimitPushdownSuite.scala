@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Add
-import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, LeftOuter, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
@@ -170,5 +170,26 @@ class LimitPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     // No pushdown for FULL OUTER JOINS.
     comparePlans(optimized, originalQuery)
+  }
+
+  test("cross join") {
+    val originalQuery = x.join(y, Cross).limit(1)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = Limit(1, LocalLimit(1, x).join(y, Cross)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("cross join and left sides are limited") {
+    val originalQuery = x.limit(2).join(y, Cross).limit(1)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = Limit(1, LocalLimit(1, x).join(y, Cross)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("cross join and right sides are limited") {
+    val originalQuery = x.join(y.limit(2), Cross).limit(1)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = Limit(1, LocalLimit(1, x).join(Limit(2, y), Cross)).analyze
+    comparePlans(optimized, correctAnswer)
   }
 }
