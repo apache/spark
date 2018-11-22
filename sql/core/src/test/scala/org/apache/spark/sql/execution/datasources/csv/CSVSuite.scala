@@ -1116,7 +1116,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .schema(schema)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df1,
-        Row(null, null) ::
+        Row(0, null) ::
         Row(1, java.sql.Date.valueOf("1983-08-04")) ::
         Nil)
 
@@ -1131,7 +1131,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .schema(schemaWithCorrField1)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df2,
-        Row(null, null, "0,2013-111-11 12:13:14") ::
+        Row(0, null, "0,2013-111-11 12:13:14") ::
         Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
         Nil)
 
@@ -1148,7 +1148,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .schema(schemaWithCorrField2)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df3,
-        Row(null, "0,2013-111-11 12:13:14", null) ::
+        Row(0, "0,2013-111-11 12:13:14", null) ::
         Row(1, null, java.sql.Date.valueOf("1983-08-04")) ::
         Nil)
 
