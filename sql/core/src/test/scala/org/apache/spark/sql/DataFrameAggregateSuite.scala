@@ -726,7 +726,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-26021: Double and Float 0.0/-0.0 should be equal when grouping") {
     val colName = "i"
-    val doubles = Seq(0.0d, 0.0d, -0.0d).toDF(colName).groupBy(colName).count().collect()
+    val doubles = Seq(0.0d, -0.0d, 0.0d).toDF(colName).groupBy(colName).count().collect()
     val floats = Seq(0.0f, -0.0f, 0.0f).toDF(colName).groupBy(colName).count().collect()
 
     assert(doubles.length == 1)
