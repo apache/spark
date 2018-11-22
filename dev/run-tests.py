@@ -410,6 +410,60 @@ def run_python_tests(test_modules, parallelism):
     run_cmd(command)
 
 
+def run_python_tests_with_coverage(test_modules, parallelism):
+    set_title_and_block("Running PySpark tests with coverage report", "BLOCK_PYSPARK_UNIT_TESTS")
+
+    command = [os.path.join(SPARK_HOME, "python", "run-tests-with-coverage")]
+    if test_modules != [modules.root]:
+        command.append("--modules=%s" % ','.join(m.name for m in test_modules))
+    command.append("--parallelism=%i" % parallelism)
+    run_cmd(command)
+    post_python_tests_results()
+
+
+def post_python_tests_results():
+    if "SPARK_TEST_KEY" not in os.environ:
+        print("[error] 'SPARK_TEST_KEY' environment variable was not set. Unable to post"
+              "PySpark coverage results.")
+        sys.exit(1)
+    spark_test_key = os.environ.get("SPARK_TEST_KEY")
+    with_pyspark_coverage_site = ["cd", "pyspark-coverage-site", "&&"]
+    commands = [[
+        # Clone PySpark coverage site.
+        "git",
+        "clone",
+        "https://spark-test:%s@github.com/spark-test/pyspark-coverage-site.git" % spark_test_key],
+
+        # Copy generated coverage HTML.
+        ["cp", "-r", "%s/python/test_coverage/htmlcov/*" % SPARK_HOME, "pyspark-coverage-site/"],
+
+        # Check out to a temporary branch.
+        with_pyspark_coverage_site + ["git", "checkout", "--orphan", "latest_branch"],
+
+        # Add all the files.
+        with_pyspark_coverage_site + ["git", "add", "-A"],
+
+        # Commit current test coverage results.
+        with_pyspark_coverage_site + [
+            "git",
+            "commit",
+            "-am",
+            '"Coverage report at latest commit in Apache Spark"',
+            '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'],
+
+        # Delete the old branch.
+        with_pyspark_coverage_site + ["git", "branch", "-D", "gh-pages"],
+
+        # Rename the temporary branch to master.
+        with_pyspark_coverage_site + ["git", "branch", "-m", "gh-pages"],
+
+        # Finally, force update to our repository.
+        with_pyspark_coverage_site + ["git", "push", "-f", "origin", "gh-pages"]]
+
+    for command in commands:
+        run_cmd(command)
+
+
 def run_python_packaging_tests():
     set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
     command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
@@ -567,7 +621,18 @@ def main():
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
-        run_python_tests(modules_with_python_tests, opts.parallelism)
+        # We only run PySpark tests with coverage report in one specific job with
+        # Spark master with SBT in Jenkins.
+        is_sbt_master_job = (
+            os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "") == "hadoop2.7"
+            and os.environ.get("SPARK_BRANCH", "") == "master"
+            and os.environ.get("AMPLAB_JENKINS", "") == "true"
+            and os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "") == "sbt")
+        is_sbt_master_job = True  # Will remove this right before getting merged.
+        if is_sbt_master_job:
+            run_python_tests_with_coverage(modules_with_python_tests, opts.parallelism)
+        else:
+            run_python_tests(modules_with_python_tests, opts.parallelism)
         run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()

@@ -86,6 +86,8 @@ Please see the guidance on how to
 
 There is also a Kubernetes integration test, see resource-managers/kubernetes/integration-tests/README.md
 
+For PySpark test coverage, see [this coverage report for the latest commit](https://spark-test.github.io/pyspark-coverage-site/).
+
 ## A Note About Hadoop Versions
 
 Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
