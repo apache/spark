@@ -550,15 +550,23 @@ case class JsonToStructs(
       s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
   }
 
-  // This converts parsed rows to the desired output by the given schema.
   @transient
-  lazy val converter = nullableSchema match {
-    case _: StructType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
-    case _: ArrayType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
-    case _: MapType =>
-      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
+  private lazy val castRow = nullableSchema match {
+    case _: StructType => (row: InternalRow) => row
+    case _: ArrayType => (row: InternalRow) => row.getArray(0)
+    case _: MapType => (row: InternalRow) => row.getMap(0)
+  }
+
+  // This converts parsed rows to the desired output by the given schema.
+  private def convertRow(rows: Iterator[InternalRow]) = {
+    if (rows.hasNext) {
+      val result = rows.next()
+      // JSON's parser produces one record only.
+      assert(!rows.hasNext)
+      castRow(result)
+    } else {
+      throw new IllegalArgumentException("Expected one row from JSON parser.")
+    }
   }
 
   val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
@@ -593,7 +601,7 @@ case class JsonToStructs(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
-    converter(parser.parse(json.asInstanceOf[UTF8String]))
+    convertRow(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
