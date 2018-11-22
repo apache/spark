@@ -133,15 +133,15 @@ abstract class TaskContext extends Serializable {
   /**
    * Removes a (Java friendly) listener that is no longer needed to be executed on task completion.
    */
-  def remoteTaskCompletionListener(listener: TaskCompletionListener): TaskContext
+  def removeTaskCompletionListener(listener: TaskCompletionListener): TaskContext
 
 
   /**
    * Removes a listener in the form of a Scala closure that is no longer needed to be executed
    * on task completion.
    */
-  def remoteTaskCompletionListener[U](f: (TaskContext) => U): TaskContext = {
-    remoteTaskCompletionListener(TaskCompletionListenerWrapper(f))
+  def removeTaskCompletionListener[U](f: (TaskContext) => U): TaskContext = {
+    removeTaskCompletionListener(TaskCompletionListenerWrapper(f))
   }
 
   /**

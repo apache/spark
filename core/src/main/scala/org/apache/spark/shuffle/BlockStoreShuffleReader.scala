@@ -133,7 +133,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
             // note that holding sorter references till the end of the task also holds
             // references to PartitionedAppendOnlyMap and PartitionedPairBuffer too and these
             // ones may consume a significant part of the available memory
-            context.remoteTaskCompletionListener(taskListener)
+            context.removeTaskCompletionListener(taskListener)
           }
         )
       case None =>

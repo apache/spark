@@ -120,7 +120,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("blah")
     }
     context.addTaskCompletionListener(listener)
-    context.remoteTaskCompletionListener(listener)
+    context.removeTaskCompletionListener(listener)
     // fails in case a TaskCompletionListener is ever called
     context.markTaskCompleted(None)
   }

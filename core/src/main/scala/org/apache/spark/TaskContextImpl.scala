@@ -20,7 +20,7 @@ package org.apache.spark
 import java.util.Properties
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, LinkedHashSet}
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
@@ -55,11 +55,11 @@ private[spark] class TaskContextImpl(
   extends TaskContext
   with Logging {
 
-  /** List of callback functions to execute when the task completes. */
-  @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
+  /** Collection of callback functions to execute when the task completes. */
+  @transient private val onCompleteCallbacks = new LinkedHashSet[TaskCompletionListener]
 
-  /** List of callback functions to execute when the task fails. */
-  @transient private val onFailureCallbacks = new ArrayBuffer[TaskFailureListener]
+  /** Collection of callback functions to execute when the task fails. */
+  @transient private val onFailureCallbacks = new LinkedHashSet[TaskFailureListener]
 
   // If defined, the corresponding task has been killed and this option contains the reason.
   @volatile private var reasonIfKilled: Option[String] = None
@@ -99,7 +99,7 @@ private[spark] class TaskContextImpl(
     this
   }
 
-  override def remoteTaskCompletionListener(listener: TaskCompletionListener)
+  override def removeTaskCompletionListener(listener: TaskCompletionListener)
       : this.type = synchronized {
     onCompleteCallbacks -= listener
     this
@@ -126,13 +126,13 @@ private[spark] class TaskContextImpl(
   }
 
   private def invokeListeners[T](
-      listeners: Seq[T],
+      listeners: Iterable[T],
       name: String,
       error: Option[Throwable])(
       callback: T => Unit): Unit = {
     val errorMsgs = new ArrayBuffer[String](2)
     // Process callbacks in the reverse order of registration
-    listeners.reverse.foreach { listener =>
+    listeners.toSeq.reverse.foreach { listener =>
       try {
         callback(listener)
       } catch {

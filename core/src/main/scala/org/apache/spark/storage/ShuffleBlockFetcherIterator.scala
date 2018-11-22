@@ -31,7 +31,6 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.util.TaskCompletionListener
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
@@ -73,8 +72,7 @@ final class ShuffleBlockFetcherIterator(
     maxBlocksInFlightPerAddress: Int,
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean)
-  extends Iterator[(BlockId, InputStream)] with DownloadFileManager with TaskCompletionListener
-    with Logging {
+  extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
 
@@ -155,6 +153,13 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
 
+  /**
+   * Task completion callback to be called in both success as well as failure cases to cleanup.
+   * It may not be called at all in case the `cleanup` method has already been called before
+   * task completion.
+   */
+  private[this] val cleanupTaskCompletionListener = (_: TaskContext) => cleanup()
+
   initialize()
 
   // Decrements the buffer reference count.
@@ -183,8 +188,6 @@ final class ShuffleBlockFetcherIterator(
       true
     }
   }
-
-  override def onTaskCompletion(context: TaskContext): Unit = cleanup()
 
   /**
    * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
@@ -218,7 +221,7 @@ final class ShuffleBlockFetcherIterator(
     }
     // remove task completion listener to release resources early as soon as this method
     // is called before task completes
-    context.remoteTaskCompletionListener(this)
+    context.removeTaskCompletionListener[Unit](cleanupTaskCompletionListener)
   }
 
   private[this] def sendRequest(req: FetchRequest) {
@@ -358,7 +361,7 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] def initialize(): Unit = {
     // Add a task completion callback (called in both success case and failure case) to cleanup.
-    context.addTaskCompletionListener(this)
+    context.addTaskCompletionListener[Unit](cleanupTaskCompletionListener)
 
     // Split local and remote blocks.
     val remoteRequests = splitLocalRemoteBlocks()
