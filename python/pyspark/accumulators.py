@@ -94,7 +94,6 @@ if sys.version < '3':
 else:
     import socketserver as SocketServer
 import threading
-from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import read_int, PickleSerializer
 
 
@@ -110,10 +109,14 @@ _accumulatorRegistry = {}
 
 def _deserialize_accumulator(aid, zero_value, accum_param):
     from pyspark.accumulators import _accumulatorRegistry
-    accum = Accumulator(aid, zero_value, accum_param)
-    accum._deserialized = True
-    _accumulatorRegistry[aid] = accum
-    return accum
+    # If this certain accumulator was deserialized, don't overwrite it.
+    if aid in _accumulatorRegistry:
+        return _accumulatorRegistry[aid]
+    else:
+        accum = Accumulator(aid, zero_value, accum_param)
+        accum._deserialized = True
+        _accumulatorRegistry[aid] = accum
+        return accum
 
 
 class Accumulator(object):
@@ -228,7 +231,6 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
 
     def handle(self):
         auth_token = self.server.auth_token
-        from pyspark.accumulators import _accumulatorRegistry
 
         def poll(func):
             while not self.server.server_shutdown:
