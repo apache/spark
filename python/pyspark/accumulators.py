@@ -230,6 +230,7 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
     """
 
     def handle(self):
+        from pyspark.accumulators import _accumulatorRegistry
         auth_token = self.server.auth_token
 
         def poll(func):
