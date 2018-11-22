@@ -116,12 +116,19 @@ class QueryPlanningTracker {
 
   def phases: Map[String, Long] = phaseToTimeNs.asScala.toMap
 
-  /** Returns the top k most expensive rules (as measured by time). */
+  /**
+   * Returns the top k most expensive rules (as measured by time). If k is larger than the rules
+   * seen so far, return all the rules. If there is no rule seen so far or k <= 0, return empty seq.
+   */
   def topRulesByTime(k: Int): Seq[(String, RuleSummary)] = {
-    val orderingByTime: Ordering[(String, RuleSummary)] = Ordering.by(e => e._2.totalTimeNs)
-    val q = new BoundedPriorityQueue(k)(orderingByTime)
-    rulesMap.asScala.foreach(q.+=)
-    q.toSeq.sortBy(r => -r._2.totalTimeNs)
+    if (k <= 0) {
+      Seq.empty
+    } else {
+      val orderingByTime: Ordering[(String, RuleSummary)] = Ordering.by(e => e._2.totalTimeNs)
+      val q = new BoundedPriorityQueue(k)(orderingByTime)
+      rulesMap.asScala.foreach(q.+=)
+      q.toSeq.sortBy(r => -r._2.totalTimeNs)
+    }
   }
 
 }
