@@ -197,7 +197,7 @@ class CSVOptions(
    */
   val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
     require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
-    require(sep.length <= 2, "'lineSep' can contain 1 or 2 characters.")
+    require(sep.length == 1, "'lineSep' can contain only 1 character.")
     sep
   }
 
@@ -232,10 +232,7 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    lineSeparator.foreach {sep =>
-      format.setLineSeparator(sep)
-      format.setNormalizedNewline(0x00.toChar)
-    }
+    lineSeparator.foreach(format.setLineSeparator)
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
 

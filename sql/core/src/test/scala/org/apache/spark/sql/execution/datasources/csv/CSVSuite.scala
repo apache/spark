@@ -1961,17 +1961,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   List(
     (0, "|", "UTF-8", false),
     (1, "^", "UTF-16BE", true),
-    (2, "::", "ISO-8859-1", true),
-    (3, "!!", "UTF-32LE", false),
+    (2, ":", "ISO-8859-1", true),
+    (3, "!", "UTF-32LE", false),
     (4, 0x1E.toChar.toString, "UTF-8", true),
     (5, "아", "UTF-32BE", false),
-    (6, "ку", "CP1251", true),
-    (8, "\r\n", "UTF-16LE", true),
-    (9, "\r\n", "utf-16be", false),
-    (10, "\u000d\u000a", "UTF-32BE", false),
-    (11, "\u000a\u000d", "UTF-8", true),
-    (12, "==", "US-ASCII", false),
-    (13, "$^", "utf-32le", true)
+    (6, "у", "CP1251", true),
+    (8, "\r", "UTF-16LE", true),
+    (9, "\u000d", "UTF-32BE", false),
+    (10, "=", "US-ASCII", false),
+    (11, "$", "utf-32le", true)
   ).foreach { case (testNum, sep, encoding, inferSchema) =>
     testLineSeparator(sep, encoding, inferSchema, testNum)
   }
@@ -1986,6 +1984,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val errMsg2 = intercept[IllegalArgumentException] {
       spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect
     }.getMessage
-    assert(errMsg2.contains("'lineSep' can contain 1 or 2 characters"))
+    assert(errMsg2.contains("'lineSep' can contain only 1 character"))
   }
 }
