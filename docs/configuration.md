@@ -801,6 +801,14 @@ Apart from these, the following properties are also available, and may be useful
     How many dead executors the Spark UI and status APIs remember before garbage collecting.
   </td>
 </tr>
+<tr>
+  <td><code>spark.ui.requestHeaderSize</code></td>
+  <td>8k</td>
+  <td>
+    The maximum allowed size for a HTTP request header, in bytes unless otherwise specified.
+    This setting applies for the Spark History Server too.
+  <td>
+</tr>
 </table>
 
 ### Compression and Serialization

@@ -312,4 +312,11 @@ package object config {
         " service is disabled.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(Long.MaxValue)
+
+  private[spark] val UI_REQUEST_HEADER_SIZE =
+    ConfigBuilder("spark.ui.requestHeaderSize")
+      .doc("Value for HTTP request header size in bytes.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("8k")
+
 }
