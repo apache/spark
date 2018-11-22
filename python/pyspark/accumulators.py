@@ -94,6 +94,7 @@ if sys.version < '3':
 else:
     import socketserver as SocketServer
 import threading
+from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import read_int, PickleSerializer
 
 
@@ -109,14 +110,10 @@ _accumulatorRegistry = {}
 
 def _deserialize_accumulator(aid, zero_value, accum_param):
     from pyspark.accumulators import _accumulatorRegistry
-    # If this certain accumulator was deserialized, don't overwrite it.
-    if aid in _accumulatorRegistry:
-        return _accumulatorRegistry[aid]
-    else:
-        accum = Accumulator(aid, zero_value, accum_param)
-        accum._deserialized = True
-        _accumulatorRegistry[aid] = accum
-        return accum
+    accum = Accumulator(aid, zero_value, accum_param)
+    accum._deserialized = True
+    _accumulatorRegistry[aid] = accum
+    return accum
 
 
 class Accumulator(object):
@@ -230,8 +227,8 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
     """
 
     def handle(self):
-        from pyspark.accumulators import _accumulatorRegistry
         auth_token = self.server.auth_token
+        from pyspark.accumulators import _accumulatorRegistry
 
         def poll(func):
             while not self.server.server_shutdown:
@@ -271,8 +268,17 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
 class AccumulatorServer(SocketServer.TCPServer):
 
     def __init__(self, server_address, RequestHandlerClass, auth_token):
-        SocketServer.TCPServer.__init__(self, server_address, RequestHandlerClass)
         self.auth_token = auth_token
+        SocketServer.TCPServer.__init__(self, server_address, RequestHandlerClass, bind_and_activate=False)
+
+    def bind_and_serve(self):
+        try:
+            self.server_bind()
+            self.server_activate()
+            self.serve_forever()
+        except:
+            self.shutdown()
+            raise
 
     """
     A simple TCP server that intercepts shutdown() in order to interrupt
@@ -289,7 +295,7 @@ class AccumulatorServer(SocketServer.TCPServer):
 def _start_update_server(auth_token):
     """Start a TCP server to receive accumulator updates in a daemon thread, and returns it"""
     server = AccumulatorServer(("localhost", 0), _UpdateRequestHandler, auth_token)
-    thread = threading.Thread(target=server.serve_forever)
+    thread = threading.Thread(target=server.bind_and_serve)
     thread.daemon = True
     thread.start()
     return server
@@ -298,4 +304,4 @@ if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        sys.exit(-1)
+        exit(-1)
