@@ -183,7 +183,7 @@ def parse_opts():
     )
     parser.add_option(
         "-p", "--parallelism", type="int", default=4,
-        help="The number of suites to test in parallel (default %default)"
+        help="The number of suites to test in parallel (default %default)."
     )
     parser.add_option(
         "--verbose", action="store_true",
