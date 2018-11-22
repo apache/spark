@@ -545,7 +545,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private def streamingUniqueGroupId(parameters: Map[String, String],
       metadataPath: String): String = {
     val groupIdPrefix = parameters
-      .getOrElse("kafka.groupIdPrefix", "spark-kafka-source")
+      .getOrElse("groupIdPrefix", "spark-kafka-source")
     s"${groupIdPrefix}-${UUID.randomUUID}-${metadataPath.hashCode}"
   }
 
