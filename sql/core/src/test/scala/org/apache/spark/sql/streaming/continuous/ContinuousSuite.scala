@@ -343,3 +343,31 @@ class ContinuousMetaSuite extends ContinuousSuiteBase {
     }
   }
 }
+
+class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
+  import testImplicits._
+
+  // We need to specify spark.sql.streaming.continuous.epochBacklogQueueSize.
+  override protected def createSparkSession = new TestSparkSession(
+    new SparkContext(
+      "local[1]",
+      "continuous-stream-test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")
+        .set("spark.sql.streaming.continuous.epochBacklogQueueSize", "10")))
+
+  test("epoch backlog overflow") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "2")
+      .option("rowsPerSecond", "500")
+      .load()
+      .select('value)
+
+    testStream(df, useV2Sink = true)(
+      StartStream(Trigger.Continuous(1)),
+      ExpectFailure[IllegalStateException] { e =>
+        e.getMessage.contains("queue has exceeded it's maximum")
+      }
+    )
+  }
+}

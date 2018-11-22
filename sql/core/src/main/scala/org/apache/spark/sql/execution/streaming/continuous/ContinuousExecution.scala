@@ -59,6 +59,10 @@ class ContinuousExecution(
   // For use only in test harnesses.
   private[sql] var currentEpochCoordinatorId: String = _
 
+  // Throwable that caused the execution to fail
+  private var failure: Option[Throwable] = None
+  protected val failureLock = new AnyRef
+
   override val logicalPlan: LogicalPlan = {
     val toExecutionRelationMap = MutableMap[StreamingRelationV2, ContinuousExecutionRelation]()
     analyzedPlan.transform {
@@ -270,6 +274,10 @@ class ContinuousExecution(
           lastExecution.toRdd
         }
       }
+
+      failureLock.synchronized {
+        failure.foreach(throw _)
+      }
     } catch {
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&
           state.get() == RECONFIGURING =>
@@ -379,6 +387,41 @@ class ContinuousExecution(
         awaitProgressLock.unlock()
       }
     }
+  }
+
+  /**
+   * Stores error and stops the query execution thread to terminate the query in new thread.
+   */
+  def stopInNewThread(error: Throwable): Unit = {
+    failureLock.synchronized {
+      failure match {
+        case None =>
+          logError(s"Query $prettyIdString received exception $error")
+          failure = Some(error)
+          stopInNewThread()
+        case _ =>
+          // Stop already initiated
+      }
+    }
+  }
+
+  /**
+   * Stops the query execution thread to terminate the query in new thread.
+   */
+  private def stopInNewThread(): Unit = {
+    new Thread("stop-continuous-execution") {
+      setDaemon(true)
+
+      override def run(): Unit = {
+        try {
+          ContinuousExecution.this.stop()
+        } catch {
+          case e: Throwable =>
+            logError(e.getMessage, e)
+            throw e
+        }
+      }
+    }.start()
   }
 
   /**
