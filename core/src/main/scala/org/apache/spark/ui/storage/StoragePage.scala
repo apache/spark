@@ -78,7 +78,7 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
     <tr>
       <td>{rdd.id}</td>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(
+        <a href={"%s/storage/rdd/?id=%s".format(
           UIUtils.prependBaseUri(request, parent.basePath), rdd.id)}>
           {rdd.name}
         </a>
