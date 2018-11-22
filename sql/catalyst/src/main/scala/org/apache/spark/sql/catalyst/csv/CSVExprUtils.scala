@@ -88,11 +88,11 @@ object CSVExprUtils {
     if (useLegacyParser) {
       (s: String) => new BigDecimal(s.replaceAll(",", ""))
     } else {
-      val df = new DecimalFormat("", new DecimalFormatSymbols(locale))
-      df.setParseBigDecimal(true)
+      val decimalFormat = new DecimalFormat("", new DecimalFormatSymbols(locale))
+      decimalFormat.setParseBigDecimal(true)
       (s: String) => {
         val pos = new ParsePosition(0)
-        val result = df.parse(s, pos).asInstanceOf[BigDecimal]
+        val result = decimalFormat.parse(s, pos).asInstanceOf[BigDecimal]
         if (pos.getIndex() != s.length() || pos.getErrorIndex() != -1) {
           throw new IllegalArgumentException("Cannot parse any decimal");
         } else {
