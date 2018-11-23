@@ -329,4 +329,53 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
+  test("set and get indeterminate attempt id") {
+    val hostname = "localhost"
+    val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
+
+    val masterTracker = newTrackerMaster()
+    masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
+
+    val slaveRpcEnv = createRpcEnv("spark-slave", hostname, 0, new SecurityManager(conf))
+    val slaveTracker = new MapOutputTrackerWorker(conf)
+    slaveTracker.trackerEndpoint =
+      slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+    // Register shuffle and indeterminate shuffle Id.
+    masterTracker.registerShuffle(0, 2)
+    masterTracker.registerIndeterminateShuffle(0, 0)
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    masterTracker.registerMapOutput(0, 0, MapStatus(
+      BlockManagerId("a", "hostA", 1000), Array(1000L)))
+    masterTracker.registerMapOutput(0, 1, MapStatus(
+      BlockManagerId("b", "hostB", 1000), Array(1000L)))
+
+    // IndeterminateAttemptIds will be updated after call `getMapSizesByExecutorId`
+    slaveTracker.getMapSizesByExecutorId(0, 0, 1, needFetchIndeterminateAttemptId = true)
+    assert(slaveTracker.indeterminateAttemptIds(0).get == 0)
+
+    // This is expected to fail because register same shuffleId with different attemptId
+    // is not allowed.
+    val error = intercept[IllegalArgumentException] {
+      masterTracker.registerIndeterminateShuffle(0, 1)
+    }
+    assert(error.getMessage.contains("The indeterminate stage should whole stage rerun"))
+
+    // New attemptId is allowed after unregister old one.
+    masterTracker.unregisterIndeterminateShuffle(0)
+    masterTracker.registerIndeterminateShuffle(0, 1)
+    masterTracker.incrementEpoch()
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+
+    // Update worker side indeterminateAttemptIds
+    slaveTracker.getMapSizesByExecutorId(0, 0, 1, needFetchIndeterminateAttemptId = true)
+    assert(slaveTracker.indeterminateAttemptIds(0).get == 1)
+
+    masterTracker.stop()
+    slaveTracker.stop()
+    rpcEnv.shutdown()
+    slaveRpcEnv.shutdown()
+  }
+
 }

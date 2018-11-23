@@ -53,7 +53,10 @@ public class ExternalShuffleBlockResolverSuite {
     // Write some sort data.
     dataContext.insertSortShuffleData(0, 0, new byte[][] {
         sortBlock0.getBytes(StandardCharsets.UTF_8),
-        sortBlock1.getBytes(StandardCharsets.UTF_8)});
+        sortBlock1.getBytes(StandardCharsets.UTF_8)}, false);
+    dataContext.insertSortShuffleData(0, 0, new byte[][] {
+        sortBlock0.getBytes(StandardCharsets.UTF_8),
+        sortBlock1.getBytes(StandardCharsets.UTF_8)}, true);
   }
 
   @AfterClass
@@ -109,6 +112,27 @@ public class ExternalShuffleBlockResolverSuite {
         "app0", "exec0", 0, 0, 1).createInputStream()) {
       String block1 =
         CharStreams.toString(new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
+      assertEquals(sortBlock1, block1);
+    }
+  }
+
+  @Test
+  public void testExtendedSortShuffleBlocks() throws IOException {
+    ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
+    resolver.registerExecutor("app0", "exec0",
+        dataContext.createExecutorInfo(SORT_MANAGER));
+
+    try (InputStream block0Stream = resolver.getBlockData(
+        "app0", "exec0", 0, 0, 0, 0).createInputStream()) {
+      String block0 =
+          CharStreams.toString(new InputStreamReader(block0Stream, StandardCharsets.UTF_8));
+      assertEquals(sortBlock0, block0);
+    }
+
+    try (InputStream block1Stream = resolver.getBlockData(
+        "app0", "exec0", 0, 0, 1, 0).createInputStream()) {
+      String block1 =
+          CharStreams.toString(new InputStreamReader(block1Stream, StandardCharsets.UTF_8));
       assertEquals(sortBlock1, block1);
     }
   }

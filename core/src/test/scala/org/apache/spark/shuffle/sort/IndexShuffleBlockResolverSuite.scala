@@ -58,10 +58,8 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     }
   }
 
-  test("commit shuffle files multiple times") {
-    val shuffleId = 1
-    val mapId = 2
-    val idxName = s"shuffle_${shuffleId}_${mapId}_0.index"
+  private def testWithIndexShuffleBlockResolver(
+      shuffleId: Int, mapId: Int, idxName: String, attemptId: Option[Int]): Unit = {
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     val lengths = Array[Long](10, 0, 20)
     val dataTmp = File.createTempFile("shuffle", null, tempDir)
@@ -71,10 +69,10 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp, attemptId)
 
     val indexFile = new File(tempDir.getAbsolutePath, idxName)
-    val dataFile = resolver.getDataFile(shuffleId, mapId)
+    val dataFile = resolver.getDataFile(shuffleId, mapId, attemptId)
 
     assert(indexFile.exists())
     assert(indexFile.length() === (lengths.length + 1) * 8)
@@ -91,7 +89,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out2.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2, attemptId)
 
     assert(indexFile.length() === (lengths.length + 1) * 8)
     assert(lengths2.toSeq === lengths.toSeq)
@@ -130,7 +128,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out3.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths3, dataTmp3)
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths3, dataTmp3, attemptId)
     assert(indexFile.length() === (lengths3.length + 1) * 8)
     assert(lengths3.toSeq != lengths.toSeq)
     assert(dataFile.exists())
@@ -154,5 +152,20 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       indexIn2.close()
     }
+  }
+
+  test("commit shuffle files multiple times") {
+    val shuffleId = 1
+    val mapId = 2
+    val idxName = s"shuffle_${shuffleId}_${mapId}_0.index"
+    testWithIndexShuffleBlockResolver(shuffleId, mapId, idxName, None)
+  }
+
+  test("commit shuffle files with attempt id multiple times") {
+    val shuffleId = 1
+    val mapId = 2
+    val attemptId = Some(1)
+    val idxName = s"shuffle_${shuffleId}_${mapId}_0_1.index"
+    testWithIndexShuffleBlockResolver(shuffleId, mapId, idxName, attemptId)
   }
 }

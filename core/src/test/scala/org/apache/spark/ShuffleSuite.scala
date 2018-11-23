@@ -412,6 +412,28 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     manager.unregisterShuffle(0)
   }
+
+  test("[SPARK-25341] check local shuffle with stage attempt id for indeterminate map stage") {
+    sc = new SparkContext("local", "test", conf.clone())
+    // Repeated repartition operation will got an indeterminate map stage of shuffle 0.
+    val rdd = sc.parallelize(1 to 10, 2).repartition(4).repartition(5)
+
+    // Cannot find one of the local shuffle blocks.
+    val dataFile = sc.env.blockManager.diskBlockManager.getFile(
+      new ShuffleDataBlockId(0, 0, 0, Some(0)))
+    val indexFile = sc.env.blockManager.diskBlockManager.getFile(
+      new ShuffleIndexBlockId(0, 0, 0, Some(0)))
+    assert(!dataFile.exists() && !indexFile.exists())
+
+    rdd.count()
+
+    // Can find one of the local shuffle blocks.
+    val dataExistsFile = sc.env.blockManager.diskBlockManager.getFile(
+      new ShuffleDataBlockId(0, 0, 0, Some(0)))
+    val indexExistsFile = sc.env.blockManager.diskBlockManager.getFile(
+      new ShuffleIndexBlockId(0, 0, 0, Some(0)))
+    assert(dataExistsFile.exists() && indexExistsFile.exists())
+  }
 }
 
 /**

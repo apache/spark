@@ -25,6 +25,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.TransportServer
 import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleClient}
 import org.apache.spark.util.Utils
+import org.apache.spark.rdd.RDD
 
 /**
  * This suite creates an external shuffle server and routes all shuffle fetches through it.
@@ -63,7 +64,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
   }
 
   // This test ensures that the external shuffle service is actually in use for the other tests.
-  test("using external shuffle service") {
+  private def checkResultWithShuffleService(createRDD: (SparkContext => RDD[_])): Unit = {
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalShuffleClient])
@@ -76,7 +77,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
     // Therefore, we should wait until all slaves are up
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
-    val rdd = sc.parallelize(0 until 1000, 10).map(i => (i, 1)).reduceByKey(_ + _)
+    val rdd = createRDD(sc)
 
     rdd.count()
     rdd.count()
@@ -91,5 +92,17 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
       rdd.count()
     }
     e.getMessage should include ("Fetch failure will not retry stage due to testing config")
+  }
+
+  test("using external shuffle service") {
+    val createRDD = (sc: SparkContext) =>
+      sc.parallelize(0 until 1000, 10).map(i => (i, 1)).reduceByKey(_ + _)
+    checkResultWithShuffleService(createRDD)
+  }
+
+  test("using external shuffle service for indeterminate rdd") {
+    val createIndeterminateRDD = (sc: SparkContext) =>
+      sc.parallelize(0 until 1000, 10).repartition(11).repartition(12)
+    checkResultWithShuffleService(createIndeterminateRDD)
   }
 }
