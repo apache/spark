@@ -79,6 +79,9 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     localityNamesAndCounts.sorted.mkString("; ")
   }
 
+  private def jobURL(request: HttpServletRequest, jobId: Int): String =
+    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
+
   def render(request: HttpServletRequest): Seq[Node] = {
     // stripXSS is called first to remove suspicious characters used in XSS attacks
     val parameterId = UIUtils.stripXSS(request.getParameter("id"))
@@ -152,20 +155,20 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           }}
           {if (hasOutput(stageData)) {
             <li>
-              <strong>Output: </strong>
+              <strong>Output Size / Records: </strong>
               {s"${Utils.bytesToString(stageData.outputBytes)} / ${stageData.outputRecords}"}
             </li>
           }}
           {if (hasShuffleRead(stageData)) {
             <li>
-              <strong>Shuffle Read: </strong>
+              <strong>Shuffle Read Size / Records: </strong>
               {s"${Utils.bytesToString(stageData.shuffleReadBytes)} / " +
                s"${stageData.shuffleReadRecords}"}
             </li>
           }}
           {if (hasShuffleWrite(stageData)) {
             <li>
-              <strong>Shuffle Write: </strong>
+              <strong>Shuffle Write Size / Records: </strong>
                {s"${Utils.bytesToString(stageData.shuffleWriteBytes)} / " +
                s"${stageData.shuffleWriteRecords}"}
             </li>
@@ -183,10 +186,9 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           {if (!stageJobIds.isEmpty) {
             <li>
               <strong>Associated Job Ids: </strong>
-              {stageJobIds.map(jobId => {val detailUrl = "%s/jobs/job/?id=%s".format(
-                UIUtils.prependBaseUri(request, parent.basePath), jobId)
-              <a href={s"${detailUrl}"}>{s"${jobId}"} &nbsp;&nbsp;</a>
-            })}
+              {stageJobIds.sorted.map { jobId =>
+                <a href={jobURL(request, jobId)}>{jobId.toString}</a><span>&nbsp;</span>
+              }}
             </li>
           }}
         </ul>
