@@ -174,6 +174,11 @@ public final class Platform {
   }
 
   public static void putFloat(Object object, long offset, float value) {
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
+    } else if (value == -0.0f) {
+      value = 0.0f;
+    }
     _UNSAFE.putFloat(object, offset, value);
   }
 
@@ -182,6 +187,11 @@ public final class Platform {
   }
 
   public static void putDouble(Object object, long offset, double value) {
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    } else if (value == -0.0d) {
+      value = 0.0d;
+    }
     _UNSAFE.putDouble(object, offset, value);
   }
 
