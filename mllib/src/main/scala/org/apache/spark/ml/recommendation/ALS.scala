@@ -671,7 +671,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     instr.logDataset(dataset)
     instr.logParams(this, rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha, userCol,
       itemCol, ratingCol, predictionCol, maxIter, regParam, nonnegative, checkpointInterval,
-      seed, intermediateStorageLevel, finalStorageLevel)
+      seed, intermediateStorageLevel, finalStorageLevel, coldStartStrategy)
 
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
