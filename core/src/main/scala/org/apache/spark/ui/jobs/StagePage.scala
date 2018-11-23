@@ -79,9 +79,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     localityNamesAndCounts.sorted.mkString("; ")
   }
 
-  private def jobURL(request: HttpServletRequest, jobId: Int): String =
-    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
-
   def render(request: HttpServletRequest): Seq[Node] = {
     // stripXSS is called first to remove suspicious characters used in XSS attacks
     val parameterId = UIUtils.stripXSS(request.getParameter("id"))
@@ -187,7 +184,9 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
             <li>
               <strong>Associated Job Ids: </strong>
               {stageJobIds.sorted.map { jobId =>
-                <a href={jobURL(request, jobId)}>{jobId.toString}</a><span>&nbsp;</span>
+                val jobURL = "%s/jobs/job/?id=%s"
+                  .format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
+                <a href={jobURL}>{jobId.toString}</a><span>&nbsp;</span>
               }}
             </li>
           }}
