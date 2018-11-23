@@ -576,7 +576,7 @@ class DataStreamReader(OptionUtils):
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            enforceSchema=None, emptyValue=None, locale=None):
+            enforceSchema=None, emptyValue=None, locale=None, lineSep=None):
         r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -675,6 +675,9 @@ class DataStreamReader(OptionUtils):
         :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
                        it uses the default value, ``en-US``. For instance, ``locale`` is used while
                        parsing dates and timestamps.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+                        Maximum length is 1 character.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -692,7 +695,7 @@ class DataStreamReader(OptionUtils):
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
-            emptyValue=emptyValue, locale=locale)
+            emptyValue=emptyValue, locale=locale, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
