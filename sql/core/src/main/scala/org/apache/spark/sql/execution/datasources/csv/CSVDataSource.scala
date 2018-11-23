@@ -95,7 +95,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       headerChecker: CSVHeaderChecker,
       requiredSchema: StructType): Iterator[InternalRow] = {
     val lines = {
-      val linesReader = new HadoopFileLinesReader(file, conf)
+      val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
