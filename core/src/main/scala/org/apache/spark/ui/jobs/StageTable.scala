@@ -383,7 +383,7 @@ private[ui] class StagePagedTable(
         {if (cachedRddInfos.nonEmpty) {
           Text("RDD: ") ++
           cachedRddInfos.map { i =>
-            <a href={s"$basePathUri/storage/rdd?id=${i.id}"}>{i.name}</a>
+            <a href={s"$basePathUri/storage/rdd/?id=${i.id}"}>{i.name}</a>
           }
         }}
         <pre>{s.details}</pre>
