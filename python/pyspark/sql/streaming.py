@@ -676,7 +676,8 @@ class DataStreamReader(OptionUtils):
                        it uses the default value, ``en-US``. For instance, ``locale`` is used while
                        parsing dates and timestamps.
         :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``. Maximum length is 2.
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+                        Maximum length is 1 character.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming

@@ -454,7 +454,8 @@ class DataFrameReader(OptionUtils):
                        it uses the default value, ``en-US``. For instance, ``locale`` is used while
                        parsing dates and timestamps.
         :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``. Maximum length is 2.
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+                        Maximum length is 1 character.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -925,7 +926,7 @@ class DataFrameWriter(OptionUtils):
         :param emptyValue: sets the string representation of an empty value. If None is set, it uses
                            the default value, ``""``.
         :param lineSep: defines the line separator that should be used for writing. If None is
-                        set, it uses the default value, ``\\n``. Maximum length is 2.
+                        set, it uses the default value, ``\\n``. Maximum length is 1 character.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """

@@ -610,7 +610,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
    * For instance, this is used while parsing dates and timestamps.</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
-   * that should be used for parsing. Maximum length is 2.</li>
+   * that should be used for parsing. Maximum length is 1 character.</li>
    * </ul>
    *
    * @since 2.0.0

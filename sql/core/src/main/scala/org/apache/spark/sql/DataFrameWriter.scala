@@ -659,7 +659,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`ignoreTrailingWhiteSpace` (default `true`): a flag indicating defines whether or not
    * trailing whitespaces from values being written should be skipped.</li>
    * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.
-   * Maximum length is 2.</li>
+   * Maximum length is 1 character.</li>
    * </ul>
    *
    * @since 2.0.0
