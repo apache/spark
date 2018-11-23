@@ -987,7 +987,7 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       part: JList[String],
       deleteData: Boolean,
       purge: Boolean): Unit = {
-    val dropOptions = dropOptionsClass.newInstance().asInstanceOf[Object]
+    val dropOptions = dropOptionsClass.getConstructor().newInstance().asInstanceOf[Object]
     dropOptionsDeleteData.setBoolean(dropOptions, deleteData)
     dropOptionsPurge.setBoolean(dropOptions, purge)
     dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)

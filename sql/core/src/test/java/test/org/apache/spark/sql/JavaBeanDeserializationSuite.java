@@ -144,10 +144,15 @@ public class JavaBeanDeserializationSuite implements Serializable {
     }
 
     @Override
+    public int hashCode() {
+      return id ^ Objects.hashCode(intervals);
+    }
+
+    @Override
     public boolean equals(Object obj) {
       if (!(obj instanceof ArrayRecord)) return false;
       ArrayRecord other = (ArrayRecord) obj;
-      return (other.id == this.id) && other.intervals.equals(this.intervals);
+      return (other.id == this.id) && Objects.equals(other.intervals, this.intervals);
     }
 
     @Override
@@ -182,6 +187,11 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     public void setIntervals(Map<String, Interval> intervals) {
       this.intervals = intervals;
+    }
+
+    @Override
+    public int hashCode() {
+      return id ^ Objects.hashCode(intervals);
     }
 
     @Override
@@ -223,6 +233,11 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     public void setEndTime(long endTime) {
       this.endTime = endTime;
+    }
+
+    @Override
+    public int hashCode() {
+      return Long.hashCode(startTime) ^ Long.hashCode(endTime);
     }
 
     @Override

@@ -732,6 +732,11 @@ class DataFrame(object):
         At least one partition-by expression must be specified.
         When no explicit sort order is specified, "ascending nulls first" is assumed.
 
+        Note that due to performance reasons this method uses sampling to estimate the ranges.
+        Hence, the output may not be consistent, since sampling can return different values.
+        The sample size can be controlled by the config
+        `spark.sql.execution.rangeExchange.sampleSizePerPartition`.
+
         >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
         2
         >>> df.show()

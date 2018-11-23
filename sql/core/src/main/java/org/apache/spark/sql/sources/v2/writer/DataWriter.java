@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources.v2.writer;
 
 import java.io.IOException;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * A data writer returned by {@link DataWriterFactory#createWriter(int, long)} and is
@@ -55,7 +55,7 @@ import org.apache.spark.annotation.InterfaceStability;
  *
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.catalyst.InternalRow}.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface DataWriter<T> {
 
   /**

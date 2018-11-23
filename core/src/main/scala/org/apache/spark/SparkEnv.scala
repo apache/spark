@@ -261,7 +261,7 @@ object SparkEnv extends Logging {
       // SparkConf, then one taking no arguments
       try {
         cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)
-          .newInstance(conf, new java.lang.Boolean(isDriver))
+          .newInstance(conf, java.lang.Boolean.valueOf(isDriver))
           .asInstanceOf[T]
       } catch {
         case _: NoSuchMethodException =>

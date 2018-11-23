@@ -19,12 +19,12 @@ package org.apache.spark.sql.api.java;
 
 import java.io.Serializable;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Stable;
 
 /**
  * A Spark SQL UDF that has 2 arguments.
  */
-@InterfaceStability.Stable
+@Stable
 public interface UDF2<T1, T2, R> extends Serializable {
   R call(T1 t1, T2 t2) throws Exception;
 }

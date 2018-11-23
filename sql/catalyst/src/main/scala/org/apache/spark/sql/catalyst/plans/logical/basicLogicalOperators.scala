@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -485,7 +485,7 @@ case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) 
   override def output: Seq[Attribute] = child.output
 
   override def simpleString: String = {
-    val cteAliases = Utils.truncatedString(cteRelations.map(_._1), "[", ", ", "]")
+    val cteAliases = truncatedString(cteRelations.map(_._1), "[", ", ", "]")
     s"CTE $cteAliases"
   }
 

@@ -21,7 +21,7 @@ import java.util.{Locale, Properties, UUID}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 1.4.0
  */
-@InterfaceStability.Stable
+@Stable
 final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()
@@ -243,7 +243,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val source = cls.newInstance().asInstanceOf[DataSourceV2]
+      val source = cls.getConstructor().newInstance().asInstanceOf[DataSourceV2]
       source match {
         case provider: BatchWriteSupportProvider =>
           val sessionOptions = DataSourceV2Utils.extractSessionConfigs(

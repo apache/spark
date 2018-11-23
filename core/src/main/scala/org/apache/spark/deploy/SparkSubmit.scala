@@ -318,7 +318,7 @@ private[spark] class SparkSubmit extends Logging {
 
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
         args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
-        if (args.isPython) {
+        if (args.isPython || isInternal(args.primaryResource)) {
           args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
         }
       }
@@ -829,7 +829,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
-      mainClass.newInstance().asInstanceOf[SparkApplication]
+      mainClass.getConstructor().newInstance().asInstanceOf[SparkApplication]
     } else {
       // SPARK-4170
       if (classOf[scala.App].isAssignableFrom(mainClass)) {

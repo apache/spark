@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -39,7 +39,7 @@ import org.apache.spark.sql.sources.v2.StreamingWriteSupportProvider
  *
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()
@@ -307,7 +307,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       val ds = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val disabledSources = df.sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
       var options = extraOptions.toMap
-      val sink = ds.newInstance() match {
+      val sink = ds.getConstructor().newInstance() match {
         case w: StreamingWriteSupportProvider
             if !disabledSources.contains(w.getClass.getCanonicalName) =>
           val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
@@ -365,7 +365,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *
    * @since 2.4.0
    */
-  @InterfaceStability.Evolving
+  @Evolving
   def foreachBatch(function: (Dataset[T], Long) => Unit): DataStreamWriter[T] = {
     this.source = "foreachBatch"
     if (function == null) throw new IllegalArgumentException("foreachBatch function cannot be null")
@@ -386,7 +386,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    *
    * @since 2.4.0
    */
-  @InterfaceStability.Evolving
+  @Evolving
   def foreachBatch(function: VoidFunction2[Dataset[T], java.lang.Long]): DataStreamWriter[T] = {
     foreachBatch((batchDs: Dataset[T], batchId: Long) => function.call(batchDs, batchId))
   }

@@ -1848,4 +1848,36 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val schema = new StructType().add("a", StringType).add("b", IntegerType)
     checkAnswer(spark.read.schema(schema).option("delimiter", delimiter).csv(input), Row("abc", 1))
   }
+
+  test("using spark.sql.columnNameOfCorruptRecord") {
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      val csv = "\""
+      val df = spark.read
+        .schema("a int, _unparsed string")
+        .csv(Seq(csv).toDS())
+
+      checkAnswer(df, Row(null, csv))
+    }
+  }
+
+  test("encoding in multiLine mode") {
+    val df = spark.range(3).toDF()
+    Seq("UTF-8", "ISO-8859-1", "CP1251", "US-ASCII", "UTF-16BE", "UTF-32LE").foreach { encoding =>
+      Seq(true, false).foreach { header =>
+        withTempPath { path =>
+          df.write
+            .option("encoding", encoding)
+            .option("header", header)
+            .csv(path.getCanonicalPath)
+          val readback = spark.read
+            .option("multiLine", true)
+            .option("encoding", encoding)
+            .option("inferSchema", true)
+            .option("header", header)
+            .csv(path.getCanonicalPath)
+          checkAnswer(readback, df)
+        }
+      }
+    }
+  }
 }
