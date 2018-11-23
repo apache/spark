@@ -85,12 +85,18 @@ abstract class QueryStage extends UnaryExecNode {
       Future.sequence(shuffleStageFutures)(implicitly, QueryStage.executionContext), Duration.Inf)
   }
 
+  private var prepared = false
+
   /**
    * Before executing the plan in this query stage, we execute all child stages, optimize the plan
    * in this stage and determine the reducer number based on the child stages' statistics. Finally
    * we do a codegen for this query stage and update the UI with the new plan.
    */
-  def prepareExecuteStage(): Unit = {
+  def prepareExecuteStage(): Unit = synchronized {
+    // Ensure the prepareExecuteStage method only be executed once.
+    if (prepared) {
+      return
+    }
     // 1. Execute childStages
     executeChildStages()
     // It is possible to optimize this stage's plan here based on the child stages' statistics.
@@ -126,6 +132,7 @@ abstract class QueryStage extends UnaryExecNode {
         queryExecution.toString,
         SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)))
     }
+    prepared = true
   }
 
   // Caches the created ShuffleRowRDD so we can reuse that.
