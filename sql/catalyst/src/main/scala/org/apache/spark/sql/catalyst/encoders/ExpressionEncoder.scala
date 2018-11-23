@@ -189,7 +189,7 @@ case class ExpressionEncoder[T](
   val serializer: Seq[NamedExpression] = {
     val clsName = Utils.getSimpleName(clsTag.runtimeClass)
 
-    if (isSerializedAsStruct && !isOptionType) {
+    if (isSerializedAsStructForTopLevel) {
       val nullSafeSerializer = objSerializer.transformUp {
         case r: BoundReference =>
           // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
@@ -220,7 +220,7 @@ case class ExpressionEncoder[T](
    * `GetColumnByOrdinal` with corresponding ordinal.
    */
   val deserializer: Expression = {
-    if (isSerializedAsStruct && !isOptionType) {
+    if (isSerializedAsStructForTopLevel) {
       // We serialized this kind of objects to root-level row. The input of general deserializer
       // is a `GetColumnByOrdinal(0)` expression to extract first column of a row. We need to
       // transform attributes accessors.
@@ -255,6 +255,15 @@ case class ExpressionEncoder[T](
    * Returns true if the type `T` is an `Option` type.
    */
   def isOptionType: Boolean = classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)
+
+  /**
+   * If the type `T` is serialized as a struct, when it is encoded to a Spark SQL row, fields in
+   * the struct are naturally mapped to top-level columns in a row. In other words, the serialized
+   * struct is flattened to row. But in case of the `T` is also an `Option` type, it can't be
+   * flattened to top-level row, because in Spark SQL top-level row can't be null. This method
+   * returns true if `T` is serialized as struct and is not `Option` type.
+   */
+  def isSerializedAsStructForTopLevel: Boolean = isSerializedAsStruct && !isOptionType
 
   // serializer expressions are used to encode an object to a row, while the object is usually an
   // intermediate value produced inside an operator, not from the output of the child operator. This
