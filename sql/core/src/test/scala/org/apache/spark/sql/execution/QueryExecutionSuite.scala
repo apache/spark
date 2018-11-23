@@ -20,9 +20,20 @@ import scala.io.Source
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
+case class QueryExecutionTestRecord(
+    c0: Int, c1: Int, c2: Int, c3: Int, c4: Int,
+    c5: Int, c6: Int, c7: Int, c8: Int, c9: Int,
+    c10: Int, c11: Int, c12: Int, c13: Int, c14: Int,
+    c15: Int, c16: Int, c17: Int, c18: Int, c19: Int,
+    c20: Int, c21: Int, c22: Int, c23: Int, c24: Int,
+    c25: Int, c26: Int)
+
 class QueryExecutionSuite extends SharedSQLContext {
+  import testImplicits._
+
   def checkDumpedPlans(path: String, expected: Int): Unit = {
     assert(Source.fromFile(path).getLines.toList
       .takeWhile(_ != "== Whole Stage Codegen ==") == List(
@@ -78,6 +89,21 @@ class QueryExecutionSuite extends SharedSQLContext {
     }
 
     assert(exception.getMessage.contains("Illegal character in scheme name"))
+  }
+
+  test("limit number of fields by sql config") {
+    def relationPlans: String = {
+      val ds = spark.createDataset(Seq(QueryExecutionTestRecord(
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)))
+      ds.queryExecution.toString
+    }
+    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "26") {
+      assert(relationPlans.contains("more fields"))
+    }
+    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "27") {
+      assert(!relationPlans.contains("more fields"))
+    }
   }
 
   test("toString() exception/error handling") {

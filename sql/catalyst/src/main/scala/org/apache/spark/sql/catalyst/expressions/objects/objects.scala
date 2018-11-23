@@ -462,12 +462,12 @@ case class NewInstance(
       val d = outerObj.getClass +: paramTypes
       val c = getConstructor(outerObj.getClass +: paramTypes)
       (args: Seq[AnyRef]) => {
-        c.newInstance(outerObj +: args: _*)
+        c(outerObj +: args)
       }
     }.getOrElse {
       val c = getConstructor(paramTypes)
       (args: Seq[AnyRef]) => {
-        c.newInstance(args: _*)
+        c(args)
       }
     }
   }
@@ -486,10 +486,16 @@ case class NewInstance(
 
     ev.isNull = resultIsNull
 
-    val constructorCall = outer.map { gen =>
-      s"${gen.value}.new ${cls.getSimpleName}($argString)"
-    }.getOrElse {
-      s"new $className($argString)"
+    val constructorCall = cls.getConstructors.size match {
+      // If there are no constructors, the `new` method will fail. In
+      // this case we can try to call the apply method constructor
+      // that might be defined on the companion object.
+      case 0 => s"$className$$.MODULE$$.apply($argString)"
+      case _ => outer.map { gen =>
+        s"${gen.value}.new ${cls.getSimpleName}($argString)"
+      }.getOrElse {
+        s"new $className($argString)"
+      }
     }
 
     val code = code"""
