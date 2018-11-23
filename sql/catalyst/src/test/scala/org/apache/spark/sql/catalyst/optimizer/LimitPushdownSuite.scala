@@ -175,21 +175,21 @@ class LimitPushdownSuite extends PlanTest {
   test("cross join") {
     val originalQuery = x.join(y, Cross).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, LocalLimit(1, x).join(y, Cross)).analyze
+    val correctAnswer = Limit(1, LocalLimit(1, x).join(LocalLimit(1, y), Cross)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("cross join and left sides are limited") {
     val originalQuery = x.limit(2).join(y, Cross).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, LocalLimit(1, x).join(y, Cross)).analyze
+    val correctAnswer = Limit(1, LocalLimit(1, x).join(LocalLimit(1, y), Cross)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("cross join and right sides are limited") {
     val originalQuery = x.join(y.limit(2), Cross).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, LocalLimit(1, x).join(Limit(2, y), Cross)).analyze
+    val correctAnswer = Limit(1, LocalLimit(1, x).join(LocalLimit(1, y), Cross)).analyze
     comparePlans(optimized, correctAnswer)
   }
 }
