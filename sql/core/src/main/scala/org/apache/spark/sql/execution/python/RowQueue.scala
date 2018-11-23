@@ -23,7 +23,7 @@ import com.google.common.io.Closeables
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.io.NioBufferedFileInputStream
-import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
+import org.apache.spark.memory.{MemoryConsumer, SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.Platform
@@ -226,7 +226,7 @@ private[python] case class HybridRowQueue(
     val page = try {
       allocatePage(required)
     } catch {
-      case _: OutOfMemoryError =>
+      case _: SparkOutOfMemoryError =>
         null
     }
     val buffer = if (page != null) {

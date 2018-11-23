@@ -109,6 +109,30 @@ object TestingUDT {
   }
 }
 
+/** An example derived from Twitter/Scrooge codegen for thrift  */
+object ScroogeLikeExample {
+  def apply(x: Int): ScroogeLikeExample = new Immutable(x)
+
+  def unapply(_item: ScroogeLikeExample): Option[Int] = Some(_item.x)
+
+  class Immutable(val x: Int) extends ScroogeLikeExample
+}
+
+trait ScroogeLikeExample extends Product1[Int] with Serializable {
+  import ScroogeLikeExample._
+
+  def x: Int
+
+  def _1: Int = x
+
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
+
+  override def equals(other: Any): Boolean =
+    canEqual(other) &&
+      this.x ==  other.asInstanceOf[ScroogeLikeExample].x
+
+  override def hashCode: Int = x
+}
 
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
@@ -361,5 +385,12 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
+  }
+
+  test("SPARK-8288: schemaFor works for a class with only a companion object constructor") {
+    val schema = schemaFor[ScroogeLikeExample]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("x", IntegerType, nullable = false))), nullable = true))
   }
 }
