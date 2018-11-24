@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.json
 
 import java.io.{ByteArrayOutputStream, CharConversionException}
 import java.nio.charset.MalformedInputException
-import java.text.{DecimalFormat, DecimalFormatSymbols}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -30,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -137,9 +137,7 @@ class JacksonParser(
   }
 
   private val decimalParser = {
-    val df = new DecimalFormat("", new DecimalFormatSymbols(options.locale))
-    df.setParseBigDecimal(true)
-    df
+    ExprUtils.getDecimalParser(SQLConf.get.legacyDecimalParsing, options.locale)
   }
 
   /**
@@ -269,7 +267,7 @@ class JacksonParser(
         case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
           Decimal(parser.getDecimalValue, dt.precision, dt.scale)
         case VALUE_STRING =>
-          val bigDecimal = decimalParser.parse(parser.getText).asInstanceOf[java.math.BigDecimal]
+          val bigDecimal = decimalParser(parser.getText)
           Decimal(bigDecimal, dt.precision, dt.scale)
       }
 
