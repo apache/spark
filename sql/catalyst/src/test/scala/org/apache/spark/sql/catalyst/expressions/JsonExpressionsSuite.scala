@@ -792,7 +792,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
 
     withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
       Seq("ru-RU").foreach { langTag =>
-        intercept[NumberFormatException] {
+        intercept[TestFailedException] {
           checkDecimalParsing(langTag)
         }
       }
