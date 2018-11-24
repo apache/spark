@@ -18,9 +18,9 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.nio.file.{Files, Paths}
 
 import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -140,6 +140,17 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
           .save(path)
       }.getMessage
       assert(e.contains(s"Partition column `$unknown` not found in schema $schemaCatalog"))
+    }
+  }
+
+  test("skip empty files in load") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      Files.write(Paths.get(path, "empty"), Array[Byte]())
+      Files.write(Paths.get(path, "notEmpty"), "a".getBytes)
+      val readback = spark.read.text(path)
+
+      assert(readback.rdd.getNumPartitions == 1)
     }
   }
 }
