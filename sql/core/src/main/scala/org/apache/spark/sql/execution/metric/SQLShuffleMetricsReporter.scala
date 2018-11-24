@@ -22,39 +22,46 @@ import org.apache.spark.executor.TempShuffleReadMetrics
 /**
  * A shuffle metrics reporter for SQL exchange operators.
  * @param tempMetrics [[TempShuffleReadMetrics]] created in TaskContext.
- * @param metrics All metrics in current SparkPlan.
+ * @param metrics All metrics in current SparkPlan. This param should not empty and
+ *   contains all shuffle metrics defined in [[SQLMetrics.getShuffleReadMetrics]].
  */
-class SQLShuffleMetricsReporter(
+private[spark] class SQLShuffleMetricsReporter(
   tempMetrics: TempShuffleReadMetrics,
   metrics: Map[String, SQLMetric]) extends TempShuffleReadMetrics {
+  private[this] val _remoteBlocksFetched = metrics(SQLMetrics.REMOTE_BLOCKS_FETCHED)
+  private[this] val _localBlocksFetched = metrics(SQLMetrics.LOCAL_BLOCKS_FETCHED)
+  private[this] val _remoteBytesRead = metrics(SQLMetrics.REMOTE_BYTES_READ)
+  private[this] val _remoteBytesReadToDisk = metrics(SQLMetrics.REMOTE_BYTES_READ_TO_DISK)
+  private[this] val _localBytesRead = metrics(SQLMetrics.LOCAL_BYTES_READ)
+  private[this] val _fetchWaitTime = metrics(SQLMetrics.FETCH_WAIT_TIME)
+  private[this] val _recordsRead = metrics(SQLMetrics.RECORDS_READ)
 
   override def incRemoteBlocksFetched(v: Long): Unit = {
-    metrics(SQLMetrics.REMOTE_BLOCKS_FETCHED).add(v)
+    _remoteBlocksFetched.add(v)
     tempMetrics.incRemoteBlocksFetched(v)
   }
   override def incLocalBlocksFetched(v: Long): Unit = {
-    metrics(SQLMetrics.LOCAL_BLOCKS_FETCHED).add(v)
+    _localBlocksFetched.add(v)
     tempMetrics.incLocalBlocksFetched(v)
   }
   override def incRemoteBytesRead(v: Long): Unit = {
-    metrics(SQLMetrics.REMOTE_BYTES_READ).add(v)
+    _remoteBytesRead.add(v)
     tempMetrics.incRemoteBytesRead(v)
   }
   override def incRemoteBytesReadToDisk(v: Long): Unit = {
-    metrics(SQLMetrics.REMOTE_BYTES_READ_TO_DISK).add(v)
+    _remoteBytesReadToDisk.add(v)
     tempMetrics.incRemoteBytesReadToDisk(v)
   }
   override def incLocalBytesRead(v: Long): Unit = {
-    metrics(SQLMetrics.LOCAL_BYTES_READ).add(v)
+    _localBytesRead.add(v)
     tempMetrics.incLocalBytesRead(v)
   }
   override def incFetchWaitTime(v: Long): Unit = {
-    metrics(SQLMetrics.FETCH_WAIT_TIME).add(v)
+    _fetchWaitTime.add(v)
     tempMetrics.incFetchWaitTime(v)
   }
   override def incRecordsRead(v: Long): Unit = {
-    metrics(SQLMetrics.RECORDS_READ).add(v)
+    _recordsRead.add(v)
     tempMetrics.incRecordsRead(v)
   }
-
 }
