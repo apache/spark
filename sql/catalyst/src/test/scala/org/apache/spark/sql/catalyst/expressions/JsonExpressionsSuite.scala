@@ -766,16 +766,22 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       expectedErrMsg = "The field for corrupt records must be string type and nullable")
   }
 
+  def decimalInput(langTag: String): (Decimal, String) = {
+    val decimalVal = new java.math.BigDecimal("1000.001")
+    val decimalType = new DecimalType(10, 5)
+    val expected = Decimal(decimalVal, decimalType.precision, decimalType.scale)
+    val decimalFormat = new DecimalFormat("",
+      new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
+    val input = s"""{"d": "${decimalFormat.format(expected.toBigDecimal)}"}"""
+
+    (expected, input)
+  }
+
   test("parse decimals using locale") {
     def checkDecimalParsing(langTag: String): Unit = {
-      val decimalVal = new java.math.BigDecimal("1000.001")
-      val decimalType = new DecimalType(10, 5)
-      val expected = Decimal(decimalVal, decimalType.precision, decimalType.scale)
-      val decimalFormat = new DecimalFormat("",
-        new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
-      val input = s"""{"d": "${decimalFormat.format(expected.toBigDecimal)}"}"""
       val schema = new StructType().add("d", DecimalType(10, 5))
       val options = Map("locale" -> langTag)
+      val (expected, input) = decimalInput(langTag)
 
       checkEvaluation(
         JsonToStructs(schema, options, Literal.create(input), gmtId),
@@ -795,6 +801,35 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         intercept[TestFailedException] {
           checkDecimalParsing(langTag)
         }
+      }
+    }
+  }
+
+  test("inferring the decimal type using locale") {
+    def checkDecimalInfer(langTag: String, expectedType: String): Unit = {
+      val options = Map("locale" -> langTag, "prefersDecimal" -> "true")
+      val (_, input) = decimalInput(langTag)
+
+      checkEvaluation(
+        SchemaOfJson(Literal.create(input), options),
+        expectedType)
+    }
+
+    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "false") {
+      Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach {
+        checkDecimalInfer(_, """struct<d:decimal(7,3)>""")
+      }
+    }
+
+    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
+      Seq("en-US", "ko-KR").foreach {
+        checkDecimalInfer(_, """struct<d:decimal(7,3)>""")
+      }
+    }
+
+    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
+      Seq("ru-RU").foreach {
+        checkDecimalInfer(_, """struct<d:string>""")
       }
     }
   }
