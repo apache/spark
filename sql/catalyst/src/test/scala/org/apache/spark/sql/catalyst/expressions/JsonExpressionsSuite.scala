@@ -767,15 +767,35 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("parse decimals using locale") {
-    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach { langTag =>
+    def checkDecimalParsing(langTag: String): Unit = {
+      val decimalVal = new java.math.BigDecimal("1000.001")
+      val decimalType = new DecimalType(10, 5)
+      val expected = Decimal(decimalVal, decimalType.precision, decimalType.scale)
+      val decimalFormat = new DecimalFormat("",
+        new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
+      val input = s"""{"d": "${decimalFormat.format(expected.toBigDecimal)}"}"""
       val schema = new StructType().add("d", DecimalType(10, 5))
       val options = Map("locale" -> langTag)
-      val expected = Decimal(1000.001, 10, 5)
-      val df = new DecimalFormat("", new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
-      val input = s"""{"d":"${df.format(expected.toBigDecimal)}"}"""
+
       checkEvaluation(
         JsonToStructs(schema, options, Literal.create(input), gmtId),
         InternalRow(expected))
+    }
+
+    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "false") {
+      Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
+    }
+
+    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
+      Seq("en-US", "ko-KR").foreach(checkDecimalParsing)
+    }
+
+    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
+      Seq("ru-RU").foreach { langTag =>
+        intercept[NumberFormatException] {
+          checkDecimalParsing(langTag)
+        }
+      }
     }
   }
 }
