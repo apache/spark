@@ -20,6 +20,7 @@ import java.io.Closeable;
 import java.io.IOException;
 
 import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -126,7 +127,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
   private boolean acquirePage(long requiredSize) {
     try {
       page = allocatePage(requiredSize);
-    } catch (OutOfMemoryError e) {
+    } catch (SparkOutOfMemoryError e) {
       logger.warn("Failed to allocate page ({} bytes).", requiredSize);
       return false;
     }

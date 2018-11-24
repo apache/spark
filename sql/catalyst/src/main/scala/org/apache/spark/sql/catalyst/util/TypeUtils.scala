@@ -46,9 +46,17 @@ object TypeUtils {
     if (TypeCoercion.haveSameType(types)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      return TypeCheckResult.TypeCheckFailure(
+      TypeCheckResult.TypeCheckFailure(
         s"input to $caller should all be the same type, but it's " +
           types.map(_.catalogString).mkString("[", ", ", "]"))
+    }
+  }
+
+  def checkForMapKeyType(keyType: DataType): TypeCheckResult = {
+    if (keyType.existsRecursively(_.isInstanceOf[MapType])) {
+      TypeCheckResult.TypeCheckFailure("The key of map cannot be/contain map.")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
     }
   }
 

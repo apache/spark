@@ -213,7 +213,7 @@ object StateStoreProvider {
    */
   def create(providerClassName: String): StateStoreProvider = {
     val providerClass = Utils.classForName(providerClassName)
-    providerClass.newInstance().asInstanceOf[StateStoreProvider]
+    providerClass.getConstructor().newInstance().asInstanceOf[StateStoreProvider]
   }
 
   /**

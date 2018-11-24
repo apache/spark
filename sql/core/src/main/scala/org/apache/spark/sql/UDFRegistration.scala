@@ -22,7 +22,7 @@ import java.lang.reflect.ParameterizedType
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends Logging {
 
   protected[sql] def registerPython(name: String, udf: UserDefinedPythonFunction): Unit = {
@@ -670,7 +670,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         throw new AnalysisException(s"It is invalid to implement multiple UDF interfaces, UDF class $className")
       } else {
         try {
-          val udf = clazz.newInstance()
+          val udf = clazz.getConstructor().newInstance()
           val udfReturnType = udfInterfaces(0).getActualTypeArguments.last
           var returnType = returnDataType
           if (returnType == null) {
@@ -727,7 +727,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       if (!classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
         throw new AnalysisException(s"class $className doesn't implement interface UserDefinedAggregateFunction")
       }
-      val udaf = clazz.newInstance().asInstanceOf[UserDefinedAggregateFunction]
+      val udaf = clazz.getConstructor().newInstance().asInstanceOf[UserDefinedAggregateFunction]
       register(name, udaf)
     } catch {
       case e: ClassNotFoundException => throw new AnalysisException(s"Can not load class ${className}, please make sure it is on the classpath")

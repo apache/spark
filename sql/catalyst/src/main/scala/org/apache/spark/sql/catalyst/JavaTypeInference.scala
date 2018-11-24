@@ -73,10 +73,10 @@ object JavaTypeInference {
     : (DataType, Boolean) = {
     typeToken.getRawType match {
       case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
-        (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
+        (c.getAnnotation(classOf[SQLUserDefinedType]).udt().getConstructor().newInstance(), true)
 
       case c: Class[_] if UDTRegistration.exists(c.getName) =>
-        val udt = UDTRegistration.getUDTFor(c.getName).get.newInstance()
+        val udt = UDTRegistration.getUDTFor(c.getName).get.getConstructor().newInstance()
           .asInstanceOf[UserDefinedType[_ >: Null]]
         (udt, true)
 

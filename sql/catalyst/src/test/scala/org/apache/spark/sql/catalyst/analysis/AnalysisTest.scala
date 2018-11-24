@@ -21,6 +21,7 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -54,7 +55,7 @@ trait AnalysisTest extends PlanTest {
       expectedPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
     val analyzer = getAnalyzer(caseSensitive)
-    val actualPlan = analyzer.executeAndCheck(inputPlan)
+    val actualPlan = analyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
     comparePlans(actualPlan, expectedPlan)
   }
 

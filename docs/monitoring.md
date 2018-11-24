@@ -203,6 +203,28 @@ Security options for the Spark History Server are covered more detail in the
     </td>
   </tr>
   <tr>
+    <td>spark.history.fs.driverlog.cleaner.enabled</td>
+    <td><code>spark.history.fs.cleaner.enabled</code></td>
+    <td>
+      Specifies whether the History Server should periodically clean up driver logs from storage.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.driverlog.cleaner.interval</td>
+    <td><code>spark.history.fs.cleaner.interval</code></td>
+    <td>
+      How often the filesystem driver log cleaner checks for files to delete.
+      Files are only deleted if they are older than <code>spark.history.fs.driverlog.cleaner.maxAge</code>
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.driverlog.cleaner.maxAge</td>
+    <td><code>spark.history.fs.cleaner.maxAge</code></td>
+    <td>
+      Driver log files older than this will be deleted when the driver log cleaner runs.
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.fs.numReplayThreads</td>
     <td>25% of available cores</td>
     <td>
