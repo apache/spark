@@ -266,7 +266,7 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken[Decimal](parser, dataType) {
         case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
           Decimal(parser.getDecimalValue, dt.precision, dt.scale)
-        case VALUE_STRING =>
+        case VALUE_STRING if parser.getTextLength >= 1 =>
           val bigDecimal = decimalParser(parser.getText)
           Decimal(bigDecimal, dt.precision, dt.scale)
       }
