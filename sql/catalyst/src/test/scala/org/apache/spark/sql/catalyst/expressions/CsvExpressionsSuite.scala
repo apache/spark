@@ -73,7 +73,7 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   test("from_csv with timestamp") {
     val schema = StructType(StructField("t", TimestampType) :: Nil)
 
-    val csvData1 = "2016-01-01T00:00:00.123Z"
+    val csvData1 = "2016-01-01T00:00:00.123"
     var c = Calendar.getInstance(DateTimeUtils.TimeZoneGMT)
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 123)

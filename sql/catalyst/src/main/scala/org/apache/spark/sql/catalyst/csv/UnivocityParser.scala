@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.csv
 import java.io.InputStream
 import java.math.BigDecimal
 
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.univocity.parsers.csv.CsvParser
@@ -28,7 +27,7 @@ import com.univocity.parsers.csv.CsvParser
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils, FailureSafeParser}
+import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils, FailureSafeParser, TimeParser}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -75,6 +74,9 @@ class UnivocityParser(
   }
 
   private val row = new GenericInternalRow(requiredSchema.length)
+
+  private val timeParser = TimeParser(options.timestampFormat, options.timeZone, options.locale)
+  private val dateParser = TimeParser(options.dateFormat, options.timeZone, options.locale)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -154,28 +156,10 @@ class UnivocityParser(
       }
 
     case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.
-        Try(options.timestampFormat.parse(datum).getTime * 1000L)
-          .getOrElse {
-          // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-          // compatibility.
-          DateTimeUtils.stringToTime(datum).getTime * 1000L
-        }
-      }
+      nullSafeDatum(d, name, nullable, options)(timeParser.toMicros)
 
     case _: DateType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.x
-        Try(DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime))
-          .getOrElse {
-          // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-          // compatibility.
-          DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
-        }
-      }
+      nullSafeDatum(d, name, nullable, options)(dateParser.toDays)
 
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)

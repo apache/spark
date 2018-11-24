@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.csv
 
 import java.math.BigDecimal
 
+import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -109,7 +110,9 @@ class UnivocityParserSuite extends SparkFunSuite {
     val timestampsOptions =
       new CSVOptions(Map("timestampFormat" -> "dd/MM/yyyy hh:mm"), false, "GMT")
     val customTimestamp = "31/01/2015 00:00"
-    val expectedTime = timestampsOptions.timestampFormat.parse(customTimestamp).getTime
+    val format = FastDateFormat.getInstance(
+      timestampsOptions.timestampFormat, timestampsOptions.timeZone, timestampsOptions.locale)
+    val expectedTime = format.parse(customTimestamp).getTime
     val castedTimestamp =
       parser.makeConverter("_1", TimestampType, nullable = true, options = timestampsOptions)
         .apply(customTimestamp)
@@ -117,7 +120,7 @@ class UnivocityParserSuite extends SparkFunSuite {
 
     val customDate = "31/01/2015"
     val dateOptions = new CSVOptions(Map("dateFormat" -> "dd/MM/yyyy"), false, "GMT")
-    val expectedDate = dateOptions.dateFormat.parse(customDate).getTime
+    val expectedDate = format.parse(customDate).getTime
     val castedDate =
       parser.makeConverter("_1", DateType, nullable = true, options = dateOptions)
         .apply(customTimestamp)

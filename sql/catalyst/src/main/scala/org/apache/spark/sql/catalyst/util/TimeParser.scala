@@ -18,14 +18,12 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.time.{LocalDateTime, ZoneOffset}
-import java.time.format.{DateTimeFormatter, ResolverStyle}
-import java.time.temporal.ChronoUnit
+import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
+import java.time.temporal.{ChronoField, ChronoUnit}
 import java.util.{Locale, TimeZone}
 
 import scala.util.Try
-
 import org.apache.commons.lang3.time.FastDateFormat
-
 import org.apache.spark.sql.internal.SQLConf
 
 sealed trait TimeParser {
@@ -35,25 +33,26 @@ sealed trait TimeParser {
 }
 
 class Iso8601TimeParser(pattern: String, timeZone: TimeZone, locale: Locale) extends TimeParser {
-  val format = DateTimeFormatter.ofPattern(pattern)
+  val formatter = DateTimeFormatter.ofPattern(pattern)
     .withLocale(locale)
     .withZone(timeZone.toZoneId)
     .withResolverStyle(ResolverStyle.SMART)
-  // Seconds since 1970-01-01T00:00:00Z
+
+  // Seconds since 1970-01-01T00:00:00
   val epoch = LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC)
 
   def toMillis(s: String): Long = {
-    val localDateTime = LocalDateTime.parse(s, format)
+    val localDateTime = LocalDateTime.parse(s, formatter)
     ChronoUnit.MILLIS.between(epoch, localDateTime)
   }
 
   def toMicros(s: String): Long = {
-    val localDateTime = LocalDateTime.parse(s, format)
+    val localDateTime = LocalDateTime.parse(s, formatter)
     ChronoUnit.MICROS.between(epoch, localDateTime)
   }
 
   def toDays(s: String): Int = {
-    val localDateTime = LocalDateTime.parse(s, format)
+    val localDateTime = LocalDateTime.parse(s, formatter)
     ChronoUnit.DAYS.between(epoch, localDateTime).toInt
   }
 }

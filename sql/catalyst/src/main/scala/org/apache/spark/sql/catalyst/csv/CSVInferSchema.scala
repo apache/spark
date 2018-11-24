@@ -23,10 +23,12 @@ import scala.util.control.Exception.allCatch
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.TimeParser
 import org.apache.spark.sql.types._
 
-object CSVInferSchema {
+class CSVInferSchema(val options: CSVOptions) {
+
+  private val timeParser = TimeParser(options.timestampFormat, options.timeZone, options.locale)
 
   /**
    * Similar to the JSON schema inference
@@ -154,10 +156,7 @@ object CSVInferSchema {
 
   private def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
     // This case infers a custom `dataFormat` is set.
-    if ((allCatch opt options.timestampFormat.parse(field)).isDefined) {
-      TimestampType
-    } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
-      // We keep this for backwards compatibility.
+    if ((allCatch opt timeParser.toMicros(field)).isDefined) {
       TimestampType
     } else {
       tryParseBoolean(field, options)
