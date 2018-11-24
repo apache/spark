@@ -1610,6 +1610,14 @@ object SQLConf {
       """ "... N more fields" placeholder.""")
     .intConf
     .createWithDefault(25)
+
+  val LEGACY_TIME_PARSER_ENABLED =
+    buildConf("spark.sql.legacy.timeParser.enabled")
+    .doc("When set to true, java.text.SimpleDateFormat is using for formatting and parsing dates " +
+         " and timestamps in a locale-sensitive manner. When set to false, classes from " +
+         "java.time.* packages are using for the same purpose.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -2029,6 +2037,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
+
+  def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

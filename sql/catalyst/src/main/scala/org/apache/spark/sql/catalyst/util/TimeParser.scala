@@ -24,6 +24,8 @@ import java.util.{Locale, TimeZone}
 
 import org.apache.commons.lang3.time.FastDateFormat
 
+import org.apache.spark.sql.internal.SQLConf
+
 sealed trait TimeParser {
   def toMicros(s: String): Long
 }
@@ -53,10 +55,10 @@ class LegacyTimeParser(pattern: String, timeZone: TimeZone, locale: Locale) exte
 
 object TimeParser {
   def apply(format: String, timeZone: TimeZone, locale: Locale): TimeParser = {
-    if (true) {
-      new Iso8601TimeParser(format, timeZone, locale)
-    } else {
+    if (SQLConf.get.legacyTimeParserEnabled) {
       new LegacyTimeParser(format, timeZone, locale)
+    } else {
+      new Iso8601TimeParser(format, timeZone, locale)
     }
   }
 }
