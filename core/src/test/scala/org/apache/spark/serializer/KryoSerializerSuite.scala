@@ -18,6 +18,7 @@
 package org.apache.spark.serializer
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, FileOutputStream}
+import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -496,6 +497,17 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
     assert(deserializationStream.readValue[Any]() === world)
     deserializationStream.close()
     assert(serInstance.deserialize[Any](helloHello) === ((hello, hello)))
+  }
+
+  test("SPARK-25786: ByteBuffer.array -- UnsupportedOperationException") {
+    val serInstance = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
+    val obj = "UnsupportedOperationException"
+    val serObj = serInstance.serialize(obj)
+    val byteBuffer = ByteBuffer.allocateDirect(serObj.array().length)
+    byteBuffer.put(serObj.array())
+    byteBuffer.flip()
+    assert(serInstance.deserialize[Any](serObj) === (obj))
+    assert(serInstance.deserialize[Any](byteBuffer) === (obj))
   }
 }
 
