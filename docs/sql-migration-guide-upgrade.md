@@ -341,8 +341,6 @@ displayTitle: Spark SQL Upgrading Guide
    APIs. Instead, `DataFrame` remains the primary programming abstraction, which is analogous to the
    single-node data frame notion in these languages.
 
- - Dataset and DataFrame API `unionAll` has been deprecated and replaced by `union`
-
  - Dataset and DataFrame API `explode` has been deprecated, alternatively, use `functions.explode()` with `select` or `flatMap`
 
  - Dataset and DataFrame API `registerTempTable` has been deprecated and replaced by `createOrReplaceTempView`
