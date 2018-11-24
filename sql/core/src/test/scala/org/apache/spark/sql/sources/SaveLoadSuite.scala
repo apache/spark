@@ -148,7 +148,7 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
       val path = dir.getCanonicalPath
       Files.write(Paths.get(path, "empty"), Array[Byte]())
       Files.write(Paths.get(path, "notEmpty"), "a".getBytes)
-      val readback = spark.read.text(path)
+      val readback = spark.read.option("wholetext", true).text(path)
 
       assert(readback.rdd.getNumPartitions == 1)
     }
