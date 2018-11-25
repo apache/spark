@@ -51,7 +51,7 @@ class CompletionIteratorSuite extends SparkFunSuite {
     var sub = Iterator(1, 2, 3)
 
     val refQueue = new ReferenceQueue[Iterator[Int]]
-    var ref = new PhantomReference[Iterator[Int]](sub, refQueue)
+    val ref = new PhantomReference[Iterator[Int]](sub, refQueue)
 
     val iter = CompletionIterator[Int, Iterator[Int]](sub, {})
     sub = null
