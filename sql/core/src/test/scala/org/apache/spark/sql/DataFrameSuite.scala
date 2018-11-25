@@ -97,6 +97,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       unionDF.agg(avg('key), max('key), min('key), sum('key)),
       Row(50.5, 100, 1, 25250) :: Nil
     )
+
+    // unionAll is an alias of union
+    val unionAllDF = testData.unionAll(testData).unionAll(testData)
+      .unionAll(testData).unionAll(testData)
+
+    checkAnswer(unionDF, unionAllDF)
   }
 
   test("union should union DataFrames with UDTs (SPARK-13410)") {

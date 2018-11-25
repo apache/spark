@@ -2724,6 +2724,20 @@ setMethod("union",
             dataFrame(unioned)
           })
 
+#' Return a new SparkDataFrame containing the union of rows
+#'
+#' This is an alias for `union`.
+#'
+#' @rdname union
+#' @name unionAll
+#' @aliases unionAll,SparkDataFrame,SparkDataFrame-method
+#' @note unionAll since 1.4.0
+setMethod("unionAll",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            union(x, y)
+          })
+
 #' Return a new SparkDataFrame containing the union of rows, matched by column names
 #'
 #' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame

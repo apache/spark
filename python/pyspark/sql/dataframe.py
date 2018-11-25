@@ -1470,10 +1470,7 @@ class DataFrame(object):
         (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
-
-        .. note:: Deprecated in 2.0, use :func:`union` instead.
         """
-        warnings.warn("Deprecated in 2.0, use union instead.", DeprecationWarning)
         return self.union(other)
 
     @since(2.3)

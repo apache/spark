@@ -1816,20 +1816,6 @@ class Dataset[T] private[sql](
    * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
    * deduplication of elements), use this function followed by a [[distinct]].
    *
-   * Also as standard in SQL, this function resolves columns by position (not by name).
-   *
-   * @group typedrel
-   * @since 2.0.0
-   */
-  @deprecated("use union()", "2.0.0")
-  def unionAll(other: Dataset[T]): Dataset[T] = union(other)
-
-  /**
-   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
-   *
-   * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
-   * deduplication of elements), use this function followed by a [[distinct]].
-   *
    * Also as standard in SQL, this function resolves columns by position (not by name):
    *
    * {{{
@@ -1859,6 +1845,20 @@ class Dataset[T] private[sql](
     // using union to union many files or partitions.
     CombineUnions(Union(logicalPlan, other.logicalPlan))
   }
+
+  /**
+   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
+   * This is an alias for `union`.
+   *
+   * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
+   * deduplication of elements), use this function followed by a [[distinct]].
+   *
+   * Also as standard in SQL, this function resolves columns by position (not by name).
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def unionAll(other: Dataset[T]): Dataset[T] = union(other)
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
