@@ -575,6 +575,19 @@ case class Range(
   }
 }
 
+/**
+ * This is a Group by operator with the aggregate functions and projections.
+ *
+ * @param groupingExpressions expressions for grouping keys
+ * @param aggregateExpressions expressions for a project list, which could contain
+ *                   [[org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction]]s.
+ *
+ * Note: Currently, aggregateExpressions correspond to both [[AggregateExpression]] and the output
+ * projections (i.e., resultExpressions). Before introducing resultExpressions, we should avoid
+ * expression-level optimization on aggregateExpressions, which could reference an expression in
+ * groupingExpressions.
+ * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
+ */
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],

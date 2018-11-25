@@ -130,6 +130,9 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
  * Note that exprId and qualifiers are in a separate parameter list because
  * we only pattern match on child and name.
  *
+ * Note that when creating a new Alias, all the [[AttributeReference]] that refer to
+ * the original alias should be updated to the new one.
+ *
  * @param child The computation being performed
  * @param name The name to be associated with the result of computing [[child]].
  * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
