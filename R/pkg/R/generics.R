@@ -631,6 +631,9 @@ setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 #' @rdname union
 setGeneric("union", function(x, y) { standardGeneric("union") })
 
+#' @rdname union
+setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
+
 #' @rdname unionByName
 setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
 
