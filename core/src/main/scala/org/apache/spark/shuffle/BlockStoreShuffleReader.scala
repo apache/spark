@@ -17,14 +17,11 @@
 
 package org.apache.spark.shuffle
 
-import java.io.InputStream
-
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.SerializerManager
-import org.apache.spark.storage.{BlockId, BlockManager, ShuffleBlockFetcherIterator}
+import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
-import org.apache.spark.util.TaskCompletionListener
 import org.apache.spark.util.collection.ExternalSorter
 
 /**

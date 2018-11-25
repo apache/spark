@@ -460,11 +460,4 @@ public class TaskMemoryManager {
   public MemoryMode getTungstenMemoryMode() {
     return tungstenMemoryMode;
   }
-
-  @VisibleForTesting
-  int getNumConsumers() {
-    synchronized (this) {
-      return consumers.size();
-    }
-  }
 }
