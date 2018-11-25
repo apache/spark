@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.{AliasIdentifier}
+import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -580,12 +580,11 @@ case class Range(
  *
  * @param groupingExpressions expressions for grouping keys
  * @param aggregateExpressions expressions for a project list, which could contain
- *                   [[org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction]]s.
+ *                             [[AggregateFunction]]s.
  *
- * Note: Currently, aggregateExpressions correspond to both [[AggregateExpression]] and the output
- * projections (i.e., resultExpressions). Before introducing resultExpressions, we should avoid
- * expression-level optimization on aggregateExpressions, which could reference an expression in
- * groupingExpressions.
+ * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
+ * separating projection from grouping and aggregate, we should avoid expression-level optimization
+ * on aggregateExpressions, which could reference an expression in groupingExpressions.
  * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
  */
 case class Aggregate(
