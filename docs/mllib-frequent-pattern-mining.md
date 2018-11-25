@@ -15,7 +15,7 @@ a popular algorithm to mining frequent itemsets.
 ## FP-growth
 
 The FP-growth algorithm is described in the paper
-[Han et al., Mining frequent patterns without candidate generation](http://dx.doi.org/10.1145/335191.335372),
+[Han et al., Mining frequent patterns without candidate generation](https://doi.org/10.1145/335191.335372),
 where "FP" stands for frequent pattern.
 Given a dataset of transactions, the first step of FP-growth is to calculate item frequencies and identify frequent items.
 Different from [Apriori-like](http://en.wikipedia.org/wiki/Apriori_algorithm) algorithms designed for the same purpose,
@@ -23,7 +23,7 @@ the second step of FP-growth uses a suffix tree (FP-tree) structure to encode tr
 explicitly, which are usually expensive to generate.
 After the second step, the frequent itemsets can be extracted from the FP-tree.
 In `spark.mllib`, we implemented a parallel version of FP-growth called PFP,
-as described in [Li et al., PFP: Parallel FP-growth for query recommendation](http://dx.doi.org/10.1145/1454008.1454027).
+as described in [Li et al., PFP: Parallel FP-growth for query recommendation](https://doi.org/10.1145/1454008.1454027).
 PFP distributes the work of growing FP-trees based on the suffixes of transactions,
 and hence more scalable than a single-machine implementation.
 We refer users to the papers for more details.
@@ -122,7 +122,7 @@ Refer to the [`AssociationRules` Java docs](api/java/org/apache/spark/mllib/fpm/
 
 PrefixSpan is a sequential pattern mining algorithm described in
 [Pei et al., Mining Sequential Patterns by Pattern-Growth: The
-PrefixSpan Approach](http://dx.doi.org/10.1109%2FTKDE.2004.77). We refer
+PrefixSpan Approach](https://doi.org/10.1109%2FTKDE.2004.77). We refer
 the reader to the referenced paper for formalizing the sequential
 pattern mining problem.
 

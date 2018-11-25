@@ -57,7 +57,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
 
     For implicit preference data, the algorithm used is based on
     `"Collaborative Filtering for Implicit Feedback Datasets",
-    <http://dx.doi.org/10.1109/ICDM.2008.22>`_, adapted for the blocked
+    <https://doi.org/10.1109/ICDM.2008.22>`_, adapted for the blocked
     approach used here.
 
     Essentially instead of finding the low-rank approximations to the
