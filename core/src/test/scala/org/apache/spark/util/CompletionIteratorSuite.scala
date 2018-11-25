@@ -48,7 +48,7 @@ class CompletionIteratorSuite extends SparkFunSuite {
     assert(numTimesCompleted === 1)
   }
   test("reference to sub iterator should not be available after completion") {
-    var sub = Iterator[Int](1, 2, 3)
+    var sub = Iterator(1, 2, 3)
 
     val refQueue = new ReferenceQueue[Iterator[Int]]
     var ref = new PhantomReference[Iterator[Int]](sub, refQueue)
