@@ -17,6 +17,9 @@
 
 package org.apache.spark.util
 
+import java.lang.ref.PhantomReference
+import java.lang.ref.ReferenceQueue
+
 import org.apache.spark.SparkFunSuite
 
 class CompletionIteratorSuite extends SparkFunSuite {
@@ -43,5 +46,24 @@ class CompletionIteratorSuite extends SparkFunSuite {
     // SPARK-4264: Calling hasNext should not trigger the completion callback again.
     assert(!completionIter.hasNext)
     assert(numTimesCompleted === 1)
+  }
+  test("reference to sub iterator should not be available after completion") {
+    var sub = Iterator[Int](1, 2, 3)
+
+    val refQueue = new ReferenceQueue[Iterator[Int]]
+    var ref = new PhantomReference[Iterator[Int]](sub, refQueue)
+
+    val iter = CompletionIterator[Int, Iterator[Int]](sub, {})
+    sub = null
+    iter.toArray
+
+    var waitIters = 100
+    while(!ref.isEnqueued && waitIters > 0) {
+      System.gc()
+      Thread.sleep(100)
+      waitIters -= 1
+    }
+    assert(ref.isEnqueued)
+    assert(refQueue.poll() === ref)
   }
 }
