@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{LocalDateTime, ZoneOffset}
-import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
-import java.time.temporal.{ChronoField, ChronoUnit}
+import java.time._
+import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalQueries
 import java.util.{Locale, TimeZone}
 
 import scala.util.Try
+
 import org.apache.commons.lang3.time.FastDateFormat
+
 import org.apache.spark.sql.internal.SQLConf
 
 sealed trait TimeParser {
@@ -33,27 +35,32 @@ sealed trait TimeParser {
 }
 
 class Iso8601TimeParser(pattern: String, timeZone: TimeZone, locale: Locale) extends TimeParser {
-  val formatter = DateTimeFormatter.ofPattern(pattern)
-    .withLocale(locale)
-    .withZone(timeZone.toZoneId)
-    .withResolverStyle(ResolverStyle.SMART)
+  val formatter = DateTimeFormatter.ofPattern(pattern, locale)
 
-  // Seconds since 1970-01-01T00:00:00
-  val epoch = LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC)
-
-  def toMillis(s: String): Long = {
-    val localDateTime = LocalDateTime.parse(s, formatter)
-    ChronoUnit.MILLIS.between(epoch, localDateTime)
+  def toInstant(s: String): Instant = {
+    val temporalAccessor = formatter.parse(s)
+    if (temporalAccessor.query(TemporalQueries.offset()) == null) {
+      val localDateTime = LocalDateTime.from(temporalAccessor)
+      val zonedDateTime = ZonedDateTime.of(localDateTime, timeZone.toZoneId)
+      Instant.from(zonedDateTime)
+    } else {
+      Instant.from(temporalAccessor)
+    }
   }
 
-  def toMicros(s: String): Long = {
-    val localDateTime = LocalDateTime.parse(s, formatter)
-    ChronoUnit.MICROS.between(epoch, localDateTime)
+  def conv(instant: Instant, secMul: Long, nanoDiv: Long): Long = {
+    val sec = Math.multiplyExact(instant.getEpochSecond, secMul)
+    val result = Math.addExact(sec, instant.getNano / nanoDiv)
+    result
   }
+
+  def toMillis(s: String): Long = conv(toInstant(s), 1000, 1000000)
+
+  def toMicros(s: String): Long = conv(toInstant(s), 1000000, 1000)
 
   def toDays(s: String): Int = {
-    val localDateTime = LocalDateTime.parse(s, formatter)
-    ChronoUnit.DAYS.between(epoch, localDateTime).toInt
+    val instant = toInstant(s)
+    (instant.getEpochSecond / DateTimeUtils.SECONDS_PER_DAY).toInt
   }
 }
 

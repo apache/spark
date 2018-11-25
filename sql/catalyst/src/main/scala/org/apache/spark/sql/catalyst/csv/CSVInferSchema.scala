@@ -26,9 +26,13 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.util.TimeParser
 import org.apache.spark.sql.types._
 
-class CSVInferSchema(val options: CSVOptions) {
+class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
-  private val timeParser = TimeParser(options.timestampFormat, options.timeZone, options.locale)
+  @transient
+  private lazy val timeParser = TimeParser(
+    options.timestampFormat,
+    options.timeZone,
+    options.locale)
 
   /**
    * Similar to the JSON schema inference
