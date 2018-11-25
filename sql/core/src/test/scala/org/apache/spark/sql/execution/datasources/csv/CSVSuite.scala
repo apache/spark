@@ -37,7 +37,7 @@ import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
 import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
@@ -586,6 +586,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val results = spark.read
       .format("csv")
       .options(Map("comment" -> "~", "header" -> "false", "inferSchema" -> "true"))
+      .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
       .load(testFile(commentsFile))
       .collect()
 
@@ -626,22 +627,19 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val results = spark.read
       .format("csv")
       .options(options)
+      .option("timeZone", "UTC")
       .schema(customSchema)
       .load(testFile(datesFile))
       .select("date")
       .collect()
 
-    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm", Locale.US)
-    val expected = Seq(
-      new Date(dateFormat.parse("26/08/2015 18:00").getTime),
-      new Date(dateFormat.parse("27/10/2014 18:30").getTime),
-      new Date(dateFormat.parse("28/01/2016 20:00").getTime))
+    val expected = Seq("2015-08-26", "2014-10-27", "2016-01-28")
     val dates = results.toSeq.map(_.toSeq.head)
     expected.zip(dates).foreach {
       case (expectedDate, date) =>
         // As it truncates the hours, minutes and etc., we only check
         // if the dates (days, months and years) are the same via `toString()`.
-        assert(expectedDate.toString === date.toString)
+        assert(expectedDate == date.toString)
     }
   }
 
@@ -916,11 +914,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .option("header", "true")
         .load(iso8601datesPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd", Locale.US)
-      val expectedDates = dates.collect().map { r =>
-        // This should be ISO8601 formatted string.
-        Row(iso8501.format(r.toSeq.head))
-      }
+      val expectedDates = Seq(Row("2015-08-26"), Row("2014-10-27"), Row("2016-01-28"))
 
       checkAnswer(iso8601dates, expectedDates)
     }
@@ -1107,7 +1101,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
     Seq(false, true).foreach { multiLine =>
-      val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+      val schema = new StructType().add("a", IntegerType).add("b", DateType)
       // We use `PERMISSIVE` mode by default if invalid string is given.
       val df1 = spark
         .read
@@ -1139,7 +1133,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       val schemaWithCorrField2 = new StructType()
         .add("a", IntegerType)
         .add(columnNameOfCorruptRecord, StringType)
-        .add("b", TimestampType)
+        .add("b", DateType)
       val df3 = spark
         .read
         .option("mode", "permissive")
@@ -1325,7 +1319,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val columnNameOfCorruptRecord = "_corrupt_record"
     val schema = new StructType()
       .add("a", IntegerType)
-      .add("b", TimestampType)
+      .add("b", DateType)
       .add(columnNameOfCorruptRecord, StringType)
     // negative cases
     val msg = intercept[AnalysisException] {
