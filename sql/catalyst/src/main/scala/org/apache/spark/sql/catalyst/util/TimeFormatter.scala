@@ -28,15 +28,15 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.internal.SQLConf
 
-sealed trait TimeParser {
-  def toMillis(s: String): Long
-  def toMicros(s: String): Long
-  def toDays(s: String): Int
-
-  def fromMicros(us: Long): String
+sealed trait TimeFormatter {
+  def parse(s: String): Long
+  def format(us: Long): String
 }
 
-class Iso8601TimeParser(pattern: String, timeZone: TimeZone, locale: Locale) extends TimeParser {
+class Iso8601TimeFormatter(
+    pattern: String,
+    timeZone: TimeZone,
+    locale: Locale) extends TimeFormatter {
   val formatter = DateTimeFormatter.ofPattern(pattern, locale)
 
   def toInstant(s: String): Instant = {
@@ -56,16 +56,9 @@ class Iso8601TimeParser(pattern: String, timeZone: TimeZone, locale: Locale) ext
     result
   }
 
-  def toMillis(s: String): Long = conv(toInstant(s), 1000, 1000000)
+  def parse(s: String): Long = conv(toInstant(s), 1000000, 1000)
 
-  def toMicros(s: String): Long = conv(toInstant(s), 1000000, 1000)
-
-  def toDays(s: String): Int = {
-    val instant = toInstant(s)
-    (instant.getEpochSecond / DateTimeUtils.SECONDS_PER_DAY).toInt
-  }
-
-  def fromMicros(us: Long): String = {
+  def format(us: Long): String = {
     val secs = Math.floorDiv(us, 1000000)
     val mos = Math.floorMod(us, 1000000)
     val instant = Instant.ofEpochSecond(secs, mos * 1000)
@@ -74,35 +67,36 @@ class Iso8601TimeParser(pattern: String, timeZone: TimeZone, locale: Locale) ext
   }
 }
 
-class LegacyTimeParser(pattern: String, timeZone: TimeZone, locale: Locale) extends TimeParser {
+class LegacyTimeFormatter(
+    pattern: String,
+    timeZone: TimeZone,
+    locale: Locale) extends TimeFormatter {
   val format = FastDateFormat.getInstance(pattern, timeZone, locale)
 
-  def toMillis(s: String): Long = format.parse(s).getTime
+  protected def toMillis(s: String): Long = format.parse(s).getTime
 
-  def toMicros(s: String): Long = toMillis(s) * DateTimeUtils.MICROS_PER_MILLIS
+  def parse(s: String): Long = toMillis(s) * DateTimeUtils.MICROS_PER_MILLIS
 
-  def toDays(s: String): Int = DateTimeUtils.millisToDays(toMillis(s))
-
-  def fromMicros(us: Long): String = {
+  def format(us: Long): String = {
     format.format(DateTimeUtils.toJavaTimestamp(us))
   }
 }
 
-class LegacyFallbackTimeParser(
+class LegacyFallbackTimeFormatter(
     pattern: String,
     timeZone: TimeZone,
-    locale: Locale) extends LegacyTimeParser(pattern, timeZone, locale) {
+    locale: Locale) extends LegacyTimeFormatter(pattern, timeZone, locale) {
   override def toMillis(s: String): Long = {
     Try {super.toMillis(s)}.getOrElse(DateTimeUtils.stringToTime(s).getTime)
   }
 }
 
-object TimeParser {
-  def apply(format: String, timeZone: TimeZone, locale: Locale): TimeParser = {
+object TimeFormatter {
+  def apply(format: String, timeZone: TimeZone, locale: Locale): TimeFormatter = {
     if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyFallbackTimeParser(format, timeZone, locale)
+      new LegacyFallbackTimeFormatter(format, timeZone, locale)
     } else {
-      new Iso8601TimeParser(format, timeZone, locale)
+      new Iso8601TimeFormatter(format, timeZone, locale)
     }
   }
 }
