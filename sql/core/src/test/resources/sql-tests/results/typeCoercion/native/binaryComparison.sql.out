@@ -1669,7 +1669,7 @@ NULL
 -- !query 205
 SELECT date('1996-09-09') = '1996-09-09' FROM t
 -- !query 205 schema
-struct<(CAST(CAST(1996-09-09 AS DATE) AS STRING) = 1996-09-09):boolean>
+struct<(CAST(1996-09-09 AS DATE) = CAST(1996-09-09 AS DATE)):boolean>
 -- !query 205 output
 true
 
@@ -1677,7 +1677,7 @@ true
 -- !query 206
 SELECT date('1996-9-10') > '1996-09-09' FROM t
 -- !query 206 schema
-struct<(CAST(CAST(1996-9-10 AS DATE) AS STRING) > 1996-09-09):boolean>
+struct<(CAST(1996-9-10 AS DATE) > CAST(1996-09-09] AS DATE)):boolean>
 -- !query 206 output
 true
 
@@ -1869,7 +1869,7 @@ true
 -- !query 230
 SELECT timestamp('1996-09-09 12:12:12.5' )> '1996-09-09 12:12:12.4' FROM t
 -- !query 230 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) > 1996-09-09 12:12:12.4):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) > CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 230 output
 true
 
@@ -1877,7 +1877,7 @@ true
 -- !query 231
 SELECT timestamp('1996-09-09 12:12:12.5' )>= '1996-09-09 12:12:12.4' FROM t
 -- !query 231 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) >= 1996-09-09 12:12:12.4):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) >= CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 231 output
 true
 
@@ -1885,7 +1885,7 @@ true
 -- !query 232
 SELECT timestamp('1996-09-09 12:12:12.5' )< '1996-09-09 12:12:12.4' FROM t
 -- !query 232 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) < 1996-09-09 12:12:12.4):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) < CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 232 output
 false
 
@@ -1893,7 +1893,7 @@ false
 -- !query 233
 SELECT timestamp('1996-09-09 12:12:12.5' )<= '1996-09-09 12:12:12.4' FROM t
 -- !query 233 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) <= 1996-09-09 12:12:12.4):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) <= CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 233 output
 false
 

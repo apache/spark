@@ -27,8 +27,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 
 /**
@@ -119,14 +121,26 @@ object TypeCoercion {
    * other is a Timestamp by making the target type to be String.
    */
   private def findCommonTypeForBinaryComparison(
-      dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
-    // We should cast all relative timestamp/date/string comparison into string comparisons
-    // This behaves as a user would expect because timestamp strings sort lexicographically.
-    // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
+      left: Expression,
+      right: Expression,
+      conf: SQLConf): Option[DataType] = (left.dataType, right.dataType) match {
+    // We should cast all relative timestamp/date/string comparison into string comparisons only if
+    // the particular literal value cannot been converted into a valid Timestamp/Date. If the value
+    // can be converted into a valid TimeStamp/Date then we cast the right side literal value to
+    // 'Timestamp'/'Date', for more details refer the description provided in stringToTimestamp()
+    // method.
     case (StringType, DateType) => Some(StringType)
-    case (DateType, StringType) => Some(StringType)
+    case (DateType, StringType) => DateTimeUtils
+      .stringToDate(UTF8String.fromString(right.toString)) match {
+      case Some(v) => Some(DateType)
+      case None => Some(StringType)
+    }
     case (StringType, TimestampType) => Some(StringType)
-    case (TimestampType, StringType) => Some(StringType)
+    case (TimestampType, StringType) => DateTimeUtils
+      .stringToTimestamp(UTF8String.fromString(right.toString)) match {
+      case Some(v) => Some(TimestampType)
+      case None => Some(StringType)
+    }
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
 
@@ -424,8 +438,8 @@ object TypeCoercion {
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
-          if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
-        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
+          if findCommonTypeForBinaryComparison(left, right, conf).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(left, right, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
@@ -471,7 +485,7 @@ object TypeCoercion {
         val rhs = sub.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          findCommonTypeForBinaryComparison(l.dataType, r.dataType, conf)
+          findCommonTypeForBinaryComparison(l, r, conf)
             .orElse(findTightestCommonType(l.dataType, r.dataType))
         }
 
