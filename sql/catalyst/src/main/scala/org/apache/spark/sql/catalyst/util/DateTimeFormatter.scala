@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.time._
-import java.time.format.{DateTimeFormatter => JavaDateTimeFormatter}
-import java.time.temporal.TemporalQueries
+import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.{ChronoField, TemporalQueries}
 import java.util.{Locale, TimeZone}
 
 import scala.util.Try
@@ -37,7 +37,16 @@ class Iso8601DateTimeFormatter(
     pattern: String,
     timeZone: TimeZone,
     locale: Locale) extends DateTimeFormatter {
-  val formatter = JavaDateTimeFormatter.ofPattern(pattern, locale)
+  val formatter = new DateTimeFormatterBuilder()
+    .appendPattern(pattern)
+    .parseDefaulting(ChronoField.YEAR_OF_ERA, 1970)
+    .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
+    .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
+    .parseDefaulting(ChronoField.HOUR_OF_DAY, 0)
+    .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
+    .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
+    .parseDefaulting(ChronoField.NANO_OF_SECOND, 0)
+    .toFormatter(locale)
 
   def toInstant(s: String): Instant = {
     val temporalAccessor = formatter.parse(s)
@@ -110,33 +119,17 @@ class Iso8601DateFormatter(
     pattern: String,
     timeZone: TimeZone,
     locale: Locale) extends DateFormatter {
-  val formatter = JavaDateTimeFormatter.ofPattern(pattern, locale)
 
-  protected def toInstant(s: String): Instant = {
-    val temporalAccessor = formatter.parse(s)
-    if (temporalAccessor.query(TemporalQueries.offset()) == null) {
-      val localDate = LocalDate.from(temporalAccessor)
-      val zonedDate = localDate.atStartOfDay(timeZone.toZoneId)
-      Instant.from(zonedDate)
-    } else {
-      Instant.from(temporalAccessor)
-    }
-  }
-
-  protected def conv(instant: Instant, secMul: Long, nanoDiv: Long): Long = {
-    val sec = Math.multiplyExact(instant.getEpochSecond, secMul)
-    val result = Math.addExact(sec, instant.getNano / nanoDiv)
-    result
-  }
+  val dateTimeFormatter = new Iso8601DateTimeFormatter(pattern, timeZone, locale)
 
   override def parse(s: String): Int = {
-    val seconds = toInstant(s).getEpochSecond
+    val seconds = dateTimeFormatter.toInstant(s).getEpochSecond
     (seconds / DateTimeUtils.SECONDS_PER_DAY).toInt
   }
 
   override def format(days: Int): String = {
     val instant = Instant.ofEpochSecond(days * DateTimeUtils.SECONDS_PER_DAY)
-    formatter.withZone(timeZone.toZoneId).format(instant)
+    dateTimeFormatter.formatter.withZone(timeZone.toZoneId).format(instant)
   }
 }
 
