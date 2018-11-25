@@ -21,13 +21,11 @@ import java.io.InputStream
 import java.math.BigDecimal
 
 import scala.util.control.NonFatal
-
 import com.univocity.parsers.csv.CsvParser
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils, FailureSafeParser, DateTimeFormatter}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -75,8 +73,11 @@ class UnivocityParser(
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
-  private val timeParser = DateTimeFormatter(options.timestampFormat, options.timeZone, options.locale)
-  private val dateParser = DateTimeFormatter(options.dateFormat, options.timeZone, options.locale)
+  private val timeFormatter = DateTimeFormatter(
+    options.timestampFormat,
+    options.timeZone,
+    options.locale)
+  private val dateFormatter = DateFormatter(options.dateFormat, options.timeZone, options.locale)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -156,10 +157,10 @@ class UnivocityParser(
       }
 
     case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(timeParser.parse)
+      nullSafeDatum(d, name, nullable, options)(timeFormatter.parse)
 
     case _: DateType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(dateParser.toDays)
+      nullSafeDatum(d, name, nullable, options)(dateFormatter.parse)
 
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
