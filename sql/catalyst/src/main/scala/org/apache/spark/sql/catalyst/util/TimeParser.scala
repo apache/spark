@@ -32,6 +32,8 @@ sealed trait TimeParser {
   def toMillis(s: String): Long
   def toMicros(s: String): Long
   def toDays(s: String): Int
+
+  def fromMicros(us: Long): String
 }
 
 class Iso8601TimeParser(pattern: String, timeZone: TimeZone, locale: Locale) extends TimeParser {
@@ -62,6 +64,14 @@ class Iso8601TimeParser(pattern: String, timeZone: TimeZone, locale: Locale) ext
     val instant = toInstant(s)
     (instant.getEpochSecond / DateTimeUtils.SECONDS_PER_DAY).toInt
   }
+
+  def fromMicros(us: Long): String = {
+    val secs = Math.floorDiv(us, 1000000)
+    val mos = Math.floorMod(us, 1000000)
+    val instant = Instant.ofEpochSecond(secs, mos * 1000)
+
+    formatter.withZone(timeZone.toZoneId).format(instant)
+  }
 }
 
 class LegacyTimeParser(pattern: String, timeZone: TimeZone, locale: Locale) extends TimeParser {
@@ -72,6 +82,10 @@ class LegacyTimeParser(pattern: String, timeZone: TimeZone, locale: Locale) exte
   def toMicros(s: String): Long = toMillis(s) * DateTimeUtils.MICROS_PER_MILLIS
 
   def toDays(s: String): Int = DateTimeUtils.millisToDays(toMillis(s))
+
+  def fromMicros(us: Long): String = {
+    format.format(DateTimeUtils.toJavaTimestamp(us))
+  }
 }
 
 class LegacyFallbackTimeParser(

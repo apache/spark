@@ -149,7 +149,7 @@ class CSVOptions(
   val dateFormat: String = parameters.getOrElse("dateFormat", "yyyy-MM-dd")
 
   val timestampFormat: String =
-    parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSX")
+    parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
