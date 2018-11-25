@@ -1806,7 +1806,7 @@ class DataFrame(object):
 
         This method implements a variation of the Greenwald-Khanna
         algorithm (with some speed optimizations). The algorithm was first
-        present in [[http://dx.doi.org/10.1145/375663.375670
+        present in [[https://doi.org/10.1145/375663.375670
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
@@ -1928,7 +1928,7 @@ class DataFrame(object):
         """
         Finding frequent items for columns, possibly with false positives. Using the
         frequent element count algorithm described in
-        "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
+        "https://doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
         .. note:: This function is meant for exploratory data analysis, as we make no

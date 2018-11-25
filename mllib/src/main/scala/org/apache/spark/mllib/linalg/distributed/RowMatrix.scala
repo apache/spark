@@ -540,7 +540,7 @@ class RowMatrix @Since("1.0.0") (
    * decomposition (factorization) for the [[RowMatrix]] of a tall and skinny shape.
    * Reference:
    *  Paul G. Constantine, David F. Gleich. "Tall and skinny QR factorizations in MapReduce
-   *  architectures" (see <a href="http://dx.doi.org/10.1145/1996092.1996103">here</a>)
+   *  architectures" (see <a href="https://doi.org/10.1145/1996092.1996103">here</a>)
    *
    * @param computeQ whether to computeQ
    * @return QRDecomposition(Q, R), Q = null if computeQ = false.

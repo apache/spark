@@ -45,7 +45,7 @@ object StatFunctions extends Logging {
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
    * optimizations).
-   * The algorithm was first present in <a href="http://dx.doi.org/10.1145/375663.375670">
+   * The algorithm was first present in <a href="https://doi.org/10.1145/375663.375670">
    * Space-efficient Online Computation of Quantile Summaries</a> by Greenwald and Khanna.
    *
    * @param df the dataframe

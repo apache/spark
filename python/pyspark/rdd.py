@@ -2354,7 +2354,7 @@ class RDD(object):
         The algorithm used is based on streamlib's implementation of
         `"HyperLogLog in Practice: Algorithmic Engineering of a State
         of The Art Cardinality Estimation Algorithm", available here
-        <http://dx.doi.org/10.1145/2452376.2452456>`_.
+        <https://doi.org/10.1145/2452376.2452456>`_.
 
         :param relativeSD: Relative accuracy. Smaller values create
                            counters that require more space.
