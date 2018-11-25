@@ -926,6 +926,13 @@ specific to Spark on Kubernetes.
    <code>spark.kubernetes.executor.podTemplateFile=/path/to/executor-pod-template.yaml`</code>
   </td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.executor.deleteOnTermination</code></td>
+  <td>true</td>
+  <td>
+  Specify whether executor pods should be deleted in case of failure or normal termination.
+  </td>
+</tr>
 </table>
 
 #### Pod template properties
