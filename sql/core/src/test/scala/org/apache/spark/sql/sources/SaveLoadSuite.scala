@@ -147,7 +147,7 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
   test("skip empty files in load") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
-      Files.write(Paths.get(path, "empty"), Array[Byte]())
+      Files.write(Paths.get(path, "empty"), Array.empty[Byte])
       Files.write(Paths.get(path, "notEmpty"), "a".getBytes)
       val readback = spark.read.option("wholetext", true).text(path)
 
