@@ -20,7 +20,7 @@ package org.apache.spark
 import java.util.Properties
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.{ArrayBuffer, LinkedHashSet}
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
@@ -55,11 +55,11 @@ private[spark] class TaskContextImpl(
   extends TaskContext
   with Logging {
 
-  /** Collection of callback functions to execute when the task completes. */
-  @transient private val onCompleteCallbacks = new LinkedHashSet[TaskCompletionListener]
+  /** List of callback functions to execute when the task completes. */
+  @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
 
-  /** Collection of callback functions to execute when the task fails. */
-  @transient private val onFailureCallbacks = new LinkedHashSet[TaskFailureListener]
+  /** List of callback functions to execute when the task fails. */
+  @transient private val onFailureCallbacks = new ArrayBuffer[TaskFailureListener]
 
   // If defined, the corresponding task has been killed and this option contains the reason.
   @volatile private var reasonIfKilled: Option[String] = None
@@ -99,13 +99,6 @@ private[spark] class TaskContextImpl(
     this
   }
 
-  override def removeTaskCompletionListener(listener: TaskCompletionListener)
-      : this.type = synchronized {
-    onCompleteCallbacks -= listener
-    this
-  }
-
-  /** Marks the task as failed and triggers the failure listeners. */
   @GuardedBy("this")
   private[spark] override def markTaskFailed(error: Throwable): Unit = synchronized {
     if (failed) return
@@ -126,13 +119,13 @@ private[spark] class TaskContextImpl(
   }
 
   private def invokeListeners[T](
-      listeners: Iterable[T],
+      listeners: Seq[T],
       name: String,
       error: Option[Throwable])(
       callback: T => Unit): Unit = {
     val errorMsgs = new ArrayBuffer[String](2)
     // Process callbacks in the reverse order of registration
-    listeners.toSeq.reverse.foreach { listener =>
+    listeners.reverse.foreach { listener =>
       try {
         callback(listener)
       } catch {

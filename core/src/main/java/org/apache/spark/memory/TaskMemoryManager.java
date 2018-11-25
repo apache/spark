@@ -232,11 +232,6 @@ public class TaskMemoryManager {
   public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
     logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size), consumer);
     memoryManager.releaseExecutionMemory(size, taskAttemptId, consumer.getMode());
-    synchronized (this) {
-      if (size == consumer.getUsed()) {
-        consumers.remove(consumer);
-      }
-    }
   }
 
   /**

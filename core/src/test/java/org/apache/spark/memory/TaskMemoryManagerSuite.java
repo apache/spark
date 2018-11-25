@@ -204,24 +204,4 @@ public class TaskMemoryManagerSuite {
     Assert.assertSame(MemoryMode.OFF_HEAP, manager.tungstenMemoryMode);
   }
 
-  @Test
-  public void stopTrackingOnReleaseExecutionMemory() {
-    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
-    memoryManager.limit(100);
-    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
-
-    TestMemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
-    c.use(20);
-    Assert.assertEquals(1, manager.getNumConsumers());
-    Assert.assertEquals(20, c.getUsed());
-
-    c.freeMemory(10);
-    Assert.assertEquals(1, manager.getNumConsumers());
-    Assert.assertEquals(10, c.getUsed());
-
-    c.freeMemory(10);
-    Assert.assertEquals(0, manager.getNumConsumers());
-    Assert.assertEquals(0, c.getUsed());
-  }
-
 }
