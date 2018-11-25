@@ -57,11 +57,11 @@ class CompletionIteratorSuite extends SparkFunSuite {
     sub = null
     iter.toArray
 
-    var waitIters = 100
-    while(!ref.isEnqueued && waitIters > 0) {
+    for (_ <- 1 to 100 if !ref.isEnqueued) {
       System.gc()
-      Thread.sleep(100)
-      waitIters -= 1
+      if (!ref.isEnqueued) {
+        Thread.sleep(10)
+      }
     }
     assert(ref.isEnqueued)
     assert(refQueue.poll() === ref)
