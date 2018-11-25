@@ -879,7 +879,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many jobs the Spark UI and status APIs remember before garbage collecting.
-    This is a target maximum, and fewer elements may be retained in some circumstances.
+    This is a soft threshold. That is, the number of jobs can display between 90% of the
+    threshold value to the threshold value.
   </td>
 </tr>
 <tr>
@@ -887,7 +888,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many stages the Spark UI and status APIs remember before garbage collecting.
-    This is a target maximum, and fewer elements may be retained in some circumstances.
+    This is a soft threshold. That is, the number of stages can display between 90% of the
+    threshold value to the threshold value.
   </td>
 </tr>
 <tr>
@@ -895,7 +897,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>100000</td>
   <td>
     How many tasks the Spark UI and status APIs remember before garbage collecting.
-    This is a target maximum, and fewer elements may be retained in some circumstances.
+    This is a soft threshold. That is, the number of tasks can display between 90% of the
+    threshold value to the threshold value.
   </td>
 </tr>
 <tr>
