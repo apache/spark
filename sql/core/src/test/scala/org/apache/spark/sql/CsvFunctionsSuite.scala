@@ -53,7 +53,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
   test("checking the columnNameOfCorruptRecord option") {
     val columnNameOfCorruptRecord = "_unparsed"
     val df = Seq("0,2013-111-11 12:13:14", "1,1983-08-04").toDS()
-    val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+    val schema = new StructType().add("a", IntegerType).add("b", DateType)
     val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
     val df2 = df
       .select(from_csv($"value", schemaWithCorrField1, Map(
