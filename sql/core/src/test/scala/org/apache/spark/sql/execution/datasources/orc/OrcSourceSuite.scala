@@ -186,6 +186,54 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
+  protected def testORCTableLocation(isConvertMetastore: Boolean): Unit = {
+    val tableName1 = "spark_orc1"
+    val tableName2 = "spark_orc2"
+
+    withTempDir { dir =>
+      val someDF1 = Seq((1, 1, "orc1"), (2, 2, "orc2")).toDF("c1", "c2", "c3").repartition(1)
+      withTable(tableName1, tableName2) {
+        val dataDir = s"${dir.getCanonicalPath}/dir1/"
+        val parentDir = s"${dir.getCanonicalPath}/"
+        val wildCardDir = new File(s"${dir}/*").toURI
+        someDF1.write.orc(dataDir)
+        val parentDirStatement =
+          s"""
+             |CREATE EXTERNAL TABLE $tableName1(
+             |  c1 int,
+             |  c2 int,
+             |  c3 string)
+             |STORED AS orc
+             |LOCATION '${parentDir}'""".stripMargin
+        sql(parentDirStatement)
+        val parentDirSqlStatement = s"select * from ${tableName1}"
+        if (isConvertMetastore) {
+          checkAnswer(sql(parentDirSqlStatement), Nil)
+        } else {
+         checkAnswer(sql(parentDirSqlStatement),
+           (1 to 2).map(i => Row(i, i, s"orc$i")))
+        }
+
+        val wildCardStatement =
+          s"""
+             |CREATE EXTERNAL TABLE $tableName2(
+             |  c1 int,
+             |  c2 int,
+             |  c3 string)
+             |STORED AS orc
+             |LOCATION '$wildCardDir'""".stripMargin
+        sql(wildCardStatement)
+        val wildCardSqlStatement = s"selet * from ${tableName2}"
+        if (isConvertMetastore) {
+          checkAnswer(sql(wildCardStatement),
+            (1 to 2).map(i => Row(i, i, s"orc$i")))
+        } else {
+          checkAnswer(sql(wildCardStatement), Nil)
+        }
+      }
+    }
+  }
+
   test("create temporary orc table") {
     checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_source"), Row(10))
 

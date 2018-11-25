@@ -190,4 +190,12 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-25993 Add test cases for resolution of ORC table location") {
+    Seq(true, false).foreach { convertMetastore =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
+        testORCTableLocation(convertMetastore)
+      }
+    }
+  }
 }

@@ -597,38 +597,6 @@ abstract class OrcQueryTest extends OrcTest {
       assert(m4.contains("Malformed ORC file"))
     }
   }
-
-  test("SPARK-25993 Add test cases for resolution of ORC table location") {
-    withTempDir { dir =>
-      val someDF1 = Seq((1, 1, "orc1"), (2, 2, "orc2")).toDF("c1", "c2", "c3").repartition(1)
-      val tableName1 = "orcTable1"
-      val tableName2 = "orcTable2"
-      withTable(tableName1, tableName2) {
-        val path1 = s"${dir.getCanonicalPath}/dir1/"
-        someDF1.write.orc(path1)
-        val path2 = s"${dir.getCanonicalPath}/"
-        val sqlStatement1 =
-          s"""
-             |CREATE EXTERNAL TABLE $tableName1(C1 INT, C2 INT, C3 STRING)
-             |STORED AS ORC LOCATION '${path2}'
-         """.stripMargin
-        sql(sqlStatement1)
-        checkAnswer(
-          sql(s"SELECT * FROM ${tableName1}"), Nil)
-
-        val path3 = s"${dir.getCanonicalPath}/*"
-        val sqlStatement2 =
-          s"""
-             |CREATE EXTERNAL TABLE $tableName2(C1 INT, C2 INT, C3 STRING)
-             |STORED AS ORC LOCATION '${path3}'
-         """.stripMargin
-        sql(sqlStatement2)
-        checkAnswer(
-          sql(s"SELECT * FROM ${tableName2}"),
-          (1 to 2).map(i => Row(i, i, s"orc$i")))
-      }
-    }
-  }
 }
 
 class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
