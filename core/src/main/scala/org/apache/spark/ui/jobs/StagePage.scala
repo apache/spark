@@ -91,7 +91,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val parameterTaskSortColumn = UIUtils.stripXSS(request.getParameter("task.sort"))
     val parameterTaskSortDesc = UIUtils.stripXSS(request.getParameter("task.desc"))
     val parameterTaskPageSize = UIUtils.stripXSS(request.getParameter("task.pageSize"))
-    val parameterTaskPrevPageSize = UIUtils.stripXSS(request.getParameter("task.prevPageSize"))
 
     val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
     val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
@@ -99,8 +98,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     }.getOrElse("Index")
     val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
     val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
-    val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)
-
     val stageId = parameterId.toInt
     val stageAttemptId = parameterAttempt.toInt
 
@@ -155,20 +152,20 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           }}
           {if (hasOutput(stageData)) {
             <li>
-              <strong>Output: </strong>
+              <strong>Output Size / Records: </strong>
               {s"${Utils.bytesToString(stageData.outputBytes)} / ${stageData.outputRecords}"}
             </li>
           }}
           {if (hasShuffleRead(stageData)) {
             <li>
-              <strong>Shuffle Read: </strong>
+              <strong>Shuffle Read Size / Records: </strong>
               {s"${Utils.bytesToString(stageData.shuffleReadBytes)} / " +
                s"${stageData.shuffleReadRecords}"}
             </li>
           }}
           {if (hasShuffleWrite(stageData)) {
             <li>
-              <strong>Shuffle Write: </strong>
+              <strong>Shuffle Write Size / Records: </strong>
                {s"${Utils.bytesToString(stageData.shuffleWriteBytes)} / " +
                s"${stageData.shuffleWriteRecords}"}
             </li>
@@ -186,10 +183,11 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           {if (!stageJobIds.isEmpty) {
             <li>
               <strong>Associated Job Ids: </strong>
-              {stageJobIds.map(jobId => {val detailUrl = "%s/jobs/job/?id=%s".format(
-                UIUtils.prependBaseUri(request, parent.basePath), jobId)
-              <a href={s"${detailUrl}"}>{s"${jobId}"} &nbsp;&nbsp;</a>
-            })}
+              {stageJobIds.sorted.map { jobId =>
+                val jobURL = "%s/jobs/job/?id=%s"
+                  .format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
+                <a href={jobURL}>{jobId.toString}</a><span>&nbsp;</span>
+              }}
             </li>
           }}
         </ul>
@@ -278,15 +276,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       accumulableRow,
       stageData.accumulatorUpdates.toSeq)
 
-    val page: Int = {
-      // If the user has changed to a larger page size, then go to page 1 in order to avoid
-      // IndexOutOfBoundsException.
-      if (taskPageSize <= taskPrevPageSize) {
-        taskPage
-      } else {
-        1
-      }
-    }
     val currentTime = System.currentTimeMillis()
     val (taskTable, taskTableHTML) = try {
       val _taskTable = new TaskPagedTable(
@@ -299,7 +288,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
         desc = taskSortDesc,
         store = parent.store
       )
-      (_taskTable, _taskTable.table(page))
+      (_taskTable, _taskTable.table(taskPage))
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
         val errorMessage =
@@ -732,8 +721,6 @@ private[ui] class TaskPagedTable(
 
   override def pageSizeFormField: String = "task.pageSize"
 
-  override def prevPageSizeFormField: String = "task.prevPageSize"
-
   override def pageNumberFormField: String = "task.page"
 
   override val dataSource: TaskDataSource = new TaskDataSource(
@@ -857,7 +844,7 @@ private[ui] class TaskPagedTable(
         </div>
       </td>
       <td>{UIUtils.formatDate(task.launchTime)}</td>
-      <td>{formatDuration(task.duration)}</td>
+      <td>{formatDuration(task.taskMetrics.map(_.executorRunTime))}</td>
       <td class={TaskDetailsClassNames.SCHEDULER_DELAY}>
         {UIUtils.formatDuration(AppStatusUtils.schedulerDelay(task))}
       </td>
@@ -1010,7 +997,9 @@ private[ui] object ApiHelper {
     HEADER_EXECUTOR -> TaskIndexNames.EXECUTOR,
     HEADER_HOST -> TaskIndexNames.HOST,
     HEADER_LAUNCH_TIME -> TaskIndexNames.LAUNCH_TIME,
-    HEADER_DURATION -> TaskIndexNames.DURATION,
+    // SPARK-26109: Duration of task as executorRunTime to make it consistent with the
+    // aggregated tasks summary metrics table and the previous versions of Spark.
+    HEADER_DURATION -> TaskIndexNames.EXEC_RUN_TIME,
     HEADER_SCHEDULER_DELAY -> TaskIndexNames.SCHEDULER_DELAY,
     HEADER_DESER_TIME -> TaskIndexNames.DESER_TIME,
     HEADER_GC_TIME -> TaskIndexNames.GC_TIME,

@@ -28,6 +28,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, StreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
@@ -35,7 +36,7 @@ import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.Clock
 
 class ContinuousExecution(
     sparkSession: SparkSession,
@@ -164,8 +165,8 @@ class ContinuousExecution(
         val newOutput = readSupport.fullSchema().toAttributes
 
         assert(output.size == newOutput.size,
-          s"Invalid reader: ${Utils.truncatedString(output, ",")} != " +
-            s"${Utils.truncatedString(newOutput, ",")}")
+          s"Invalid reader: ${truncatedString(output, ",")} != " +
+            s"${truncatedString(newOutput, ",")}")
         replacements ++= output.zip(newOutput)
 
         val loggedOffset = offsets.offsets(0)
@@ -262,7 +263,12 @@ class ContinuousExecution(
 
       reportTimeTaken("runContinuous") {
         SQLExecution.withNewExecutionId(
-          sparkSessionForQuery, lastExecution)(lastExecution.toRdd)
+          sparkSessionForQuery, lastExecution) {
+          // Materialize `executedPlan` so that accessing it when `toRdd` is running doesn't need to
+          // wait for a lock
+          lastExecution.executedPlan
+          lastExecution.toRdd
+        }
       }
     } catch {
       case t: Throwable if StreamExecution.isInterruptionException(t, sparkSession.sparkContext) &&

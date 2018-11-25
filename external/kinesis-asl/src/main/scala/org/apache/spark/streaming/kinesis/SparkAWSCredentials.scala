@@ -14,13 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.streaming.kinesis
 
-import scala.collection.JavaConverters._
+package org.apache.spark.streaming.kinesis
 
 import com.amazonaws.auth._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 
 /**
@@ -84,14 +83,14 @@ private[kinesis] final case class STSCredentials(
   }
 }
 
-@InterfaceStability.Evolving
+@Evolving
 object SparkAWSCredentials {
   /**
    * Builder for [[SparkAWSCredentials]] instances.
    *
    * @since 2.2.0
    */
-  @InterfaceStability.Evolving
+  @Evolving
   class Builder {
     private var basicCreds: Option[BasicCredentials] = None
     private var stsCreds: Option[STSCredentials] = None

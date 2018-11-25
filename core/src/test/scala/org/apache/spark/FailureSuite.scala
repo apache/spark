@@ -257,7 +257,9 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local[1,2]", "test")
     intercept[SparkException] {
       sc.parallelize(1 to 2).foreach { i =>
+        // scalastyle:off throwerror
         throw new LinkageError()
+        // scalastyle:on throwerror
       }
     }
   }

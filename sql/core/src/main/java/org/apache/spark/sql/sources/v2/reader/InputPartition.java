@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources.v2.reader;
 
 import java.io.Serializable;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * A serializable representation of an input partition returned by
@@ -32,7 +32,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * the actual reading. So {@link InputPartition} must be serializable while {@link PartitionReader}
  * doesn't need to be.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface InputPartition extends Serializable {
 
   /**

@@ -231,7 +231,8 @@ case class AlterTableAddColumnsCommand(
     }
 
     if (DDLUtils.isDatasourceTable(catalogTable)) {
-      DataSource.lookupDataSource(catalogTable.provider.get, conf).newInstance() match {
+      DataSource.lookupDataSource(catalogTable.provider.get, conf).
+        getConstructor().newInstance() match {
         // For datasource table, this command can only support the following File format.
         // TextFileFormat only default to one column "value"
         // Hive type is already considered as hive serde table, so the logic will not
@@ -306,7 +307,8 @@ case class LoadDataCommand(
     val loadPath = {
       if (isLocal) {
         val localFS = FileContext.getLocalFSFileContext()
-        makeQualified(FsConstants.LOCAL_FS_URI, localFS.getWorkingDirectory(), new Path(path))
+        LoadDataCommand.makeQualified(FsConstants.LOCAL_FS_URI, localFS.getWorkingDirectory(),
+          new Path(path))
       } else {
         val loadPath = new Path(path)
         // Follow Hive's behavior:
@@ -323,7 +325,7 @@ case class LoadDataCommand(
         // by considering the wild card scenario in mind.as per old logic query param  is
         // been considered while creating URI instance and if path contains wild card char '?'
         // the remaining charecters after '?' will be removed while forming URI instance
-        makeQualified(defaultFS, uriPath, loadPath)
+        LoadDataCommand.makeQualified(defaultFS, uriPath, loadPath)
       }
     }
     val fs = loadPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
@@ -363,7 +365,9 @@ case class LoadDataCommand(
     CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
   }
+}
 
+object LoadDataCommand {
   /**
    * Returns a qualified path object. Method ported from org.apache.hadoop.fs.Path class.
    *
@@ -372,8 +376,9 @@ case class LoadDataCommand(
    * @param path       Path instance based on the path string specified by the user.
    * @return qualified path object
    */
-  private def makeQualified(defaultUri: URI, workingDir: Path, path: Path): Path = {
-    val pathUri = if (path.isAbsolute()) path.toUri() else new Path(workingDir, path).toUri()
+  private[sql] def makeQualified(defaultUri: URI, workingDir: Path, path: Path): Path = {
+    val newPath = new Path(workingDir, path)
+    val pathUri = if (path.isAbsolute()) path.toUri() else newPath.toUri()
     if (pathUri.getScheme == null || pathUri.getAuthority == null &&
         defaultUri.getAuthority != null) {
       val scheme = if (pathUri.getScheme == null) defaultUri.getScheme else pathUri.getScheme
@@ -383,14 +388,14 @@ case class LoadDataCommand(
         pathUri.getAuthority
       }
       try {
-        val newUri = new URI(scheme, authority, pathUri.getPath, pathUri.getFragment)
+        val newUri = new URI(scheme, authority, pathUri.getPath, null, pathUri.getFragment)
         new Path(newUri)
       } catch {
         case e: URISyntaxException =>
           throw new IllegalArgumentException(e)
       }
     } else {
-      path
+      newPath
     }
   }
 }
@@ -954,9 +959,11 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       builder ++= metadata.viewText.mkString(" AS\n", "", "\n")
     } else {
       showHiveTableHeader(metadata, builder)
+      showTableComment(metadata, builder)
       showHiveTableNonDataColumns(metadata, builder)
       showHiveTableStorageInfo(metadata, builder)
-      showHiveTableProperties(metadata, builder)
+      showTableLocation(metadata, builder)
+      showTableProperties(metadata, builder)
     }
 
     builder.toString()
@@ -970,13 +977,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     if (columns.nonEmpty) {
       builder ++= columns.mkString("(", ", ", ")\n")
     }
-
-    metadata
-      .comment
-      .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
-      .foreach(builder.append)
   }
-
 
   private def showHiveTableNonDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.partitionColumnNames.nonEmpty) {
@@ -1020,15 +1021,24 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         builder ++= s"  OUTPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
       }
     }
+  }
 
+  private def showTableLocation(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.tableType == EXTERNAL) {
-      storage.locationUri.foreach { uri =>
-        builder ++= s"LOCATION '$uri'\n"
+      metadata.storage.locationUri.foreach { location =>
+        builder ++= s"LOCATION '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'\n"
       }
     }
   }
 
-  private def showHiveTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
+  private def showTableComment(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    metadata
+      .comment
+      .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
+      .foreach(builder.append)
+  }
+
+  private def showTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.properties.nonEmpty) {
       val props = metadata.properties.map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
@@ -1045,6 +1055,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     showDataSourceTableDataColumns(metadata, builder)
     showDataSourceTableOptions(metadata, builder)
     showDataSourceTableNonDataColumns(metadata, builder)
+    showTableComment(metadata, builder)
+    showTableLocation(metadata, builder)
+    showTableProperties(metadata, builder)
 
     builder.toString()
   }
@@ -1060,14 +1073,6 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
     val dataSourceOptions = metadata.storage.properties.map {
       case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
-    } ++ metadata.storage.locationUri.flatMap { location =>
-      if (metadata.tableType == MANAGED) {
-        // If it's a managed table, omit PATH option. Spark SQL always creates external table
-        // when the table creation DDL contains the PATH option.
-        None
-      } else {
-        Some(s"path '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'")
-      }
     }
 
     if (dataSourceOptions.nonEmpty) {

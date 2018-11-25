@@ -102,16 +102,18 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
-  def executeAndCheck(plan: LogicalPlan): LogicalPlan = AnalysisHelper.markInAnalyzer {
-    val analyzed = execute(plan)
-    try {
-      checkAnalysis(analyzed)
-      analyzed
-    } catch {
-      case e: AnalysisException =>
-        val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
-        ae.setStackTrace(e.getStackTrace)
-        throw ae
+  def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
+    AnalysisHelper.markInAnalyzer {
+      val analyzed = executeAndTrack(plan, tracker)
+      try {
+        checkAnalysis(analyzed)
+        analyzed
+      } catch {
+        case e: AnalysisException =>
+          val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
+          ae.setStackTrace(e.getStackTrace)
+          throw ae
+      }
     }
   }
 
@@ -824,7 +826,8 @@ class Analyzer(
     }
 
     private def dedupAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
-      attrMap.get(attr).getOrElse(attr).withQualifier(attr.qualifier)
+      val exprId = attrMap.getOrElse(attr, attr).exprId
+      attr.withExprId(exprId)
     }
 
     /**
@@ -870,7 +873,7 @@ class Analyzer(
     private def dedupOuterReferencesInSubquery(
         plan: LogicalPlan,
         attrMap: AttributeMap[Attribute]): LogicalPlan = {
-      plan resolveOperatorsDown { case currentFragment =>
+      plan transformDown { case currentFragment =>
         currentFragment transformExpressions {
           case OuterReference(a: Attribute) =>
             OuterReference(dedupAttr(a, attrMap))
@@ -951,6 +954,12 @@ class Analyzer(
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
+
+      // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
+      // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
+      // names leading to ambiguous references exception.
+      case a @ Aggregate(groupingExprs, aggExprs, appendColumns: AppendColumns) =>
+        a.mapExpressions(resolve(_, appendColumns))
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
@@ -2137,36 +2146,27 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf@ScalaUDF(func, _, inputs, _, _, _, _, nullableTypes) =>
-          if (nullableTypes.isEmpty) {
-            // If no nullability info is available, do nothing. No fields will be specially
-            // checked for null in the plan. If nullability info is incorrect, the results
-            // of the UDF could be wrong.
-            udf
-          } else {
-            // Otherwise, add special handling of null for fields that can't accept null.
-            // The result of operations like this, when passed null, is generally to return null.
-            assert(nullableTypes.length == inputs.length)
+        case udf @ ScalaUDF(_, _, inputs, inputsNullSafe, _, _, _, _)
+            if inputsNullSafe.contains(false) =>
+          // Otherwise, add special handling of null for fields that can't accept null.
+          // The result of operations like this, when passed null, is generally to return null.
+          assert(inputsNullSafe.length == inputs.length)
 
-            // TODO: skip null handling for not-nullable primitive inputs after we can completely
-            // trust the `nullable` information.
-            val needsNullCheck = (nullable: Boolean, expr: Expression) =>
-              nullable && !expr.isInstanceOf[KnownNotNull]
-            val inputsNullCheck = nullableTypes.zip(inputs)
-              .filter { case (nullableType, expr) => needsNullCheck(!nullableType, expr) }
-              .map { case (_, expr) => IsNull(expr) }
-              .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
-            // Once we add an `If` check above the udf, it is safe to mark those checked inputs
-            // as not nullable (i.e., wrap them with `KnownNotNull`), because the null-returning
-            // branch of `If` will be called if any of these checked inputs is null. Thus we can
-            // prevent this rule from being applied repeatedly.
-            val newInputs = nullableTypes.zip(inputs).map { case (nullable, expr) =>
-              if (nullable) expr else KnownNotNull(expr)
-            }
-            inputsNullCheck
-              .map(If(_, Literal.create(null, udf.dataType), udf.copy(children = newInputs)))
-              .getOrElse(udf)
-          }
+          // TODO: skip null handling for not-nullable primitive inputs after we can completely
+          // trust the `nullable` information.
+          val inputsNullCheck = inputsNullSafe.zip(inputs)
+            .filter { case (nullSafe, _) => !nullSafe }
+            .map { case (_, expr) => IsNull(expr) }
+            .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
+          // Once we add an `If` check above the udf, it is safe to mark those checked inputs
+          // as null-safe (i.e., set `inputsNullSafe` all `true`), because the null-returning
+          // branch of `If` will be called if any of these checked inputs is null. Thus we can
+          // prevent this rule from being applied repeatedly.
+          val newInputsNullSafe = inputsNullSafe.map(_ => true)
+          inputsNullCheck
+            .map(If(_, Literal.create(null, udf.dataType),
+              udf.copy(inputsNullSafe = newInputsNullSafe)))
+            .getOrElse(udf)
       }
     }
   }
@@ -2393,13 +2393,22 @@ class Analyzer(
             case UnresolvedMapObjects(func, inputData, cls) if inputData.resolved =>
               inputData.dataType match {
                 case ArrayType(et, cn) =>
-                  val expr = MapObjects(func, inputData, et, cn, cls) transformUp {
+                  MapObjects(func, inputData, et, cn, cls) transformUp {
                     case UnresolvedExtractValue(child, fieldName) if child.resolved =>
                       ExtractValue(child, fieldName, resolver)
                   }
-                  expr
                 case other =>
                   throw new AnalysisException("need an array field but got " + other.catalogString)
+              }
+            case u: UnresolvedCatalystToExternalMap if u.child.resolved =>
+              u.child.dataType match {
+                case _: MapType =>
+                  CatalystToExternalMap(u) transformUp {
+                    case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+                      ExtractValue(child, fieldName, resolver)
+                  }
+                case other =>
+                  throw new AnalysisException("need a map field but got " + other.catalogString)
               }
           }
           validateNestedTupleFields(result)

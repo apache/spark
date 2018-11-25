@@ -19,9 +19,9 @@ package org.apache.spark.sql.streaming;
 
 import java.util.concurrent.TimeUnit;
 
+import org.apache.spark.annotation.Evolving;
 import scala.concurrent.duration.Duration;
 
-import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
 
@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
  *
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 public class Trigger {
 
   /**

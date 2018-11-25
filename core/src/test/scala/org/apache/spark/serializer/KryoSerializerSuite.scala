@@ -18,9 +18,13 @@
 package org.apache.spark.serializer
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, FileOutputStream}
+import java.nio.ByteBuffer
+import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.{Kryo, KryoException}
@@ -31,7 +35,7 @@ import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -199,7 +203,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
       // Check that very long ranges don't get written one element at a time
-      assert(ser.serialize(t).limit() < 100)
+      assert(ser.serialize(t).limit() < 200)
     }
     check(1 to 1000000)
     check(1 to 1000000 by 2)
@@ -209,10 +213,10 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(1L to 1000000L by 2L)
     check(1L until 1000000L)
     check(1L until 1000000L by 2L)
-    check(1.0 to 1000000.0 by 1.0)
-    check(1.0 to 1000000.0 by 2.0)
-    check(1.0 until 1000000.0 by 1.0)
-    check(1.0 until 1000000.0 by 2.0)
+    check(Range.BigDecimal.inclusive(1, 1000000, 1))
+    check(Range.BigDecimal.inclusive(1, 1000000, 2))
+    check(Range.BigDecimal(1, 1000000, 1))
+    check(Range.BigDecimal(1, 1000000, 2))
   }
 
   test("asJavaIterable") {
@@ -308,7 +312,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val conf = new SparkConf(false)
     conf.set("spark.kryo.registrator", "this.class.does.not.exist")
 
-    val thrown = intercept[SparkException](new KryoSerializer(conf).newInstance())
+    val thrown = intercept[SparkException](new KryoSerializer(conf).newInstance().serialize(1))
     assert(thrown.getMessage.contains("Failed to register classes with Kryo"))
   }
 
@@ -431,9 +435,11 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     ser.deserialize[HashMap[Int, List[String]]](serializedMap)
   }
 
-  private def testSerializerInstanceReuse(autoReset: Boolean, referenceTracking: Boolean): Unit = {
+  private def testSerializerInstanceReuse(
+      autoReset: Boolean, referenceTracking: Boolean, usePool: Boolean): Unit = {
     val conf = new SparkConf(loadDefaults = false)
       .set("spark.kryo.referenceTracking", referenceTracking.toString)
+      .set("spark.kryo.pool", usePool.toString)
     if (!autoReset) {
       conf.set("spark.kryo.registrator", classOf[RegistratorWithoutAutoReset].getName)
     }
@@ -456,9 +462,58 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
   // Regression test for SPARK-7766, an issue where disabling auto-reset and enabling
   // reference-tracking would lead to corrupted output when serializer instances are re-used
-  for (referenceTracking <- Set(true, false); autoReset <- Set(true, false)) {
-    test(s"instance reuse with autoReset = $autoReset, referenceTracking = $referenceTracking") {
-      testSerializerInstanceReuse(autoReset = autoReset, referenceTracking = referenceTracking)
+  for {
+    referenceTracking <- Seq(true, false)
+    autoReset <- Seq(true, false)
+    usePool <- Seq(true, false)
+  } {
+    test(s"instance reuse with autoReset = $autoReset, referenceTracking = $referenceTracking" +
+      s", usePool = $usePool") {
+      testSerializerInstanceReuse(
+        autoReset, referenceTracking, usePool)
+    }
+  }
+
+  test("SPARK-25839 KryoPool implementation works correctly in multi-threaded environment") {
+    implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(
+      Executors.newFixedThreadPool(4))
+
+    val ser = new KryoSerializer(conf.clone.set("spark.kryo.pool", "true"))
+
+    val tests = mutable.ListBuffer[Future[Boolean]]()
+
+    def check[T: ClassTag](t: T) {
+      tests += Future {
+        val serializerInstance = ser.newInstance()
+        serializerInstance.deserialize[T](serializerInstance.serialize(t)) === t
+      }
+    }
+
+    check((1, 3))
+    check(Array((1, 3)))
+    check(List((1, 3)))
+    check(List[Int]())
+    check(List[Int](1, 2, 3))
+    check(List[String]())
+    check(List[String]("x", "y", "z"))
+    check(None)
+    check(Some(1))
+    check(Some("hi"))
+    check(1 -> 1)
+    check(mutable.ArrayBuffer(1, 2, 3))
+    check(mutable.ArrayBuffer("1", "2", "3"))
+    check(mutable.Map())
+    check(mutable.Map(1 -> "one", 2 -> "two"))
+    check(mutable.Map("one" -> 1, "two" -> 2))
+    check(mutable.HashMap(1 -> "one", 2 -> "two"))
+    check(mutable.HashMap("one" -> 1, "two" -> 2))
+    check(List(Some(mutable.HashMap(1 -> 1, 2 -> 2)), None, Some(mutable.HashMap(3 -> 4))))
+    check(List(
+      mutable.HashMap("one" -> 1, "two" -> 2),
+      mutable.HashMap(1 -> "one", 2 -> "two", 3 -> "three")))
+
+    tests.foreach { f =>
+      assert(ThreadUtils.awaitResult(f, 10.seconds))
     }
   }
 }
@@ -496,6 +551,17 @@ class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSpar
     assert(deserializationStream.readValue[Any]() === world)
     deserializationStream.close()
     assert(serInstance.deserialize[Any](helloHello) === ((hello, hello)))
+  }
+
+  test("SPARK-25786: ByteBuffer.array -- UnsupportedOperationException") {
+    val serInstance = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
+    val obj = "UnsupportedOperationException"
+    val serObj = serInstance.serialize(obj)
+    val byteBuffer = ByteBuffer.allocateDirect(serObj.array().length)
+    byteBuffer.put(serObj.array())
+    byteBuffer.flip()
+    assert(serInstance.deserialize[Any](serObj) === (obj))
+    assert(serInstance.deserialize[Any](byteBuffer) === (obj))
   }
 }
 

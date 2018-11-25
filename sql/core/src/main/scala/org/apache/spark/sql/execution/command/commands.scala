@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -95,7 +95,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
  * @param child the physical plan child ran by the `DataWritingCommand`.
  */
 case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
-  extends SparkPlan {
+  extends UnaryExecNode {
 
   override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
 
@@ -105,8 +105,6 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 
     rows.map(converter(_).asInstanceOf[InternalRow])
   }
-
-  override def children: Seq[SparkPlan] = child :: Nil
 
   override def output: Seq[Attribute] = cmd.output
 
