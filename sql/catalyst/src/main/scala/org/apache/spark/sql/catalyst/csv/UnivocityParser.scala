@@ -27,7 +27,7 @@ import com.univocity.parsers.csv.CsvParser
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils, FailureSafeParser, TimeFormatter}
+import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils, FailureSafeParser, DateTimeFormatter}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -75,8 +75,8 @@ class UnivocityParser(
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
-  private val timeParser = TimeFormatter(options.timestampFormat, options.timeZone, options.locale)
-  private val dateParser = TimeFormatter(options.dateFormat, options.timeZone, options.locale)
+  private val timeParser = DateTimeFormatter(options.timestampFormat, options.timeZone, options.locale)
+  private val dateParser = DateTimeFormatter(options.dateFormat, options.timeZone, options.locale)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {

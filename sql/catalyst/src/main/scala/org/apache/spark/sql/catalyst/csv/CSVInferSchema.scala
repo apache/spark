@@ -23,13 +23,13 @@ import scala.util.control.Exception.allCatch
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
-import org.apache.spark.sql.catalyst.util.TimeFormatter
+import org.apache.spark.sql.catalyst.util.DateTimeFormatter
 import org.apache.spark.sql.types._
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   @transient
-  private lazy val timeParser = TimeFormatter(
+  private lazy val timeParser = DateTimeFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)

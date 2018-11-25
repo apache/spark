@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.time._
-import java.time.format.DateTimeFormatter
+import java.time.format.{DateTimeFormatter => JavaDateTimeFormatter}
 import java.time.temporal.TemporalQueries
 import java.util.{Locale, TimeZone}
 
@@ -28,16 +28,16 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.internal.SQLConf
 
-sealed trait TimeFormatter {
+sealed trait DateTimeFormatter {
   def parse(s: String): Long
   def format(us: Long): String
 }
 
-class Iso8601TimeFormatter(
+class Iso8601DateTimeFormatter(
     pattern: String,
     timeZone: TimeZone,
-    locale: Locale) extends TimeFormatter {
-  val formatter = DateTimeFormatter.ofPattern(pattern, locale)
+    locale: Locale) extends DateTimeFormatter {
+  val formatter = JavaDateTimeFormatter.ofPattern(pattern, locale)
 
   def toInstant(s: String): Instant = {
     val temporalAccessor = formatter.parse(s)
@@ -67,10 +67,10 @@ class Iso8601TimeFormatter(
   }
 }
 
-class LegacyTimeFormatter(
+class LegacyDateTimeFormatter(
     pattern: String,
     timeZone: TimeZone,
-    locale: Locale) extends TimeFormatter {
+    locale: Locale) extends DateTimeFormatter {
   val format = FastDateFormat.getInstance(pattern, timeZone, locale)
 
   protected def toMillis(s: String): Long = format.parse(s).getTime
@@ -82,21 +82,21 @@ class LegacyTimeFormatter(
   }
 }
 
-class LegacyFallbackTimeFormatter(
+class LegacyFallbackDateTimeFormatter(
     pattern: String,
     timeZone: TimeZone,
-    locale: Locale) extends LegacyTimeFormatter(pattern, timeZone, locale) {
+    locale: Locale) extends LegacyDateTimeFormatter(pattern, timeZone, locale) {
   override def toMillis(s: String): Long = {
     Try {super.toMillis(s)}.getOrElse(DateTimeUtils.stringToTime(s).getTime)
   }
 }
 
-object TimeFormatter {
-  def apply(format: String, timeZone: TimeZone, locale: Locale): TimeFormatter = {
+object DateTimeFormatter {
+  def apply(format: String, timeZone: TimeZone, locale: Locale): DateTimeFormatter = {
     if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyFallbackTimeFormatter(format, timeZone, locale)
+      new LegacyFallbackDateTimeFormatter(format, timeZone, locale)
     } else {
-      new Iso8601TimeFormatter(format, timeZone, locale)
+      new Iso8601DateTimeFormatter(format, timeZone, locale)
     }
   }
 }
