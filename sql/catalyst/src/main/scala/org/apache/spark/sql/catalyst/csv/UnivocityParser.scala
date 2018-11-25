@@ -21,7 +21,9 @@ import java.io.InputStream
 import java.math.BigDecimal
 
 import scala.util.control.NonFatal
+
 import com.univocity.parsers.csv.CsvParser
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
@@ -104,7 +106,7 @@ class UnivocityParser(
   //
   //   output row - ["A", 2]
   private val valueConverters: Array[ValueConverter] = {
-    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
   }
 
   /**
@@ -117,8 +119,7 @@ class UnivocityParser(
   def makeConverter(
       name: String,
       dataType: DataType,
-      nullable: Boolean = true,
-      options: CSVOptions): ValueConverter = dataType match {
+      nullable: Boolean = true): ValueConverter = dataType match {
     case _: ByteType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(_.toByte)
 
@@ -166,7 +167,7 @@ class UnivocityParser(
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
     case udt: UserDefinedType[_] => (datum: String) =>
-      makeConverter(name, udt.sqlType, nullable, options)
+      makeConverter(name, udt.sqlType, nullable)
 
     // We don't actually hit this exception though, we keep it for understandability
     case _ => throw new RuntimeException(s"Unsupported type: ${dataType.typeName}")

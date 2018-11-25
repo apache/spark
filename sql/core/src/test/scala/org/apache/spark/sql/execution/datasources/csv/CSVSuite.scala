@@ -622,7 +622,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val options = Map(
       "header" -> "true",
       "inferSchema" -> "false",
-      "dateFormat" -> "dd/MM/yyyy hh:mm")
+      "dateFormat" -> "dd/MM/yyyy HH:mm")
     val results = spark.read
       .format("csv")
       .options(options)
