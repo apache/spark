@@ -132,7 +132,7 @@ class PrefixSpan(object):
     A parallel PrefixSpan algorithm to mine frequent sequential patterns.
     The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan:
     Mining Sequential Patterns Efficiently by Prefix-Projected Pattern Growth
-    ([[http://doi.org/10.1109/ICDE.2001.914830]]).
+    ([[https://doi.org/10.1109/ICDE.2001.914830]]).
 
     .. versionadded:: 1.6.0
     """

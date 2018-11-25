@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{ArrayType, LongType, StructField, StructType}
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
  * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
  * Efficiently by Prefix-Projected Pattern Growth
- * (see <a href="http://doi.org/10.1109/ICDE.2001.914830">here</a>).
+ * (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
  * This class is not yet an Estimator/Transformer, use `findFrequentSequentialPatterns` method to
  * run the PrefixSpan algorithm.
  *
