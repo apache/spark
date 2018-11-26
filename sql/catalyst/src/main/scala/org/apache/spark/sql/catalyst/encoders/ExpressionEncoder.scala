@@ -252,18 +252,14 @@ case class ExpressionEncoder[T](
   def isSerializedAsStruct: Boolean = objSerializer.dataType.isInstanceOf[StructType]
 
   /**
-   * Returns true if the type `T` is an `Option` type.
-   */
-  def isOptionType: Boolean = classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)
-
-  /**
    * If the type `T` is serialized as a struct, when it is encoded to a Spark SQL row, fields in
    * the struct are naturally mapped to top-level columns in a row. In other words, the serialized
    * struct is flattened to row. But in case of the `T` is also an `Option` type, it can't be
    * flattened to top-level row, because in Spark SQL top-level row can't be null. This method
    * returns true if `T` is serialized as struct and is not `Option` type.
    */
-  def isSerializedAsStructForTopLevel: Boolean = isSerializedAsStruct && !isOptionType
+  def isSerializedAsStructForTopLevel: Boolean = isSerializedAsStruct &&
+    !classOf[Option[_]].isAssignableFrom(clsTag.runtimeClass)
 
   // serializer expressions are used to encode an object to a row, while the object is usually an
   // intermediate value produced inside an operator, not from the output of the child operator. This
