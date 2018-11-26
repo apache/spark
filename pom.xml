@@ -158,6 +158,8 @@
     <scala.binary.version>2.12</scala.binary.version>
     <scalafmt.version>1.5.1</scalafmt.version>
     <scalafmt.parameters>--diff --test</scalafmt.parameters>
+    <!-- for now, not running scalafmt as part of default verify pipeline -->
+    <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.9.6</fasterxml.jackson.version>
     <snappy.version>1.1.7.1</snappy.version>
@@ -2608,9 +2610,7 @@
         <version>0.9_${scalafmt.version}</version>
         <configuration>
           <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
-          <skip>false</skip> <!-- (Optional) skip formatting -->
-          <skiptest>false</skiptest> <!-- (Optional) Skip formatting test sources -->
-          <skipmain>false</skipmain> <!-- (Optional) Skip formatting main sources -->
+          <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
           <configLocation>.scalafmt.conf</configLocation> <!-- (Optional) config locataion -->
         </configuration>
         <executions>

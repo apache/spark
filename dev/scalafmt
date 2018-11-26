@@ -20,4 +20,4 @@
 # by default, format only files that differ from git master
 params="${@:---diff}"
 
-./build/mvn mvn-scalafmt_2.12:format -Dscalafmt.parameters="$params"
+./build/mvn mvn-scalafmt_2.12:format -Dscalafmt.skip=false -Dscalafmt.parameters="$params"
