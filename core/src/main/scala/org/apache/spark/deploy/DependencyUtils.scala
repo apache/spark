@@ -24,7 +24,6 @@ import java.util.regex.Pattern
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -62,12 +61,13 @@ private[deploy] object DependencyUtils extends Logging {
       hadoopConf: Configuration,
       secMgr: SecurityManager): String = {
     val targetDir = Utils.createTempDir()
-    val fileSeparator = Pattern.quote(System.getProperty("file.separator"))
+    val fileSeparator = Pattern.quote(File.separator)
+    val userJarName = userJar.split(fileSeparator).last
     Option(jars)
       .map {
         resolveGlobPaths(_, hadoopConf)
           .split(",")
-          .filterNot(_.contains(userJar.split(fileSeparator).last))
+          .filterNot(_.contains(userJarName))
           .mkString(",")
       }
       .filterNot(_ == "")
