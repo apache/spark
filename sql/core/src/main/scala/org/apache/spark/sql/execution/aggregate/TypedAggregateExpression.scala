@@ -40,9 +40,9 @@ object TypedAggregateExpression {
     val outputEncoder = encoderFor[OUT]
     val outputType = outputEncoder.objSerializer.dataType
 
-    // Checks if the buffer object is simple, i.e. the buffer encoder is flat and the serializer
-    // expression is an alias of `BoundReference`, which means the buffer object doesn't need
-    // serialization.
+    // Checks if the buffer object is simple, i.e. the `BUF` type is not serialized as struct
+    // and the serializer expression is an alias of `BoundReference`, which means the buffer
+    // object doesn't need serialization.
     val isSimpleBuffer = {
       bufferSerializer.head match {
         case Alias(_: BoundReference, _) if !bufferEncoder.isSerializedAsStruct => true
@@ -76,7 +76,7 @@ object TypedAggregateExpression {
         None,
         bufferSerializer,
         bufferEncoder.resolveAndBind().deserializer,
-        outputEncoder.serializer,
+        outputEncoder.objSerializer,
         outputType,
         outputEncoder.objSerializer.nullable)
     }
@@ -213,7 +213,7 @@ case class ComplexTypedAggregateExpression(
     inputSchema: Option[StructType],
     bufferSerializer: Seq[NamedExpression],
     bufferDeserializer: Expression,
-    outputSerializer: Seq[Expression],
+    outputSerializer: Expression,
     dataType: DataType,
     nullable: Boolean,
     mutableAggBufferOffset: Int = 0,
@@ -245,13 +245,7 @@ case class ComplexTypedAggregateExpression(
     aggregator.merge(buffer, input)
   }
 
-  private lazy val resultObjToRow = dataType match {
-    case _: StructType =>
-      UnsafeProjection.create(CreateStruct(outputSerializer))
-    case _ =>
-      assert(outputSerializer.length == 1)
-      UnsafeProjection.create(outputSerializer.head)
-  }
+  private lazy val resultObjToRow = UnsafeProjection.create(outputSerializer)
 
   override def eval(buffer: Any): Any = {
     val resultObj = aggregator.finish(buffer)

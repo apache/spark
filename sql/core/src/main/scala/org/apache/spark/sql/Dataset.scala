@@ -1093,7 +1093,7 @@ class Dataset[T] private[sql](
     // Note that we do this before joining them, to enable the join operator to return null for one
     // side, in cases like outer-join.
     val left = {
-      val combined = if (!this.exprEnc.isSerializedAsStruct) {
+      val combined = if (!this.exprEnc.isSerializedAsStructForTopLevel) {
         assert(joined.left.output.length == 1)
         Alias(joined.left.output.head, "_1")()
       } else {
@@ -1103,7 +1103,7 @@ class Dataset[T] private[sql](
     }
 
     val right = {
-      val combined = if (!other.exprEnc.isSerializedAsStruct) {
+      val combined = if (!other.exprEnc.isSerializedAsStructForTopLevel) {
         assert(joined.right.output.length == 1)
         Alias(joined.right.output.head, "_2")()
       } else {
@@ -1116,14 +1116,14 @@ class Dataset[T] private[sql](
     // combine the outputs of each join side.
     val conditionExpr = joined.condition.get transformUp {
       case a: Attribute if joined.left.outputSet.contains(a) =>
-        if (!this.exprEnc.isSerializedAsStruct) {
+        if (!this.exprEnc.isSerializedAsStructForTopLevel) {
           left.output.head
         } else {
           val index = joined.left.output.indexWhere(_.exprId == a.exprId)
           GetStructField(left.output.head, index)
         }
       case a: Attribute if joined.right.outputSet.contains(a) =>
-        if (!other.exprEnc.isSerializedAsStruct) {
+        if (!other.exprEnc.isSerializedAsStructForTopLevel) {
           right.output.head
         } else {
           val index = joined.right.output.indexWhere(_.exprId == a.exprId)
@@ -1396,7 +1396,7 @@ class Dataset[T] private[sql](
     implicit val encoder = c1.encoder
     val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil, logicalPlan)
 
-    if (!encoder.isSerializedAsStruct) {
+    if (!encoder.isSerializedAsStructForTopLevel) {
       new Dataset[U1](sparkSession, project, encoder)
     } else {
       // Flattens inner fields of U1
@@ -1851,6 +1851,20 @@ class Dataset[T] private[sql](
     // using union to union many files or partitions.
     CombineUnions(Union(logicalPlan, other.logicalPlan))
   }
+
+  /**
+   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
+   * This is an alias for `union`.
+   *
+   * This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union (that does
+   * deduplication of elements), use this function followed by a [[distinct]].
+   *
+   * Also as standard in SQL, this function resolves columns by position (not by name).
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def unionAll(other: Dataset[T]): Dataset[T] = union(other)
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
