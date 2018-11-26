@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.util.Utils
 
 
 /**
@@ -79,29 +80,31 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
    * an expression that is not [[CaseWhen]], [[If]], [[And]], [[Or]] or
    * `Literal(null, BooleanType)`.
    */
-  private def replaceNullWithFalse(e: Expression): Expression = {
-    if (e.dataType != BooleanType) {
-      e
-    } else {
-      e match {
-        case Literal(null, BooleanType) =>
-          FalseLiteral
-        case And(left, right) =>
-          And(replaceNullWithFalse(left), replaceNullWithFalse(right))
-        case Or(left, right) =>
-          Or(replaceNullWithFalse(left), replaceNullWithFalse(right))
-        case cw: CaseWhen =>
-          val newBranches = cw.branches.map { case (cond, value) =>
-            replaceNullWithFalse(cond) -> replaceNullWithFalse(value)
-          }
-          val newElseValue = cw.elseValue.map(replaceNullWithFalse)
-          CaseWhen(newBranches, newElseValue)
-        case If(pred, trueVal, falseVal) =>
-          If(replaceNullWithFalse(pred),
-            replaceNullWithFalse(trueVal),
-            replaceNullWithFalse(falseVal))
-        case _ => e
+  private def replaceNullWithFalse(e: Expression): Expression = e match {
+    case Literal(null, BooleanType) =>
+      FalseLiteral
+    case And(left, right) =>
+      And(replaceNullWithFalse(left), replaceNullWithFalse(right))
+    case Or(left, right) =>
+      Or(replaceNullWithFalse(left), replaceNullWithFalse(right))
+    case cw: CaseWhen if cw.dataType == BooleanType =>
+      val newBranches = cw.branches.map { case (cond, value) =>
+        replaceNullWithFalse(cond) -> replaceNullWithFalse(value)
       }
-    }
+      val newElseValue = cw.elseValue.map(replaceNullWithFalse)
+      CaseWhen(newBranches, newElseValue)
+    case i @ If(pred, trueVal, falseVal) if i.dataType == BooleanType =>
+      If(replaceNullWithFalse(pred), replaceNullWithFalse(trueVal), replaceNullWithFalse(falseVal))
+    case e if e.dataType == BooleanType =>
+      e
+    case e =>
+      val message = "Expected a Boolean type expression in replaceNullWithFalse, " +
+        s"but got the type `${e.dataType.catalogString}` in `${e.sql}`."
+      if (Utils.isTesting) {
+        throw new IllegalArgumentException(message)
+      } else {
+        logWarning(message)
+        e
+      }
   }
 }
