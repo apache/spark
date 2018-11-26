@@ -25,7 +25,7 @@ import scala.util.control.Breaks._
 import org.apache.spark.SparkException
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.{Instance, LabeledPoint, StandardScaler}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix, Vector, Vectors}
 import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
@@ -217,6 +217,63 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
         new LogisticRegression()
           .setLowerBoundsOnIntercepts(lowerBoundsOnIntercepts)
           .setFitIntercept(false)
+          .fit(binaryDataset)
+      }
+    }
+
+    withClue("prior precisions should be required when prior mean is set") {
+      intercept[IllegalArgumentException] {
+        new LogisticRegression()
+          .setPriorMean(Array(0.5, 0.5, 0.5, 0.5))
+          .setRegParam(1.0)
+          .fit(binaryDataset)
+      }
+    }
+
+    withClue("prior mean should be required when prior precisions is set") {
+      intercept[IllegalArgumentException] {
+        new LogisticRegression()
+          .setPriorPrecisions(Array(1.0, 1.0, 1.0, 1.0))
+          .setRegParam(1.0)
+          .fit(binaryDataset)
+      }
+    }
+
+    withClue("L2 regularization should be required when using prior regularization") {
+      intercept[IllegalArgumentException] {
+        new LogisticRegression()
+          .setPriorMean(Array(0.5, 0.5, 0.5, 0.5))
+          .setPriorPrecisions(Array(1.0, 1.0, 1.0, 1.0))
+          .fit(binaryDataset)
+      }
+    }
+
+    withClue("`elasticNetParam` should be less than 1.0 when using prior regularization") {
+      intercept[IllegalArgumentException] {
+        new LogisticRegression()
+          .setPriorMean(Array(0.5, 0.5, 0.5, 0.5))
+          .setPriorPrecisions(Array(1.0, 1.0, 1.0, 1.0))
+          .setElasticNetParam(1.0)
+          .fit(binaryDataset)
+      }
+    }
+
+    withClue("prior mean and precisions should have equal length") {
+      intercept[IllegalArgumentException] {
+        new LogisticRegression()
+          .setPriorMean(Array(0.5, 0.5, 0.5, 0.5))
+          .setPriorPrecisions(Array(1.0, 1.0, 1.0))
+          .setRegParam(1.0)
+          .fit(binaryDataset)
+      }
+    }
+
+    withClue("priors' length should match number of features") {
+      intercept[IllegalArgumentException] {
+        new LogisticRegression()
+          .setPriorMean(Array(0.5, 0.5, 0.5))
+          .setPriorPrecisions(Array(1.0, 1.0, 1.0))
+          .setRegParam(1.0)
           .fit(binaryDataset)
       }
     }
@@ -1017,6 +1074,151 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(model1.coefficients ~= coefficientsRStd relTol 1E-3)
     assert(model2.intercept ~== interceptR relTol 1E-3)
     assert(model2.coefficients ~= coefficientsR relTol 1E-3)
+  }
+
+  test("binary logistic regression with prior regularization equivalent to L2") {
+    val priorMean = Array.fill(4)(0.0)
+    val priorPrecisions = Array.fill(4)(1.0)
+
+    val trainer1 = (new LogisticRegression).setFitIntercept(true)
+      .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(true).setWeightCol("weight")
+      .setPriorMean(priorMean).setPriorPrecisions(priorPrecisions)
+    val trainer2 = (new LogisticRegression).setFitIntercept(true)
+      .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(false).setWeightCol("weight")
+      .setPriorMean(priorMean).setPriorPrecisions(priorPrecisions)
+
+    val model1 = trainer1.fit(binaryDataset)
+    val model2 = trainer2.fit(binaryDataset)
+
+    /*
+      Use the following R code to load the data and train the model using glmnet package.
+
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 1.37, standardize=T))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 1.37, standardize=F))
+      coefficientsStd
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  0.12707703
+      data.V3     -0.06980967
+      data.V4      0.10803933
+      data.V5     -0.04800404
+      data.V6     -0.10165096
+
+      coefficients
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  0.46613016
+      data.V3     -0.04944529
+      data.V4      0.02326772
+      data.V5     -0.11362772
+      data.V6     -0.06312848
+
+     */
+    val coefficientsRStd = Vectors.dense(-0.06980967, 0.10803933, -0.04800404, -0.10165096)
+    val interceptRStd = 0.12707703
+    val coefficientsR = Vectors.dense(-0.04944529, 0.02326772, -0.11362772, -0.06312848)
+    val interceptR = 0.46613016
+
+    assert(model1.intercept ~== interceptRStd relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsRStd relTol 1E-3)
+    assert(model2.intercept ~== interceptR relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR relTol 1E-3)
+  }
+
+  test("binary logistic regression with prior regularization equivalent " +
+    "to L2 (bis)") {
+    val priorMean = Array.fill(4)(0.0)
+    val priorPrecisions = Array.fill(4)(1.37)
+
+    val trainer1 = (new LogisticRegression).setFitIntercept(true)
+      .setElasticNetParam(0.0).setRegParam(1.0).setStandardization(true).setWeightCol("weight")
+      .setPriorMean(priorMean).setPriorPrecisions(priorPrecisions)
+    val trainer2 = (new LogisticRegression).setFitIntercept(true)
+      .setElasticNetParam(0.0).setRegParam(1.0).setStandardization(false).setWeightCol("weight")
+      .setPriorMean(priorMean).setPriorPrecisions(priorPrecisions)
+
+    val model1 = trainer1.fit(binaryDataset)
+    val model2 = trainer2.fit(binaryDataset)
+
+    /*
+      Use the following R code to load the data and train the model using glmnet package.
+
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 1.37, standardize=T))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 1.37, standardize=F))
+      coefficientsStd
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  0.12707703
+      data.V3     -0.06980967
+      data.V4      0.10803933
+      data.V5     -0.04800404
+      data.V6     -0.10165096
+
+      coefficients
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  0.46613016
+      data.V3     -0.04944529
+      data.V4      0.02326772
+      data.V5     -0.11362772
+      data.V6     -0.06312848
+
+     */
+    val coefficientsRStd = Vectors.dense(-0.06980967, 0.10803933, -0.04800404, -0.10165096)
+    val interceptRStd = 0.12707703
+    val coefficientsR = Vectors.dense(-0.04944529, 0.02326772, -0.11362772, -0.06312848)
+    val interceptR = 0.46613016
+
+    assert(model1.intercept ~== interceptRStd relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsRStd relTol 1E-3)
+    assert(model2.intercept ~== interceptR relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR relTol 1E-3)
+  }
+
+  test("binary logistic regression with prior regularization") {
+    val datasetOrig = binaryDataset.selectExpr("label", "features as features_orig", "weight")
+
+    // ensure standardization is the same as done with sklearn
+    val dataset = new StandardScaler().
+      setWithMean(true).
+      setInputCol("features_orig").
+      setOutputCol("features").
+      fit(datasetOrig).
+      transform(datasetOrig)
+
+    val priorMean: Array[Double] = Array(0.1, -0.2, 0.3, -0.4)
+    val priorPrecisions: Array[Double] = Array(10.0, 20.0, 30.0, 40.0)
+
+    import org.apache.spark.sql.functions._
+    // ensure the regularization term is normalized as the loss term
+    val normalizer: Double = dataset.agg(sum("weight")).first().getDouble(0)
+
+    val trainer = (new LogisticRegression)
+      .setFitIntercept(false)
+      .setElasticNetParam(0.0)
+      .setRegParam(1.0 / normalizer)
+      .setStandardization(true)
+      .setWeightCol("weight")
+      .setPriorMean(priorMean).setPriorPrecisions(priorPrecisions)
+
+    val model = trainer.fit(dataset)
+
+    val expectedCoeffs = Vectors.dense(-0.44989613, 0.36149292, -0.63427473, -0.59001135)
+    assert(model.coefficients ~= expectedCoeffs relTol 1E-2)
   }
 
   test("binary logistic regression with intercept with L2 regularization with bound") {

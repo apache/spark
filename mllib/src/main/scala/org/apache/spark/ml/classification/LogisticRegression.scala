@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator.LogisticAggregator
-import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
+import org.apache.spark.ml.optim.loss.{L2Regularization, PriorRegularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -250,6 +250,66 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
       isSet(lowerBoundsOnIntercepts) || isSet(upperBoundsOnIntercepts)
   }
 
+  /**
+   * The prior multivariate mean (coefficients) for Maximum A Posteriori (MAP) optimization.
+   * Default is none.
+   *
+   * @group expertParam */
+  @Since("2.4.0")
+  val priorMean: DoubleArrayParam = new DoubleArrayParam(this, "priorMean",
+  "The prior mean used for Prior regularization.")
+
+  /** @group expertGetParam */
+  def getPriorMean: Array[Double] = $(priorMean)
+
+  /** @group expertSetParam */
+  def setPriorMean(value: Array[Double]): this.type = {
+    set(priorMean, value)
+  }
+
+  /**
+   * The prior precisions for Maximum A Posteriori (MAP) optimization.
+   * Default is none.
+   *
+   * @group expertParam */
+  @Since("2.4.0")
+  val priorPrecisions: DoubleArrayParam = new DoubleArrayParam(this, "priorPrecisions",
+  "The prior precisions used for Prior regularization")
+
+  /** @group expertGetParam */
+  def getPriorPrecisions: Array[Double] = $(priorPrecisions)
+
+  /** @group expertSetParam */
+  def setPriorPrecisions(value: Array[Double]): this.type = {
+    set(priorPrecisions, value)
+  }
+
+  protected def usingPriors: Boolean = {
+    isSet(priorMean) && isSet(priorPrecisions)
+  }
+
+  /**
+   * Validates that priors are consistent.
+   *
+   * @throws IllegalArgumentException if `priorMean` and `priorPrecisions` are inconsistent.
+   */
+  protected def checkPriorsConsistency(numFeatures: Option[Int] = None): Unit = {
+    if (isSet(priorMean) || isSet(priorPrecisions)) {
+      require(isSet(priorMean) && isSet(priorPrecisions), "Both prior mean and precisions must " +
+                                                          "be set to use prior regularization")
+      require($(regParam) > 0, "Prior regularization requires a positive `regParam`")
+      require($(elasticNetParam) < 1.0, "Prior regularization requires `elasticNetParam` < 1.0")
+      val mean = $(priorMean)
+      val precisions = $(priorPrecisions)
+      require(mean.length == precisions.length, "Dimensions of prior mean and precisions must " +
+                                                "match")
+      require(precisions.max > 0.0, "`priorPrecisions` must be non-negative")
+      if (numFeatures.isDefined) {
+        require(mean.length == numFeatures.get, "Priors length must match the number of features")
+      }
+    }
+  }
+
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
@@ -263,6 +323,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
       require(!isSet(lowerBoundsOnIntercepts) && !isSet(upperBoundsOnIntercepts),
         "Please don't set bounds on intercepts if fitting without intercept.")
     }
+    checkPriorsConsistency()
     super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 }
@@ -558,6 +619,10 @@ class LogisticRegression @Since("1.2.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
+    if (usingPriors) {
+      checkPriorsConsistency(Some(numFeatures))
+    }
+
     instr.logNumClasses(numClasses)
     instr.logNumFeatures(numFeatures)
 
@@ -614,8 +679,13 @@ class LogisticRegression @Since("1.2.0") (
 
         val regularization = if (regParamL2 != 0.0) {
           val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures * numCoefficientSets
-          Some(new L2Regularization(regParamL2, shouldApply,
-            if ($(standardization)) None else Some(getFeaturesStd)))
+          val stds = if ($(standardization)) None else Some(getFeaturesStd)
+          if (usingPriors) {
+            Some(new PriorRegularization($(priorMean), $(priorPrecisions),
+              regParamL2, shouldApply, stds))
+          } else {
+            Some(new L2Regularization(regParamL2, shouldApply, stds))
+          }
         } else {
           None
         }
