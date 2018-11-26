@@ -117,6 +117,27 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podOperations, times(podAllocationSize + 1)).create(any(classOf[Pod]))
   }
 
+  test("Immediately request more executors if possible when total expected executors changes") {
+    // Start with no executors.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(0)
+    snapshotsStore.replaceSnapshot(Seq.empty[Pod])
+    snapshotsStore.notifySubscribers()
+    verify(podOperations, never()).create(podWithAttachedContainerForId(1))
+
+    // Setting total to 1 immediately requests more.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(1)
+    verify(podOperations).create(podWithAttachedContainerForId(1))
+
+    // Raising the total while executors are pending does not immediately request more.
+    podsAllocatorUnderTest.setTotalExpectedExecutors(2)
+    verify(podOperations, never()).create(podWithAttachedContainerForId(2))
+
+    // It will be requested like usual when the pending containers are running.
+    snapshotsStore.updatePod(runningExecutor(1))
+    snapshotsStore.notifySubscribers()
+    verify(podOperations).create(podWithAttachedContainerForId(2))
+  }
+
   test("When a current batch reaches error states immediately, re-request" +
     " them on the next batch.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(podAllocationSize)

@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.util.{HashMap => JHashMap}
 
@@ -37,8 +36,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher._
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
-  SparkListenerExecutorAdded}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart, SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.tags.ExtendedYarnTest
 import org.apache.spark.util.Utils
@@ -148,6 +146,26 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         // Sending some sensitive information, which we'll make sure gets redacted
         "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
         "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
+      ))
+  }
+
+  test("run Spark in yarn-client mode with dynamic allocation") {
+    testBasicYarnApp(true,
+      Map(
+        "spark.dynamicAllocation.enabled" -> "true",
+        // Start with 0 executors to at least test that we will request more to run the job.
+        "spark.dynamicAllocation.initialExecutors" -> "0",
+        "spark.dynamicAllocation.maxExecutors" -> "1"
+      ))
+  }
+
+  test("run Spark in yarn-cluster mode with dynamic allocation") {
+    testBasicYarnApp(false,
+      Map(
+        "spark.dynamicAllocation.enabled" -> "true",
+        // Start with 0 executors to at least test that we will request more to run the job.
+        "spark.dynamicAllocation.initialExecutors" -> "0",
+        "spark.dynamicAllocation.maxExecutors" -> "1"
       ))
   }
 

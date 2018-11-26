@@ -35,12 +35,11 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.TestConfig._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
 import org.apache.spark.internal.Logging
-import org.apache.spark.launcher.SparkLauncher
 
 private[spark] class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
-  with Logging with Eventually with Matchers {
+  with PythonTestsSuite with ClientModeTestsSuite with DynamicAllocationTestsSuite
+  with PodTemplateSuite with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 
@@ -261,6 +260,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       }
     }
   }
+
   protected def doBasicDriverPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
     assert(driverPod.getSpec.getContainers.get(0).getImage === image)
@@ -268,7 +268,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
       === baseMemory)
   }
-
 
   protected def doBasicDriverPyPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
@@ -285,7 +284,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
       === standardNonJVMMemory)
   }
-
 
   protected def doBasicExecutorPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === image)

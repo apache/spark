@@ -546,6 +546,7 @@ class SparkContext(config: SparkConf) extends Logging {
           case b: ExecutorAllocationClient =>
             Some(new ExecutorAllocationManager(
               schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
+              _env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
               _env.blockManager.master))
           case _ =>
             None

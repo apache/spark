@@ -397,7 +397,9 @@ private[spark] class DAGScheduler(
     shuffleIdToMapStage(shuffleDep.shuffleId) = stage
     updateJobIdStageIdMaps(jobId, stage)
 
-    if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
+    if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
+      mapOutputTracker.markShuffleActive(shuffleDep.shuffleId)
+    } else {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
       logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
@@ -627,6 +629,7 @@ private[spark] class DAGScheduler(
                 }
                 for ((k, v) <- shuffleIdToMapStage.find(_._2 == stage)) {
                   shuffleIdToMapStage.remove(k)
+                  mapOutputTracker.markShuffleInactive(k)
                 }
                 if (waitingStages.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))
@@ -1346,6 +1349,31 @@ private[spark] class DAGScheduler(
       case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
       case _ =>
     }
+
+    // Make sure shuffle outputs are registered before we post the event so that
+    // handlers can act on up-to-date shuffle information.
+    event.reason match {
+      case Success =>
+        task match {
+          case smt: ShuffleMapTask =>
+            val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
+            val status = event.result.asInstanceOf[MapStatus]
+            val execId = status.location.executorId
+            logDebug("Registering shuffle output on executor " + execId)
+            if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
+              logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
+            } else {
+              // The epoch of the task is acceptable (i.e., the task was launched after the most
+              // recent failure we're aware of for the executor), so mark the task's output as
+              // available.
+              mapOutputTracker.registerMapOutput(
+                shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
+            }
+          case _ =>
+        }
+      case _ =>
+    }
+
     postTaskEnd(event)
 
     event.reason match {
@@ -1382,21 +1410,12 @@ private[spark] class DAGScheduler(
                 logInfo("Ignoring result from " + rt + " because its job has finished")
             }
 
-          case smt: ShuffleMapTask =>
+          case _: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
             shuffleStage.pendingPartitions -= task.partitionId
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
-            if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
-              logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
-            } else {
-              // The epoch of the task is acceptable (i.e., the task was launched after the most
-              // recent failure we're aware of for the executor), so mark the task's output as
-              // available.
-              mapOutputTracker.registerMapOutput(
-                shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
-            }
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
               markStageAsFinished(shuffleStage)
