@@ -498,7 +498,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Reuse Python worker or not. If yes, it will use a fixed number of Python workers,
     does not need to fork() a Python process for every task. It will be very useful
-    if there is large broadcast, then the broadcast will not be needed to transferred
+    if there is a large broadcast, then the broadcast will not need to be transferred
     from JVM to Python worker for every task.
   </td>
 </tr>

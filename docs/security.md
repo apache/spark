@@ -337,7 +337,7 @@ Configuration for SSL is organized hierarchically. The user can configure the de
 which will be used for all the supported communication protocols unless they are overwritten by
 protocol-specific settings. This way the user can easily provide the common settings for all the
 protocols without disabling the ability to configure each one individually. The following table
-describes the the SSL configuration namespaces:
+describes the SSL configuration namespaces:
 
 <table class="table">
   <tr>
