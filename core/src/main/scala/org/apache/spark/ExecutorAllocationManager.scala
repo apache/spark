@@ -25,7 +25,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
@@ -87,6 +87,7 @@ private[spark] class ExecutorAllocationManager(
     client: ExecutorAllocationClient,
     listenerBus: LiveListenerBus,
     conf: SparkConf,
+    mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster)
   extends Logging {
 
@@ -113,6 +114,9 @@ private[spark] class ExecutorAllocationManager(
 
   private val cachedExecutorIdleTimeoutS = conf.getTimeAsSeconds(
     "spark.dynamicAllocation.cachedExecutorIdleTimeout", s"${Integer.MAX_VALUE}s")
+
+  private val inactiveShuffleExecutorIdleTimeoutS = conf.getTimeAsSeconds(
+    "spark.dynamicAllocation.inactiveShuffleExecutorIdleTimeout", s"${Integer.MAX_VALUE}s")
 
   // During testing, the methods to actually kill and add executors are mocked out
   private val testing = conf.getBoolean("spark.dynamicAllocation.testing", false)
@@ -209,12 +213,6 @@ private[spark] class ExecutorAllocationManager(
     }
     if (cachedExecutorIdleTimeoutS < 0) {
       throw new SparkException("spark.dynamicAllocation.cachedExecutorIdleTimeout must be >= 0!")
-    }
-    // Require external shuffle service for dynamic allocation
-    // Otherwise, we may lose shuffle files when killing executors
-    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !testing) {
-      throw new SparkException("Dynamic allocation of executors requires the external " +
-        "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
     if (tasksPerExecutorForFullParallelism == 0) {
       throw new SparkException("spark.executor.cores must not be < spark.task.cpus.")
@@ -546,7 +544,7 @@ private[spark] class ExecutorAllocationManager(
       // has been reached, it will no longer be marked as idle. When new executors join,
       // however, we are no longer at the lower bound, and so we must mark executor X
       // as idle again so as not to forget that it is a candidate for removal. (see SPARK-4951)
-      executorIds.filter(listener.isExecutorIdle).foreach(onExecutorIdle)
+      checkForIdleExecutors()
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
     } else {
       logWarning(s"Duplicate executor $executorId has registered")
@@ -601,28 +599,42 @@ private[spark] class ExecutorAllocationManager(
    */
   private def onExecutorIdle(executorId: String): Unit = synchronized {
     if (executorIds.contains(executorId)) {
-      if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
+      val hasActiveShuffleBlocks =
+        mapOutputTracker.hasOutputsOnExecutor(executorId, activeOnly = true)
+      if (!removeTimes.contains(executorId)
+        && !executorsPendingToRemove.contains(executorId)
+        && !hasActiveShuffleBlocks) {
         // Note that it is not necessary to query the executors since all the cached
         // blocks we are concerned with are reported to the driver. Note that this
         // does not include broadcast blocks.
         val hasCachedBlocks = blockManagerMaster.hasCachedBlocks(executorId)
+        val hasAnyShuffleBlocks = mapOutputTracker.hasOutputsOnExecutor(executorId)
         val now = clock.getTimeMillis()
-        val timeout = {
-          if (hasCachedBlocks) {
-            // Use a different timeout if the executor has cached blocks.
-            now + cachedExecutorIdleTimeoutS * 1000
-          } else {
-            now + executorIdleTimeoutS * 1000
-          }
-        }
-        val realTimeout = if (timeout <= 0) Long.MaxValue else timeout // overflow
-        removeTimes(executorId) = realTimeout
+
+        // Use the maximum of all the timeouts that apply.
+        val timeoutS = List(
+          executorIdleTimeoutS,
+          if (hasCachedBlocks) cachedExecutorIdleTimeoutS else 0,
+          if (hasAnyShuffleBlocks) inactiveShuffleExecutorIdleTimeoutS else 0)
+          .max
+
+        val expiryTime = now + timeoutS * 1000;
+        val realExpiryTime = if (expiryTime <= 0) Long.MaxValue else expiryTime
+
+        removeTimes(executorId) = realExpiryTime
         logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
-          s"scheduled to run on the executor (to expire in ${(realTimeout - now)/1000} seconds)")
+          s"scheduled to run on the executor (to expire in ${(realExpiryTime - now)/1000} seconds)")
       }
     } else {
       logWarning(s"Attempted to mark unknown executor $executorId idle")
     }
+  }
+
+  /**
+   * Check if any executors are now idle, and call the idle callback for them.
+   */
+  private def checkForIdleExecutors(): Unit = synchronized {
+    executorIds.filter(listener.isExecutorIdle).foreach(onExecutorIdle)
   }
 
   /**
@@ -658,6 +670,12 @@ private[spark] class ExecutorAllocationManager(
     // maintain the executor placement hints for each stage Id used by resource framework to better
     // place the executors.
     private val stageIdToExecutorPlacementHints = new mutable.HashMap[Int, (Int, Map[String, Int])]
+
+    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+      // At the end of a job, trigger the callbacks for idle executors again to clean up executors
+      // which we were keeping around only because they held active shuffle blocks.
+      allocationManager.checkForIdleExecutors()
+    }
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false

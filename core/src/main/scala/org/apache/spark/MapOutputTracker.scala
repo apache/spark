@@ -28,6 +28,7 @@ import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
+import org.apache.spark.ExecutorShuffleStatus.ExecutorShuffleStatus
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -62,6 +63,13 @@ private class ShuffleStatus(numPartitions: Int) {
   val mapStatuses = new Array[MapStatus](numPartitions)
 
   /**
+   * Whether an active job in the [[org.apache.spark.scheduler.DAGScheduler]] depends on this.
+   * If dynamic allocation is enabled, then executors that do not contain active shuffles may
+   * eventually be surrendered by the [[ExecutorAllocationManager]].
+   */
+  var isActive = true
+
+  /**
    * The cached result of serializing the map statuses array. This cache is lazily populated when
    * [[serializedMapStatus]] is called. The cache is invalidated when map outputs are removed.
    */
@@ -80,9 +88,16 @@ private class ShuffleStatus(numPartitions: Int) {
   /**
    * Counter tracking the number of partitions that have output. This is a performance optimization
    * to avoid having to count the number of non-null entries in the `mapStatuses` array and should
-   * be equivalent to`mapStatuses.count(_ ne null)`.
+   * be equivalent to `mapStatuses.count(_ ne null)`.
    */
   private[this] var _numAvailableOutputs: Int = 0
+
+  /**
+   * Cached set of executorIds on which outputs exist. This is a performance optimization to avoid
+   * having to repeatedly iterate over ever element in the `mapStatuses` array and should be
+   * equivalent to `mapStatuses.map(_.location.executorId).groupBy(x => x).mapValues(_.length)`.
+   */
+  private[this] val _numOutputsPerExecutorId = HashMap[String, Int]().withDefaultValue(0)
 
   /**
    * Register a map output. If there is already a registered location for the map output then it
@@ -90,7 +105,7 @@ private class ShuffleStatus(numPartitions: Int) {
    */
   def addMapOutput(mapId: Int, status: MapStatus): Unit = synchronized {
     if (mapStatuses(mapId) == null) {
-      _numAvailableOutputs += 1
+      incrementNumAvailableOutputs(status.location)
       invalidateSerializedMapOutputStatusCache()
     }
     mapStatuses(mapId) = status
@@ -103,7 +118,7 @@ private class ShuffleStatus(numPartitions: Int) {
    */
   def removeMapOutput(mapId: Int, bmAddress: BlockManagerId): Unit = synchronized {
     if (mapStatuses(mapId) != null && mapStatuses(mapId).location == bmAddress) {
-      _numAvailableOutputs -= 1
+      decrementNumAvailableOutputs(bmAddress)
       mapStatuses(mapId) = null
       invalidateSerializedMapOutputStatusCache()
     }
@@ -133,11 +148,19 @@ private class ShuffleStatus(numPartitions: Int) {
   def removeOutputsByFilter(f: (BlockManagerId) => Boolean): Unit = synchronized {
     for (mapId <- 0 until mapStatuses.length) {
       if (mapStatuses(mapId) != null && f(mapStatuses(mapId).location)) {
-        _numAvailableOutputs -= 1
+        decrementNumAvailableOutputs(mapStatuses(mapId).location)
         mapStatuses(mapId) = null
         invalidateSerializedMapOutputStatusCache()
       }
     }
+  }
+
+  def hasOutputsOnExecutor(execId: String): Boolean = synchronized {
+    _numOutputsPerExecutorId(execId) > 0
+  }
+
+  def executorsWithOutputs(): Set[String] = synchronized {
+    _numOutputsPerExecutorId.keySet.toSet
   }
 
   /**
@@ -190,6 +213,22 @@ private class ShuffleStatus(numPartitions: Int) {
    */
   def withMapStatuses[T](f: Array[MapStatus] => T): T = synchronized {
     f(mapStatuses)
+  }
+
+  private[this] def incrementNumAvailableOutputs(bmAddress: BlockManagerId): Unit = synchronized {
+    _numOutputsPerExecutorId(bmAddress.executorId) += 1
+    _numAvailableOutputs += 1
+  }
+
+  private[this] def decrementNumAvailableOutputs(bmAddress: BlockManagerId): Unit = synchronized {
+    assert(_numOutputsPerExecutorId(bmAddress.executorId) >= 1,
+      s"Tried to remove non-existent output from ${bmAddress.executorId}")
+    if (_numOutputsPerExecutorId(bmAddress.executorId) == 1) {
+      _numOutputsPerExecutorId.remove(bmAddress.executorId)
+    } else {
+      _numOutputsPerExecutorId(bmAddress.executorId) -= 1
+    }
+    _numAvailableOutputs -= 1
   }
 
   /**
@@ -304,6 +343,11 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def unregisterShuffle(shuffleId: Int): Unit
 
   def stop() {}
+}
+
+private[spark] object ExecutorShuffleStatus extends Enumeration {
+  type ExecutorShuffleStatus = Value
+  val Active, Inactive, Unknown = Value
 }
 
 /**
@@ -453,6 +497,26 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
+  def markShuffleInactive(shuffleId: Int): Unit = {
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) =>
+        shuffleStatus.isActive = false
+      case None =>
+        throw new SparkException(
+          s"markShuffleInactive called for nonexistent shuffle ID $shuffleId.")
+    }
+  }
+
+  def markShuffleActive(shuffleId: Int): Unit = {
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) =>
+        shuffleStatus.isActive = true
+      case None =>
+        throw new SparkException(
+          s"markShuffleActive called for nonexistent shuffle ID $shuffleId.")
+    }
+  }
+
   /**
    * Removes all shuffle outputs associated with this host. Note that this will also remove
    * outputs which are served by an external shuffle server (if one exists).
@@ -470,6 +534,12 @@ private[spark] class MapOutputTrackerMaster(
   def removeOutputsOnExecutor(execId: String): Unit = {
     shuffleStatuses.valuesIterator.foreach { _.removeOutputsOnExecutor(execId) }
     incrementEpoch()
+  }
+
+  def hasOutputsOnExecutor(execId: String, activeOnly: Boolean = false): Boolean = {
+    shuffleStatuses.valuesIterator.exists { status =>
+      status.hasOutputsOnExecutor(execId) && (!activeOnly || status.isActive)
+    }
   }
 
   /** Check if the given shuffle is being tracked */
@@ -575,6 +645,20 @@ private[spark] class MapOutputTrackerMaster(
     } else {
       Nil
     }
+  }
+
+  /**
+   * Return the set of executors that contain tracked shuffle files, with a status of
+   * [[ExecutorShuffleStatus.Inactive]] iff all shuffle files on that executor are marked inactive.
+   *
+   * @return a map of executor IDs to their corresponding [[ExecutorShuffleStatus]]
+   */
+  def getExecutorShuffleStatus: scala.collection.Map[String, ExecutorShuffleStatus] = {
+    shuffleStatuses.values
+      .flatMap(status => status.executorsWithOutputs().map(_ -> status.isActive))
+      .groupBy(_._1)
+      .mapValues(_.exists(_._2))
+      .mapValues(if (_) ExecutorShuffleStatus.Active else ExecutorShuffleStatus.Inactive)
   }
 
   /**
