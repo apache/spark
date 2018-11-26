@@ -142,7 +142,7 @@ class RandomForestClassifier @Since("1.4.0") (
       .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
 
-    val numFeatures = oldDataset.first().features.size
+    val numFeatures = trees.head.numFeatures
     instr.logNumClasses(numClasses)
     instr.logNumFeatures(numFeatures)
     new RandomForestClassificationModel(uid, trees, numFeatures, numClasses)
