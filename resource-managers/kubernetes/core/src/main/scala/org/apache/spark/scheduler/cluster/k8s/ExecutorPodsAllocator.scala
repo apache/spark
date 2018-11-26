@@ -18,17 +18,6 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
-import io.fabric8.kubernetes.api.model.PodBuilder
-import io.fabric8.kubernetes.client.KubernetesClient
-import scala.collection.mutable
-
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesConf
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.{Clock, Utils}
-
 private[spark] class ExecutorPodsAllocator(
     conf: SparkConf,
     secMgr: SecurityManager,
@@ -66,15 +55,24 @@ private[spark] class ExecutorPodsAllocator(
   // snapshot yet. Mapped to the timestamp when they were created.
   private val newlyCreatedExecutors = mutable.Map.empty[Long, Long]
 
+  private var latestSnapshot: Option[ExecutorPodsSnapshot] = None
+
+  private var appId: Option[String] = None
+
   def start(applicationId: String): Unit = {
     snapshotsStore.addSubscriber(podAllocationDelay) {
       onNewSnapshots(applicationId, _)
     }
   }
 
-  def setTotalExpectedExecutors(total: Int): Unit = totalExpectedExecutors.set(total)
+  def setTotalExpectedExecutors(total: Int): Unit = {
+    logDebug("Setting total expected executors", SafeArg.of("totalExpectedExecutors", total))
+    totalExpectedExecutors.set(total)
+    appId.foreach { id => latestSnapshot.foreach { requestExecutorsIfNecessary(id, _) } }
+  }
 
   private def onNewSnapshots(applicationId: String, snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
+    this.appId = Some(applicationId)
     newlyCreatedExecutors --= snapshots.flatMap(_.executorPods.keys)
     // For all executors we've created against the API but have not seen in a snapshot
     // yet - check the current time. If the current time has exceeded some threshold,
@@ -110,12 +108,18 @@ private[spark] class ExecutorPodsAllocator(
     if (snapshots.nonEmpty) {
       // Only need to examine the cluster as of the latest snapshot, the "current" state, to see if
       // we need to allocate more executors or not.
-      val latestSnapshot = snapshots.last
-      val currentRunningExecutors = latestSnapshot.executorPods.values.count {
+      latestSnapshot = Some(snapshots.last)
+      requestExecutorsIfNecessary(applicationId, snapshots.last)
+    }
+  }
+
+  private def requestExecutorsIfNecessary(applicationId: String,
+                                          snapshot: ExecutorPodsSnapshot): Unit = {
+      val currentRunningExecutors = snapshot.executorPods.values.count {
         case PodRunning(_) => true
         case _ => false
       }
-      val currentPendingExecutors = latestSnapshot.executorPods.values.count {
+      val currentPendingExecutors = snapshot.executorPods.values.count {
         case PodPending(_) => true
         case _ => false
       }
@@ -145,7 +149,6 @@ private[spark] class ExecutorPodsAllocator(
             .build()
           kubernetesClient.pods().create(podWithAttachedContainer)
           newlyCreatedExecutors(newExecutorId) = clock.getTimeMillis()
-          logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
         }
       } else if (currentRunningExecutors >= currentTotalExpectedExecutors) {
         // TODO handle edge cases if we end up with more running executors than expected.
