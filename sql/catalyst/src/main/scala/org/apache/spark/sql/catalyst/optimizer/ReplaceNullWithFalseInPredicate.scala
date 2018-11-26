@@ -72,7 +72,8 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
   }
 
   /**
-   * Recursively replaces `Literal(null, BooleanType)` with `FalseLiteral`.
+   * Recursively traverse the Boolean-type expression to replace
+   * `Literal(null, BooleanType)` with `FalseLiteral`, if possible.
    *
    * Note that `transformExpressionsDown` can not be used here as we must stop as soon as we hit
    * an expression that is not [[CaseWhen]], [[If]], [[And]], [[Or]] or
