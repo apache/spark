@@ -18,7 +18,7 @@
 package org.apache.spark.broadcast
 
 import java.io._
-import java.lang.ref.WeakReference
+import java.lang.ref.SoftReference
 import java.nio.ByteBuffer
 import java.util.zip.Adler32
 
@@ -63,10 +63,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
    * which builds this value by reading blocks from the driver and/or other executors.
    *
    * On the driver, if the value is required, it is read lazily from the block manager. We hold
-   * a weak reference so that it can be garbage collected if required, as we can always reconstruct
+   * a soft reference so that it can be garbage collected if required, as we can always reconstruct
    * in the future.
    */
-  @transient private var _value: WeakReference[T] = _
+  @transient private var _value: SoftReference[T] = _
 
   /** The compression codec to use, or None if compression is disabled */
   @transient private var compressionCodec: Option[CompressionCodec] = _
@@ -95,13 +95,13 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   /** The checksum for all the blocks. */
   private var checksums: Array[Int] = _
 
-  override protected def getValue() = {
+  override protected def getValue() = synchronized {
     val memoized: T = if (_value == null) null.asInstanceOf[T] else _value.get
     if (memoized != null) {
       memoized
     } else {
       val newlyRead = readBroadcastBlock()
-      _value = new WeakReference[T](newlyRead)
+      _value = new SoftReference[T](newlyRead)
       newlyRead
     }
   }
