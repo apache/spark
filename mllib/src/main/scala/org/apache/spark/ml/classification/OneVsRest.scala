@@ -22,12 +22,10 @@ import java.util.UUID
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 import scala.language.existentials
-
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject, _}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
@@ -37,7 +35,7 @@ import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -170,7 +168,7 @@ final class OneVsRestModel private[ml] (
     transformSchema(dataset.schema, logging = true)
 
     if (getPredictionCol == "" && getRawPredictionCol == "") {
-      logWarning(s"$uid: ClassificationModel.transform() was called as NOOP" +
+      logWarning(s"$uid: OneVsRestModel.transform() was called as NOOP" +
         " since no output columns were set.")
       return dataset.toDF
     }
@@ -215,6 +213,9 @@ final class OneVsRestModel private[ml] (
       newDataset.unpersist()
     }
 
+    var outputColNames = Seq.empty[String]
+    var outputColumns = Seq.empty[Column]
+
     if (getRawPredictionCol != "") {
       val numClass = models.length
 
@@ -225,30 +226,24 @@ final class OneVsRestModel private[ml] (
         Vectors.dense(predArray)
       }
 
-      if (getPredictionCol != "") {
-        // output the index of the classifier with highest confidence as prediction
-        val labelUDF = udf { (rawPredictions: Vector) => rawPredictions.argmax.toDouble }
+      outputColNames = outputColNames :+ getRawPredictionCol
+      outputColumns = outputColumns :+ rawPredictionUDF(col(accColName))
+    }
 
-        // output confidence as raw prediction, label and label metadata as prediction
-        aggregatedDataset
-          .withColumn(getRawPredictionCol, rawPredictionUDF(col(accColName)))
-          .withColumn(getPredictionCol, labelUDF(col(getRawPredictionCol)), labelMetadata)
-          .drop(accColName)
-      } else {
-        aggregatedDataset
-          .withColumn(getRawPredictionCol, rawPredictionUDF(col(accColName)))
-          .drop(accColName)
-      }
-    } else {
+    if (getPredictionCol != "") {
       // output the index of the classifier with highest confidence as prediction
       val labelUDF = udf { (predictions: Map[Int, Double]) =>
         predictions.maxBy(_._2)._1.toDouble
       }
-      // output label and label metadata as prediction
-      aggregatedDataset
-        .withColumn(getPredictionCol, labelUDF(col(accColName)), labelMetadata)
-        .drop(accColName)
+
+      outputColNames = outputColNames :+ getPredictionCol
+      outputColumns = outputColumns :+ labelUDF(col(accColName))
+        .as(getPredictionCol, labelMetadata)
     }
+
+    aggregatedDataset
+      .withColumns(outputColNames, outputColumns)
+      .drop(accColName)
   }
 
   @Since("1.4.1")
