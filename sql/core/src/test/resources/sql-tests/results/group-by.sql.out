@@ -486,4 +486,4 @@ Aggregate [k#x], [k#x, min(v#x) AS every(v)#x, max(v#x) AS some(v)#x, max(v#x) A
 *HashAggregate(keys=[k#x], functions=[min(v#x), max(v#x)], output=[k#x, every(v)#x, some(v)#x, any(v)#x])
 +- Exchange hashpartitioning(k#x, 200)
    +- *HashAggregate(keys=[k#x], functions=[partial_min(v#x), partial_max(v#x)], output=[k#x, min#x, max#x])
-      +- LocalTableScan [k#x, v#x]
+      +- *LocalTableScan [k#x, v#x]
