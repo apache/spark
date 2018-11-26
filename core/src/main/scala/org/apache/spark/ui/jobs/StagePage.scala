@@ -152,20 +152,20 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           }}
           {if (hasOutput(stageData)) {
             <li>
-              <strong>Output: </strong>
+              <strong>Output Size / Records: </strong>
               {s"${Utils.bytesToString(stageData.outputBytes)} / ${stageData.outputRecords}"}
             </li>
           }}
           {if (hasShuffleRead(stageData)) {
             <li>
-              <strong>Shuffle Read: </strong>
+              <strong>Shuffle Read Size / Records: </strong>
               {s"${Utils.bytesToString(stageData.shuffleReadBytes)} / " +
                s"${stageData.shuffleReadRecords}"}
             </li>
           }}
           {if (hasShuffleWrite(stageData)) {
             <li>
-              <strong>Shuffle Write: </strong>
+              <strong>Shuffle Write Size / Records: </strong>
                {s"${Utils.bytesToString(stageData.shuffleWriteBytes)} / " +
                s"${stageData.shuffleWriteRecords}"}
             </li>
@@ -183,10 +183,11 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           {if (!stageJobIds.isEmpty) {
             <li>
               <strong>Associated Job Ids: </strong>
-              {stageJobIds.map(jobId => {val detailUrl = "%s/jobs/job/?id=%s".format(
-                UIUtils.prependBaseUri(request, parent.basePath), jobId)
-              <a href={s"${detailUrl}"}>{s"${jobId}"} &nbsp;&nbsp;</a>
-            })}
+              {stageJobIds.sorted.map { jobId =>
+                val jobURL = "%s/jobs/job/?id=%s"
+                  .format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
+                <a href={jobURL}>{jobId.toString}</a><span>&nbsp;</span>
+              }}
             </li>
           }}
         </ul>
@@ -843,7 +844,7 @@ private[ui] class TaskPagedTable(
         </div>
       </td>
       <td>{UIUtils.formatDate(task.launchTime)}</td>
-      <td>{formatDuration(task.duration)}</td>
+      <td>{formatDuration(task.taskMetrics.map(_.executorRunTime))}</td>
       <td class={TaskDetailsClassNames.SCHEDULER_DELAY}>
         {UIUtils.formatDuration(AppStatusUtils.schedulerDelay(task))}
       </td>
@@ -996,7 +997,9 @@ private[ui] object ApiHelper {
     HEADER_EXECUTOR -> TaskIndexNames.EXECUTOR,
     HEADER_HOST -> TaskIndexNames.HOST,
     HEADER_LAUNCH_TIME -> TaskIndexNames.LAUNCH_TIME,
-    HEADER_DURATION -> TaskIndexNames.DURATION,
+    // SPARK-26109: Duration of task as executorRunTime to make it consistent with the
+    // aggregated tasks summary metrics table and the previous versions of Spark.
+    HEADER_DURATION -> TaskIndexNames.EXEC_RUN_TIME,
     HEADER_SCHEDULER_DELAY -> TaskIndexNames.SCHEDULER_DELAY,
     HEADER_DESER_TIME -> TaskIndexNames.DESER_TIME,
     HEADER_GC_TIME -> TaskIndexNames.GC_TIME,

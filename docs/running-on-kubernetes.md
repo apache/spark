@@ -88,6 +88,18 @@ $ ./bin/docker-image-tool.sh -r <repo> -t my-tag build
 $ ./bin/docker-image-tool.sh -r <repo> -t my-tag push
 ```
 
+By default `bin/docker-image-tool.sh` builds docker image for running JVM jobs. You need to opt-in to build additional 
+language binding docker images.
+
+Example usage is
+```bash
+# To build additional PySpark docker image
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
+
+# To build additional SparkR docker image
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile build
+```
+
 ## Cluster Mode
 
 To launch Spark Pi in cluster mode,
@@ -154,7 +166,7 @@ hostname via `spark.driver.host` and your spark driver's port to `spark.driver.p
 
 ### Client Mode Executor Pod Garbage Collection
 
-If you run your Spark driver in a pod, it is highly recommended to set `spark.driver.pod.name` to the name of that pod.
+If you run your Spark driver in a pod, it is highly recommended to set `spark.kubernetes.driver.pod.name` to the name of that pod.
 When this property is set, the Spark scheduler will deploy the executor pods with an
 [OwnerReference](https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/), which in turn will
 ensure that once the driver pod is deleted from the cluster, all of the application's executor pods will also be deleted.
@@ -163,7 +175,7 @@ an OwnerReference pointing to that pod will be added to each executor pod's Owne
 setting the OwnerReference to a pod that is not actually that driver pod, or else the executors may be terminated
 prematurely when the wrong pod is deleted.
 
-If your application is not running inside a pod, or if `spark.driver.pod.name` is not set when your application is
+If your application is not running inside a pod, or if `spark.kubernetes.driver.pod.name` is not set when your application is
 actually running in a pod, keep in mind that the executor pods may not be properly deleted from the cluster when the
 application exits. The Spark scheduler attempts to delete these pods, but if the network request to the API server fails
 for any reason, these pods will remain in the cluster. The executor processes should exit when they cannot reach the
