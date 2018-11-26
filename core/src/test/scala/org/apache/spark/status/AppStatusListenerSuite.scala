@@ -1289,11 +1289,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     time += 1
     tasks(0).markFinished(TaskState.FINISHED, time)
-    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, "taskType",
       Success, tasks(0), null))
     time += 1
     tasks(1).markFinished(TaskState.FINISHED, time)
-    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, "taskType",
       Success, tasks(1), null))
 
     stage.failureReason = Some("Failed")
@@ -1303,11 +1303,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     time += 1
     tasks(2).markFinished(TaskState.FAILED, time)
-    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, "taskType",
       ExecutorLostFailure("1", true, Some("Lost executor")), tasks(2), null))
     time += 1
     tasks(3).markFinished(TaskState.FAILED, time)
-    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptId, "taskType",
+    listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber, "taskType",
       ExecutorLostFailure("2", true, Some("Lost executor")), tasks(3), null))
 
     val esummary = store.view(classOf[ExecutorStageSummaryWrapper]).asScala.map(_.info)
