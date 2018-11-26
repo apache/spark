@@ -37,7 +37,7 @@ import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
@@ -895,32 +895,38 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("Write dates correctly in ISO8601 format by default") {
-    withTempDir { dir =>
-      val customSchema = new StructType(Array(StructField("date", DateType, true)))
-      val iso8601datesPath = s"${dir.getCanonicalPath}/iso8601dates.csv"
-      val dates = spark.read
-        .format("csv")
-        .schema(customSchema)
-        .option("header", "true")
-        .option("inferSchema", "false")
-        .option("dateFormat", "dd/MM/yyyy HH:mm")
-        .load(testFile(datesFile))
-      dates.write
-        .format("csv")
-        .option("header", "true")
-        .save(iso8601datesPath)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTempDir { dir =>
+        val customSchema = new StructType(Array(StructField("date", DateType, true)))
+        val iso8601datesPath = s"${dir.getCanonicalPath}/iso8601dates.csv"
+        val dates = spark.read
+          .format("csv")
+          .schema(customSchema)
+          .option("header", "true")
+          .option("inferSchema", "false")
+          .option("dateFormat", "dd/MM/yyyy HH:mm")
+          .load(testFile(datesFile))
+        dates.write
+          .format("csv")
+          .option("header", "true")
+          .save(iso8601datesPath)
 
-      // This will load back the dates as string.
-      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
-      val iso8601dates = spark.read
-        .format("csv")
-        .schema(stringSchema)
-        .option("header", "true")
-        .load(iso8601datesPath)
+        // This will load back the dates as string.
+        val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
+        val iso8601dates = spark.read
+          .format("csv")
+          .schema(stringSchema)
+          .option("header", "true")
+          .load(iso8601datesPath)
 
-      val expectedDates = Seq(Row("2015-08-26"), Row("2014-10-27"), Row("2016-01-28"))
+        val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd", Locale.US)
+        val expectedDates = dates.collect().map { r =>
+          // This should be ISO8601 formatted string.
+          Row(iso8501.format(r.toSeq.head))
+        }
 
-      checkAnswer(iso8601dates, expectedDates)
+        checkAnswer(iso8601dates, expectedDates)
+      }
     }
   }
 
