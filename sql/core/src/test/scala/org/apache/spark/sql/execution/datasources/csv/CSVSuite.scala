@@ -633,13 +633,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       .select("date")
       .collect()
 
-    val expected = Seq("2015-08-26", "2014-10-27", "2016-01-28")
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm", Locale.US)
+    val expected = Seq(
+      new Date(dateFormat.parse("26/08/2015 18:00").getTime),
+      new Date(dateFormat.parse("27/10/2014 18:30").getTime),
+      new Date(dateFormat.parse("28/01/2016 20:00").getTime))
     val dates = results.toSeq.map(_.toSeq.head)
     expected.zip(dates).foreach {
       case (expectedDate, date) =>
         // As it truncates the hours, minutes and etc., we only check
         // if the dates (days, months and years) are the same via `toString()`.
-        assert(expectedDate == date.toString)
+        assert(expectedDate.toString === date.toString)
     }
   }
 
