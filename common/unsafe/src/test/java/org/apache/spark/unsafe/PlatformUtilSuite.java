@@ -165,10 +165,14 @@ public class PlatformUtilSuite {
     byte[] floatBytes = new byte[Float.BYTES];
     Platform.putDouble(doubleBytes, Platform.BYTE_ARRAY_OFFSET, -0.0d);
     Platform.putFloat(floatBytes, Platform.BYTE_ARRAY_OFFSET, -0.0f);
-    double doubleFromPlatform = Platform.getDouble(doubleBytes, Platform.BYTE_ARRAY_OFFSET);
-    float floatFromPlatform = Platform.getFloat(floatBytes, Platform.BYTE_ARRAY_OFFSET);
 
-    Assert.assertEquals(Double.doubleToLongBits(0.0d), Double.doubleToLongBits(doubleFromPlatform));
-    Assert.assertEquals(Float.floatToIntBits(0.0f), Float.floatToIntBits(floatFromPlatform));
+    byte[] doubleBytes2 = new byte[Double.BYTES];
+    byte[] floatBytes2 = new byte[Float.BYTES];
+    Platform.putDouble(doubleBytes, Platform.BYTE_ARRAY_OFFSET, 0.0d);
+    Platform.putFloat(floatBytes, Platform.BYTE_ARRAY_OFFSET, 0.0f);
+
+    // Make sure the bytes we write from 0.0 and -0.0 are same.
+    Assert.assertArrayEquals(doubleBytes, doubleBytes2);
+    Assert.assertArrayEquals(floatBytes, floatBytes2);
   }
 }

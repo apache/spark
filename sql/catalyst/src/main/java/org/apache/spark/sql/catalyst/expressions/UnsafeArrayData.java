@@ -334,17 +334,11 @@ public final class UnsafeArrayData extends ArrayData {
   }
 
   public void setFloat(int ordinal, float value) {
-    if (Float.isNaN(value)) {
-      value = Float.NaN;
-    }
     assertIndexIsValid(ordinal);
     Platform.putFloat(baseObject, getElementOffset(ordinal, 4), value);
   }
 
   public void setDouble(int ordinal, double value) {
-    if (Double.isNaN(value)) {
-      value = Double.NaN;
-    }
     assertIndexIsValid(ordinal);
     Platform.putDouble(baseObject, getElementOffset(ordinal, 8), value);
   }
