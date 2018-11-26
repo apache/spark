@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
@@ -40,7 +41,7 @@ import org.apache.spark.sql.types._
  * "name(arguments...)", the concrete implementation must be a case class whose constructor
  * arguments are all Expressions types. See [[Substring]] for an example.
  *
- * There are a few important traits:
+ * There are a few important traits or abstract classes:
  *
  * - [[Nondeterministic]]: an expression that is not deterministic.
  * - [[Stateful]]: an expression that contains mutable state. For example, MonotonicallyIncreasingID
@@ -50,7 +51,7 @@ import org.apache.spark.sql.types._
  *                        interpreted mode.
  * - [[NullIntolerant]]: an expression that is null intolerant (i.e. any null input will result in
  *                       null output).
- * - [[NonSQLExpression]]: a common base trait for the expressions that doesn't have SQL
+ * - [[NonSQLExpression]]: a common base trait for the expressions that do not have SQL
  *                         expressions like representation. For example, `ScalaUDF`, `ScalaUDAF`,
  *                         and object `MapObjects` and `Invoke`.
  * - [[UserDefinedExpression]]: a common base trait for user-defined functions, including
@@ -58,9 +59,10 @@ import org.apache.spark.sql.types._
  * - [[HigherOrderFunction]]: a common base trait for higher order functions that take one or more
  *                            (lambda) functions and applies these to some objects. The function
  *                            produces a number of variables which can be consumed by some lambda
- *                            function.
+ *                            functions.
  * - [[NamedExpression]]: An [[Expression]] that is named.
  * - [[TimeZoneAwareExpression]]: A common base trait for time zone aware expressions.
+ * - [[SubqueryExpression]]: A base interface for expressions that contain a [[LogicalPlan]].
  *
  * - [[LeafExpression]]: an expression that has no child.
  * - [[UnaryExpression]]: an expression that has one child.
