@@ -125,7 +125,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       SERVICE_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
       MOUNT_VOLUMES_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE)
+      DRIVER_CMD_STEP_TYPE,
+      HADOOP_GLOBAL_STEP_TYPE)
   }
 
   test("Apply volumes step if a mount subpath is present.") {
