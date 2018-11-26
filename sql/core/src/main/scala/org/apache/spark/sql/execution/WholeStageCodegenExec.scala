@@ -447,7 +447,7 @@ trait InputRDDCodegen extends CodegenSupport {
       null
     }
 
-    val numOutputRowsCode = if (metrics.contains("numOutputRows")) {
+    val updateNumOutputRowsMetrics = if (metrics.contains("numOutputRows")) {
       val numOutputRows = metricTerm(ctx, "numOutputRows")
       s"$numOutputRows.add(1);"
     } else {
@@ -456,7 +456,7 @@ trait InputRDDCodegen extends CodegenSupport {
     s"""
        | while ($limitNotReachedCond $input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
-       |   ${numOutputRowsCode}
+       |   ${updateNumOutputRowsMetrics}
        |   ${consume(ctx, outputVars, if (createUnsafeProjection) null else row).trim}
        |   ${shouldStopCheckCode}
        | }
