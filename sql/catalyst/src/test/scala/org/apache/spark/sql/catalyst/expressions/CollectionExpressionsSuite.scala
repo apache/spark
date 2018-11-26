@@ -1658,6 +1658,19 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
 
+  test("Array Except - null handling") {
+    val empty = Literal.create(Seq.empty[Int], ArrayType(IntegerType, containsNull = false))
+    val oneNull = Literal.create(Seq(null), ArrayType(IntegerType))
+    val twoNulls = Literal.create(Seq(null, null), ArrayType(IntegerType))
+
+    checkEvaluation(ArrayExcept(oneNull, oneNull), Seq.empty)
+    checkEvaluation(ArrayExcept(twoNulls, twoNulls), Seq.empty)
+    checkEvaluation(ArrayExcept(twoNulls, oneNull), Seq.empty)
+    checkEvaluation(ArrayExcept(empty, oneNull), Seq.empty)
+    checkEvaluation(ArrayExcept(oneNull, empty), Seq(null))
+    checkEvaluation(ArrayExcept(twoNulls, empty), Seq(null))
+  }
+
   test("Array Intersect") {
     val a00 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType, false))
     val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType, false))
@@ -1768,5 +1781,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ArrayIntersect(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === true)
     assert(ArrayIntersect(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayIntersect(a23, a24).dataType.asInstanceOf[ArrayType].containsNull === true)
+  }
+
+  test("Array Intersect - null handling") {
+    val empty = Literal.create(Seq.empty[Int], ArrayType(IntegerType, containsNull = false))
+    val oneNull = Literal.create(Seq(null), ArrayType(IntegerType))
+    val twoNulls = Literal.create(Seq(null, null), ArrayType(IntegerType))
+
+    checkEvaluation(ArrayIntersect(oneNull, oneNull), Seq(null))
+    checkEvaluation(ArrayIntersect(twoNulls, twoNulls), Seq(null))
+    checkEvaluation(ArrayIntersect(twoNulls, oneNull), Seq(null))
+    checkEvaluation(ArrayIntersect(oneNull, twoNulls), Seq(null))
+    checkEvaluation(ArrayIntersect(empty, oneNull), Seq.empty)
+    checkEvaluation(ArrayIntersect(oneNull, empty), Seq.empty)
   }
 }
