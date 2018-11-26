@@ -455,7 +455,33 @@ case class TruncateTableCommand(
           throw new NoSuchPartitionException(table.database, table.identifier.table, spec)
         }
 
-        partLocations
+        val partitionFixLocations = partLocations.map { partURI =>
+          val partLocationStr = partURI.get.toString
+          val partitionKeyValue = if (partitionSpec.isDefined) {
+            partitionSpec.get.toSeq.map { case (key, value) =>
+              s"$key=$value"
+            }.mkString("/")
+          } else {
+            s"${table.identifier.unquotedString}"
+          }
+          if (partLocationStr.isEmpty) {
+            ""
+          } else {
+            val endIndex = partLocationStr.indexOf(partitionKeyValue)
+            if (endIndex == -1) {
+              partLocationStr
+            } else {
+              partLocationStr.substring(0, endIndex + partitionKeyValue.length)
+            }
+          }
+        }.distinct.map{ partitionLoc =>
+          if (partitionLoc.isEmpty) {
+            None
+          } else {
+            Option(new URI(partitionLoc))
+          }
+        }
+        partitionFixLocations
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
     locations.foreach { location =>
@@ -464,7 +490,10 @@ case class TruncateTableCommand(
         try {
           val fs = path.getFileSystem(hadoopConf)
           fs.delete(path, true)
-          fs.mkdirs(path)
+          // if location is tableRootPath mkdir,otherwise not
+          if(partCols.isEmpty) {
+            fs.mkdirs(path)
+          }
         } catch {
           case NonFatal(e) =>
             throw new AnalysisException(
@@ -473,7 +502,13 @@ case class TruncateTableCommand(
         }
       }
     }
-    // After deleting the data, invalidate the table to make sure we don't keep around a stale
+
+    // delete metadata partition
+    catalog.listPartitions(tableName, partitionSpec).map(_.spec).foreach {
+      partSec =>
+        catalog.dropPartitions(tableName, Seq(partSec), true, true, true)
+    }
+      // After deleting the data, invalidate the table to make sure we don't keep around a stale
     // file relation in the metastore cache.
     spark.sessionState.refreshTable(tableName.unquotedString)
     // Also try to drop the contents of the table from the columnar cache
@@ -483,8 +518,7 @@ case class TruncateTableCommand(
       case NonFatal(e) =>
         log.warn(s"Exception when attempting to uncache table $tableIdentWithDB", e)
     }
-
-    if (table.stats.nonEmpty) {
+      if (table.stats.nonEmpty) {
       // empty table after truncation
       val newStats = CatalogStatistics(sizeInBytes = 0, rowCount = Some(0))
       catalog.alterTableStats(tableName, Some(newStats))

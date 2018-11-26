@@ -1895,18 +1895,34 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-25774 truncate table with partition and path - datasource table") {
+    import testImplicits._
+    val data = (1 to 10).map { i => (i % 3, i % 5, i) }.toDF("width", "length", "height")
+    withTable("partTable") {
+      data.write.partitionBy("width", "length").saveAsTable("partTable")
+      // supported since partitions are stored in the metastore
+      sql("TRUNCATE TABLE partTable partition(length = 1)")
+      assert(spark.sql("show partitions partTable").collect().exists {
+        row => !row(0).asInstanceOf[String].contains("=1")
+      })
+      assert(spark.sql("show partitions partTable").collect().exists {
+        row => row(0).asInstanceOf[String].contains("width=1")
+      })
+      assert(spark.table("partTable").filter($"length" === 1).collect().isEmpty)
+      sql("TRUNCATE TABLE partTable partition(width = 1)")
+      assert(spark.sql("show partitions partTable").collect().exists {
+        row => !row(0).asInstanceOf[String].contains("width=1")
+      })
+      assert(spark.table("partTable").filter($"width" === 1).collect().isEmpty)
+      sql("TRUNCATE TABLE partTable")
+      assert(spark.table("partTable").collect().isEmpty)
+    }
+  }
+
   test("truncate partitioned table - datasource table") {
     import testImplicits._
 
     val data = (1 to 10).map { i => (i % 3, i % 5, i) }.toDF("width", "length", "height")
-
-    withTable("partTable") {
-      data.write.partitionBy("width", "length").saveAsTable("partTable")
-      // supported since partitions are stored in the metastore
-      sql("TRUNCATE TABLE partTable PARTITION (width=1, length=1)")
-      assert(spark.table("partTable").filter($"width" === 1).collect().nonEmpty)
-      assert(spark.table("partTable").filter($"width" === 1 && $"length" === 1).collect().isEmpty)
-    }
 
     withTable("partTable") {
       data.write.partitionBy("width", "length").saveAsTable("partTable")
