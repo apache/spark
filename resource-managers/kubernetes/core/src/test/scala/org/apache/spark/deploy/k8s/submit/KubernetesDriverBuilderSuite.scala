@@ -117,22 +117,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       "",
       false,
       KubernetesHostPathVolumeConf("/path"))
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        "test-app",
-        "main",
-        Seq.empty),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      volumeSpec :: Nil,
-      hadoopConfSpec = None)
+    val conf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeSpec))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -150,8 +135,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       "foo",
       false,
       KubernetesHostPathVolumeConf("/path"))
-    val conf = KubernetesTestConf.createDriverConf(
-      volumes = Seq(volumeSpec))
+    val conf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeSpec))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,

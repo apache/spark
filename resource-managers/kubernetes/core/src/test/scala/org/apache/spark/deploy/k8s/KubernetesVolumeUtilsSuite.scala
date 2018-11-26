@@ -39,7 +39,7 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     sparkConf.set("test.emptyDir.volumeName.mount.readOnly", "true")
     sparkConf.set("test.emptyDir.volumeName.mount.subPath", "subPath")
 
-    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head.get
+    val volumeSpec = KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.").head
     assert(volumeSpec.volumeName === "volumeName")
     assert(volumeSpec.mountPath === "/path")
     assert(volumeSpec.mountSubPath === "subPath")
