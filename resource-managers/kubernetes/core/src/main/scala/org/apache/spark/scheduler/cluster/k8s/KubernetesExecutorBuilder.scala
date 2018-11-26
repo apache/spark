@@ -42,7 +42,7 @@ private[spark] class KubernetesExecutorBuilder(
       new KerberosConfExecutorFeatureStep(_),
     provideHadoopSparkUserStep: (KubernetesExecutorConf => HadoopSparkUserExecutorFeatureStep) =
       new HadoopSparkUserExecutorFeatureStep(_),
-    provideInitialPod: () => SparkPod = SparkPod.initialPod) {
+    provideInitialPod: () => SparkPod = () => SparkPod.initialPod()) {
 
   def buildFromFeatures(kubernetesConf: KubernetesExecutorConf): SparkPod = {
     val sparkConf = kubernetesConf.sparkConf

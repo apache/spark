@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.reader.PartitionReader;
 
 /**
  * A variation on {@link PartitionReader} for use with continuous streaming processing.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface ContinuousPartitionReader<T> extends PartitionReader<T> {
 
   /**

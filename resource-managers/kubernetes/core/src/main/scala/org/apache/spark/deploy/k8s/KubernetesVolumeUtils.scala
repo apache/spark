@@ -33,9 +33,12 @@ private[spark] object KubernetesVolumeUtils {
     getVolumeTypesAndNames(properties).map { case (volumeType, volumeName) =>
       val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_PATH_KEY"
       val readOnlyKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_READONLY_KEY"
+      val subPathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY"
+
       KubernetesVolumeSpec(
         volumeName = volumeName,
         mountPath = properties(pathKey),
+        mountSubPath = properties.get(subPathKey).getOrElse(""),
         mountReadOnly = properties.get(readOnlyKey).exists(_.toBoolean),
         volumeConf = parseVolumeSpecificConf(properties, volumeType, volumeName))
     }.toSeq

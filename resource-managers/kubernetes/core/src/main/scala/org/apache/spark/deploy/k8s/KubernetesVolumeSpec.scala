@@ -32,5 +32,6 @@ private[spark] case class KubernetesEmptyDirVolumeConf(
 private[spark] case class KubernetesVolumeSpec(
     volumeName: String,
     mountPath: String,
+    mountSubPath: String,
     mountReadOnly: Boolean,
     volumeConf: KubernetesVolumeSpecificConf)

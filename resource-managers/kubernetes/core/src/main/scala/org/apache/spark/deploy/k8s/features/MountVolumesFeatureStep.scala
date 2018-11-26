@@ -46,6 +46,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
       val volumeMount = new VolumeMountBuilder()
         .withMountPath(spec.mountPath)
         .withReadOnly(spec.mountReadOnly)
+        .withSubPath(spec.mountSubPath)
         .withName(spec.volumeName)
         .build()
 

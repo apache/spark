@@ -45,7 +45,7 @@ private[spark] class KubernetesDriverBuilder(
       new KerberosConfDriverFeatureStep(_),
     providePodTemplateConfigMapStep: (KubernetesConf => PodTemplateConfigMapStep) =
       new PodTemplateConfigMapStep(_),
-    provideInitialPod: () => SparkPod = SparkPod.initialPod) {
+    provideInitialPod: () => SparkPod = () => SparkPod.initialPod) {
 
   def buildFromFeatures(kubernetesConf: KubernetesDriverConf): KubernetesDriverSpec = {
     val baseFeatures = Seq(

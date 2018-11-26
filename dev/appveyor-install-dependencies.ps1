@@ -116,7 +116,7 @@ Pop-Location
 
 # ========================== R
 $rVer = "3.5.1"
-$rToolsVer = "3.4.0"
+$rToolsVer = "3.5.1"
 
 InstallR
 InstallRtools

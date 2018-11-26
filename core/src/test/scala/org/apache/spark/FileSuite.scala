@@ -202,7 +202,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext("local", "test")
       val objs = sc.makeRDD(1 to 3).map { x =>
         val loader = Thread.currentThread().getContextClassLoader
-        Class.forName(className, true, loader).newInstance()
+        Class.forName(className, true, loader).getConstructor().newInstance()
       }
       val outputDir = new File(tempDir, "output").getAbsolutePath
       objs.saveAsObjectFile(outputDir)

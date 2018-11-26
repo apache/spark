@@ -161,11 +161,11 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
         "The given values of function map should all be the same type, but they are " +
           values.map(_.dataType.catalogString).mkString("[", ", ", "]"))
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeUtils.checkForMapKeyType(dataType.keyType)
     }
   }
 
-  override def dataType: DataType = {
+  override def dataType: MapType = {
     MapType(
       keyType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(keys.map(_.dataType))
         .getOrElse(StringType),
@@ -223,6 +223,16 @@ case class MapFromArrays(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      val keyType = left.dataType.asInstanceOf[ArrayType].elementType
+      TypeUtils.checkForMapKeyType(keyType)
+    }
+  }
 
   override def dataType: DataType = {
     MapType(
