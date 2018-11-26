@@ -223,12 +223,12 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
              |STORED AS orc
              |LOCATION '$wildCardDir'""".stripMargin
         sql(wildCardStatement)
-        val wildCardSqlStatement = s"selet * from ${tableName2}"
+        val wildCardSqlStatement = s"select * from ${tableName2}"
         if (isConvertMetastore) {
-          checkAnswer(sql(wildCardStatement),
+          checkAnswer(sql(wildCardSqlStatement),
             (1 to 2).map(i => Row(i, i, s"orc$i")))
         } else {
-          checkAnswer(sql(wildCardStatement), Nil)
+          checkAnswer(sql(wildCardSqlStatement), Nil)
         }
       }
     }
