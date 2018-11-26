@@ -34,22 +34,20 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep {
 
-  private val conf = kubernetesConf.sparkConf
-
   private val hadoopConfDir = Option(kubernetesConf.sparkConf.getenv(ENV_HADOOP_CONF_DIR))
-  private val hadoopConfigMapName = kubernetesConf.sparkConf.get(KUBERNETES_HADOOP_CONF_CONFIG_MAP)
+  private val hadoopConfigMapName = kubernetesConf.get(KUBERNETES_HADOOP_CONF_CONFIG_MAP)
   KubernetesUtils.requireNandDefined(
     hadoopConfDir,
     hadoopConfigMapName,
     "Do not specify both the `HADOOP_CONF_DIR` in your ENV and the ConfigMap " +
     "as the creation of an additional ConfigMap, when one is already specified is extraneous")
 
-  private val principal = conf.get(org.apache.spark.internal.config.PRINCIPAL)
-  private val keytab = conf.get(org.apache.spark.internal.config.KEYTAB)
-  private val existingSecretName = conf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
-  private val existingSecretItemKey = conf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
-  private val krb5File = conf.get(KUBERNETES_KERBEROS_KRB5_FILE)
-  private val krb5CMap = conf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
+  private val principal = kubernetesConf.get(org.apache.spark.internal.config.PRINCIPAL)
+  private val keytab = kubernetesConf.get(org.apache.spark.internal.config.KEYTAB)
+  private val existingSecretName = kubernetesConf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
+  private val existingSecretItemKey = kubernetesConf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
+  private val krb5File = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+  private val krb5CMap = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf)
   private val tokenManager = new HadoopDelegationTokenManager(kubernetesConf.sparkConf, hadoopConf)
   private val isKerberosEnabled =

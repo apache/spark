@@ -32,11 +32,11 @@ import org.apache.spark.util.Utils
  * Creates the driver command for running the user app, and propagates needed configuration so
  * executors can also find the app code.
  */
-private[spark] class DriverCommandFeatureStep(driverConf: KubernetesDriverConf)
+private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep {
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    driverConf.mainAppResource match {
+    conf.mainAppResource match {
       case JavaMainAppResource(_) =>
         configureForJava(pod)
 
@@ -49,7 +49,7 @@ private[spark] class DriverCommandFeatureStep(driverConf: KubernetesDriverConf)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
-    driverConf.mainAppResource match {
+    conf.mainAppResource match {
       case JavaMainAppResource(res) =>
         res.map(additionalJavaProperties).getOrElse(Map.empty)
 
@@ -69,10 +69,10 @@ private[spark] class DriverCommandFeatureStep(driverConf: KubernetesDriverConf)
   }
 
   private def configureForPython(pod: SparkPod, res: String): SparkPod = {
-    val maybePythonFiles = if (driverConf.pyFiles.nonEmpty) {
+    val maybePythonFiles = if (conf.pyFiles.nonEmpty) {
       // Delineation by ":" is to append the PySpark Files to the PYTHONPATH
       // of the respective PySpark pod
-      val resolved = KubernetesUtils.resolveFileUrisAndPath(driverConf.pyFiles)
+      val resolved = KubernetesUtils.resolveFileUrisAndPath(conf.pyFiles)
       Some(new EnvVarBuilder()
         .withName(ENV_PYSPARK_FILES)
         .withValue(resolved.mkString(":"))
@@ -83,7 +83,7 @@ private[spark] class DriverCommandFeatureStep(driverConf: KubernetesDriverConf)
     val pythonEnvs =
       Seq(new EnvVarBuilder()
           .withName(ENV_PYSPARK_MAJOR_PYTHON_VERSION)
-          .withValue(driverConf.sparkConf.get(PYSPARK_MAJOR_PYTHON_VERSION))
+          .withValue(conf.get(PYSPARK_MAJOR_PYTHON_VERSION))
         .build()) ++
       maybePythonFiles
 
@@ -103,9 +103,9 @@ private[spark] class DriverCommandFeatureStep(driverConf: KubernetesDriverConf)
     new ContainerBuilder(pod.container)
       .addToArgs("driver")
       .addToArgs("--properties-file", SPARK_CONF_PATH)
-      .addToArgs("--class", driverConf.mainClass)
+      .addToArgs("--class", conf.mainClass)
       .addToArgs(resource)
-      .addToArgs(driverConf.appArgs: _*)
+      .addToArgs(conf.appArgs: _*)
   }
 
   private def additionalJavaProperties(resource: String): Map[String, String] = {
@@ -114,7 +114,7 @@ private[spark] class DriverCommandFeatureStep(driverConf: KubernetesDriverConf)
 
   private def additionalPythonProperties(resource: String): Map[String, String] = {
     resourceType(APP_RESOURCE_TYPE_PYTHON) ++
-      mergeFileList("spark.files", Seq(resource) ++ driverConf.pyFiles)
+      mergeFileList("spark.files", Seq(resource) ++ conf.pyFiles)
   }
 
   private def additionalRProperties(resource: String): Map[String, String] = {
@@ -122,7 +122,7 @@ private[spark] class DriverCommandFeatureStep(driverConf: KubernetesDriverConf)
   }
 
   private def mergeFileList(key: String, filesToAdd: Seq[String]): Map[String, String] = {
-    val existing = Utils.stringToSeq(driverConf.sparkConf.get(key, ""))
+    val existing = Utils.stringToSeq(conf.get(key, ""))
     Map(key -> (existing ++ filesToAdd).distinct.mkString(","))
   }
 

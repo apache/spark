@@ -28,7 +28,7 @@ private[spark] class HadoopSparkUserExecutorFeatureStep(conf: KubernetesExecutor
   extends KubernetesFeatureConfigStep {
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val sparkUserName = conf.sparkConf.get(KERBEROS_SPARK_USER_NAME)
+    val sparkUserName = conf.get(KERBEROS_SPARK_USER_NAME)
     HadoopBootstrapUtil.bootstrapSparkUserPod(sparkUserName, pod)
   }
 }

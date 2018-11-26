@@ -30,7 +30,7 @@ private[spark] class HadoopConfExecutorFeatureStep(conf: KubernetesExecutorConf)
   extends KubernetesFeatureConfigStep with Logging {
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val hadoopConfDirCMapName = conf.sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
+    val hadoopConfDirCMapName = conf.getOption(HADOOP_CONFIG_MAP_NAME)
     require(hadoopConfDirCMapName.isDefined,
       "Ensure that the env `HADOOP_CONF_DIR` is defined either in the client or " +
         " using pre-existing ConfigMaps")
