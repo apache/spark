@@ -1217,8 +1217,44 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
 
     val model = trainer.fit(dataset)
 
-    val expectedCoeffs = Vectors.dense(-0.44989613, 0.36149292, -0.63427473, -0.59001135)
+    val expectedCoeffs = Vectors.dense(-0.44984539, 0.36144524, -0.63427745, -0.58994011)
     assert(model.coefficients ~= expectedCoeffs relTol 1E-2)
+
+    /*
+
+      The expected outputs were produced by using the bayes_logistic package.
+      GitHub: https://github.com/Valassis-Digital-Media/bayes_logistic
+
+      The following code snippet provides the Python implementation:
+
+      from sklearn.preprocessing import StandardScaler
+
+      import bayes_logistic as bl
+      import numpy as np
+
+      csv_path = 'binary_dataset.csv'
+      data = np.genfromtxt(csv_path, delimiter=',')
+
+      y = data[:, 0]
+      X = data[:, 1:5]
+      weights = data[:, 5]
+
+      n = float(X.shape[0])
+      # sqrt(n-1)/sqrt(n) factor for getting the same standardization as spark
+      Xstd = StandardScaler().fit_transform(X) * np.sqrt(n-1) / np.sqrt(n)
+
+      w_prior = np.array([0.1, -0.2, 0.3, -0.4])
+      H_prior = np.array([10.0, 20.0, 30.0, 40.0])
+
+      w_posterior, H_posterior = bl.fit_bayes_logistic(y, Xstd,
+                                                       w_prior, H_prior,
+                                                       weights=weights,
+                                                       solver='L-BFGS-B',
+                                                       maxiter=100)
+
+      print(w_posterior)
+
+     */
   }
 
   test("binary logistic regression with intercept with L2 regularization with bound") {
