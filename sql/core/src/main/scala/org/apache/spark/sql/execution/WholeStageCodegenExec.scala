@@ -422,6 +422,10 @@ trait InputRDDCodegen extends CodegenSupport {
 
   def inputRDD: RDD[InternalRow]
 
+  // If the input is an RDD of InternalRow which are potentially not UnsafeRow,
+  // and there is no parent to consume it, it needs an UnsafeProjection.
+  protected val createUnsafeProjection: Boolean = (parent == null)
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     inputRDD :: Nil
   }
@@ -431,10 +435,29 @@ trait InputRDDCodegen extends CodegenSupport {
     val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
       forceInline = true)
     val row = ctx.freshName("row")
+
+    val outputVars = if (createUnsafeProjection) {
+      // creating the vars will make the parent consume add an unsafe projection.
+      ctx.INPUT_ROW = row
+      ctx.currentVars = null
+      output.zipWithIndex.map { case (a, i) =>
+        BoundReference(i, a.dataType, a.nullable).genCode(ctx)
+      }
+    } else {
+      null
+    }
+
+    val numOutputRowsCode = if (metrics.contains("numOutputRows")) {
+      val numOutputRows = metricTerm(ctx, "numOutputRows")
+      s"$numOutputRows.add(1);"
+    } else {
+      ""
+    }
     s"""
        | while ($limitNotReachedCond $input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
-       |   ${consume(ctx, null, row).trim}
+       |   ${numOutputRowsCode}
+       |   ${consume(ctx, outputVars, if (createUnsafeProjection) null else row).trim}
        |   ${shouldStopCheckCode}
        | }
      """.stripMargin
