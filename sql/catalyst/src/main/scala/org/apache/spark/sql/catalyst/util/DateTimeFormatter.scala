@@ -45,7 +45,6 @@ class Iso8601DateTimeFormatter(
     .parseDefaulting(ChronoField.HOUR_OF_DAY, 0)
     .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
     .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
-    .parseDefaulting(ChronoField.MICRO_OF_SECOND, 0)
     .toFormatter(locale)
 
   def toInstant(s: String): Instant = {
