@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import java.lang.{Long => JLong}
 import java.math.{BigInteger, MathContext, RoundingMode}
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.AnalysisException
 
 /**
@@ -31,7 +31,7 @@ import org.apache.spark.sql.AnalysisException
  * - If decimalVal is set, it represents the whole decimal value
  * - Otherwise, the decimal value is longVal / (10 ** _scale)
  */
-@InterfaceStability.Unstable
+@Unstable
 final class Decimal extends Ordered[Decimal] with Serializable {
   import org.apache.spark.sql.types.Decimal._
 
@@ -185,9 +185,21 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  def toScalaBigInt: BigInt = BigInt(toLong)
+  def toScalaBigInt: BigInt = {
+    if (decimalVal.ne(null)) {
+      decimalVal.toBigInt()
+    } else {
+      BigInt(toLong)
+    }
+  }
 
-  def toJavaBigInteger: java.math.BigInteger = java.math.BigInteger.valueOf(toLong)
+  def toJavaBigInteger: java.math.BigInteger = {
+    if (decimalVal.ne(null)) {
+      decimalVal.underlying().toBigInteger()
+    } else {
+      java.math.BigInteger.valueOf(toLong)
+    }
+  }
 
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {
@@ -407,7 +419,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 }
 
-@InterfaceStability.Unstable
+@Unstable
 object Decimal {
   val ROUND_HALF_UP = BigDecimal.RoundingMode.HALF_UP
   val ROUND_HALF_EVEN = BigDecimal.RoundingMode.HALF_EVEN

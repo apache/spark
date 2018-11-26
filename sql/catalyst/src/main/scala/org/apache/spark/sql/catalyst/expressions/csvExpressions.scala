@@ -106,6 +106,10 @@ case class CsvToStructs(
       throw new AnalysisException(s"from_csv() doesn't support the ${mode.name} mode. " +
         s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
     }
+    ExprUtils.verifyColumnNameOfCorruptRecord(
+      nullableSchema,
+      parsedOptions.columnNameOfCorruptRecord)
+
     val actualSchema =
       StructType(nullableSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     val rawParser = new UnivocityParser(actualSchema, actualSchema, parsedOptions)

@@ -157,7 +157,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private def kubernetesConfWithCorrectFields(): KubernetesConf[KubernetesExecutorSpecificConf] =
     Matchers.argThat(new ArgumentMatcher[KubernetesConf[KubernetesExecutorSpecificConf]] {
       override def matches(argument: scala.Any): Boolean = {
-        if (!argument.isInstanceOf[KubernetesConf[KubernetesExecutorSpecificConf]]) {
+        if (!argument.isInstanceOf[KubernetesConf[_]]) {
           false
         } else {
           val k8sConf = argument.asInstanceOf[KubernetesConf[KubernetesExecutorSpecificConf]]

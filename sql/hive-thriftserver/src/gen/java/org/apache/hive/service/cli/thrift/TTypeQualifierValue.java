@@ -112,7 +112,7 @@ public class TTypeQualifierValue extends org.apache.thrift.TUnion<TTypeQualifier
     super();
   }
 
-  public TTypeQualifierValue(_Fields setField, Object value) {
+  public TTypeQualifierValue(TTypeQualifierValue._Fields setField, Object value) {
     super(setField, value);
   }
 

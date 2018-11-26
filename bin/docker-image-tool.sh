@@ -55,6 +55,18 @@ function image_ref {
   echo "$image"
 }
 
+function docker_push {
+  local image_name="$1"
+  if [ ! -z $(docker images -q "$(image_ref ${image_name})") ]; then
+    docker push "$(image_ref ${image_name})"
+    if [ $? -ne 0 ]; then
+      error "Failed to push $image_name Docker image."
+    fi
+  else
+    echo "$(image_ref ${image_name}) image not found. Skipping push for this image."
+  fi
+}
+
 # Create a smaller build context for docker in dev builds to make the build faster. Docker
 # uploads all of the current directory to the daemon, and it can get pretty big with dev
 # builds that contain test log files and other artifacts.
@@ -140,8 +152,8 @@ function build {
     base_img=$(image_ref spark)
   )
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile"}
-  local PYDOCKERFILE=${PYDOCKERFILE:-"kubernetes/dockerfiles/spark/bindings/python/Dockerfile"}
-  local RDOCKERFILE=${RDOCKERFILE:-"kubernetes/dockerfiles/spark/bindings/R/Dockerfile"}
+  local PYDOCKERFILE=${PYDOCKERFILE:-false}
+  local RDOCKERFILE=${RDOCKERFILE:-false}
 
   (cd $(img_ctx_dir base) && docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
@@ -150,34 +162,29 @@ function build {
     error "Failed to build Spark JVM Docker image, please refer to Docker build output for details."
   fi
 
-  (cd $(img_ctx_dir pyspark) && docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-    -t $(image_ref spark-py) \
-    -f "$PYDOCKERFILE" .)
-    if [ $? -ne 0 ]; then
-      error "Failed to build PySpark Docker image, please refer to Docker build output for details."
-    fi
+  if [ "${PYDOCKERFILE}" != "false" ]; then
+    (cd $(img_ctx_dir pyspark) && docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+      -t $(image_ref spark-py) \
+      -f "$PYDOCKERFILE" .)
+      if [ $? -ne 0 ]; then
+        error "Failed to build PySpark Docker image, please refer to Docker build output for details."
+      fi
+  fi
 
-  (cd $(img_ctx_dir sparkr) && docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-    -t $(image_ref spark-r) \
-    -f "$RDOCKERFILE" .)
-  if [ $? -ne 0 ]; then
-    error "Failed to build SparkR Docker image, please refer to Docker build output for details."
+  if [ "${RDOCKERFILE}" != "false" ]; then
+    (cd $(img_ctx_dir sparkr) && docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+      -t $(image_ref spark-r) \
+      -f "$RDOCKERFILE" .)
+    if [ $? -ne 0 ]; then
+      error "Failed to build SparkR Docker image, please refer to Docker build output for details."
+    fi
   fi
 }
 
 function push {
-  docker push "$(image_ref spark)"
-  if [ $? -ne 0 ]; then
-    error "Failed to push Spark JVM Docker image."
-  fi
-  docker push "$(image_ref spark-py)"
-  if [ $? -ne 0 ]; then
-    error "Failed to push PySpark Docker image."
-  fi
-  docker push "$(image_ref spark-r)"
-  if [ $? -ne 0 ]; then
-    error "Failed to push SparkR Docker image."
-  fi
+  docker_push "spark"
+  docker_push "spark-py"
+  docker_push "spark-r"
 }
 
 function usage {
@@ -192,8 +199,10 @@ Commands:
 
 Options:
   -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
-  -p file               Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
-  -R file               Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
+  -p file               (Optional) Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
+                        Skips building PySpark docker image if not specified.
+  -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
+                        Skips building SparkR docker image if not specified.
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
@@ -212,6 +221,9 @@ Check the following documentation for more information on using the minikube Doc
 Examples:
   - Build image in minikube with tag "testing"
     $0 -m -t testing build
+
+  - Build PySpark docker image
+    $0 -r docker.io/myrepo -t v2.3.0 -p kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
 
   - Build and push image with tag "v2.3.0" to docker.io/myrepo
     $0 -r docker.io/myrepo -t v2.3.0 build

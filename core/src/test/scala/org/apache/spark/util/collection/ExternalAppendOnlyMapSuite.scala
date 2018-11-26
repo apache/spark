@@ -19,6 +19,7 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.ref.WeakReference
 
 import org.scalatest.Matchers
