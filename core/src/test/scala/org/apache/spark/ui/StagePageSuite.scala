@@ -96,18 +96,6 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("peak execution memory should displayed") {
-    val html = renderStagePage().toString().toLowerCase(Locale.ROOT)
-    val targetString = "peak execution memory"
-    assert(html.contains(targetString))
-  }
-
-  test("SPARK-10543: peak execution memory should be per-task rather than cumulative") {
-    val html = renderStagePage().toString().toLowerCase(Locale.ROOT)
-    // verify min/25/50/75/max show task value not cumulative values
-    assert(html.contains(s"<td>$peakExecutionMemory.0 b</td>" * 5))
-  }
-
   /**
    * Render a stage page started with the given conf and return the HTML.
    * This also runs a dummy stage to populate the page with useful content.

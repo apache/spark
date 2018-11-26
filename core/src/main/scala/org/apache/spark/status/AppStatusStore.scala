@@ -351,7 +351,9 @@ private[spark] class AppStatusStore(
   def taskList(stageId: Int, stageAttemptId: Int, maxTasks: Int): Seq[v1.TaskData] = {
     val stageKey = Array(stageId, stageAttemptId)
     store.view(classOf[TaskDataWrapper]).index("stage").first(stageKey).last(stageKey).reverse()
-      .max(maxTasks).asScala.map(_.toApi).toSeq.reverse
+      .max(maxTasks).asScala.map { taskDataWrapper =>
+      constructTaskData(taskDataWrapper)
+    }.toSeq.reverse
   }
 
   def taskList(
@@ -390,7 +392,9 @@ private[spark] class AppStatusStore(
     }
 
     val ordered = if (ascending) indexed else indexed.reverse()
-    ordered.skip(offset).max(length).asScala.map(_.toApi).toSeq
+    ordered.skip(offset).max(length).asScala.map { taskDataWrapper =>
+      constructTaskData(taskDataWrapper)
+    }.toSeq
   }
 
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
@@ -494,6 +498,24 @@ private[spark] class AppStatusStore(
 
   def close(): Unit = {
     store.close()
+  }
+
+  def constructTaskData(taskDataWrapper: TaskDataWrapper) : v1.TaskData = {
+    val taskDataOld: v1.TaskData = taskDataWrapper.toApi
+    val executorLogs: Option[Map[String, String]] = try {
+      Some(executorSummary(taskDataOld.executorId).executorLogs)
+    } catch {
+      case e: NoSuchElementException => e.getMessage
+        None
+    }
+    new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
+      taskDataOld.attempt, taskDataOld.launchTime, taskDataOld.resultFetchStart,
+      taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
+      taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
+      taskDataOld.errorMessage, taskDataOld.taskMetrics,
+      executorLogs.getOrElse(Map[String, String]()),
+      AppStatusUtils.schedulerDelay(taskDataOld),
+      AppStatusUtils.gettingResultTime(taskDataOld))
   }
 
 }
