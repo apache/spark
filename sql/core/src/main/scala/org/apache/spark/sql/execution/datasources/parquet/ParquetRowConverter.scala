@@ -561,6 +561,7 @@ private[parquet] class ParquetRowConverter(
     override def end(): Unit = {
       // The parquet map may contains null or duplicated map keys. When it happens, the behavior is
       // undefined.
+      // TODO (SPARK-26174): disallow it with a config.
       updater.set(ArrayBasedMapData(currentKeys.toArray, currentValues.toArray))
     }
 

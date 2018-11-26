@@ -549,7 +549,7 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
   override def eval(input: InternalRow): Any = {
-    val maps = children.map(_.eval(input).asInstanceOf[MapData]).toArray
+    val maps = children.map(_.eval(input).asInstanceOf[MapData])
     if (maps.contains(null)) {
       return null
     }
@@ -561,12 +561,8 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
         s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
     }
 
-    mapBuilder.reset()
-    var i = 0
-    while (i < maps.length) {
-      val map = maps(i)
+    for (map <- maps) {
       mapBuilder.putAll(map.keyArray(), map.valueArray())
-      i += 1
     }
     mapBuilder.build()
   }
@@ -648,7 +644,6 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
         |}
         |ArrayData $finKeysName = $keyConcat($keyArgsName, (int) $numElementsName);
         |ArrayData $finValsName = $valueConcat($valArgsName, (int) $numElementsName);
-        |$builderTerm.reset();
         |${ev.value} = $builderTerm.from($finKeysName, $finValsName);
       """.stripMargin
 
@@ -752,7 +747,6 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       }
     }
 
-    mapBuilder.reset()
     i = 0
     while (i < numEntries) {
       mapBuilder.put(entries.getStruct(i, 2))
@@ -769,7 +763,6 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
       ctx.nullArrayElementsSaveExec(nullEntries, ev.isNull, c) {
         s"""
            |final int $numEntries = $c.numElements();
-           |$builderTerm.reset();
            |for (int $i = 0; $i < $numEntries; $i++) {
            |  $builderTerm.put($c.getStruct($i, 2));
            |}

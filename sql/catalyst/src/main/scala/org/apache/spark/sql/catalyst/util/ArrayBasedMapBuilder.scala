@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{AtomicType, CalendarIntervalType, DataType, MapType}
+import org.apache.spark.sql.types._
 
 /**
  * A builder of [[ArrayBasedMapData]], which fails if a null map key is detected, and removes
@@ -28,6 +28,7 @@ import org.apache.spark.sql.types.{AtomicType, CalendarIntervalType, DataType, M
  */
 class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Serializable {
   assert(!keyType.existsRecursively(_.isInstanceOf[MapType]), "key of map cannot be/contain map")
+  assert(keyType != NullType, "map key cannot be null type.")
 
   private lazy val keyToIndex = keyType match {
     case _: AtomicType | _: CalendarIntervalType => mutable.HashMap.empty[Any, Int]
@@ -43,12 +44,6 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
 
   private lazy val keyGetter = InternalRow.getAccessor(keyType)
   private lazy val valueGetter = InternalRow.getAccessor(valueType)
-
-  def reset(): Unit = {
-    keyToIndex.clear()
-    keys.clear()
-    values.clear()
-  }
 
   def put(key: Any, value: Any): Unit = {
     if (key == null) {
@@ -74,19 +69,6 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
     put(keyGetter(entry, 0), valueGetter(entry, 1))
   }
 
-  def putAll(keyArray: Array[Any], valueArray: Array[Any]): Unit = {
-    if (keyArray.length != valueArray.length) {
-      throw new RuntimeException(
-        "The key array and value array of MapData must have the same length.")
-    }
-
-    var i = 0
-    while (i < keyArray.length) {
-      put(keyArray(i), valueArray(i))
-      i += 1
-    }
-  }
-
   def putAll(keyArray: ArrayData, valueArray: ArrayData): Unit = {
     if (keyArray.numElements() != valueArray.numElements()) {
       throw new RuntimeException(
@@ -100,16 +82,34 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
     }
   }
 
-  def build(): ArrayBasedMapData = {
-    new ArrayBasedMapData(new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
+  private def reset(): Unit = {
+    keyToIndex.clear()
+    keys.clear()
+    values.clear()
   }
 
+  /**
+   * Builds the result [[ArrayBasedMapData]] and reset this builder to free up the resources. The
+   * builder becomes fresh afterward and is ready to take input and build another map.
+   */
+  def build(): ArrayBasedMapData = {
+    val map = new ArrayBasedMapData(
+      new GenericArrayData(keys.toArray), new GenericArrayData(values.toArray))
+    reset()
+    map
+  }
+
+  /**
+   * Builds a [[ArrayBasedMapData]] from the given key and value array and reset this builder. The
+   * builder becomes fresh afterward and is ready to take input and build another map.
+   */
   def from(keyArray: ArrayData, valueArray: ArrayData): ArrayBasedMapData = {
-    assert(keyToIndex.isEmpty, "'from' can only be called with a fresh GenericMapBuilder.")
+    assert(keyToIndex.isEmpty, "'from' can only be called with a fresh ArrayBasedMapBuilder.")
     putAll(keyArray, valueArray)
     if (keyToIndex.size == keyArray.numElements()) {
       // If there is no duplicated map keys, creates the MapData with the input key and value array,
       // as they might already in unsafe format and are more efficient.
+      reset()
       new ArrayBasedMapData(keyArray, valueArray)
     } else {
       build()

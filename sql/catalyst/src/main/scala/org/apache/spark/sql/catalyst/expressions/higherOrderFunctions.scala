@@ -538,7 +538,6 @@ case class TransformKeys(
       resultKeys.update(i, result)
       i += 1
     }
-    mapBuilder.reset()
     mapBuilder.from(resultKeys, map.valueArray())
   }
 

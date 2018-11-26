@@ -169,7 +169,6 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
 
   override def eval(input: InternalRow): Any = {
-    mapBuilder.reset()
     var i = 0
     while (i < keys.length) {
       mapBuilder.put(keys(i).eval(input), values(i).eval(input))
@@ -191,7 +190,6 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
        $assignKeys
        $allocationValueData
        $assignValues
-       $builderTerm.reset();
        final MapData ${ev.value} = $builderTerm.from($keyArrayData, $valueArrayData);
       """
     ev.copy(code = code, isNull = FalseLiteral)
@@ -239,17 +237,13 @@ case class MapFromArrays(left: Expression, right: Expression)
   override def nullSafeEval(keyArray: Any, valueArray: Any): Any = {
     val keyArrayData = keyArray.asInstanceOf[ArrayData]
     val valueArrayData = valueArray.asInstanceOf[ArrayData]
-    mapBuilder.reset()
     mapBuilder.from(keyArrayData.copy(), valueArrayData.copy())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (keyArrayData, valueArrayData) => {
       val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
-      s"""
-         |$builderTerm.reset();
-         |${ev.value} = $builderTerm.from($keyArrayData.copy(), $valueArrayData.copy());
-       """.stripMargin
+      s"${ev.value} = $builderTerm.from($keyArrayData.copy(), $valueArrayData.copy());"
     })
   }
 
@@ -467,7 +461,6 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
       inputString.asInstanceOf[UTF8String].split(stringDelimiter.asInstanceOf[UTF8String], -1)
     val keyValueDelimiterUTF8String = keyValueDelimiter.asInstanceOf[UTF8String]
 
-    mapBuilder.reset()
     var i = 0
     while (i < keyValues.length) {
       val keyValueArray = keyValues(i).split(keyValueDelimiterUTF8String, 2)

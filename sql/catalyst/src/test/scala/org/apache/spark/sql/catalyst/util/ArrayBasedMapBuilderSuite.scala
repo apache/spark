@@ -29,11 +29,10 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite {
     val builder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     builder.put(1, 1)
     builder.put(InternalRow(2, 2))
-    builder.putAll(Array(3: Any), Array(3: Any))
-    builder.putAll(new GenericArrayData(Seq(4)), new GenericArrayData(Seq(4)))
+    builder.putAll(new GenericArrayData(Seq(3)), new GenericArrayData(Seq(3)))
     val map = builder.build()
-    assert(map.numElements() == 4)
-    assert(ArrayBasedMapData.toScalaMap(map) == Map(1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4))
+    assert(map.numElements() == 3)
+    assert(ArrayBasedMapData.toScalaMap(map) == Map(1 -> 1, 2 -> 2, 3 -> 3))
   }
 
   test("fail with null key") {
