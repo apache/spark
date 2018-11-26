@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.csv
 import java.io.Writer
 
 import com.univocity.parsers.csv.CsvWriter
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeFormatter, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeFormatter}
 import org.apache.spark.sql.types._
 
 class UnivocityGenerator(
