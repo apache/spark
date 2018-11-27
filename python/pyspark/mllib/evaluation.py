@@ -163,7 +163,7 @@ class MulticlassMetrics(JavaModelWrapper):
     """
     Evaluator for multiclass classification.
 
-    :param predictionAndLabels: an RDD of (prediction, label) pairs.
+    :param predAndLabelsWithOptWeight: an RDD of prediction, label and optional weight.
 
     >>> predictionAndLabels = sc.parallelize([(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)])
@@ -192,16 +192,53 @@ class MulticlassMetrics(JavaModelWrapper):
     0.66...
     >>> metrics.weightedFMeasure(2.0)
     0.65...
+    >>> predAndLabelsWithOptWeight = sc.parallelize([(0.0, 0.0, 1.0), (0.0, 1.0, 1.0),
+    ...      (0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (1.0, 1.0, 1.0), (1.0, 1.0, 1.0),
+    ...      (2.0, 2.0, 1.0), (2.0, 0.0, 1.0)])
+    >>> metrics = MulticlassMetrics(predAndLabelsWithOptWeight)
+    >>> metrics.confusionMatrix().toArray()
+    array([[ 2.,  1.,  1.],
+           [ 1.,  3.,  0.],
+           [ 0.,  0.,  1.]])
+    >>> metrics.falsePositiveRate(0.0)
+    0.2...
+    >>> metrics.precision(1.0)
+    0.75...
+    >>> metrics.recall(2.0)
+    1.0...
+    >>> metrics.fMeasure(0.0, 2.0)
+    0.52...
+    >>> metrics.accuracy
+    0.66...
+    >>> metrics.weightedFalsePositiveRate
+    0.19...
+    >>> metrics.weightedPrecision
+    0.68...
+    >>> metrics.weightedRecall
+    0.66...
+    >>> metrics.weightedFMeasure()
+    0.66...
+    >>> metrics.weightedFMeasure(2.0)
+    0.65...
 
     .. versionadded:: 1.4.0
     """
 
-    def __init__(self, predictionAndLabels):
-        sc = predictionAndLabels.ctx
+    def __init__(self, predAndLabelsWithOptWeight):
+        sc = predAndLabelsWithOptWeight.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
-        df = sql_ctx.createDataFrame(predictionAndLabels, schema=StructType([
-            StructField("prediction", DoubleType(), nullable=False),
-            StructField("label", DoubleType(), nullable=False)]))
+        numCol = len(predAndLabelsWithOptWeight.first())
+        schema = None
+        if (numCol == 2):
+            schema = StructType([
+                StructField("prediction", DoubleType(), nullable=False),
+                StructField("label", DoubleType(), nullable=False)])
+        elif (numCol == 3):
+            schema = StructType([
+                StructField("prediction", DoubleType(), nullable=False),
+                StructField("label", DoubleType(), nullable=False),
+                StructField("weight", DoubleType(), nullable=False)])
+        df = sql_ctx.createDataFrame(predAndLabelsWithOptWeight, schema)
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.MulticlassMetrics
         java_model = java_class(df._jdf)
         super(MulticlassMetrics, self).__init__(java_model)
