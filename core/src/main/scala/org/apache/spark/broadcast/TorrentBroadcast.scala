@@ -215,8 +215,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   }
 
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
-    TorrentBroadcast.synchronized {
-      val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
+    val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
+    broadcastCache.synchronized {
 
       Option(broadcastCache.get(broadcastId)).map(_.asInstanceOf[T]).getOrElse {
         setConf(SparkEnv.get.conf)
