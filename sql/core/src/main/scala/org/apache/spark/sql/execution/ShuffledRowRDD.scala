@@ -113,8 +113,8 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
  */
 class ShuffledRowRDD(
     var dependency: ShuffleDependency[Int, InternalRow, InternalRow],
-    specifiedPartitionStartIndices: Option[Array[Int]] = None,
-    metrics: Map[String, SQLMetric] = Map.empty)
+    metrics: Map[String, SQLMetric],
+    specifiedPartitionStartIndices: Option[Array[Int]] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
@@ -159,11 +159,7 @@ class ShuffledRowRDD(
     val tempMetrics = context.taskMetrics().createTempShuffleReadMetrics()
     // metrics here could be empty cause user can use ShuffledRowRDD directly,
     // so we just use the tempMetrics created in TaskContext in this case.
-    val sqlMetricsReporter = if (metrics.isEmpty) {
-      tempMetrics
-    } else {
-      new SQLShuffleMetricsReporter(tempMetrics, metrics)
-    }
+    val sqlMetricsReporter = new SQLShuffleMetricsReporter(tempMetrics, metrics)
     // The range of pre-shuffle partitions that we are fetching at here is
     // [startPreShufflePartitionIndex, endPreShufflePartitionIndex - 1].
     val reader =

@@ -109,7 +109,7 @@ case class ShuffleExchangeExec(
       assert(newPartitioning.isInstanceOf[HashPartitioning])
       newPartitioning = UnknownPartitioning(indices.length)
     }
-    new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices, metrics)
+    new ShuffledRowRDD(shuffleDependency, metrics, specifiedPartitionStartIndices)
   }
 
   /**
