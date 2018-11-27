@@ -18,7 +18,7 @@
 package org.apache.spark.executor
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.shuffle.ShuffleMetricsReporter
+import org.apache.spark.shuffle.ShuffleReadMetricsReporter
 import org.apache.spark.util.LongAccumulator
 
 
@@ -130,7 +130,7 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
  * shuffle dependency, and all temporary metrics will be merged into the [[ShuffleReadMetrics]] at
  * last.
  */
-private[spark] class TempShuffleReadMetrics extends ShuffleMetricsReporter {
+private[spark] class TempShuffleReadMetrics extends ShuffleReadMetricsReporter {
   private[this] var _remoteBlocksFetched = 0L
   private[this] var _localBlocksFetched = 0L
   private[this] var _remoteBytesRead = 0L
