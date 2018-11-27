@@ -400,25 +400,21 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests(test_modules, parallelism):
+def run_python_tests(test_modules, parallelism, with_coverage=False):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
-    command = [os.path.join(SPARK_HOME, "python", "run-tests")]
+    if with_coverage:
+        script = "run-tests-with-coverage"
+    else:
+        script = "run-tests"
+    command = [os.path.join(SPARK_HOME, "python", script)]
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
     run_cmd(command)
 
-
-def run_python_tests_with_coverage(test_modules, parallelism):
-    set_title_and_block("Running PySpark tests with coverage report", "BLOCK_PYSPARK_UNIT_TESTS")
-
-    command = [os.path.join(SPARK_HOME, "python", "run-tests-with-coverage")]
-    if test_modules != [modules.root]:
-        command.append("--modules=%s" % ','.join(m.name for m in test_modules))
-    command.append("--parallelism=%i" % parallelism)
-    run_cmd(command)
-    post_python_tests_results()
+    if with_coverage:
+        post_python_tests_results()
 
 
 def post_python_tests_results():
@@ -632,10 +628,8 @@ def main():
             and os.environ.get("AMPLAB_JENKINS", "") == "true"
             and os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "") == "sbt")
         is_sbt_master_job = True  # Will remove this right before getting merged.
-        if is_sbt_master_job:
-            run_python_tests_with_coverage(modules_with_python_tests, opts.parallelism)
-        else:
-            run_python_tests(modules_with_python_tests, opts.parallelism)
+        run_python_tests(
+            modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
         run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
