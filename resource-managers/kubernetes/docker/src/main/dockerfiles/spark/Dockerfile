@@ -17,11 +17,6 @@
 
 FROM openjdk:8-alpine
 
-ARG spark_jars=jars
-ARG example_jars=examples/jars
-ARG img_path=kubernetes/dockerfiles
-ARG k8s_tests=kubernetes/tests
-
 # Before building the docker image, first build and make a Spark distribution following
 # the instructions in http://spark.apache.org/docs/latest/building-spark.html.
 # If this docker file is being used in the context of building your images from a Spark
@@ -41,13 +36,12 @@ RUN set -ex && \
     echo "auth required pam_wheel.so use_uid" >> /etc/pam.d/su && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd
 
-COPY ${spark_jars} /opt/spark/jars
+COPY jars /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
-COPY ${img_path}/spark/entrypoint.sh /opt/
-COPY ${example_jars} /opt/spark/examples/jars
-COPY examples/src /opt/spark/examples/src
-COPY ${k8s_tests} /opt/spark/tests
+COPY kubernetes/dockerfiles/spark/entrypoint.sh /opt/
+COPY examples /opt/spark/examples
+COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
 
 ENV SPARK_HOME /opt/spark
