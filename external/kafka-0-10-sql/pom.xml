@@ -30,7 +30,7 @@
   <properties>
     <sbt.project.name>sql-kafka-0-10</sbt.project.name>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.0.0</kafka.version>
+    <kafka.version>2.1.0</kafka.version>
   </properties>
   <packaging>jar</packaging>
   <name>Kafka 0.10+ Source for Structured Streaming</name>
@@ -88,6 +88,13 @@
           <artifactId>jackson-annotations</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <!-- Kafka embedded server uses Zookeeper 3.4.7 API -->
+    <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper</artifactId>
+      <version>3.4.7</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>net.sf.jopt-simple</groupId>
