@@ -56,7 +56,7 @@ case class DataSourceV2Relation(
 
   override def pushedFilters: Seq[Expression] = Seq.empty
 
-  override def simpleString: String = "RelationV2 " + metadataString
+  override def simpleString(maxFields: Int): String = "RelationV2 " + metadataString(maxFields)
 
   def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options, schema)
 
@@ -90,7 +90,9 @@ case class StreamingDataSourceV2Relation(
 
   override def isStreaming: Boolean = true
 
-  override def simpleString: String = "Streaming RelationV2 " + metadataString
+  override def simpleString(maxFields: Int): String = {
+    "Streaming RelationV2 " + metadataString(maxFields)
+  }
 
   override def pushedFilters: Seq[Expression] = Nil
 

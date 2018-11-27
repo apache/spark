@@ -40,7 +40,7 @@ case class DataSourceV2ScanExec(
     @transient scanConfig: ScanConfig)
   extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
 
-  override def simpleString: String = "ScanV2 " + metadataString
+  override def simpleString(maxFields: Int): String = "ScanV2 " + metadataString(maxFields)
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
