@@ -42,7 +42,15 @@ class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkConf = new SparkConf()
   }
 
-  private def addTokenToUGI: Unit = {
+  override def afterEach(): Unit = {
+    try {
+      resetUGI
+    } finally {
+      super.afterEach()
+    }
+  }
+
+  private def addTokenToUGI(): Unit = {
     val token = new Token[KafkaDelegationTokenIdentifier](
       tokenId.getBytes,
       tokenPassword.getBytes,
@@ -64,31 +72,23 @@ class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("getTokenJaasParams with token no service should throw exception") {
-    try {
-      addTokenToUGI
+    addTokenToUGI
 
-      val thrown = intercept[IllegalArgumentException] {
-        KafkaSecurityHelper.getTokenJaasParams(sparkConf)
-      }
-
-      assert(thrown.getMessage contains "Kerberos service name must be defined")
-    } finally {
-      resetUGI
+    val thrown = intercept[IllegalArgumentException] {
+      KafkaSecurityHelper.getTokenJaasParams(sparkConf)
     }
+
+    assert(thrown.getMessage contains "Kerberos service name must be defined")
   }
 
   test("getTokenJaasParams with token should return scram module") {
-    try {
-      addTokenToUGI
-      sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
+    addTokenToUGI
+    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
 
-      val jaasParams = KafkaSecurityHelper.getTokenJaasParams(sparkConf)
+    val jaasParams = KafkaSecurityHelper.getTokenJaasParams(sparkConf)
 
-      assert(jaasParams.get.contains("ScramLoginModule"))
-      assert(jaasParams.get.contains(tokenId))
-      assert(jaasParams.get.contains(tokenPassword))
-    } finally {
-      resetUGI
-    }
+    assert(jaasParams.get.contains("ScramLoginModule"))
+    assert(jaasParams.get.contains(tokenId))
+    assert(jaasParams.get.contains(tokenPassword))
   }
 }
