@@ -215,8 +215,8 @@ final class OneVsRestModel private[ml] (
       newDataset.unpersist()
     }
 
-    var outputColNames = Seq.empty[String]
-    var outputColumns = Seq.empty[Column]
+    var predictionColNames = Seq.empty[String]
+    var predictionColumns = Seq.empty[Column]
 
     if (getRawPredictionCol != "") {
       val numClass = models.length
@@ -228,8 +228,8 @@ final class OneVsRestModel private[ml] (
         Vectors.dense(predArray)
       }
 
-      outputColNames = outputColNames :+ getRawPredictionCol
-      outputColumns = outputColumns :+ rawPredictionUDF(col(accColName))
+      predictionColNames = predictionColNames :+ getRawPredictionCol
+      predictionColumns = predictionColumns :+ rawPredictionUDF(col(accColName))
     }
 
     if (getPredictionCol != "") {
@@ -238,13 +238,13 @@ final class OneVsRestModel private[ml] (
         predictions.maxBy(_._2)._1.toDouble
       }
 
-      outputColNames = outputColNames :+ getPredictionCol
-      outputColumns = outputColumns :+ labelUDF(col(accColName))
+      predictionColNames = predictionColNames :+ getPredictionCol
+      predictionColumns = predictionColumns :+ labelUDF(col(accColName))
         .as(getPredictionCol, labelMetadata)
     }
 
     aggregatedDataset
-      .withColumns(outputColNames, outputColumns)
+      .withColumns(predictionColNames, predictionColumns)
       .drop(accColName)
   }
 
