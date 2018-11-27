@@ -36,7 +36,7 @@ import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, Utils}
+import org.apache.spark.util._
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -2192,6 +2192,102 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // Check that if we submit the map stage again, no tasks run
     submitMapStage(shuffleDep)
     assert(results.size === 1)
+    assertDataStructuresEmpty()
+  }
+
+  test("stage level active shuffle tracking") {
+    // We will have 3 stages depending on each other.
+    // The second stage is composed of 2 RDDs to check we're tracking shuffle up the chain.
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(1))
+    val shuffleId1 = shuffleDep1.shuffleId
+    val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(1))
+    val shuffleId2 = shuffleDep2.shuffleId
+    val intermediateRdd = new MyRDD(sc, 1, List(shuffleDep2), tracker = mapOutputTracker)
+    val intermediateDep = new OneToOneDependency(intermediateRdd)
+    val reduceRdd = new MyRDD(sc, 1, List(intermediateDep), tracker = mapOutputTracker)
+
+    // Submit the job.
+    // Both shuffles should become active.
+    submit(reduceRdd, Array(0))
+    assert(mapOutputTracker.shuffleStatuses(shuffleId1).isActive === true)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId2).isActive === true)
+
+    // Complete the first stage.
+    // Both shuffles remain active.
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId1).isActive === true)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId2).isActive === true)
+
+    // Complete the second stage.
+    // Shuffle 1 is no longer needed and should become inactive.
+    completeShuffleMapStageSuccessfully(1, 0, 1)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId1).isActive === false)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId2).isActive === true)
+
+    // Complete the results stage.
+    // Both shuffles are no longer needed and should become inactive.
+    completeNextResultStageWithSuccess(2, 0)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId1).isActive === false)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId2).isActive === false)
+
+    // Double check results.
+    assert(results === Map(0 -> 42))
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("stage level active shuffle tracking with multiple dependents") {
+    // We will have a diamond shape dependency.
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val shuffleId = shuffleDep.shuffleId
+    val intermediateRdd1 = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+    val intermediateRdd2 = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+    val intermediateDep1 = new ShuffleDependency(intermediateRdd1, new HashPartitioner(1))
+    val intermediateDep2 = new ShuffleDependency(intermediateRdd2, new HashPartitioner(1))
+    val reduceRdd =
+      new MyRDD(sc, 1, List(intermediateDep1, intermediateDep2), tracker = mapOutputTracker)
+
+    // Submit the job.
+    // Shuffle becomes active.
+    submit(reduceRdd, Array(0))
+    assert(mapOutputTracker.shuffleStatuses(shuffleId).isActive === true)
+
+    // Complete the shuffle stage.
+    // Shuffle remains active.
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId).isActive === true)
+
+    // Complete first intermediate stage.
+    // Shuffle is still active.
+    val stageAttempt = taskSets(1)
+    checkStageId(1, 0, stageAttempt)
+    complete(stageAttempt, stageAttempt.tasks.zipWithIndex.map {
+      case (task, idx) =>
+        (Success, makeMapStatus("host" + ('A' + idx).toChar, 1))
+    }.toSeq)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId).isActive === true)
+
+    // Complete second intermediate stage.
+    // Shuffle is no longer active.
+    val stageAttempt2 = taskSets(2)
+    checkStageId(2, 0, stageAttempt2)
+    complete(stageAttempt2, stageAttempt2.tasks.zipWithIndex.map {
+      case (task, idx) =>
+        (Success, makeMapStatus("host" + ('A' + idx).toChar, 1))
+    }.toSeq)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId).isActive === false)
+
+    // Complete the results stage.
+    // Shuffle is still inactive.
+    completeNextResultStageWithSuccess(3, 0)
+    assert(mapOutputTracker.shuffleStatuses(shuffleId).isActive === false)
+
+    // Double check results.
+    assert(results === Map(0 -> 42))
+    results.clear()
     assertDataStructuresEmpty()
   }
 
