@@ -422,9 +422,8 @@ trait InputRDDCodegen extends CodegenSupport {
 
   def inputRDD: RDD[InternalRow]
 
-  // If the input is an RDD of InternalRow which are potentially not UnsafeRow,
-  // and there is no parent to consume it, it needs an UnsafeProjection.
-  protected val createUnsafeProjection: Boolean = (parent == null)
+  // If the input can be InternalRows, an UnsafeProjection needs to be created.
+  protected val createUnsafeProjection: Boolean
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     inputRDD :: Nil
@@ -487,6 +486,9 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
   }
 
   override def inputRDD: RDD[InternalRow] = child.execute()
+
+  // InputAdapter does not need UnsafeProjection.
+  protected val createUnsafeProjection: Boolean = false
 
   override def generateTreeString(
       depth: Int,

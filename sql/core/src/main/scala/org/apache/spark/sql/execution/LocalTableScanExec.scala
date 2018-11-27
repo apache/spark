@@ -77,7 +77,7 @@ case class LocalTableScanExec(
     taken
   }
 
-  // Does not need to create an UnsafeProjection - input is already always UnsafeRows
+  // Input is already UnsafeRows.
   override protected val createUnsafeProjection: Boolean = false
 
   // Do not codegen when there is no parent - to support the fast driver-local collect/take paths.

@@ -200,5 +200,8 @@ case class RDDScanExec(
     s"$nodeName${truncatedString(output, "[", ",", "]")}"
   }
 
+  // Input can be InternalRow, has to be turned into UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = true
+
   override def inputRDD: RDD[InternalRow] = rdd
 }
