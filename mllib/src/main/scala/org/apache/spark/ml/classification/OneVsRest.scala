@@ -368,7 +368,8 @@ final class OneVsRest @Since("1.4.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, labelCol, featuresCol, predictionCol, parallelism, rawPredictionCol)
+    instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol,
+      rawPredictionCol, parallelism)
     instr.logNamedValue("classifier", $(classifier).getClass.getCanonicalName)
 
     // determine number of classes either from metadata if provided, or via computation.
