@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
 import org.scalatest.BeforeAndAfter
@@ -144,14 +145,14 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
     }
   }
 
-  test("skip empty files in load") {
+  test("skip empty files in non bucketed read") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
       Files.write(Paths.get(path, "empty"), Array.empty[Byte])
-      Files.write(Paths.get(path, "notEmpty"), "a".getBytes)
+      Files.write(Paths.get(path, "notEmpty"), "a".getBytes(StandardCharsets.UTF_8))
       val readback = spark.read.option("wholetext", true).text(path)
 
-      assert(readback.rdd.getNumPartitions == 1)
+      assert(readback.rdd.getNumPartitions === 1)
     }
   }
 }
