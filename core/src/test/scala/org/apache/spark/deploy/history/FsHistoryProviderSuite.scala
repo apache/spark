@@ -728,53 +728,54 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("clean up stale app information") {
-    val storeDir = Utils.createTempDir()
-    val conf = createTestConf().set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
-    val clock = new ManualClock()
-    val provider = spy(new FsHistoryProvider(conf, clock))
-    val appId = "new1"
+    withTempDir { storeDir =>
+      val conf = createTestConf().set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
+      val clock = new ManualClock()
+      val provider = spy(new FsHistoryProvider(conf, clock))
+      val appId = "new1"
 
-    // Write logs for two app attempts.
-    clock.advance(1)
-    val attempt1 = newLogFile(appId, Some("1"), inProgress = false)
-    writeFile(attempt1, true, None,
-      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("1")),
-      SparkListenerJobStart(0, 1L, Nil, null),
-      SparkListenerApplicationEnd(5L)
+      // Write logs for two app attempts.
+      clock.advance(1)
+      val attempt1 = newLogFile(appId, Some("1"), inProgress = false)
+      writeFile(attempt1, true, None,
+        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("1")),
+        SparkListenerJobStart(0, 1L, Nil, null),
+        SparkListenerApplicationEnd(5L)
       )
-    val attempt2 = newLogFile(appId, Some("2"), inProgress = false)
-    writeFile(attempt2, true, None,
-      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("2")),
-      SparkListenerJobStart(0, 1L, Nil, null),
-      SparkListenerApplicationEnd(5L)
+      val attempt2 = newLogFile(appId, Some("2"), inProgress = false)
+      writeFile(attempt2, true, None,
+        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("2")),
+        SparkListenerJobStart(0, 1L, Nil, null),
+        SparkListenerApplicationEnd(5L)
       )
-    updateAndCheck(provider) { list =>
-      assert(list.size === 1)
-      assert(list(0).id === appId)
-      assert(list(0).attempts.size === 2)
-    }
+      updateAndCheck(provider) { list =>
+        assert(list.size === 1)
+        assert(list(0).id === appId)
+        assert(list(0).attempts.size === 2)
+      }
 
-    // Load the app's UI.
-    val ui = provider.getAppUI(appId, Some("1"))
-    assert(ui.isDefined)
+      // Load the app's UI.
+      val ui = provider.getAppUI(appId, Some("1"))
+      assert(ui.isDefined)
 
-    // Delete the underlying log file for attempt 1 and rescan. The UI should go away, but since
-    // attempt 2 still exists, listing data should be there.
-    clock.advance(1)
-    attempt1.delete()
-    updateAndCheck(provider) { list =>
-      assert(list.size === 1)
-      assert(list(0).id === appId)
-      assert(list(0).attempts.size === 1)
-    }
-    assert(!ui.get.valid)
-    assert(provider.getAppUI(appId, None) === None)
+      // Delete the underlying log file for attempt 1 and rescan. The UI should go away, but since
+      // attempt 2 still exists, listing data should be there.
+      clock.advance(1)
+      attempt1.delete()
+      updateAndCheck(provider) { list =>
+        assert(list.size === 1)
+        assert(list(0).id === appId)
+        assert(list(0).attempts.size === 1)
+      }
+      assert(!ui.get.valid)
+      assert(provider.getAppUI(appId, None) === None)
 
-    // Delete the second attempt's log file. Now everything should go away.
-    clock.advance(1)
-    attempt2.delete()
-    updateAndCheck(provider) { list =>
-      assert(list.isEmpty)
+      // Delete the second attempt's log file. Now everything should go away.
+      clock.advance(1)
+      attempt2.delete()
+      updateAndCheck(provider) { list =>
+        assert(list.isEmpty)
+      }
     }
   }
 
