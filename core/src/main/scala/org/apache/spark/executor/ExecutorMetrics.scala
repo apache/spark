@@ -35,7 +35,7 @@ class ExecutorMetrics private[spark] extends Serializable {
 
   /** Returns the value for the specified metric. */
   def getMetricValue(metricName: String): Long = {
-    metrics(ExecutorMetricType.metricToOffset.get(metricName).get)
+    metrics(ExecutorMetricType.metricToOffset(metricName))
   }
 
   /** Returns true if the values for the metrics have been set, false otherwise. */
@@ -67,7 +67,7 @@ class ExecutorMetrics private[spark] extends Serializable {
    */
   private[spark] def compareAndUpdatePeakValues(executorMetrics: ExecutorMetrics): Boolean = {
     var updated = false
-    ExecutorMetricType.metricToOffset.map { case (_, idx) =>
+    (0 until ExecutorMetricType.numMetrics).foreach { idx =>
       if (executorMetrics.metrics(idx) > metrics(idx)) {
         updated = true
         metrics(idx) = executorMetrics.metrics(idx)

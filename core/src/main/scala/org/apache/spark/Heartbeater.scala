@@ -66,9 +66,9 @@ private[spark] class Heartbeater(
     val metrics = new Array[Long](ExecutorMetricType.numMetrics)
     var offset = 0
     ExecutorMetricType.metricGetters.foreach { metric =>
-      val newSetOfMetrics = metric.getMetricValues(memoryManager)
-      Array.copy(newSetOfMetrics, 0, metrics, offset, newSetOfMetrics.size)
-      offset += newSetOfMetrics.length
+      val newMetrics = metric.getMetricValues(memoryManager)
+      Array.copy(newMetrics, 0, metrics, offset, newMetrics.size)
+      offset += newMetrics.length
     }
     new ExecutorMetrics(metrics)
   }

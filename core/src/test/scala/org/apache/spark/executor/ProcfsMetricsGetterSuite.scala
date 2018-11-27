@@ -20,20 +20,19 @@ package org.apache.spark.executor
 import org.apache.spark.SparkFunSuite
 
 
-class ProcfsBasedSystemsSuite extends SparkFunSuite {
+class ProcfsMetricsGetterSuite extends SparkFunSuite {
 
-  val p = new ProcfsBasedSystems(getTestResourcePath("ProcessTree"))
-  p.pageSize = 4096L
+  val p = new ProcfsMetricsGetter(getTestResourcePath("ProcessTree"), 4096L)
 
   test("testGetProcessInfo") {
-    var r = ProcfsBasedSystemsMetrics(0, 0, 0, 0, 0, 0)
-    r = p.computeProcessInfo(r, 26109)
+    var r = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+    r = p.addProcfsMetricsFromOneProcess(r, 26109)
     assert(r.jvmVmemTotal == 4769947648L)
     assert(r.jvmRSSTotal == 262610944)
     assert(r.pythonVmemTotal == 0)
     assert(r.pythonRSSTotal == 0)
 
-    r = p.computeProcessInfo(r, 22763)
+    r = p.addProcfsMetricsFromOneProcess(r, 22763)
     assert(r.pythonVmemTotal == 360595456)
     assert(r.pythonRSSTotal == 7831552)
     assert(r.jvmVmemTotal == 4769947648L)

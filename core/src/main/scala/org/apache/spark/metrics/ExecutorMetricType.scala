@@ -21,22 +21,22 @@ import javax.management.ObjectName
 
 import scala.collection.mutable
 
-import org.apache.spark.executor.ProcfsBasedSystems
+import org.apache.spark.executor.ProcfsMetricsGetter
 import org.apache.spark.memory.MemoryManager
 
 /**
  * Executor metric types for executor-level metrics stored in ExecutorMetrics.
  */
 sealed trait ExecutorMetricType {
-  private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
-    new Array[Long](0)
-  }
-  private[spark] def names: Seq[String] = Seq()
+  private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long]
+  private[spark] def names: Seq[String]
 }
 
 sealed trait SingleValueExecutorMetricType extends ExecutorMetricType {
-  override private[spark] def names = Seq(getClass().getName().
-    stripSuffix("$").split("""\.""").last)
+  override private[spark] def names = {
+    Seq(getClass().getName().
+      stripSuffix("$").split("""\.""").last)
+  }
 
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     val metrics = new Array[Long](1)
@@ -44,7 +44,7 @@ sealed trait SingleValueExecutorMetricType extends ExecutorMetricType {
     metrics
   }
 
-  private[spark] def getMetricValue(memoryManager: MemoryManager): Long = 0
+  private[spark] def getMetricValue(memoryManager: MemoryManager): Long
 }
 
 private[spark] abstract class MemoryManagerExecutorMetricType(
@@ -85,8 +85,9 @@ case object ProcessTreeMetrics extends ExecutorMetricType {
     "ProcessTreePythonRSSMemory",
     "ProcessTreeOtherVMemory",
     "ProcessTreeOtherRSSMemory")
+
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
-    val allMetrics = ExecutorMetricType.pTreeInfo.computeAllMetrics()
+    val allMetrics = ProcfsMetricsGetter.pTreeInfo.computeAllMetrics()
     val processTreeMetrics = new Array[Long](names.length)
     processTreeMetrics(0) = allMetrics.jvmVmemTotal
     processTreeMetrics(1) = allMetrics.jvmRSSTotal
@@ -123,7 +124,6 @@ case object MappedPoolMemory extends MBeanExecutorMetricType(
   "java.nio:type=BufferPool,name=mapped")
 
 private[spark] object ExecutorMetricType {
-  final val pTreeInfo = new ProcfsBasedSystems
 
   // List of all executor metric getters
   val metricGetters = IndexedSeq(
