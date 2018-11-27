@@ -879,13 +879,13 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
   }
 
   def hasCountStats(a: Attribute): Boolean =
-    get(a).map(_.hasCountStats).getOrElse(false)
+    get(a).exists(_.hasCountStats)
 
   def hasDistinctCount(a: Attribute): Boolean =
-    get(a).map(_.distinctCount.isDefined).getOrElse(false)
+    get(a).exists(_.distinctCount.isDefined)
 
   def hasMinMaxStats(a: Attribute): Boolean =
-    get(a).map(_.hasCountStats).getOrElse(false)
+    get(a).exists(_.hasMinMaxStats)
 
   /**
    * Gets column stat for the given attribute. Prefer the column stat in updatedMap than that in
