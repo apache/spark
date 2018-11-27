@@ -85,6 +85,12 @@ class HadoopTableReader(
   SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(
     sparkSession.sparkContext.conf, hadoopConf)
 
+  // User's configuration that through setCommand should update the hadoopConf
+  // but the key must start with 'spark.hadoop.'
+  for ((key, value) <- sparkSession.conf.getAll if key.startsWith("spark.hadoop.")) {
+    hadoopConf.set(key.substring("spark.hadoop.".length), value)
+  }
+
   private val _broadcastedHadoopConf =
     sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 

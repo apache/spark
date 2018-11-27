@@ -468,10 +468,7 @@ object SparkHadoopUtil {
   private def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
-      val hadoopKey = key.substring("spark.hadoop.".length)
-      if (hadoopConf.get(hadoopKey) == null) {
-        hadoopConf.set(hadoopKey, value)
-      }
+      hadoopConf.set(key.substring("spark.hadoop.".length), value)
     }
   }
 }
