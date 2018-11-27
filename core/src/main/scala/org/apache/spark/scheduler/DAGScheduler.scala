@@ -25,7 +25,7 @@ import java.util.function.BiFunction
 
 import scala.annotation.tailrec
 import scala.collection.Map
-import scala.collection.mutable.{ArrayStack, HashMap, HashSet}
+import scala.collection.mutable.{ArrayStack, HashMap, HashSet, Set}
 import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
@@ -149,6 +149,13 @@ private[spark] class DAGScheduler(
    * the shuffle data will be in the MapOutputTracker).
    */
   private[scheduler] val shuffleIdToMapStage = new HashMap[Int, ShuffleMapStage]
+
+  /**
+   * Mapping from shuffle dependency ID to the IDs of the stages which depend on the shuffle data.
+   * Used to track when shuffle data becomes no longer active.
+   */
+  private[scheduler] val shuffleIdToDependentStages = new HashMap[Int, Set[Int]]
+
   private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
 
   // Stages we need to run whose parents aren't done
@@ -396,6 +403,7 @@ private[spark] class DAGScheduler(
     stageIdToStage(id) = stage
     shuffleIdToMapStage(shuffleDep.shuffleId) = stage
     updateJobIdStageIdMaps(jobId, stage)
+    updateShuffleDependenciesMap(stage)
 
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       mapOutputTracker.markShuffleActive(shuffleDep.shuffleId)
@@ -455,6 +463,7 @@ private[spark] class DAGScheduler(
     val stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
+    updateShuffleDependenciesMap(stage)
     stage
   }
 
@@ -599,6 +608,17 @@ private[spark] class DAGScheduler(
       }
     }
     updateJobIdStageIdMapsList(List(stage))
+  }
+
+  /**
+   * Registers the shuffle dependencies of the given stage.
+   */
+  private def updateShuffleDependenciesMap(stage: Stage): Unit = {
+    getShuffleDependencies(stage.rdd).foreach { shuffleDep =>
+      val shuffleId = shuffleDep.shuffleId
+      logDebug("Tracking that stage " + stage.id + " depends on shuffle " + shuffleId)
+      shuffleIdToDependentStages.getOrElseUpdate(shuffleId, Set.empty) += stage.id
+    }
   }
 
   /**
@@ -1857,6 +1877,24 @@ private[spark] class DAGScheduler(
       case Some(t) => "%.03f".format((clock.getTimeMillis() - t) / 1000.0)
       case _ => "Unknown"
     }
+
+    getShuffleDependencies(stage.rdd).foreach { shuffleDep =>
+      val shuffleId = shuffleDep.shuffleId
+      if (!shuffleIdToDependentStages.contains(shuffleId)) {
+        logDebug("Stage finished with untracked shuffle dependency " + shuffleId)
+      } else {
+        var dependentStages = shuffleIdToDependentStages(shuffleId)
+        dependentStages -= stage.id;
+        logDebug("Stage " + stage.id + " finished.  " +
+          "Shuffle " + shuffleId + " now has dependencies " + dependentStages)
+        if (dependentStages.isEmpty) {
+          logDebug("Shuffle " + shuffleId + " is no longer needed.  Marking it inactive.")
+          shuffleIdToDependentStages.remove(shuffleId)
+          mapOutputTracker.markShuffleInactive(shuffleId)
+        }
+      }
+    }
+
     if (errorMessage.isEmpty) {
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stage.latestInfo.completionTime = Some(clock.getTimeMillis())
