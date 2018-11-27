@@ -95,7 +95,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val msg2 = intercept[Exception] {
       df6.select(map_from_arrays($"k", $"v")).collect
     }.getMessage
-    assert(msg2.contains("The given two arrays should have the same length"))
+    assert(msg2.contains("The key array and value array of MapData must have the same length"))
   }
 
   test("struct with column name") {
