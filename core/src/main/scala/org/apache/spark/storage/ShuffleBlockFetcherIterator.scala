@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
-import org.apache.spark.shuffle.{FetchFailedException, ShuffleMetricsReporter}
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
@@ -73,7 +73,7 @@ final class ShuffleBlockFetcherIterator(
     maxBlocksInFlightPerAddress: Int,
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean,
-    shuffleMetrics: ShuffleMetricsReporter)
+    shuffleMetrics: ShuffleReadMetricsReporter)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
