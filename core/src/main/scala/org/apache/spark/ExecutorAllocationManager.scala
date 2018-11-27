@@ -677,6 +677,7 @@ private[spark] class ExecutorAllocationManager(
     override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
       // At the end of a job, trigger the callbacks for idle executors again to clean up executors
       // which we were keeping around only because they held active shuffle blocks.
+      logDebug("Checking for idle executors at end of job")
       allocationManager.checkForIdleExecutors()
     }
 
@@ -727,6 +728,11 @@ private[spark] class ExecutorAllocationManager(
         if (stageIdToNumTasks.isEmpty && stageIdToNumSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
         }
+
+        // Trigger the callbacks for idle executors again to clean up executors
+        // which we were keeping around only because they held active shuffle blocks.
+        logDebug("Checking for idle executors at end of stage")
+        allocationManager.checkForIdleExecutors()
       }
     }
 
