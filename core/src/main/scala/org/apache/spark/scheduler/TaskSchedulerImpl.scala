@@ -81,6 +81,10 @@ private[spark] class TaskSchedulerImpl(
   private val speculationScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
 
+  // whether to prefer assigning tasks to executors that contain shuffle files
+  val shuffleBiasedTaskSchedulingEnabled =
+    conf.getBoolean("spark.scheduler.shuffleBiasedTaskScheduling.enabled", false)
+
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s")
 
@@ -377,11 +381,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }.getOrElse(offers)
 
-    val shuffledOffers = shuffleOffers(filteredOffers)
-    // Build a list of tasks to assign to each worker.
-    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
-    val availableCpus = shuffledOffers.map(o => o.cores).toArray
-    val availableSlots = shuffledOffers.map(o => o.cores / CPUS_PER_TASK).sum
+    var tasks: Seq[Seq[TaskDescription]] = Nil
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -391,11 +391,36 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
+    // If shuffle-biased task scheduling is enabled, then first assign as many tasks as possible to
+    // executors containing active shuffle files, followed by assigning to executors with inactive
+    // shuffle files, and then finally to those without shuffle files. This bin packing allows for
+    // more efficient dynamic allocation in the absence of an external shuffle service.
+    val partitionedAndShuffledOffers = partitionAndShuffleOffers(filteredOffers)
+    for (shuffledOffers <- partitionedAndShuffledOffers.map(_._2)) {
+      tasks ++= doResourceOffers(shuffledOffers, sortedTaskSets)
+    }
+
+    // TODO SPARK-24823 Cancel a job that contains barrier stage(s) if the barrier tasks don't get
+    // launched within a configured time.
+    if (tasks.size > 0) {
+      hasLaunchedTask = true
+    }
+    return tasks
+  }
+
+  private def doResourceOffers(
+      shuffledOffers: IndexedSeq[WorkerOffer],
+      sortedTaskSets: IndexedSeq[TaskSetManager]): Seq[Seq[TaskDescription]] = {
+    // Build a list of tasks to assign to each worker.
+    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
+    val availableCpus = shuffledOffers.map(o => o.cores).toArray
+    val availableSlots = shuffledOffers.map(o => o.cores / CPUS_PER_TASK).sum
+
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     for (taskSet <- sortedTaskSets) {
-      // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
+      // Skip the barrier taskSet if the available slots are less than the number of pending tasks
       if (taskSet.isBarrier && availableSlots < taskSet.numTasks) {
         // Skip the launch process.
         // TODO SPARK-24819 If the job requires more slots than available (both busy and free
@@ -439,25 +464,40 @@ private[spark] class TaskSchedulerImpl(
             .mkString(",")
           addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
 
-          logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for barrier " +
-            s"stage ${taskSet.stageId}.")
+          logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for " +
+            s"barrier stage ${taskSet.stageId}.")
         }
       }
     }
-
-    // TODO SPARK-24823 Cancel a job that contains barrier stage(s) if the barrier tasks don't get
-    // launched within a configured time.
-    if (tasks.size > 0) {
-      hasLaunchedTask = true
-    }
-    return tasks
+    tasks
   }
 
   /**
-   * Shuffle offers around to avoid always placing tasks on the same workers.  Exposed to allow
-   * overriding in tests, so it can be deterministic.
+   * Shuffle offers around to avoid always placing tasks on the same workers.
+   * If shuffle-biased task scheduling is enabled, this function partitions the offers based on
+   * whether they have active/inactive/no shuffle files present.
    */
-  protected def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
+  def partitionAndShuffleOffers(offers: IndexedSeq[WorkerOffer])
+  : IndexedSeq[(ExecutorShuffleStatus.Value, IndexedSeq[WorkerOffer])] = {
+    if (shuffleBiasedTaskSchedulingEnabled && offers.length > 1) {
+      // bias towards executors that have active shuffle outputs
+      val execShuffles = mapOutputTracker.getExecutorShuffleStatus
+      offers
+        .groupBy(offer => execShuffles.getOrElse(offer.executorId, ExecutorShuffleStatus.Unknown))
+        .mapValues(doShuffleOffers)
+        .toStream
+        .sortBy(_._1) // order: Active, Inactive, Unknown
+        .toIndexedSeq
+    } else {
+      IndexedSeq((ExecutorShuffleStatus.Unknown, doShuffleOffers(offers)))
+    }
+  }
+
+  /**
+   * Does the shuffling for [[partitionAndShuffleOffers()]]. Exposed to allow overriding in tests,
+   * so that it can be deterministic.
+   */
+  protected def doShuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
     Random.shuffle(offers)
   }
 

@@ -656,8 +656,8 @@ private[spark] class MapOutputTrackerMaster(
   def getExecutorShuffleStatus: scala.collection.Map[String, ExecutorShuffleStatus] = {
     shuffleStatuses.values
       .flatMap(status => status.executorsWithOutputs().map(_ -> status.isActive))
-      .groupBy(_._1)
-      .mapValues(_.exists(_._2))
+      .groupBy(_._1) // group by executor ID
+      .mapValues(_.exists(_._2)) // true if any are Active
       .mapValues(if (_) ExecutorShuffleStatus.Active else ExecutorShuffleStatus.Inactive)
   }
 
