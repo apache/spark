@@ -201,9 +201,9 @@ abstract class Expression extends TreeNode[Expression] {
    * See [[Canonicalize]] for more details.
    *
    * This method should be used (instead of `sameResult`) when comparing if 2 expressions are the
-   * same and one can replace the other (eg. in Optimizer/Analyzer rules when we want to replace
+   * same and one can replace the other (eg. in Optimizer/Analyzer rules where we want to replace
    * equivalent expressions). It should not be used (and `sameResult` should be used instead) when
-   * comparing if 2 expressions produce the same output (in this case `semanticEquals` can be too
+   * comparing if 2 expressions produce the same results (in this case `semanticEquals` can be too
    * strict).
    */
   def semanticEquals(other: Expression): Boolean =
@@ -217,7 +217,7 @@ abstract class Expression extends TreeNode[Expression] {
    * is aliased).
    *
    * This method should be used (instead of `semanticEquals`) when checking if 2 expressions
-   * produce the same output (eg. as in the case we are interested to check if the ordering is the
+   * produce the same results (eg. as in the case we are interested to check if the ordering is the
    * same). It should not be used (and `semanticEquals` should be used instead) when comparing if 2
    * expressions are the same and one can replace the other.
    */
