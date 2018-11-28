@@ -28,10 +28,10 @@ import org.apache.spark.sql.types.StructType;
  * catalog, etc.
  * <p>
  * This interface can mixin the following interfaces to support different operations:
+ * </p>
  * <ul>
  *   <li>{@link SupportsBatchRead}: this table can be read in batch queries.</li>
  * </ul>
- * </p>
  */
 @Evolving
 public interface Table {
