@@ -2742,6 +2742,7 @@ setMethod("union",
 #' @aliases unionAll,SparkDataFrame,SparkDataFrame-method
 #' @rdname unionAll
 #' @name unionAll
+#' @seealso \link{union}
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2749,7 +2750,7 @@ setMethod("union",
 #' df2 <- read.json(path2)
 #' unionAllDF <- unionAll(df1, df2)
 #' }
-#' @note unionAll since 3.0.0
+#' @note unionAll since 1.4.0
 setMethod("unionAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
