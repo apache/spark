@@ -60,6 +60,8 @@ private[avro] class AvroOutputWriter(
 
     }.getRecordWriter(context)
 
+  override def init(): Unit = {}
+
   override def write(row: InternalRow): Unit = {
     val key = new AvroKey(serializer.serialize(row).asInstanceOf[GenericRecord])
     recordWriter.write(key, NullWritable.get())

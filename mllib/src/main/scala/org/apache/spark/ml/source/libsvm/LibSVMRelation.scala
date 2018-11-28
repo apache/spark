@@ -49,6 +49,8 @@ private[libsvm] class LibSVMOutputWriter(
   // This `asInstanceOf` is safe because it's guaranteed by `LibSVMFileFormat.verifySchema`
   private val udt = dataSchema(1).dataType.asInstanceOf[VectorUDT]
 
+  override def init(): Unit = {}
+
   override def write(row: InternalRow): Unit = {
     val label = row.getDouble(0)
     val vector = udt.deserialize(row.getStruct(1, udt.sqlType.length))
