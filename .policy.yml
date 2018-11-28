@@ -1,0 +1,36 @@
+policy:
+  approval:
+    - or:
+      - maintainer approval
+      - excavator only touched build tooling or dependencies
+  disapproval:
+    requires:
+      teams:
+        - "palantir/spark" 
+
+approval_rules:
+
+  - name: maintainer approval
+    options:
+      allow_contributor: true
+    requires:
+      count: 1
+      teams:
+        - "palantir/spark"
+
+  - name: excavator only touched build tooling or dependencies
+    requires:
+      count: 0
+    if:
+      has_author_in:
+        users: [ "svc-excavator-bot" ]
+      only_changed_files:
+        paths:
+          - "^\\.baseline/.*$"
+          - "^.*gradle$"
+          - "^gradle/wrapper/.*"
+          - "^gradlew.bat$"
+          - "^gradlew$"
+          - "^gradle.properties$"
+          - "^settings.gradle$"
+          - "^versions.props$"
