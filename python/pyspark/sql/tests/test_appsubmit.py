@@ -22,7 +22,7 @@ import tempfile
 import py4j
 
 from pyspark import SparkContext
-from pyspark.tests import SparkSubmitTests
+from pyspark.tests.test_appsubmit import SparkSubmitTests
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
@@ -91,6 +91,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
     except ImportError:
-        unittest.main(verbosity=2)
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

@@ -94,8 +94,13 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
       Map("number of output rows" -> 1L,
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
+    val shuffleExpected1 = Map(
+      "records read" -> 2L,
+      "local blocks fetched" -> 2L,
+      "remote blocks fetched" -> 0L)
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("HashAggregate", expected1(0))),
+      1L -> (("Exchange", shuffleExpected1)),
       0L -> (("HashAggregate", expected1(1))))
     )
 
@@ -106,8 +111,13 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
       Map("number of output rows" -> 3L,
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
+    val shuffleExpected2 = Map(
+      "records read" -> 4L,
+      "local blocks fetched" -> 4L,
+      "remote blocks fetched" -> 0L)
     testSparkPlanMetrics(df2, 1, Map(
       2L -> (("HashAggregate", expected2(0))),
+      1L -> (("Exchange", shuffleExpected2)),
       0L -> (("HashAggregate", expected2(1))))
     )
   }
@@ -191,7 +201,11 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of output rows" -> 4L))))
+          "number of output rows" -> 4L))),
+        2L -> (("Exchange", Map(
+          "records read" -> 4L,
+          "local blocks fetched" -> 2L,
+          "remote blocks fetched" -> 0L))))
       )
     }
   }
@@ -208,7 +222,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("SortMergeJoin", Map(
-          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          // It's 8 because we read 6 rows in the left and 2 row in the right one
           "number of output rows" -> 8L))))
       )
 
@@ -216,7 +230,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df2, 1, Map(
         0L -> (("SortMergeJoin", Map(
-          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          // It's 8 because we read 6 rows in the left and 2 row in the right one
           "number of output rows" -> 8L))))
       )
     }
@@ -287,7 +301,6 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       // Assume the execution plan is
       // ... -> ShuffledHashJoin(nodeId = 1) -> Project(nodeId = 0)
       val df = df1.join(df2, "key")
-      val metrics = getSparkPlanMetrics(df, 1, Set(1L))
       testSparkPlanMetrics(df, 1, Map(
         1L -> (("ShuffledHashJoin", Map(
           "number of output rows" -> 2L,

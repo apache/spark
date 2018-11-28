@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources.v2.writer.streaming;
 import java.io.Serializable;
 
 import org.apache.spark.TaskContext;
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.sources.v2.writer.DataWriter;
 
@@ -33,7 +33,7 @@ import org.apache.spark.sql.sources.v2.writer.DataWriter;
  * will be created on executors and do the actual writing. So this interface must be
  * serializable and {@link DataWriter} doesn't need to be.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface StreamingDataWriterFactory extends Serializable {
 
   /**

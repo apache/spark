@@ -97,6 +97,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     val volumeSpec = KubernetesVolumeSpec(
       "volume",
       "/tmp",
+      "",
       false,
       KubernetesHostPathVolumeConf("/checkpoint"))
     val conf = KubernetesConf(

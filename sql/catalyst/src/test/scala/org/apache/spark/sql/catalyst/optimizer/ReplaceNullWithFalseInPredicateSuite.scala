@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Expression, GreaterThan, If, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
-class ReplaceNullWithFalseSuite extends PlanTest {
+class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -36,15 +36,23 @@ class ReplaceNullWithFalseSuite extends PlanTest {
         ConstantFolding,
         BooleanSimplification,
         SimplifyConditionals,
-        ReplaceNullWithFalse) :: Nil
+        ReplaceNullWithFalseInPredicate) :: Nil
   }
 
-  private val testRelation = LocalRelation('i.int, 'b.boolean)
+  private val testRelation =
+    LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
   private val anotherTestRelation = LocalRelation('d.int)
 
   test("replace null inside filter and join conditions") {
-    testFilter(originalCond = Literal(null), expectedCond = FalseLiteral)
-    testJoin(originalCond = Literal(null), expectedCond = FalseLiteral)
+    testFilter(originalCond = Literal(null, BooleanType), expectedCond = FalseLiteral)
+    testJoin(originalCond = Literal(null, BooleanType), expectedCond = FalseLiteral)
+  }
+
+  test("Not expected type - replaceNullWithFalse") {
+    val e = intercept[IllegalArgumentException] {
+      testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
+    }.getMessage
+    assert(e.contains("but got the type `int` in `CAST(NULL AS INT)"))
   }
 
   test("replace null in branches of If") {
@@ -298,6 +306,26 @@ class ReplaceNullWithFalseSuite extends PlanTest {
     testProjection(originalExpr = column, expectedExpr = column)
   }
 
+  test("replace nulls in lambda function of ArrayFilter") {
+    testHigherOrderFunc('a, ArrayFilter, Seq('e))
+  }
+
+  test("replace nulls in lambda function of ArrayExists") {
+    testHigherOrderFunc('a, ArrayExists, Seq('e))
+  }
+
+  test("replace nulls in lambda function of MapFilter") {
+    testHigherOrderFunc('m, MapFilter, Seq('k, 'v))
+  }
+
+  test("inability to replace nulls in arbitrary higher-order function") {
+    val lambdaFunc = LambdaFunction(
+      function = If('e > 0, Literal(null, BooleanType), TrueLiteral),
+      arguments = Seq[NamedExpression]('e))
+    val column = ArrayTransform('a, lambdaFunc)
+    testProjection(originalExpr = column, expectedExpr = column)
+  }
+
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {
     test((rel, exp) => rel.where(exp), originalCond, expectedCond)
   }
@@ -308,6 +336,25 @@ class ReplaceNullWithFalseSuite extends PlanTest {
 
   private def testProjection(originalExpr: Expression, expectedExpr: Expression): Unit = {
     test((rel, exp) => rel.select(exp), originalExpr, expectedExpr)
+  }
+
+  private def testHigherOrderFunc(
+      argument: Expression,
+      createExpr: (Expression, Expression) => Expression,
+      lambdaArgs: Seq[NamedExpression]): Unit = {
+    val condArg = lambdaArgs.last
+    // the lambda body is: if(arg > 0, null, true)
+    val cond = GreaterThan(condArg, Literal(0))
+    val lambda1 = LambdaFunction(
+      function = If(cond, Literal(null, BooleanType), TrueLiteral),
+      arguments = lambdaArgs)
+    // the optimized lambda body is: if(arg > 0, false, true)
+    val lambda2 = LambdaFunction(
+      function = If(cond, FalseLiteral, TrueLiteral),
+      arguments = lambdaArgs)
+    testProjection(
+      originalExpr = createExpr(argument, lambda1) as 'x,
+      expectedExpr = createExpr(argument, lambda2) as 'x)
   }
 
   private def test(

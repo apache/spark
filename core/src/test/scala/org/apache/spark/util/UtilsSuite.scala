@@ -33,7 +33,7 @@ import scala.util.Random
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -44,14 +44,6 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
-
-  test("truncatedString") {
-    assert(Utils.truncatedString(Nil, "[", ", ", "]", 2) == "[]")
-    assert(Utils.truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", 2) == "[1, ... 2 more fields]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", -5) == "[, ... 3 more fields]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), ", ") == "1, 2, 3")
-  }
 
   test("timeConversion") {
     // Test -1
@@ -932,10 +924,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         signal(pid, "SIGKILL")
       }
 
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var majorVersion = versionParts(0).toInt
-      if (majorVersion == 1) majorVersion = versionParts(1).toInt
-      if (majorVersion >= 8) {
+      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_1_8)) {
         // We'll make sure that forcibly terminating a process works by
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.

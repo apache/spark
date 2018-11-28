@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
  *
  * @since 1.5.0
  */
-@InterfaceStability.Stable
+@Stable
 abstract class UserDefinedAggregateFunction extends Serializable {
 
   /**
@@ -159,7 +159,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
  *
  * @since 1.5.0
  */
-@InterfaceStability.Stable
+@Stable
 abstract class MutableAggregationBuffer extends Row {
 
   /** Update the ith value of this buffer. */

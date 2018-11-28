@@ -448,6 +448,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
         model2: GBTClassificationModel): Unit = {
       TreeTests.checkEqual(model, model2)
       assert(model.numFeatures === model2.numFeatures)
+      assert(model.featureImportances == model2.featureImportances)
     }
 
     val gbt = new GBTClassifier()

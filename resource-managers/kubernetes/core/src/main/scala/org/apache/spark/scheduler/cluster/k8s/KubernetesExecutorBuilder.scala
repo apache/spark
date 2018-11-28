@@ -41,7 +41,7 @@ private[spark] class KubernetesExecutorBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-    provideInitialPod: () => SparkPod = SparkPod.initialPod) {
+    provideInitialPod: () => SparkPod = () => SparkPod.initialPod()) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {

@@ -143,6 +143,40 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val volumeSpec = KubernetesVolumeSpec(
       "volume",
       "/tmp",
+      "",
+      false,
+      KubernetesHostPathVolumeConf("/path"))
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        JavaMainAppResource(None),
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      volumeSpec :: Nil,
+      hadoopConfSpec = None)
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      LOCAL_DIRS_STEP_TYPE,
+      MOUNT_VOLUMES_STEP_TYPE,
+      DRIVER_CMD_STEP_TYPE)
+  }
+
+  test("Apply volumes step if a mount subpath is present.") {
+    val volumeSpec = KubernetesVolumeSpec(
+      "volume",
+      "/tmp",
+      "foo",
       false,
       KubernetesHostPathVolumeConf("/path"))
     val conf = KubernetesConf(
