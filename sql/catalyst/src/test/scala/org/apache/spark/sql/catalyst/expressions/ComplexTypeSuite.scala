@@ -183,6 +183,11 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
       "Cannot use null as map key")
 
+    // Duplicated map keys will be removed w.r.t. the last wins policy.
+    checkEvaluation(
+      CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))),
+      create_map(1 -> 3))
+
     // ArrayType map key and value
     val map = CreateMap(Seq(
       Literal.create(intSeq, ArrayType(IntegerType, containsNull = false)),
@@ -243,12 +248,18 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       MapFromArrays(intWithNullArray, strArray),
       "Cannot use null as map key")
 
+    // Duplicated map keys will be removed w.r.t. the last wins policy.
+    checkEvaluation(
+      MapFromArrays(
+        Literal.create(Seq(1, 1), ArrayType(IntegerType)),
+        Literal.create(Seq(2, 3), ArrayType(IntegerType))),
+      create_map(1 -> 3))
+
     // map key can't be map
     val arrayOfMap = Seq(create_map(1 -> "a", 2 -> "b"))
     val map = MapFromArrays(
       Literal.create(arrayOfMap, ArrayType(MapType(IntegerType, StringType))),
-      Literal.create(Seq(1), ArrayType(IntegerType))
-    )
+      Literal.create(Seq(1), ArrayType(IntegerType)))
     map.checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
       case TypeCheckResult.TypeCheckFailure(msg) =>
@@ -355,6 +366,11 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s5 = Literal("a")
     val m5 = Map("a" -> null)
     checkEvaluation(new StringToMap(s5), m5)
+
+    // Duplicated map keys will be removed w.r.t. the last wins policy.
+    checkEvaluation(
+      new StringToMap(Literal("a:1,b:2,a:3")),
+      create_map("a" -> "3", "b" -> "2"))
 
     // arguments checking
     assert(new StringToMap(Literal("a:1,b:2,c:3")).checkInputDataTypes().isSuccess)
