@@ -85,9 +85,9 @@ object DataSourceV2Strategy extends Strategy {
         val neededOutput = relation.output.filter(requiredColumns.contains)
         if (neededOutput != relation.output) {
           r.pruneColumns(neededOutput.toStructType)
-          val config = r.build()
+          val scan = r.build()
           val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
-          config -> config.readSchema().toAttributes.map {
+          scan -> scan.readSchema().toAttributes.map {
             // We have to keep the attribute id during transformation.
             a => a.withExprId(nameToAttr(a.name).exprId)
           }
