@@ -1610,6 +1610,12 @@ object SQLConf {
       """ "... N more fields" placeholder.""")
     .intConf
     .createWithDefault(25)
+
+  val MAX_PLAN_STRING_LENGTH = buildConf("spark.sql.debug.maxPlanLength")
+    .doc("Maximum number of characters to output for a plan in debug output.  If the plan is " +
+      "longer, it will end with a ... and further output will be truncated.")
+    .longConf
+    .createWithDefault(8192)
 }
 
 /**
@@ -2029,6 +2035,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
+
+  def maxPlanStringLength: Long = getConf(SQLConf.MAX_PLAN_STRING_LENGTH)
 
   /** ********************** SQLConf functionality methods ************ */
 

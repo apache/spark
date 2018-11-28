@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.util.{truncatedString, withSizeLimitedWriter}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
@@ -484,7 +484,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       writer: Writer,
       verbose: Boolean,
       addSuffix: Boolean): Unit = {
-    generateTreeString(0, Nil, writer, verbose, "", addSuffix)
+    withSizeLimitedWriter(writer) { w =>
+      generateTreeString(0, Nil, w, verbose, "", addSuffix)
+    }
   }
 
   /**

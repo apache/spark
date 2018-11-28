@@ -21,21 +21,20 @@ import java.math.BigInteger
 import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions.DslString
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.plans.{LeftOuter, NaturalJoin}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Union}
+import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, NaturalJoin, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LeafNode, Union}
 import org.apache.spark.sql.catalyst.plans.physical.{IdentityBroadcastMode, RoundRobinPartitioning, SinglePartition}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
@@ -594,5 +593,15 @@ class TreeNodeSuite extends SparkFunSuite {
     val result = before.withNewChildren(Stream(Literal(1), Literal(3)))
     val expected = Coalesce(Stream(Literal(1), Literal(3)))
     assert(result === expected)
+  }
+
+  test("toString() tree depth") {
+    val ds = (1 until 100).foldLeft(Literal("TestLiteral"): Expression) { case (treeNode, x) =>
+      Add(Literal(x), treeNode)
+    }
+
+    val planString = ds.treeString
+    assert(planString.endsWith("..."))
+    assert(planString.length <= SQLConf.get.maxPlanStringLength)
   }
 }
