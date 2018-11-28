@@ -138,19 +138,22 @@ private[spark] class ProcfsMetricsGetter(
       }
       val stdoutThread = Utils.processStreamByLine("read stdout for pgrep",
         process.getInputStream, appendChildPid)
-      val error = process.getErrorStream
-      var errorString = ""
-      (0 until error.available()).foreach { i =>
-        errorString += error.read()
-      }
+      val errorStringBuilder = new StringBuilder()
+      val stdErrThread = Utils.processStreamByLine(
+        "stderr for pgrep",
+        process.getErrorStream,
+        { line =>
+        errorStringBuilder.append(line)
+      })
       val exitCode = process.waitFor()
       stdoutThread.join()
+      stdErrThread.join()
+      val errorString = errorStringBuilder.toString()
       // pgrep will have exit code of 1 if there are more than one child process
       // and it will have a exit code of 2 if there is no child process
       if (exitCode != 0 && exitCode > 2) {
         val cmd = builder.command().toArray.mkString(" ")
-        logWarning(s"Process $cmd" +
-          s" exited with code $exitCode, with stderr:" + s"${errorString} ")
+        logWarning(s"Process $cmd exited with code $exitCode and stderr: $errorString")
         throw new SparkException(s"Process $cmd exited with code $exitCode")
       }
       childPidsInInt
@@ -165,12 +168,9 @@ private[spark] class ProcfsMetricsGetter(
 
   def addProcfsMetricsFromOneProcess(
       allMetrics: ProcfsMetrics,
-      pid: Int):
-      ProcfsMetrics = {
+      pid: Int): ProcfsMetrics = {
 
-    // Hadoop ProcfsBasedProcessTree class used regex and pattern matching to retrive the memory
-    // info. I tried that but found it not correct during tests, so I used normal string analysis
-    // instead. The computation of RSS and Vmem are based on proc(5):
+    // The computation of RSS and Vmem are based on proc(5):
     // http://man7.org/linux/man-pages/man5/proc.5.html
     try {
       val pidDir = new File(procfsDir, pid.toString)
@@ -180,28 +180,25 @@ private[spark] class ProcfsMetricsGetter(
         Utils.tryWithResource( new BufferedReader(fReader)) { in =>
           val procInfo = in.readLine
           val procInfoSplit = procInfo.split(" ")
-          if (procInfoSplit != null) {
-            val vmem = procInfoSplit(22).toLong
-            val rssPages = procInfoSplit(23).toLong
-            if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
-              return allMetrics.copy(
-                jvmVmemTotal = allMetrics.jvmVmemTotal + vmem,
-                jvmRSSTotal = allMetrics.jvmRSSTotal + (rssPages*pageSize)
-              )
-            }
-            else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
-              return allMetrics.copy(
-                pythonVmemTotal = allMetrics.pythonVmemTotal + vmem,
-                pythonRSSTotal = allMetrics.pythonRSSTotal + (rssPages*pageSize)
-              )
-            }
-              return allMetrics.copy(
-                otherVmemTotal = allMetrics.otherVmemTotal + vmem,
-                otherRSSTotal = allMetrics.otherRSSTotal + (rssPages*pageSize)
-              )
+          val vmem = procInfoSplit(22).toLong
+          val rssMem = procInfoSplit(23).toLong*pageSize
+          if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
+            allMetrics.copy(
+              jvmVmemTotal = allMetrics.jvmVmemTotal + vmem,
+              jvmRSSTotal = allMetrics.jvmRSSTotal + (rssMem)
+            )
+          }
+          else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
+            allMetrics.copy(
+              pythonVmemTotal = allMetrics.pythonVmemTotal + vmem,
+              pythonRSSTotal = allMetrics.pythonRSSTotal + (rssMem)
+            )
           }
           else {
-            return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+            allMetrics.copy(
+              otherVmemTotal = allMetrics.otherVmemTotal + vmem,
+              otherRSSTotal = allMetrics.otherRSSTotal + (rssMem)
+            )
           }
         }
       }
