@@ -650,19 +650,20 @@ class TreeEnsembleParams(DecisionTreeParams):
         return self.getOrDefault(self.featureSubsetStrategy)
 
 
-class TreeRegressorParams(Params):
+class HasVarianceImpurity(Params):
     """
     Private class to track supported impurity measures.
     """
 
     supportedImpurities = ["variance"]
+
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
                      "Supported options: " +
                      ", ".join(supportedImpurities), typeConverter=TypeConverters.toString)
 
     def __init__(self):
-        super(TreeRegressorParams, self).__init__()
+        super(HasVarianceImpurity, self).__init__()
 
     @since("1.4.0")
     def setImpurity(self, value):
@@ -677,6 +678,10 @@ class TreeRegressorParams(Params):
         Gets the value of impurity or its default value.
         """
         return self.getOrDefault(self.impurity)
+
+
+class TreeRegressorParams(HasVarianceImpurity):
+    pass
 
 
 class RandomForestParams(TreeEnsembleParams):
@@ -709,7 +714,6 @@ class GBTParams(TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndica
     """
     Private class to track supported GBT params.
     """
-    supportedLossTypes = ["squared", "absolute"]
 
     stepSize = Param(Params._dummy(), "stepSize",
                      "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
@@ -736,6 +740,28 @@ class GBTParams(TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndica
         Gets the value of validationTol or its default value.
         """
         return self.getOrDefault(self.validationTol)
+
+
+class GBTRegressorParams(GBTParams, TreeRegressorParams):
+    """
+    Private class to track supported GBTRegressor params.
+
+    .. versionadded:: 3.0.0
+    """
+
+    supportedLossTypes = ["squared", "absolute"]
+
+    lossType = Param(Params._dummy(), "lossType",
+                     "Loss function which GBT tries to minimize (case-insensitive). " +
+                     "Supported options: " + ", ".join(supportedLossTypes),
+                     typeConverter=TypeConverters.toString)
+
+    @since("1.4.0")
+    def setLossType(self, value):
+        """
+        Sets the value of :py:attr:`lossType`.
+        """
+        return self._set(lossType=value)
 
 
 @inherit_doc
@@ -1056,9 +1082,9 @@ class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaML
 
 
 @inherit_doc
-class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, GBTParams,
-                   HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable, JavaMLReadable,
-                   TreeRegressorParams):
+class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                   GBTRegressorParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
+                   JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
@@ -1114,13 +1140,6 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     .. versionadded:: 1.4.0
     """
 
-    lossType = Param(Params._dummy(), "lossType",
-                     "Loss function which GBT tries to minimize (case-insensitive). " +
-                     "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
-                     typeConverter=TypeConverters.toString)
-
-    supportedLossTypes = ["squared", "absolute"]
-
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
@@ -1167,20 +1186,6 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
 
     def _create_model(self, java_model):
         return GBTRegressionModel(java_model)
-
-    @since("1.4.0")
-    def setLossType(self, value):
-        """
-        Sets the value of :py:attr:`lossType`.
-        """
-        return self._set(lossType=value)
-
-    @since("1.4.0")
-    def getLossType(self):
-        """
-        Gets the value of lossType or its default value.
-        """
-        return self.getOrDefault(self.lossType)
 
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):
