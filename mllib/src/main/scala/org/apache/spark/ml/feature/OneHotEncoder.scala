@@ -116,37 +116,37 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
  *
  * @see `StringIndexer` for converting categorical values into category indices
  */
-@Since("2.3.0")
-class OneHotEncoder @Since("2.3.0") (@Since("2.3.0") override val uid: String)
+@Since("3.0.0")
+class OneHotEncoder @Since("3.0.0") (@Since("3.0.0") override val uid: String)
     extends Estimator[OneHotEncoderModel] with OneHotEncoderBase with DefaultParamsWritable {
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   def this() = this(Identifiable.randomUID("oneHotEncoder"))
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("3.0.0")
   def setInputCols(values: Array[String]): this.type = set(inputCols, values)
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("3.0.0")
   def setOutputCols(values: Array[String]): this.type = set(outputCols, values)
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("3.0.0")
   def setDropLast(value: Boolean): this.type = set(dropLast, value)
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("3.0.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   override def transformSchema(schema: StructType): StructType = {
     val keepInvalid = $(handleInvalid) == OneHotEncoder.KEEP_INVALID
     validateAndTransformSchema(schema, dropLast = $(dropLast),
       keepInvalid = keepInvalid)
   }
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   override def fit(dataset: Dataset[_]): OneHotEncoderModel = {
     transformSchema(dataset.schema)
 
@@ -186,18 +186,18 @@ class OneHotEncoder @Since("2.3.0") (@Since("2.3.0") override val uid: String)
     copyValues(model)
   }
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
 }
 
-@Since("2.3.0")
+@Since("3.0.0")
 object OneHotEncoder extends DefaultParamsReadable[OneHotEncoder] {
 
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val ERROR_INVALID: String = "error"
   private[feature] val supportedHandleInvalids: Array[String] = Array(KEEP_INVALID, ERROR_INVALID)
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   override def load(path: String): OneHotEncoder = super.load(path)
 }
 
@@ -205,10 +205,10 @@ object OneHotEncoder extends DefaultParamsReadable[OneHotEncoder] {
  * @param categorySizes  Original number of categories for each feature being encoded.
  *                       The array contains one value for each input column, in order.
  */
-@Since("2.3.0")
+@Since("3.0.0")
 class OneHotEncoderModel private[ml] (
-    @Since("2.3.0") override val uid: String,
-    @Since("2.3.0") val categorySizes: Array[Int])
+    @Since("3.0.0") override val uid: String,
+    @Since("3.0.0") val categorySizes: Array[Int])
   extends Model[OneHotEncoderModel] with OneHotEncoderBase with MLWritable {
 
   import OneHotEncoderModel._
@@ -270,22 +270,22 @@ class OneHotEncoderModel private[ml] (
   }
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("3.0.0")
   def setInputCols(values: Array[String]): this.type = set(inputCols, values)
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("3.0.0")
   def setOutputCols(values: Array[String]): this.type = set(outputCols, values)
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("3.0.0")
   def setDropLast(value: Boolean): this.type = set(dropLast, value)
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("3.0.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
 
@@ -323,7 +323,7 @@ class OneHotEncoderModel private[ml] (
     schema
   }
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema, logging = true)
     val keepInvalid = $(handleInvalid) == OneHotEncoder.KEEP_INVALID
@@ -348,17 +348,17 @@ class OneHotEncoderModel private[ml] (
     dataset.withColumns($(outputCols), encodedColumns)
   }
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   override def copy(extra: ParamMap): OneHotEncoderModel = {
     val copied = new OneHotEncoderModel(uid, categorySizes)
     copyValues(copied, extra).setParent(parent)
   }
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   override def write: MLWriter = new OneHotEncoderModelWriter(this)
 }
 
-@Since("2.3.0")
+@Since("3.0.0")
 object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
 
   private[OneHotEncoderModel]
@@ -391,10 +391,10 @@ object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
     }
   }
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   override def read: MLReader[OneHotEncoderModel] = new OneHotEncoderModelReader
 
-  @Since("2.3.0")
+  @Since("3.0.0")
   override def load(path: String): OneHotEncoderModel = super.load(path)
 }
 
