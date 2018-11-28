@@ -15,19 +15,6 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle
+table.dataTable thead .sorting_asc { background: url('images/sort_asc.png') no-repeat bottom right; }
 
-/**
- * An interface for reporting shuffle information, for each shuffle. This interface assumes
- * all the methods are called on a single-threaded, i.e. concrete implementations would not need
- * to synchronize anything.
- */
-private[spark] trait ShuffleMetricsReporter {
-  def incRemoteBlocksFetched(v: Long): Unit
-  def incLocalBlocksFetched(v: Long): Unit
-  def incRemoteBytesRead(v: Long): Unit
-  def incRemoteBytesReadToDisk(v: Long): Unit
-  def incLocalBytesRead(v: Long): Unit
-  def incFetchWaitTime(v: Long): Unit
-  def incRecordsRead(v: Long): Unit
-}
+table.dataTable thead .sorting_desc { background: url('images/sort_desc.png') no-repeat bottom right; }
