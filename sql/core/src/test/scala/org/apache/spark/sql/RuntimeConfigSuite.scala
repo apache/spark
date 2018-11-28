@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config
 
 class RuntimeConfigSuite extends SparkFunSuite {
 
@@ -73,7 +74,7 @@ class RuntimeConfigSuite extends SparkFunSuite {
     val conf = newConf()
 
     val ex = intercept[AnalysisException] {
-      conf.set("spark.task.cpus", 4)
+      conf.set(config.CPUS_PER_TASK.key, 4)
     }
     assert(ex.getMessage.contains("Spark config"))
   }
