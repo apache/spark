@@ -27,8 +27,10 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.ExecutorShuffleStatus._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.ManualClock
 
 class FakeSchedulerBackend extends SchedulerBackend {
@@ -836,7 +838,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // We customize the task scheduler just to let us control the way offers are shuffled, so we
     // can be sure we try both permutations, and to control the clock on the tasksetmanager.
     val taskScheduler = new TaskSchedulerImpl(sc) {
-      override def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
+      override def doShuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
         // Don't shuffle the offers around for this test.  Instead, we'll just pass in all
         // the permutations we care about directly.
         offers
@@ -871,6 +873,40 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         assert(taskDescs.head.executorId === "exec1")
       }
     }
+  }
+
+  test("Shuffle-biased task scheduling enabled should lead to non-random offer shuffling") {
+    setupScheduler("spark.scheduler.shuffleBiasedTaskScheduling.enabled" -> "true")
+
+    // Make offers in different executors, so they can be a mix of active, inactive, unknown
+    val offers = IndexedSeq(
+      WorkerOffer("exec1", "host1", 2), // inactive
+      WorkerOffer("exec2", "host2", 2), // active
+      WorkerOffer("exec3", "host3", 2) // unknown
+    )
+    val makeMapStatus = (offer: WorkerOffer) =>
+      MapStatus(BlockManagerId(offer.executorId, offer.host, 1), Array(10))
+    val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.registerShuffle(0, 2)
+    mapOutputTracker.registerShuffle(1, 1)
+    mapOutputTracker.registerMapOutput(0, 0, makeMapStatus(offers(0)))
+    mapOutputTracker.registerMapOutput(0, 1, makeMapStatus(offers(1)))
+    mapOutputTracker.registerMapOutput(1, 0, makeMapStatus(offers(1)))
+    mapOutputTracker.markShuffleInactive(0)
+
+    val execStatus = mapOutputTracker.getExecutorShuffleStatus
+    assert(execStatus.equals(Map("exec1" -> Inactive, "exec2" -> Active)))
+
+    assert(taskScheduler.partitionAndShuffleOffers(offers).map(_._1)
+      .equals(IndexedSeq(Active, Inactive, Unknown)))
+    assert(taskScheduler.partitionAndShuffleOffers(offers).flatMap(_._2).map(offers.indexOf(_))
+      .equals(IndexedSeq(1, 0, 2)))
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(3, stageId = 1, stageAttemptId = 0))
+    // should go to active first, then inactive
+    val taskDescs = taskScheduler.resourceOffers(offers).flatten
+    assert(taskDescs.size === 3)
+    assert(taskDescs.map(_.executorId).equals(Seq("exec2", "exec2", "exec1")))
   }
 
   test("With delay scheduling off, tasks can be run at any locality level immediately") {
