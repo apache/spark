@@ -181,9 +181,10 @@ private[json] class JsonOutputWriter(
     val gen = jacksonGenerator.getOrElse {
       val os = CodecStreams.createOutputStreamWriter(context, new Path(path), encoding)
       // create the Generator without separator inserted between 2 records
-      new JacksonGenerator(dataSchema, os, options)
+      val newGen = new JacksonGenerator(dataSchema, os, options)
+      jacksonGenerator = Some(newGen)
+      newGen
     }
-    jacksonGenerator = Some(gen)
 
     gen.write(row)
     gen.writeLineEnding()
