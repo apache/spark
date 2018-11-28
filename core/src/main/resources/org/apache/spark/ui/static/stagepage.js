@@ -610,7 +610,8 @@ $(document).ready(function () {
                 $("#accumulator-table").DataTable(accumulatorConf);
 
                 // building tasks table that uses server side functionality
-                var totalTasksToShow = responseBody.numCompleteTasks + responseBody.numActiveTasks;
+                var totalTasksToShow = responseBody.numCompleteTasks + responseBody.numActiveTasks +
+                    responseBody.numKilledTasks + responseBody.numFailedTasks;
                 var taskTable = "#active-tasks-table";
                 var taskConf = {
                     "serverSide": true,
@@ -921,7 +922,7 @@ $(document).ready(function () {
 
                 // title number and toggle list
                 $("#summaryMetricsTitle").html("Summary Metrics for " + "<a href='#tasksTitle'>" + responseBody.numCompleteTasks + " Completed Tasks" + "</a>");
-                $("#tasksTitle").html("Task (" + totalTasksToShow + ")");
+                $("#tasksTitle").html("Tasks (" + totalTasksToShow + ")");
 
                 // hide or show the accumulate update table
                 if (accumulatorTable.length == 0) {
