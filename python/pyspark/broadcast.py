@@ -121,16 +121,8 @@ class Broadcast(object):
         f.close()
 
     def load_from_path(self, path):
-        # we only need to decrypt it here if its on the driver since executor
-        # decryption handled already
-        if self._sc is not None and self._sc._encryption_enabled:
-            port, auth_secret = self._python_broadcast.setupDecryptionServer()
-            (decrypted_sock_file, _) = local_connect_and_auth(port, auth_secret)
-            self._python_broadcast.waitTillBroadcastDataSent()
-            return self.load(decrypted_sock_file)
-        else:
-            with open(path, 'rb', 1 << 20) as f:
-                return self.load(f)
+        with open(path, 'rb', 1 << 20) as f:
+            return self.load(f)
 
     def load(self, file):
         # "file" could also be a socket
@@ -145,7 +137,15 @@ class Broadcast(object):
         """ Return the broadcasted value
         """
         if not hasattr(self, "_value") and self._path is not None:
-            self._value = self.load_from_path(self._path)
+            # we only need to decrypt it here when encryption is enabled and
+            # if its on the driver, since executor decryption is handled already
+            if self._sc._encryption_enabled:
+                port, auth_secret = self._python_broadcast.setupDecryptionServer()
+                (decrypted_sock_file, _) = local_connect_and_auth(port, auth_secret)
+                self._python_broadcast.waitTillBroadcastDataSent()
+                return self.load(decrypted_sock_file)
+            else:
+                self._value = self.load_from_path(self._path)
         return self._value
 
     def unpersist(self, blocking=False):
