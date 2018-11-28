@@ -170,4 +170,16 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("EXPLAIN EXTENDED CODEGEN SELECT 1")
     }
   }
+
+  test("SPARK-23034 show relation names in Hive table scan nodes") {
+    val tableName = "tab"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(c1 int) USING hive")
+      val output = new java.io.ByteArrayOutputStream()
+      Console.withOut(output) {
+        spark.table(tableName).explain(extended = false)
+      }
+      assert(output.toString.contains(s"Scan hive default.$tableName"))
+    }
+  }
 }

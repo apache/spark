@@ -67,7 +67,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       val dummyOption = new JSONOptions(Map.empty[String, String], "GMT")
       val dummySchema = StructType(Seq.empty)
-      val parser = new JacksonParser(dummySchema, dummyOption)
+      val parser = new JacksonParser(dummySchema, dummyOption, allowArrayAsStructs = true)
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
         jsonParser.nextToken()
@@ -249,7 +249,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     checkAnswer(
       sql("select nullstr, headers.Host from jsonTable"),
-      Seq(Row("", "1.abc.com"), Row("", null), Row("", null), Row(null, null))
+      Seq(Row("", "1.abc.com"), Row("", null), Row(null, null), Row(null, null))
     )
   }
 
@@ -1115,6 +1115,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Row(null, null, null),
         Row(null, null, null),
         Row(null, null, null),
+        Row(null, null, null),
         Row("str_a_4", "str_b_4", "str_c_4"),
         Row(null, null, null))
     )
@@ -1136,6 +1137,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkAnswer(
         jsonDF.select($"a", $"b", $"c", $"_unparsed"),
         Row(null, null, null, "{") ::
+          Row(null, null, null, "") ::
           Row(null, null, null, """{"a":1, b:2}""") ::
           Row(null, null, null, """{"a":{, b:3}""") ::
           Row("str_a_4", "str_b_4", "str_c_4", null) ::
@@ -1150,6 +1152,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkAnswer(
         jsonDF.filter($"_unparsed".isNotNull).select($"_unparsed"),
         Row("{") ::
+          Row("") ::
           Row("""{"a":1, b:2}""") ::
           Row("""{"a":{, b:3}""") ::
           Row("]") :: Nil
@@ -1171,6 +1174,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(
       jsonDF.selectExpr("a", "b", "c", "_malformed"),
       Row(null, null, null, "{") ::
+        Row(null, null, null, "") ::
         Row(null, null, null, """{"a":1, b:2}""") ::
         Row(null, null, null, """{"a":{, b:3}""") ::
         Row("str_a_4", "str_b_4", "str_c_4", null) ::
@@ -1813,6 +1817,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val path = dir.getCanonicalPath
       primitiveFieldAndType
         .toDF("value")
+        .repartition(1)
         .write
         .option("compression", "GzIp")
         .text(path)
@@ -1838,6 +1843,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val path = dir.getCanonicalPath
       primitiveFieldAndType
         .toDF("value")
+        .repartition(1)
         .write
         .text(path)
 
@@ -1892,7 +1898,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .text(path)
 
       val jsonDF = spark.read.option("multiLine", true).option("mode", "PERMISSIVE").json(path)
-      assert(jsonDF.count() === corruptRecordCount)
+      assert(jsonDF.count() === corruptRecordCount + 1) // null row for empty file
       assert(jsonDF.schema === new StructType()
         .add("_corrupt_record", StringType)
         .add("dummy", StringType))
@@ -1905,7 +1911,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           F.count($"dummy").as("valid"),
           F.count($"_corrupt_record").as("corrupt"),
           F.count("*").as("count"))
-      checkAnswer(counts, Row(1, 4, 6))
+      checkAnswer(counts, Row(1, 5, 7)) // null row for empty file
     }
   }
 
@@ -2223,7 +2229,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
 
-
   test("SPARK-23723: specified encoding is not matched to actual encoding") {
     val fileName = "test-data/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
@@ -2489,5 +2494,66 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       }
       assert(exception.getMessage.contains("encoding must not be included in the blacklist"))
     }
+  }
+
+  test("count() for malformed input") {
+    def countForMalformedJSON(expected: Long, input: Seq[String]): Unit = {
+      val schema = new StructType().add("a", StringType)
+      val strings = spark.createDataset(input)
+      val df = spark.read.schema(schema).json(strings)
+
+      assert(df.count() == expected)
+    }
+    def checkCount(expected: Long): Unit = {
+      val validRec = """{"a":"b"}"""
+      val inputs = Seq(
+        Seq("{-}", validRec),
+        Seq(validRec, "?"),
+        Seq("}", validRec),
+        Seq(validRec, """{"a": [1, 2, 3]}"""),
+        Seq("""{"a": {"a": "b"}}""", validRec)
+      )
+      inputs.foreach { input =>
+        countForMalformedJSON(expected, input)
+      }
+    }
+
+    checkCount(2)
+    countForMalformedJSON(1, Seq(""))
+  }
+
+  test("SPARK-25040: empty strings should be disallowed") {
+    def failedOnEmptyString(dataType: DataType): Unit = {
+       val df = spark.read.schema(s"a ${dataType.catalogString}")
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      val errMessage = intercept[SparkException] {
+        df.collect()
+      }.getMessage
+      assert(errMessage.contains(
+        s"Failed to parse an empty string for data type ${dataType.catalogString}"))
+    }
+
+    def emptyString(dataType: DataType, expected: Any): Unit = {
+      val df = spark.read.schema(s"a ${dataType.catalogString}")
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      checkAnswer(df, Row(expected) :: Nil)
+    }
+
+    failedOnEmptyString(BooleanType)
+    failedOnEmptyString(ByteType)
+    failedOnEmptyString(ShortType)
+    failedOnEmptyString(IntegerType)
+    failedOnEmptyString(LongType)
+    failedOnEmptyString(FloatType)
+    failedOnEmptyString(DoubleType)
+    failedOnEmptyString(DecimalType.SYSTEM_DEFAULT)
+    failedOnEmptyString(TimestampType)
+    failedOnEmptyString(DateType)
+    failedOnEmptyString(ArrayType(IntegerType))
+    failedOnEmptyString(MapType(StringType, IntegerType, true))
+    failedOnEmptyString(StructType(StructField("f1", IntegerType, true) :: Nil))
+
+    emptyString(StringType, "")
+    emptyString(BinaryType, "".getBytes(StandardCharsets.UTF_8))
   }
 }

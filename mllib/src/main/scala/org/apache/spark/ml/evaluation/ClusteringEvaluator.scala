@@ -119,6 +119,8 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
           df, $(predictionCol), $(featuresCol))
       case ("silhouette", "cosine") =>
         CosineSilhouette.computeSilhouetteScore(df, $(predictionCol), $(featuresCol))
+      case (mn, dm) =>
+        throw new IllegalArgumentException(s"No support for metric $mn, distance $dm")
     }
   }
 }

@@ -17,23 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.InternalCompilerException
+import scala.util.control.NonFatal
 
-import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
-
-/**
- * Catches compile error during code generation.
- */
-object CodegenError {
-  def unapply(throwable: Throwable): Option[Exception] = throwable match {
-    case e: InternalCompilerException => Some(e)
-    case e: CompileException => Some(e)
-    case _ => None
-  }
-}
 
 /**
  * Defines values for `SQLConf` config of fallback mode. Use for test only.
@@ -44,10 +32,10 @@ object CodegenObjectFactoryMode extends Enumeration {
 
 /**
  * A codegen object generator which creates objects with codegen path first. Once any compile
- * error happens, it can fallbacks to interpreted implementation. In tests, we can use a SQL config
+ * error happens, it can fallback to interpreted implementation. In tests, we can use a SQL config
  * `SQLConf.CODEGEN_FACTORY_MODE` to control fallback behavior.
  */
-abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] {
+abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] extends Logging {
 
   def createObject(in: IN): OUT = {
     // We are allowed to choose codegen-only or no-codegen modes if under tests.
@@ -63,7 +51,10 @@ abstract class CodeGeneratorWithInterpretedFallback[IN, OUT] {
         try {
           createCodeGeneratedObject(in)
         } catch {
-          case CodegenError(_) => createInterpretedObject(in)
+          case NonFatal(_) =>
+            // We should have already seen the error message in `CodeGenerator`
+            logWarning("Expr codegen error and falling back to interpreter mode")
+            createInterpretedObject(in)
         }
     }
   }

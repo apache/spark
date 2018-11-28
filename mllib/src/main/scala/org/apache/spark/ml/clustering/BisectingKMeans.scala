@@ -104,10 +104,6 @@ class BisectingKMeansModel private[ml] (
   @Since("2.1.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  /** @group expertSetParam */
-  @Since("2.4.0")
-  def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
@@ -129,8 +125,15 @@ class BisectingKMeansModel private[ml] (
   /**
    * Computes the sum of squared distances between the input points and their corresponding cluster
    * centers.
+   *
+   * @deprecated This method is deprecated and will be removed in future versions. Use
+   *             ClusteringEvaluator instead. You can also get the cost on the training dataset in
+   *             the summary.
    */
   @Since("2.0.0")
+  @deprecated("This method is deprecated and will be removed in future versions. Use " +
+    "ClusteringEvaluator instead. You can also get the cost on the training dataset in the " +
+    "summary.", "3.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
     val data = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
@@ -273,11 +276,12 @@ class BisectingKMeans @Since("2.0.0") (
       .setMinDivisibleClusterSize($(minDivisibleClusterSize))
       .setSeed($(seed))
       .setDistanceMeasure($(distanceMeasure))
-    val parentModel = bkm.run(rdd)
+    val parentModel = bkm.run(rdd, Some(instr))
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k), $(maxIter))
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
+    instr.logNumFeatures(model.clusterCenters.head.size)
     model.setSummary(Some(summary))
   }
 

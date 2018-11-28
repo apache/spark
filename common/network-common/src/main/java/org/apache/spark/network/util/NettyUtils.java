@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.util;
 
-import java.lang.reflect.Field;
 import java.util.concurrent.ThreadFactory;
 
 import io.netty.buffer.PooledByteBufAllocator;
@@ -111,24 +110,14 @@ public class NettyUtils {
     }
     return new PooledByteBufAllocator(
       allowDirectBufs && PlatformDependent.directBufferPreferred(),
-      Math.min(getPrivateStaticField("DEFAULT_NUM_HEAP_ARENA"), numCores),
-      Math.min(getPrivateStaticField("DEFAULT_NUM_DIRECT_ARENA"), allowDirectBufs ? numCores : 0),
-      getPrivateStaticField("DEFAULT_PAGE_SIZE"),
-      getPrivateStaticField("DEFAULT_MAX_ORDER"),
-      allowCache ? getPrivateStaticField("DEFAULT_TINY_CACHE_SIZE") : 0,
-      allowCache ? getPrivateStaticField("DEFAULT_SMALL_CACHE_SIZE") : 0,
-      allowCache ? getPrivateStaticField("DEFAULT_NORMAL_CACHE_SIZE") : 0
+      Math.min(PooledByteBufAllocator.defaultNumHeapArena(), numCores),
+      Math.min(PooledByteBufAllocator.defaultNumDirectArena(), allowDirectBufs ? numCores : 0),
+      PooledByteBufAllocator.defaultPageSize(),
+      PooledByteBufAllocator.defaultMaxOrder(),
+      allowCache ? PooledByteBufAllocator.defaultTinyCacheSize() : 0,
+      allowCache ? PooledByteBufAllocator.defaultSmallCacheSize() : 0,
+      allowCache ? PooledByteBufAllocator.defaultNormalCacheSize() : 0,
+      allowCache ? PooledByteBufAllocator.defaultUseCacheForAllThreads() : false
     );
-  }
-
-  /** Used to get defaults from Netty's private static fields. */
-  private static int getPrivateStaticField(String name) {
-    try {
-      Field f = PooledByteBufAllocator.DEFAULT.getClass().getDeclaredField(name);
-      f.setAccessible(true);
-      return f.getInt(null);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
   }
 }

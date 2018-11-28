@@ -20,9 +20,9 @@ package org.apache.spark.sql.avro
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailFastMode, ParseMode}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.AvroOutputTimestampType
 
 /**
  * Options for Avro Reader and Writer stored in case insensitive manner.
@@ -81,13 +81,16 @@ class AvroOptions(
     parameters.get("compression").getOrElse(SQLConf.get.avroCompressionCodec)
   }
 
-  /**
-   * Avro timestamp type used when Spark writes data to Avro files.
-   * Currently supported types are `TIMESTAMP_MICROS` and `TIMESTAMP_MILLIS`.
-   * TIMESTAMP_MICROS is a logical timestamp type in Avro, which stores number of microseconds
-   * from the Unix epoch. TIMESTAMP_MILLIS is also logical, but with millisecond precision,
-   * which means Spark has to truncate the microsecond portion of its timestamp value.
-   * The related configuration is set via SQLConf, and it is not exposed as an option.
-   */
-  val outputTimestampType: AvroOutputTimestampType.Value = SQLConf.get.avroOutputTimestampType
+  val parseMode: ParseMode =
+    parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
+}
+
+object AvroOptions {
+  def apply(parameters: Map[String, String]): AvroOptions = {
+    val hadoopConf = SparkSession
+      .getActiveSession
+      .map(_.sessionState.newHadoopConf())
+      .getOrElse(new Configuration())
+    new AvroOptions(CaseInsensitiveMap(parameters), hadoopConf)
+  }
 }

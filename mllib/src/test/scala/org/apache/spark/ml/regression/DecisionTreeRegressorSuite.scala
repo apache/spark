@@ -191,20 +191,6 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0),
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
   }
-
-  test("label/impurity stats") {
-    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
-    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
-    val dtr = new DecisionTreeRegressor()
-      .setImpurity("variance")
-      .setMaxDepth(2)
-      .setMaxBins(8)
-    val model = dtr.fit(df)
-    val statInfo = model.rootNode
-
-    assert(statInfo.getCount == 1000.0 && statInfo.getSum == 600.0
-      && statInfo.getSumOfSquares == 600.0)
-  }
 }
 
 private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {

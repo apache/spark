@@ -185,27 +185,31 @@ class FramedSerializer(Serializer):
         raise NotImplementedError
 
 
-class ArrowSerializer(FramedSerializer):
+class ArrowStreamSerializer(Serializer):
     """
-    Serializes bytes as Arrow data with the Arrow file format.
+    Serializes Arrow record batches as a stream.
     """
 
-    def dumps(self, batch):
+    def dump_stream(self, iterator, stream):
         import pyarrow as pa
-        import io
-        sink = io.BytesIO()
-        writer = pa.RecordBatchFileWriter(sink, batch.schema)
-        writer.write_batch(batch)
-        writer.close()
-        return sink.getvalue()
+        writer = None
+        try:
+            for batch in iterator:
+                if writer is None:
+                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                writer.write_batch(batch)
+        finally:
+            if writer is not None:
+                writer.close()
 
-    def loads(self, obj):
+    def load_stream(self, stream):
         import pyarrow as pa
-        reader = pa.RecordBatchFileReader(pa.BufferReader(obj))
-        return reader.read_all()
+        reader = pa.open_stream(stream)
+        for batch in reader:
+            yield batch
 
     def __repr__(self):
-        return "ArrowSerializer"
+        return "ArrowStreamSerializer"
 
 
 def _create_batch(series, timezone):
@@ -229,12 +233,14 @@ def _create_batch(series, timezone):
     def create_array(s, t):
         mask = s.isnull()
         # Ensure timestamp series are in expected form for Spark internal representation
+        # TODO: maybe don't need None check anymore as of Arrow 0.9.1
         if t is not None and pa.types.is_timestamp(t):
             s = _check_series_convert_timestamps_internal(s.fillna(0), timezone)
             # TODO: need cast after Arrow conversion, ns values cause error with pandas 0.19.2
             return pa.Array.from_pandas(s, mask=mask).cast(t, safe=False)
         elif t is not None and pa.types.is_string(t) and sys.version < '3':
             # TODO: need decode before converting to Arrow in Python 2
+            # TODO: don't need as of Arrow 0.9.1
             return pa.Array.from_pandas(s.apply(
                 lambda v: v.decode("utf-8") if isinstance(v, str) else v), mask=mask, type=t)
         elif t is not None and pa.types.is_decimal(t) and \
@@ -713,9 +719,67 @@ def write_int(value, stream):
     stream.write(struct.pack("!i", value))
 
 
+def read_bool(stream):
+    length = stream.read(1)
+    if not length:
+        raise EOFError
+    return struct.unpack("!?", length)[0]
+
+
 def write_with_length(obj, stream):
     write_int(len(obj), stream)
     stream.write(obj)
+
+
+class ChunkedStream(object):
+
+    """
+    This is a file-like object takes a stream of data, of unknown length, and breaks it into fixed
+    length frames.  The intended use case is serializing large data and sending it immediately over
+    a socket -- we do not want to buffer the entire data before sending it, but the receiving end
+    needs to know whether or not there is more data coming.
+
+    It works by buffering the incoming data in some fixed-size chunks.  If the buffer is full, it
+    first sends the buffer size, then the data.  This repeats as long as there is more data to send.
+    When this is closed, it sends the length of whatever data is in the buffer, then that data, and
+    finally a "length" of -1 to indicate the stream has completed.
+    """
+
+    def __init__(self, wrapped, buffer_size):
+        self.buffer_size = buffer_size
+        self.buffer = bytearray(buffer_size)
+        self.current_pos = 0
+        self.wrapped = wrapped
+
+    def write(self, bytes):
+        byte_pos = 0
+        byte_remaining = len(bytes)
+        while byte_remaining > 0:
+            new_pos = byte_remaining + self.current_pos
+            if new_pos < self.buffer_size:
+                # just put it in our buffer
+                self.buffer[self.current_pos:new_pos] = bytes[byte_pos:]
+                self.current_pos = new_pos
+                byte_remaining = 0
+            else:
+                # fill the buffer, send the length then the contents, and start filling again
+                space_left = self.buffer_size - self.current_pos
+                new_byte_pos = byte_pos + space_left
+                self.buffer[self.current_pos:self.buffer_size] = bytes[byte_pos:new_byte_pos]
+                write_int(self.buffer_size, self.wrapped)
+                self.wrapped.write(self.buffer)
+                byte_remaining -= space_left
+                byte_pos = new_byte_pos
+                self.current_pos = 0
+
+    def close(self):
+        # if there is anything left in the buffer, write it out first
+        if self.current_pos > 0:
+            write_int(self.current_pos, self.wrapped)
+            self.wrapped.write(self.buffer[:self.current_pos])
+        # -1 length indicates to the receiving end that we're done.
+        write_int(-1, self.wrapped)
+        self.wrapped.close()
 
 
 if __name__ == '__main__':

@@ -204,6 +204,24 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-25028: column stats collection for null partitioning columns") {
+    val table = "analyze_partition_with_null"
+    withTempDir { dir =>
+      withTable(table) {
+        sql(s"""
+             |CREATE TABLE $table (value string, name string)
+             |USING PARQUET
+             |PARTITIONED BY (name)
+             |LOCATION '${dir.toURI}'""".stripMargin)
+        val df = Seq(("a", null), ("b", null)).toDF("value", "name")
+        df.write.mode("overwrite").insertInto(table)
+        sql(s"ANALYZE TABLE $table PARTITION (name) COMPUTE STATISTICS")
+        val partitions = spark.sessionState.catalog.listPartitions(TableIdentifier(table))
+        assert(partitions.head.stats.get.rowCount.get == 2)
+      }
+    }
+  }
+
   test("number format in statistics") {
     val numbers = Seq(
       BigInt(0) -> (("0.0 B", "0")),

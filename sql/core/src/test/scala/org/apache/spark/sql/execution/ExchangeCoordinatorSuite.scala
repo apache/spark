@@ -31,6 +31,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var originalInstantiatedSparkSession: Option[SparkSession] = _
 
   override protected def beforeAll(): Unit = {
+    super.beforeAll()
     originalActiveSparkSession = SparkSession.getActiveSession
     originalInstantiatedSparkSession = SparkSession.getDefaultSession
 
@@ -39,9 +40,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   override protected def afterAll(): Unit = {
-    // Set these states back.
-    originalActiveSparkSession.foreach(ctx => SparkSession.setActiveSession(ctx))
-    originalInstantiatedSparkSession.foreach(ctx => SparkSession.setDefaultSession(ctx))
+    try {
+      // Set these states back.
+      originalActiveSparkSession.foreach(ctx => SparkSession.setActiveSession(ctx))
+      originalInstantiatedSparkSession.foreach(ctx => SparkSession.setDefaultSession(ctx))
+    } finally {
+      super.afterAll()
+    }
   }
 
   private def checkEstimation(

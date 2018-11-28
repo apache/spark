@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockManager;
@@ -662,7 +663,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * It is only valid to call this method immediately after calling `lookup()` using the same key.
      * </p>
      * <p>
-     * The key and value must be word-aligned (that is, their sizes must multiples of 8).
+     * The key and value must be word-aligned (that is, their sizes must be a multiple of 8).
      * </p>
      * <p>
      * After calling this method, calls to `get[Key|Value]Address()` and `get[Key|Value]Length`
@@ -741,7 +742,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         if (numKeys >= growthThreshold && longArray.size() < MAX_CAPACITY) {
           try {
             growAndRehash();
-          } catch (OutOfMemoryError oom) {
+          } catch (SparkOutOfMemoryError oom) {
             canGrowArray = false;
           }
         }
@@ -757,7 +758,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private boolean acquireNewPage(long required) {
     try {
       currentPage = allocatePage(required);
-    } catch (OutOfMemoryError e) {
+    } catch (SparkOutOfMemoryError e) {
       return false;
     }
     dataPages.add(currentPage);

@@ -33,7 +33,7 @@ import scala.util.Random
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -44,14 +44,6 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
-
-  test("truncatedString") {
-    assert(Utils.truncatedString(Nil, "[", ", ", "]", 2) == "[]")
-    assert(Utils.truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", 2) == "[1, ... 2 more fields]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", -5) == "[, ... 3 more fields]")
-    assert(Utils.truncatedString(Seq(1, 2, 3), ", ") == "1, 2, 3")
-  }
 
   test("timeConversion") {
     // Test -1
@@ -932,10 +924,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         signal(pid, "SIGKILL")
       }
 
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var majorVersion = versionParts(0).toInt
-      if (majorVersion == 1) majorVersion = versionParts(1).toInt
-      if (majorVersion >= 8) {
+      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_1_8)) {
         // We'll make sure that forcibly terminating a process works by
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.
@@ -1183,6 +1172,55 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass]) ===
       "UtilsSuite$MalformedClassObject$MalformedClass")
+  }
+
+  test("stringHalfWidth") {
+    // scalastyle:off nonascii
+    assert(Utils.stringHalfWidth(null) == 0)
+    assert(Utils.stringHalfWidth("") == 0)
+    assert(Utils.stringHalfWidth("ab c") == 4)
+    assert(Utils.stringHalfWidth("1098") == 4)
+    assert(Utils.stringHalfWidth("mø") == 2)
+    assert(Utils.stringHalfWidth("γύρ") == 3)
+    assert(Utils.stringHalfWidth("pê") == 2)
+    assert(Utils.stringHalfWidth("ー") == 2)
+    assert(Utils.stringHalfWidth("测") == 2)
+    assert(Utils.stringHalfWidth("か") == 2)
+    assert(Utils.stringHalfWidth("걸") == 2)
+    assert(Utils.stringHalfWidth("à") == 1)
+    assert(Utils.stringHalfWidth("焼") == 2)
+    assert(Utils.stringHalfWidth("羍む") == 4)
+    assert(Utils.stringHalfWidth("뺭ᾘ") == 3)
+    assert(Utils.stringHalfWidth("\u0967\u0968\u0969") == 3)
+    // scalastyle:on nonascii
+  }
+
+  test("trimExceptCRLF standalone") {
+    val crlfSet = Set("\r", "\n")
+    val nonPrintableButCRLF = (0 to 32).map(_.toChar.toString).toSet -- crlfSet
+
+    // identity for CRLF
+    crlfSet.foreach { s => Utils.trimExceptCRLF(s) === s }
+
+    // empty for other non-printables
+    nonPrintableButCRLF.foreach { s => assert(Utils.trimExceptCRLF(s) === "") }
+
+    // identity for a printable string
+    assert(Utils.trimExceptCRLF("a") === "a")
+
+    // identity for strings with CRLF
+    crlfSet.foreach { s =>
+      assert(Utils.trimExceptCRLF(s"${s}a") === s"${s}a")
+      assert(Utils.trimExceptCRLF(s"a${s}") === s"a${s}")
+      assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
+    }
+
+    // trim nonPrintableButCRLF except when inside a string
+    nonPrintableButCRLF.foreach { s =>
+      assert(Utils.trimExceptCRLF(s"${s}a") === "a")
+      assert(Utils.trimExceptCRLF(s"a${s}") === "a")
+      assert(Utils.trimExceptCRLF(s"b${s}b") === s"b${s}b")
+    }
   }
 }
 

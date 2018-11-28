@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateMutableProjection, GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -55,47 +56,50 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
 }
 
 /**
- * A [[MutableProjection]] that is calculated by calling `eval` on each of the specified
- * expressions.
+ * Converts a [[InternalRow]] to another Row given a sequence of expression that define each
+ * column of the new row. If the schema of the input row is specified, then the given expression
+ * will be bound to that schema.
  *
- * @param expressions a sequence of expressions that determine the value of each column of the
- *                    output row.
+ * In contrast to a normal projection, a MutableProjection reuses the same underlying row object
+ * each time an input row is added.  This significantly reduces the cost of calculating the
+ * projection, but means that it is not safe to hold on to a reference to a [[InternalRow]] after
+ * `next()` has been called on the [[Iterator]] that produced it. Instead, the user must call
+ * `InternalRow.copy()` and hold on to the returned [[InternalRow]] before calling `next()`.
  */
-case class InterpretedMutableProjection(expressions: Seq[Expression]) extends MutableProjection {
-  def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
-    this(expressions.map(BindReferences.bindReference(_, inputSchema)))
+abstract class MutableProjection extends Projection {
+  def currentValue: InternalRow
 
-  private[this] val buffer = new Array[Any](expressions.size)
+  /** Uses the given row to store the output of the projection. */
+  def target(row: InternalRow): MutableProjection
+}
 
-  override def initialize(partitionIndex: Int): Unit = {
-    expressions.foreach(_.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    })
+/**
+ * The factory object for `MutableProjection`.
+ */
+object MutableProjection
+    extends CodeGeneratorWithInterpretedFallback[Seq[Expression], MutableProjection] {
+
+  override protected def createCodeGeneratedObject(in: Seq[Expression]): MutableProjection = {
+    GenerateMutableProjection.generate(in, SQLConf.get.subexpressionEliminationEnabled)
   }
 
-  private[this] val exprArray = expressions.toArray
-  private[this] var mutableRow: InternalRow = new GenericInternalRow(exprArray.length)
-  def currentValue: InternalRow = mutableRow
-
-  override def target(row: InternalRow): MutableProjection = {
-    mutableRow = row
-    this
+  override protected def createInterpretedObject(in: Seq[Expression]): MutableProjection = {
+    InterpretedMutableProjection.createProjection(in)
   }
 
-  override def apply(input: InternalRow): InternalRow = {
-    var i = 0
-    while (i < exprArray.length) {
-      // Store the result into buffer first, to make the projection atomic (needed by aggregation)
-      buffer(i) = exprArray(i).eval(input)
-      i += 1
-    }
-    i = 0
-    while (i < exprArray.length) {
-      mutableRow(i) = buffer(i)
-      i += 1
-    }
-    mutableRow
+  /**
+   * Returns an MutableProjection for given sequence of bound Expressions.
+   */
+  def create(exprs: Seq[Expression]): MutableProjection = {
+    createObject(exprs)
+  }
+
+  /**
+   * Returns an MutableProjection for given sequence of Expressions, which will be bound to
+   * `inputSchema`.
+   */
+  def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): MutableProjection = {
+    create(toBoundExprs(exprs, inputSchema))
   }
 }
 
@@ -115,17 +119,11 @@ object UnsafeProjection
     extends CodeGeneratorWithInterpretedFallback[Seq[Expression], UnsafeProjection] {
 
   override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
-    GenerateUnsafeProjection.generate(in)
+    GenerateUnsafeProjection.generate(in, SQLConf.get.subexpressionEliminationEnabled)
   }
 
   override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
     InterpretedUnsafeProjection.createProjection(in)
-  }
-
-  protected def toBoundExprs(
-      exprs: Seq[Expression],
-      inputSchema: Seq[Attribute]): Seq[Expression] = {
-    exprs.map(BindReferences.bindReference(_, inputSchema))
   }
 
   protected def toUnsafeExprs(exprs: Seq[Expression]): Seq[Expression] = {
@@ -165,23 +163,6 @@ object UnsafeProjection
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
     create(toBoundExprs(exprs, inputSchema))
-  }
-
-  /**
-   * Same as other create()'s but allowing enabling/disabling subexpression elimination.
-   * The param `subexpressionEliminationEnabled` doesn't guarantee to work. For example,
-   * when fallbacking to interpreted execution, it is not supported.
-   */
-  def create(
-      exprs: Seq[Expression],
-      inputSchema: Seq[Attribute],
-      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
-    val unsafeExprs = toUnsafeExprs(toBoundExprs(exprs, inputSchema))
-    try {
-      GenerateUnsafeProjection.generate(unsafeExprs, subexpressionEliminationEnabled)
-    } catch {
-      case CodegenError(_) => InterpretedUnsafeProjection.createProjection(unsafeExprs)
-    }
   }
 }
 

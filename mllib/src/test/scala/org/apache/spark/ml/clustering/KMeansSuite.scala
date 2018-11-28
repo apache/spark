@@ -117,7 +117,6 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       assert(clusters === Set(0, 1, 2, 3, 4))
     }
 
-    assert(model.computeCost(dataset) < 0.1)
     assert(model.hasParent)
 
     // Check validity of model summary
@@ -132,7 +131,6 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     }
     assert(summary.cluster.columns === Array(predictionColName))
     assert(summary.trainingCost < 0.1)
-    assert(model.computeCost(dataset) == summary.trainingCost)
     val clusterSizes = summary.clusterSizes
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
@@ -201,15 +199,15 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
   }
 
   test("KMean with Array input") {
-    def trainAndComputeCost(dataset: Dataset[_]): Double = {
+    def trainAndGetCost(dataset: Dataset[_]): Double = {
       val model = new KMeans().setK(k).setMaxIter(1).setSeed(1).fit(dataset)
-      model.computeCost(dataset)
+      model.summary.trainingCost
     }
 
     val (newDataset, newDatasetD, newDatasetF) = MLTestingUtils.generateArrayFeatureDataset(dataset)
-    val trueCost = trainAndComputeCost(newDataset)
-    val doubleArrayCost = trainAndComputeCost(newDatasetD)
-    val floatArrayCost = trainAndComputeCost(newDatasetF)
+    val trueCost = trainAndGetCost(newDataset)
+    val doubleArrayCost = trainAndGetCost(newDatasetD)
+    val floatArrayCost = trainAndGetCost(newDatasetF)
 
     // checking the cost is fine enough as a sanity check
     assert(trueCost ~== doubleArrayCost absTol 1e-6)
@@ -234,7 +232,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     val oldKmeansModel = new MLlibKMeansModel(clusterCenters)
     val kmeansModel = new KMeansModel("", oldKmeansModel)
     def checkModel(pmml: PMML): Unit = {
-      // Check the header descripiton is what we expect
+      // Check the header description is what we expect
       assert(pmml.getHeader.getDescription === "k-means clustering")
       // check that the number of fields match the single vector size
       assert(pmml.getDataDictionary.getNumberOfFields === clusterCenters(0).size)

@@ -126,9 +126,12 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   """,
   note = "The function is non-deterministic.")
 // scalastyle:on line.size.limit
-case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful {
+case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful
+    with ExpressionWithRandomSeed {
 
   def this() = this(None)
+
+  override def withNewSeed(seed: Long): Uuid = Uuid(Some(seed))
 
   override lazy val resolved: Boolean = randomSeed.isDefined
 

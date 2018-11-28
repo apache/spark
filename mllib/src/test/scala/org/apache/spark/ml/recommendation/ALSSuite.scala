@@ -594,13 +594,14 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       (check: (ALSModel, ALSModel) => Unit)
       (check2: (ALSModel, ALSModel, DataFrame, Encoder[_]) => Unit): Unit = {
     val dfs = genRatingsDFWithNumericCols(spark, column)
-    val df = dfs.find {
-      case (numericTypeWithEncoder, _) => numericTypeWithEncoder.numericType == baseType
-    } match {
-      case Some((_, df)) => df
+    val maybeDf = dfs.find { case (numericTypeWithEncoder, _) =>
+      numericTypeWithEncoder.numericType == baseType
     }
+    assert(maybeDf.isDefined)
+    val df = maybeDf.get._2
+
     val expected = estimator.fit(df)
-    val actuals = dfs.filter(_ != baseType).map(t => (t, estimator.fit(t._2)))
+    val actuals = dfs.map(t => (t, estimator.fit(t._2)))
     actuals.foreach { case (_, actual) => check(expected, actual) }
     actuals.foreach { case (t, actual) => check2(expected, actual, t._2, t._1.encoder) }
 

@@ -37,7 +37,7 @@ import org.apache.mesos.protobuf.{ByteString, GeneratedMessageV3}
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.TaskState
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{Status => _, _}
 import org.apache.spark.util.Utils
 
 /**
@@ -355,7 +355,7 @@ trait MesosSchedulerUtils extends Logging {
    *                       https://github.com/apache/mesos/blob/master/src/common/values.cpp
    *                       https://github.com/apache/mesos/blob/master/src/common/attributes.cpp
    *
-   * @param constraintsVal constaints string consisting of ';' separated key-value pairs (separated
+   * @param constraintsVal constains string consisting of ';' separated key-value pairs (separated
    *                       by ':')
    * @return  Map of constraints to match resources offers.
    */

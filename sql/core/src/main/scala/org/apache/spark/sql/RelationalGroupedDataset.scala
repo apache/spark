@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
@@ -45,7 +45,7 @@ import org.apache.spark.sql.types.{NumericType, StructType}
  *
  * @since 2.0.0
  */
-@InterfaceStability.Stable
+@Stable
 class RelationalGroupedDataset protected[sql](
     df: DataFrame,
     groupingExprs: Seq[Expression],
@@ -314,7 +314,76 @@ class RelationalGroupedDataset protected[sql](
    * @param pivotColumn Name of the column to pivot.
    * @since 1.6.0
    */
-  def pivot(pivotColumn: String): RelationalGroupedDataset = {
+  def pivot(pivotColumn: String): RelationalGroupedDataset = pivot(Column(pivotColumn))
+
+  /**
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
+   * There are two versions of pivot function: one that requires the caller to specify the list
+   * of distinct values to pivot on, and one that does not. The latter is more concise but less
+   * efficient, because Spark needs to first compute the list of distinct values internally.
+   *
+   * {{{
+   *   // Compute the sum of earnings for each year by course with each course as a separate column
+   *   df.groupBy("year").pivot("course", Seq("dotNET", "Java")).sum("earnings")
+   *
+   *   // Or without specifying column values (less efficient)
+   *   df.groupBy("year").pivot("course").sum("earnings")
+   * }}}
+   *
+   * From Spark 3.0.0, values can be literal columns, for instance, struct. For pivoting by
+   * multiple columns, use the `struct` function to combine the columns and values:
+   *
+   * {{{
+   *   df.groupBy("year")
+   *     .pivot("trainingCourse", Seq(struct(lit("java"), lit("Experts"))))
+   *     .agg(sum($"earnings"))
+   * }}}
+   *
+   * @param pivotColumn Name of the column to pivot.
+   * @param values List of values that will be translated to columns in the output DataFrame.
+   * @since 1.6.0
+   */
+  def pivot(pivotColumn: String, values: Seq[Any]): RelationalGroupedDataset = {
+    pivot(Column(pivotColumn), values)
+  }
+
+  /**
+   * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
+   * aggregation.
+   *
+   * There are two versions of pivot function: one that requires the caller to specify the list
+   * of distinct values to pivot on, and one that does not. The latter is more concise but less
+   * efficient, because Spark needs to first compute the list of distinct values internally.
+   *
+   * {{{
+   *   // Compute the sum of earnings for each year by course with each course as a separate column
+   *   df.groupBy("year").pivot("course", Arrays.<Object>asList("dotNET", "Java")).sum("earnings");
+   *
+   *   // Or without specifying column values (less efficient)
+   *   df.groupBy("year").pivot("course").sum("earnings");
+   * }}}
+   *
+   * @param pivotColumn Name of the column to pivot.
+   * @param values List of values that will be translated to columns in the output DataFrame.
+   * @since 1.6.0
+   */
+  def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset = {
+    pivot(Column(pivotColumn), values)
+  }
+
+  /**
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
+   * This is an overloaded version of the `pivot` method with `pivotColumn` of the `String` type.
+   *
+   * {{{
+   *   // Or without specifying column values (less efficient)
+   *   df.groupBy($"year").pivot($"course").sum($"earnings");
+   * }}}
+   *
+   * @param pivotColumn he column to pivot.
+   * @since 2.4.0
+   */
+  def pivot(pivotColumn: Column): RelationalGroupedDataset = {
     // This is to prevent unintended OOM errors when the number of distinct values is large
     val maxValues = df.sparkSession.sessionState.conf.dataFramePivotMaxValues
     // Get the distinct values of the column and sort them so its consistent
@@ -339,29 +408,28 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
-   * There are two versions of pivot function: one that requires the caller to specify the list
-   * of distinct values to pivot on, and one that does not. The latter is more concise but less
-   * efficient, because Spark needs to first compute the list of distinct values internally.
+   * This is an overloaded version of the `pivot` method with `pivotColumn` of the `String` type.
    *
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
-   *   df.groupBy("year").pivot("course", Seq("dotNET", "Java")).sum("earnings")
-   *
-   *   // Or without specifying column values (less efficient)
-   *   df.groupBy("year").pivot("course").sum("earnings")
+   *   df.groupBy($"year").pivot($"course", Seq("dotNET", "Java")).sum($"earnings")
    * }}}
    *
-   * @param pivotColumn Name of the column to pivot.
+   * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
-   * @since 1.6.0
+   * @since 2.4.0
    */
-  def pivot(pivotColumn: String, values: Seq[Any]): RelationalGroupedDataset = {
+  def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
+        val valueExprs = values.map(_ match {
+          case c: Column => c.expr
+          case v => Literal.apply(v)
+        })
         new RelationalGroupedDataset(
           df,
           groupingExprs,
-          RelationalGroupedDataset.PivotType(df.resolve(pivotColumn), values.map(Literal.apply)))
+          RelationalGroupedDataset.PivotType(pivotColumn.expr, valueExprs))
       case _: RelationalGroupedDataset.PivotType =>
         throw new UnsupportedOperationException("repeated pivots are not supported")
       case _ =>
@@ -371,25 +439,14 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
-   * aggregation.
+   * aggregation. This is an overloaded version of the `pivot` method with `pivotColumn` of
+   * the `String` type.
    *
-   * There are two versions of pivot function: one that requires the caller to specify the list
-   * of distinct values to pivot on, and one that does not. The latter is more concise but less
-   * efficient, because Spark needs to first compute the list of distinct values internally.
-   *
-   * {{{
-   *   // Compute the sum of earnings for each year by course with each course as a separate column
-   *   df.groupBy("year").pivot("course", Arrays.<Object>asList("dotNET", "Java")).sum("earnings");
-   *
-   *   // Or without specifying column values (less efficient)
-   *   df.groupBy("year").pivot("course").sum("earnings");
-   * }}}
-   *
-   * @param pivotColumn Name of the column to pivot.
+   * @param pivotColumn the column to pivot.
    * @param values List of values that will be translated to columns in the output DataFrame.
-   * @since 1.6.0
+   * @since 2.4.0
    */
-  def pivot(pivotColumn: String, values: java.util.List[Any]): RelationalGroupedDataset = {
+  def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
     pivot(pivotColumn, values.asScala)
   }
 
@@ -517,5 +574,5 @@ private[sql] object RelationalGroupedDataset {
   /**
    * To indicate it's the PIVOT
    */
-  private[sql] case class PivotType(pivotCol: Expression, values: Seq[Literal]) extends GroupType
+  private[sql] case class PivotType(pivotCol: Expression, values: Seq[Expression]) extends GroupType
 }

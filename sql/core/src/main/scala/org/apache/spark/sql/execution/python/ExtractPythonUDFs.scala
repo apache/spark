@@ -24,9 +24,8 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 
 
 /**
@@ -93,7 +92,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
+object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
 
   private type EvalType = Int
   private type EvalTypeChecker = EvalType => Boolean
@@ -132,14 +131,14 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
     expressions.flatMap(collectEvaluableUDFs)
   }
 
-  def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    case plan: SparkPlan => extract(plan)
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case plan: LogicalPlan => extract(plan)
   }
 
   /**
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
-  private def extract(plan: SparkPlan): SparkPlan = {
+  private def extract(plan: LogicalPlan): LogicalPlan = {
     val udfs = collectEvaluableUDFsFromExpressions(plan.expressions)
       // ignore the PythonUDF that come from second/third aggregate, which is not used
       .filter(udf => udf.references.subsetOf(plan.inputSet))
@@ -151,7 +150,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       val prunedChildren = plan.children.map { child =>
         val allNeededOutput = inputsForPlan.intersect(child.outputSet).toSeq
         if (allNeededOutput.length != child.output.length) {
-          ProjectExec(allNeededOutput, child)
+          Project(allNeededOutput, child)
         } else {
           child
         }
@@ -180,9 +179,9 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
             _.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
           ) match {
             case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
-              ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
+              ArrowEvalPython(vectorizedUdfs, child.output ++ resultAttrs, child)
             case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
-              BatchEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child)
+              BatchEvalPython(plainUdfs, child.output ++ resultAttrs, child)
             case _ =>
               throw new AnalysisException(
                 "Expected either Scalar Pandas UDFs or Batched UDFs but got both")
@@ -209,7 +208,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
       val newPlan = extract(rewritten)
       if (newPlan.output != plan.output) {
         // Trim away the new UDF value if it was only used for filtering or something.
-        ProjectExec(plan.output, newPlan)
+        Project(plan.output, newPlan)
       } else {
         newPlan
       }
@@ -218,15 +217,15 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
   // Split the original FilterExec to two FilterExecs. Only push down the first few predicates
   // that are all deterministic.
-  private def trySplitFilter(plan: SparkPlan): SparkPlan = {
+  private def trySplitFilter(plan: LogicalPlan): LogicalPlan = {
     plan match {
-      case filter: FilterExec =>
+      case filter: Filter =>
         val (candidates, nonDeterministic) =
           splitConjunctivePredicates(filter.condition).partition(_.deterministic)
         val (pushDown, rest) = candidates.partition(!hasScalarPythonUDF(_))
         if (pushDown.nonEmpty) {
-          val newChild = FilterExec(pushDown.reduceLeft(And), filter.child)
-          FilterExec((rest ++ nonDeterministic).reduceLeft(And), newChild)
+          val newChild = Filter(pushDown.reduceLeft(And), filter.child)
+          Filter((rest ++ nonDeterministic).reduceLeft(And), newChild)
         } else {
           filter
         }

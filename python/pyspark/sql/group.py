@@ -211,6 +211,8 @@ class GroupedData(object):
 
         >>> df4.groupBy("year").pivot("course").sum("earnings").collect()
         [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
+        >>> df5.groupBy("sales.year").pivot("sales.course").sum("sales.earnings").collect()
+        [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
         """
         if values is None:
             jgd = self._jgd.pivot(pivot_col)
@@ -296,6 +298,12 @@ def _test():
                                    Row(course="dotNET", year=2012, earnings=5000),
                                    Row(course="dotNET", year=2013, earnings=48000),
                                    Row(course="Java",   year=2013, earnings=30000)]).toDF()
+    globs['df5'] = sc.parallelize([
+        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=10000)),
+        Row(training="junior", sales=Row(course="Java",   year=2012, earnings=20000)),
+        Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
+        Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
+        Row(training="expert", sales=Row(course="Java",   year=2013, earnings=30000))]).toDF()
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.group, globs=globs,

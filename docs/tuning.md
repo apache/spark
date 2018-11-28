@@ -26,16 +26,16 @@ Often, this will be the first thing you should tune to optimize a Spark applicat
 Spark aims to strike a balance between convenience (allowing you to work with any Java type
 in your operations) and performance. It provides two serialization libraries:
 
-* [Java serialization](http://docs.oracle.com/javase/6/docs/api/java/io/Serializable.html):
+* [Java serialization](https://docs.oracle.com/javase/8/docs/api/java/io/Serializable.html):
   By default, Spark serializes objects using Java's `ObjectOutputStream` framework, and can work
   with any class you create that implements
-  [`java.io.Serializable`](http://docs.oracle.com/javase/6/docs/api/java/io/Serializable.html).
+  [`java.io.Serializable`](https://docs.oracle.com/javase/8/docs/api/java/io/Serializable.html).
   You can also control the performance of your serialization more closely by extending
-  [`java.io.Externalizable`](http://docs.oracle.com/javase/6/docs/api/java/io/Externalizable.html).
+  [`java.io.Externalizable`](https://docs.oracle.com/javase/8/docs/api/java/io/Externalizable.html).
   Java serialization is flexible but often quite slow, and leads to large
   serialized formats for many classes.
 * [Kryo serialization](https://github.com/EsotericSoftware/kryo): Spark can also use
-  the Kryo library (version 2) to serialize objects more quickly. Kryo is significantly
+  the Kryo library (version 4) to serialize objects more quickly. Kryo is significantly
   faster and more compact than Java serialization (often as much as 10x), but does not support all
   `Serializable` types and requires you to *register* the classes you'll use in the program in advance
   for best performance.
@@ -230,7 +230,7 @@ temporary objects created during task execution. Some steps which may be useful 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
 
 Our experience suggests that the effect of GC tuning depends on your application and the amount of memory available.
-There are [many more tuning options](http://www.oracle.com/technetwork/java/javase/gc-tuning-6-140523.html) described online,
+There are [many more tuning options](https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/index.html) described online,
 but at a high level, managing how frequently full GC takes place can help in reducing the overhead.
 
 GC tuning flags for executors can be specified by setting `spark.executor.extraJavaOptions` in

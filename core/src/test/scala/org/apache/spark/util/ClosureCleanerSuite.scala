@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.io.NotSerializableException
 
+import scala.language.reflectiveCalls
+
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.partial.CountEvaluator

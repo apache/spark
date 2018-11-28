@@ -226,7 +226,9 @@ setMethod("showDF",
 
 #' show
 #'
-#' Print class and type information of a Spark object.
+#' If eager evaluation is enabled and the Spark object is a SparkDataFrame, evaluate the
+#' SparkDataFrame and print top rows of the SparkDataFrame, otherwise, print the class
+#' and type information of the Spark object.
 #'
 #' @param object a Spark object. Can be a SparkDataFrame, Column, GroupedData, WindowSpec.
 #'
@@ -244,11 +246,33 @@ setMethod("showDF",
 #' @note show(SparkDataFrame) since 1.4.0
 setMethod("show", "SparkDataFrame",
           function(object) {
-            cols <- lapply(dtypes(object), function(l) {
-              paste(l, collapse = ":")
-            })
-            s <- paste(cols, collapse = ", ")
-            cat(paste(class(object), "[", s, "]\n", sep = ""))
+            allConf <- sparkR.conf()
+            prop <- allConf[["spark.sql.repl.eagerEval.enabled"]]
+            if (!is.null(prop) && identical(prop, "true")) {
+              argsList <- list()
+              argsList$x <- object
+              prop <- allConf[["spark.sql.repl.eagerEval.maxNumRows"]]
+              if (!is.null(prop)) {
+                numRows <- as.integer(prop)
+                if (numRows > 0) {
+                  argsList$numRows <- numRows
+                }
+              }
+              prop <- allConf[["spark.sql.repl.eagerEval.truncate"]]
+              if (!is.null(prop)) {
+                truncate <- as.integer(prop)
+                if (truncate > 0) {
+                  argsList$truncate <- truncate
+                }
+              }
+              do.call(showDF, argsList)
+            } else {
+              cols <- lapply(dtypes(object), function(l) {
+                paste(l, collapse = ":")
+              })
+              s <- paste(cols, collapse = ", ")
+              cat(paste(class(object), "[", s, "]\n", sep = ""))
+            }
           })
 
 #' DataTypes
@@ -497,33 +521,6 @@ setMethod("createOrReplaceTempView",
               invisible(callJMethod(x@sdf, "createOrReplaceTempView", viewName))
           })
 
-#' (Deprecated) Register Temporary Table
-#'
-#' Registers a SparkDataFrame as a Temporary Table in the SparkSession
-#' @param x A SparkDataFrame
-#' @param tableName A character vector containing the name of the table
-#'
-#' @family SparkDataFrame functions
-#' @seealso \link{createOrReplaceTempView}
-#' @rdname registerTempTable-deprecated
-#' @name registerTempTable
-#' @aliases registerTempTable,SparkDataFrame,character-method
-#' @examples
-#'\dontrun{
-#' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' registerTempTable(df, "json_df")
-#' new_df <- sql("SELECT * FROM json_df")
-#'}
-#' @note registerTempTable since 1.4.0
-setMethod("registerTempTable",
-          signature(x = "SparkDataFrame", tableName = "character"),
-          function(x, tableName) {
-              .Deprecated("createOrReplaceTempView")
-              invisible(callJMethod(x@sdf, "createOrReplaceTempView", tableName))
-          })
-
 #' insertInto
 #'
 #' Insert the contents of a SparkDataFrame into a table registered in the current SparkSession.
@@ -588,7 +585,7 @@ setMethod("cache",
 #' \url{http://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
 #'
 #' @param x the SparkDataFrame to persist.
-#' @param newLevel storage level chosen for the persistance. See available options in
+#' @param newLevel storage level chosen for the persistence. See available options in
 #'        the description.
 #'
 #' @family SparkDataFrame functions
@@ -770,6 +767,14 @@ setMethod("repartition",
 #'                      using \code{spark.sql.shuffle.partitions} as number of partitions.}
 #'}
 #'
+#' At least one partition-by expression must be specified.
+#' When no explicit sort order is specified, "ascending nulls first" is assumed.
+#'
+#' Note that due to performance reasons this method uses sampling to estimate the ranges.
+#' Hence, the output may not be consistent, since sampling can return different values.
+#' The sample size can be controlled by the config
+#' \code{spark.sql.execution.rangeExchange.sampleSizePerPartition}.
+#'
 #' @param x a SparkDataFrame.
 #' @param numPartitions the number of partitions to use.
 #' @param col the column by which the range partitioning will be performed.
@@ -933,7 +938,6 @@ setMethod("write.orc",
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' write.parquet(df, "/tmp/sparkr-tmp1/")
-#' saveAsParquetFile(df, "/tmp/sparkr-tmp2/")
 #'}
 #' @note write.parquet since 1.6.0
 setMethod("write.parquet",
@@ -942,17 +946,6 @@ setMethod("write.parquet",
             write <- callJMethod(x@sdf, "write")
             write <- setWriteOptions(write, mode = mode, ...)
             invisible(handledCallJMethod(write, "parquet", path))
-          })
-
-#' @rdname write.parquet
-#' @name saveAsParquetFile
-#' @aliases saveAsParquetFile,SparkDataFrame,character-method
-#' @note saveAsParquetFile since 1.4.0
-setMethod("saveAsParquetFile",
-          signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
-            .Deprecated("write.parquet")
-            write.parquet(x, path)
           })
 
 #' Save the content of SparkDataFrame in a text file at the specified path.
@@ -2739,7 +2732,10 @@ setMethod("union",
             dataFrame(unioned)
           })
 
-#' unionAll is deprecated - use union instead
+#' Return a new SparkDataFrame containing the union of rows
+#'
+#' This is an alias for `union`.
+#'
 #' @rdname union
 #' @name unionAll
 #' @aliases unionAll,SparkDataFrame,SparkDataFrame-method
@@ -2747,7 +2743,6 @@ setMethod("union",
 setMethod("unionAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
-            .Deprecated("union")
             union(x, y)
           })
 
@@ -2848,6 +2843,35 @@ setMethod("intersect",
             dataFrame(intersected)
           })
 
+#' intersectAll
+#'
+#' Return a new SparkDataFrame containing rows in both this SparkDataFrame
+#' and another SparkDataFrame while preserving the duplicates.
+#' This is equivalent to \code{INTERSECT ALL} in SQL. Also as standard in
+#' SQL, this function resolves columns by position (not by name).
+#'
+#' @param x a SparkDataFrame.
+#' @param y a SparkDataFrame.
+#' @return A SparkDataFrame containing the result of the intersect all operation.
+#' @family SparkDataFrame functions
+#' @aliases intersectAll,SparkDataFrame,SparkDataFrame-method
+#' @rdname intersectAll
+#' @name intersectAll
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- read.json(path)
+#' df2 <- read.json(path2)
+#' intersectAllDF <- intersectAll(df1, df2)
+#' }
+#' @note intersectAll since 2.4.0
+setMethod("intersectAll",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            intersected <- callJMethod(x@sdf, "intersectAll", y@sdf)
+            dataFrame(intersected)
+          })
+
 #' except
 #'
 #' Return a new SparkDataFrame containing rows in this SparkDataFrame
@@ -2867,12 +2891,40 @@ setMethod("intersect",
 #' df2 <- read.json(path2)
 #' exceptDF <- except(df, df2)
 #' }
-#' @rdname except
 #' @note except since 1.4.0
 setMethod("except",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
             excepted <- callJMethod(x@sdf, "except", y@sdf)
+            dataFrame(excepted)
+          })
+
+#' exceptAll
+#'
+#' Return a new SparkDataFrame containing rows in this SparkDataFrame
+#' but not in another SparkDataFrame while preserving the duplicates.
+#' This is equivalent to \code{EXCEPT ALL} in SQL. Also as standard in
+#' SQL, this function resolves columns by position (not by name).
+#'
+#' @param x a SparkDataFrame.
+#' @param y a SparkDataFrame.
+#' @return A SparkDataFrame containing the result of the except all operation.
+#' @family SparkDataFrame functions
+#' @aliases exceptAll,SparkDataFrame,SparkDataFrame-method
+#' @rdname exceptAll
+#' @name exceptAll
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- read.json(path)
+#' df2 <- read.json(path2)
+#' exceptAllDF <- exceptAll(df1, df2)
+#' }
+#' @note exceptAll since 2.4.0
+setMethod("exceptAll",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            excepted <- callJMethod(x@sdf, "exceptAll", y@sdf)
             dataFrame(excepted)
           })
 
@@ -2898,6 +2950,9 @@ setMethod("except",
 #' @param source a name for external data source.
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
+#' @param partitionBy a name or a list of names of columns to partition the output by on the file
+#'                    system. If specified, the output is laid out on the file system similar
+#'                    to Hive's partitioning scheme.
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -2909,13 +2964,13 @@ setMethod("except",
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' write.df(df, "myfile", "parquet", "overwrite")
+#' write.df(df, "myfile", "parquet", "overwrite", partitionBy = c("col1", "col2"))
 #' saveDF(df, parquetPath2, "parquet", mode = "append", mergeSchema = TRUE)
 #' }
 #' @note write.df since 1.4.0
 setMethod("write.df",
           signature(df = "SparkDataFrame"),
-          function(df, path = NULL, source = NULL, mode = "error", ...) {
+          function(df, path = NULL, source = NULL, mode = "error", partitionBy = NULL, ...) {
             if (!is.null(path) && !is.character(path)) {
               stop("path should be character, NULL or omitted.")
             }
@@ -2929,8 +2984,18 @@ setMethod("write.df",
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
+            cols <- NULL
+            if (!is.null(partitionBy)) {
+              if (!all(sapply(partitionBy, function(c) is.character(c)))) {
+                stop("All partitionBy column names should be characters.")
+              }
+              cols <- as.list(partitionBy)
+            }
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)
+            if (!is.null(cols)) {
+              write <- callJMethod(write, "partitionBy", cols)
+            }
             write <- setWriteOptions(write, path = path, mode = mode, ...)
             write <- handledCallJMethod(write, "save")
           })
@@ -3929,7 +3994,17 @@ setMethod("hint",
           signature(x = "SparkDataFrame", name = "character"),
           function(x, name, ...) {
             parameters <- list(...)
-            stopifnot(all(sapply(parameters, is.character)))
+            if (!all(sapply(parameters, function(y) {
+              if (is.character(y) || is.numeric(y)) {
+                TRUE
+              } else if (is.list(y)) {
+                all(sapply(y, function(z) { is.character(z) || is.numeric(z) }))
+              } else {
+                FALSE
+              }
+            }))) {
+              stop("sql hint should be character, numeric, or list with character or numeric.")
+            }
             jdf <- callJMethod(x@sdf, "hint", name, parameters)
             dataFrame(jdf)
           })

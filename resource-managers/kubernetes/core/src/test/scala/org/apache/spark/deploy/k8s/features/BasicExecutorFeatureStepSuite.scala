@@ -75,6 +75,7 @@ class BasicExecutorFeatureStepSuite
       .set("spark.driver.host", DRIVER_HOSTNAME)
       .set("spark.driver.port", DRIVER_PORT.toString)
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS.mkString(","))
+      .set("spark.kubernetes.resource.type", "java")
   }
 
   test("basic executor pod has reasonable defaults") {
@@ -90,7 +91,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Nil,
-        Seq.empty[String]))
+        hadoopConfSpec = None))
     val executor = step.configurePod(SparkPod.initialPod())
 
     // The executor pod name and default labels.
@@ -130,7 +131,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map.empty,
         Nil,
-        Seq.empty[String]))
+        hadoopConfSpec = None))
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
   }
 
@@ -151,7 +152,7 @@ class BasicExecutorFeatureStepSuite
         Map.empty,
         Map("qux" -> "quux"),
         Nil,
-        Seq.empty[String]))
+        hadoopConfSpec = None))
     val executor = step.configurePod(SparkPod.initialPod())
 
     checkEnv(executor,
@@ -159,6 +160,29 @@ class BasicExecutorFeatureStepSuite
         ENV_CLASSPATH -> "bar=baz",
         "qux" -> "quux"))
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
+  }
+
+  test("test executor pyspark memory") {
+    val conf = baseConf.clone()
+    conf.set("spark.kubernetes.resource.type", "python")
+    conf.set(org.apache.spark.internal.config.PYSPARK_EXECUTOR_MEMORY, 42L)
+
+    val step = new BasicExecutorFeatureStep(
+      KubernetesConf(
+        conf,
+        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
+        RESOURCE_NAME_PREFIX,
+        APP_ID,
+        LABELS,
+        ANNOTATIONS,
+        Map.empty,
+        Map.empty,
+        Map.empty,
+        Nil,
+        hadoopConfSpec = None))
+    val executor = step.configurePod(SparkPod.initialPod())
+    // This is checking that basic executor + executorMemory = 1408 + 42 = 1450
+    assert(executor.container.getResources.getRequests.get("memory").getAmount === "1450Mi")
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

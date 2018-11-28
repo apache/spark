@@ -74,8 +74,6 @@ case class FlatMapGroupsInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
-    val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
@@ -141,8 +139,6 @@ case class FlatMapGroupsInPandasExec(
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc,
-        bufferSize,
-        reuseWorker,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         argOffsets,
         dedupSchema,

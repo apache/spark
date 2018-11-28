@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types._
 
@@ -48,5 +50,13 @@ object DataSourceUtils {
           s"$format data source does not support ${field.dataType.catalogString} data type.")
       }
     }
+  }
+
+  // SPARK-24626: Metadata files and temporary files should not be
+  // counted as data files, so that they shouldn't participate in tasks like
+  // location size calculation.
+  private[sql] def isDataPath(path: Path): Boolean = {
+    val name = path.getName
+    !(name.startsWith("_") || name.startsWith("."))
   }
 }

@@ -452,4 +452,30 @@ class DataTypeSuite extends SparkFunSuite {
     new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType, false)),
     new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
     false)
+
+  test("SPARK-25031: MapType should produce current formatted string for complex types") {
+    val keyType: DataType = StructType(Seq(
+      StructField("a", DataTypes.IntegerType),
+      StructField("b", DataTypes.IntegerType)))
+
+    val valueType: DataType = StructType(Seq(
+      StructField("c", DataTypes.IntegerType),
+      StructField("d", DataTypes.IntegerType)))
+
+    val builder = new StringBuilder
+
+    MapType(keyType, valueType).buildFormattedString(prefix = "", builder = builder)
+
+    val result = builder.toString()
+    val expected =
+      """-- key: struct
+        |    |-- a: integer (nullable = true)
+        |    |-- b: integer (nullable = true)
+        |-- value: struct (valueContainsNull = true)
+        |    |-- c: integer (nullable = true)
+        |    |-- d: integer (nullable = true)
+        |""".stripMargin
+
+    assert(result === expected)
+  }
 }

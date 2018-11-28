@@ -112,10 +112,12 @@ private[spark] class AppStatusStore(
     }
   }
 
-  def stageAttempt(stageId: Int, stageAttemptId: Int, details: Boolean = false): v1.StageData = {
+  def stageAttempt(stageId: Int, stageAttemptId: Int,
+      details: Boolean = false): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
-    val stage = store.read(classOf[StageDataWrapper], stageKey).info
-    if (details) stageWithDetails(stage) else stage
+    val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
+    val stage = if (details) stageWithDetails(stageDataWrapper.info) else stageDataWrapper.info
+    (stage, stageDataWrapper.jobIds.toSeq)
   }
 
   def taskCount(stageId: Int, stageAttemptId: Int): Long = {
@@ -349,7 +351,9 @@ private[spark] class AppStatusStore(
   def taskList(stageId: Int, stageAttemptId: Int, maxTasks: Int): Seq[v1.TaskData] = {
     val stageKey = Array(stageId, stageAttemptId)
     store.view(classOf[TaskDataWrapper]).index("stage").first(stageKey).last(stageKey).reverse()
-      .max(maxTasks).asScala.map(_.toApi).toSeq.reverse
+      .max(maxTasks).asScala.map { taskDataWrapper =>
+      constructTaskData(taskDataWrapper)
+    }.toSeq.reverse
   }
 
   def taskList(
@@ -388,7 +392,9 @@ private[spark] class AppStatusStore(
     }
 
     val ordered = if (ascending) indexed else indexed.reverse()
-    ordered.skip(offset).max(length).asScala.map(_.toApi).toSeq
+    ordered.skip(offset).max(length).asScala.map { taskDataWrapper =>
+      constructTaskData(taskDataWrapper)
+    }.toSeq
   }
 
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
@@ -494,6 +500,24 @@ private[spark] class AppStatusStore(
     store.close()
   }
 
+  def constructTaskData(taskDataWrapper: TaskDataWrapper) : v1.TaskData = {
+    val taskDataOld: v1.TaskData = taskDataWrapper.toApi
+    val executorLogs: Option[Map[String, String]] = try {
+      Some(executorSummary(taskDataOld.executorId).executorLogs)
+    } catch {
+      case e: NoSuchElementException => e.getMessage
+        None
+    }
+    new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
+      taskDataOld.attempt, taskDataOld.launchTime, taskDataOld.resultFetchStart,
+      taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
+      taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
+      taskDataOld.errorMessage, taskDataOld.taskMetrics,
+      executorLogs.getOrElse(Map[String, String]()),
+      AppStatusUtils.schedulerDelay(taskDataOld),
+      AppStatusUtils.gettingResultTime(taskDataOld))
+  }
+
 }
 
 private[spark] object AppStatusStore {
@@ -503,10 +527,11 @@ private[spark] object AppStatusStore {
   /**
    * Create an in-memory store for a live application.
    */
-  def createLiveStore(conf: SparkConf): AppStatusStore = {
+  def createLiveStore(
+      conf: SparkConf,
+      appStatusSource: Option[AppStatusSource] = None): AppStatusStore = {
     val store = new ElementTrackingStore(new InMemoryStore(), conf)
-    val listener = new AppStatusListener(store, conf, true)
+    val listener = new AppStatusListener(store, conf, true, appStatusSource)
     new AppStatusStore(store, listener = Some(listener))
   }
-
 }

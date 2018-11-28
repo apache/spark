@@ -56,88 +56,17 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      mainAppResource = None,
+      mainAppResource = JavaMainAppResource(None),
       MAIN_CLASS,
       APP_ARGS,
-      maybePyFiles = None)
+      maybePyFiles = None,
+      hadoopConfDir = None)
     assert(conf.appId === APP_ID)
     assert(conf.sparkConf.getAll.toMap === sparkConf.getAll.toMap)
     assert(conf.appResourceNamePrefix === RESOURCE_NAME_PREFIX)
     assert(conf.roleSpecificConf.appName === APP_NAME)
-    assert(conf.roleSpecificConf.mainAppResource.isEmpty)
     assert(conf.roleSpecificConf.mainClass === MAIN_CLASS)
     assert(conf.roleSpecificConf.appArgs === APP_ARGS)
-  }
-
-  test("Creating driver conf with and without the main app jar influences spark.jars") {
-    val sparkConf = new SparkConf(false)
-      .setJars(Seq("local:///opt/spark/jar1.jar"))
-    val mainAppJar = Some(JavaMainAppResource("local:///opt/spark/main.jar"))
-    val kubernetesConfWithMainJar = KubernetesConf.createDriverConf(
-      sparkConf,
-      APP_NAME,
-      RESOURCE_NAME_PREFIX,
-      APP_ID,
-      mainAppJar,
-      MAIN_CLASS,
-      APP_ARGS,
-      maybePyFiles = None)
-    assert(kubernetesConfWithMainJar.sparkConf.get("spark.jars")
-      .split(",")
-      === Array("local:///opt/spark/jar1.jar", "local:///opt/spark/main.jar"))
-    val kubernetesConfWithoutMainJar = KubernetesConf.createDriverConf(
-      sparkConf,
-      APP_NAME,
-      RESOURCE_NAME_PREFIX,
-      APP_ID,
-      mainAppResource = None,
-      MAIN_CLASS,
-      APP_ARGS,
-      maybePyFiles = None)
-    assert(kubernetesConfWithoutMainJar.sparkConf.get("spark.jars").split(",")
-      === Array("local:///opt/spark/jar1.jar"))
-    assert(kubernetesConfWithoutMainJar.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.1)
-  }
-
-  test("Creating driver conf with a python primary file") {
-    val mainResourceFile = "local:///opt/spark/main.py"
-    val inputPyFiles = Array("local:///opt/spark/example2.py", "local:///example3.py")
-    val sparkConf = new SparkConf(false)
-      .setJars(Seq("local:///opt/spark/jar1.jar"))
-      .set("spark.files", "local:///opt/spark/example4.py")
-    val mainAppResource = Some(PythonMainAppResource(mainResourceFile))
-    val kubernetesConfWithMainResource = KubernetesConf.createDriverConf(
-      sparkConf,
-      APP_NAME,
-      RESOURCE_NAME_PREFIX,
-      APP_ID,
-      mainAppResource,
-      MAIN_CLASS,
-      APP_ARGS,
-      Some(inputPyFiles.mkString(",")))
-    assert(kubernetesConfWithMainResource.sparkConf.get("spark.jars").split(",")
-      === Array("local:///opt/spark/jar1.jar"))
-    assert(kubernetesConfWithMainResource.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.4)
-    assert(kubernetesConfWithMainResource.sparkFiles
-      === Array("local:///opt/spark/example4.py", mainResourceFile) ++ inputPyFiles)
-  }
-
-  test("Testing explicit setting of memory overhead on non-JVM tasks") {
-    val sparkConf = new SparkConf(false)
-      .set(MEMORY_OVERHEAD_FACTOR, 0.3)
-
-    val mainResourceFile = "local:///opt/spark/main.py"
-    val mainAppResource = Some(PythonMainAppResource(mainResourceFile))
-    val conf = KubernetesConf.createDriverConf(
-      sparkConf,
-      APP_NAME,
-      RESOURCE_NAME_PREFIX,
-      APP_ID,
-      mainAppResource,
-      MAIN_CLASS,
-      APP_ARGS,
-      None)
-    assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
   }
 
   test("Resolve driver labels, annotations, secret mount paths, envs, and memory overhead") {
@@ -164,10 +93,11 @@ class KubernetesConfSuite extends SparkFunSuite {
       APP_NAME,
       RESOURCE_NAME_PREFIX,
       APP_ID,
-      mainAppResource = None,
+      mainAppResource = JavaMainAppResource(None),
       MAIN_CLASS,
       APP_ARGS,
-      maybePyFiles = None)
+      maybePyFiles = None,
+      hadoopConfDir = None)
     assert(conf.roleLabels === Map(
       SPARK_APP_ID_LABEL -> APP_ID,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++

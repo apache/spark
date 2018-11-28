@@ -19,38 +19,34 @@ package test.org.apache.spark.sql.sources.v2;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.List;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.sources.v2.DataSourceOptions;
-import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.ReadSupport;
+import org.apache.spark.sql.sources.v2.*;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.sources.v2.reader.partitioning.ClusteredDistribution;
 import org.apache.spark.sql.sources.v2.reader.partitioning.Distribution;
 import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
-import org.apache.spark.sql.types.StructType;
 
-public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
+public class JavaPartitionAwareDataSource implements DataSourceV2, BatchReadSupportProvider {
 
-  class Reader implements DataSourceReader, SupportsReportPartitioning {
-    private final StructType schema = new StructType().add("a", "int").add("b", "int");
+  class ReadSupport extends JavaSimpleReadSupport implements SupportsReportPartitioning {
 
     @Override
-    public StructType readSchema() {
-      return schema;
+    public InputPartition[] planInputPartitions(ScanConfig config) {
+      InputPartition[] partitions = new InputPartition[2];
+      partitions[0] = new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 4, 6});
+      partitions[1] = new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 2, 2});
+      return partitions;
     }
 
     @Override
-    public List<InputPartition<InternalRow>> planInputPartitions() {
-      return java.util.Arrays.asList(
-        new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 4, 6}),
-        new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 2, 2}));
+    public PartitionReaderFactory createReaderFactory(ScanConfig config) {
+      return new SpecificReaderFactory();
     }
 
     @Override
-    public Partitioning outputPartitioning() {
+    public Partitioning outputPartitioning(ScanConfig config) {
       return new MyPartitioning();
     }
   }
@@ -66,50 +62,53 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     public boolean satisfy(Distribution distribution) {
       if (distribution instanceof ClusteredDistribution) {
         String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
-        return Arrays.asList(clusteredCols).contains("a");
+        return Arrays.asList(clusteredCols).contains("i");
       }
 
       return false;
     }
   }
 
-  static class SpecificInputPartition implements InputPartition<InternalRow>,
-    InputPartitionReader<InternalRow> {
-
-    private int[] i;
-    private int[] j;
-    private int current = -1;
+  static class SpecificInputPartition implements InputPartition {
+    int[] i;
+    int[] j;
 
     SpecificInputPartition(int[] i, int[] j) {
       assert i.length == j.length;
       this.i = i;
       this.j = j;
     }
+  }
+
+  static class SpecificReaderFactory implements PartitionReaderFactory {
 
     @Override
-    public boolean next() throws IOException {
-      current += 1;
-      return current < i.length;
-    }
+    public PartitionReader<InternalRow> createReader(InputPartition partition) {
+      SpecificInputPartition p = (SpecificInputPartition) partition;
+      return new PartitionReader<InternalRow>() {
+        private int current = -1;
 
-    @Override
-    public InternalRow get() {
-      return new GenericInternalRow(new Object[] {i[current], j[current]});
-    }
+        @Override
+        public boolean next() throws IOException {
+          current += 1;
+          return current < p.i.length;
+        }
 
-    @Override
-    public void close() throws IOException {
+        @Override
+        public InternalRow get() {
+          return new GenericInternalRow(new Object[] {p.i[current], p.j[current]});
+        }
 
-    }
+        @Override
+        public void close() throws IOException {
 
-    @Override
-    public InputPartitionReader<InternalRow> createPartitionReader() {
-      return this;
+        }
+      };
     }
   }
 
   @Override
-  public DataSourceReader createReader(DataSourceOptions options) {
-    return new Reader();
+  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
+    return new ReadSupport();
   }
 }

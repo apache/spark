@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -537,11 +537,11 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val view = View(desc = metadata, output = metadata.schema.toAttributes,
         child = CatalystSqlParser.parsePlan(metadata.viewText.get))
       comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
-        SubqueryAlias("view1", view))
+        SubqueryAlias("view1", "db3", view))
       // Look up a view using current database of the session catalog.
       catalog.setCurrentDatabase("db3")
       comparePlans(catalog.lookupRelation(TableIdentifier("view1")),
-        SubqueryAlias("view1", view))
+        SubqueryAlias("view1", "db3", view))
     }
   }
 
@@ -1427,6 +1427,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     Seq(true, false) foreach { caseSensitive =>
       val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
       val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
+      catalog.setCurrentDatabase("db1")
       try {
         val analyzer = new Analyzer(catalog, conf)
 
@@ -1440,6 +1441,8 @@ abstract class SessionCatalogSuite extends AnalysisTest {
         }
 
         assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
+        // SPARK-21318: the error message should contains the current database name
+        assert(cause.getMessage.contains("db1"))
       } finally {
         catalog.reset()
       }

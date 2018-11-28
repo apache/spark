@@ -18,7 +18,7 @@
 package org.apache.spark.network.server;
 
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
@@ -26,6 +26,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportResponseHandler;
+import org.apache.spark.network.protocol.ChunkFetchRequest;
+import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.RequestMessage;
 import org.apache.spark.network.protocol.ResponseMessage;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
@@ -47,7 +49,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * on the channel for at least `requestTimeoutMs`. Note that this is duplex traffic; we will not
  * timeout if the client is continuously sending but getting no responses, for simplicity.
  */
-public class TransportChannelHandler extends ChannelInboundHandlerAdapter {
+public class TransportChannelHandler extends SimpleChannelInboundHandler<Message> {
   private static final Logger logger = LoggerFactory.getLogger(TransportChannelHandler.class);
 
   private final TransportClient client;
@@ -112,8 +114,21 @@ public class TransportChannelHandler extends ChannelInboundHandlerAdapter {
     super.channelInactive(ctx);
   }
 
+  /**
+   * Overwrite acceptInboundMessage to properly delegate ChunkFetchRequest messages
+   * to ChunkFetchRequestHandler.
+   */
   @Override
-  public void channelRead(ChannelHandlerContext ctx, Object request) throws Exception {
+  public boolean acceptInboundMessage(Object msg) throws Exception {
+    if (msg instanceof ChunkFetchRequest) {
+      return false;
+    } else {
+      return super.acceptInboundMessage(msg);
+    }
+  }
+
+  @Override
+  public void channelRead0(ChannelHandlerContext ctx, Message request) throws Exception {
     if (request instanceof RequestMessage) {
       requestHandler.handle((RequestMessage) request);
     } else if (request instanceof ResponseMessage) {

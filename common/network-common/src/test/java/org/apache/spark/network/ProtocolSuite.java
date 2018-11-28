@@ -116,8 +116,8 @@ public class ProtocolSuite {
       throws Exception {
 
       ByteArrayWritableChannel channel = new ByteArrayWritableChannel(Ints.checkedCast(in.count()));
-      while (in.transfered() < in.count()) {
-        in.transferTo(channel, in.transfered());
+      while (in.transferred() < in.count()) {
+        in.transferTo(channel, in.transferred());
       }
       out.add(Unpooled.wrappedBuffer(channel.getData()));
     }

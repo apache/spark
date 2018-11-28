@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.types.DataType
 
-case class KnowNotNull(child: Expression) extends UnaryExpression {
+case class KnownNotNull(child: Expression) extends UnaryExpression {
   override def nullable: Boolean = false
   override def dataType: DataType = child.dataType
 

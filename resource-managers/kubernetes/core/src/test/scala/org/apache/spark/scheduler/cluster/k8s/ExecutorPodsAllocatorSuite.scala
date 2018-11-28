@@ -157,23 +157,34 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private def kubernetesConfWithCorrectFields(): KubernetesConf[KubernetesExecutorSpecificConf] =
     Matchers.argThat(new ArgumentMatcher[KubernetesConf[KubernetesExecutorSpecificConf]] {
       override def matches(argument: scala.Any): Boolean = {
-        if (!argument.isInstanceOf[KubernetesConf[KubernetesExecutorSpecificConf]]) {
+        if (!argument.isInstanceOf[KubernetesConf[_]]) {
           false
         } else {
           val k8sConf = argument.asInstanceOf[KubernetesConf[KubernetesExecutorSpecificConf]]
           val executorSpecificConf = k8sConf.roleSpecificConf
+          // TODO: HADOOP_CONF_DIR
           val expectedK8sConf = KubernetesConf.createExecutorConf(
             conf,
             executorSpecificConf.executorId,
             TEST_SPARK_APP_ID,
             Some(driverPod))
-          k8sConf.sparkConf.getAll.toMap == conf.getAll.toMap &&
+
+          // Set prefixes to a common string since KUBERNETES_EXECUTOR_POD_NAME_PREFIX
+          // has not be set for the tests and thus KubernetesConf will use a random
+          // string for the prefix, based on the app name, and this comparison here will fail.
+          val k8sConfCopy = k8sConf
+            .copy(appResourceNamePrefix = "")
+            .copy(sparkConf = conf)
+          val expectedK8sConfCopy = expectedK8sConf
+            .copy(appResourceNamePrefix = "")
+            .copy(sparkConf = conf)
+
+            k8sConf.sparkConf.getAll.toMap == conf.getAll.toMap &&
             // Since KubernetesConf.createExecutorConf clones the SparkConf object, force
             // deep equality comparison for the SparkConf object and use object equality
             // comparison on all other fields.
-            k8sConf.copy(sparkConf = conf) == expectedK8sConf.copy(sparkConf = conf)
+            k8sConfCopy == expectedK8sConfCopy
         }
       }
     })
-
 }

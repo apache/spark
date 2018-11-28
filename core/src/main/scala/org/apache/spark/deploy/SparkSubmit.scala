@@ -286,8 +286,6 @@ private[spark] class SparkSubmit extends Logging {
       case (STANDALONE, CLUSTER) if args.isR =>
         error("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
-      case (KUBERNETES, _) if args.isR =>
-        error("R applications are currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
         error("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
@@ -320,7 +318,7 @@ private[spark] class SparkSubmit extends Logging {
 
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
         args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
-        if (args.isPython) {
+        if (args.isPython || isInternal(args.primaryResource)) {
           args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
         }
       }
@@ -337,7 +335,7 @@ private[spark] class SparkSubmit extends Logging {
     val targetDir = Utils.createTempDir()
 
     // assure a keytab is available from any place in a JVM
-    if (clusterManager == YARN || clusterManager == LOCAL || isMesosClient) {
+    if (clusterManager == YARN || clusterManager == LOCAL || isMesosClient || isKubernetesCluster) {
       if (args.principal != null) {
         if (args.keytab != null) {
           require(new File(args.keytab).exists(), s"Keytab file: ${args.keytab} does not exist")
@@ -522,6 +520,10 @@ private[spark] class SparkSubmit extends Logging {
         confKey = "spark.driver.extraJavaOptions"),
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = "spark.driver.extraLibraryPath"),
+      OptionAssigner(args.principal, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        confKey = PRINCIPAL.key),
+      OptionAssigner(args.keytab, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        confKey = KEYTAB.key),
 
       // Propagate attributes for dependency resolution at the driver side
       OptionAssigner(args.packages, STANDALONE | MESOS, CLUSTER, confKey = "spark.jars.packages"),
@@ -539,8 +541,6 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.jars"),
       OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.archives"),
-      OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.principal"),
-      OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.keytab"),
 
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
@@ -646,7 +646,8 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    if (clusterManager == MESOS && UserGroupInformation.isSecurityEnabled) {
+    if ((clusterManager == MESOS || clusterManager == KUBERNETES)
+       && UserGroupInformation.isSecurityEnabled) {
       setRMPrincipal(sparkConf)
     }
 
@@ -700,7 +701,11 @@ private[spark] class SparkSubmit extends Logging {
           if (args.pyFiles != null) {
             childArgs ++= Array("--other-py-files", args.pyFiles)
           }
-        } else {
+        } else if (args.isR) {
+          childArgs ++= Array("--primary-r-file", args.primaryResource)
+          childArgs ++= Array("--main-class", "org.apache.spark.deploy.RRunner")
+        }
+        else {
           childArgs ++= Array("--primary-java-resource", args.primaryResource)
           childArgs ++= Array("--main-class", args.mainClass)
         }
@@ -758,8 +763,8 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
-  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos mode, we
-  // must trick it into thinking we're YARN.
+  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos or Kubernetes
+  // mode, we must trick it into thinking we're YARN.
   private def setRMPrincipal(sparkConf: SparkConf): Unit = {
     val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
     val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
@@ -824,7 +829,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
-      mainClass.newInstance().asInstanceOf[SparkApplication]
+      mainClass.getConstructor().newInstance().asInstanceOf[SparkApplication]
     } else {
       // SPARK-4170
       if (classOf[scala.App].isAssignableFrom(mainClass)) {
@@ -923,8 +928,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
         } catch {
           case e: SparkUserAppException =>
             exitFn(e.exitCode)
-          case e: SparkException =>
-            printErrorAndExit(e.getMessage())
         }
       }
 
@@ -989,9 +992,9 @@ private[spark] object SparkSubmitUtils {
 
   // Exposed for testing.
   // These components are used to make the default exclusion rules for Spark dependencies.
-  // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
-  // other spark-streaming utility components. Underscore is there to differentiate between
-  // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
+  // We need to specify each component explicitly, otherwise we miss
+  // spark-streaming utility components. Underscore is there to differentiate between
+  // spark-streaming_2.1x and spark-streaming-kafka-0-10-assembly_2.1x
   val IVY_DEFAULT_EXCLUDES = Seq("catalyst_", "core_", "graphx_", "kvstore_", "launcher_", "mllib_",
     "mllib-local_", "network-common_", "network-shuffle_", "repl_", "sketch_", "sql_", "streaming_",
     "tags_", "unsafe_")

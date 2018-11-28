@@ -19,12 +19,15 @@ package org.apache.spark.sql.execution.metric
 
 import java.io.File
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -497,6 +500,19 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     }
   }
 
+  test("SPARK-25278: output metrics are wrong for plans repeated in the query") {
+    val name = "demo_view"
+    withView(name) {
+      sql(s"CREATE OR REPLACE VIEW $name AS VALUES 1,2")
+      val view = spark.table(name)
+      val union = view.union(view)
+      testSparkPlanMetrics(union, 1, Map(
+        0L -> ("Union" -> Map()),
+        1L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
+        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
+    }
+  }
+
   test("writing data out metrics: parquet") {
     testMetricsNonDynamicPartition("parquet", "t1")
   }
@@ -505,37 +521,80 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     testMetricsDynamicPartition("parquet", "parquet", "t1")
   }
 
-  test("writing metrics from single thread") {
-    val nAdds = 10
-    val acc = new SQLMetric("test", -10)
-    assert(acc.isZero())
-    acc.set(0)
-    for (i <- 1 to nAdds) acc.add(1)
-    assert(!acc.isZero())
-    assert(nAdds === acc.value)
-    acc.reset()
-    assert(acc.isZero())
+  private def collectNodeWithinWholeStage[T <: SparkPlan : ClassTag](plan: SparkPlan): Seq[T] = {
+    val stages = plan.collect {
+      case w: WholeStageCodegenExec => w
+    }
+    assert(stages.length == 1, "The query plan should have one and only one whole-stage.")
+
+    val cls = classTag[T].runtimeClass
+    stages.head.collect {
+      case n if n.getClass == cls => n.asInstanceOf[T]
+    }
   }
 
-  test("writing metrics from multiple threads") {
-    implicit val ec: ExecutionContextExecutor = ExecutionContext.global
-    val nFutures = 1000
-    val nAdds = 100
-    val acc = new SQLMetric("test", -10)
-    assert(acc.isZero() === true)
-    acc.set(0)
-    val l = for ( i <- 1 to nFutures ) yield {
-      Future {
-        for (j <- 1 to nAdds) acc.add(1)
-        i
-      }
+  test("SPARK-25602: SparkPlan.getByteArrayRdd should not consume the input when not necessary") {
+    def checkFilterAndRangeMetrics(
+        df: DataFrame,
+        filterNumOutputs: Int,
+        rangeNumOutputs: Int): Unit = {
+      val plan = df.queryExecution.executedPlan
+
+      val filters = collectNodeWithinWholeStage[FilterExec](plan)
+      assert(filters.length == 1, "The query plan should have one and only one Filter")
+      assert(filters.head.metrics("numOutputRows").value == filterNumOutputs)
+
+      val ranges = collectNodeWithinWholeStage[RangeExec](plan)
+      assert(ranges.length == 1, "The query plan should have one and only one Range")
+      assert(ranges.head.metrics("numOutputRows").value == rangeNumOutputs)
     }
-    for (futures <- Future.sequence(l)) {
-      assert(nFutures === futures.length)
-      assert(!acc.isZero())
-      assert(nFutures * nAdds === acc.value)
-      acc.reset()
-      assert(acc.isZero())
+
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      val df = spark.range(0, 3000, 1, 2).toDF().filter('id % 3 === 0)
+      df.collect()
+      checkFilterAndRangeMetrics(df, filterNumOutputs = 1000, rangeNumOutputs = 3000)
+
+      df.queryExecution.executedPlan.foreach(_.resetMetrics())
+      // For each partition, we get 2 rows. Then the Filter should produce 2 rows per-partition,
+      // and Range should produce 4 rows per-partition ([0, 1, 2, 3] and [15, 16, 17, 18]). Totally
+      // Filter produces 4 rows, and Range produces 8 rows.
+      df.queryExecution.toRdd.mapPartitions(_.take(2)).collect()
+      checkFilterAndRangeMetrics(df, filterNumOutputs = 4, rangeNumOutputs = 8)
+
+      // Top-most limit will call `CollectLimitExec.executeCollect`, which will only run the first
+      // task, so totally the Filter produces 2 rows, and Range produces 4 rows ([0, 1, 2, 3]).
+      val df2 = df.limit(2)
+      df2.collect()
+      checkFilterAndRangeMetrics(df2, filterNumOutputs = 2, rangeNumOutputs = 4)
+    }
+  }
+
+  test("SPARK-25497: LIMIT within whole stage codegen should not consume all the inputs") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      // A special query that only has one partition, so there is no shuffle and the entire query
+      // can be whole-stage-codegened.
+      val df = spark.range(0, 1500, 1, 1).limit(10).groupBy('id).count().limit(1).filter('id >= 0)
+      df.collect()
+      val plan = df.queryExecution.executedPlan
+
+      val ranges = collectNodeWithinWholeStage[RangeExec](plan)
+      assert(ranges.length == 1, "The query plan should have one and only one Range")
+      // The Range should only produce the first batch, i.e. 1000 rows.
+      assert(ranges.head.metrics("numOutputRows").value == 1000)
+
+      val aggs = collectNodeWithinWholeStage[HashAggregateExec](plan)
+      assert(aggs.length == 2, "The query plan should have two and only two Aggregate")
+      val partialAgg = aggs.filter(_.aggregateExpressions.head.mode == Partial).head
+      // The partial aggregate should output 10 rows, because its input is 10 rows.
+      assert(partialAgg.metrics("numOutputRows").value == 10)
+      val finalAgg = aggs.filter(_.aggregateExpressions.head.mode == Final).head
+      // The final aggregate should only produce 1 row, because the upstream limit only needs 1 row.
+      assert(finalAgg.metrics("numOutputRows").value == 1)
+
+      val filters = collectNodeWithinWholeStage[FilterExec](plan)
+      assert(filters.length == 1, "The query plan should have one and only one Filter")
+      // The final Filter should produce 1 rows, because the input is just one row.
+      assert(filters.head.metrics("numOutputRows").value == 1)
     }
   }
 }

@@ -167,6 +167,8 @@ public class VectorizedColumnReader {
         leftInPage = (int) (endOfPageValueCount - valuesRead);
       }
       int num = Math.min(total, leftInPage);
+      PrimitiveType.PrimitiveTypeName typeName =
+        descriptor.getPrimitiveType().getPrimitiveTypeName();
       if (isCurrentPageDictionaryEncoded) {
         // Read and decode dictionary ids.
         defColumn.readIntegers(
@@ -175,12 +177,12 @@ public class VectorizedColumnReader {
         // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
         if (column.hasDictionary() || (rowId == 0 &&
-            (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
-            (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64  &&
+            (typeName == PrimitiveType.PrimitiveTypeName.INT32 ||
+            (typeName == PrimitiveType.PrimitiveTypeName.INT64 &&
               originalType != OriginalType.TIMESTAMP_MILLIS) ||
-            descriptor.getType() == PrimitiveType.PrimitiveTypeName.FLOAT ||
-            descriptor.getType() == PrimitiveType.PrimitiveTypeName.DOUBLE ||
-            descriptor.getType() == PrimitiveType.PrimitiveTypeName.BINARY))) {
+            typeName == PrimitiveType.PrimitiveTypeName.FLOAT ||
+            typeName == PrimitiveType.PrimitiveTypeName.DOUBLE ||
+            typeName == PrimitiveType.PrimitiveTypeName.BINARY))) {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
@@ -195,7 +197,7 @@ public class VectorizedColumnReader {
           decodeDictionaryIds(0, rowId, column, column.getDictionaryIds());
         }
         column.setDictionary(null);
-        switch (descriptor.getType()) {
+        switch (typeName) {
           case BOOLEAN:
             readBooleanBatch(rowId, num, column);
             break;
@@ -218,10 +220,11 @@ public class VectorizedColumnReader {
             readBinaryBatch(rowId, num, column);
             break;
           case FIXED_LEN_BYTE_ARRAY:
-            readFixedLenByteArrayBatch(rowId, num, column, descriptor.getTypeLength());
+            readFixedLenByteArrayBatch(
+              rowId, num, column, descriptor.getPrimitiveType().getTypeLength());
             break;
           default:
-            throw new IOException("Unsupported type: " + descriptor.getType());
+            throw new IOException("Unsupported type: " + typeName);
         }
       }
 
@@ -243,7 +246,7 @@ public class VectorizedColumnReader {
       WritableColumnVector column) {
     return new SchemaColumnConvertNotSupportedException(
       Arrays.toString(descriptor.getPath()),
-      descriptor.getType().toString(),
+      descriptor.getPrimitiveType().getPrimitiveTypeName().toString(),
       column.dataType().catalogString());
   }
 
@@ -255,7 +258,7 @@ public class VectorizedColumnReader {
       int num,
       WritableColumnVector column,
       WritableColumnVector dictionaryIds) {
-    switch (descriptor.getType()) {
+    switch (descriptor.getPrimitiveType().getPrimitiveTypeName()) {
       case INT32:
         if (column.dataType() == DataTypes.IntegerType ||
             DecimalType.is32BitDecimalType(column.dataType())) {
@@ -381,7 +384,8 @@ public class VectorizedColumnReader {
         break;
 
       default:
-        throw new UnsupportedOperationException("Unsupported type: " + descriptor.getType());
+        throw new UnsupportedOperationException(
+          "Unsupported type: " + descriptor.getPrimitiveType().getPrimitiveTypeName());
     }
   }
 

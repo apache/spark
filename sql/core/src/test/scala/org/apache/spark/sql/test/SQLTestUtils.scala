@@ -67,6 +67,20 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
   }
 
   /**
+   * A helper function for turning off/on codegen.
+   */
+  protected def testWithWholeStageCodegenOnAndOff(testName: String)(f: String => Unit): Unit = {
+    Seq("false", "true").foreach { codegenEnabled =>
+      val isTurnOn = if (codegenEnabled == "true") "on" else "off"
+      test(s"$testName (whole-stage-codegen ${isTurnOn})") {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+          f(codegenEnabled)
+        }
+      }
+    }
+  }
+
+  /**
    * Materialize the test data immediately after the `SQLContext` is set up.
    * This is necessary if the data is accessed by name but not through direct reference.
    */
@@ -76,7 +90,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
 
   /**
    * Disable stdout and stderr when running the test. To not output the logs to the console,
-   * ConsoleAppender's `follow` should be set to `true` so that it will honors reassignments of
+   * ConsoleAppender's `follow` should be set to `true` so that it will honor reassignments of
    * System.out or System.err. Otherwise, ConsoleAppender will still output to the console even if
    * we change System.out and System.err.
    */
@@ -165,18 +179,6 @@ private[sql] trait SQLTestUtilsBase
   protected override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     SparkSession.setActiveSession(spark)
     super.withSQLConf(pairs: _*)(f)
-  }
-
-  /**
-   * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If
-   * a file/directory is created there by `f`, it will be delete after `f` returns.
-   *
-   * @todo Probably this method should be moved to a more general place
-   */
-  protected def withTempPath(f: File => Unit): Unit = {
-    val path = Utils.createTempDir()
-    path.delete()
-    try f(path) finally Utils.deleteRecursively(path)
   }
 
   /**

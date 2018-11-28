@@ -165,7 +165,7 @@ export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:ReservedCodeCacheSize=512m}"
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$MVN" -T 1C clean package -DskipTests $@)
+BUILD_COMMAND=("$MVN" clean package -DskipTests $@)
 
 # Actually build the jar
 echo -e "\nBuilding with..."
@@ -192,6 +192,7 @@ fi
 if [ -d "$SPARK_HOME"/resource-managers/kubernetes/core/target/ ]; then
   mkdir -p "$DISTDIR/kubernetes/"
   cp -a "$SPARK_HOME"/resource-managers/kubernetes/docker/src/main/dockerfiles "$DISTDIR/kubernetes/"
+  cp -a "$SPARK_HOME"/resource-managers/kubernetes/integration-tests/tests "$DISTDIR/kubernetes/"
 fi
 
 # Copy examples and dependencies
@@ -211,10 +212,13 @@ mkdir -p "$DISTDIR/examples/src/main"
 cp -r "$SPARK_HOME/examples/src/main" "$DISTDIR/examples/src/"
 
 # Copy license and ASF files
-cp "$SPARK_HOME/LICENSE-binary" "$DISTDIR/LICENSE"
-mkdir -p "$DISTDIR/licenses"
-cp -r "$SPARK_HOME/licenses-binary" "$DISTDIR/licenses"
-cp "$SPARK_HOME/NOTICE-binary" "$DISTDIR/NOTICE"
+if [ -e "$SPARK_HOME/LICENSE-binary" ]; then
+  cp "$SPARK_HOME/LICENSE-binary" "$DISTDIR/LICENSE"
+  cp -r "$SPARK_HOME/licenses-binary" "$DISTDIR/licenses"
+  cp "$SPARK_HOME/NOTICE-binary" "$DISTDIR/NOTICE"
+else
+  echo "Skipping copying LICENSE files"
+fi
 
 if [ -e "$SPARK_HOME/CHANGES.txt" ]; then
   cp "$SPARK_HOME/CHANGES.txt" "$DISTDIR"

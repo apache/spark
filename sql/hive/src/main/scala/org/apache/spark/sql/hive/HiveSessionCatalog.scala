@@ -131,14 +131,14 @@ private[sql] class HiveSessionCatalog(
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(funcName)) {
-          // If the function actually exists in functionRegistry, it means that there is an
-          // error when we create the Expression using the given children.
+        if (super.functionExists(name)) {
+          // If the function exists (either in functionRegistry or externalCatalog),
+          // it means that there is an error when we create the Expression using the given children.
           // We need to throw the original exception.
           throw error
         } else {
-          // This function is not in functionRegistry, let's try to load it as a Hive's
-          // built-in function.
+          // This function does not exist (neither in functionRegistry or externalCatalog),
+          // let's try to load it as a Hive's built-in function.
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
           if (!hiveFunctions.contains(functionName)) {

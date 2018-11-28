@@ -19,7 +19,6 @@ ARG base_img
 FROM $base_img
 WORKDIR /
 RUN mkdir ${SPARK_HOME}/python
-COPY python/lib ${SPARK_HOME}/python/lib
 # TODO: Investigate running both pip and pip3 via virtualenvs
 RUN apk add --no-cache python && \
     apk add --no-cache python3 && \
@@ -33,6 +32,7 @@ RUN apk add --no-cache python && \
     # Removed the .cache to save space
     rm -r /root/.cache
 
+COPY python/lib ${SPARK_HOME}/python/lib
 ENV PYTHONPATH ${SPARK_HOME}/python/lib/pyspark.zip:${SPARK_HOME}/python/lib/py4j-*.zip
 
 WORKDIR /opt/spark/work-dir

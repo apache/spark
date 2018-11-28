@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.types._
 
 /**
- * Helper functions to check for valid data types.
+ * Functions to help with checking for valid data types and value comparison of various types.
  */
 object TypeUtils {
   def checkForNumericExpr(dt: DataType, caller: String): TypeCheckResult = {
@@ -46,9 +46,17 @@ object TypeUtils {
     if (TypeCoercion.haveSameType(types)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      return TypeCheckResult.TypeCheckFailure(
+      TypeCheckResult.TypeCheckFailure(
         s"input to $caller should all be the same type, but it's " +
           types.map(_.catalogString).mkString("[", ", ", "]"))
+    }
+  }
+
+  def checkForMapKeyType(keyType: DataType): TypeCheckResult = {
+    if (keyType.existsRecursively(_.isInstanceOf[MapType])) {
+      TypeCheckResult.TypeCheckFailure("The key of map cannot be/contain map.")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
     }
   }
 
@@ -72,5 +80,16 @@ object TypeUtils {
       if (res != 0) return res
     }
     x.length - y.length
+  }
+
+  /**
+   * Returns true if the equals method of the elements of the data type is implemented properly.
+   * This also means that they can be safely used in collections relying on the equals method,
+   * as sets or maps.
+   */
+  def typeWithProperEquals(dataType: DataType): Boolean = dataType match {
+    case BinaryType => false
+    case _: AtomicType => true
+    case _ => false
   }
 }

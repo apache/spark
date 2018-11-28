@@ -19,15 +19,16 @@ package org.apache.spark.sql.sources.v2.writer;
 
 import java.io.Serializable;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport;
 
 /**
  * A commit message returned by {@link DataWriter#commit()} and will be sent back to the driver side
- * as the input parameter of {@link DataSourceWriter#commit(WriterCommitMessage[])}.
+ * as the input parameter of {@link BatchWriteSupport#commit(WriterCommitMessage[])} or
+ * {@link StreamingWriteSupport#commit(long, WriterCommitMessage[])}.
  *
- * This is an empty interface, data sources should define their own message class and use it in
- * their {@link DataWriter#commit()} and {@link DataSourceWriter#commit(WriterCommitMessage[])}
- * implementations.
+ * This is an empty interface, data sources should define their own message class and use it when
+ * generating messages at executor side and handling the messages at driver side.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface WriterCommitMessage extends Serializable {}

@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.AliasIdentifier
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
-  RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -64,7 +64,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   }
 
   override def validConstraints: Set[Expression] =
-    child.constraints.union(getAliasedConstraints(projectList))
+    getAllValidConstraints(projectList)
 }
 
 /**
@@ -74,7 +74,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
  * their output.
  *
  * @param generator the generator expression
- * @param unrequiredChildIndex this paramter starts as Nil and gets filled by the Optimizer.
+ * @param unrequiredChildIndex this parameter starts as Nil and gets filled by the Optimizer.
  *                             It's used as an optimization for omitting data generation that will
  *                             be discarded next by a projection.
  *                             A common use case is when we explode(array(..)) and are interested
@@ -113,7 +113,7 @@ case class Generate(
   def qualifiedGeneratorOutput: Seq[Attribute] = {
     val qualifiedOutput = qualifier.map { q =>
       // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifier(Some(q)))
+      generatorOutput.map(a => a.withQualifier(Seq(q)))
     }.getOrElse(generatorOutput)
     val nullableOutput = qualifiedOutput.map {
       // if outer, make all attributes nullable, otherwise keep existing nullability
@@ -167,7 +167,7 @@ object SetOperation {
 case class Intersect(
     left: LogicalPlan,
     right: LogicalPlan,
-    isAll: Boolean = false) extends SetOperation(left, right) {
+    isAll: Boolean) extends SetOperation(left, right) {
 
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
 
@@ -191,7 +191,7 @@ case class Intersect(
 case class Except(
     left: LogicalPlan,
     right: LogicalPlan,
-    isAll: Boolean = false) extends SetOperation(left, right) {
+    isAll: Boolean) extends SetOperation(left, right) {
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) "All" else "" )
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
@@ -353,6 +353,38 @@ case class Join(
 }
 
 /**
+ * Append data to an existing table.
+ */
+case class AppendData(
+    table: NamedRelation,
+    query: LogicalPlan,
+    isByName: Boolean) extends LogicalPlan {
+  override def children: Seq[LogicalPlan] = Seq(query)
+  override def output: Seq[Attribute] = Seq.empty
+
+  override lazy val resolved: Boolean = {
+    table.resolved && query.resolved && query.output.size == table.output.size &&
+        query.output.zip(table.output).forall {
+          case (inAttr, outAttr) =>
+            // names and types must match, nullability must be compatible
+            inAttr.name == outAttr.name &&
+                DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
+                (outAttr.nullable || !inAttr.nullable)
+        }
+  }
+}
+
+object AppendData {
+  def byName(table: NamedRelation, df: LogicalPlan): AppendData = {
+    new AppendData(table, df, true)
+  }
+
+  def byPosition(table: NamedRelation, query: LogicalPlan): AppendData = {
+    new AppendData(table, query, false)
+  }
+}
+
+/**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
  * concrete implementations during analysis.
  *
@@ -453,7 +485,7 @@ case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) 
   override def output: Seq[Attribute] = child.output
 
   override def simpleString: String = {
-    val cteAliases = Utils.truncatedString(cteRelations.map(_._1), "[", ", ", "]")
+    val cteAliases = truncatedString(cteRelations.map(_._1), "[", ", ", "]")
     s"CTE $cteAliases"
   }
 
@@ -543,6 +575,18 @@ case class Range(
   }
 }
 
+/**
+ * This is a Group by operator with the aggregate functions and projections.
+ *
+ * @param groupingExpressions expressions for grouping keys
+ * @param aggregateExpressions expressions for a project list, which could contain
+ *                             [[AggregateFunction]]s.
+ *
+ * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
+ * separating projection from grouping and aggregate, we should avoid expression-level optimization
+ * on aggregateExpressions, which could reference an expression in groupingExpressions.
+ * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
+ */
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
@@ -563,7 +607,7 @@ case class Aggregate(
 
   override def validConstraints: Set[Expression] = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
-    child.constraints.union(getAliasedConstraints(nonAgg))
+    getAllValidConstraints(nonAgg)
   }
 }
 
@@ -794,19 +838,37 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
 /**
  * Aliased subquery.
  *
- * @param alias the alias name for this subquery.
+ * @param name the alias identifier for this subquery.
  * @param child the logical plan of this subquery.
  */
 case class SubqueryAlias(
-    alias: String,
+    name: AliasIdentifier,
     child: LogicalPlan)
   extends OrderPreservingUnaryNode {
 
-  override def doCanonicalize(): LogicalPlan = child.canonicalized
+  def alias: String = name.identifier
 
-  override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
+  override def output: Seq[Attribute] = {
+    val qualifierList = name.database.map(Seq(_, alias)).getOrElse(Seq(alias))
+    child.output.map(_.withQualifier(qualifierList))
+  }
+  override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 
+object SubqueryAlias {
+  def apply(
+      identifier: String,
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(identifier), child)
+  }
+
+  def apply(
+      identifier: String,
+      database: String,
+      child: LogicalPlan): SubqueryAlias = {
+    SubqueryAlias(AliasIdentifier(identifier, Some(database)), child)
+  }
+}
 /**
  * Sample the dataset.
  *

@@ -121,6 +121,21 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("OptimizedIn test: NULL IN (subquery) gets transformed to Filter(null)") {
+    val subquery = ListQuery(testRelation.select(UnresolvedAttribute("a")))
+    val originalQuery =
+      testRelation
+        .where(InSubquery(Seq(Literal.create(null, NullType)), subquery))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(Literal.create(null, BooleanType))
+        .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("OptimizedIn test: Inset optimization disabled as " +
     "list expression contains attribute)") {
     val originalQuery =

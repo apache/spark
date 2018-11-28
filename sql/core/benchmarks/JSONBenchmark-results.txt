@@ -1,0 +1,48 @@
+================================================================================================
+Benchmark for performance of JSON parsing
+================================================================================================
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+JSON schema inferring:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 71832 / 72149          1.4         718.3       1.0X
+UTF-8 is set                              101700 / 101819          1.0        1017.0       0.7X
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+count a short column:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 16501 / 16519          6.1         165.0       1.0X
+UTF-8 is set                                16477 / 16516          6.1         164.8       1.0X
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+count a wide column:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+No encoding                                 39871 / 40242          0.3        3987.1       1.0X
+UTF-8 is set                                39581 / 39721          0.3        3958.1       1.0X
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Select a subset of 10 columns:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Select 10 columns + count()                 16011 / 16033          0.6        1601.1       1.0X
+Select 1 column + count()                   14350 / 14392          0.7        1435.0       1.1X
+count()                                       3007 / 3034          3.3         300.7       5.3X
+
+Preparing data for benchmarking ...
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+creation of JSON parser per line:        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Short column without encoding                 8334 / 8453          1.2         833.4       1.0X
+Short column with UTF-8                     13627 / 13784          0.7        1362.7       0.6X
+Wide column without encoding              155073 / 155351          0.1       15507.3       0.1X
+Wide column with UTF-8                    212114 / 212263          0.0       21211.4       0.0X
+
+

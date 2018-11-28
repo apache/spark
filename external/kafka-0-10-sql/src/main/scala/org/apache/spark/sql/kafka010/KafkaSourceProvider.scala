@@ -30,9 +30,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, MicroBatchReadSupport, StreamWriteSupport}
-import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousInputPartitionReader
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -46,9 +45,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     with StreamSinkProvider
     with RelationProvider
     with CreatableRelationProvider
-    with StreamWriteSupport
-    with ContinuousReadSupport
-    with MicroBatchReadSupport
+    with StreamingWriteSupportProvider
+    with ContinuousReadSupportProvider
+    with MicroBatchReadSupportProvider
     with Logging {
   import KafkaSourceProvider._
 
@@ -78,7 +77,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
+    val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
 
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val specifiedKafkaParams =
@@ -108,20 +107,19 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   /**
-   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader]] to read batches
-   * of Kafka data in a micro-batch streaming query.
+   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport]] to read
+   * batches of Kafka data in a micro-batch streaming query.
    */
-  override def createMicroBatchReader(
-      schema: Optional[StructType],
+  override def createMicroBatchReadSupport(
       metadataPath: String,
-      options: DataSourceOptions): KafkaMicroBatchReader = {
+      options: DataSourceOptions): KafkaMicroBatchReadSupport = {
 
     val parameters = options.asMap().asScala.toMap
     validateStreamOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
+    val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
 
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val specifiedKafkaParams =
@@ -140,7 +138,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-    new KafkaMicroBatchReader(
+    new KafkaMicroBatchReadSupport(
       kafkaOffsetReader,
       kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
       options,
@@ -150,19 +148,18 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   /**
-   * Creates a [[ContinuousInputPartitionReader]] to read
+   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport]] to read
    * Kafka data in a continuous streaming query.
    */
-  override def createContinuousReader(
-      schema: Optional[StructType],
+  override def createContinuousReadSupport(
       metadataPath: String,
-      options: DataSourceOptions): KafkaContinuousReader = {
+      options: DataSourceOptions): KafkaContinuousReadSupport = {
     val parameters = options.asMap().asScala.toMap
     validateStreamOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
+    val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
 
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val specifiedKafkaParams =
@@ -181,7 +178,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-    new KafkaContinuousReader(
+    new KafkaContinuousReadSupport(
       kafkaOffsetReader,
       kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
       parameters,
@@ -270,11 +267,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  override def createStreamWriter(
+  override def createStreamingWriteSupport(
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceOptions): StreamWriter = {
+      options: DataSourceOptions): StreamingWriteSupport = {
     import scala.collection.JavaConverters._
 
     val spark = SparkSession.getActiveSession.get
@@ -285,7 +282,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     KafkaWriter.validateQuery(
       schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
 
-    new KafkaStreamWriter(topic, producerParams, schema)
+    new KafkaStreamingWriteSupport(topic, producerParams, schema)
   }
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =
@@ -513,7 +510,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
 
       // So that the driver does not pull too much data
-      .set(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, new java.lang.Integer(1))
+      .set(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, java.lang.Integer.valueOf(1))
 
       // If buffer config is not set, set it to reasonable value to work around
       // buffer issues (see KAFKA-3135)
@@ -540,6 +537,18 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       // buffer issues (see KAFKA-3135)
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
       .build()
+
+  /**
+   * Returns a unique consumer group (group.id), allowing the user to set the prefix of
+   * the consumer group
+   */
+  private def streamingUniqueGroupId(
+      parameters: Map[String, String],
+      metadataPath: String): String = {
+    val groupIdPrefix = parameters
+      .getOrElse("groupIdPrefix", "spark-kafka-source")
+    s"${groupIdPrefix}-${UUID.randomUUID}-${metadataPath.hashCode}"
+  }
 
   /** Class to conveniently update Kafka config params, while logging the changes */
   private case class ConfigUpdater(module: String, kafkaParams: Map[String, String]) {

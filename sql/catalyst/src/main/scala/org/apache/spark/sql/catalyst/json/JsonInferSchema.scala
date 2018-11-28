@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -69,10 +70,17 @@ private[sql] object JsonInferSchema {
       }.reduceOption(typeMerger).toIterator
     }
 
-    // Here we get RDD local iterator then fold, instead of calling `RDD.fold` directly, because
-    // `RDD.fold` will run the fold function in DAGScheduler event loop thread, which may not have
-    // active SparkSession and `SQLConf.get` may point to the wrong configs.
-    val rootType = mergedTypesFromPartitions.toLocalIterator.fold(StructType(Nil))(typeMerger)
+    // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
+    // the fold functions in the scheduler event loop thread.
+    val existingConf = SQLConf.get
+    var rootType: DataType = StructType(Nil)
+    val foldPartition = (iter: Iterator[DataType]) => iter.fold(StructType(Nil))(typeMerger)
+    val mergeResult = (index: Int, taskResult: DataType) => {
+      rootType = SQLConf.withExistingConf(existingConf) {
+        typeMerger(rootType, taskResult)
+      }
+    }
+    json.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
 
     canonicalizeType(rootType, configOptions) match {
       case Some(st: StructType) => st

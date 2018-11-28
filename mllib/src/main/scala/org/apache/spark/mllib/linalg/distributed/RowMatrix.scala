@@ -370,32 +370,41 @@ class RowMatrix @Since("1.0.0") (
    * Each column corresponds for one principal component,
    * and the columns are in descending order of component variance.
    * The row data do not need to be "centered" first; it is not necessary for
-   * the mean of each column to be 0.
+   * the mean of each column to be 0. But, if the number of columns are more than
+   * 65535, then the data need to be "centered".
    *
    * @param k number of top principal components.
    * @return a matrix of size n-by-k, whose columns are principal components, and
    * a vector of values which indicate how much variance each principal component
    * explains
-   *
-   * @note This cannot be computed on matrices with more than 65535 columns.
    */
   @Since("1.6.0")
   def computePrincipalComponentsAndExplainedVariance(k: Int): (Matrix, Vector) = {
     val n = numCols().toInt
     require(k > 0 && k <= n, s"k = $k out of range (0, n = $n]")
 
-    val Cov = computeCovariance().asBreeze.asInstanceOf[BDM[Double]]
+    if (n > 65535) {
+      val svd = computeSVD(k)
+      val s = svd.s.toArray.map(eigValue => eigValue * eigValue / (n - 1))
+      val eigenSum = s.sum
+      val explainedVariance = s.map(_ / eigenSum)
 
-    val brzSvd.SVD(u: BDM[Double], s: BDV[Double], _) = brzSvd(Cov)
-
-    val eigenSum = s.data.sum
-    val explainedVariance = s.data.map(_ / eigenSum)
-
-    if (k == n) {
-      (Matrices.dense(n, k, u.data), Vectors.dense(explainedVariance))
+      (svd.V, Vectors.dense(explainedVariance))
     } else {
-      (Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k)),
-        Vectors.dense(Arrays.copyOfRange(explainedVariance, 0, k)))
+
+      val Cov = computeCovariance().asBreeze.asInstanceOf[BDM[Double]]
+
+      val brzSvd.SVD(u: BDM[Double], s: BDV[Double], _) = brzSvd(Cov)
+
+      val eigenSum = s.data.sum
+      val explainedVariance = s.data.map(_ / eigenSum)
+
+      if (k == n) {
+        (Matrices.dense(n, k, u.data), Vectors.dense(explainedVariance))
+      } else {
+        (Matrices.dense(n, k, Arrays.copyOfRange(u.data, 0, n * k)),
+          Vectors.dense(Arrays.copyOfRange(explainedVariance, 0, k)))
+      }
     }
   }
 
@@ -531,7 +540,7 @@ class RowMatrix @Since("1.0.0") (
    * decomposition (factorization) for the [[RowMatrix]] of a tall and skinny shape.
    * Reference:
    *  Paul G. Constantine, David F. Gleich. "Tall and skinny QR factorizations in MapReduce
-   *  architectures" (see <a href="http://dx.doi.org/10.1145/1996092.1996103">here</a>)
+   *  architectures" (see <a href="https://doi.org/10.1145/1996092.1996103">here</a>)
    *
    * @param computeQ whether to computeQ
    * @return QRDecomposition(Q, R), Q = null if computeQ = false.

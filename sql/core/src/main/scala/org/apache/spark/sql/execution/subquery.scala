@@ -91,49 +91,6 @@ case class ScalarSubquery(
 }
 
 /**
- * A subquery that will check the value of `child` whether is in the result of a query or not.
- */
-case class InSubquery(
-    child: Expression,
-    plan: SubqueryExec,
-    exprId: ExprId,
-    private var result: Array[Any] = null,
-    private var updated: Boolean = false) extends ExecSubqueryExpression {
-
-  override def dataType: DataType = BooleanType
-  override def children: Seq[Expression] = child :: Nil
-  override def nullable: Boolean = child.nullable
-  override def toString: String = s"$child IN ${plan.name}"
-  override def withNewPlan(plan: SubqueryExec): InSubquery = copy(plan = plan)
-
-  override def semanticEquals(other: Expression): Boolean = other match {
-    case in: InSubquery => child.semanticEquals(in.child) && plan.sameResult(in.plan)
-    case _ => false
-  }
-
-  def updateResult(): Unit = {
-    val rows = plan.executeCollect()
-    result = rows.map(_.get(0, child.dataType)).asInstanceOf[Array[Any]]
-    updated = true
-  }
-
-  override def eval(input: InternalRow): Any = {
-    require(updated, s"$this has not finished")
-    val v = child.eval(input)
-    if (v == null) {
-      null
-    } else {
-      result.contains(v)
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    require(updated, s"$this has not finished")
-    InSet(child, result.toSet).doGenCode(ctx, ev)
-  }
-}
-
-/**
  * Plans scalar subqueries from that are present in the given [[SparkPlan]].
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {

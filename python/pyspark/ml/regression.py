@@ -188,8 +188,8 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritabl
     @property
     @since("2.3.0")
     def scale(self):
-        """
-        The value by which \|y - X'w\| is scaled down when loss is "huber", otherwise 1.0.
+        r"""
+        The value by which :math:`\|y - X'w\|` is scaled down when loss is "huber", otherwise 1.0.
         """
         return self._call_java("scale")
 
@@ -279,12 +279,12 @@ class LinearRegressionSummary(JavaWrapper):
     @property
     @since("2.0.0")
     def explainedVariance(self):
-        """
+        r"""
         Returns the explained variance regression score.
-        explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
+        explainedVariance = :math:`1 - \frac{variance(y - \hat{y})}{variance(y)}`
 
-        .. seealso:: `Wikipedia explain variation \
-        <http://en.wikipedia.org/wiki/Explained_variation>`_
+        .. seealso:: `Wikipedia explain variation
+            <http://en.wikipedia.org/wiki/Explained_variation>`_
 
         .. note:: This ignores instance weights (setting all to 1.0) from
             `LinearRegression.weightCol`. This will change in later Spark
@@ -339,8 +339,8 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns R^2, the coefficient of determination.
 
-        .. seealso:: `Wikipedia coefficient of determination \
-        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`_
+        .. seealso:: `Wikipedia coefficient of determination
+            <http://en.wikipedia.org/wiki/Coefficient_of_determination>`_
 
         .. note:: This ignores instance weights (setting all to 1.0) from
             `LinearRegression.weightCol`. This will change in later Spark
@@ -354,8 +354,8 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns Adjusted R^2, the adjusted coefficient of determination.
 
-        .. seealso:: `Wikipedia coefficient of determination, Adjusted R^2 \
-        <https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2>`_
+        .. seealso:: `Wikipedia coefficient of determination, Adjusted R^2
+            <https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2>`_
 
         .. note:: This ignores instance weights (setting all to 1.0) from
             `LinearRegression.weightCol`. This will change in later Spark versions.
@@ -1375,7 +1375,7 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @since("1.6.0")
     def scale(self):
         """
-        Model scale paramter.
+        Model scale parameter.
         """
         return self._call_java("scale")
 

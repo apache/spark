@@ -494,7 +494,7 @@ case class SortMergeJoinExec(
          |        $leftRow = null;
          |      } else {
          |        $matches.add((UnsafeRow) $rightRow);
-         |        $rightRow = null;;
+         |        $rightRow = null;
          |      }
          |    } while ($leftRow != null);
          |  }

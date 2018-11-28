@@ -51,13 +51,15 @@ private[spark] class MountVolumesFeatureStep(
       val volumeMount = new VolumeMountBuilder()
         .withMountPath(spec.mountPath)
         .withReadOnly(spec.mountReadOnly)
+        .withSubPath(spec.mountSubPath)
         .withName(spec.volumeName)
         .build()
 
       val volumeBuilder = spec.volumeConf match {
         case KubernetesHostPathVolumeConf(hostPath) =>
+          /* "" means that no checks will be performed before mounting the hostPath volume */
           new VolumeBuilder()
-            .withHostPath(new HostPathVolumeSource(hostPath))
+            .withHostPath(new HostPathVolumeSource(hostPath, ""))
 
         case KubernetesPVCVolumeConf(claimName) =>
           new VolumeBuilder()

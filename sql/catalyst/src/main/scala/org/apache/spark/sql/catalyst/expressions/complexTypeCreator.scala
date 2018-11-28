@@ -61,11 +61,10 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val et = dataType.elementType
-    val evals = children.map(e => e.genCode(ctx))
-    val (preprocess, assigns, postprocess, arrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false)
+    val (allocation, assigns, arrayData) =
+      GenArrayData.genCodeToCreateArrayData(ctx, et, children, false, "createArray")
     ev.copy(
-      code = code"${preprocess}${assigns}${postprocess}",
+      code = code"${allocation}${assigns}",
       value = JavaCode.variable(arrayData, dataType),
       isNull = FalseLiteral)
   }
@@ -75,87 +74,60 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
 private [sql] object GenArrayData {
   /**
-   * Return Java code pieces based on DataType and isPrimitive to allocate ArrayData class
+   * Return Java code pieces based on DataType and array size to allocate ArrayData class
    *
    * @param ctx a [[CodegenContext]]
    * @param elementType data type of underlying array elements
-   * @param elementsCode concatenated set of [[ExprCode]] for each element of an underlying array
+   * @param elementsExpr concatenated set of [[Expression]] for each element of an underlying array
    * @param isMapKey if true, throw an exception when the element is null
-   * @return (code pre-assignments, concatenated assignments to each array elements,
-   *           code post-assignments, arrayData name)
+   * @param functionName string to include in the error message
+   * @return (array allocation, concatenated assignments to each array elements, arrayData name)
    */
   def genCodeToCreateArrayData(
       ctx: CodegenContext,
       elementType: DataType,
-      elementsCode: Seq[ExprCode],
-      isMapKey: Boolean): (String, String, String, String) = {
+      elementsExpr: Seq[Expression],
+      isMapKey: Boolean,
+      functionName: String): (String, String, String) = {
     val arrayDataName = ctx.freshName("arrayData")
-    val numElements = elementsCode.length
+    val numElements = s"${elementsExpr.length}L"
 
-    if (!CodeGenerator.isPrimitiveType(elementType)) {
-      val arrayName = ctx.freshName("arrayObject")
-      val genericArrayClass = classOf[GenericArrayData].getName
+    val initialization = CodeGenerator.createArrayData(
+      arrayDataName, elementType, numElements, s" $functionName failed.")
 
-      val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
-        val isNullAssignment = if (!isMapKey) {
-          s"$arrayName[$i] = null;"
-        } else {
-          "throw new RuntimeException(\"Cannot use null as map key!\");"
-        }
-        eval.code + s"""
-         if (${eval.isNull}) {
-           $isNullAssignment
-         } else {
-           $arrayName[$i] = ${eval.value};
-         }
-       """
-      }
-      val assignmentString = ctx.splitExpressionsWithCurrentInputs(
-        expressions = assignments,
-        funcName = "apply",
-        extraArguments = ("Object[]", arrayName) :: Nil)
+    val assignments = elementsExpr.zipWithIndex.map { case (expr, i) =>
+      val eval = expr.genCode(ctx)
+      val setArrayElement = CodeGenerator.setArrayElement(
+        arrayDataName, elementType, i.toString, eval.value)
 
-      (s"Object[] $arrayName = new Object[$numElements];",
-       assignmentString,
-       s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
-       arrayDataName)
-    } else {
-      val arrayName = ctx.freshName("array")
-      val unsafeArraySizeInBytes =
-        UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
-        ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
-      val baseOffset = Platform.BYTE_ARRAY_OFFSET
-
-      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-      val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
+      val assignment = if (!expr.nullable) {
+        setArrayElement
+      } else {
         val isNullAssignment = if (!isMapKey) {
           s"$arrayDataName.setNullAt($i);"
         } else {
           "throw new RuntimeException(\"Cannot use null as map key!\");"
         }
-        eval.code + s"""
-         if (${eval.isNull}) {
-           $isNullAssignment
-         } else {
-           $arrayDataName.set$primitiveValueTypeName($i, ${eval.value});
-         }
-       """
-      }
-      val assignmentString = ctx.splitExpressionsWithCurrentInputs(
-        expressions = assignments,
-        funcName = "apply",
-        extraArguments = ("UnsafeArrayData", arrayDataName) :: Nil)
 
-      (s"""
-        byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
-        UnsafeArrayData $arrayDataName = new UnsafeArrayData();
-        Platform.putLong($arrayName, $baseOffset, $numElements);
-        $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
-      """,
-       assignmentString,
-       "",
-       arrayDataName)
+        s"""
+           |if (${eval.isNull}) {
+           |  $isNullAssignment
+           |} else {
+           |  $setArrayElement
+           |}
+         """.stripMargin
+      }
+      s"""
+         |${eval.code}
+         |$assignment
+       """.stripMargin
     }
+    val assignmentString = ctx.splitExpressionsWithCurrentInputs(
+      expressions = assignments,
+      funcName = "apply",
+      extraArguments = ("ArrayData", arrayDataName) :: Nil)
+
+    (initialization, assignmentString, arrayDataName)
   }
 }
 
@@ -189,11 +161,11 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
         "The given values of function map should all be the same type, but they are " +
           values.map(_.dataType.catalogString).mkString("[", ", ", "]"))
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeUtils.checkForMapKeyType(dataType.keyType)
     }
   }
 
-  override def dataType: DataType = {
+  override def dataType: MapType = {
     MapType(
       keyType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(keys.map(_.dataType))
         .getOrElse(StringType),
@@ -216,21 +188,17 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mapClass = classOf[ArrayBasedMapData].getName
     val MapType(keyDt, valueDt, _) = dataType
-    val evalKeys = keys.map(e => e.genCode(ctx))
-    val evalValues = values.map(e => e.genCode(ctx))
-    val (preprocessKeyData, assignKeys, postprocessKeyData, keyArrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, evalKeys, true)
-    val (preprocessValueData, assignValues, postprocessValueData, valueArrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, evalValues, false)
+    val (allocationKeyData, assignKeys, keyArrayData) =
+      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, keys, true, "createMap")
+    val (allocationValueData, assignValues, valueArrayData) =
+      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, values, false, "createMap")
     val code =
       code"""
        final boolean ${ev.isNull} = false;
-       $preprocessKeyData
+       $allocationKeyData
        $assignKeys
-       $postprocessKeyData
-       $preprocessValueData
+       $allocationValueData
        $assignValues
-       $postprocessValueData
        final MapData ${ev.value} = new $mapClass($keyArrayData, $valueArrayData);
       """
     ev.copy(code = code)
@@ -248,13 +216,23 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
       in keys should not be null""",
   examples = """
     Examples:
-      > SELECT _FUNC_([1.0, 3.0], ['2', '4']);
+      > SELECT _FUNC_(array(1.0, 3.0), array('2', '4'));
        {1.0:"2",3.0:"4"}
   """, since = "2.4.0")
 case class MapFromArrays(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      val keyType = left.dataType.asInstanceOf[ArrayType].elementType
+      TypeUtils.checkForMapKeyType(keyType)
+    }
+  }
 
   override def dataType: DataType = {
     MapType(
@@ -379,10 +357,7 @@ trait CreateNamedStructLike extends Expression {
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.length < 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName requires at least one argument")
-    } else if (children.size % 2 != 0) {
+    if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
     } else {
       val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)

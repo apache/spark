@@ -145,10 +145,11 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @since("2.2.0")
     def associationRules(self):
         """
-        DataFrame with three columns:
+        DataFrame with four columns:
         * `antecedent`  - Array of the same type as the input column.
         * `consequent`  - Array of the same type as the input column.
         * `confidence`  - Confidence for the rule (`DoubleType`).
+        * `lift`        - Lift for the rule (`DoubleType`).
         """
         return self._call_java("associationRules")
 
@@ -157,7 +158,7 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
                HasMinSupport, HasNumPartitions, HasMinConfidence,
                JavaMLWritable, JavaMLReadable):
 
-    """
+    r"""
     .. note:: Experimental
 
     A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
@@ -166,8 +167,8 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
     independent group of mining tasks. The FP-Growth algorithm is described in
     Han et al., Mining frequent patterns without candidate generation [HAN2000]_
 
-    .. [LI2008] http://dx.doi.org/10.1145/1454008.1454027
-    .. [HAN2000] http://dx.doi.org/10.1145/335191.335372
+    .. [LI2008] https://doi.org/10.1145/1454008.1454027
+    .. [HAN2000] https://doi.org/10.1145/335191.335372
 
     .. note:: null values in the feature column are ignored during fit().
     .. note:: Internally `transform` `collects` and `broadcasts` association rules.
@@ -253,7 +254,7 @@ class PrefixSpan(JavaParams):
     A parallel PrefixSpan algorithm to mine frequent sequential patterns.
     The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
     Efficiently by Prefix-Projected Pattern Growth
-    (see <a href="http://doi.org/10.1109/ICDE.2001.914830">here</a>).
+    (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
     This class is not yet an Estimator/Transformer, use :py:func:`findFrequentSequentialPatterns`
     method to run the PrefixSpan algorithm.
 

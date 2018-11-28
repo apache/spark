@@ -33,7 +33,7 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
-class KafkaSinkSuite extends StreamTest with SharedSQLContext {
+class KafkaSinkSuite extends StreamTest with SharedSQLContext with KafkaTest {
   import testImplicits._
 
   protected var testUtils: KafkaTestUtils = _
@@ -48,9 +48,12 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
   }
 
   override def afterAll(): Unit = {
-    if (testUtils != null) {
-      testUtils.teardown()
-      testUtils = null
+    try {
+      if (testUtils != null) {
+        testUtils.teardown()
+        testUtils = null
+      }
+    } finally {
       super.afterAll()
     }
   }
@@ -424,6 +427,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         .format("kafka")
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.max.block.ms", "5000")
         .queryName("kafkaStream")
       withTopic.foreach(stream.option("topic", _))
       withOutputMode.foreach(stream.outputMode(_))

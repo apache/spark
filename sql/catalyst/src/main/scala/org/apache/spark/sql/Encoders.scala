@@ -22,7 +22,7 @@ import java.lang.reflect.Modifier
 import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Cast}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
  * @since 1.6.0
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 object Encoders {
 
   /**
@@ -203,12 +203,10 @@ object Encoders {
     validatePublicClass[T]()
 
     ExpressionEncoder[T](
-      schema = new StructType().add("value", BinaryType),
-      flat = true,
-      serializer = Seq(
+      objSerializer =
         EncodeUsingSerializer(
-          BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo)),
-      deserializer =
+          BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo),
+      objDeserializer =
         DecodeUsingSerializer[T](
           Cast(GetColumnByOrdinal(0, BinaryType), BinaryType),
           classTag[T],

@@ -169,7 +169,7 @@ def determine_java_version(java_exe):
     # find raw version string, eg 'java version "1.8.0_25"'
     raw_version_str = next(x for x in raw_output_lines if " version " in x)
 
-    match = re.search('(\d+)\.(\d+)\.(\d+)', raw_version_str)
+    match = re.search(r'(\d+)\.(\d+)\.(\d+)', raw_version_str)
 
     major = int(match.group(1))
     minor = int(match.group(2))
@@ -249,15 +249,6 @@ def get_zinc_port():
     return random.randrange(3030, 4030)
 
 
-def kill_zinc_on_port(zinc_port):
-    """
-    Kill the Zinc process running on the given port, if one exists.
-    """
-    cmd = "%s -P |grep %s | grep LISTEN | awk '{ print $2; }' | xargs kill"
-    lsof_exe = which("lsof")
-    subprocess.check_call(cmd % (lsof_exe if lsof_exe else "/usr/sbin/lsof", zinc_port), shell=True)
-
-
 def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
@@ -267,7 +258,6 @@ def exec_maven(mvn_args=()):
     zinc_flag = "-DzincPort=%s" % zinc_port
     flags = [os.path.join(SPARK_HOME, "build", "mvn"), "--force", zinc_flag]
     run_cmd(flags + mvn_args)
-    kill_zinc_on_port(zinc_port)
 
 
 def exec_sbt(sbt_args=()):
@@ -305,7 +295,6 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.6": ["-Phadoop-2.6"],
         "hadoop2.7": ["-Phadoop-2.7"],
     }
 
@@ -333,8 +322,6 @@ def build_spark_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["test:package",  # Build test jars as some tests depend on them
-                 "streaming-kafka-0-8-assembly/assembly",
-                 "streaming-flume-assembly/assembly",
                  "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
@@ -369,15 +356,7 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     if checkstyle:
         run_java_style_checks()
 
-    # Note that we skip Unidoc build only if Hadoop 2.6 is explicitly set in this SBT build.
-    # Due to a different dependency resolution in SBT & Unidoc by an unknown reason, the
-    # documentation build fails on a specific machine & environment in Jenkins but it was unable
-    # to reproduce. Please see SPARK-20343. This is a band-aid fix that should be removed in
-    # the future.
-    is_hadoop_version_2_6 = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE") == "hadoop2.6"
-    if not is_hadoop_version_2_6:
-        # Make sure that Java and Scala API documentation can be generated
-        build_spark_unidoc_sbt(hadoop_version)
+    build_spark_unidoc_sbt(hadoop_version)
 
 
 def build_apache_spark(build_tool, hadoop_version):
@@ -481,7 +460,7 @@ def parse_opts():
         prog="run-tests"
     )
     parser.add_option(
-        "-p", "--parallelism", type="int", default=4,
+        "-p", "--parallelism", type="int", default=8,
         help="The number of suites to test in parallel (default %default)"
     )
 
@@ -528,14 +507,14 @@ def main():
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.6")
+        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.7")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.6")
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.7")
         test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,

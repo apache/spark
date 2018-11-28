@@ -39,7 +39,7 @@ case class AnalyzeTableCommand(
     }
 
     // Compute stats for the whole table
-    val newTotalSize = CommandUtils.calculateTotalSize(sessionState, tableMeta)
+    val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
     val newRowCount =
       if (noscan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 

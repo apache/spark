@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.ScalaUDF
 import org.apache.spark.sql.types.DataType
 
@@ -36,7 +37,7 @@ import org.apache.spark.sql.types.DataType
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,
@@ -45,6 +46,10 @@ case class UserDefinedFunction protected[sql] (
   private var _nameOption: Option[String] = None
   private var _nullable: Boolean = true
   private var _deterministic: Boolean = true
+
+  // This is a `var` instead of in the constructor for backward compatibility of this case class.
+  // TODO: revisit this case class in Spark 3.0, and narrow down the public surface.
+  private[sql] var nullableTypes: Option[Seq[Boolean]] = None
 
   /**
    * Returns true when the UDF can return a nullable value.
@@ -68,10 +73,20 @@ case class UserDefinedFunction protected[sql] (
    */
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
+    // TODO: make sure this class is only instantiated through `SparkUserDefinedFunction.create()`
+    // and `nullableTypes` is always set.
+    if (nullableTypes.isEmpty) {
+      nullableTypes = Some(ScalaReflection.getParameterTypeNullability(f))
+    }
+    if (inputTypes.isDefined) {
+      assert(inputTypes.get.length == nullableTypes.get.length)
+    }
+
     Column(ScalaUDF(
       f,
       dataType,
       exprs.map(_.expr),
+      nullableTypes.get,
       inputTypes.getOrElse(Nil),
       udfName = _nameOption,
       nullable = _nullable,
@@ -83,6 +98,7 @@ case class UserDefinedFunction protected[sql] (
     udf._nameOption = _nameOption
     udf._nullable = _nullable
     udf._deterministic = _deterministic
+    udf.nullableTypes = nullableTypes
     udf
   }
 
@@ -125,5 +141,24 @@ case class UserDefinedFunction protected[sql] (
       udf._deterministic = false
       udf
     }
+  }
+}
+
+// We have to use a name different than `UserDefinedFunction` here, to avoid breaking the binary
+// compatibility of the auto-generate UserDefinedFunction object.
+private[sql] object SparkUserDefinedFunction {
+
+  def create(
+      f: AnyRef,
+      dataType: DataType,
+      inputSchemas: Seq[Option[ScalaReflection.Schema]]): UserDefinedFunction = {
+    val inputTypes = if (inputSchemas.contains(None)) {
+      None
+    } else {
+      Some(inputSchemas.map(_.get.dataType))
+    }
+    val udf = new UserDefinedFunction(f, dataType, inputTypes)
+    udf.nullableTypes = Some(inputSchemas.map(_.map(_.nullable).getOrElse(true)))
+    udf
   }
 }
