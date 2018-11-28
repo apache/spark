@@ -122,6 +122,8 @@ class SimpleTextOutputWriter(path: String, dataSchema: StructType, context: Task
 
   private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
+  override def init(): Unit = {}
+
   override def write(row: InternalRow): Unit = {
     val serialized = row.toSeq(dataSchema).map { v =>
       if (v == null) "" else v.toString
