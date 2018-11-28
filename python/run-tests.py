@@ -250,7 +250,7 @@ def main():
             if python_implementation not in module.blacklisted_python_implementations:
                 for test_goal in module.python_test_goals:
                     heavy_tests = ['pyspark.streaming.tests', 'pyspark.mllib.tests',
-                                   'pyspark.tests', 'pyspark.sql.tests']
+                                   'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests']
                     if any(map(lambda prefix: test_goal.startswith(prefix), heavy_tests)):
                         priority = 0
                     else:

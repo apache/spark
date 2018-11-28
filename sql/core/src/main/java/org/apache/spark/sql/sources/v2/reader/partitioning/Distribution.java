@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.reader.partitioning;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.reader.PartitionReader;
 
 /**
@@ -37,5 +37,5 @@ import org.apache.spark.sql.sources.v2.reader.PartitionReader;
  *   <li>{@link ClusteredDistribution}</li>
  * </ul>
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface Distribution {}

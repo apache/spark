@@ -23,6 +23,7 @@ import java.util.{Calendar, Locale}
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
@@ -547,7 +548,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       JsonToStructs(schema, Map.empty, Literal.create(" ", StringType), gmtId),
-      null
+      InternalRow(null)
     )
   }
 
@@ -753,5 +754,15 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         JsonToStructs(schema, options, Literal.create(dateStr), gmtId),
         InternalRow(17836)) // number of days from 1970-01-01
     }
+  }
+
+  test("verify corrupt column") {
+    checkExceptionInExpression[AnalysisException](
+      JsonToStructs(
+        schema = StructType.fromDDL("i int, _unparsed boolean"),
+        options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
+        child = Literal.create("""{"i":"a"}"""),
+        timeZoneId = gmtId),
+      expectedErrMsg = "The field for corrupt records must be string type and nullable")
   }
 }

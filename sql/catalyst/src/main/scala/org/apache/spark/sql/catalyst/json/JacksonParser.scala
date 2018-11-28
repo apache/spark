@@ -367,6 +367,8 @@ class JacksonParser(
       values += fieldConverter.apply(parser)
     }
 
+    // The JSON map will never have null or duplicated map keys, it's safe to create a
+    // ArrayBasedMapData directly here.
     ArrayBasedMapData(keys.toArray, values.toArray)
   }
 
@@ -399,7 +401,7 @@ class JacksonParser(
         // a null first token is equivalent to testing for input.trim.isEmpty
         // but it works on any token stream and not just strings
         parser.nextToken() match {
-          case null => Nil
+          case null => throw new RuntimeException("Not found any JSON token")
           case _ => rootConverter.apply(parser) match {
             case null => throw new RuntimeException("Root converter returned null")
             case rows => rows
