@@ -28,6 +28,7 @@ import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.deploy.security.KafkaTokenUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
@@ -544,18 +545,30 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     }
 
     def setTokenJaasConfigIfNeeded(): ConfigUpdater = {
-      // There are multiple possibilities to log in:
-      // - Token is provided -> try to log in with scram module using kafka's dynamic JAAS
-      //   configuration.
-      // - Token not provided -> try to log in with JVM global security configuration
+      // There are multiple possibilities to log in and applied in the following order:
+      // - JVM global security provided -> try to log in with JVM global security configuration
       //   which can be configured for example with 'java.security.auth.login.config'.
       //   For this no additional parameter needed.
-      KafkaSecurityHelper.getTokenJaasParams(SparkEnv.get.conf).foreach { jaasParams =>
-        logInfo("Delegation token detected, using it for login.")
-        val mechanism = kafkaParams
-          .getOrElse(SaslConfigs.SASL_MECHANISM, SaslConfigs.DEFAULT_SASL_MECHANISM)
-        require(mechanism.startsWith("SCRAM"), "Delegation token works only with SCRAM mechanism.")
-        set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
+      // - Token is provided -> try to log in with scram module using kafka's dynamic JAAS
+      //   configuration.
+      // - Token not provided -> try to log in with kerberos module and ticket cache using kafka's
+      //   dynamic JAAS configuration.
+      if (KafkaTokenUtil.isGlobalJaasConfigurationProvided) {
+        logDebug("JVM global security configuration detected, using it for login.")
+      } else {
+        if (KafkaSecurityHelper.isTokenAvailable()) {
+          logDebug("Delegation token detected, using it for login.")
+          val jaasParams = KafkaSecurityHelper.getTokenJaasParams(SparkEnv.get.conf)
+          val mechanism = kafkaParams
+            .getOrElse(SaslConfigs.SASL_MECHANISM, SaslConfigs.DEFAULT_SASL_MECHANISM)
+          require(mechanism.startsWith("SCRAM"),
+            "Delegation token works only with SCRAM mechanism.")
+          set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
+        } else {
+          logDebug("Using ticket cache for login.")
+          val jaasParams = KafkaTokenUtil.getTicketCacheJaasParams(SparkEnv.get.conf)
+          set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
+        }
       }
       this
     }

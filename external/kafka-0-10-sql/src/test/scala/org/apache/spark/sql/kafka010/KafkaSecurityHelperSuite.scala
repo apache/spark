@@ -66,9 +66,14 @@ class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
     UserGroupInformation.setLoginUser(null)
   }
 
-  test("getTokenJaasParams without token should return None") {
-    val jaasParams = KafkaSecurityHelper.getTokenJaasParams(sparkConf)
-    assert(!jaasParams.isDefined)
+  test("isTokenAvailable without token should return false") {
+    assert(!KafkaSecurityHelper.isTokenAvailable())
+  }
+
+  test("isTokenAvailable with token should return true") {
+    addTokenToUGI
+
+    assert(KafkaSecurityHelper.isTokenAvailable())
   }
 
   test("getTokenJaasParams with token no service should throw exception") {
@@ -87,8 +92,9 @@ class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
 
     val jaasParams = KafkaSecurityHelper.getTokenJaasParams(sparkConf)
 
-    assert(jaasParams.get.contains("ScramLoginModule"))
-    assert(jaasParams.get.contains(tokenId))
-    assert(jaasParams.get.contains(tokenPassword))
+    assert(jaasParams.contains("ScramLoginModule required"))
+    assert(jaasParams.contains("tokenauth=true"))
+    assert(jaasParams.contains(tokenId))
+    assert(jaasParams.contains(tokenPassword))
   }
 }
