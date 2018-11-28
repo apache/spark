@@ -2648,7 +2648,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           "transform_values(" +
             "z,(k, v) -> map_from_arrays(ARRAY(1, 2, 3), " +
             "ARRAY('one', 'two', 'three'))[k] || '_' || CAST(v AS String))"),
-        Seq(Row(Map(1 -> "one_1.0", 2 -> "two_1.4", 3 -> "three_1.7"))))
+        Seq(Row(Map(1 -> "one_1.0", 2 -> "two_1.4", 3 ->"three_1.7"))))
 
       checkAnswer(
         dfExample4.selectExpr("transform_values(z, (k, v) -> k-v)"),
