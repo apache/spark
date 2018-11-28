@@ -486,7 +486,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       writer: Writer,
       verbose: Boolean,
       addSuffix: Boolean): Unit = {
-      generateTreeString(0, Nil, writer, verbose, "", addSuffix)
+    generateTreeString(0, Nil, writer, verbose, "", addSuffix)
   }
 
   /**
