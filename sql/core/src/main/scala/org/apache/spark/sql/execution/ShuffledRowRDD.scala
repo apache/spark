@@ -157,8 +157,8 @@ class ShuffledRowRDD(
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val shuffledRowPartition = split.asInstanceOf[ShuffledRowRDDPartition]
     val tempMetrics = context.taskMetrics().createTempShuffleReadMetrics()
-    // metrics here could be empty cause user can use ShuffledRowRDD directly,
-    // so we just use the tempMetrics created in TaskContext in this case.
+    // Wrap the tempMetrics with SQLShuffleMetricsReporter here to support
+    // shuffle read metrics in SQL.
     val sqlMetricsReporter = new SQLShuffleMetricsReporter(tempMetrics, metrics)
     // The range of pre-shuffle partitions that we are fetching at here is
     // [startPreShufflePartitionIndex, endPreShufflePartitionIndex - 1].
