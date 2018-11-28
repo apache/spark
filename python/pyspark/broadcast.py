@@ -139,7 +139,7 @@ class Broadcast(object):
         if not hasattr(self, "_value") and self._path is not None:
             # we only need to decrypt it here when encryption is enabled and
             # if its on the driver, since executor decryption is handled already
-            if self._sc._encryption_enabled:
+            if self._sc is not None and self._sc._encryption_enabled:
                 port, auth_secret = self._python_broadcast.setupDecryptionServer()
                 (decrypted_sock_file, _) = local_connect_and_auth(port, auth_secret)
                 self._python_broadcast.waitTillBroadcastDataSent()
