@@ -167,10 +167,6 @@ case class Alias(child: Expression, name: String)(
     }
   }
 
-  override def sameResult(other: Expression): Boolean = {
-    this.child.sameResult(other)
-  }
-
   def newInstance(): NamedExpression =
     Alias(child, name)(qualifier = qualifier, explicitMetadata = explicitMetadata)
 

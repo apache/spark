@@ -232,13 +232,6 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     }
   }
 
-  override def sameResult(other: Expression): Boolean = other match {
-    case HashPartitioning(exprs, _) => expressions.zip(exprs).forall {
-        case (l, r) => l.sameResult(r)
-      }
-    case _ => false
-  }
-
   /**
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
    * than numPartitions) based on hashing expressions.

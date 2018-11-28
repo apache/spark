@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -221,10 +221,8 @@ abstract class Expression extends TreeNode[Expression] {
    * same). It should not be used (and `semanticEquals` should be used instead) when comparing if 2
    * expressions are the same and one can replace the other.
    */
-  def sameResult(other: Expression): Boolean = other match {
-    case a: Alias => sameResult(a.child)
-    case _ => this.semanticEquals(other)
-  }
+  final def sameResult(other: Expression): Boolean =
+    CleanupAliases.trimAliases(this) semanticEquals CleanupAliases.trimAliases(other)
 
   /**
    * Returns a `hashCode` for the calculation performed by this expression. Unlike the standard
