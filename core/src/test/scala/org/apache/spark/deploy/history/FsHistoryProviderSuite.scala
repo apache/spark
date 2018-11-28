@@ -334,7 +334,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(!log2.exists())
   }
 
-  test("should not clean inprogress application with lastUpdated time less the maxTime") {
+  test("should not clean inprogress application with lastUpdated time less than maxTime") {
     val firstFileModifiedTime = TimeUnit.DAYS.toMillis(1)
     val secondFileModifiedTime = TimeUnit.DAYS.toMillis(6)
     val maxAge = TimeUnit.DAYS.toMillis(7)
