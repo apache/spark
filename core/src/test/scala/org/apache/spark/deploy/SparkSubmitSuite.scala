@@ -936,6 +936,25 @@ class SparkSubmitSuite
     }
   }
 
+  test("remove copies of application jar from classpath") {
+    val fs = File.separator
+    val sparkConf = new SparkConf(false)
+    val hadoopConf = new Configuration()
+    val secMgr = new SecurityManager(sparkConf)
+
+    val appJarName = "myApp.jar"
+    val jar1Name = "myJar1.jar"
+    val jar2Name = "myJar2.jar"
+    val userJar = s"file:/path${fs}to${fs}app${fs}jar$fs$appJarName"
+    val jars = s"file:/$jar1Name,file:/$appJarName,file:/$jar2Name"
+
+    val resolvedJars = DependencyUtils
+      .resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf, secMgr)
+
+    assert(!resolvedJars.contains(appJarName))
+    assert(resolvedJars.contains(jar1Name) && resolvedJars.contains(jar2Name))
+  }
+
   test("Avoid re-upload remote resources in yarn client mode") {
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)

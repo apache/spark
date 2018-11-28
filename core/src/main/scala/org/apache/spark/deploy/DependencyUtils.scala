@@ -60,11 +60,12 @@ private[deploy] object DependencyUtils {
       hadoopConf: Configuration,
       secMgr: SecurityManager): String = {
     val targetDir = Utils.createTempDir()
+    val userJarName = userJar.split(File.separatorChar).last
     Option(jars)
       .map {
         resolveGlobPaths(_, hadoopConf)
           .split(",")
-          .filterNot(_.contains(userJar.split("/").last))
+          .filterNot(_.contains(userJarName))
           .mkString(",")
       }
       .filterNot(_ == "")
