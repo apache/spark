@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.nio.charset.{Charset, UnsupportedCharsetException}
+import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
@@ -33,7 +33,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.log4j.{AppenderSkeleton, LogManager}
 import org.apache.log4j.spi.LoggingEvent
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -1858,5 +1858,132 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
       checkAnswer(df, Row(null, csv))
     }
+  }
+
+  test("encoding in multiLine mode") {
+    val df = spark.range(3).toDF()
+    Seq("UTF-8", "ISO-8859-1", "CP1251", "US-ASCII", "UTF-16BE", "UTF-32LE").foreach { encoding =>
+      Seq(true, false).foreach { header =>
+        withTempPath { path =>
+          df.write
+            .option("encoding", encoding)
+            .option("header", header)
+            .csv(path.getCanonicalPath)
+          val readback = spark.read
+            .option("multiLine", true)
+            .option("encoding", encoding)
+            .option("inferSchema", true)
+            .option("header", header)
+            .csv(path.getCanonicalPath)
+          checkAnswer(readback, df)
+        }
+      }
+    }
+  }
+
+  test("""Support line separator - default value \r, \r\n and \n""") {
+    val data = "\"a\",1\r\"c\",2\r\n\"d\",3\n"
+
+    withTempPath { path =>
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+      val df = spark.read.option("inferSchema", true).csv(path.getAbsolutePath)
+      val expectedSchema =
+        StructType(StructField("_c0", StringType) :: StructField("_c1", IntegerType) :: Nil)
+      checkAnswer(df, Seq(("a", 1), ("c", 2), ("d", 3)).toDF())
+      assert(df.schema === expectedSchema)
+    }
+  }
+
+  def testLineSeparator(lineSep: String, encoding: String, inferSchema: Boolean, id: Int): Unit = {
+    test(s"Support line separator in ${encoding} #${id}") {
+      // Read
+      val data =
+        s""""a",1$lineSep
+           |c,2$lineSep"
+           |d",3""".stripMargin
+      val dataWithTrailingLineSep = s"$data$lineSep"
+
+      Seq(data, dataWithTrailingLineSep).foreach { lines =>
+        withTempPath { path =>
+          Files.write(path.toPath, lines.getBytes(encoding))
+          val schema = StructType(StructField("_c0", StringType)
+            :: StructField("_c1", LongType) :: Nil)
+
+          val expected = Seq(("a", 1), ("\nc", 2), ("\nd", 3))
+            .toDF("_c0", "_c1")
+          Seq(false, true).foreach { multiLine =>
+            val reader = spark
+              .read
+              .option("lineSep", lineSep)
+              .option("multiLine", multiLine)
+              .option("encoding", encoding)
+            val df = if (inferSchema) {
+              reader.option("inferSchema", true).csv(path.getAbsolutePath)
+            } else {
+              reader.schema(schema).csv(path.getAbsolutePath)
+            }
+            checkAnswer(df, expected)
+          }
+        }
+      }
+
+      // Write
+      withTempPath { path =>
+        Seq("a", "b", "c").toDF("value").coalesce(1)
+          .write
+          .option("lineSep", lineSep)
+          .option("encoding", encoding)
+          .csv(path.getAbsolutePath)
+        val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+        val readBack = new String(Files.readAllBytes(partFile.toPath), encoding)
+        assert(
+          readBack === s"a${lineSep}b${lineSep}c${lineSep}")
+      }
+
+      // Roundtrip
+      withTempPath { path =>
+        val df = Seq("a", "b", "c").toDF()
+        df.write
+          .option("lineSep", lineSep)
+          .option("encoding", encoding)
+          .csv(path.getAbsolutePath)
+        val readBack = spark
+          .read
+          .option("lineSep", lineSep)
+          .option("encoding", encoding)
+          .csv(path.getAbsolutePath)
+        checkAnswer(df, readBack)
+      }
+    }
+  }
+
+  // scalastyle:off nonascii
+  List(
+    (0, "|", "UTF-8", false),
+    (1, "^", "UTF-16BE", true),
+    (2, ":", "ISO-8859-1", true),
+    (3, "!", "UTF-32LE", false),
+    (4, 0x1E.toChar.toString, "UTF-8", true),
+    (5, "아", "UTF-32BE", false),
+    (6, "у", "CP1251", true),
+    (8, "\r", "UTF-16LE", true),
+    (9, "\u000d", "UTF-32BE", false),
+    (10, "=", "US-ASCII", false),
+    (11, "$", "utf-32le", true)
+  ).foreach { case (testNum, sep, encoding, inferSchema) =>
+    testLineSeparator(sep, encoding, inferSchema, testNum)
+  }
+  // scalastyle:on nonascii
+
+  test("lineSep restrictions") {
+    val errMsg1 = intercept[IllegalArgumentException] {
+      spark.read.option("lineSep", "").csv(testFile(carsFile)).collect
+    }.getMessage
+    assert(errMsg1.contains("'lineSep' cannot be an empty string"))
+
+    val errMsg2 = intercept[IllegalArgumentException] {
+      spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect
+    }.getMessage
+    assert(errMsg2.contains("'lineSep' can contain only 1 character"))
   }
 }

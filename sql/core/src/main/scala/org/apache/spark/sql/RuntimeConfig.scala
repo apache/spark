@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.internal.SQLConf
-
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
@@ -29,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * @since 2.0.0
  */
-@InterfaceStability.Stable
+@Stable
 class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
 
   /**

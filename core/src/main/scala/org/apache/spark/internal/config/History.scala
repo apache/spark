@@ -29,6 +29,14 @@ private[spark] object History {
     .stringConf
     .createWithDefault(DEFAULT_LOG_DIR)
 
+  val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
+    .booleanConf
+    .createWithDefault(false)
+
+  val CLEANER_INTERVAL_S = ConfigBuilder("spark.history.fs.cleaner.interval")
+    .timeConf(TimeUnit.SECONDS)
+    .createWithDefaultString("1d")
+
   val MAX_LOG_AGE_S = ConfigBuilder("spark.history.fs.cleaner.maxAge")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("7d")
@@ -62,4 +70,13 @@ private[spark] object History {
         "parts of event log files. It can be disabled by setting this config to 0.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
+
+  val DRIVER_LOG_CLEANER_ENABLED = ConfigBuilder("spark.history.fs.driverlog.cleaner.enabled")
+    .fallbackConf(CLEANER_ENABLED)
+
+  val DRIVER_LOG_CLEANER_INTERVAL = ConfigBuilder("spark.history.fs.driverlog.cleaner.interval")
+    .fallbackConf(CLEANER_INTERVAL_S)
+
+  val MAX_DRIVER_LOG_AGE_S = ConfigBuilder("spark.history.fs.driverlog.cleaner.maxAge")
+    .fallbackConf(MAX_LOG_AGE_S)
 }

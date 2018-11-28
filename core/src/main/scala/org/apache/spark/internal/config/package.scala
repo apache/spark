@@ -49,6 +49,19 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
+  private[spark] val DRIVER_LOG_DFS_DIR =
+    ConfigBuilder("spark.driver.log.dfsDir").stringConf.createOptional
+
+  private[spark] val DRIVER_LOG_LAYOUT =
+    ConfigBuilder("spark.driver.log.layout")
+      .stringConf
+      .createOptional
+
+  private[spark] val DRIVER_LOG_PERSISTTODFS =
+    ConfigBuilder("spark.driver.log.persistToDfs.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
       .booleanConf
@@ -556,6 +569,12 @@ package object config {
       .doc("Value for HTTP Strict Transport Security Response Header")
       .stringConf
       .createOptional
+
+  private[spark] val UI_REQUEST_HEADER_SIZE =
+    ConfigBuilder("spark.ui.requestHeaderSize")
+      .doc("Value for HTTP request header size in bytes.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("8k")
 
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
     .doc("Class names of listeners to add to SparkContext during initialization.")
