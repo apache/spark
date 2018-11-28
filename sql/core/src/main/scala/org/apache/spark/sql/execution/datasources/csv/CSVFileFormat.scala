@@ -175,9 +175,10 @@ private[csv] class CsvOutputWriter(
     val gen = univocityGenerator.getOrElse {
       val charset = Charset.forName(params.charset)
       val os = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
-      new UnivocityGenerator(dataSchema, os, params)
+      val newGen = new UnivocityGenerator(dataSchema, os, params)
+      univocityGenerator = Some(newGen)
+      newGen
     }
-    univocityGenerator = Some(gen)
 
     gen.write(row)
   }
