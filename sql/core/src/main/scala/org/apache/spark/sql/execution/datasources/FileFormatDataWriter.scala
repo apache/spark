@@ -121,6 +121,7 @@ class SingleDirectoryDataWriter(
       path = currentPath,
       dataSchema = description.dataColumns.toStructType,
       context = taskAttemptContext)
+    currentWriter.init()
 
     statsTrackers.foreach(_.newFile(currentPath))
   }
@@ -237,6 +238,7 @@ class DynamicPartitionDataWriter(
       path = currentPath,
       dataSchema = description.dataColumns.toStructType,
       context = taskAttemptContext)
+    currentWriter.init()
 
     statsTrackers.foreach(_.newFile(currentPath))
   }

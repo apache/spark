@@ -37,6 +37,8 @@ private[parquet] class ParquetOutputWriter(path: String, context: TaskAttemptCon
     }.getRecordWriter(context)
   }
 
+  override def init(): Unit = {}
+
   override def write(row: InternalRow): Unit = recordWriter.write(null, row)
 
   override def close(): Unit = recordWriter.close(context)

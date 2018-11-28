@@ -1859,4 +1859,16 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       checkAnswer(df, Row(null, csv))
     }
   }
+
+  test("SPARK-26208: write and read empty data to csv file with header") {
+    withTempPath { path =>
+      val df1 = Seq.empty[(String, String)].toDF("x", "y")
+      df1.printSchema
+      df1.write.format("csv").option("header", true).save(path.getAbsolutePath)
+      val df2 = spark.read.format("csv").option("header", true).load(path.getAbsolutePath)
+      df2.printSchema
+      assert(df1.schema === df2.schema)
+      checkAnswer(df1, df2)
+    }
+  }
 }

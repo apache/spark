@@ -50,6 +50,8 @@ private[orc] class OrcOutputWriter(
     recordWriter
   }
 
+  override def init(): Unit = {}
+
   override def write(row: InternalRow): Unit = {
     recordWriter.write(NullWritable.get(), serializer.serialize(row))
   }

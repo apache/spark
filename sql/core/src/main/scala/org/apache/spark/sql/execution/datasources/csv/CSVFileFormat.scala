@@ -180,6 +180,12 @@ private[csv] class CsvOutputWriter(
 
   private val gen = new UnivocityGenerator(dataSchema, writer, params)
 
+  override def init(): Unit = {
+    if (params.headerFlag) {
+      gen.writeHeaders()
+    }
+  }
+
   override def write(row: InternalRow): Unit = gen.write(row)
 
   override def close(): Unit = gen.close()
