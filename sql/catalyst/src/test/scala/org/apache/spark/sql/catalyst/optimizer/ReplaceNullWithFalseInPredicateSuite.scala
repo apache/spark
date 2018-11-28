@@ -44,8 +44,15 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   private val anotherTestRelation = LocalRelation('d.int)
 
   test("replace null inside filter and join conditions") {
-    testFilter(originalCond = Literal(null), expectedCond = FalseLiteral)
-    testJoin(originalCond = Literal(null), expectedCond = FalseLiteral)
+    testFilter(originalCond = Literal(null, BooleanType), expectedCond = FalseLiteral)
+    testJoin(originalCond = Literal(null, BooleanType), expectedCond = FalseLiteral)
+  }
+
+  test("Not expected type - replaceNullWithFalse") {
+    val e = intercept[IllegalArgumentException] {
+      testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
+    }.getMessage
+    assert(e.contains("but got the type `int` in `CAST(NULL AS INT)"))
   }
 
   test("replace null in branches of If") {
