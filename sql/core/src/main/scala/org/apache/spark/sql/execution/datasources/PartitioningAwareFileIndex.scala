@@ -126,13 +126,14 @@ abstract class PartitioningAwareFileIndex(
     val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
     val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
       .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
-    val inferredPartitionSpec = PartitioningUtils.parsePartitions(
-      leafDirs,
-      typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
-      basePaths = basePaths,
-      timeZoneId = timeZoneId)
+
     userSpecifiedSchema match {
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
+        val inferredPartitionSpec = PartitioningUtils.parsePartitions(
+          leafDirs,
+          typeInference = false,
+          basePaths = basePaths,
+          timeZoneId = timeZoneId)
         val userPartitionSchema =
           combineInferredAndUserSpecifiedPartitionSchema(inferredPartitionSpec)
 
@@ -151,7 +152,11 @@ abstract class PartitioningAwareFileIndex(
           part.copy(values = castPartitionValuesToUserSchema(part.values))
         })
       case _ =>
-        inferredPartitionSpec
+        PartitioningUtils.parsePartitions(
+          leafDirs,
+          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
+          basePaths = basePaths,
+          timeZoneId = timeZoneId)
     }
   }
 
