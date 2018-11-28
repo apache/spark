@@ -1301,7 +1301,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
-                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
+                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
                   validationIndicatorCol=None)
         Sets params for Gradient Boosted Tree Classification.
         """
