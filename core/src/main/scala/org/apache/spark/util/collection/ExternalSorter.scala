@@ -727,9 +727,10 @@ private[spark] class ExternalSorter[K, V, C](
     spills.clear()
     forceSpillFiles.foreach(s => s.file.delete())
     forceSpillFiles.clear()
-    if (map != null || buffer != null) {
+    if (map != null || buffer != null || readingIterator != null) {
       map = null // So that the memory can be garbage-collected
       buffer = null // So that the memory can be garbage-collected
+      readingIterator = null // So that the memory can be garbage-collected
       releaseMemory()
     }
   }
