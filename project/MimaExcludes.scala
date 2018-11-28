@@ -34,8 +34,8 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
-  // Exclude rules for 3.0.x
-  lazy val v30excludes = v24excludes ++ Seq(
+  // Exclude rules for 2.5.x
+  lazy val v25excludes = v24excludes ++ Seq(
   )
 
   // Exclude rules for 2.4.x
@@ -1217,7 +1217,7 @@ object MimaExcludes {
   }
 
   def excludes(version: String) = version match {
-    case v if v.startsWith("3.0") => v30excludes
+    case v if v.startsWith("2.5") => v25excludes
     case v if v.startsWith("2.4") => v24excludes
     case v if v.startsWith("2.3") => v23excludes
     case v if v.startsWith("2.2") => v22excludes

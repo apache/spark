@@ -883,7 +883,7 @@ class DataFrame(object):
         >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
         33
 
-        .. versionchanged:: 3.0
+        .. versionchanged:: 2.5
            Added sampling by a column of :class:`Column`
         """
         if isinstance(col, basestring):

@@ -414,7 +414,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    +-----+---+
    * }}}
    *
-   * @since 3.0.0
+   * @since 2.5.0
    */
   def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame = {
     require(fractions.values.forall(p => p >= 0.0 && p <= 1.0),
@@ -437,7 +437,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @tparam T stratum type
    * @return a new `DataFrame` that represents the stratified sample
    *
-   * @since 3.0.0
+   * @since 2.5.0
    */
   def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
