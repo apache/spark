@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.IOException
+import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -178,6 +179,15 @@ object HiveAnalysis extends Rule[LogicalPlan] {
 case class RelationConversions(
     conf: SQLConf,
     sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
+  private def isConvertible(relation: HiveTableRelation): Boolean = {
+    isConvertible(relation.tableMeta)
+  }
+
+  private def isConvertible(tableMeta: CatalogTable): Boolean = {
+    val serde = tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    serde.contains("parquet") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
+      serde.contains("orc") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+  }
 
   private val metastoreCatalog = sessionCatalog.metastoreCatalog
 
@@ -187,14 +197,22 @@ case class RelationConversions(
       case InsertIntoTable(r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
         // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
-            !r.isPartitioned && metastoreCatalog.isConvertible(r) =>
+            !r.isPartitioned && isConvertible(r) =>
         InsertIntoTable(metastoreCatalog.convert(r), partition,
           query, overwrite, ifPartitionNotExists)
 
       // Read path
       case relation: HiveTableRelation
-          if DDLUtils.isHiveTable(relation.tableMeta) && metastoreCatalog.isConvertible(relation) =>
+          if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
         metastoreCatalog.convert(relation)
+
+      // CTAS
+      case CreateTable(tableDesc, mode, Some(query))
+          if DDLUtils.isHiveTable(tableDesc) && tableDesc.partitionColumnNames.isEmpty &&
+            isConvertible(tableDesc) =>
+        DDLUtils.checkDataColNames(tableDesc)
+        CreateHiveTableAsSelectWithDataSourceCommand(
+          tableDesc, query, query.output.map(_.name), mode)
     }
   }
 }

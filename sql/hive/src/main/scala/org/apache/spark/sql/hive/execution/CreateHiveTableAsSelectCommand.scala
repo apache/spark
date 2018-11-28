@@ -64,9 +64,6 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
       try {
         // Read back the metadata of the table which was created just now.
         val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
-        // For CTAS, there is no static partition values to insert.
-        val partition = createdTableMeta.partitionColumnNames.map(_ -> None).toMap
-
         val command = getDataWritingCommand(catalog, createdTableMeta, tableExists)
         command.run(sparkSession, child)
       } catch {
@@ -110,14 +107,14 @@ case class CreateHiveTableAsSelectCommand(
       catalog: SessionCatalog,
       tableDesc: CatalogTable,
       tableExists: Boolean): DataWritingCommand = {
-    if (!tableExists) {
+    if (tableExists) {
       InsertIntoHiveTable(
         tableDesc,
         Map.empty,
         query,
         overwrite = false,
         ifPartitionNotExists = false,
-        outputColumnNames = outputColumnNames).
+        outputColumnNames = outputColumnNames)
     } else {
       // For CTAS, there is no static partition values to insert.
       val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
@@ -169,7 +166,7 @@ case class CreateHiveTableAsSelectWithDataSourceCommand(
       hadoopRelation.fileFormat,
       hadoopRelation.options,
       query,
-      mode,
+      if (tableExists) mode else SaveMode.Overwrite,
       Some(tableDesc),
       Some(hadoopRelation.location),
       query.output.map(_.name))

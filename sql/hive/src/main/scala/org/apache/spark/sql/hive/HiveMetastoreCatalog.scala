@@ -117,16 +117,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
   }
 
-  def isConvertible(relation: HiveTableRelation): Boolean = {
-    isConvertible(relation.tableMeta)
-  }
-
-  def isConvertible(tableMeta: CatalogTable): Boolean = {
-    val serde = tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    serde.contains("parquet") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
-      serde.contains("orc") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_ORC)
-  }
-
   // Return true for Apache ORC and Hive ORC-related configuration names.
   // Note that Spark doesn't support configurations like `hive.merge.orcfile.stripe.level`.
   private def isOrcProperty(key: String) =
