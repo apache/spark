@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{LocalSparkSession, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
@@ -137,7 +138,9 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
         rowsRDD,
         new PartitionIdPassthrough(2),
         new UnsafeRowSerializer(2))
-    val shuffled = new ShuffledRowRDD(dependency)
+    val shuffled = new ShuffledRowRDD(
+      dependency,
+      SQLMetrics.getShuffleReadMetrics(spark.sparkContext))
     shuffled.count()
   }
 }
