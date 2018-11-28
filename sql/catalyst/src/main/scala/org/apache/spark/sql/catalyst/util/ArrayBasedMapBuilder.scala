@@ -31,11 +31,13 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
   assert(keyType != NullType, "map key cannot be null type.")
 
   private lazy val keyToIndex = keyType match {
-    case _: AtomicType | _: CalendarIntervalType => mutable.HashMap.empty[Any, Int]
+    // Binary type data is `byte[]`, which can't use `==` to check equality.
+    case _: AtomicType | _: CalendarIntervalType if !keyType.isInstanceOf[BinaryType] =>
+      new java.util.HashMap[Any, Int]()
     case _ =>
       // for complex types, use interpreted ordering to be able to compare unsafe data with safe
       // data, e.g. UnsafeRow vs GenericInternalRow.
-      mutable.TreeMap.empty[Any, Int](TypeUtils.getInterpretedOrdering(keyType))
+      new java.util.TreeMap[Any, Int](TypeUtils.getInterpretedOrdering(keyType))
   }
 
   // TODO: specialize it
@@ -50,14 +52,14 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       throw new RuntimeException("Cannot use null as map key.")
     }
 
-    val maybeExistingIdx = keyToIndex.get(key)
-    if (maybeExistingIdx.isDefined) {
-      // Overwrite the previous value, as the policy is last wins.
-      values(maybeExistingIdx.get) = value
-    } else {
+    val index = keyToIndex.getOrDefault(key, -1)
+    if (index == -1) {
       keyToIndex.put(key, values.length)
       keys.append(key)
       values.append(value)
+    } else {
+      // Overwrite the previous value, as the policy is last wins.
+      values(index) = value
     }
   }
 

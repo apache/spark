@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
-import org.apache.spark.sql.types.{ArrayType, IntegerType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType, StructType}
 import org.apache.spark.unsafe.Platform
 
 class ArrayBasedMapBuilderSuite extends SparkFunSuite {
@@ -50,6 +50,20 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite {
     val map = builder.build()
     assert(map.numElements() == 2)
     assert(ArrayBasedMapData.toScalaMap(map) == Map(1 -> 2, 2 -> 2))
+  }
+
+  test("binary type key") {
+    val builder = new ArrayBasedMapBuilder(BinaryType, IntegerType)
+    builder.put(Array(1.toByte), 1)
+    builder.put(Array(2.toByte), 2)
+    builder.put(Array(1.toByte), 3)
+    val map = builder.build()
+    assert(map.numElements() == 2)
+    val entries = ArrayBasedMapData.toScalaMap(map).iterator.toSeq
+    assert(entries(0)._1.asInstanceOf[Array[Byte]].toSeq == Seq(1))
+    assert(entries(0)._2 == 3)
+    assert(entries(1)._1.asInstanceOf[Array[Byte]].toSeq == Seq(2))
+    assert(entries(1)._2 == 2)
   }
 
   test("struct type key") {
