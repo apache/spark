@@ -80,7 +80,8 @@ class BroadcastTest(unittest.TestCase):
         self._test_broadcast_on_driver()
 
     def test_broadcast_value_driver_encryption(self):
-        self.self._test_broadcast_on_driver(("spark.io.encryption.enabled", "true"))
+        self._test_broadcast_on_driver(("spark.io.encryption.enabled", "true"))
+
 
 class BroadcastFrameProtocolTest(unittest.TestCase):
 
