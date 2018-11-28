@@ -1615,7 +1615,7 @@ object SQLConf {
     buildConf("spark.sql.execution.setCommandRejectsSparkConfs")
       .internal()
       .doc("If it is set to true, SET command will fail when the key is registered as " +
-        "an SparkConf entry.")
+        "a SparkConf entry.")
       .booleanConf
       .createWithDefault(true)
 }
