@@ -84,7 +84,7 @@ case class RowDataSourceScanExec(
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val tableIdentifier: Option[TableIdentifier])
-  extends DataSourceScanExec {
+  extends DataSourceScanExec with InputRDDCodegen {
 
   def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
 
@@ -104,30 +104,10 @@ case class RowDataSourceScanExec(
     }
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    rdd :: Nil
-  }
+  // Input can be InternalRow, has to be turned into UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = true
 
-  override protected def doProduce(ctx: CodegenContext): String = {
-    val numOutputRows = metricTerm(ctx, "numOutputRows")
-    // PhysicalRDD always just has one input
-    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];")
-    val exprRows = output.zipWithIndex.map{ case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable)
-    }
-    val row = ctx.freshName("row")
-    ctx.INPUT_ROW = row
-    ctx.currentVars = null
-    val columnsRowInput = exprRows.map(_.genCode(ctx))
-    s"""
-       |while ($input.hasNext()) {
-       |  InternalRow $row = (InternalRow) $input.next();
-       |  $numOutputRows.add(1);
-       |  ${consume(ctx, columnsRowInput).trim}
-       |  if (shouldStop()) return;
-       |}
-     """.stripMargin
-  }
+  override def inputRDD: RDD[InternalRow] = rdd
 
   override val metadata: Map[String, String] = {
     val markedFilters = for (filter <- filters) yield {
