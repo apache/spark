@@ -150,11 +150,14 @@ class TextOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  private var writer: Option[OutputStream] = None
+  private var outputStream: Option[OutputStream] = None
 
   override def write(row: InternalRow): Unit = {
-    val os = writer.getOrElse(CodecStreams.createOutputStream(context, new Path(path)))
-    writer = Some(os)
+    val os = outputStream.getOrElse{
+      val newStream = CodecStreams.createOutputStream(context, new Path(path))
+      outputStream = Some(newStream)
+      newStream
+    }
 
     if (!row.isNullAt(0)) {
       val utf8string = row.getUTF8String(0)
@@ -164,6 +167,6 @@ class TextOutputWriter(
   }
 
   override def close(): Unit = {
-    writer.map(_.close())
+    outputStream.map(_.close())
   }
 }
