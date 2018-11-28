@@ -35,9 +35,7 @@ import org.apache.spark.util.Utils
 
 private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
 
-  private val decimalParser = {
-    ExprUtils.getDecimalParser(SQLConf.get.legacyDecimalParsing, options.locale)
-  }
+  private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   /**
    * Infer the type of a collection of json records in three stages:

@@ -136,9 +136,7 @@ class JacksonParser(
     }
   }
 
-  private val decimalParser = {
-    ExprUtils.getDecimalParser(SQLConf.get.legacyDecimalParsing, options.locale)
-  }
+  private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`

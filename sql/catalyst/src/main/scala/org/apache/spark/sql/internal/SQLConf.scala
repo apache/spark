@@ -1610,13 +1610,6 @@ object SQLConf {
       """ "... N more fields" placeholder.""")
     .intConf
     .createWithDefault(25)
-
-  val LEGACY_DECIMAL_PARSING_ENABLED = buildConf("spark.sql.legacy.decimalParsing.enabled")
-    .doc("If it is set to false, it enables parsing decimals in locale specific formats. " +
-      "To switch back to previous behaviour when parsing was performed by java.math.BigDecimal " +
-      "and all commas were removed from the input, set the flag to true.")
-    .booleanConf
-    .createWithDefault(false)
 }
 
 /**
@@ -2036,8 +2029,6 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
-
-  def legacyDecimalParsing: Boolean = getConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

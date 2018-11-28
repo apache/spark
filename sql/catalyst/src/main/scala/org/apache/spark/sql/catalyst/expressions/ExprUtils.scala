@@ -87,8 +87,8 @@ object ExprUtils {
     }
   }
 
-  def getDecimalParser(useLegacyParser: Boolean, locale: Locale): String => java.math.BigDecimal = {
-    if (useLegacyParser) {
+  def getDecimalParser(locale: Locale): String => java.math.BigDecimal = {
+    if (locale == Locale.US) { // Special handling the default locale for backward compatibility
       (s: String) => new java.math.BigDecimal(s.replaceAll(",", ""))
     } else {
       val decimalFormat = new DecimalFormat("", new DecimalFormatSymbols(locale))

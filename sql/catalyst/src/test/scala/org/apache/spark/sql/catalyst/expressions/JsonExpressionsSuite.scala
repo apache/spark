@@ -788,21 +788,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         InternalRow(expected))
     }
 
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "false") {
-      Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
-    }
-
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
-      Seq("en-US", "ko-KR").foreach(checkDecimalParsing)
-    }
-
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
-      Seq("ru-RU").foreach { langTag =>
-        intercept[TestFailedException] {
-          checkDecimalParsing(langTag)
-        }
-      }
-    }
+    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
   }
 
   test("inferring the decimal type using locale") {
@@ -815,22 +801,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         expectedType)
     }
 
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "false") {
-      Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach {
+    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach {
         checkDecimalInfer(_, """struct<d:decimal(7,3)>""")
-      }
-    }
-
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
-      Seq("en-US", "ko-KR").foreach {
-        checkDecimalInfer(_, """struct<d:decimal(7,3)>""")
-      }
-    }
-
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
-      Seq("ru-RU").foreach {
-        checkDecimalInfer(_, """struct<d:string>""")
-      }
     }
   }
 }
