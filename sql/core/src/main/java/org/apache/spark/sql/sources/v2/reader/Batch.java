@@ -31,12 +31,13 @@ public interface Batch {
    * Returns a list of {@link InputPartition input partitions}. Each {@link InputPartition}
    * represents a data split that can be processed by one Spark task. The number of input
    * partitions returned here is the same as the number of RDD partitions this scan outputs.
-   *
-   * Note that, this may not be a full scan if the data source supports optimization like filter
-   * push-down. Implementations should check the status of {@link Scan} that creates this batch,
-   * and adjust the resulting {@link InputPartition input partitions}.
-   *
+   * <p>
+   * If the {@link Scan} supports filter pushdown, this Batch is likely configured with a filter
+   * and is responsible for creating splits for that filter, which is not a full scan.
+   * </p>
+   * <p>
    * This method will be called only once during a data source scan, to launch one Spark job.
+   * </p>
    */
   InputPartition[] planInputPartitions();
 

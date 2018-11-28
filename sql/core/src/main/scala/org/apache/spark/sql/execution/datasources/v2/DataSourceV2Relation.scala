@@ -22,7 +22,6 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
@@ -40,19 +39,17 @@ import org.apache.spark.sql.types.StructType
  * @param userSpecifiedSchema The user-specified schema for this scan.
  */
 case class DataSourceV2Relation(
+    // TODO: remove `source` when we finish API refactor for write.
     source: TableProvider,
     table: SupportsBatchRead,
     output: Seq[AttributeReference],
     options: Map[String, String],
-    tableIdent: Option[TableIdentifier] = None,
     userSpecifiedSchema: Option[StructType] = None)
   extends LeafNode with MultiInstanceRelation with NamedRelation with DataSourceV2StringFormat {
 
   import DataSourceV2Relation._
 
-  override def name: String = {
-    tableIdent.map(_.unquotedString).getOrElse(s"${source.name}:unknown")
-  }
+  override def name: String = table.name()
 
   override def pushedFilters: Seq[Expression] = Seq.empty
 
@@ -160,14 +157,12 @@ object DataSourceV2Relation {
       provider: TableProvider,
       table: SupportsBatchRead,
       options: Map[String, String],
-      tableIdent: Option[TableIdentifier] = None,
       userSpecifiedSchema: Option[StructType] = None): DataSourceV2Relation = {
     val output = table.schema().toAttributes
-    val ident = tableIdent.orElse(tableFromOptions(options))
-    DataSourceV2Relation(
-      provider, table, output, options, ident, userSpecifiedSchema)
+    DataSourceV2Relation(provider, table, output, options, userSpecifiedSchema)
   }
 
+  // TODO: remove this when we finish API refactor for write.
   def createRelationForWrite(
       source: DataSourceV2,
       options: Map[String, String]): DataSourceV2Relation = {
@@ -175,11 +170,5 @@ object DataSourceV2Relation {
     val dsOptions = new DataSourceOptions(options.asJava)
     val table = provider.getTable(dsOptions)
     create(provider, table.asInstanceOf[SupportsBatchRead], options)
-  }
-
-  private def tableFromOptions(options: Map[String, String]): Option[TableIdentifier] = {
-    options
-      .get(DataSourceOptions.TABLE_KEY)
-      .map(TableIdentifier(_, options.get(DataSourceOptions.DATABASE_KEY)))
   }
 }

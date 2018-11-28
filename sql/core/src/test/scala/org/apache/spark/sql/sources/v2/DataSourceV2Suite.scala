@@ -38,18 +38,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  private def getScanConfig(query: DataFrame): AdvancedScanBuilder = {
-    query.queryExecution.executedPlan.collect {
-      case d: DataSourceV2ScanExec =>
-        d.scan.asInstanceOf[AdvancedScanBuilder]
-    }.head
-  }
-
-  private def getJavaScanConfig(
-      query: DataFrame): JavaAdvancedDataSourceV2.AdvancedScanBuilder = {
-    query.queryExecution.executedPlan.collect {
-      case d: DataSourceV2ScanExec =>
-        d.scan.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedScanBuilder]
+  private def getScanNode(df: DataFrame): DataSourceV2ScanExec = {
+    df.queryExecution.executedPlan.collect {
+      case s: DataSourceV2ScanExec => s
     }.head
   }
 
@@ -72,53 +63,28 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
         val q1 = df.select('j)
         checkAnswer(q1, (0 until 10).map(i => Row(-i)))
-        if (cls == classOf[AdvancedDataSourceV2]) {
-          val config = getScanConfig(q1)
-          assert(config.filters.isEmpty)
-          assert(config.requiredSchema.fieldNames === Seq("j"))
-        } else {
-          val config = getJavaScanConfig(q1)
-          assert(config.filters.isEmpty)
-          assert(config.requiredSchema.fieldNames === Seq("j"))
-        }
+        val scan1 = getScanNode(q1)
+        assert(scan1.pushedFilters.isEmpty)
+        assert(scan1.output.map(_.name) === Seq("j"))
 
         val q2 = df.filter('i > 3)
         checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
-        if (cls == classOf[AdvancedDataSourceV2]) {
-          val config = getScanConfig(q2)
-          assert(config.filters.flatMap(_.references).toSet == Set("i"))
-          assert(config.requiredSchema.fieldNames === Seq("i", "j"))
-        } else {
-          val config = getJavaScanConfig(q2)
-          assert(config.filters.flatMap(_.references).toSet == Set("i"))
-          assert(config.requiredSchema.fieldNames === Seq("i", "j"))
-        }
+        val scan2 = getScanNode(q2)
+        assert(scan2.pushedFilters.flatMap(_.references).map(_.name).toSet == Set("i"))
+        assert(scan2.output.map(_.name) === Seq("i", "j"))
 
         val q3 = df.select('i).filter('i > 6)
         checkAnswer(q3, (7 until 10).map(i => Row(i)))
-        if (cls == classOf[AdvancedDataSourceV2]) {
-          val config = getScanConfig(q3)
-          assert(config.filters.flatMap(_.references).toSet == Set("i"))
-          assert(config.requiredSchema.fieldNames === Seq("i"))
-        } else {
-          val config = getJavaScanConfig(q3)
-          assert(config.filters.flatMap(_.references).toSet == Set("i"))
-          assert(config.requiredSchema.fieldNames === Seq("i"))
-        }
+        val scan3 = getScanNode(q3)
+        assert(scan3.pushedFilters.flatMap(_.references).map(_.name).toSet == Set("i"))
+        assert(scan3.output.map(_.name) === Seq("i"))
 
         val q4 = df.select('j).filter('j < -10)
         checkAnswer(q4, Nil)
-        if (cls == classOf[AdvancedDataSourceV2]) {
-          val config = getScanConfig(q4)
-          // 'j < 10 is not supported by the testing data source.
-          assert(config.filters.isEmpty)
-          assert(config.requiredSchema.fieldNames === Seq("j"))
-        } else {
-          val config = getJavaScanConfig(q4)
-          // 'j < 10 is not supported by the testing data source.
-          assert(config.filters.isEmpty)
-          assert(config.requiredSchema.fieldNames === Seq("j"))
-        }
+        val scan4 = getScanNode(q4)
+        // 'j < -10 is not supported by the testing data source.
+        assert(scan4.pushedFilters.isEmpty)
+        assert(scan4.output.map(_.name) === Seq("j"))
       }
     }
   }
@@ -279,26 +245,26 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
     val q1 = df.select('i + 1)
     checkAnswer(q1, (1 until 11).map(i => Row(i)))
-    val config1 = getScanConfig(q1)
-    assert(config1.requiredSchema.fieldNames === Seq("i"))
+    val scan1 = getScanNode(q1)
+    assert(scan1.output.map(_.name) === Seq("i"))
 
     val q2 = df.select(lit(1))
     checkAnswer(q2, (0 until 10).map(i => Row(1)))
-    val config2 = getScanConfig(q2)
-    assert(config2.requiredSchema.isEmpty)
+    val scan2 = getScanNode(q2)
+    assert(scan2.output.isEmpty)
 
     // 'j === 1 can't be pushed down, but we should still be able do column pruning
     val q3 = df.filter('j === -1).select('j * 2)
     checkAnswer(q3, Row(-2))
-    val config3 = getScanConfig(q3)
-    assert(config3.filters.isEmpty)
-    assert(config3.requiredSchema.fieldNames === Seq("j"))
+    val scan3 = getScanNode(q3)
+    assert(scan3.pushedFilters.isEmpty)
+    assert(scan3.output.map(_.name) === Seq("j"))
 
     // column pruning should work with other operators.
     val q4 = df.sort('i).limit(1).select('i + 1)
     checkAnswer(q4, Row(1))
-    val config4 = getScanConfig(q4)
-    assert(config4.requiredSchema.fieldNames === Seq("i"))
+    val scan4 = getScanNode(q4)
+    assert(scan4.output.map(_.name) === Seq("i"))
   }
 
   test("SPARK-23315: get output from canonicalized data source v2 related plans") {

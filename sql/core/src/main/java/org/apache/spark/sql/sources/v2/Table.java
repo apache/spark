@@ -26,14 +26,27 @@ import org.apache.spark.sql.types.StructType;
  * An interface representing a logical structured data set of a data source. For example, the
  * implementation can be a directory on the file system, a topic of Kafka, or a table in the
  * catalog, etc.
- *
+ * <p>
  * This interface can mixin the following interfaces to support different operations:
  * <ul>
  *   <li>{@link SupportsBatchRead}: this table can be read in batch queries.</li>
  * </ul>
+ * </p>
  */
 @Evolving
 public interface Table {
+
+  /**
+   * A name to identify this table.
+   * <p>
+   * By default this returns the class name of this implementation. Please override it to provide a
+   * meaningful name, like the database and table name from catalog, or the location of files for
+   * this table.
+   * </p>
+   */
+  default String name() {
+    return this.getClass().toString();
+  }
 
   /**
    * Returns the schema of this table.
@@ -43,9 +56,10 @@ public interface Table {
   /**
    * Returns a {@link ScanBuilder} which can be used to build a {@link Scan} later. Spark will call
    * this method for each data scanning query.
-   *
+   * <p>
    * The builder can take some query specific information to do operators pushdown, and keep these
    * information in the created {@link Scan}.
+   * </p>
    */
   ScanBuilder newScanBuilder(DataSourceOptions options);
 }

@@ -24,8 +24,9 @@ import org.apache.spark.sql.types.StructType;
 /**
  * The base interface for v2 data sources which don't have a real catalog. Implementations must
  * have a public, 0-arg constructor.
- *
+ * <p>
  * The major responsibility of this interface is to return a {@link Table} for read/write.
+ * </p>
  */
 @Evolving
 // TODO: do not extend `DataSourceV2`, after we finish the API refactor completely.
@@ -41,10 +42,10 @@ public interface TableProvider extends DataSourceV2 {
 
   /**
    * Return a {@link Table} instance to do read/write with user-specified schema and options.
-   *
+   * <p>
    * By default this method throws {@link UnsupportedOperationException}, implementations should
    * override this method to handle user-specified schema.
-   *
+   * </p>
    * @param options the user-specified options that can identify a table, e.g. file path, Kafka
    *                topic name, etc. It's an immutable case-insensitive string-to-string map.
    * @param schema the user-specified schema.

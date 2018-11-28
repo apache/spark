@@ -25,12 +25,13 @@ import org.apache.spark.sql.sources.v2.Table;
 /**
  * A logical representation of a data source scan. This interface is used to provide logical
  * information, like what the actual read schema is.
- *
+ * <p>
  * This logical representation is shared between batch scan, micro-batch streaming scan and
  * continuous streaming scan. Data sources must implement the corresponding methods in this
  * interface, to match what the table promises to support. For example, {@link #toBatch()} must be
  * implemented, if the {@link Table} that creates this {@link Scan} implements
  * {@link SupportsBatchRead}.
+ * </p>
  */
 @Evolving
 public interface Scan {
@@ -47,6 +48,6 @@ public interface Scan {
    * {@link Table} that creates this scan implements {@link SupportsBatchRead}.
    */
   default Batch toBatch() {
-    throw new UnsupportedOperationException("Do not support batch scan.");
+    throw new UnsupportedOperationException("Batch scans are not supported");
   }
 }

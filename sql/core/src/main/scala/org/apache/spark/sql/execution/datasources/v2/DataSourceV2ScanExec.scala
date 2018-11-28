@@ -34,26 +34,24 @@ case class DataSourceV2ScanExec(
     @transient source: DataSourceV2,
     @transient options: Map[String, String],
     @transient pushedFilters: Seq[Expression],
-    @transient scan: Scan,
-    @transient partitions: Array[InputPartition],
-    @transient readerFactory: PartitionReaderFactory)
+    @transient batch: Batch)
   extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
 
   override def simpleString: String = "ScanV2 " + metadataString
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: DataSourceV2StreamingScanExec =>
-      output == other.output && source.getClass == other.source.getClass &&
-        options == other.options
+    case other: DataSourceV2ScanExec => this.batch == other.batch
     case _ => false
   }
 
-  override def hashCode(): Int = {
-    Seq(output, source, options).hashCode()
-  }
+  override def hashCode(): Int = batch.hashCode()
 
-  override def outputPartitioning: physical.Partitioning = scan match {
+  private lazy val partitions = batch.planInputPartitions()
+
+  private lazy val readerFactory = batch.createReaderFactory()
+
+  override def outputPartitioning: physical.Partitioning = batch match {
     case _ if partitions.length == 1 =>
       SinglePartition
 
@@ -64,7 +62,7 @@ case class DataSourceV2ScanExec(
     case _ => super.outputPartitioning
   }
 
-  override val supportsBatch: Boolean = {
+  override def supportsBatch: Boolean = {
     require(partitions.forall(readerFactory.supportColumnarReads) ||
       !partitions.exists(readerFactory.supportColumnarReads),
       "Cannot mix row-based and columnar input partitions.")
