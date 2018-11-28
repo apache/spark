@@ -367,6 +367,8 @@ class JacksonParser(
       values += fieldConverter.apply(parser)
     }
 
+    // The JSON map will never have null or duplicated map keys, it's safe to create a
+    // ArrayBasedMapData directly here.
     ArrayBasedMapData(keys.toArray, values.toArray)
   }
 
