@@ -38,7 +38,8 @@ import org.apache.spark.util.Utils
  */
 class JacksonParser(
     schema: DataType,
-    val options: JSONOptions) extends Logging {
+    val options: JSONOptions,
+    allowArrayAsStructs: Boolean) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -84,7 +85,7 @@ class JacksonParser(
         // List([str_a_1,null])
         // List([str_a_2,null], [null,str_b_3])
         //
-      case START_ARRAY =>
+      case START_ARRAY if allowArrayAsStructs =>
         val array = convertArray(parser, elementConverter)
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.
@@ -93,6 +94,8 @@ class JacksonParser(
         } else {
           array.toArray[InternalRow](schema).toSeq
         }
+      case START_ARRAY =>
+        throw new RuntimeException("Parsing JSON arrays as structs is forbidden.")
     }
   }
 
@@ -396,7 +399,7 @@ class JacksonParser(
         // a null first token is equivalent to testing for input.trim.isEmpty
         // but it works on any token stream and not just strings
         parser.nextToken() match {
-          case null => Nil
+          case null => throw new RuntimeException("Not found any JSON token")
           case _ => rootConverter.apply(parser) match {
             case null => throw new RuntimeException("Root converter returned null")
             case rows => rows

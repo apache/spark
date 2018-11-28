@@ -272,6 +272,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         .replaceAll("Created By.*", s"Created By $notIncludedMsg")
         .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
         .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
+        .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
         .replaceAll("\\*\\(\\d+\\) ", "*"))  // remove the WholeStageCodegen codegenStageIds
 
       // If the output is not pre-sorted, sort it.

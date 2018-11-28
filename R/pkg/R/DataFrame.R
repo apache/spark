@@ -226,7 +226,9 @@ setMethod("showDF",
 
 #' show
 #'
-#' Print class and type information of a Spark object.
+#' If eager evaluation is enabled and the Spark object is a SparkDataFrame, evaluate the
+#' SparkDataFrame and print top rows of the SparkDataFrame, otherwise, print the class
+#' and type information of the Spark object.
 #'
 #' @param object a Spark object. Can be a SparkDataFrame, Column, GroupedData, WindowSpec.
 #'
@@ -244,11 +246,33 @@ setMethod("showDF",
 #' @note show(SparkDataFrame) since 1.4.0
 setMethod("show", "SparkDataFrame",
           function(object) {
-            cols <- lapply(dtypes(object), function(l) {
-              paste(l, collapse = ":")
-            })
-            s <- paste(cols, collapse = ", ")
-            cat(paste(class(object), "[", s, "]\n", sep = ""))
+            allConf <- sparkR.conf()
+            prop <- allConf[["spark.sql.repl.eagerEval.enabled"]]
+            if (!is.null(prop) && identical(prop, "true")) {
+              argsList <- list()
+              argsList$x <- object
+              prop <- allConf[["spark.sql.repl.eagerEval.maxNumRows"]]
+              if (!is.null(prop)) {
+                numRows <- as.integer(prop)
+                if (numRows > 0) {
+                  argsList$numRows <- numRows
+                }
+              }
+              prop <- allConf[["spark.sql.repl.eagerEval.truncate"]]
+              if (!is.null(prop)) {
+                truncate <- as.integer(prop)
+                if (truncate > 0) {
+                  argsList$truncate <- truncate
+                }
+              }
+              do.call(showDF, argsList)
+            } else {
+              cols <- lapply(dtypes(object), function(l) {
+                paste(l, collapse = ":")
+              })
+              s <- paste(cols, collapse = ", ")
+              cat(paste(class(object), "[", s, "]\n", sep = ""))
+            }
           })
 
 #' DataTypes
@@ -497,32 +521,6 @@ setMethod("createOrReplaceTempView",
               invisible(callJMethod(x@sdf, "createOrReplaceTempView", viewName))
           })
 
-#' (Deprecated) Register Temporary Table
-#'
-#' Registers a SparkDataFrame as a Temporary Table in the SparkSession
-#' @param x A SparkDataFrame
-#' @param tableName A character vector containing the name of the table
-#'
-#' @seealso \link{createOrReplaceTempView}
-#' @rdname registerTempTable-deprecated
-#' @name registerTempTable
-#' @aliases registerTempTable,SparkDataFrame,character-method
-#' @examples
-#'\dontrun{
-#' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' registerTempTable(df, "json_df")
-#' new_df <- sql("SELECT * FROM json_df")
-#'}
-#' @note registerTempTable since 1.4.0
-setMethod("registerTempTable",
-          signature(x = "SparkDataFrame", tableName = "character"),
-          function(x, tableName) {
-              .Deprecated("createOrReplaceTempView")
-              invisible(callJMethod(x@sdf, "createOrReplaceTempView", tableName))
-          })
-
 #' insertInto
 #'
 #' Insert the contents of a SparkDataFrame into a table registered in the current SparkSession.
@@ -769,6 +767,14 @@ setMethod("repartition",
 #'                      using \code{spark.sql.shuffle.partitions} as number of partitions.}
 #'}
 #'
+#' At least one partition-by expression must be specified.
+#' When no explicit sort order is specified, "ascending nulls first" is assumed.
+#'
+#' Note that due to performance reasons this method uses sampling to estimate the ranges.
+#' Hence, the output may not be consistent, since sampling can return different values.
+#' The sample size can be controlled by the config
+#' \code{spark.sql.execution.rangeExchange.sampleSizePerPartition}.
+#'
 #' @param x a SparkDataFrame.
 #' @param numPartitions the number of partitions to use.
 #' @param col the column by which the range partitioning will be performed.
@@ -932,7 +938,6 @@ setMethod("write.orc",
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' write.parquet(df, "/tmp/sparkr-tmp1/")
-#' saveAsParquetFile(df, "/tmp/sparkr-tmp2/")
 #'}
 #' @note write.parquet since 1.6.0
 setMethod("write.parquet",
@@ -941,17 +946,6 @@ setMethod("write.parquet",
             write <- callJMethod(x@sdf, "write")
             write <- setWriteOptions(write, mode = mode, ...)
             invisible(handledCallJMethod(write, "parquet", path))
-          })
-
-#' @rdname write.parquet
-#' @name saveAsParquetFile
-#' @aliases saveAsParquetFile,SparkDataFrame,character-method
-#' @note saveAsParquetFile since 1.4.0
-setMethod("saveAsParquetFile",
-          signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
-            .Deprecated("write.parquet")
-            write.parquet(x, path)
           })
 
 #' Save the content of SparkDataFrame in a text file at the specified path.
@@ -2738,7 +2732,10 @@ setMethod("union",
             dataFrame(unioned)
           })
 
-#' unionAll is deprecated - use union instead
+#' Return a new SparkDataFrame containing the union of rows
+#'
+#' This is an alias for `union`.
+#'
 #' @rdname union
 #' @name unionAll
 #' @aliases unionAll,SparkDataFrame,SparkDataFrame-method
@@ -2746,7 +2743,6 @@ setMethod("union",
 setMethod("unionAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
-            .Deprecated("union")
             union(x, y)
           })
 

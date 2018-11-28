@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * An interface for building the {@link ScanConfig}. Implementations can mixin those
  * SupportsPushDownXYZ interfaces to do operator pushdown, and keep the operator pushdown result in
  * the returned {@link ScanConfig}.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface ScanConfigBuilder {
   ScanConfig build();
 }

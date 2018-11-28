@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.{Calendar, Locale}
 
-import org.apache.spark.SparkFunSuite
+import org.scalatest.exceptions.TestFailedException
+
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
@@ -409,14 +413,18 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       JsonToStructs(schema, Map.empty, Literal(jsonData), gmtId),
-      null
+      InternalRow(null)
     )
 
-    // Other modes should still return `null`.
-    checkEvaluation(
-      JsonToStructs(schema, Map("mode" -> PermissiveMode.name), Literal(jsonData), gmtId),
-      null
-    )
+    val exception = intercept[TestFailedException] {
+      checkEvaluation(
+        JsonToStructs(schema, Map("mode" -> FailFastMode.name), Literal(jsonData), gmtId),
+        InternalRow(null)
+      )
+    }.getCause
+    assert(exception.isInstanceOf[SparkException])
+    assert(exception.getMessage.contains(
+      "Malformed records are detected in record parsing. Parse Mode: FAILFAST"))
   }
 
   test("from_json - input=array, schema=array, output=array") {
@@ -450,21 +458,23 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   test("from_json - input=array of single object, schema=struct, output=single row") {
     val input = """[{"a": 1}]"""
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    val output = InternalRow(1)
+    val output = InternalRow(null)
     checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
   }
 
-  test("from_json - input=array, schema=struct, output=null") {
+  test("from_json - input=array, schema=struct, output=single row") {
     val input = """[{"a": 1}, {"a": 2}]"""
-    val schema = StructType(StructField("a", IntegerType) :: Nil)
-    val output = null
-    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
+    val corrupted = "corrupted"
+    val schema = new StructType().add("a", IntegerType).add(corrupted, StringType)
+    val output = InternalRow(null, UTF8String.fromString(input))
+    val options = Map("columnNameOfCorruptRecord" -> corrupted)
+    checkEvaluation(JsonToStructs(schema, options, Literal(input), gmtId), output)
   }
 
-  test("from_json - input=empty array, schema=struct, output=null") {
+  test("from_json - input=empty array, schema=struct, output=single row with null") {
     val input = """[]"""
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    val output = null
+    val output = InternalRow(null)
     checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
   }
 
@@ -487,7 +497,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       JsonToStructs(schema, Map.empty, Literal(badJson), gmtId),
-      null)
+      InternalRow(null))
   }
 
   test("from_json with timestamp") {
@@ -538,7 +548,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       JsonToStructs(schema, Map.empty, Literal.create(" ", StringType), gmtId),
-      null
+      InternalRow(null)
     )
   }
 
@@ -728,5 +738,31 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       new SchemaOfJson(Literal.create("""{"col":01}"""),
         CreateMap(Seq(Literal.create("allowNumericLeadingZeros"), Literal.create("true")))),
       "struct<col:bigint>")
+  }
+
+  test("parse date with locale") {
+    Seq("en-US", "ru-RU").foreach { langTag =>
+      val locale = Locale.forLanguageTag(langTag)
+      val date = new SimpleDateFormat("yyyy-MM-dd").parse("2018-11-05")
+      val schema = new StructType().add("d", DateType)
+      val dateFormat = "MMM yyyy"
+      val sdf = new SimpleDateFormat(dateFormat, locale)
+      val dateStr = s"""{"d":"${sdf.format(date)}"}"""
+      val options = Map("dateFormat" -> dateFormat, "locale" -> langTag)
+
+      checkEvaluation(
+        JsonToStructs(schema, options, Literal.create(dateStr), gmtId),
+        InternalRow(17836)) // number of days from 1970-01-01
+    }
+  }
+
+  test("verify corrupt column") {
+    checkExceptionInExpression[AnalysisException](
+      JsonToStructs(
+        schema = StructType.fromDDL("i int, _unparsed boolean"),
+        options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
+        child = Literal.create("""{"i":"a"}"""),
+        timeZoneId = gmtId),
+      expectedErrMsg = "The field for corrupt records must be string type and nullable")
   }
 }

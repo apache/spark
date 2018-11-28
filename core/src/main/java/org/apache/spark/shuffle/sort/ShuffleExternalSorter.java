@@ -38,6 +38,7 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TooLargePageException;
 import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.FileSegment;
@@ -75,7 +76,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   private final TaskMemoryManager taskMemoryManager;
   private final BlockManager blockManager;
   private final TaskContext taskContext;
-  private final ShuffleWriteMetrics writeMetrics;
+  private final ShuffleWriteMetricsReporter writeMetrics;
 
   /**
    * Force this sorter to spill when there are this many elements in memory.
@@ -113,7 +114,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       int initialSize,
       int numPartitions,
       SparkConf conf,
-      ShuffleWriteMetrics writeMetrics) {
+      ShuffleWriteMetricsReporter writeMetrics) {
     super(memoryManager,
       (int) Math.min(PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, memoryManager.pageSizeBytes()),
       memoryManager.getTungstenMemoryMode());
@@ -144,7 +145,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    */
   private void writeSortedFile(boolean isLastFile) {
 
-    final ShuffleWriteMetrics writeMetricsToUse;
+    final ShuffleWriteMetricsReporter writeMetricsToUse;
 
     if (isLastFile) {
       // We're writing the final non-spill file, so we _do_ want to count this as shuffle bytes.
@@ -241,9 +242,14 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       //
       // Note that we intentionally ignore the value of `writeMetricsToUse.shuffleWriteTime()`.
       // Consistent with ExternalSorter, we do not count this IO towards shuffle write time.
-      // This means that this IO time is not accounted for anywhere; SPARK-3577 will fix this.
-      writeMetrics.incRecordsWritten(writeMetricsToUse.recordsWritten());
-      taskContext.taskMetrics().incDiskBytesSpilled(writeMetricsToUse.bytesWritten());
+      // SPARK-3577 tracks the spill time separately.
+
+      // This is guaranteed to be a ShuffleWriteMetrics based on the if check in the beginning
+      // of this method.
+      writeMetrics.incRecordsWritten(
+        ((ShuffleWriteMetrics)writeMetricsToUse).recordsWritten());
+      taskContext.taskMetrics().incDiskBytesSpilled(
+        ((ShuffleWriteMetrics)writeMetricsToUse).bytesWritten());
     }
   }
 

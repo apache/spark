@@ -467,7 +467,9 @@ class FetchFailureHidingRDD(
     } catch {
       case t: Throwable =>
         if (throwOOM) {
+          // scalastyle:off throwerror
           throw new OutOfMemoryError("OOM while handling another exception")
+          // scalastyle:on throwerror
         } else if (interrupt) {
           // make sure our test is setup correctly
           assert(TaskContext.get().asInstanceOf[TaskContextImpl].fetchFailed.isDefined)

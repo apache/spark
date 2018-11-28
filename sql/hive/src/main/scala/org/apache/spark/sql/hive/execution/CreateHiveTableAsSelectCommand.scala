@@ -86,9 +86,9 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
     tableExists: Boolean): DataWritingCommand
 
   override def argString: String = {
-    s"[Database:${tableDesc.database}}, " +
-      s"TableName: ${tableDesc.identifier.table}, " +
-      s"InsertIntoHiveTable]"
+    s"[Database:${tableDesc.database}, " +
+    s"TableName: ${tableDesc.identifier.table}, " +
+    s"InsertIntoHiveTable]"
   }
 }
 

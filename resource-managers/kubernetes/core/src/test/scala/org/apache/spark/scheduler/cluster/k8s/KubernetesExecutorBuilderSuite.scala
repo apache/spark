@@ -16,12 +16,15 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.PodBuilder
+import io.fabric8.kubernetes.api.model.{Config => _, _}
+import io.fabric8.kubernetes.client.KubernetesClient
+import org.mockito.Mockito.{mock, never, verify}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.deploy.k8s.submit.PodBuilderSuiteUtils
 
 class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val BASIC_STEP_TYPE = "basic"
@@ -73,7 +76,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
@@ -92,7 +94,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map("secret-name" -> "secret-key"),
       Map.empty,
       Nil,
-      Seq.empty[String],
       None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -106,6 +107,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     val volumeSpec = KubernetesVolumeSpec(
       "volume",
       "/tmp",
+      "",
       false,
       KubernetesHostPathVolumeConf("/checkpoint"))
     val conf = KubernetesConf(
@@ -120,7 +122,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       volumeSpec :: Nil,
-      Seq.empty[String],
       None)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -149,7 +150,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Some(HadoopConfSpec(Some("/var/hadoop-conf"), None)))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -177,7 +177,6 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       Some(HadoopConfSpec(None, Some("pre-defined-onfigMapName"))))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -192,5 +191,40 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     stepTypes.foreach { stepType =>
       assert(resolvedPod.pod.getMetadata.getLabels.get(stepType) === stepType)
     }
+  }
+
+  test("Starts with empty executor pod if template is not specified") {
+    val kubernetesClient = mock(classOf[KubernetesClient])
+    val executorBuilder = KubernetesExecutorBuilder.apply(kubernetesClient, new SparkConf())
+    verify(kubernetesClient, never()).pods()
+  }
+
+  test("Starts with executor template if specified") {
+    val kubernetesClient = PodBuilderSuiteUtils.loadingMockKubernetesClient()
+    val sparkConf = new SparkConf(false)
+      .set("spark.driver.host", "https://driver.host.com")
+      .set(Config.CONTAINER_IMAGE, "spark-executor:latest")
+      .set(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE, "template-file.yaml")
+    val kubernetesConf = KubernetesConf(
+      sparkConf,
+      KubernetesExecutorSpecificConf(
+        "executor-id", Some(new PodBuilder()
+          .withNewMetadata()
+          .withName("driver")
+          .endMetadata()
+          .build())),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Nil,
+      Option.empty)
+    val sparkPod = KubernetesExecutorBuilder
+      .apply(kubernetesClient, sparkConf)
+      .buildFromFeatures(kubernetesConf)
+    PodBuilderSuiteUtils.verifyPodWithSupportedFeatures(sparkPod)
   }
 }

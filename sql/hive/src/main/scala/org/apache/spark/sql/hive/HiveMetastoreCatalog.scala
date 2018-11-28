@@ -175,7 +175,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
     val lazyPruningEnabled = sparkSession.sqlContext.conf.manageFilesourcePartitions
     val tablePath = new Path(relation.tableMeta.location)
-    val fileFormat = fileFormatClass.newInstance()
+    val fileFormat = fileFormatClass.getConstructor().newInstance()
 
     val result = if (relation.isPartitioned) {
       val partitionSchema = relation.tableMeta.partitionSchema

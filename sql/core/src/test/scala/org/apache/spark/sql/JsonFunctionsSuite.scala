@@ -17,9 +17,14 @@
 
 package org.apache.spark.sql
 
+import java.text.SimpleDateFormat
+import java.util.Locale
+
 import collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -132,7 +137,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(from_json($"value", schema)),
-      Row(null) :: Nil)
+      Row(Row(null)) :: Nil)
   }
 
   test("from_json - json doesn't conform to the array type") {
@@ -393,7 +398,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
     val in = Seq("""{"a": [1, 2, 3]}""").toDS()
-    val out = in.select(from_json('value, schema_of_json(lit("""{"a": [1]}"""))) as "parsed")
+    val out = in.select(from_json('value, schema_of_json("""{"a": [1]}""")) as "parsed")
     val expected = StructType(StructField(
       "parsed",
       StructType(StructField(
@@ -546,5 +551,61 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
           from_json($"root", schema_of_json(lit(json))),
           Map("pretty" -> "true"))),
       Seq(Row(expected)))
+  }
+
+  test("from_json invalid json - check modes") {
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      val schema = new StructType()
+        .add("a", IntegerType)
+        .add("b", IntegerType)
+        .add("_unparsed", StringType)
+      val badRec = """{"a" 1, "b": 11}"""
+      val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
+
+      checkAnswer(
+        df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
+        Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
+
+      val exception1 = intercept[SparkException] {
+        df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
+      }.getMessage
+      assert(exception1.contains(
+        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+
+      val exception2 = intercept[SparkException] {
+        df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED")))
+          .collect()
+      }.getMessage
+      assert(exception2.contains(
+        "from_json() doesn't support the DROPMALFORMED mode. " +
+          "Acceptable modes are PERMISSIVE and FAILFAST."))
+    }
+  }
+
+  test("corrupt record column in the middle") {
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("_unparsed", StringType)
+      .add("b", IntegerType)
+    val badRec = """{"a" 1, "b": 11}"""
+    val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
+
+    checkAnswer(
+      df.select(from_json($"value", schema, Map("columnNameOfCorruptRecord" -> "_unparsed"))),
+      Row(Row(null, badRec, null)) :: Row(Row(2, null, 12)) :: Nil)
+  }
+
+  test("parse timestamps with locale") {
+    Seq("en-US", "ko-KR", "zh-CN", "ru-RU").foreach { langTag =>
+      val locale = Locale.forLanguageTag(langTag)
+      val ts = new SimpleDateFormat("dd/MM/yyyy HH:mm").parse("06/11/2018 18:00")
+      val timestampFormat = "dd MMM yyyy HH:mm"
+      val sdf = new SimpleDateFormat(timestampFormat, locale)
+      val input = Seq(s"""{"time": "${sdf.format(ts)}"}""").toDS()
+      val options = Map("timestampFormat" -> timestampFormat, "locale" -> langTag)
+      val df = input.select(from_json($"value", "time timestamp", options))
+
+      checkAnswer(df, Row(Row(java.sql.Timestamp.valueOf("2018-11-06 18:00:00.0"))))
+    }
   }
 }

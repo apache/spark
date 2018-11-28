@@ -111,7 +111,7 @@ private[sql] object SQLUtils extends Logging {
   private[this] def doConversion(data: Object, dataType: DataType): Object = {
     data match {
       case d: java.lang.Double if dataType == FloatType =>
-        new java.lang.Float(d)
+        java.lang.Float.valueOf(d.toFloat)
       // Scala Map is the only allowed external type of map type in Row.
       case m: java.util.Map[_, _] => m.asScala
       case _ => data

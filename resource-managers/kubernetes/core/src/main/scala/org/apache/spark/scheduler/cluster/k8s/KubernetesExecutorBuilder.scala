@@ -16,7 +16,12 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesRoleSpecificConf, SparkPod}
+import java.io.File
+
+import io.fabric8.kubernetes.client.KubernetesClient
+
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features._
 
@@ -35,19 +40,20 @@ private[spark] class KubernetesExecutorBuilder(
       new LocalDirsFeatureStep(_),
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
-    new MountVolumesFeatureStep(_),
+      new MountVolumesFeatureStep(_),
     provideHadoopConfStep: (
       KubernetesConf[KubernetesExecutorSpecificConf]
-        => HadoopConfExecutorFeatureStep) =
-    new HadoopConfExecutorFeatureStep(_),
+      => HadoopConfExecutorFeatureStep) =
+      new HadoopConfExecutorFeatureStep(_),
     provideKerberosConfStep: (
       KubernetesConf[KubernetesExecutorSpecificConf]
-        => KerberosConfExecutorFeatureStep) =
-    new KerberosConfExecutorFeatureStep(_),
+      => KerberosConfExecutorFeatureStep) =
+      new KerberosConfExecutorFeatureStep(_),
     provideHadoopSparkUserStep: (
       KubernetesConf[KubernetesExecutorSpecificConf]
-        => HadoopSparkUserExecutorFeatureStep) =
-    new HadoopSparkUserExecutorFeatureStep(_)) {
+      => HadoopSparkUserExecutorFeatureStep) =
+      new HadoopSparkUserExecutorFeatureStep(_),
+    provideInitialPod: () => SparkPod = () => SparkPod.initialPod()) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
@@ -85,10 +91,24 @@ private[spark] class KubernetesExecutorBuilder(
       volumesFeature ++
       maybeHadoopConfFeatureSteps
 
-    var executorPod = SparkPod.initialPod()
+    var executorPod = provideInitialPod()
     for (feature <- allFeatures) {
       executorPod = feature.configurePod(executorPod)
     }
     executorPod
+  }
+}
+
+private[spark] object KubernetesExecutorBuilder {
+  def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesExecutorBuilder = {
+    conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+      .map(new File(_))
+      .map(file => new KubernetesExecutorBuilder(provideInitialPod = () =>
+          KubernetesUtils.loadPodFromTemplate(
+            kubernetesClient,
+            file,
+            conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
+      ))
+      .getOrElse(new KubernetesExecutorBuilder())
   }
 }

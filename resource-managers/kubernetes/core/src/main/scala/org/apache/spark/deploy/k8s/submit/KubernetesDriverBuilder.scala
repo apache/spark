@@ -16,9 +16,13 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
+import java.io.File
+
+import io.fabric8.kubernetes.client.KubernetesClient
+
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.k8s.{Config, KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.features._
-import org.apache.spark.deploy.k8s.features.bindings.{JavaDriverFeatureStep, PythonDriverFeatureStep, RDriverFeatureStep}
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -40,22 +44,18 @@ private[spark] class KubernetesDriverBuilder(
     provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-    providePythonStep: (
+    provideDriverCommandStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
-      => PythonDriverFeatureStep) =
-      new PythonDriverFeatureStep(_),
-    provideRStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => RDriverFeatureStep) =
-    new RDriverFeatureStep(_),
-    provideJavaStep: (
-      KubernetesConf[KubernetesDriverSpecificConf]
-        => JavaDriverFeatureStep) =
-    new JavaDriverFeatureStep(_),
+      => DriverCommandFeatureStep) =
+      new DriverCommandFeatureStep(_),
     provideHadoopGlobalStep: (
       KubernetesConf[KubernetesDriverSpecificConf]
         => KerberosConfDriverFeatureStep) =
-    new KerberosConfDriverFeatureStep(_))  {
+    new KerberosConfDriverFeatureStep(_),
+    providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => PodTemplateConfigMapStep) =
+    new PodTemplateConfigMapStep(_),
+    provideInitialPod: () => SparkPod = () => SparkPod.initialPod()) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
@@ -74,26 +74,26 @@ private[spark] class KubernetesDriverBuilder(
     val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
       Seq(provideVolumesStep(kubernetesConf))
     } else Nil
+    val podTemplateFeature = if (
+      kubernetesConf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined) {
+      Seq(providePodTemplateConfigMapStep(kubernetesConf))
+    } else Nil
 
-    val bindingsStep = kubernetesConf.roleSpecificConf.mainAppResource.map {
-        case JavaMainAppResource(_) =>
-          provideJavaStep(kubernetesConf)
-        case PythonMainAppResource(_) =>
-          providePythonStep(kubernetesConf)
-        case RMainAppResource(_) =>
-          provideRStep(kubernetesConf)}
-      .getOrElse(provideJavaStep(kubernetesConf))
+    val driverCommandStep = provideDriverCommandStep(kubernetesConf)
 
     val maybeHadoopConfigStep =
       kubernetesConf.hadoopConfSpec.map { _ =>
-          provideHadoopGlobalStep(kubernetesConf)}
+        provideHadoopGlobalStep(kubernetesConf)}
 
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
-      (baseFeatures :+ bindingsStep) ++
+      baseFeatures ++ Seq(driverCommandStep) ++
         secretFeature ++ envSecretFeature ++ volumesFeature ++
-        maybeHadoopConfigStep.toSeq
+        maybeHadoopConfigStep.toSeq ++ podTemplateFeature
 
-    var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
+    var spec = KubernetesDriverSpec(
+      provideInitialPod(),
+      driverKubernetesResources = Seq.empty,
+      kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
       val configuredPod = feature.configurePod(spec.pod)
       val addedSystemProperties = feature.getAdditionalPodSystemProperties()
@@ -104,5 +104,19 @@ private[spark] class KubernetesDriverBuilder(
         spec.systemProperties ++ addedSystemProperties)
     }
     spec
+  }
+}
+
+private[spark] object KubernetesDriverBuilder {
+  def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesDriverBuilder = {
+    conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
+      .map(new File(_))
+      .map(file => new KubernetesDriverBuilder(provideInitialPod = () =>
+        KubernetesUtils.loadPodFromTemplate(
+          kubernetesClient,
+          file,
+          conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME))
+      ))
+      .getOrElse(new KubernetesDriverBuilder())
   }
 }

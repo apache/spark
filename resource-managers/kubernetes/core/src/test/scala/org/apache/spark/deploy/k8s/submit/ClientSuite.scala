@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.submit
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
-import io.fabric8.kubernetes.client.dsl.{MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
+import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{doReturn, verify, when}
 import org.scalatest.BeforeAndAfter
@@ -133,7 +133,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     sparkConf = new SparkConf(false)
     kubernetesConf = KubernetesConf[KubernetesDriverSpecificConf](
       sparkConf,
-      KubernetesDriverSpecificConf(None, MAIN_CLASS, APP_NAME, APP_ARGS),
+      KubernetesDriverSpecificConf(JavaMainAppResource(None), MAIN_CLASS, APP_NAME, APP_ARGS),
       KUBERNETES_RESOURCE_PREFIX,
       APP_ID,
       Map.empty,
@@ -142,7 +142,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       Map.empty,
       Map.empty,
       Nil,
-      Seq.empty[String],
       hadoopConfSpec = None)
     when(driverBuilder.buildFromFeatures(kubernetesConf)).thenReturn(BUILT_KUBERNETES_SPEC)
     when(kubernetesClient.pods()).thenReturn(podOperations)

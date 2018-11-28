@@ -266,6 +266,39 @@ of the most common options to set are:
     Only has effect in Spark standalone mode or Mesos cluster deploy mode.
   </td>
 </tr>
+<tr>
+  <td><code>spark.driver.log.dfsDir</code></td>
+  <td>(none)</td>
+  <td>
+    Base directory in which Spark driver logs are synced, if <code>spark.driver.log.persistToDfs.enabled</code>
+    is true. Within this base directory, each application logs the driver logs to an application specific file.
+    Users may want to set this to a unified location like an HDFS directory so driver log files can be persisted
+    for later usage. This directory should allow any Spark user to read/write files and the Spark History Server
+    user to delete files. Additionally, older logs from this directory are cleaned by the
+    <a href="monitoring.html#spark-history-server-configuration-options">Spark History Server</a> if
+    <code>spark.history.fs.driverlog.cleaner.enabled</code> is true and, if they are older than max age configured
+    by setting <code>spark.history.fs.driverlog.cleaner.maxAge</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.log.persistToDfs.enabled</code></td>
+  <td>false</td>
+  <td>
+    If true, spark application running in client mode will write driver logs to a persistent storage, configured
+    in <code>spark.driver.log.dfsDir</code>. If <code>spark.driver.log.dfsDir</code> is not configured, driver logs
+    will not be persisted. Additionally, enable the cleaner by setting <code>spark.history.fs.driverlog.cleaner.enabled</code>
+    to true in <a href="monitoring.html#spark-history-server-configuration-options">Spark History Server</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.log.layout</code></td>
+  <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n</td>
+  <td>
+    The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If this is not configured,
+    it uses the layout for the first appender defined in log4j.properties. If that is also not configured, driver logs
+    use the default layout.
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
@@ -445,7 +478,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The directory which is used to dump the profile result before driver exiting.
     The results will be dumped as separated file for each RDD. They can be loaded
-    by ptats.Stats(). If this is specified, the profile result will not be displayed
+    by <code>pstats.Stats()</code>. If this is specified, the profile result will not be displayed
     automatically.
   </td>
 </tr>
@@ -762,6 +795,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.eventLog.allowErasureCoding</code></td>
+  <td>false</td>
+  <td>
+    Whether to allow event logs to use erasure coding, or turn erasure coding off, regardless of
+    filesystem defaults.  On HDFS, erasure coded files will not update as quickly as regular
+    replicated files, so the application updates will take longer to appear in the History Server.
+    Note that even if this is true, Spark will still not force the file to use erasure coding, it
+    will simply use filesystem defaults.
+  </td>
+</tr>
+<tr>
   <td><code>spark.eventLog.dir</code></td>
   <td>file:///tmp/spark-events</td>
   <td>
@@ -928,6 +972,14 @@ Apart from these, the following properties are also available, and may be useful
     <br /><code>spark.com.test.filter1.param.name1=foo</code>
     <br /><code>spark.com.test.filter1.param.name2=bar</code>
   </td>
+</tr>
+<tr>
+  <td><code>spark.ui.requestHeaderSize</code></td>
+  <td>8k</td>
+  <td>
+    The maximum allowed size for a HTTP request header, in bytes unless otherwise specified.
+    This setting applies for the Spark History Server too.
+  <td>
 </tr>
 </table>
 
@@ -1597,6 +1649,14 @@ Apart from these, the following properties are also available, and may be useful
     Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
     value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
     driver using more memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.blacklist.unschedulableTaskSetTimeout</code></td>
+  <td>120s</td>
+  <td>
+    The timeout in seconds to wait to acquire a new executor and schedule a task before aborting a
+    TaskSet which is unschedulable because of being completely blacklisted.
   </td>
 </tr>
 <tr>

@@ -28,7 +28,7 @@ import org.apache.spark.metrics.ExecutorMetricType
 @DeveloperApi
 class ExecutorMetrics private[spark] extends Serializable {
 
-  // Metrics are indexed by MetricGetter.values
+  // Metrics are indexed by ExecutorMetricType.values
   private val metrics = new Array[Long](ExecutorMetricType.values.length)
 
   // the first element is initialized to -1, indicating that the values for the array
