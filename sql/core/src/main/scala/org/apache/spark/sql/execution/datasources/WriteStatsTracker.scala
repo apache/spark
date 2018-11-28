@@ -32,10 +32,6 @@ trait WriteTaskStats extends Serializable
  * A trait for classes that are capable of collecting statistics on data that's being processed by
  * a single write task in [[FileFormatWriter]] - i.e. there should be one instance per executor.
  *
- * This trait is coupled with the way [[FileFormatWriter]] works, in the sense that its methods
- * will be called according to how tuples are being written out to disk, namely in sorted order
- * according to partitionValue(s), then bucketId.
- *
  * As such, a typical call scenario is:
  *
  * newPartition -> newBucket -> newFile -> newRow -.
@@ -71,7 +67,6 @@ trait WriteTaskStatsTracker {
 
   /**
    * Process the fact that a new row to update the tracked statistics accordingly.
-   * The row will be written to the most recently witnessed file (via `newFile`).
    * @note Keep in mind that any overhead here is per-row, obviously,
    *       so implementations should be as lightweight as possible.
    * @param row Current data row to be processed.

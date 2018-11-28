@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.FileNotFoundException
 
+import scala.collection.mutable
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -54,7 +56,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   private[this] var numBytes: Long = 0L
   private[this] var numRows: Long = 0L
 
-  private[this] var curFile: Option[String] = None
+  private[this] val allFiles = mutable.HashSet[String]()
 
   /**
    * Get the size of the file expected to have been written by a worker.
@@ -84,19 +86,18 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   }
 
   override def newFile(filePath: String): Unit = {
-    statCurrentFile()
-    curFile = Some(filePath)
+    allFiles.add(filePath)
     submittedFiles += 1
   }
 
-  private def statCurrentFile(): Unit = {
-    curFile.foreach { path =>
+  private def statAllFiles(): Unit = {
+    allFiles.foreach { path =>
       getFileSize(path).foreach { len =>
         numBytes += len
         numFiles += 1
       }
-      curFile = None
     }
+    allFiles.clear()
   }
 
   override def newRow(row: InternalRow): Unit = {
@@ -104,7 +105,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   }
 
   override def getFinalStats(): WriteTaskStats = {
-    statCurrentFile()
+    statAllFiles()
 
     // Reports bytesWritten and recordsWritten to the Spark output metrics.
     Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>

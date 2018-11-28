@@ -1639,6 +1639,12 @@ object SQLConf {
       "java.time.* packages are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
+
+  val MAX_HASH_BASED_OUTPUT_WRITERS = buildConf("spark.sql.maxHashBasedOutputWriters")
+    .doc("Maximum number of output writers when doing hash-based write. " +
+      "If writers exceeding this limit, executor will fall back to sort-based write.")
+    .intConf
+    .createWithDefault(200)
 }
 
 /**
@@ -2065,6 +2071,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
   def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
+
+  def maxHashBasedOutputWriters: Int = getConf(SQLConf.MAX_HASH_BASED_OUTPUT_WRITERS)
 
   /** ********************** SQLConf functionality methods ************ */
 

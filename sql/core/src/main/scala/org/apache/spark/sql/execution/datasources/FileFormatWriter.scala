@@ -36,7 +36,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.{SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
@@ -102,6 +103,14 @@ object FileFormatWriter extends Logging {
     val outputWriterFactory =
       fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
 
+    // Create ordering expressions on partition, bucket id, and sort columns,
+    // it will be used to sort input rows when falling back from hash-based write
+    // to sort-based one.
+    val orderingExprWithPartitionsAndBuckets =
+      (partitionColumns ++ bucketIdExpression ++ sortColumns)
+        .map(SortOrder(_, Ascending))
+        .map(BindReferences.bindReference(_, outputSpec.outputColumns))
+
     val description = new WriteJobDescription(
       uuid = UUID.randomUUID().toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
@@ -116,11 +125,14 @@ object FileFormatWriter extends Logging {
         .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
       timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
         .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone),
-      statsTrackers = statsTrackers
+      statsTrackers = statsTrackers,
+      maxHashBasedOutputWriters = sparkSession.sessionState.conf.maxHashBasedOutputWriters,
+      enableRadixSort = sparkSession.sessionState.conf.enableRadixSort,
+      sortOrderWithPartitionsAndBuckets = orderingExprWithPartitionsAndBuckets
     )
 
-    // We should first sort by partition columns, then bucket id, and finally sorting columns.
-    val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
+    // We should sort by sorting columns.
+    val requiredOrdering = sortColumns
     // the sort order doesn't matter
     val actualOrdering = plan.outputOrdering.map(_.child)
     val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
@@ -238,8 +250,23 @@ object FileFormatWriter extends Logging {
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Execute the task to write rows out and commit the task.
-        while (iterator.hasNext) {
-          dataWriter.write(iterator.next())
+        var switchToSortBasedWrite = false
+        var iter = iterator
+        while (iter.hasNext) {
+          // In case of too many output writers being opened, falling back from
+          // hash-based write to sort-based write.
+          if (!switchToSortBasedWrite &&
+              dataWriter.getNumOfOutputWriters > description.maxHashBasedOutputWriters &&
+              dataWriter.isInstanceOf[DynamicPartitionDataWriter]) {
+            switchToSortBasedWrite = true
+            val sorter = createSorter(
+              description.sortOrderWithPartitionsAndBuckets,
+              description.allColumns,
+              description.enableRadixSort)
+            iter = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
+            dataWriter.switchToSortBasedWrite()
+          }
+          dataWriter.write(iter.next())
         }
         dataWriter.commit()
       })(catchBlock = {
@@ -280,5 +307,41 @@ object FileFormatWriter extends Logging {
     statsTrackers.zip(statsPerTracker).foreach {
       case (statsTracker, stats) => statsTracker.processStats(stats)
     }
+  }
+
+  /**
+   * Create a sorter for input rows before doing sort-based write.
+   */
+  private def createSorter(
+      sortOrder: Seq[SortOrder],
+      output: Seq[Attribute],
+      enableRadixSort: Boolean): UnsafeExternalRowSorter = {
+    val ordering = codegen.GenerateOrdering.generate(sortOrder, output)
+
+    // The comparator for comparing prefix
+    val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
+    val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+
+    val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
+      SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
+
+    // The generator for prefix
+    val prefixExpr = SortPrefix(boundSortExpression)
+    val prefixProjection = UnsafeProjection.create(Seq(prefixExpr))
+    val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
+      private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+      override def computePrefix(row: InternalRow):
+      UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+        val prefix = prefixProjection.apply(row)
+        result.isNull = prefix.isNullAt(0)
+        result.value = if (result.isNull) prefixExpr.nullValue else prefix.getLong(0)
+        result
+      }
+    }
+
+    val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
+    val schema = StructType.fromAttributes(output)
+    UnsafeExternalRowSorter.create(
+      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
   }
 }

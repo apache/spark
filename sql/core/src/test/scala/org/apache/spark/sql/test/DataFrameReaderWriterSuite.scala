@@ -881,6 +881,42 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
+  test("Insert overwrite table command should have correct output: hash/sort-based write") {
+    withTable("tbl", "tbl2") {
+      val df = spark.range(20)
+        .map(_ => {
+          val n = scala.util.Random.nextInt
+          (n, n.toInt, n.toInt)
+        })
+        .toDF("col1", "col2", "col3")
+      df.write.format("parquet").saveAsTable("tbl")
+      spark.sql("CREATE TABLE tbl2(COL1 long, COL2 int, COL3 int) USING parquet PARTITIONED " +
+        "BY (COL2) CLUSTERED BY (COL3) INTO 3 BUCKETS")
+      val queryToInsertTable = "INSERT OVERWRITE TABLE tbl2 SELECT COL1, COL2, COL3 FROM tbl"
+
+      // Verify output with hash-based write
+      withSQLConf(SQLConf.MAX_HASH_BASED_OUTPUT_WRITERS.key -> "200") {
+        spark.sql(queryToInsertTable)
+        checkAnswer(spark.table("tbl2").orderBy("COL1"),
+          spark.table("tbl").orderBy("col1"))
+      }
+
+      // Verify output with sort-based write
+      withSQLConf(SQLConf.MAX_HASH_BASED_OUTPUT_WRITERS.key -> "-1") {
+        spark.sql(queryToInsertTable)
+        checkAnswer(spark.table("tbl2").orderBy("COL1"),
+          spark.table("tbl").orderBy("col1"))
+      }
+
+      // Verify output with falling back from hash-based to sort-based write
+      withSQLConf(SQLConf.MAX_HASH_BASED_OUTPUT_WRITERS.key -> "3") {
+        spark.sql(queryToInsertTable)
+        checkAnswer(spark.table("tbl2").orderBy("COL1"),
+          spark.table("tbl").orderBy("col1"))
+      }
+    }
+  }
+
   test("Create table as select command should output correct schema: basic") {
     withTable("tbl", "tbl2") {
       withView("view1") {
