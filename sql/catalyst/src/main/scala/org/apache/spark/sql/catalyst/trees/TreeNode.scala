@@ -473,7 +473,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def treeString(verbose: Boolean, addSuffix: Boolean = false): String = {
     val writer = new StringBuilderWriter()
     try {
-      treeString(writer, verbose, addSuffix)
+      withSizeLimitedWriter(writer) { w =>
+        treeString(w, verbose, addSuffix)
+      }
       writer.toString
     } finally {
       writer.close()
@@ -484,9 +486,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       writer: Writer,
       verbose: Boolean,
       addSuffix: Boolean): Unit = {
-    withSizeLimitedWriter(writer) { w =>
-      generateTreeString(0, Nil, w, verbose, "", addSuffix)
-    }
+      generateTreeString(0, Nil, writer, verbose, "", addSuffix)
   }
 
   /**
