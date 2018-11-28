@@ -498,6 +498,7 @@ object KubernetesIntegrationTests {
         val cmd = Seq(dockerTool, "-m",
           "-t", imageTag.value,
           "-p", s"$bindingsDir/python/Dockerfile",
+          "-R", s"$bindingsDir/R/Dockerfile",
           "build"
         )
         val ec = Process(cmd).!
