@@ -83,22 +83,4 @@ object CSVExprUtils {
         throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
     }
   }
-
-  def getDecimalParser(useLegacyParser: Boolean, locale: Locale): String => java.math.BigDecimal = {
-    if (useLegacyParser) {
-      (s: String) => new BigDecimal(s.replaceAll(",", ""))
-    } else {
-      val decimalFormat = new DecimalFormat("", new DecimalFormatSymbols(locale))
-      decimalFormat.setParseBigDecimal(true)
-      (s: String) => {
-        val pos = new ParsePosition(0)
-        val result = decimalFormat.parse(s, pos).asInstanceOf[BigDecimal]
-        if (pos.getIndex() != s.length() || pos.getErrorIndex() != -1) {
-          throw new IllegalArgumentException("Cannot parse any decimal");
-        } else {
-          result
-        }
-      }
-    }
-  }
 }

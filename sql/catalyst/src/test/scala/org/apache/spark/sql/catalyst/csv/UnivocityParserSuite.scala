@@ -214,20 +214,6 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       assert(parser.makeConverter("_1", decimalType, options = options).apply(input) === expected)
     }
 
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "false") {
-      Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
-    }
-
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
-      Seq("en-US", "ko-KR").foreach(checkDecimalParsing)
-    }
-
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
-      Seq("ru-RU").foreach { langTag =>
-        intercept[NumberFormatException] {
-          checkDecimalParsing(langTag)
-        }
-      }
-    }
+    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
   }
 }

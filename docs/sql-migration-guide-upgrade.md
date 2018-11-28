@@ -11,8 +11,6 @@ displayTitle: Spark SQL Upgrading Guide
 
   - Since Spark 3.0, the Dataset and DataFrame API `unionAll` is not deprecated any more. It is an alias for `union`.
 
-  - In Spark version 2.4 and earlier, accepted format of decimals parsed from CSV is an optional sign ('+' or '-'), followed by a sequence of zero or more decimal digits, optionally followed by a fraction, optionally followed by an exponent. Any commas were removed from the input before parsing. Since Spark 3.0, format varies and depends on locale which can be set via CSV option `locale`. The default locale is `en-US`. To switch back to previous behavior, set `spark.sql.legacy.decimalParsing.enabled` to `true`.
-   
   - In PySpark, when creating a `SparkSession` with `SparkSession.builder.getOrCreate()`, if there is an existing `SparkContext`, the builder was trying to update the `SparkConf` of the existing `SparkContext` with configurations specified to the builder, but the `SparkContext` is shared by all `SparkSession`s, so we should not update them. Since 3.0, the builder comes to not update the configurations. This is the same behavior as Java/Scala API in 2.3 and above. If you want to update them, you need to update them prior to creating a `SparkSession`.
 
   - In Spark version 2.4 and earlier, the parser of JSON data source treats empty strings as null for some data types such as `IntegerType`. For `FloatType` and `DoubleType`, it fails on empty strings and throws exceptions. Since Spark 3.0, we disallow empty strings and will throw exceptions for data types except for `StringType` and `BinaryType`.

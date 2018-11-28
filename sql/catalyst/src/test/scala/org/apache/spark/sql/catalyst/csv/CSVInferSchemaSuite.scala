@@ -186,16 +186,6 @@ class CSVInferSchemaSuite extends SparkFunSuite  with SQLHelper {
       assert(inferSchema.inferField(NullType, input) == expectedType)
     }
 
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "false") {
-      Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalInfer(_, DecimalType(7, 0)))
-    }
-
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
-      Seq("en-US", "ko-KR").foreach(checkDecimalInfer(_, DecimalType(7, 0)))
-    }
-
-    withSQLConf(SQLConf.LEGACY_DECIMAL_PARSING_ENABLED.key -> "true") {
-      Seq("ru-RU", "de-DE").foreach(checkDecimalInfer(_, StringType))
-    }
+    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalInfer(_, DecimalType(7, 0)))
   }
 }

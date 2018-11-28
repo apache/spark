@@ -17,20 +17,18 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import java.text.ParsePosition
-
 import scala.util.control.Exception.allCatch
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class CSVInferSchema(options: CSVOptions) extends Serializable {
 
   private val decimalParser = {
-    CSVExprUtils.getDecimalParser(SQLConf.get.legacyDecimalParsing, options.locale)
+    ExprUtils.getDecimalParser(options.locale)
   }
 
   /**
