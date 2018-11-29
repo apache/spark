@@ -169,7 +169,7 @@ object PartitioningUtils {
 
       // Finally, we create `Partition`s based on paths and resolved partition values.
       val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues).map {
-        case (PartitionValues(columnNames, literals), (path, _)) =>
+        case (PartitionValues(_, literals), (path, _)) =>
           PartitionPath(InternalRow.fromSeq(literals.map(_.value)), path)
       }
 
