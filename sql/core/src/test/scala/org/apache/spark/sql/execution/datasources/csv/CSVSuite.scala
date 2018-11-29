@@ -1986,4 +1986,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }.getMessage
     assert(errMsg2.contains("'lineSep' can contain only 1 character"))
   }
+
+  test("do not produce empty files for empty partitions") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.emptyDataset[String].write.csv(path)
+      val files = new File(path).listFiles()
+      assert(!files.exists(_.getName.endsWith("csv")))
+    }
+  }
 }
