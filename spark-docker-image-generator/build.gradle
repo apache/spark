@@ -41,7 +41,7 @@ test {
   maxHeapSize = "512m"
 }
 
-task prepareDockerBundleDir(type: Sync) {
+task prepareDockerBundleDir(type: Zip) {
   from("${rootDir}/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile") {
     into 'kubernetes/dockerfiles/spark'
     rename 'Dockerfile', 'Dockerfile.original'
@@ -57,9 +57,33 @@ task prepareDockerBundleDir(type: Sync) {
   from(fileTree("${rootDir}/sbin")) {
     into 'sbin'
   }
-  into file("src/main/resources/docker-resources")
+  destinationDir file("${buildDir}/docker-resources")
+  archiveName "docker-resources.zip"
   includeEmptyDirs = false
 }
 
 tasks.compileJava.dependsOn tasks.prepareDockerBundleDir
 tasks.idea.dependsOn tasks.prepareDockerBundleDir
+
+publishing {
+  publications {
+    dockerBundle(MavenPublication) {
+      artifactId 'spark-docker-resources'
+      artifact tasks.prepareDockerBundleDir
+    }
+  }
+
+  repositories {
+    maven {
+      name = "mavenTest"
+      url = "${buildDir}/mavenTest"
+    }
+  }
+}
+
+test {
+    systemProperty 'docker-resources-zip-path', "${buildDir}/docker-resources/docker-resources.zip"
+}
+
+tasks.test.dependsOn tasks.publishDockerBundlePublicationToMavenTestRepository
+tasks.test.environment 'MAVEN_REPO', "${buildDir.getAbsolutePath()}/mavenTest"

@@ -17,11 +17,11 @@
 package org.apache.spark.deploy.kubernetes.docker.gradle;
 
 import java.io.File;
-import java.net.URL;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -77,10 +77,13 @@ public final class SparkDockerPlugin implements Plugin<Project> {
               sparkAppJar)
               .into(jarsDirProvider));
       copySparkAppLibTask.dependsOn(jarTask);
-      URL dockerResourcesUrl = getClass().getResource("/docker-resources");
+      String version = Optional.ofNullable(getClass().getPackage().getImplementationVersion())
+              .orElse("latest.release");
+      Configuration dockerResourcesConf = project.getConfigurations().detachedConfiguration(
+            project.getDependencies().create("org.apache.spark:spark-docker-resources:" + version));
       Sync deployScriptsTask = project.getTasks().create(
           "sparkDockerDeployScripts", Sync.class, task -> {
-            task.from(project.fileTree(dockerResourcesUrl));
+            task.from(project.zipTree(dockerResourcesConf.getSingleFile()));
             task.setIncludeEmptyDirs(false);
             task.into(dockerBuildDirectory);
           });

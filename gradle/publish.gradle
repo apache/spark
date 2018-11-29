@@ -36,7 +36,7 @@ bintray {
     name = rootProject.name
     userOrg = 'palantir'
     licenses = ['Apache-2.0']
-    publications = ['nebula']
+    publications = ['nebula', 'dockerBundle']
   }
 }
 

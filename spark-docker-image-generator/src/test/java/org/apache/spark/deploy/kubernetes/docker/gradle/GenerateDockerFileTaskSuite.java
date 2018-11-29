@@ -18,6 +18,7 @@ package org.apache.spark.deploy.kubernetes.docker.gradle;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,6 +27,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import org.apache.commons.io.IOUtils;
 import org.assertj.core.api.Assertions;
@@ -37,7 +40,6 @@ import org.junit.rules.TemporaryFolder;
 import org.mockito.Mockito;
 
 public final class GenerateDockerFileTaskSuite {
-
   @Rule
   public TemporaryFolder tempFolder = new TemporaryFolder();
 
@@ -49,10 +51,24 @@ public final class GenerateDockerFileTaskSuite {
     File dockerFileDir = tempFolder.newFolder("docker");
     destDockerFile = new File(dockerFileDir, "Dockerfile");
     srcDockerFile = tempFolder.newFile("Dockerfile.original");
-    try (InputStream originalDockerFileResource = getClass().getResourceAsStream(
-        "/docker-resources/kubernetes/dockerfiles/spark/Dockerfile.original");
-         FileOutputStream srcDockerFileStream = new FileOutputStream(srcDockerFile)) {
-      IOUtils.copy(originalDockerFileResource, srcDockerFileStream);
+
+    try (InputStream originalDockerBundleZipped = new FileInputStream(
+            new File(System.getProperty("docker-resources-zip-path")));
+        ZipInputStream unzipped = new ZipInputStream(originalDockerBundleZipped);
+        FileOutputStream srcDockerFileStream = new FileOutputStream(srcDockerFile)) {
+      ZipEntry currentEntry = unzipped.getNextEntry();
+      boolean foundDockerFile = false;
+      while (currentEntry != null && !foundDockerFile) {
+        if (currentEntry.getName().equals("kubernetes/dockerfiles/spark/Dockerfile.original")) {
+          IOUtils.copy(unzipped, srcDockerFileStream);
+          foundDockerFile = true;
+        } else {
+          currentEntry = unzipped.getNextEntry();
+        }
+      }
+      if (!foundDockerFile) {
+        throw new IllegalStateException("Dockerfile not found.");
+      }
     }
   }
 
@@ -73,7 +89,7 @@ public final class GenerateDockerFileTaskSuite {
         getClass().getResourceAsStream("/ExpectedDockerfile");
         InputStreamReader expectedDockerFileReader =
             new InputStreamReader(expectedDockerFileInput, StandardCharsets.UTF_8);
-         BufferedReader expectedDockerFileBuffered =
+        BufferedReader expectedDockerFileBuffered =
             new BufferedReader(expectedDockerFileReader)) {
       List<String> expectedFileLines = expectedDockerFileBuffered
           .lines()
