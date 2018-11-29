@@ -277,7 +277,8 @@ object PartitioningUtils {
       assert(rawColumnValue.nonEmpty, s"Empty partition column value in '$columnSpec'")
 
       val literal = if (userSpecifiedDataTypes.contains(columnName)) {
-        // SPARK-26188: don't infer data types of partition columns if user specifies schema
+        // SPARK-26188: if user provides corresponding column schema, process the column as String
+        //              type and cast it as user specified data type later.
         inferPartitionColumnValue(rawColumnValue, false, timeZone)
       } else {
         inferPartitionColumnValue(rawColumnValue, typeInference, timeZone)

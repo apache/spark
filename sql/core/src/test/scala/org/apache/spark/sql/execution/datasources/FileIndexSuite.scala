@@ -58,8 +58,8 @@ class FileIndexSuite extends SharedSQLContext {
       stringToFile(file, "text")
       val path = new Path(dir.getCanonicalPath)
       val schema = StructType(Seq(StructField("a", StringType, false)))
-      val catalog = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
-      val partitionValues = catalog.partitionSpec().partitions.map(_.values)
+      val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+      val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
       assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
         partitionValues(0).getString(0) == "4d")
     }
