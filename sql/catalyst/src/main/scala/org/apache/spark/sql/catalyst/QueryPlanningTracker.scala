@@ -105,7 +105,7 @@ class QueryPlanningTracker {
    * Measure the start and end time of a phase. Note that each phase can only be measured once.
    */
   def measurePhase[T](phase: String)(f: => T): T = {
-    require(phasesMap.containsKey(phase), s"Phase $phase has been run before.")
+    require(!phasesMap.containsKey(phase), s"Phase $phase has been run before.")
 
     val startTime = System.currentTimeMillis()
     val ret = f
