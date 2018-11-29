@@ -82,14 +82,6 @@ object SQLMetrics {
 
   private val baseForAvgMetric: Int = 10
 
-  val REMOTE_BLOCKS_FETCHED = "remoteBlocksFetched"
-  val LOCAL_BLOCKS_FETCHED = "localBlocksFetched"
-  val REMOTE_BYTES_READ = "remoteBytesRead"
-  val REMOTE_BYTES_READ_TO_DISK = "remoteBytesReadToDisk"
-  val LOCAL_BYTES_READ = "localBytesRead"
-  val FETCH_WAIT_TIME = "fetchWaitTime"
-  val RECORDS_READ = "recordsRead"
-
   /**
    * Converts a double value to long value by multiplying a base integer, so we can store it in
    * `SQLMetrics`. It only works for average metrics. When showing the metrics on UI, we restore
@@ -202,16 +194,4 @@ object SQLMetrics {
         SparkListenerDriverAccumUpdates(executionId.toLong, metrics.map(m => m.id -> m.value)))
     }
   }
-
-  /**
-   * Create all shuffle read relative metrics and return the Map.
-   */
-  def getShuffleReadMetrics(sc: SparkContext): Map[String, SQLMetric] = Map(
-    REMOTE_BLOCKS_FETCHED -> createMetric(sc, "remote blocks fetched"),
-    LOCAL_BLOCKS_FETCHED -> createMetric(sc, "local blocks fetched"),
-    REMOTE_BYTES_READ -> createSizeMetric(sc, "remote bytes read"),
-    REMOTE_BYTES_READ_TO_DISK -> createSizeMetric(sc, "remote bytes read to disk"),
-    LOCAL_BYTES_READ -> createSizeMetric(sc, "local bytes read"),
-    FETCH_WAIT_TIME -> createTimingMetric(sc, "fetch wait time"),
-    RECORDS_READ -> createMetric(sc, "records read"))
 }
