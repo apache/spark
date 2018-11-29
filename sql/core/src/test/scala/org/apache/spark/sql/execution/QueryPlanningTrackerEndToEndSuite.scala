@@ -27,9 +27,9 @@ class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
     val tracker = df.queryExecution.tracker
 
     assert(tracker.phases.size == 3)
-    assert(tracker.phases("analysis") > 0)
-    assert(tracker.phases("optimization") > 0)
-    assert(tracker.phases("planning") > 0)
+    assert(tracker.phases("analysis").durationMs > 0)
+    assert(tracker.phases("optimization").durationMs > 0)
+    assert(tracker.phases("planning").durationMs > 0)
 
     assert(tracker.rules.nonEmpty)
   }
@@ -41,10 +41,10 @@ class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
     val tracker = df.queryExecution.tracker
 
     assert(tracker.phases.size == 4)
-    assert(tracker.phases("parsing") > 0)
-    assert(tracker.phases("analysis") > 0)
-    assert(tracker.phases("optimization") > 0)
-    assert(tracker.phases("planning") > 0)
+    assert(tracker.phases("parsing").durationMs > 0)
+    assert(tracker.phases("analysis").durationMs > 0)
+    assert(tracker.phases("optimization").durationMs > 0)
+    assert(tracker.phases("planning").durationMs > 0)
 
     assert(tracker.rules.nonEmpty)
   }
