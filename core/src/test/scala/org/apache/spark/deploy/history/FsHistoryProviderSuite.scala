@@ -334,6 +334,45 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(!log2.exists())
   }
 
+  test("should not clean inprogress application with lastUpdated time less than maxTime") {
+    val firstFileModifiedTime = TimeUnit.DAYS.toMillis(1)
+    val secondFileModifiedTime = TimeUnit.DAYS.toMillis(6)
+    val maxAge = TimeUnit.DAYS.toMillis(7)
+    val clock = new ManualClock(0)
+    val provider = new FsHistoryProvider(
+      createTestConf().set(MAX_LOG_AGE_S, maxAge / 1000), clock)
+    val log = newLogFile("inProgressApp1", None, inProgress = true)
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1"))
+    )
+    clock.setTime(firstFileModifiedTime)
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1")),
+      SparkListenerJobStart(0, 1L, Nil, null)
+    )
+
+    clock.setTime(secondFileModifiedTime)
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    clock.setTime(TimeUnit.DAYS.toMillis(10))
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1")),
+      SparkListenerJobStart(0, 1L, Nil, null),
+      SparkListenerJobEnd(0, 1L, JobSucceeded)
+    )
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    // This should not trigger any cleanup
+    updateAndCheck(provider) { list =>
+      list.size should be(1)
+    }
+  }
+
   test("log cleaner for inProgress files") {
     val firstFileModifiedTime = TimeUnit.SECONDS.toMillis(10)
     val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
