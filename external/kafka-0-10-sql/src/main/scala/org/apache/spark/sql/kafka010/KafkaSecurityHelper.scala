@@ -35,7 +35,7 @@ private[kafka010] object KafkaSecurityHelper extends Logging {
   def getTokenJaasParams(sparkConf: SparkConf): String = {
     val token = UserGroupInformation.getCurrentUser().getCredentials.getToken(
       KafkaTokenUtil.TOKEN_SERVICE)
-    val serviceName = sparkConf.get(KAFKA_KERBEROS_SERVICE_NAME)
+    val serviceName = sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)
     require(serviceName.isDefined, "Kerberos service name must be defined")
     val username = new String(token.getIdentifier)
     val password = new String(token.getPassword)

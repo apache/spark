@@ -62,12 +62,12 @@ private[spark] object KafkaTokenUtil extends Logging {
   private[security] def createAdminClientProperties(sparkConf: SparkConf): ju.Properties = {
     val adminClientProperties = new ju.Properties
 
-    val bootstrapServers = sparkConf.get(KAFKA_BOOTSTRAP_SERVERS)
+    val bootstrapServers = sparkConf.get(Kafka.BOOTSTRAP_SERVERS)
     require(bootstrapServers.nonEmpty, s"Tried to obtain kafka delegation token but bootstrap " +
       "servers not configured.")
     adminClientProperties.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers.get)
 
-    val protocol = sparkConf.get(KAFKA_SECURITY_PROTOCOL)
+    val protocol = sparkConf.get(Kafka.SECURITY_PROTOCOL)
     adminClientProperties.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, protocol)
     protocol match {
       case SASL_SSL.name =>
@@ -92,6 +92,8 @@ private[spark] object KafkaTokenUtil extends Logging {
     //   JAAS configuration.
     // - Keytab not provided -> try to log in with kerberos module and ticket cache using kafka's
     //   dynamic JAAS configuration.
+    // Kafka client is unable to use subject from JVM which already logged in
+    // to kdc (see KAFKA-7677)
     if (isGlobalJaasConfigurationProvided) {
       logDebug("JVM global security configuration detected, using it for login.")
     } else {
@@ -120,28 +122,28 @@ private[spark] object KafkaTokenUtil extends Logging {
   }
 
   private def setTrustStoreProperties(sparkConf: SparkConf, properties: ju.Properties): Unit = {
-    sparkConf.get(KAFKA_TRUSTSTORE_LOCATION).foreach { truststoreLocation =>
+    sparkConf.get(Kafka.TRUSTSTORE_LOCATION).foreach { truststoreLocation =>
       properties.put("ssl.truststore.location", truststoreLocation)
     }
-    sparkConf.get(KAFKA_TRUSTSTORE_PASSWORD).foreach { truststorePassword =>
+    sparkConf.get(Kafka.TRUSTSTORE_PASSWORD).foreach { truststorePassword =>
       properties.put("ssl.truststore.password", truststorePassword)
     }
   }
 
   private def setKeyStoreProperties(sparkConf: SparkConf, properties: ju.Properties): Unit = {
-    sparkConf.get(KAFKA_KEYSTORE_LOCATION).foreach { keystoreLocation =>
+    sparkConf.get(Kafka.KEYSTORE_LOCATION).foreach { keystoreLocation =>
       properties.put("ssl.keystore.location", keystoreLocation)
     }
-    sparkConf.get(KAFKA_KEYSTORE_PASSWORD).foreach { keystorePassword =>
+    sparkConf.get(Kafka.KEYSTORE_PASSWORD).foreach { keystorePassword =>
       properties.put("ssl.keystore.password", keystorePassword)
     }
-    sparkConf.get(KAFKA_KEY_PASSWORD).foreach { keyPassword =>
+    sparkConf.get(Kafka.KEY_PASSWORD).foreach { keyPassword =>
       properties.put("ssl.key.password", keyPassword)
     }
   }
 
   private[security] def getKeytabJaasParams(sparkConf: SparkConf): String = {
-    val serviceName = sparkConf.get(KAFKA_KERBEROS_SERVICE_NAME)
+    val serviceName = sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)
     require(serviceName.nonEmpty, "Kerberos service name must be defined")
 
     val params =
@@ -157,7 +159,7 @@ private[spark] object KafkaTokenUtil extends Logging {
   }
 
   def getTicketCacheJaasParams(sparkConf: SparkConf): String = {
-    val serviceName = sparkConf.get(KAFKA_KERBEROS_SERVICE_NAME)
+    val serviceName = sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)
     require(serviceName.nonEmpty, "Kerberos service name must be defined")
 
     val params =

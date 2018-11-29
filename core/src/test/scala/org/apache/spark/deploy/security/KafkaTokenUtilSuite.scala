@@ -89,14 +89,14 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("createAdminClientProperties with SASL_PLAINTEXT protocol should not include " +
       "keystore and truststore config") {
-    sparkConf.set(KAFKA_BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(KAFKA_SECURITY_PROTOCOL, SASL_PLAINTEXT.name)
-    sparkConf.set(KAFKA_TRUSTSTORE_LOCATION, trustStoreLocation)
-    sparkConf.set(KAFKA_TRUSTSTORE_PASSWORD, trustStoreLocation)
-    sparkConf.set(KAFKA_KEYSTORE_LOCATION, keyStoreLocation)
-    sparkConf.set(KAFKA_KEYSTORE_PASSWORD, keyStorePassword)
-    sparkConf.set(KAFKA_KEY_PASSWORD, keyPassword)
-    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
+    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
+    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_PLAINTEXT.name)
+    sparkConf.set(Kafka.TRUSTSTORE_LOCATION, trustStoreLocation)
+    sparkConf.set(Kafka.TRUSTSTORE_PASSWORD, trustStoreLocation)
+    sparkConf.set(Kafka.KEYSTORE_LOCATION, keyStoreLocation)
+    sparkConf.set(Kafka.KEYSTORE_PASSWORD, keyStorePassword)
+    sparkConf.set(Kafka.KEY_PASSWORD, keyPassword)
+    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
@@ -112,14 +112,14 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("createAdminClientProperties with SASL_SSL protocol should include truststore config") {
-    sparkConf.set(KAFKA_BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(KAFKA_SECURITY_PROTOCOL, SASL_SSL.name)
-    sparkConf.set(KAFKA_TRUSTSTORE_LOCATION, trustStoreLocation)
-    sparkConf.set(KAFKA_TRUSTSTORE_PASSWORD, trustStorePassword)
-    sparkConf.set(KAFKA_KEYSTORE_LOCATION, keyStoreLocation)
-    sparkConf.set(KAFKA_KEYSTORE_PASSWORD, keyStorePassword)
-    sparkConf.set(KAFKA_KEY_PASSWORD, keyPassword)
-    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
+    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
+    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
+    sparkConf.set(Kafka.TRUSTSTORE_LOCATION, trustStoreLocation)
+    sparkConf.set(Kafka.TRUSTSTORE_PASSWORD, trustStorePassword)
+    sparkConf.set(Kafka.KEYSTORE_LOCATION, keyStoreLocation)
+    sparkConf.set(Kafka.KEYSTORE_PASSWORD, keyStorePassword)
+    sparkConf.set(Kafka.KEY_PASSWORD, keyPassword)
+    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
@@ -136,14 +136,14 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("createAdminClientProperties with SSL protocol should include keystore and truststore " +
       "config") {
-    sparkConf.set(KAFKA_BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(KAFKA_SECURITY_PROTOCOL, SSL.name)
-    sparkConf.set(KAFKA_TRUSTSTORE_LOCATION, trustStoreLocation)
-    sparkConf.set(KAFKA_TRUSTSTORE_PASSWORD, trustStorePassword)
-    sparkConf.set(KAFKA_KEYSTORE_LOCATION, keyStoreLocation)
-    sparkConf.set(KAFKA_KEYSTORE_PASSWORD, keyStorePassword)
-    sparkConf.set(KAFKA_KEY_PASSWORD, keyPassword)
-    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
+    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
+    sparkConf.set(Kafka.SECURITY_PROTOCOL, SSL.name)
+    sparkConf.set(Kafka.TRUSTSTORE_LOCATION, trustStoreLocation)
+    sparkConf.set(Kafka.TRUSTSTORE_PASSWORD, trustStorePassword)
+    sparkConf.set(Kafka.KEYSTORE_LOCATION, keyStoreLocation)
+    sparkConf.set(Kafka.KEYSTORE_PASSWORD, keyStorePassword)
+    sparkConf.set(Kafka.KEY_PASSWORD, keyPassword)
+    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
@@ -159,8 +159,8 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("createAdminClientProperties with global config should not set dynamic jaas config") {
-    sparkConf.set(KAFKA_BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(KAFKA_SECURITY_PROTOCOL, SASL_SSL.name)
+    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
+    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
     setGlobalKafkaClientConfig()
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
@@ -174,10 +174,10 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("createAdminClientProperties with keytab should set keytab dynamic jaas config") {
-    sparkConf.set(KAFKA_BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(KAFKA_SECURITY_PROTOCOL, SASL_SSL.name)
+    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
+    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
     sparkConf.set(KEYTAB, keytab)
-    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
+    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
     sparkConf.set(PRINCIPAL, principal)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
@@ -193,9 +193,9 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("createAdminClientProperties without keytab should set ticket cache dynamic jaas config") {
-    sparkConf.set(KAFKA_BOOTSTRAP_SERVERS, bootStrapServers)
-    sparkConf.set(KAFKA_SECURITY_PROTOCOL, SASL_SSL.name)
-    sparkConf.set(KAFKA_KERBEROS_SERVICE_NAME, kerberosServiceName)
+    sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
+    sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
+    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 

@@ -26,7 +26,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol.{SASL_PLAINTEXT, S
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{KAFKA_BOOTSTRAP_SERVERS, KAFKA_SECURITY_PROTOCOL}
+import org.apache.spark.internal.config._
 
 private[security] class KafkaDelegationTokenProvider
   extends HadoopDelegationTokenProvider with Logging {
@@ -52,8 +52,8 @@ private[security] class KafkaDelegationTokenProvider
   override def delegationTokensRequired(
       sparkConf: SparkConf,
       hadoopConf: Configuration): Boolean = {
-    val protocol = sparkConf.get(KAFKA_SECURITY_PROTOCOL)
-    sparkConf.contains(KAFKA_BOOTSTRAP_SERVERS) &&
+    val protocol = sparkConf.get(Kafka.SECURITY_PROTOCOL)
+    sparkConf.contains(Kafka.BOOTSTRAP_SERVERS) &&
       (protocol == SASL_SSL.name ||
         protocol == SSL.name ||
         protocol == SASL_PLAINTEXT.name)
