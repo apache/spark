@@ -58,18 +58,20 @@ class Iso8601DateTimeFormatter(
     }
   }
 
-  def conv(instant: Instant, secMul: Long, nanoDiv: Long): Long = {
+  private def instantToMicros(instant: Instant, secMul: Long, nanoDiv: Long): Long = {
     val sec = Math.multiplyExact(instant.getEpochSecond, secMul)
     val result = Math.addExact(sec, instant.getNano / nanoDiv)
     result
   }
 
-  def parse(s: String): Long = conv(toInstant(s), 1000000, 1000)
+  def parse(s: String): Long = {
+    instantToMicros(toInstant(s), DateTimeUtils.MICROS_PER_SECOND, DateTimeUtils.NANOS_PER_MICROS)
+  }
 
   def format(us: Long): String = {
-    val secs = Math.floorDiv(us, 1000000)
-    val mos = Math.floorMod(us, 1000000)
-    val instant = Instant.ofEpochSecond(secs, mos * 1000)
+    val secs = Math.floorDiv(us, DateTimeUtils.MICROS_PER_SECOND)
+    val mos = Math.floorMod(us, DateTimeUtils.MICROS_PER_SECOND)
+    val instant = Instant.ofEpochSecond(secs, mos * DateTimeUtils.NANOS_PER_MICROS)
 
     formatter.withZone(timeZone.toZoneId).format(instant)
   }
