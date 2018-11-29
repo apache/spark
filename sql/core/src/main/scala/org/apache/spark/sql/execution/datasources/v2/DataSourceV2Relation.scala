@@ -25,6 +25,7 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
@@ -45,15 +46,15 @@ case class DataSourceV2Relation(
     output: Seq[AttributeReference],
     options: Map[String, String],
     userSpecifiedSchema: Option[StructType] = None)
-  extends LeafNode with MultiInstanceRelation with NamedRelation with DataSourceV2StringFormat {
+  extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   import DataSourceV2Relation._
 
   override def name: String = table.name()
 
-  override def pushedFilters: Seq[Expression] = Seq.empty
-
-  override def simpleString: String = "RelationV2 " + metadataString
+  override def simpleString: String = {
+    s"RelationV2${truncatedString(output, "[", ", ", "]")} $name"
+  }
 
   def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options, schema)
 
