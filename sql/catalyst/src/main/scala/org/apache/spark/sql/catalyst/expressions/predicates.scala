@@ -375,23 +375,18 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val setTerm = ctx.addReferenceObj("set", set)
-    val childGen = child.genCode(ctx)
-    val setIsNull = if (hasNull) {
-      s"${ev.isNull} = !${ev.value};"
-    } else {
-      ""
-    }
-    ev.copy(code =
-      code"""
-         |${childGen.code}
-         |${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${childGen.isNull};
-         |${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
-         |if (!${ev.isNull}) {
-         |  ${ev.value} = $setTerm.contains(${childGen.value});
-         |  $setIsNull
-         |}
-       """.stripMargin)
+    nullSafeCodeGen(ctx, ev, c => {
+      val setTerm = ctx.addReferenceObj("set", set)
+      val setIsNull = if (hasNull) {
+        s"${ev.isNull} = !${ev.value};"
+      } else {
+        ""
+      }
+      s"""
+         |${ev.value} = $setTerm.contains($c);
+         |$setIsNull
+       """.stripMargin
+    })
   }
 
   override def sql: String = {
