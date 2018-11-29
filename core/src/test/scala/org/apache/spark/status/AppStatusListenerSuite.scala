@@ -1309,7 +1309,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       stage.failureReason = Some("Failed")
       listener.onStageCompleted(SparkListenerStageCompleted(stage))
       time += 1
-      listener.onJobEnd(SparkListenerJobEnd(1, time, JobFailed(new RuntimeException("Bad Executor"))))
+      listener.onJobEnd(SparkListenerJobEnd(1, time, JobFailed(
+        new RuntimeException("Bad Executor"))))
 
       time += 1
       tasks(2).markFinished(TaskState.FAILED, time)
