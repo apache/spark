@@ -23,19 +23,21 @@ class QueryPlanningTrackerSuite extends SparkFunSuite {
 
   test("phases") {
     val t = new QueryPlanningTracker
-    t.measureTime("p1") {
+    t.measurePhase("p1") {
       Thread.sleep(1)
     }
 
-    assert(t.phases("p1") > 0)
+    assert(t.phases("p1").durationMs > 0)
     assert(!t.phases.contains("p2"))
+  }
 
-    val old = t.phases("p1")
+  test("each phase can only run once") {
+    val t = new QueryPlanningTracker
+    t.measurePhase("p1") { }
 
-    t.measureTime("p1") {
-      Thread.sleep(1)
+    intercept[IllegalArgumentException] {
+      t.measurePhase("p1") {}
     }
-    assert(t.phases("p1") > old)
   }
 
   test("rules") {

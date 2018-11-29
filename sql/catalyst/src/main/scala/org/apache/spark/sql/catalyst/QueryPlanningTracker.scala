@@ -41,6 +41,13 @@ object QueryPlanningTracker {
   val OPTIMIZATION = "optimization"
   val PLANNING = "planning"
 
+  /**
+   * Summary for a rule.
+   * @param totalTimeNs total amount of time, in nanosecs, spent in this rule.
+   * @param numInvocations number of times the rule has been invoked.
+   * @param numEffectiveInvocations number of times the rule has been invoked and
+   *                                resulted in a plan change.
+   */
   class RuleSummary(
     var totalTimeNs: Long, var numInvocations: Long, var numEffectiveInvocations: Long) {
 
@@ -48,6 +55,18 @@ object QueryPlanningTracker {
 
     override def toString: String = {
       s"RuleSummary($totalTimeNs, $numInvocations, $numEffectiveInvocations)"
+    }
+  }
+
+  /**
+   * Summary of a phase, with start time and end time so we can construct a timeline.
+   */
+  class PhaseSummary(val startTimeMs: Long, val endTimeMs: Long) {
+
+    def durationMs: Long = endTimeMs - startTimeMs
+
+    override def toString: String = {
+      s"PhaseSummary($startTimeMs, $endTimeMs)"
     }
   }
 
@@ -79,15 +98,19 @@ class QueryPlanningTracker {
   // Use a Java HashMap for less overhead.
   private val rulesMap = new java.util.HashMap[String, RuleSummary]
 
-  // From a phase to time in ns.
-  private val phaseToTimeNs = new java.util.HashMap[String, Long]
+  // From a phase to its start time and end time, in ms.
+  private val phasesMap = new java.util.HashMap[String, PhaseSummary]
 
-  /** Measure the runtime of function f, and add it to the time for the specified phase. */
-  def measureTime[T](phase: String)(f: => T): T = {
-    val startTime = System.nanoTime()
+  /**
+   * Measure the start and end time of a phase. Note that each phase can only be measured once.
+   */
+  def measurePhase[T](phase: String)(f: => T): T = {
+    require(phasesMap.containsKey(phase), s"Phase $phase has been run before.")
+
+    val startTime = System.currentTimeMillis()
     val ret = f
-    val timeTaken = System.nanoTime() - startTime
-    phaseToTimeNs.put(phase, phaseToTimeNs.getOrDefault(phase, 0) + timeTaken)
+    val endTime = System.currentTimeMillis
+    phasesMap.put(phase, new PhaseSummary(startTime, endTime))
     ret
   }
 
@@ -114,7 +137,7 @@ class QueryPlanningTracker {
 
   def rules: Map[String, RuleSummary] = rulesMap.asScala.toMap
 
-  def phases: Map[String, Long] = phaseToTimeNs.asScala.toMap
+  def phases: Map[String, PhaseSummary] = phasesMap.asScala.toMap
 
   /**
    * Returns the top k most expensive rules (as measured by time). If k is larger than the rules
