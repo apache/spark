@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.DataType
  * @since 1.3.0
  */
 @Stable
-trait UserDefinedFunction {
+sealed trait UserDefinedFunction {
 
   /**
    * Returns true when the UDF can return a nullable value.
@@ -102,10 +102,8 @@ private[sql] case class SparkUserDefinedFunction(
       assert(inputTypes.get.length == nullableTypes.get.length)
     }
 
-    val inputsNullSafe = if (nullableTypes.isEmpty) {
+    val inputsNullSafe = nullableTypes.getOrElse {
       ScalaReflection.getParameterTypeNullability(f)
-    } else {
-      nullableTypes.get
     }
 
     Column(ScalaUDF(
