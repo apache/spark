@@ -17,53 +17,26 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{RangeExec, SortExec}
+import org.apache.spark.sql.execution.RangeExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class QueryStageTest extends SharedSQLContext {
-
   test("Adaptive Query Execution repartitions") {
-    val plan = createMergeJoinPlan(100, 100)
+    val originalNumPartitions = 100
 
-    val resultQueryStage = PlanQueryStage.apply(new SQLConf)(plan)
+    val plan = {
+      val leftRangeExec = RangeExec(
+        org.apache.spark.sql.catalyst.plans.logical.Range(1, 1000, 1, 1))
 
-    val rdd = resultQueryStage.execute()
-    assert(rdd.getNumPartitions == 0)
-  }
-
-  def createMergeJoinPlan(leftNum: Int, rightNum: Int): SortMergeJoinExec = {
-    val leftRangeExec = RangeExec(
-      org.apache.spark.sql.catalyst.plans.logical.Range(1, leftNum, 1, 1))
-    val leftOutput = leftRangeExec.output(0)
-    val left = SortExec(
-      Seq(SortOrder(leftOutput, Ascending)),
-      true,
       ShuffleExchangeExec(
-        HashPartitioning(Seq(leftOutput), 100),
-        leftRangeExec))
+        HashPartitioning(leftRangeExec.output, originalNumPartitions),
+        leftRangeExec)
+    }
 
-    val rightRangeExec = RangeExec(
-      org.apache.spark.sql.catalyst.plans.logical.Range(1, rightNum, 1, 1))
-    val rightOutput = rightRangeExec.output(0)
-    val right = SortExec(
-      Seq(SortOrder(rightOutput, Ascending)),
-      true,
-      ShuffleExchangeExec(
-        HashPartitioning(Seq(rightOutput), 100),
-        rightRangeExec))
-
-    SortMergeJoinExec(
-      Seq(leftOutput),
-      Seq(rightOutput),
-      Inner,
-      None,
-      left,
-      right)
+    assert(plan.execute().getNumPartitions == originalNumPartitions)
+    assert(PlanQueryStage.apply(new SQLConf)(plan).execute().getNumPartitions == 1)
   }
 }
