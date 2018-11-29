@@ -720,7 +720,7 @@ private[spark] class BlockManager(
   /**
    * Get block from remote block managers as a ManagedBuffer.
    */
-  def getRemoteManagedBuffer(blockId: BlockId): Option[ManagedBuffer] = {
+  private def getRemoteManagedBuffer(blockId: BlockId): Option[ManagedBuffer] = {
     logDebug(s"Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
     var runningFailureCount = 0
@@ -785,6 +785,11 @@ private[spark] class BlockManager(
       }
 
       if (data != null) {
+        // If the ManagedBuffer is a BlockManagerManagedBuffer, the disposal of the
+        // byte buffers backing it may need to be handled after reading the bytes.
+        // In this case, since we just fetched the bytes remotely, we do not have
+        // a BlockManagerManagedBuffer. The assert here is to ensure that this holds
+        // true (or the disposal is handled).
         assert(!data.isInstanceOf[BlockManagerManagedBuffer])
         return Some(data)
       }
