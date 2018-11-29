@@ -64,4 +64,3 @@ object FPGrowthExample {
     spark.stop()
   }
 }
-
