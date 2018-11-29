@@ -2543,9 +2543,9 @@ object EliminateUnions extends Rule[LogicalPlan] {
  */
 object CleanupAliases extends Rule[LogicalPlan] {
   private[catalyst] def trimAliases(e: Expression): Expression = {
-    e.transformDown {
-      case Alias(child, _) => trimAliases(child)
-      case MultiAlias(child, _) => trimAliases(child)
+    e.transformUp {
+      case Alias(child, _) => child
+      case MultiAlias(child, _) => child
     }
   }
 
