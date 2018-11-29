@@ -49,6 +49,7 @@ public interface TableProvider extends DataSourceV2 {
    * @param options the user-specified options that can identify a table, e.g. file path, Kafka
    *                topic name, etc. It's an immutable case-insensitive string-to-string map.
    * @param schema the user-specified schema.
+   * @throws UnsupportedOperationException
    */
   default Table getTable(DataSourceOptions options, StructType schema) {
     String name;

@@ -39,7 +39,7 @@ public interface Table {
   /**
    * A name to identify this table.
    * <p>
-   * By default this returns the class name of this implementation. Please override it to provide a
+   * By default this returns the class name of the implementation. Please override it to provide a
    * meaningful name, like the database and table name from catalog, or the location of files for
    * this table.
    * </p>

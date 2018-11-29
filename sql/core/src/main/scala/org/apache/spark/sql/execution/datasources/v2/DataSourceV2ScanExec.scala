@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
-import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
 
 /**
@@ -31,13 +31,13 @@ import org.apache.spark.sql.sources.v2.reader._
  */
 case class DataSourceV2ScanExec(
     output: Seq[AttributeReference],
-    @transient source: DataSourceV2,
-    @transient options: Map[String, String],
-    @transient pushedFilters: Seq[Expression],
+    scanDesc: String,
     @transient batch: Batch)
-  extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
+  extends LeafExecNode with ColumnarBatchScan {
 
-  override def simpleString: String = "ScanV2 " + metadataString
+  override def simpleString: String = {
+    s"ScanV2${truncatedString(output, "[", ", ", "]")} $scanDesc"
+  }
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {

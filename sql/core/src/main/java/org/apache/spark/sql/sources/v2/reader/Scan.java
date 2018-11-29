@@ -43,9 +43,24 @@ public interface Scan {
   StructType readSchema();
 
   /**
+   * A description string of this scan, which may includes information like: what filters are
+   * configured for this scan, what's the value of some important options like path, etc. The
+   * description doesn't need to include {@link #readSchema()}, as Spark already knows it.
+   * <p>
+   * By default this returns the class name of the implementation. Please override it to provide a
+   * meaningful description.
+   * </p>
+   */
+  default String description() {
+    return this.getClass().toString();
+  }
+
+  /**
    * Returns the physical representation of this scan for batch query. By default this method throws
    * exception, data sources must overwrite this method to provide an implementation, if the
    * {@link Table} that creates this scan implements {@link SupportsBatchRead}.
+   *
+   * @throws UnsupportedOperationException
    */
   default Batch toBatch() {
     throw new UnsupportedOperationException("Batch scans are not supported");

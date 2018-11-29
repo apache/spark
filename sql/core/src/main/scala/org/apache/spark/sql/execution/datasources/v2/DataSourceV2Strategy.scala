@@ -116,12 +116,7 @@ object DataSourceV2Strategy extends Strategy {
            |Output: ${output.mkString(", ")}
          """.stripMargin)
 
-      val plan = DataSourceV2ScanExec(
-        output,
-        relation.source,
-        relation.options,
-        pushedFilters,
-        scan.toBatch)
+      val plan = DataSourceV2ScanExec(output, scan.description(), scan.toBatch)
 
       val filterCondition = postScanFilters.reduceLeftOption(And)
       val withFilter = filterCondition.map(FilterExec(_, plan)).getOrElse(plan)
