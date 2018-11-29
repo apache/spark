@@ -127,37 +127,14 @@ abstract class PartitioningAwareFileIndex(
     val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
       .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
-    userSpecifiedSchema match {
-      case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
-        val inferredPartitionSpec = PartitioningUtils.parsePartitions(
-          leafDirs,
-          typeInference = false,
-          basePaths = basePaths,
-          timeZoneId = timeZoneId)
-        val userPartitionSchema =
-          combineInferredAndUserSpecifiedPartitionSchema(inferredPartitionSpec)
-
-        // we need to cast into the data type that user specified.
-        def castPartitionValuesToUserSchema(row: InternalRow) = {
-          InternalRow((0 until row.numFields).map { i =>
-            val dt = inferredPartitionSpec.partitionColumns.fields(i).dataType
-            Cast(
-              Literal.create(row.get(i, dt), dt),
-              userPartitionSchema.fields(i).dataType,
-              Option(timeZoneId)).eval()
-          }: _*)
-        }
-
-        PartitionSpec(userPartitionSchema, inferredPartitionSpec.partitions.map { part =>
-          part.copy(values = castPartitionValuesToUserSchema(part.values))
-        })
-      case _ =>
-        PartitioningUtils.parsePartitions(
-          leafDirs,
-          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
-          basePaths = basePaths,
-          timeZoneId = timeZoneId)
-    }
+    val caseSensitive = sparkSession.sqlContext.conf.caseSensitiveAnalysis
+    PartitioningUtils.parsePartitions(
+      leafDirs,
+      typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
+      basePaths = basePaths,
+      userSpecifiedSchema = userSpecifiedSchema,
+      caseSensitive = caseSensitive,
+      timeZoneId = timeZoneId)
   }
 
   private def prunePartitions(

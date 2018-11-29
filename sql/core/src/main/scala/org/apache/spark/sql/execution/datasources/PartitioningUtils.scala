@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -94,18 +94,34 @@ object PartitioningUtils {
       paths: Seq[Path],
       typeInference: Boolean,
       basePaths: Set[Path],
+      userSpecifiedSchema: Option[StructType],
+      caseSensitive: Boolean,
       timeZoneId: String): PartitionSpec = {
-    parsePartitions(paths, typeInference, basePaths, DateTimeUtils.getTimeZone(timeZoneId))
+    parsePartitions(paths, typeInference, basePaths, userSpecifiedSchema,
+      caseSensitive, DateTimeUtils.getTimeZone(timeZoneId))
   }
 
   private[datasources] def parsePartitions(
       paths: Seq[Path],
       typeInference: Boolean,
       basePaths: Set[Path],
+      userSpecifiedSchema: Option[StructType],
+      caseSensitive: Boolean,
       timeZone: TimeZone): PartitionSpec = {
+    val userSpecifiedDataTypes = if (userSpecifiedSchema.isDefined) {
+      val nameToDataType = userSpecifiedSchema.get.fields.map(f => f.name -> f.dataType).toMap
+      if (caseSensitive) {
+        CaseInsensitiveMap(nameToDataType)
+      } else {
+        nameToDataType
+      }
+    } else {
+      Map.empty[String, DataType]
+    }
+
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
-      parsePartition(path, typeInference, basePaths, timeZone)
+      parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes, timeZone)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
@@ -147,14 +163,22 @@ object PartitioningUtils {
         columnNames.zip(literals).map { case (name, Literal(_, dataType)) =>
           // We always assume partition columns are nullable since we've no idea whether null values
           // will be appended in the future.
-          StructField(name, dataType, nullable = true)
+          StructField(name, userSpecifiedDataTypes.getOrElse(name, dataType), nullable = true)
         }
       }
 
       // Finally, we create `Partition`s based on paths and resolved partition values.
       val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues).map {
-        case (PartitionValues(_, literals), (path, _)) =>
-          PartitionPath(InternalRow.fromSeq(literals.map(_.value)), path)
+        case (PartitionValues(columnNames, literals), (path, _)) =>
+          val values = columnNames.zip(literals).map {
+            case (name, literal) =>
+              if (userSpecifiedDataTypes.contains(name)) {
+                Cast(literal, userSpecifiedDataTypes(name), Option(timeZone.getID)).eval()
+              } else {
+                literal.value
+              }
+          }
+          PartitionPath(InternalRow.fromSeq(values), path)
       }
 
       PartitionSpec(StructType(fields), partitions)
@@ -185,6 +209,7 @@ object PartitioningUtils {
       path: Path,
       typeInference: Boolean,
       basePaths: Set[Path],
+      userSpecifiedDataTypes: Map[String, DataType],
       timeZone: TimeZone): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
@@ -206,7 +231,7 @@ object PartitioningUtils {
         // Let's say currentPath is a path of "/table/a=1/", currentPath.getName will give us a=1.
         // Once we get the string, we try to parse it and find the partition column and value.
         val maybeColumn =
-          parsePartitionColumn(currentPath.getName, typeInference, timeZone)
+          parsePartitionColumn(currentPath.getName, typeInference, userSpecifiedDataTypes, timeZone)
         maybeColumn.foreach(columns += _)
 
         // Now, we determine if we should stop.
@@ -239,6 +264,7 @@ object PartitioningUtils {
   private def parsePartitionColumn(
       columnSpec: String,
       typeInference: Boolean,
+      userSpecifiedDataTypes: Map[String, DataType],
       timeZone: TimeZone): Option[(String, Literal)] = {
     val equalSignIndex = columnSpec.indexOf('=')
     if (equalSignIndex == -1) {
@@ -250,7 +276,12 @@ object PartitioningUtils {
       val rawColumnValue = columnSpec.drop(equalSignIndex + 1)
       assert(rawColumnValue.nonEmpty, s"Empty partition column value in '$columnSpec'")
 
-      val literal = inferPartitionColumnValue(rawColumnValue, typeInference, timeZone)
+      val literal = if (userSpecifiedDataTypes.contains(columnName)) {
+        // SPARK-26188: don't infer data types of partition columns if user specifies schema
+        inferPartitionColumnValue(rawColumnValue, false, timeZone)
+      } else {
+        inferPartitionColumnValue(rawColumnValue, typeInference, timeZone)
+      }
       Some(columnName -> literal)
     }
   }
