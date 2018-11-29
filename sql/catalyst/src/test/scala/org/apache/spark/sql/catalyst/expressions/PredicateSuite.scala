@@ -268,7 +268,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(InSet(nl, nS), null)
 
     val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
-      LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
+      LongType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
     primitiveTypes.foreach { t =>
       val dataGen = RandomDataGenerator.forType(t, nullable = true).get
       val inputData = Seq.fill(10) {
@@ -291,6 +291,54 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
       checkEvaluation(InSet(input(0), inputData.slice(1, 10).toSet), expected)
     }
+  }
+
+  test("INSET: binary") {
+    val hS = HashSet[Any]() + Array(1.toByte, 2.toByte) + Array(3.toByte)
+    val nS = HashSet[Any]() + Array(1.toByte, 2.toByte) + Array(3.toByte) + null
+    val onetwo = Literal(Array(1.toByte, 2.toByte))
+    val three = Literal(Array(3.toByte))
+    val threefour = Literal(Array(3.toByte, 4.toByte))
+    val nl = Literal(null, onetwo.dataType)
+    checkEvaluation(InSet(onetwo, hS), true)
+    checkEvaluation(InSet(three, hS), true)
+    checkEvaluation(InSet(three, nS), true)
+    checkEvaluation(InSet(threefour, hS), false)
+    checkEvaluation(InSet(threefour, nS), null)
+    checkEvaluation(InSet(nl, hS), null)
+    checkEvaluation(InSet(nl, nS), null)
+  }
+
+  test("INSET: struct") {
+    val hS = HashSet[Any]() + Literal.create((1, "a")).value + Literal.create((2, "b")).value
+    val nS = HashSet[Any]() + Literal.create((1, "a")).value + Literal.create((2, "b")).value + null
+    val oneA = Literal.create((1, "a"))
+    val twoB = Literal.create((2, "b"))
+    val twoC = Literal.create((2, "c"))
+    val nl = Literal(null, oneA.dataType)
+    checkEvaluation(InSet(oneA, hS), true)
+    checkEvaluation(InSet(twoB, hS), true)
+    checkEvaluation(InSet(twoB, nS), true)
+    checkEvaluation(InSet(twoC, hS), false)
+    checkEvaluation(InSet(twoC, nS), null)
+    checkEvaluation(InSet(nl, hS), null)
+    checkEvaluation(InSet(nl, nS), null)
+  }
+
+  test("INSET: array") {
+    val hS = HashSet[Any]() + Literal.create(Seq(1, 2)).value + Literal.create(Seq(3)).value
+    val nS = HashSet[Any]() + Literal.create(Seq(1, 2)).value + Literal.create(Seq(3)).value + null
+    val onetwo = Literal.create(Seq(1, 2))
+    val three = Literal.create(Seq(3))
+    val threefour = Literal.create(Seq(3, 4))
+    val nl = Literal(null, onetwo.dataType)
+    checkEvaluation(InSet(onetwo, hS), true)
+    checkEvaluation(InSet(three, hS), true)
+    checkEvaluation(InSet(three, nS), true)
+    checkEvaluation(InSet(threefour, hS), false)
+    checkEvaluation(InSet(threefour, nS), null)
+    checkEvaluation(InSet(nl, hS), null)
+    checkEvaluation(InSet(nl, nS), null)
   }
 
   private case class MyStruct(a: Long, b: String)
