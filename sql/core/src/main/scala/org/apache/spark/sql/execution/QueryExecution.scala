@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.util.withSizeLimitedWriter
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
@@ -202,7 +203,8 @@ class QueryExecution(
   }
 
   private def writeOrError(writer: Writer)(f: Writer => Unit): Unit = {
-    try f(writer)
+    try
+      withSizeLimitedWriter(writer)(f)
     catch {
       case e: AnalysisException => writer.write(e.toString)
     }
