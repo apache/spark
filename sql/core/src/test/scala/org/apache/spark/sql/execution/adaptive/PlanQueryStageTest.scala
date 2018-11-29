@@ -18,12 +18,11 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{RangeExec, SortExec}
+import org.apache.spark.sql.execution.RangeExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.joins.{BuildRight, ShuffledHashJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -53,7 +52,7 @@ class PlanQueryStageTest extends SharedSQLContext {
     conf.setConfString("spark.sql.exchange.reuse", "true")
 
     val planQueryStage = PlanQueryStage(conf)
-    val newPlan = planQueryStage(createMergeJoinPlan(100, 100))
+    val newPlan = planQueryStage(createJoinExec(100, 100))
 
     val collected = newPlan.collect {
       case e: ShuffleQueryStageInput => e.childStage
@@ -68,7 +67,7 @@ class PlanQueryStageTest extends SharedSQLContext {
     conf.setConfString("spark.sql.exchange.reuse", "true")
 
     val planQueryStage = PlanQueryStage(conf)
-    val newPlan = planQueryStage(createMergeJoinPlan(100, 101))
+    val newPlan = planQueryStage(createJoinExec(100, 101))
 
     val collected = newPlan.collect {
       case e: ShuffleQueryStageInput => e.childStage
@@ -78,25 +77,20 @@ class PlanQueryStageTest extends SharedSQLContext {
     assert(!collected(0).eq(collected(1)))
   }
 
-  def createMergeJoinPlan(leftNum: Int, rightNum: Int): SortMergeJoinExec = {
-    val left = SortExec(
-      Seq(SortOrder(UnresolvedAttribute("blah"), Ascending)),
-      true,
-      ShuffleExchangeExec(
-        HashPartitioning(Seq(UnresolvedAttribute("blah")), 100),
-        RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(1, leftNum, 1, 1))))
+  def createJoinExec(leftNum: Int, rightNum: Int): ShuffledHashJoinExec = {
+    val left = ShuffleExchangeExec(
+      HashPartitioning(Seq(UnresolvedAttribute("blah")), 100),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(1, leftNum, 1, 1)))
 
-    val right = SortExec(
-      Seq(SortOrder(UnresolvedAttribute("blah"), Ascending)),
-      true,
-      ShuffleExchangeExec(
-        HashPartitioning(Seq(UnresolvedAttribute("blah")), 100),
-        RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(1, rightNum, 1, 1))))
+    val right = ShuffleExchangeExec(
+      HashPartitioning(Seq(UnresolvedAttribute("blah")), 100),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(1, rightNum, 1, 1)))
 
-    SortMergeJoinExec(
+    ShuffledHashJoinExec(
       Seq(UnresolvedAttribute("blah")),
       Seq(UnresolvedAttribute("blah")),
       Inner,
+      BuildRight,
       None,
       left,
       right)
