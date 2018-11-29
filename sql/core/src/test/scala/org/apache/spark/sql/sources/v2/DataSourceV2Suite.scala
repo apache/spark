@@ -38,9 +38,17 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  private def getScanNode(df: DataFrame): DataSourceV2ScanExec = {
-    df.queryExecution.executedPlan.collect {
-      case s: DataSourceV2ScanExec => s
+  private def getBatch(query: DataFrame): AdvancedBatch = {
+    query.queryExecution.executedPlan.collect {
+      case d: DataSourceV2ScanExec =>
+        d.batch.asInstanceOf[AdvancedBatch]
+    }.head
+  }
+
+  private def getJavaBatch(query: DataFrame): JavaAdvancedDataSourceV2.AdvancedBatch = {
+    query.queryExecution.executedPlan.collect {
+      case d: DataSourceV2ScanExec =>
+        d.batch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
     }.head
   }
 
@@ -63,28 +71,53 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
         val q1 = df.select('j)
         checkAnswer(q1, (0 until 10).map(i => Row(-i)))
-        val scan1 = getScanNode(q1)
-        assert(scan1.pushedFilters.isEmpty)
-        assert(scan1.output.map(_.name) === Seq("j"))
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val batch = getBatch(q1)
+          assert(batch.filters.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        } else {
+          val batch = getJavaBatch(q1)
+          assert(batch.filters.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        }
 
         val q2 = df.filter('i > 3)
         checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
-        val scan2 = getScanNode(q2)
-        assert(scan2.pushedFilters.flatMap(_.references).map(_.name).toSet == Set("i"))
-        assert(scan2.output.map(_.name) === Seq("i", "j"))
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val batch = getBatch(q2)
+          assert(batch.filters.flatMap(_.references).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
+        } else {
+          val batch = getJavaBatch(q2)
+          assert(batch.filters.flatMap(_.references).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
+        }
 
         val q3 = df.select('i).filter('i > 6)
         checkAnswer(q3, (7 until 10).map(i => Row(i)))
-        val scan3 = getScanNode(q3)
-        assert(scan3.pushedFilters.flatMap(_.references).map(_.name).toSet == Set("i"))
-        assert(scan3.output.map(_.name) === Seq("i"))
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val batch = getBatch(q3)
+          assert(batch.filters.flatMap(_.references).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i"))
+        } else {
+          val batch = getJavaBatch(q3)
+          assert(batch.filters.flatMap(_.references).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i"))
+        }
 
         val q4 = df.select('j).filter('j < -10)
         checkAnswer(q4, Nil)
-        val scan4 = getScanNode(q4)
-        // 'j < -10 is not supported by the testing data source.
-        assert(scan4.pushedFilters.isEmpty)
-        assert(scan4.output.map(_.name) === Seq("j"))
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val batch = getBatch(q4)
+          // 'j < 10 is not supported by the testing data source.
+          assert(batch.filters.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        } else {
+          val batch = getJavaBatch(q4)
+          // 'j < 10 is not supported by the testing data source.
+          assert(batch.filters.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        }
       }
     }
   }
@@ -245,26 +278,26 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
     val q1 = df.select('i + 1)
     checkAnswer(q1, (1 until 11).map(i => Row(i)))
-    val scan1 = getScanNode(q1)
-    assert(scan1.output.map(_.name) === Seq("i"))
+    val batch1 = getBatch(q1)
+    assert(batch1.requiredSchema.fieldNames === Seq("i"))
 
     val q2 = df.select(lit(1))
     checkAnswer(q2, (0 until 10).map(i => Row(1)))
-    val scan2 = getScanNode(q2)
-    assert(scan2.output.isEmpty)
+    val batch2 = getBatch(q2)
+    assert(batch2.requiredSchema.isEmpty)
 
     // 'j === 1 can't be pushed down, but we should still be able do column pruning
     val q3 = df.filter('j === -1).select('j * 2)
     checkAnswer(q3, Row(-2))
-    val scan3 = getScanNode(q3)
-    assert(scan3.pushedFilters.isEmpty)
-    assert(scan3.output.map(_.name) === Seq("j"))
+    val batch3 = getBatch(q3)
+    assert(batch3.filters.isEmpty)
+    assert(batch3.requiredSchema.fieldNames === Seq("j"))
 
     // column pruning should work with other operators.
     val q4 = df.sort('i).limit(1).select('i + 1)
     checkAnswer(q4, Row(1))
-    val scan4 = getScanNode(q4)
-    assert(scan4.output.map(_.name) === Seq("i"))
+    val batch4 = getBatch(q4)
+    assert(batch4.requiredSchema.fieldNames === Seq("i"))
   }
 
   test("SPARK-23315: get output from canonicalized data source v2 related plans") {
@@ -444,7 +477,7 @@ class AdvancedScanBuilder extends ScanBuilder
   override def toBatch: Batch = new AdvancedBatch(filters, requiredSchema)
 }
 
-class AdvancedBatch(filters: Array[Filter], requiredSchema: StructType) extends Batch {
+class AdvancedBatch(val filters: Array[Filter], val requiredSchema: StructType) extends Batch {
 
   override def planInputPartitions(): Array[InputPartition] = {
     val lowerBound = filters.collectFirst {

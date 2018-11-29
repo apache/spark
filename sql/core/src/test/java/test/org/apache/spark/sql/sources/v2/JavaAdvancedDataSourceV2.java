@@ -42,12 +42,11 @@ public class JavaAdvancedDataSourceV2 implements TableProvider {
     };
   }
 
-  public static class AdvancedScanBuilder implements ScanBuilder, Scan,
+  static class AdvancedScanBuilder implements ScanBuilder, Scan,
     SupportsPushDownFilters, SupportsPushDownRequiredColumns {
 
-    // Exposed for testing.
-    public StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
-    public Filter[] filters = new Filter[0];
+    private StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
+    private Filter[] filters = new Filter[0];
 
     @Override
     public void pruneColumns(StructType requiredSchema) {
@@ -99,9 +98,10 @@ public class JavaAdvancedDataSourceV2 implements TableProvider {
     }
   }
 
-  static class AdvancedBatch implements Batch {
-    private StructType requiredSchema;
-    private Filter[] filters;
+  public static class AdvancedBatch implements Batch {
+    // Exposed for testing.
+    public StructType requiredSchema;
+    public Filter[] filters;
 
     AdvancedBatch(StructType requiredSchema, Filter[] filters) {
       this.requiredSchema = requiredSchema;
