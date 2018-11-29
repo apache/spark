@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.ml.feature.OneHotEncoderEstimator;
+import org.apache.spark.ml.feature.OneHotEncoder;
 import org.apache.spark.ml.feature.OneHotEncoderModel;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -34,11 +34,11 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 // $example off$
 
-public class JavaOneHotEncoderEstimatorExample {
+public class JavaOneHotEncoderExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
       .builder()
-      .appName("JavaOneHotEncoderEstimatorExample")
+      .appName("JavaOneHotEncoderExample")
       .getOrCreate();
 
     // Note: categorical features are usually first encoded with StringIndexer
@@ -59,7 +59,7 @@ public class JavaOneHotEncoderEstimatorExample {
 
     Dataset<Row> df = spark.createDataFrame(data, schema);
 
-    OneHotEncoderEstimator encoder = new OneHotEncoderEstimator()
+    OneHotEncoder encoder = new OneHotEncoder()
       .setInputCols(new String[] {"categoryIndex1", "categoryIndex2"})
       .setOutputCols(new String[] {"categoryVec1", "categoryVec2"});
 
