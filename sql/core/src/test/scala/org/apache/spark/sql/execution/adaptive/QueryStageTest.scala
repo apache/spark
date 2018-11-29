@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
@@ -29,32 +28,39 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 class QueryStageTest extends SharedSQLContext {
 
-  test("Replaces ShuffleExchangeExec/BroadcastExchangeExec with reuse disabled") {
+  test("Adaptive Query Execution repartitions") {
     val plan = createMergeJoinPlan(100, 100)
 
-    val resultQueryStage = ResultQueryStage(plan)
+    val resultQueryStage = PlanQueryStage.apply(new SQLConf)(plan)
 
-    resultQueryStage.execute()
+    val rdd = resultQueryStage.execute()
+    assert(rdd.getNumPartitions == 0)
   }
 
   def createMergeJoinPlan(leftNum: Int, rightNum: Int): SortMergeJoinExec = {
+    val leftRangeExec = RangeExec(
+      org.apache.spark.sql.catalyst.plans.logical.Range(1, leftNum, 1, 1))
+    val leftOutput = leftRangeExec.output(0)
     val left = SortExec(
-      Seq(SortOrder(UnresolvedAttribute("blah"), Ascending)),
+      Seq(SortOrder(leftOutput, Ascending)),
       true,
       ShuffleExchangeExec(
-        HashPartitioning(Seq(UnresolvedAttribute("blah")), 100),
-        RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(1, leftNum, 1, 1))))
+        HashPartitioning(Seq(leftOutput), 100),
+        leftRangeExec))
 
+    val rightRangeExec = RangeExec(
+      org.apache.spark.sql.catalyst.plans.logical.Range(1, rightNum, 1, 1))
+    val rightOutput = rightRangeExec.output(0)
     val right = SortExec(
-      Seq(SortOrder(UnresolvedAttribute("blah"), Ascending)),
+      Seq(SortOrder(rightOutput, Ascending)),
       true,
       ShuffleExchangeExec(
-        HashPartitioning(Seq(UnresolvedAttribute("blah")), 100),
-        RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(1, rightNum, 1, 1))))
+        HashPartitioning(Seq(rightOutput), 100),
+        rightRangeExec))
 
     SortMergeJoinExec(
-      Seq(UnresolvedAttribute("blah")),
-      Seq(UnresolvedAttribute("blah")),
+      Seq(leftOutput),
+      Seq(rightOutput),
       Inner,
       None,
       left,
