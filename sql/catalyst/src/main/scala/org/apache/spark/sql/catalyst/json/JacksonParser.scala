@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -134,6 +135,8 @@ class JacksonParser(
         Seq(InternalRow(new GenericArrayData(Seq(convertObject(parser, st, fieldConverters)))))
     }
   }
+
+  private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
@@ -261,6 +264,9 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken[Decimal](parser, dataType) {
         case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
           Decimal(parser.getDecimalValue, dt.precision, dt.scale)
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          val bigDecimal = decimalParser(parser.getText)
+          Decimal(bigDecimal, dt.precision, dt.scale)
       }
 
     case st: StructType =>
@@ -367,6 +373,8 @@ class JacksonParser(
       values += fieldConverter.apply(parser)
     }
 
+    // The JSON map will never have null or duplicated map keys, it's safe to create a
+    // ArrayBasedMapData directly here.
     ArrayBasedMapData(keys.toArray, values.toArray)
   }
 
@@ -399,7 +407,7 @@ class JacksonParser(
         // a null first token is equivalent to testing for input.trim.isEmpty
         // but it works on any token stream and not just strings
         parser.nextToken() match {
-          case null => Nil
+          case null => throw new RuntimeException("Not found any JSON token")
           case _ => rootConverter.apply(parser) match {
             case null => throw new RuntimeException("Root converter returned null")
             case rows => rows
