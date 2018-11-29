@@ -2733,6 +2733,7 @@ setMethod("union",
           })
 
 #' Return a new SparkDataFrame containing the union of rows.
+#'
 #' This is an alias for \code{union}.
 #'
 #' @param x a SparkDataFrame.
