@@ -207,7 +207,7 @@ package object util extends Logging {
 
   def withSizeLimitedWriter[T](writer: Writer)(f: (Writer) => T): Option[T] = {
     try {
-	    // Subtract 3 from the string length to leave room for the "..."
+      // Subtract 3 from the string length to leave room for the "..."
       val limited = new SizeLimitedWriter(writer, SQLConf.get.maxPlanStringLength - 3)
       Some(f(limited))
     }
