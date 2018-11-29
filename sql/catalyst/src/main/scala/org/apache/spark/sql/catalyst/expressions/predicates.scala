@@ -367,11 +367,29 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 
   @transient lazy val set: Set[Any] = child.dataType match {
-    case _: AtomicType => hset
+    case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
     case _: NullType => hset
     case _ =>
+      val ord = TypeUtils.getInterpretedOrdering(child.dataType)
+      val ordering = if (hasNull) {
+        new Ordering[Any] {
+          override def compare(x: Any, y: Any): Int = {
+            if (x == null && y == null) {
+              0
+            } else if (x == null) {
+              -1
+            } else if (y == null) {
+              1
+            } else {
+              ord.compare(x, y)
+            }
+          }
+        }
+      } else {
+        ord
+      }
       // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ hset
+      TreeSet.empty(ordering) ++ hset
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
