@@ -23,12 +23,10 @@ import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.json.JsonInferSchema.inferField
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -776,6 +774,9 @@ case class SchemaOfJson(
   }
 
   @transient
+  private lazy val jsonInferSchema = new JsonInferSchema(jsonOptions)
+
+  @transient
   private lazy val json = child.eval().asInstanceOf[UTF8String]
 
   override def checkInputDataTypes(): TypeCheckResult = child match {
@@ -787,7 +788,7 @@ case class SchemaOfJson(
   override def eval(v: InternalRow): Any = {
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       parser.nextToken()
-      inferField(parser, jsonOptions)
+      jsonInferSchema.inferField(parser)
     }
 
     UTF8String.fromString(dt.catalogString)
