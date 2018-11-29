@@ -195,7 +195,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
         new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
       assert(deserialized === (1 to 100).toList)
     }
-    // This will exercise the getRemoteBytes / getRemoteValues code paths:
+    // This will exercise the getRemoteValues code path:
     assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
   }
 
