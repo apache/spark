@@ -141,8 +141,6 @@ class HiveOutputWriter(
   private val wrappers = fieldOIs.zip(dataTypes).map { case (f, dt) => wrapperFor(f, dt) }
   private val outputData = new Array[Any](fieldOIs.length)
 
-  override def init(): Unit = {}
-
   override def write(row: InternalRow): Unit = {
     var i = 0
     while (i < fieldOIs.length) {

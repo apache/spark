@@ -152,8 +152,6 @@ class TextOutputWriter(
 
   private var outputStream: Option[OutputStream] = None
 
-  override def init(): Unit = {}
-
   override def write(row: InternalRow): Unit = {
     val os = outputStream.getOrElse{
       val newStream = CodecStreams.createOutputStream(context, new Path(path))

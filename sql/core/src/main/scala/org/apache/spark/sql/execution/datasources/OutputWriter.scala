@@ -58,7 +58,7 @@ abstract class OutputWriterFactory extends Serializable {
  */
 abstract class OutputWriter {
   /** Initializes before writing any rows. Invoked on executor size. */
-  def init(): Unit
+  def init(): Unit = {}
 
   /**
    * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned

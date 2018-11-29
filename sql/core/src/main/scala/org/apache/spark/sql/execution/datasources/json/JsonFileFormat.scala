@@ -177,8 +177,6 @@ private[json] class JsonOutputWriter(
 
   private var jacksonGenerator: Option[JacksonGenerator] = None
 
-  override def init(): Unit = {}
-
   override def write(row: InternalRow): Unit = {
     val gen = jacksonGenerator.getOrElse {
       val os = CodecStreams.createOutputStreamWriter(context, new Path(path), encoding)
