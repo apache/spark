@@ -165,15 +165,14 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     } else {
       (extractLabeledPoints(dataset), null)
     }
-    val numFeatures = trainDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, predictionCol, impurity, lossType,
       maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
-      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy)
-    instr.logNumFeatures(numFeatures)
+      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy,
+      validationIndicatorCol, validationTol)
 
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
@@ -182,6 +181,10 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       GradientBoostedTrees.run(trainDataset, boostingStrategy,
         $(seed), $(featureSubsetStrategy))
     }
+
+    val numFeatures = baseLearners.head.numFeatures
+    instr.logNumFeatures(numFeatures)
+
     new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
   }
 

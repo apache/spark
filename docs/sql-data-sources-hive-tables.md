@@ -74,7 +74,7 @@ creating table, you can create a table using storage handler at Hive side, and u
     <td><code>inputFormat, outputFormat</code></td>
     <td>
       These 2 options specify the name of a corresponding `InputFormat` and `OutputFormat` class as a string literal,
-      e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in pair, and you can not
+      e.g. `org.apache.hadoop.hive.ql.io.orc.OrcInputFormat`. These 2 options must be appeared in a pair, and you can not
       specify them if you already specified the `fileFormat` option.
     </td>
   </tr>
