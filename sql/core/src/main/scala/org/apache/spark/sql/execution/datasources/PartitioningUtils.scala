@@ -110,7 +110,7 @@ object PartitioningUtils {
       timeZone: TimeZone): PartitionSpec = {
     val userSpecifiedDataTypes = if (userSpecifiedSchema.isDefined) {
       val nameToDataType = userSpecifiedSchema.get.fields.map(f => f.name -> f.dataType).toMap
-      if (caseSensitive) {
+      if (!caseSensitive) {
         CaseInsensitiveMap(nameToDataType)
       } else {
         nameToDataType
@@ -170,15 +170,7 @@ object PartitioningUtils {
       // Finally, we create `Partition`s based on paths and resolved partition values.
       val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues).map {
         case (PartitionValues(columnNames, literals), (path, _)) =>
-          val values = columnNames.zip(literals).map {
-            case (name, literal) =>
-              if (userSpecifiedDataTypes.contains(name)) {
-                Cast(literal, userSpecifiedDataTypes(name), Option(timeZone.getID)).eval()
-              } else {
-                literal.value
-              }
-          }
-          PartitionPath(InternalRow.fromSeq(values), path)
+          PartitionPath(InternalRow.fromSeq(literals.map(_.value)), path)
       }
 
       PartitionSpec(StructType(fields), partitions)
@@ -277,9 +269,12 @@ object PartitioningUtils {
       assert(rawColumnValue.nonEmpty, s"Empty partition column value in '$columnSpec'")
 
       val literal = if (userSpecifiedDataTypes.contains(columnName)) {
-        // SPARK-26188: if user provides corresponding column schema, process the column as String
-        //              type and cast it as user specified data type later.
-        inferPartitionColumnValue(rawColumnValue, false, timeZone)
+        // SPARK-26188: if user provides corresponding column schema, get the column value without
+        //              inference, and then cast it as user specified data type.
+        val columnValue = inferPartitionColumnValue(rawColumnValue, false, timeZone)
+        val castedValue =
+          Cast(columnValue, userSpecifiedDataTypes(columnName), Option(timeZone.getID)).eval()
+        Literal.create(castedValue, userSpecifiedDataTypes(columnName))
       } else {
         inferPartitionColumnValue(rawColumnValue, typeInference, timeZone)
       }
