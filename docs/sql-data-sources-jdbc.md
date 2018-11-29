@@ -55,7 +55,7 @@ the following case-insensitive options:
       as a subquery in the <code>FROM</code> clause. Spark will also assign an alias to the subquery clause.
       As an example, spark will issue a query of the following form to the JDBC Source.<br><br>
       <code> SELECT &lt;columns&gt; FROM (&lt;user_specified_query&gt;) spark_gen_alias</code><br><br>
-      Below are couple of restrictions while using this option.<br>
+      Below are a couple of restrictions while using this option.<br>
       <ol>
          <li> It is not allowed to specify `dbtable` and `query` options at the same time. </li>
          <li> It is not allowed to specify `query` and `partitionColumn` options at the same time. When specifying

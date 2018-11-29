@@ -687,7 +687,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0</code></td>
   <td>
     Set the maximum number GPU resources to acquire for this job. Note that executors will still launch when no GPU resources are found
-    since this configuration is just a upper limit and not a guaranteed amount.
+    since this configuration is just an upper limit and not a guaranteed amount.
   </td>
   </tr>
 <tr>
