@@ -169,19 +169,27 @@ private[csv] class CsvOutputWriter(
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
 
-  private val charset = Charset.forName(params.charset)
+  private var univocityGenerator: Option[UnivocityGenerator] = None
 
-  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
-
-  private val gen = new UnivocityGenerator(dataSchema, writer, params)
+  private def getOrCreateGen(): UnivocityGenerator = univocityGenerator.getOrElse {
+    val charset = Charset.forName(params.charset)
+    val os = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
+    val newGen = new UnivocityGenerator(dataSchema, os, params)
+    univocityGenerator = Some(newGen)
+    newGen
+  }
 
   override def init(): Unit = {
     if (params.headerFlag) {
+      val gen = getOrCreateGen()
       gen.writeHeaders()
     }
   }
 
-  override def write(row: InternalRow): Unit = gen.write(row)
+  override def write(row: InternalRow): Unit = {
+    val gen = getOrCreateGen()
+    gen.write(row)
+  }
 
-  override def close(): Unit = gen.close()
+  override def close(): Unit = univocityGenerator.map(_.close())
 }
