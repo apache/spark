@@ -42,14 +42,13 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
    */
   def infer(
       tokenRDD: RDD[Array[String]],
-      header: Array[String],
-      options: CSVOptions): StructType = {
+      header: Array[String]): StructType = {
     val fields = if (options.inferSchemaFlag) {
       val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
       val rootTypes: Array[DataType] =
-        tokenRDD.aggregate(startType)(inferRowType(options), mergeRowTypes)
+        tokenRDD.aggregate(startType)(inferRowType, mergeRowTypes)
 
-      toStructFields(rootTypes, header, options)
+      toStructFields(rootTypes, header)
     } else {
       // By default fields are assumed to be StringType
       header.map(fieldName => StructField(fieldName, StringType, nullable = true))
@@ -60,8 +59,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   def toStructFields(
       fieldTypes: Array[DataType],
-      header: Array[String],
-      options: CSVOptions): Array[StructField] = {
+      header: Array[String]): Array[StructField] = {
     header.zip(fieldTypes).map { case (thisHeader, rootType) =>
       val dType = rootType match {
         case _: NullType => StringType
@@ -71,11 +69,10 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     }
   }
 
-  def inferRowType(options: CSVOptions)
-      (rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
+  def inferRowType(rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
-      rowSoFar(i) = inferField(rowSoFar(i), next(i), options)
+      rowSoFar(i) = inferField(rowSoFar(i), next(i))
       i+=1
     }
     rowSoFar
@@ -91,20 +88,20 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
    * Infer type of string field. Given known type Double, and a string "1", there is no
    * point checking if it is an Int, as the final type must be Double or higher.
    */
-  def inferField(typeSoFar: DataType, field: String, options: CSVOptions): DataType = {
+  def inferField(typeSoFar: DataType, field: String): DataType = {
     if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
     } else {
       typeSoFar match {
-        case NullType => tryParseInteger(field, options)
-        case IntegerType => tryParseInteger(field, options)
-        case LongType => tryParseLong(field, options)
+        case NullType => tryParseInteger(field)
+        case IntegerType => tryParseInteger(field)
+        case LongType => tryParseLong(field)
         case _: DecimalType =>
           // DecimalTypes have different precisions and scales, so we try to find the common type.
-          compatibleType(typeSoFar, tryParseDecimal(field, options)).getOrElse(StringType)
-        case DoubleType => tryParseDouble(field, options)
-        case TimestampType => tryParseTimestamp(field, options)
-        case BooleanType => tryParseBoolean(field, options)
+          compatibleType(typeSoFar, tryParseDecimal(field)).getOrElse(StringType)
+        case DoubleType => tryParseDouble(field)
+        case TimestampType => tryParseTimestamp(field)
+        case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
           throw new UnsupportedOperationException(s"Unexpected data type $other")
@@ -112,27 +109,27 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     }
   }
 
-  private def isInfOrNan(field: String, options: CSVOptions): Boolean = {
+  private def isInfOrNan(field: String): Boolean = {
     field == options.nanValue || field == options.negativeInf || field == options.positiveInf
   }
 
-  private def tryParseInteger(field: String, options: CSVOptions): DataType = {
+  private def tryParseInteger(field: String): DataType = {
     if ((allCatch opt field.toInt).isDefined) {
       IntegerType
     } else {
-      tryParseLong(field, options)
+      tryParseLong(field)
     }
   }
 
-  private def tryParseLong(field: String, options: CSVOptions): DataType = {
+  private def tryParseLong(field: String): DataType = {
     if ((allCatch opt field.toLong).isDefined) {
       LongType
     } else {
-      tryParseDecimal(field, options)
+      tryParseDecimal(field)
     }
   }
 
-  private def tryParseDecimal(field: String, options: CSVOptions): DataType = {
+  private def tryParseDecimal(field: String): DataType = {
     val decimalTry = allCatch opt {
       // `BigDecimal` conversion can fail when the `field` is not a form of number.
       val bigDecimal = new BigDecimal(field)
@@ -144,30 +141,30 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         //   2. scale is bigger than precision.
         DecimalType(bigDecimal.precision, bigDecimal.scale)
       } else {
-        tryParseDouble(field, options)
+        tryParseDouble(field)
       }
     }
-    decimalTry.getOrElse(tryParseDouble(field, options))
+    decimalTry.getOrElse(tryParseDouble(field))
   }
 
-  private def tryParseDouble(field: String, options: CSVOptions): DataType = {
-    if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field, options)) {
+  private def tryParseDouble(field: String): DataType = {
+    if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
     } else {
-      tryParseTimestamp(field, options)
+      tryParseTimestamp(field)
     }
   }
 
-  private def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
+  private def tryParseTimestamp(field: String): DataType = {
     // This case infers a custom `dataFormat` is set.
     if ((allCatch opt timeParser.parse(field)).isDefined) {
       TimestampType
     } else {
-      tryParseBoolean(field, options)
+      tryParseBoolean(field)
     }
   }
 
-  private def tryParseBoolean(field: String, options: CSVOptions): DataType = {
+  private def tryParseBoolean(field: String): DataType = {
     if ((allCatch opt field.toBoolean).isDefined) {
       BooleanType
     } else {

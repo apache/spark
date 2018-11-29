@@ -181,8 +181,8 @@ case class SchemaOfCsv(
     val header = row.zipWithIndex.map { case (_, index) => s"_c$index" }
     val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
     val inferSchema = new CSVInferSchema(parsedOptions)
-    val fieldTypes = inferSchema.inferRowType(parsedOptions)(startType, row)
-    val st = StructType(inferSchema.toStructFields(fieldTypes, header, parsedOptions))
+    val fieldTypes = inferSchema.inferRowType(startType, row)
+    val st = StructType(inferSchema.toStructFields(fieldTypes, header))
     UTF8String.fromString(st.catalogString)
   }
 

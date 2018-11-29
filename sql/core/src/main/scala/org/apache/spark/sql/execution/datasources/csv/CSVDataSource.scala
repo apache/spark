@@ -135,7 +135,7 @@ object TextInputCSVDataSource extends CSVDataSource {
           val parser = new CsvParser(parsedOptions.asParserSettings)
           linesWithoutHeader.map(parser.parseLine)
         }
-        new CSVInferSchema(parsedOptions).infer(tokenRDD, header, parsedOptions)
+        new CSVInferSchema(parsedOptions).infer(tokenRDD, header)
       case _ =>
         // If the first line could not be read, just return the empty schema.
         StructType(Nil)
@@ -208,7 +208,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
             encoding = parsedOptions.charset)
         }
         val sampled = CSVUtils.sample(tokenRDD, parsedOptions)
-        new CSVInferSchema(parsedOptions).infer(sampled, header, parsedOptions)
+        new CSVInferSchema(parsedOptions).infer(sampled, header)
       case None =>
         // If the first row could not be read, just return the empty schema.
         StructType(Nil)
