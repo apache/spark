@@ -124,3 +124,4 @@ spark-docker-image-generator/plugin-test-project/gradle-build/*
 spark-docker-image-generator/plugin-test-project/build/*
 .baseline/*
 .bulldozer.yml
+.policy.yml
