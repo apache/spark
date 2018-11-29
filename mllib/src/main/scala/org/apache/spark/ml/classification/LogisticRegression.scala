@@ -503,8 +503,9 @@ class LogisticRegression @Since("1.2.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, regParam, elasticNetParam, standardization, threshold,
-      maxIter, tol, fitIntercept)
+    instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
+      probabilityCol, regParam, elasticNetParam, standardization, threshold, maxIter, tol,
+      fitIntercept)
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
