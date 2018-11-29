@@ -33,13 +33,13 @@ class SizeLimitedWriterSuite extends SparkFunSuite {
     assert(writer.toString === "testtest")
   }
 
-  test("filter pattern") {
+  test("truncate at the limit") {
     val writer = new StringBuilderWriter()
     val limited = new SizeLimitedWriter(writer, 5)
     assertThrows[WriterSizeException] {
       limited.write("test")
       limited.write("test")
     }
-    assert(writer.toString === "test")
+    assert(writer.toString === "testt")
   }
 }

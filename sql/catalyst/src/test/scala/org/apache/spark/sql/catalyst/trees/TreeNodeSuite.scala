@@ -597,13 +597,13 @@ class TreeNodeSuite extends SparkFunSuite {
     assert(result === expected)
   }
 
-  test("toString() tree depth") {
+  test("treeString limits plan length") {
     val ds = (1 until 100).foldLeft(Literal("TestLiteral"): Expression) { case (treeNode, x) =>
       Add(Literal(x), treeNode)
     }
 
     val planString = ds.treeString
     assert(planString.endsWith("..."))
-    assert(planString.length <= SQLConf.get.maxPlanStringLength)
+    assert(planString.length === SQLConf.get.maxPlanStringLength)
   }
 }

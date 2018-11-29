@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.io.Writer
 
-class WriterSizeException(val attemptedSize: Long, val charLimit: Long) extends Exception(
-  s"Attempted to write $attemptedSize characters to a writer that is limited to $charLimit")
+class WriterSizeException(val extraChars: Long, val charLimit: Long) extends Exception(
+  s"Writer reached limit of $charLimit characters.  $extraChars extra characters ignored.")
 
 /**
  * This class is used to control the size of generated writers.  Guarantees that the total number
@@ -31,15 +31,15 @@ class WriterSizeException(val attemptedSize: Long, val charLimit: Long) extends 
  */
 class SizeLimitedWriter(underlying: Writer, charLimit: Long) extends Writer {
 
-  var charsWritten: Long = 0
+  private var charsWritten: Long = 0
 
   override def write(cbuf: Array[Char], off: Int, len: Int): Unit = {
-    val newLength = charsWritten + Math.min(cbuf.length - off, len)
-    if (newLength > charLimit) {
-      throw new WriterSizeException(newLength, charLimit)
+    val charsToWrite = Math.min(charLimit - charsWritten, len).toInt
+    underlying.write(cbuf, off, charsToWrite)
+    charsWritten += charsToWrite
+    if (charsToWrite < len) {
+      throw new WriterSizeException(len - charsToWrite, charLimit)
     }
-    charsWritten = newLength
-    underlying.write(cbuf, off, len)
   }
 
   override def flush(): Unit = underlying.flush()
