@@ -239,7 +239,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       }
     }
 
-    withClue("L2 regularization should be required when using prior regularization") {
+    withClue("`regParam` should be positive when using prior regularization") {
       intercept[IllegalArgumentException] {
         new LogisticRegression()
           .setPriorMean(Array(0.5, 0.5, 0.5, 0.5))
