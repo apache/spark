@@ -132,11 +132,6 @@ function build {
     SPARK_ROOT="$CTX_DIR/base"
   fi
 
-  # If a custom SPARK_UID was set add it to build arguments
-  if [ -n "$SPARK_UID" ]; then
-    BUILD_ARGS+=(--build-arg spark_uid=$SPARK_UID)
-  fi
-
   # Verify that the Docker image content directory is present
   if [ ! -d "$SPARK_ROOT/kubernetes/dockerfiles" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
@@ -151,6 +146,12 @@ function build {
   fi
 
   local BUILD_ARGS=(${BUILD_PARAMS})
+
+  # If a custom SPARK_UID was set add it to build arguments
+  if [ -n "$SPARK_UID" ]; then
+    BUILD_ARGS+=(--build-arg spark_uid=$SPARK_UID)
+  fi
+
   local BINDING_BUILD_ARGS=(
     ${BUILD_PARAMS}
     --build-arg
