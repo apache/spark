@@ -1897,7 +1897,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .text(path)
 
       val jsonDF = spark.read.option("multiLine", true).option("mode", "PERMISSIVE").json(path)
-      assert(jsonDF.count() === corruptRecordCount + 1) // null row for empty file
+      assert(jsonDF.count() === corruptRecordCount)
       assert(jsonDF.schema === new StructType()
         .add("_corrupt_record", StringType)
         .add("dummy", StringType))
@@ -1910,7 +1910,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           F.count($"dummy").as("valid"),
           F.count($"_corrupt_record").as("corrupt"),
           F.count("*").as("count"))
-      checkAnswer(counts, Row(1, 5, 7)) // null row for empty file
+      checkAnswer(counts, Row(1, 4, 6)) // null row for empty file
     }
   }
 
@@ -2554,5 +2554,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     emptyString(StringType, "")
     emptyString(BinaryType, "".getBytes(StandardCharsets.UTF_8))
+  }
+
+  test("do not produce empty files for empty partitions") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.emptyDataset[String].write.json(path)
+      val files = new File(path).listFiles()
+      assert(!files.exists(_.getName.endsWith("json")))
+    }
   }
 }
