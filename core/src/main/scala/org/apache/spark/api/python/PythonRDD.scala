@@ -639,6 +639,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     with Logging {
 
   private var encryptionServer: PythonServer[Unit] = null
+  private var decryptionServer: PythonServer[Unit] = null
 
   /**
    * Read data from disks, then copy it to `out`
@@ -687,15 +688,35 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
       override def handleConnection(sock: Socket): Unit = {
         val env = SparkEnv.get
         val in = sock.getInputStream()
-        val dir = new File(Utils.getLocalDir(env.conf))
-        val file = File.createTempFile("broadcast", "", dir)
-        path = file.getAbsolutePath
-        val out = env.serializerManager.wrapForEncryption(new FileOutputStream(path))
+        val abspath = new File(path).getAbsolutePath
+        val out = env.serializerManager.wrapForEncryption(new FileOutputStream(abspath))
         DechunkedInputStream.dechunkAndCopyToOutput(in, out)
       }
     }
     Array(encryptionServer.port, encryptionServer.secret)
   }
+
+  def setupDecryptionServer(): Array[Any] = {
+    decryptionServer = new PythonServer[Unit]("broadcast-decrypt-server-for-driver") {
+      override def handleConnection(sock: Socket): Unit = {
+        val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()))
+        Utils.tryWithSafeFinally {
+          val in = SparkEnv.get.serializerManager.wrapForEncryption(new FileInputStream(path))
+          Utils.tryWithSafeFinally {
+            Utils.copyStream(in, out, false)
+          } {
+            in.close()
+          }
+          out.flush()
+        } {
+          JavaUtils.closeQuietly(out)
+        }
+      }
+    }
+    Array(decryptionServer.port, decryptionServer.secret)
+  }
+
+  def waitTillBroadcastDataSent(): Unit = decryptionServer.getResult()
 
   def waitTillDataReceived(): Unit = encryptionServer.getResult()
 }
