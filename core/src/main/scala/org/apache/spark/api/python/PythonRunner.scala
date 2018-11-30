@@ -74,13 +74,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   private val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
   // each python worker gets an equal part of the allocation. the worker pool will grow to the
   // number of concurrent tasks, which is determined by the number of cores in this executor.
-  private val memoryMb = if (Utils.isWindows) {
-    // Windows currently does not have 'resource' Python module that is required in worker.py
-    None
-  } else {
-    conf.get(PYSPARK_EXECUTOR_MEMORY)
+  private val memoryMb = conf.get(PYSPARK_EXECUTOR_MEMORY)
       .map(_ / conf.getInt("spark.executor.cores", 1))
-  }
 
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars = funcs.head.funcs.head.envVars
