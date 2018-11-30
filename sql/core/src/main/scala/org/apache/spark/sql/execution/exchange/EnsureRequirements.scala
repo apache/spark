@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
  * each operator by inserting [[ShuffleExchangeExec]] Operators where required.  Also ensure that
  * the input partition ordering requirements are met.
  */
-case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
+case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] with PredicateHelper {
   private def defaultNumPreShufflePartitions: Int = conf.numShufflePartitions
 
   private def targetPostShuffleInputSize: Long = conf.targetPostShuffleInputSize
@@ -139,8 +139,15 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
-    val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
-    val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
+    val aliasMap = AttributeMap(operator.children.flatMap(_.expressions.collect {
+      case a: Alias => (a.toAttribute, a.child)
+    }))
+    val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution.map {
+      _.mapExpressions(replaceAlias(_, aliasMap))
+    }
+    val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering.map {
+      _.map(replaceAlias(_, aliasMap).asInstanceOf[SortOrder])
+    }
     var children: Seq[SparkPlan] = operator.children
     assert(requiredChildDistributions.length == children.length)
     assert(requiredChildOrderings.length == children.length)

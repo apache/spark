@@ -210,8 +210,8 @@ abstract class Expression extends TreeNode[Expression] {
     deterministic && other.deterministic && canonicalized == other.canonicalized
 
   /**
-   * Returns true when two expressions will always compute the same result, even if the output may
-   * be different, because of different names or similar differences.
+   * Returns true when two expressions will always compute the same result, even if the output from
+   * plan perspective may be different, because of different names or similar differences.
    * Usually this means that their canonicalized form equals, but it may also not be the case, as
    * different output expressions can evaluate to the same result as well (eg. when an expression
    * is aliased).

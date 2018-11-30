@@ -22,7 +22,10 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
@@ -1555,6 +1558,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.where($"city".contains(new java.lang.Character('A'))),
       Seq(Row("Amsterdam")))
+  }
+
+  test("SPARK-25951: avoid redundant shuffle on rename") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val N = 10
+      val t1 = spark.range(N).selectExpr("floor(id/4) as k1")
+      val t2 = spark.range(N).selectExpr("floor(id/4) as k2")
+
+      val agg1 = t1.groupBy("k1").agg(count(lit("1")).as("cnt1"))
+      val agg2 = t2.groupBy("k2").agg(count(lit("1")).as("cnt2")).withColumnRenamed("k2", "k3")
+      val finalPlan = agg1.join(agg2, $"k1" === $"k3")
+      val exchanges = finalPlan.queryExecution.executedPlan.collect {
+        case se: ShuffleExchangeExec => se
+      }
+      assert(exchanges.size == 2)
+      assert(!exchanges.exists(_.newPartitioning match {
+        case HashPartitioning(Seq(a: AttributeReference), _) => a.name == "k3"
+        case _ => false
+      }))
+    }
   }
 }
 

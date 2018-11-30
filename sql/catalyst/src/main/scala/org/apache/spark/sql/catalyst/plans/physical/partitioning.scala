@@ -42,6 +42,12 @@ sealed trait Distribution {
    * matching the given number of partitions.
    */
   def createPartitioning(numPartitions: Int): Partitioning
+
+  /**
+   * Returns a new `Distribution` with its `Expression`s transformed according to the provided
+   * function.
+   */
+  def mapExpressions(f: Expression => Expression): Distribution = this
 }
 
 /**
@@ -89,6 +95,10 @@ case class ClusteredDistribution(
         s"the actual number of partitions is $numPartitions.")
     HashPartitioning(clustering, numPartitions)
   }
+
+  override def mapExpressions(f: Expression => Expression): ClusteredDistribution = {
+    copy(clustering = clustering.map(f))
+  }
 }
 
 /**
@@ -114,6 +124,10 @@ case class HashClusteredDistribution(
         s"the actual number of partitions is $numPartitions.")
     HashPartitioning(expressions, numPartitions)
   }
+
+  override def mapExpressions(f: Expression => Expression): HashClusteredDistribution = {
+    copy(expressions = expressions.map(f))
+  }
 }
 
 /**
@@ -134,6 +148,10 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
 
   override def createPartitioning(numPartitions: Int): Partitioning = {
     RangePartitioning(ordering, numPartitions)
+  }
+
+  override def mapExpressions(f: Expression => Expression): OrderedDistribution = {
+    copy(ordering = ordering.map(f(_).asInstanceOf[SortOrder]))
   }
 }
 
