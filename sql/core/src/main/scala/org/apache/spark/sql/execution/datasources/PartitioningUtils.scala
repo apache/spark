@@ -155,7 +155,8 @@ object PartitioningUtils {
           "root directory of the table. If there are multiple root directories, " +
           "please load them separately and then union them.")
 
-      val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues, timeZone)
+      val resolvedPartitionValues =
+        resolvePartitions(pathsWithPartitionValues, caseSensitive, timeZone)
 
       // Creates the StructType which represents the partition columns.
       val fields = {
@@ -345,15 +346,18 @@ object PartitioningUtils {
    */
   def resolvePartitions(
       pathsWithPartitionValues: Seq[(Path, PartitionValues)],
+      caseSensitive: Boolean,
       timeZone: TimeZone): Seq[PartitionValues] = {
     if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
     } else {
-      // TODO: Selective case sensitivity.
-      val distinctPartColNames =
-        pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase())).distinct
+      val distinctPartColNames = if (caseSensitive) {
+        pathsWithPartitionValues.map(_._2.columnNames)
+      } else {
+        pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase()))
+      }
       assert(
-        distinctPartColNames.size == 1,
+        distinctPartColNames.distinct.size == 1,
         listConflictingPartitionColumns(pathsWithPartitionValues))
 
       // Resolves possible type conflicts for each column

@@ -65,6 +65,34 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
+  test("SPARK-26230: if case sensitive, validate partitions with original column names") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, s"a=1")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val partitionDirectory2 = new File(dir, s"A=2")
+      partitionDirectory2.mkdir()
+      val file2 = new File(partitionDirectory2, "text.txt")
+      stringToFile(file2, "text")
+      val path = new Path(dir.getCanonicalPath)
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+        val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
+        assert(partitionValues.length == 2)
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val msg = intercept[AssertionError] {
+          val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+          fileIndex.partitionSpec()
+        }.getMessage
+        assert(msg.contains("Conflicting partition column names detected"))
+      }
+    }
+  }
+
   test("InMemoryFileIndex: input paths are converted to qualified paths") {
     withTempDir { dir =>
       val file = new File(dir, "text.txt")
