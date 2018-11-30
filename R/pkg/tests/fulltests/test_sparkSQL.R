@@ -1379,7 +1379,7 @@ test_that("column operators", {
 
 test_that("column functions", {
   c <- column("a")
-  c1 <- abs(c) + acos(c) + approxCountDistinct(c) + ascii(c) + asin(c) + atan(c)
+  c1 <- abs(c) + acos(c) + approx_count_distinct(c) + ascii(c) + asin(c) + atan(c)
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
   c3 <- cosh(c) + count(c) + crc32(c) + hash(c) + exp(c)
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
@@ -1388,7 +1388,7 @@ test_that("column functions", {
   c7 <- mean(c) + min(c) + month(c) + negate(c) + posexplode(c) + quarter(c)
   c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c) + monotonically_increasing_id()
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
-  c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
+  c10 <- sumDistinct(c) + tan(c) + tanh(c) + degrees(c) + radians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
   c12 <- variance(c) + ltrim(c, "a") + rtrim(c, "b") + trim(c, "c")
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
@@ -1620,14 +1620,20 @@ test_that("column functions", {
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 
-  # Test from_csv()
+  # Test from_csv(), schema_of_csv()
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, alias(from_csv(df$col, "a INT"), "csv")))
   expect_equal(c[[1]][[1]]$a, 1)
   c <- collect(select(df, alias(from_csv(df$col, lit("a INT")), "csv")))
   expect_equal(c[[1]][[1]]$a, 1)
 
-  # Test to_json(), from_json()
+  df <- as.DataFrame(list(list("col" = "1")))
+  c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
+  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  c <- collect(select(df, schema_of_csv(lit("Amsterdam,2018"))))
+  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+
+  # Test to_json(), from_json(), schema_of_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
   j <- collect(select(df, alias(to_json(df$people), "json")))
   expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
@@ -1654,6 +1660,12 @@ test_that("column functions", {
     expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 })))
   }
 
+  df <- as.DataFrame(list(list("col" = "1")))
+  c <- collect(select(df, schema_of_json('{"name":"Bob"}')))
+  expect_equal(c[[1]], "struct<name:string>")
+  c <- collect(select(df, schema_of_json(lit('{"name":"Bob"}'))))
+  expect_equal(c[[1]], "struct<name:string>")
+
   # Test to_json() supports arrays of primitive types and arrays
   df <- sql("SELECT array(19, 42, 70) as age")
   j <- collect(select(df, alias(to_json(df$age), "json")))
@@ -1674,7 +1686,7 @@ test_that("column functions", {
 
   # check for unparseable
   df <- as.DataFrame(list(list("a" = "")))
-  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
+  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]]$a, NA)
 
   # check if array type in string is correctly supported.
   jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
@@ -2458,6 +2470,7 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
   expect_equal(count(unioned), 6)
   expect_equal(first(unioned)$name, "Michael")
   expect_equal(count(arrange(suppressWarnings(union(df, df2)), df$age)), 6)
+  expect_equal(count(arrange(suppressWarnings(unionAll(df, df2)), df$age)), 6)
 
   df1 <- select(df2, "age", "name")
   unioned1 <- arrange(unionByName(df1, df), df1$age)

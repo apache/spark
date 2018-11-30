@@ -23,8 +23,8 @@ import java.lang.invoke.SerializedLambda
 import scala.collection.mutable.{Map, Set, Stack}
 import scala.language.existentials
 
-import org.apache.xbean.asm6.{ClassReader, ClassVisitor, MethodVisitor, Type}
-import org.apache.xbean.asm6.Opcodes._
+import org.apache.xbean.asm7.{ClassReader, ClassVisitor, MethodVisitor, Type}
+import org.apache.xbean.asm7.Opcodes._
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
@@ -424,7 +424,7 @@ private[spark] class ReturnStatementInClosureException
   extends SparkException("Return statements aren't allowed in Spark closures")
 
 private class ReturnStatementFinder(targetMethodName: Option[String] = None)
-  extends ClassVisitor(ASM6) {
+  extends ClassVisitor(ASM7) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
 
@@ -438,7 +438,7 @@ private class ReturnStatementFinder(targetMethodName: Option[String] = None)
       val isTargetMethod = targetMethodName.isEmpty ||
         name == targetMethodName.get || name == targetMethodName.get.stripSuffix("$adapted")
 
-      new MethodVisitor(ASM6) {
+      new MethodVisitor(ASM7) {
         override def visitTypeInsn(op: Int, tp: String) {
           if (op == NEW && tp.contains("scala/runtime/NonLocalReturnControl") && isTargetMethod) {
             throw new ReturnStatementInClosureException
@@ -446,7 +446,7 @@ private class ReturnStatementFinder(targetMethodName: Option[String] = None)
         }
       }
     } else {
-      new MethodVisitor(ASM6) {}
+      new MethodVisitor(ASM7) {}
     }
   }
 }
@@ -470,7 +470,7 @@ private[util] class FieldAccessFinder(
     findTransitively: Boolean,
     specificMethod: Option[MethodIdentifier[_]] = None,
     visitedMethods: Set[MethodIdentifier[_]] = Set.empty)
-  extends ClassVisitor(ASM6) {
+  extends ClassVisitor(ASM7) {
 
   override def visitMethod(
       access: Int,
@@ -485,7 +485,7 @@ private[util] class FieldAccessFinder(
       return null
     }
 
-    new MethodVisitor(ASM6) {
+    new MethodVisitor(ASM7) {
       override def visitFieldInsn(op: Int, owner: String, name: String, desc: String) {
         if (op == GETFIELD) {
           for (cl <- fields.keys if cl.getName == owner.replace('/', '.')) {
@@ -525,7 +525,7 @@ private[util] class FieldAccessFinder(
   }
 }
 
-private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM6) {
+private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM7) {
   var myName: String = null
 
   // TODO: Recursively find inner closures that we indirectly reference, e.g.
@@ -540,7 +540,7 @@ private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM
 
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    new MethodVisitor(ASM6) {
+    new MethodVisitor(ASM7) {
       override def visitMethodInsn(
           op: Int, owner: String, name: String, desc: String, itf: Boolean) {
         val argTypes = Type.getArgumentTypes(desc)

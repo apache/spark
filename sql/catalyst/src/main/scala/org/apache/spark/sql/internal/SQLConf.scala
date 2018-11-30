@@ -27,7 +27,6 @@ import scala.collection.immutable
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
-import org.tukaani.xz.LZMA2Options
 
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
@@ -36,6 +35,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
 
 object SQLConf {
 
-  private val sqlConfEntries = java.util.Collections.synchronizedMap(
+  private[sql] val sqlConfEntries = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, ConfigEntry[_]]())
 
   val staticConfKeys: java.util.Set[String] =
@@ -818,6 +818,18 @@ object SQLConf {
     .intConf
     .createWithDefault(65535)
 
+  val CODEGEN_METHOD_SPLIT_THRESHOLD = buildConf("spark.sql.codegen.methodSplitThreshold")
+    .internal()
+    .doc("The threshold of source-code splitting in the codegen. When the number of characters " +
+      "in a single Java function (without comment) exceeds the threshold, the function will be " +
+      "automatically split to multiple smaller ones. We cannot know how many bytecode will be " +
+      "generated, so use the code length as metric. When running on HotSpot, a function's " +
+      "bytecode should not go beyond 8KB, otherwise it will not be JITted; it also should not " +
+      "be too small, otherwise there will be many function calls.")
+    .intConf
+    .checkValue(threshold => threshold > 0, "The threshold must be a positive integer.")
+    .createWithDefault(1024)
+
   val WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR =
     buildConf("spark.sql.codegen.splitConsumeFuncByOperator")
       .internal()
@@ -1234,7 +1246,7 @@ object SQLConf {
       .doc("Threshold for number of rows guaranteed to be held in memory by the sort merge " +
         "join operator")
       .intConf
-      .createWithDefault(Int.MaxValue)
+      .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.spill.threshold")
@@ -1468,7 +1480,7 @@ object SQLConf {
           "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
           " in memory, otherwise do a global sort which spills to disk if necessary.")
       .intConf
-      .createWithDefault(Int.MaxValue)
+      .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1582,6 +1594,30 @@ object SQLConf {
         "WHERE, which does not follow SQL standard.")
       .booleanConf
       .createWithDefault(false)
+
+  val NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE =
+    buildConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue")
+      .internal()
+      .doc("When set to true, the key attribute resulted from running `Dataset.groupByKey` " +
+        "for non-struct key type, will be named as `value`, following the behavior of Spark " +
+        "version 2.4 and earlier.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val MAX_TO_STRING_FIELDS = buildConf("spark.sql.debug.maxToStringFields")
+    .doc("Maximum number of fields of sequence-like entries can be converted to strings " +
+      "in debug output. Any elements beyond the limit will be dropped and replaced by a" +
+      """ "... N more fields" placeholder.""")
+    .intConf
+    .createWithDefault(25)
+
+  val SET_COMMAND_REJECTS_SPARK_CONFS =
+    buildConf("spark.sql.legacy.execution.setCommandRejectsSparkConfs")
+      .internal()
+      .doc("If it is set to true, SET command will fail when the key is registered as " +
+        "a SparkConf entry.")
+      .booleanConf
+      .createWithDefault(true)
 }
 
 /**
@@ -1738,6 +1774,8 @@ class SQLConf extends Serializable with Logging {
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
+
+  def methodSplitThreshold: Int = getConf(CODEGEN_METHOD_SPLIT_THRESHOLD)
 
   def wholeStageSplitConsumeFuncByOperator: Boolean =
     getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
@@ -1994,6 +2032,13 @@ class SQLConf extends Serializable with Logging {
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
+
+  def nameNonStructGroupingKeyAsValue: Boolean =
+    getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
+
+  def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
+
+  def setCommandRejectsSparkConfs: Boolean = getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CONFS)
 
   /** ********************** SQLConf functionality methods ************ */
 

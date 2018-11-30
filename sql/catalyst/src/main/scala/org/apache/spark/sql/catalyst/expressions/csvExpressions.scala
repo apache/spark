@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -92,13 +93,23 @@ case class CsvToStructs(
     }
   }
 
+  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
+
   @transient lazy val parser = {
-    val parsedOptions = new CSVOptions(options, columnPruning = true, timeZoneId.get)
+    val parsedOptions = new CSVOptions(
+      options,
+      columnPruning = true,
+      defaultTimeZoneId = timeZoneId.get,
+      defaultColumnNameOfCorruptRecord = nameOfCorruptRecord)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw new AnalysisException(s"from_csv() doesn't support the ${mode.name} mode. " +
         s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
     }
+    ExprUtils.verifyColumnNameOfCorruptRecord(
+      nullableSchema,
+      parsedOptions.columnNameOfCorruptRecord)
+
     val actualSchema =
       StructType(nullableSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     val rawParser = new UnivocityParser(actualSchema, actualSchema, parsedOptions)
@@ -169,8 +180,9 @@ case class SchemaOfCsv(
 
     val header = row.zipWithIndex.map { case (_, index) => s"_c$index" }
     val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-    val fieldTypes = CSVInferSchema.inferRowType(parsedOptions)(startType, row)
-    val st = StructType(CSVInferSchema.toStructFields(fieldTypes, header, parsedOptions))
+    val inferSchema = new CSVInferSchema(parsedOptions)
+    val fieldTypes = inferSchema.inferRowType(startType, row)
+    val st = StructType(inferSchema.toStructFields(fieldTypes, header))
     UTF8String.fromString(st.catalogString)
   }
 

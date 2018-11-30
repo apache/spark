@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.submit
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
-import io.fabric8.kubernetes.client.dsl.{MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
+import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{doReturn, verify, when}
 import org.scalatest.BeforeAndAfter
@@ -28,7 +28,6 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 

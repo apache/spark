@@ -119,25 +119,6 @@ class DataFrame(object):
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
-    @since(1.3)
-    def registerTempTable(self, name):
-        """Registers this DataFrame as a temporary table using the given name.
-
-        The lifetime of this temporary table is tied to the :class:`SparkSession`
-        that was used to create this :class:`DataFrame`.
-
-        >>> df.registerTempTable("people")
-        >>> df2 = spark.sql("select * from people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
-        >>> spark.catalog.dropTempView("people")
-
-        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
-        """
-        warnings.warn(
-            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
-        self._jdf.createOrReplaceTempView(name)
-
     @since(2.0)
     def createTempView(self, name):
         """Creates a local temporary view with this DataFrame.
@@ -276,7 +257,7 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        Scan ExistingRDD[age#0,name#1]
+        *(1) Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -750,6 +731,11 @@ class DataFrame(object):
 
         At least one partition-by expression must be specified.
         When no explicit sort order is specified, "ascending nulls first" is assumed.
+
+        Note that due to performance reasons this method uses sampling to estimate the ranges.
+        Hence, the output may not be consistent, since sampling can return different values.
+        The sample size can be controlled by the config
+        `spark.sql.execution.rangeExchange.sampleSizePerPartition`.
 
         >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
         2
@@ -1470,10 +1456,7 @@ class DataFrame(object):
         (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
-
-        .. note:: Deprecated in 2.0, use :func:`union` instead.
         """
-        warnings.warn("Deprecated in 2.0, use union instead.", DeprecationWarning)
         return self.union(other)
 
     @since(2.3)
@@ -1834,7 +1817,7 @@ class DataFrame(object):
 
         This method implements a variation of the Greenwald-Khanna
         algorithm (with some speed optimizations). The algorithm was first
-        present in [[http://dx.doi.org/10.1145/375663.375670
+        present in [[https://doi.org/10.1145/375663.375670
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
@@ -1956,7 +1939,7 @@ class DataFrame(object):
         """
         Finding frequent items for columns, possibly with false positives. Using the
         frequent element count algorithm described in
-        "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
+        "https://doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
         .. note:: This function is meant for exploratory data analysis, as we make no

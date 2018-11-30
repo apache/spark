@@ -38,15 +38,15 @@ Spark SQL and DataFrames support the following data types:
   elements with the type of `elementType`. `containsNull` is used to indicate if
   elements in a `ArrayType` value can have `null` values.
   - `MapType(keyType, valueType, valueContainsNull)`:
-  Represents values comprising a set of key-value pairs. The data type of keys are
-  described by `keyType` and the data type of values are described by `valueType`.
+  Represents values comprising a set of key-value pairs. The data type of keys is
+  described by `keyType` and the data type of values is described by `valueType`.
   For a `MapType` value, keys are not allowed to have `null` values. `valueContainsNull`
   is used to indicate if values of a `MapType` value can have `null` values.
   - `StructType(fields)`: Represents values with the structure described by
   a sequence of `StructField`s (`fields`).
     * `StructField(name, dataType, nullable)`: Represents a field in a `StructType`.
     The name of a field is indicated by `name`. The data type of a field is indicated
-    by `dataType`. `nullable` is used to indicate if values of this fields can have
+    by `dataType`. `nullable` is used to indicate if values of these fields can have
     `null` values.
 
 <div class="codetabs">

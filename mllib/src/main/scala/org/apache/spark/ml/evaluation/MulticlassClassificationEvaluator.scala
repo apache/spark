@@ -19,7 +19,7 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
-import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
+import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol, HasWeightCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.sql.{Dataset, Row}
@@ -33,7 +33,8 @@ import org.apache.spark.sql.types.DoubleType
 @Since("1.5.0")
 @Experimental
 class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") override val uid: String)
-  extends Evaluator with HasPredictionCol with HasLabelCol with DefaultParamsWritable {
+  extends Evaluator with HasPredictionCol with HasLabelCol
+    with HasWeightCol with DefaultParamsWritable {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("mcEval"))
@@ -67,6 +68,10 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  /** @group setParam */
+  @Since("3.0.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
   setDefault(metricName -> "f1")
 
   @Since("2.0.0")
@@ -75,11 +80,13 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
     SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
     SchemaUtils.checkNumericType(schema, $(labelCol))
 
-    val predictionAndLabels =
-      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType)).rdd.map {
-        case Row(prediction: Double, label: Double) => (prediction, label)
+    val predictionAndLabelsWithWeights =
+      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType),
+        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
+        .rdd.map {
+        case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
       }
-    val metrics = new MulticlassMetrics(predictionAndLabels)
+    val metrics = new MulticlassMetrics(predictionAndLabelsWithWeights)
     val metric = $(metricName) match {
       case "f1" => metrics.weightedFMeasure
       case "weightedPrecision" => metrics.weightedPrecision

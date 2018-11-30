@@ -382,17 +382,13 @@ private[spark] object EventLoggingListener extends Logging {
       appId: String,
       appAttemptId: Option[String],
       compressionCodecName: Option[String] = None): String = {
-    val base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId)
+    val base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + Utils.sanitizeDirName(appId)
     val codec = compressionCodecName.map("." + _).getOrElse("")
     if (appAttemptId.isDefined) {
-      base + "_" + sanitize(appAttemptId.get) + codec
+      base + "_" + Utils.sanitizeDirName(appAttemptId.get) + codec
     } else {
       base + codec
     }
-  }
-
-  private def sanitize(str: String): String = {
-    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }
 
   /**
