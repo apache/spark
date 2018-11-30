@@ -813,7 +813,7 @@ private[spark] class SparkSubmit extends Logging {
       mainClass = Utils.classForName(childMainClass)
     } catch {
       case e: ClassNotFoundException =>
-        logError(s"Failed to load $childMainClass.", e)
+        logError(s"Failed to load class $childMainClass.")
         if (childMainClass.contains("thriftserver")) {
           logInfo(s"Failed to load main class $childMainClass.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
@@ -915,12 +915,16 @@ object SparkSubmit extends CommandLineUtils with Logging {
           override protected def logInfo(msg: => String): Unit = self.logInfo(msg)
 
           override protected def logWarning(msg: => String): Unit = self.logWarning(msg)
+
+          override protected def logError(msg: => String): Unit = self.logError(msg)
         }
       }
 
       override protected def logInfo(msg: => String): Unit = printMessage(msg)
 
       override protected def logWarning(msg: => String): Unit = printMessage(s"Warning: $msg")
+
+      override protected def logError(msg: => String): Unit = printMessage(s"Error: $msg")
 
       override def doSubmit(args: Array[String]): Unit = {
         try {
