@@ -2283,7 +2283,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("create table all_null (attrInt int)")
         sql("insert into all_null values (null)")
         sql("analyze table all_null compute statistics for columns attrInt")
-        checkAnswer(sql("select * from all_null where attrInt < 1"), Nil)
+        // check if the stats can be calculated without Cast exception.
+        sql("select * from all_null where attrInt < 1").queryExecution.stringWithStats
       }
     }
   }
