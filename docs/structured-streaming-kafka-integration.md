@@ -624,3 +624,57 @@ For experimenting on `spark-shell`, you can also use `--packages` to add `spark-
 
 See [Application Submission Guide](submitting-applications.html) for more details about submitting
 applications with external dependencies.
+
+## Security
+
+Kafka 0.9.0.0 introduced several features that increases security in a cluster. For detailed
+description about these possibilities, see [Kafka security docs](http://kafka.apache.org/documentation.html#security).
+
+It's worth noting that security is optional and turned off by default.
+
+Spark supports the following ways to authenticate against Kafka cluster:
+- **Delegation token (introduced in Kafka broker 1.1.0)**: This way the application can be configured
+  via Spark parameters and may not need JAAS login configuration (Spark can use Kafka's dynamic JAAS
+  configuration feature). For further information about delegation tokens, see
+  [Kafka delegation token docs](http://kafka.apache.org/documentation/#security_delegation_token).
+
+  The process is initiated by Spark's Kafka delegation token provider. This is enabled by default
+  but can be turned off with `spark.security.credentials.kafka.enabled`. When
+  `spark.kafka.bootstrap.servers` set Spark looks for authentication information in the following
+  order and choose the first available to log in:
+  - **JAAS login configuration**
+  - **Keytab file**, such as,
+
+        ./bin/spark-submit \
+            --keytab <KEYTAB_FILE> \
+            --principal <PRINCIPAL> \
+            --conf spark.kafka.bootstrap.servers=<KAFKA_SERVERS> \
+            ...
+
+  - **Kerberos credential cache**, such as,
+
+        ./bin/spark-submit \
+            --conf spark.kafka.bootstrap.servers=<KAFKA_SERVERS> \
+            ...
+
+  Spark supports the following authentication protocols to obtain token:
+  - **SASL SSL (default)**: With `GSSAPI` mechanism Kerberos used for authentication and SSL for encryption.
+  - **SSL**: It's leveraging a capability from SSL called 2-way authentication. The server authenticate
+    clients through certificates. Please note 2-way authentication must be enabled on Kafka brokers.
+  - **SASL PLAINTEXT (for testing)**: With `GSSAPI` mechanism Kerberos used for authentication but
+    because there is no encryption it's only for testing purposes.
+
+  After delegation token successfully obtained Spark spreads it across nodes and renews it accordingly.
+  Delegation token uses `SCRAM` login module for authentication.
+
+  When delegation token is available for example on an executor it can be overridden with JAAS login
+  configuration.
+- **JAAS login configuration**: JAAS login configuration must be created and transferred to all
+  nodes where Spark tries to access Kafka cluster. This provides the possibility to apply any
+  custom authentication logic with a higher cost to maintain. This can be done several ways.
+  One possibility is to provide additional JVM parameters, such as,
+
+      ./bin/spark-submit \
+          --driver-java-options "-Djava.security.auth.login.config=/path/to/custom_jaas.conf" \
+          --conf spark.executor.extraJavaOptions=-Djava.security.auth.login.config=/path/to/custom_jaas.conf \
+          ...
