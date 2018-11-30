@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Curre
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, StreamingDataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2StreamingScanExec, StreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, StreamingWriteSupportProvider}
@@ -206,7 +206,8 @@ class ContinuousExecution(
     }
 
     val (readSupport, scanConfig) = lastExecution.executedPlan.collect {
-      case scan: DataSourceV2ScanExec if scan.readSupport.isInstanceOf[ContinuousReadSupport] =>
+      case scan: DataSourceV2StreamingScanExec
+          if scan.readSupport.isInstanceOf[ContinuousReadSupport] =>
         scan.readSupport.asInstanceOf[ContinuousReadSupport] -> scan.scanConfig
     }.head
 

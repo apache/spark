@@ -18,25 +18,21 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.types.StructType;
 
 /**
- * A mix-in interface for {@link ScanBuilder}. Data sources can implement this
- * interface to push down required columns to the data source and only read these columns during
- * scan to reduce the size of the data to be read.
+ * A mix in interface for {@link BatchReadSupport}. Data sources can implement this interface to
+ * report statistics to Spark.
+ *
+ * As of Spark 2.4, statistics are reported to the optimizer before any operator is pushed to the
+ * data source. Implementations that return more accurate statistics based on pushed operators will
+ * not improve query performance until the planner can push operators before getting stats.
  */
 @Evolving
-public interface SupportsPushDownRequiredColumns extends ScanBuilder {
+// TODO: remove it, after we finish the API refactor completely.
+public interface OldSupportsReportStatistics extends ReadSupport {
 
   /**
-   * Applies column pruning w.r.t. the given requiredSchema.
-   *
-   * Implementation should try its best to prune the unnecessary columns or nested fields, but it's
-   * also OK to do the pruning partially, e.g., a data source may not be able to prune nested
-   * fields, and only prune top-level columns.
-   *
-   * Note that, {@link ScanConfig#readSchema()} implementation should take care of the column
-   * pruning applied here.
+   * Returns the estimated statistics of this data source scan.
    */
-  void pruneColumns(StructType requiredSchema);
+  Statistics estimateStatistics(ScanConfig config);
 }

@@ -21,43 +21,44 @@ import java.io.IOException;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.sources.v2.SupportsBatchRead;
+import org.apache.spark.sql.sources.v2.Table;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
-abstract class JavaSimpleReadSupport implements BatchReadSupport {
+abstract class JavaSimpleBatchTable implements Table, SupportsBatchRead {
 
   @Override
-  public StructType fullSchema() {
+  public StructType schema() {
     return new StructType().add("i", "int").add("j", "int");
   }
 
   @Override
-  public ScanConfigBuilder newScanConfigBuilder() {
-    return new JavaNoopScanConfigBuilder(fullSchema());
-  }
-
-  @Override
-  public PartitionReaderFactory createReaderFactory(ScanConfig config) {
-    return new JavaSimpleReaderFactory();
+  public String name() {
+    return this.getClass().toString();
   }
 }
 
-class JavaNoopScanConfigBuilder implements ScanConfigBuilder, ScanConfig {
+abstract class JavaSimpleScanBuilder implements ScanBuilder, Scan, Batch {
 
-  private StructType schema;
-
-  JavaNoopScanConfigBuilder(StructType schema) {
-    this.schema = schema;
+  @Override
+  public Scan build() {
+    return this;
   }
 
   @Override
-  public ScanConfig build() {
+  public Batch toBatch() {
     return this;
   }
 
   @Override
   public StructType readSchema() {
-    return schema;
+    return new StructType().add("i", "int").add("j", "int");
+  }
+
+  @Override
+  public PartitionReaderFactory createReaderFactory() {
+    return new JavaSimpleReaderFactory();
   }
 }
 
