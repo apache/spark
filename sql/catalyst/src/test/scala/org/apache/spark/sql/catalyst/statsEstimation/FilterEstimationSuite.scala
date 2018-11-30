@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMap
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{ColumnStatsMap, FilterEstimation}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -840,7 +840,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     assert(!columnStatsMap.hasDistinctCount(attrNoDistinct))
     assert(columnStatsMap.hasDistinctCount(attrNoCount))
     assert(columnStatsMap.hasDistinctCount(attrNoMinMax))
-    assert(columnStatsMap.hasCountStats(attrNoDistinct))
+    assert(!columnStatsMap.hasCountStats(attrNoDistinct))
     assert(!columnStatsMap.hasCountStats(attrNoCount))
     assert(columnStatsMap.hasCountStats(attrNoMinMax))
     assert(columnStatsMap.hasMinMaxStats(attrNoDistinct))
