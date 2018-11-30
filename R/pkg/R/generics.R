@@ -1206,6 +1206,14 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @name NULL
 setGeneric("rtrim", function(x, trimString) { standardGeneric("rtrim") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("schema_of_csv", function(x, ...) { standardGeneric("schema_of_csv") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("schema_of_json", function(x, ...) { standardGeneric("schema_of_json") })
+
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
