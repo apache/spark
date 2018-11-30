@@ -1327,7 +1327,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       }
 
       val allExecutorSummary = store.view(classOf[ExecutorSummaryWrapper]).asScala.map(_.info)
-      assert(allExecutorSummary.size == 2)
+      assert(allExecutorSummary.size === 2)
       allExecutorSummary.foreach { allExecSummary =>
         assert(allExecSummary.failedTasks === 1)
         assert(allExecSummary.activeTasks === 0)
