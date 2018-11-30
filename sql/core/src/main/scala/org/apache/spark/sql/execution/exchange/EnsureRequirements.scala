@@ -139,22 +139,20 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] with Predic
   }
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
-    val aliasMap = AttributeMap(operator.children.flatMap(_.expressions.collect {
-      case a: Alias => (a.toAttribute, a.child)
-    }))
-    val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution.map {
-      _.mapExpressions(replaceAlias(_, aliasMap))
-    }
-    val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering.map {
-      _.map(replaceAlias(_, aliasMap).asInstanceOf[SortOrder])
-    }
+    val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
+    val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
     var children: Seq[SparkPlan] = operator.children
     assert(requiredChildDistributions.length == children.length)
     assert(requiredChildOrderings.length == children.length)
 
+    val aliasMap = AttributeMap[Expression](children.flatMap(_.expressions.collect {
+      case a: Alias => (a.toAttribute, a)
+    }))
+
     // Ensure that the operator's children satisfy their output distribution requirements.
     children = children.zip(requiredChildDistributions).map {
-      case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
+      case (child, distribution) if child.outputPartitioning.satisfies(
+          distribution.mapExpressions(replaceAlias(_, aliasMap))) =>
         child
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
@@ -216,8 +214,10 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] with Predic
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
+      val requiredOrderingWithAlias =
+        requiredOrdering.map(replaceAlias(_, aliasMap).asInstanceOf[SortOrder])
       // If child.outputOrdering already satisfies the requiredOrdering, we do not need to sort.
-      if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
+      if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrderingWithAlias)) {
         child
       } else {
         SortExec(requiredOrdering, global = false, child = child)
