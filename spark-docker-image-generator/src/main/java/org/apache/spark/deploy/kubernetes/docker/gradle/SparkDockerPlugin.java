@@ -163,7 +163,7 @@ public final class SparkDockerPlugin implements Plugin<Project> {
                   task ->
                       task.commandLine(
                           "docker", "push", String.format("%s:%s", resolvedImageName, tag))
-                          .dependsOn("sparkDockerTag%s")))
+                          .dependsOn(String.format("sparkDockerTag%s", tag))))
           .collect(Collectors.toList());
       if (!pushTasks.isEmpty()) {
         pushAllTask.dependsOn(pushTasks);
