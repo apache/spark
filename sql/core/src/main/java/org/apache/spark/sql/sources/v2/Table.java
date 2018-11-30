@@ -37,16 +37,10 @@ import org.apache.spark.sql.types.StructType;
 public interface Table {
 
   /**
-   * A name to identify this table.
-   * <p>
-   * By default this returns the class name of the implementation. Please override it to provide a
-   * meaningful name, like the database and table name from catalog, or the location of files for
-   * this table.
-   * </p>
+   * A name to identify this table. Implementations should provide a meaningful name, like the
+   * database and table name from catalog, or the location of files for this table.
    */
-  default String name() {
-    return this.getClass().toString();
-  }
+  String name();
 
   /**
    * Returns the schema of this table.

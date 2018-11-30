@@ -394,6 +394,8 @@ object SimpleReaderFactory extends PartitionReaderFactory {
 abstract class SimpleBatchTable extends Table with SupportsBatchRead  {
 
   override def schema(): StructType = new StructType().add("i", "int").add("j", "int")
+
+  override def name(): String = this.getClass.toString
 }
 
 abstract class SimpleScanBuilder extends ScanBuilder

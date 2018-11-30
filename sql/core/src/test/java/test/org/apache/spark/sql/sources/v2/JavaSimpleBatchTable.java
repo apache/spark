@@ -32,6 +32,11 @@ abstract class JavaSimpleBatchTable implements Table, SupportsBatchRead {
   public StructType schema() {
     return new StructType().add("i", "int").add("j", "int");
   }
+
+  @Override
+  public String name() {
+    return this.getClass().toString();
+  }
 }
 
 abstract class JavaSimpleScanBuilder implements ScanBuilder, Scan, Batch {
