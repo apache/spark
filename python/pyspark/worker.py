@@ -273,8 +273,6 @@ def main(infile, outfile):
 
         # set up memory limits
         memory_limit_mb = int(os.environ.get('PYSPARK_EXECUTOR_MEMORY_MB', "-1"))
-        # 'PYSPARK_EXECUTOR_MEMORY_MB' should be undefined on Windows because it depends on
-        # resource module which is a Unix specific module.
         if memory_limit_mb > 0 and has_resource_module:
             total_memory = resource.RLIMIT_AS
             try:
