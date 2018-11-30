@@ -102,15 +102,21 @@ class QueryPlanningTracker {
   private val phasesMap = new java.util.HashMap[String, PhaseSummary]
 
   /**
-   * Measure the start and end time of a phase. Note that each phase can only be measured once.
+   * Measure the start and end time of a phase. Note that if this function is called multiple
+   * times for the same phase, the recorded start time will be the start time of the first call,
+   * and the recorded end time will be the end time of the last call.
    */
   def measurePhase[T](phase: String)(f: => T): T = {
-    require(!phasesMap.containsKey(phase), s"Phase $phase has been run before.")
-
     val startTime = System.currentTimeMillis()
     val ret = f
     val endTime = System.currentTimeMillis
-    phasesMap.put(phase, new PhaseSummary(startTime, endTime))
+
+    if (phasesMap.containsKey(phase)) {
+      val oldSummary = phasesMap.get(phase)
+      phasesMap.put(phase, new PhaseSummary(oldSummary.startTimeMs, endTime))
+    } else {
+      phasesMap.put(phase, new PhaseSummary(startTime, endTime))
+    }
     ret
   }
 

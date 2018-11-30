@@ -75,17 +75,18 @@ class QueryExecution(
     sparkSession.sessionState.optimizer.executeAndTrack(withCachedData, tracker)
   }
 
-  // executedPlan should not be used to initialize any SparkPlan. It should be
-  // only used for execution.
-  lazy val executedPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
+  lazy val sparkPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
     SparkSession.setActiveSession(sparkSession)
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
     //       but we will implement to choose the best plan.
-    val plan = planner.plan(ReturnAnswer(optimizedPlan)).next()
-    prepareForExecution(plan)
+    planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 
-  lazy val sparkPlan: SparkPlan = executedPlan
+  // executedPlan should not be used to initialize any SparkPlan. It should be
+  // only used for execution.
+  lazy val executedPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
+    prepareForExecution(sparkPlan)
+  }
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
