@@ -1273,15 +1273,13 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(allJobs.head.numFailedStages == 1)
   }
 
-  test("SPARK-25451: total tasks in the executor summary should match total stage tasks") {
+  Seq(true, false).foreach { live: Boolean =>
+    test(s"Total tasks in the executor summary should match total stage tasks (live = $live)") {
 
-    val isLiveSeq = Seq(true, false)
-
-    isLiveSeq.foreach { live: Boolean =>
       val testConf = if (live) {
-        conf.clone.set(LIVE_ENTITY_UPDATE_PERIOD, Long.MaxValue)
+        conf.clone().set(LIVE_ENTITY_UPDATE_PERIOD, Long.MaxValue)
       } else {
-        conf.clone.set(LIVE_ENTITY_UPDATE_PERIOD, -1L)
+        conf.clone().set(LIVE_ENTITY_UPDATE_PERIOD, -1L)
       }
 
       val listener = new AppStatusListener(store, testConf, live)
