@@ -25,12 +25,7 @@ class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
     val df = spark.range(1000).selectExpr("count(*)")
     df.collect()
     val tracker = df.queryExecution.tracker
-
-    assert(tracker.phases.size == 3)
-    assert(tracker.phases("analysis").durationMs > 0)
-    assert(tracker.phases("optimization").durationMs > 0)
-    assert(tracker.phases("planning").durationMs > 0)
-
+    assert(tracker.phases.keySet == Set("analysis", "optimization", "planning"))
     assert(tracker.rules.nonEmpty)
   }
 
@@ -39,13 +34,7 @@ class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
     df.collect()
 
     val tracker = df.queryExecution.tracker
-
-    assert(tracker.phases.size == 4)
-    assert(tracker.phases("parsing").durationMs > 0)
-    assert(tracker.phases("analysis").durationMs > 0)
-    assert(tracker.phases("optimization").durationMs > 0)
-    assert(tracker.phases("planning").durationMs > 0)
-
+    assert(tracker.phases.keySet == Set("parsing", "analysis", "optimization", "planning"))
     assert(tracker.rules.nonEmpty)
   }
 
