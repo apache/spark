@@ -2276,4 +2276,41 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-25271: Hive ctas commands should use data source if it is convertible") {
+    withTempView("p") {
+      Seq(1, 2, 3).toDF("id").createOrReplaceTempView("p")
+
+      Seq("orc", "parquet").foreach { format =>
+        Seq(true, false).foreach { isConverted =>
+          withSQLConf(
+            HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
+            HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted") {
+
+            val targetTable = "targetTable"
+            withTable(targetTable) {
+              val df = sql(s"CREATE TABLE $targetTable STORED AS $format AS SELECT id FROM p")
+              checkAnswer(sql(s"SELECT id FROM $targetTable"),
+                Row(1) :: Row(2) :: Row(3) :: Nil)
+
+              val ctasDSCommand = df.queryExecution.analyzed.collect {
+                case _: CreateHiveTableAsSelectWithDataSourceCommand => true
+                }.headOption
+              val ctasCommand = df.queryExecution.analyzed.collect {
+                case _: CreateHiveTableAsSelectCommand => true
+              }.headOption
+
+              if (isConverted) {
+                assert(ctasDSCommand.nonEmpty)
+                assert(ctasCommand.isEmpty)
+              } else {
+                assert(ctasDSCommand.isEmpty)
+                assert(ctasCommand.nonEmpty)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
 }
