@@ -830,8 +830,8 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
     val colStatNoCount = ColumnStat(distinctCount = Some(2), min = Some(false), max = Some(true),
       nullCount = None, avgLen = Some(1), maxLen = Some(1))
-    val colStatNoMinMax = ColumnStat(distinctCount = Some(0), min = None, max = None,
-      nullCount = Some(0), avgLen = None, maxLen = None)
+    val colStatNoMinMax = ColumnStat(distinctCount = Some(1), min = None, max = None,
+      nullCount = Some(1), avgLen = None, maxLen = None)
     val columnStatsMap = ColumnStatsMap(AttributeMap(Seq(
       attrNoDistinct -> colStatNoDistinct,
       attrNoCount -> colStatNoCount,

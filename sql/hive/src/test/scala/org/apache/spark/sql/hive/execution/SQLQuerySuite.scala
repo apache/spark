@@ -2276,4 +2276,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+
+  test("SPARK-26181 hasMinMaxStats method of ColumnStatsMap is not correct") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("all_null") {
+        sql("create table all_null (attrInt int)")
+        sql("insert into all_null values (null)")
+        sql("analyze table all_null compute statistics for columns attrInt")
+        checkAnswer(sql("select * from all_null where attrInt < 1"), Nil)
+      }
+    }
+  }
+
 }
