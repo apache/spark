@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
 
 object SQLConf {
 
-  private val sqlConfEntries = java.util.Collections.synchronizedMap(
+  private[sql] val sqlConfEntries = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, ConfigEntry[_]]())
 
   val staticConfKeys: java.util.Set[String] =
@@ -1610,6 +1610,14 @@ object SQLConf {
       """ "... N more fields" placeholder.""")
     .intConf
     .createWithDefault(25)
+
+  val SET_COMMAND_REJECTS_SPARK_CONFS =
+    buildConf("spark.sql.legacy.execution.setCommandRejectsSparkConfs")
+      .internal()
+      .doc("If it is set to true, SET command will fail when the key is registered as " +
+        "a SparkConf entry.")
+      .booleanConf
+      .createWithDefault(true)
 }
 
 /**
@@ -2029,6 +2037,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
+
+  def setCommandRejectsSparkConfs: Boolean = getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CONFS)
 
   /** ********************** SQLConf functionality methods ************ */
 
