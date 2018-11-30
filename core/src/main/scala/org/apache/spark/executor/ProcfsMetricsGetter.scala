@@ -173,7 +173,7 @@ private[spark] class ProcfsMetricsGetter(val procfsDir: String = "/proc/") exten
       Utils.tryWithResource(new InputStreamReader(
         new FileInputStream(
           new File(pidDir, procfsStatFile)), Charset.forName("UTF-8"))) { fReader =>
-        Utils.tryWithResource( new BufferedReader(fReader)) { in =>
+          val in = new BufferedReader(fReader)
           val procInfo = in.readLine
           val procInfoSplit = procInfo.split(" ")
           val vmem = procInfoSplit(22).toLong
@@ -196,7 +196,6 @@ private[spark] class ProcfsMetricsGetter(val procfsDir: String = "/proc/") exten
               otherRSSTotal = allMetrics.otherRSSTotal + (rssMem)
             )
           }
-        }
       }
     } catch {
       case f: IOException =>
