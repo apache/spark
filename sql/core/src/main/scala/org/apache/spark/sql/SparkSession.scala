@@ -649,7 +649,7 @@ class SparkSession private(
    */
   def sql(sqlText: String): DataFrame = {
     val tracker = new QueryPlanningTracker
-    val plan = tracker.measureTime(QueryPlanningTracker.PARSING) {
+    val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
       sessionState.sqlParser.parsePlan(sqlText)
     }
     Dataset.ofRows(self, plan, tracker)
