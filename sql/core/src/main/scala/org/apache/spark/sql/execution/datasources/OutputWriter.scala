@@ -57,9 +57,6 @@ abstract class OutputWriterFactory extends Serializable {
  * executor side.  This instance is used to persist rows to this single output file.
  */
 abstract class OutputWriter {
-  /** Initializes before writing any rows. Invoked on executor size. */
-  def init(): Unit = {}
-
   /**
    * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned
    * tables, dynamic partition columns are not included in rows to be written.

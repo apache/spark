@@ -179,11 +179,9 @@ private[csv] class CsvOutputWriter(
     newGen
   }
 
-  override def init(): Unit = {
-    if (params.headerFlag) {
-      val gen = getOrCreateGen()
-      gen.writeHeaders()
-    }
+  if (params.headerFlag) {
+    val gen = getOrCreateGen()
+    gen.writeHeaders()
   }
 
   override def write(row: InternalRow): Unit = {
