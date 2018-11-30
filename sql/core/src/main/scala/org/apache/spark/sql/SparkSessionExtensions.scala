@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Order, Rule, RuleBatch, RuleInOrder}
 
 /**
  * :: Experimental ::
@@ -73,6 +73,7 @@ class SparkSessionExtensions {
   type StrategyBuilder = SparkSession => Strategy
   type ParserBuilder = (SparkSession, ParserInterface) => ParserInterface
   type FunctionDescription = (FunctionIdentifier, ExpressionInfo, FunctionBuilder)
+  type Order = Order.Order
 
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
 
@@ -128,9 +129,26 @@ class SparkSessionExtensions {
 
   private[this] val optimizerRules = mutable.Buffer.empty[RuleBuilder]
 
+  private[this] val optimizerRulesInOrder =
+    mutable.Buffer.empty[(String, String, Order, RuleBuilder)]
+  private[this] val optimizerBatches =
+    mutable.Buffer.empty[(String, Int, String, Order, Seq[RuleBuilder])]
+
   private[sql] def buildOptimizerRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
     optimizerRules.map(_.apply(session))
   }
+
+  private[sql] def buildOptimizerRulesInOrder(session: SparkSession): Seq[RuleInOrder] = {
+    optimizerRulesInOrder.map(r => RuleInOrder(r._1, r._2, r._3, r._4.apply(session)))
+  }
+
+  private[sql] def buildOptimizerBatches(session: SparkSession): Seq[RuleBatch] = {
+    optimizerBatches.map(batch => {
+      val rules = batch._5
+      RuleBatch(batch._1, batch._2, batch._3, batch._4, rules.map(r => r.apply(session)))
+    })
+  }
+
 
   /**
    * Inject an optimizer `Rule` builder into the [[SparkSession]]. The injected rules will be
@@ -140,6 +158,39 @@ class SparkSessionExtensions {
    */
   def injectOptimizerRule(builder: RuleBuilder): Unit = {
     optimizerRules += builder
+  }
+
+  /**
+   * Inject an optimizer `Rule` builder into the [[SparkSession]] in a particular batch after
+   * or before a specific existing rule in the batch.
+   * If the existingRule or the current rule is excluded via the conf
+   * spark.sql.optimizer.excludedRules, then the rule will be excluded.
+   * If the batchName does not exist, or if the existing rule does not exist in the given
+   * batch, then an error will be thrown. (fail fast)
+   */
+  def injectOptimizerRuleInOrder(
+      builder: RuleBuilder,
+      batchName: String,
+      ruleOrder: Order.Order,
+      existingRule: String): Unit = {
+    optimizerRulesInOrder += Tuple4(batchName, existingRule, ruleOrder, builder)
+  }
+
+  /**
+   * Inject a batch of optimizer rules
+   * @param batchName - Batch Name to inject
+   * @param maxIterations - Iterations
+   * @param existingBatchName - Existing batch name in reference to which this batch is injected
+   * @param order - Specify the order, if before the existing batch or after the existing batch
+   * @param rules - Sequence of RuleBuilder's. New rules in the batch that will be added
+   */
+  def injectOptimizerBatch(
+      batchName: String,
+      maxIterations: Int,
+      existingBatchName: String,
+      order: Order.Value,
+      rules: Seq[RuleBuilder]): Unit = {
+    optimizerBatches += Tuple5(batchName, maxIterations, existingBatchName, order, rules)
   }
 
   private[this] val plannerStrategyBuilders = mutable.Buffer.empty[StrategyBuilder]

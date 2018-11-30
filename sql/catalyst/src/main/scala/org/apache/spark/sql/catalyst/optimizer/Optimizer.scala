@@ -236,9 +236,126 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
+   * Seq of Optimizer rule to be added after or before a rule in a specific batch
+   */
+  def optimizerRulesInOrder: Seq[RuleInOrder] = Nil
+
+  /**
+   * Batches to add to the optimizer in a specific order with respect to a existing batch
+   * Seq of Tuple(existing batch name, order, Batch to add).
+   */
+  def optimizerBatches: Seq[(String, Order.Value, Batch)] = Nil
+
+  /**
+   * Return the batch after removing rules that need to be excluded
+   */
+  private def handleExcludedRules(batch: Batch, excludedRules: Seq[String]): Seq[Batch] = {
+    // Excluded rules
+    val filteredRules = batch.rules.filter { rule =>
+      val exclude = excludedRules.contains(rule.ruleName)
+      if (exclude) {
+        logInfo(s"Optimization rule '${rule.ruleName}' is excluded from the optimizer.")
+      }
+      !exclude
+    }
+    if (batch.rules == filteredRules) {
+      Seq(batch)
+    } else if (filteredRules.nonEmpty) {
+      Seq(Batch(batch.name, batch.strategy, filteredRules: _*))
+    } else {
+      logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
+        s"as all enclosed rules have been excluded.")
+      Seq.empty
+    }
+  }
+
+  /**
+   * Add the customized rules and batch in order to the optimizer batches.
+   * excludedRules - rules that will be excluded
+   */
+  def injectRulesBatches(excludedRules: Seq[String]): Seq[Batch] = {
+    var (exclude, injectRules) = optimizerRulesInOrder.partition(r =>
+      excludedRules.contains(r.rule.ruleName))
+    exclude.foreach(r =>
+      logInfo(s"Optimization rule '${r.rule.ruleName} is excluded from the optimizer."))
+
+    var injectBatches = optimizerBatches
+    val newBatches = defaultBatches.flatMap(batch => {
+      val currBatch = if (injectRules.nonEmpty) {
+        var addRules = injectRules.filter(_.batchName.equals(batch.name))
+        // For a rule, check if a rule needs to be added before or after it and add it
+        if (addRules.nonEmpty) {
+          val rules = batch.rules.flatMap(r => {
+            if (excludedRules.contains(r.ruleName)) {
+              logInfo(s"Optimization rule '${r.ruleName}' is excluded from the optimizer.")
+              Seq.empty
+            } else {
+              val beforeRules = addRules.filter(add => add.existingRule.equals(r.ruleName)
+                && add.ruleOrder.equals(Order.before)).map(_.rule)
+              val afterRules = addRules.filter(add => add.existingRule.equals(r.ruleName)
+                && add.ruleOrder.equals(Order.after)).map(_.rule)
+              addRules = addRules.filterNot(_.existingRule.equals(r.ruleName))
+              beforeRules ++ Seq(r) ++ afterRules
+            }
+          })
+
+          if (addRules.nonEmpty) {
+            val errMsg = s"Unable to add the customized optimization rule(s)" +
+              s" to batch ${batch.name}: " +
+              addRules.map(_.rule.ruleName).mkString("[", ",", "]") +
+              ". Verify that the batch name and the existingRule name that was specified in the" +
+              " injectOptimizerRuleInOrder method is correct.\nCheck that the existingRule" +
+              " is not in the excluded list specified by spark.sql.optimizer.excludedRules."
+            throw new Exception(errMsg)
+          } else if (rules.isEmpty) {
+            logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
+              s"as all enclosed rules have been excluded.")
+            Seq.empty
+          } else {
+            injectRules = injectRules.filterNot(_.batchName.equals(batch.name))
+            Seq(Batch(batch.name, batch.strategy, rules: _*))
+          }
+        } else {
+          handleExcludedRules(batch, excludedRules)
+        }
+      } else {
+        handleExcludedRules(batch, excludedRules)
+      }
+
+      // Add optimizer batches
+      if (optimizerBatches.nonEmpty && optimizerBatches.exists(_._1.equals(batch.name))) {
+        val before = optimizerBatches.filter(b => b._1.equals(batch.name) &&
+          b._2.equals(Order.before)).flatMap(b => handleExcludedRules(b._3, excludedRules))
+        val after = optimizerBatches.filter(b => b._1.equals(batch.name) &&
+          b._2.equals(Order.after)).flatMap(b => handleExcludedRules(b._3, excludedRules))
+        injectBatches = injectBatches.filterNot(_._1.equals(batch.name))
+        before ++ currBatch ++ after
+      } else {
+        currBatch
+      }
+    })
+
+    if (injectRules.nonEmpty) {
+      val errMsg = "Unable to add the customized optimization rule:" +
+        injectRules.map(r => s"(${r.rule.ruleName} to batch ${r.batchName})").
+          mkString("[", ",", "]") + ". Verify that the batch name that was specified in the" +
+        " injectOptimizerRuleInOrder method is correct."
+      throw new Exception(errMsg)
+    }
+
+    if (injectBatches.nonEmpty) {
+      throw new Exception("Unable to add optimizer batch: " +
+        injectBatches.map(_._3.name).mkString("[", ",", "]") +
+        ". Verify that the existing batch name in injectOptimizerBatch is correct.")
+    }
+    newBatches
+  }
+
+  /**
    * Returns (defaultBatches - (excludedRules - nonExcludableRules)), the rule batches that
    * eventually run in the Optimizer.
-   *
+   * Any customizable rules or batches that were injected via the SparkSessionExtensions will
+   * also be injected.
    * Implementations of this class should override [[defaultBatches]], and [[nonExcludableRules]]
    * if necessary, instead of this method.
    */
@@ -253,27 +370,15 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       }
       !nonExcludable
     }
-    if (excludedRules.isEmpty) {
-      defaultBatches
-    } else {
-      defaultBatches.flatMap { batch =>
-        val filteredRules = batch.rules.filter { rule =>
-          val exclude = excludedRules.contains(rule.ruleName)
-          if (exclude) {
-            logInfo(s"Optimization rule '${rule.ruleName}' is excluded from the optimizer.")
-          }
-          !exclude
-        }
-        if (batch.rules == filteredRules) {
-          Some(batch)
-        } else if (filteredRules.nonEmpty) {
-          Some(Batch(batch.name, batch.strategy, filteredRules: _*))
-        } else {
-          logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
-            s"as all enclosed rules have been excluded.")
-          None
-        }
+
+    if (optimizerRulesInOrder.isEmpty && optimizerBatches.isEmpty) {
+      if (excludedRules.isEmpty) {
+        defaultBatches
+      } else {
+        defaultBatches.flatMap(batch => handleExcludedRules(batch, excludedRules))
       }
+    } else {
+      injectRulesBatches(excludedRules)
     }
   }
 }

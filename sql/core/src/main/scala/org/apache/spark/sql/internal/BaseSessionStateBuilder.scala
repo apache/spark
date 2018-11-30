@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Order, Rule, RuleBatch, RuleInOrder}
 import org.apache.spark.sql.execution.{QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -213,6 +213,16 @@ abstract class BaseSessionStateBuilder(
     new SparkOptimizer(catalog, experimentalMethods) {
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
+      override def optimizerRulesInOrder: Seq[RuleInOrder] =
+        customOperatorOptimizationRulesOrder
+      override def optimizerBatches: Seq[(String, Order.Value, Batch)] = {
+        customOperatorOptimizationBatches.map(batch => {
+          val strategy = if (batch.iterations == 1) { Once } else {
+            FixedPoint(Math.min(batch.iterations, SQLConf.get.optimizerMaxIterations))
+          }
+          (batch.existingBatchName, batch.order, Batch(batch.batchName, strategy, batch.rules: _*))
+        })
+      }
     }
   }
 
@@ -224,6 +234,21 @@ abstract class BaseSessionStateBuilder(
    */
   protected def customOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = {
     extensions.buildOptimizerRules(session)
+  }
+
+  /**
+   * Custom operator optimization rules to add to the Optimizer.
+   * This will add the rules in a specific order.
+   */
+  protected def customOperatorOptimizationRulesOrder: Seq[RuleInOrder] = {
+    extensions.buildOptimizerRulesInOrder(session)
+  }
+
+  /**
+   * Custom operator optimization batches to add to the optimizer
+   */
+  protected def customOperatorOptimizationBatches: Seq[RuleBatch] = {
+    extensions.buildOptimizerBatches(session)
   }
 
   /**

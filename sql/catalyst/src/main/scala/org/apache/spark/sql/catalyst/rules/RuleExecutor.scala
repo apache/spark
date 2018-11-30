@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.rules
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.internal.SQLConf
@@ -184,3 +185,22 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     }
   }
 }
+
+object Order extends Enumeration{
+  type Order = Value
+  val after = Value(1)
+  val before = Value(2)
+}
+
+case class RuleInOrder(
+    batchName: String,
+    existingRule: String,
+    ruleOrder: Order.Value,
+    rule: Rule[LogicalPlan])
+
+case class RuleBatch(
+    batchName: String,
+    iterations: Int,
+    existingBatchName: String,
+    order: Order.Value,
+    rules: Seq[Rule[LogicalPlan]])
