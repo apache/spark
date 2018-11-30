@@ -408,6 +408,19 @@
       <scope>provided</scope>
     </dependency>
 
+    <!--
+     The following kafka dependency used to obtain delegation token.
+     In order to prevent spark-core from depending on kafka, these deps have been placed in the
+     "provided" scope, rather than the "compile" scope, and NoClassDefFoundError exceptions are
+     handled when the user explicitly use neither spark-streaming-kafka nor spark-sql-kafka modules.
+    -->
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka-clients</artifactId>
+      <version>${kafka.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

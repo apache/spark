@@ -194,7 +194,7 @@ class GBTClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, featuresCol, predictionCol, impurity, lossType,
       maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
       seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy,
-      validationIndicatorCol)
+      validationIndicatorCol, validationTol)
     instr.logNumClasses(numClasses)
 
     val (baseLearners, learnerWeights) = if (withValidation) {

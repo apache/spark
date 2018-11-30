@@ -175,7 +175,7 @@ case class RDDScanExec(
     rdd: RDD[InternalRow],
     name: String,
     override val outputPartitioning: Partitioning = UnknownPartitioning(0),
-    override val outputOrdering: Seq[SortOrder] = Nil) extends LeafExecNode {
+    override val outputOrdering: Seq[SortOrder] = Nil) extends LeafExecNode with InputRDDCodegen {
 
   private def rddName: String = Option(rdd.name).map(n => s" $n").getOrElse("")
 
@@ -199,4 +199,9 @@ case class RDDScanExec(
   override def simpleString(maxFields: Int): String = {
     s"$nodeName${truncatedString(output, "[", ",", "]", maxFields)}"
   }
+
+  // Input can be InternalRow, has to be turned into UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = true
+
+  override def inputRDD: RDD[InternalRow] = rdd
 }
