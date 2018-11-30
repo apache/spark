@@ -35,7 +35,7 @@ import org.junit.Test;
 
 public final class SparkDockerPluginSuite {
 
-  private static final File TEST_PROJECT_DIR = Paths.get("plugin-test-project").toFile();
+  private static final File TEST_PROJECT_DIR = Paths.get("src/test/resources/plugin-test-project").toFile();
 
   private String dockerTag;
 

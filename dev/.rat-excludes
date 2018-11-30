@@ -119,6 +119,9 @@ kafka-source-initial-offset-version-2.1.0.bin
 kafka-source-initial-offset-future-version.bin
 vote.tmpl
 gradle-build/*
+gradlew
+gradlew.bat
+gradle-wrapper.properties
 spark-docker-image-generator/gradle-build/*
 spark-docker-image-generator/plugin-test-project/gradle-build/*
 spark-docker-image-generator/plugin-test-project/build/*

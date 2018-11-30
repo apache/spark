@@ -36,7 +36,6 @@ apply plugin: 'java'
 version '1.0'
 group 'org.apache.spark'
 sourceCompatibility = 1.8
-buildDir = 'gradle-build'
 
 dependencies {
   compile 'com.google.guava:guava:21.0'

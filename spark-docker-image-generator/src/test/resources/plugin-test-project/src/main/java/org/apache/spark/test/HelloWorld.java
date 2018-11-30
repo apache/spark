@@ -15,7 +15,19 @@
  * limitations under the License.
  */
 
-// This must be the same as the repo name, palantir/spark is the only bucket this repo is provisioned to write to
-rootProject.name = 'spark'
+package org.apache.spark.test;
 
-include ':spark-docker-image-generator'
+import java.util.List;
+
+import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableList;
+
+public final class HelloWorld {
+
+  private HelloWorld() { }
+
+  public static void main(String[] args) {
+    List<String> strs = ImmutableList.of("Hello", "World");
+    System.out.println(Joiner.on(",").join(strs));
+  }
+}

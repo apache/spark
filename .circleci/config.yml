@@ -277,8 +277,7 @@ jobs:
       - *restore-gradle-wrapper-cache
       - *restore-gradle-cache
       - setup_remote_docker: { docker_layer_caching: true }
-      - run: |
-          ./gradlew --info --stacktrace test | tee /tmp/run-spark-docker-gradle-plugin-tests.log
+      - run: ./gradlew --info --parallel --continue --stacktrace test
 
   run-backcompat-tests:
     # depends on build-sbt
