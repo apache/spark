@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.avro
 
-import java.math.{BigDecimal}
+import java.math.BigDecimal
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
@@ -218,6 +218,8 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
             i += 1
           }
 
+          // The Avro map will never have null or duplicated map keys, it's safe to create a
+          // ArrayBasedMapData directly here.
           updater.set(ordinal, new ArrayBasedMapData(keyArray, valueArray))
 
       case (UNION, _) =>

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import java.text.{DecimalFormat, DecimalFormatSymbols}
+import java.util.Locale
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.types._
@@ -143,7 +146,7 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     val inferSchema = new CSVInferSchema(options)
 
     // 9.03E+12 is Decimal(3, -10) and 1.19E+11 is Decimal(3, -9).
-    assert(inferSchema.inferField(DecimalType(3, -10), "1.19E+11") ==
+    assert(inferSchema.inferField(DecimalType(3, -10), "1.19E11") ==
       DecimalType(4, -9))
 
     // BigDecimal("12345678901234567890.01234567890123456789") is precision 40 and scale 20.
@@ -164,5 +167,22 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferField(NullType, "nan") == DoubleType)
     assert(inferSchema.inferField(NullType, "inf") == DoubleType)
     assert(inferSchema.inferField(NullType, "-inf") == DoubleType)
+  }
+
+  test("inferring the decimal type using locale") {
+    def checkDecimalInfer(langTag: String, expectedType: DataType): Unit = {
+      val options = new CSVOptions(
+        parameters = Map("locale" -> langTag, "inferSchema" -> "true", "sep" -> "|"),
+        columnPruning = false,
+        defaultTimeZoneId = "GMT")
+      val inferSchema = new CSVInferSchema(options)
+
+      val df = new DecimalFormat("", new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
+      val input = df.format(Decimal(1000001).toBigDecimal)
+
+      assert(inferSchema.inferField(NullType, input) == expectedType)
+    }
+
+    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalInfer(_, DecimalType(7, 0)))
   }
 }

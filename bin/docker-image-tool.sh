@@ -29,6 +29,20 @@ if [ -z "${SPARK_HOME}" ]; then
 fi
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
+CTX_DIR="$SPARK_HOME/target/tmp/docker"
+
+function is_dev_build {
+  [ ! -f "$SPARK_HOME/RELEASE" ]
+}
+
+function cleanup_ctx_dir {
+  if is_dev_build; then
+    rm -rf "$CTX_DIR"
+  fi
+}
+
+trap cleanup_ctx_dir EXIT
+
 function image_ref {
   local image="$1"
   local add_repo="${2:-1}"
@@ -53,49 +67,89 @@ function docker_push {
   fi
 }
 
+# Create a smaller build context for docker in dev builds to make the build faster. Docker
+# uploads all of the current directory to the daemon, and it can get pretty big with dev
+# builds that contain test log files and other artifacts.
+#
+# Three build contexts are created, one for each image: base, pyspark, and sparkr. For them
+# to have the desired effect, the docker command needs to be executed inside the appropriate
+# context directory.
+#
+# Note: docker does not support symlinks in the build context.
+function create_dev_build_context {(
+  set -e
+  local BASE_CTX="$CTX_DIR/base"
+  mkdir -p "$BASE_CTX/kubernetes"
+  cp -r "resource-managers/kubernetes/docker/src/main/dockerfiles" \
+    "$BASE_CTX/kubernetes/dockerfiles"
+
+  cp -r "assembly/target/scala-$SPARK_SCALA_VERSION/jars" "$BASE_CTX/jars"
+  cp -r "resource-managers/kubernetes/integration-tests/tests" \
+    "$BASE_CTX/kubernetes/tests"
+
+  mkdir "$BASE_CTX/examples"
+  cp -r "examples/src" "$BASE_CTX/examples/src"
+  # Copy just needed examples jars instead of everything.
+  mkdir "$BASE_CTX/examples/jars"
+  for i in examples/target/scala-$SPARK_SCALA_VERSION/jars/*; do
+    if [ ! -f "$BASE_CTX/jars/$(basename $i)" ]; then
+      cp $i "$BASE_CTX/examples/jars"
+    fi
+  done
+
+  for other in bin sbin data; do
+    cp -r "$other" "$BASE_CTX/$other"
+  done
+
+  local PYSPARK_CTX="$CTX_DIR/pyspark"
+  mkdir -p "$PYSPARK_CTX/kubernetes"
+  cp -r "resource-managers/kubernetes/docker/src/main/dockerfiles" \
+    "$PYSPARK_CTX/kubernetes/dockerfiles"
+  mkdir "$PYSPARK_CTX/python"
+  cp -r "python/lib" "$PYSPARK_CTX/python/lib"
+
+  local R_CTX="$CTX_DIR/sparkr"
+  mkdir -p "$R_CTX/kubernetes"
+  cp -r "resource-managers/kubernetes/docker/src/main/dockerfiles" \
+    "$R_CTX/kubernetes/dockerfiles"
+  cp -r "R" "$R_CTX/R"
+)}
+
+function img_ctx_dir {
+  if is_dev_build; then
+    echo "$CTX_DIR/$1"
+  else
+    echo "$SPARK_HOME"
+  fi
+}
+
 function build {
   local BUILD_ARGS
-  local IMG_PATH
-  local JARS
+  local SPARK_ROOT="$SPARK_HOME"
 
-  if [ ! -f "$SPARK_HOME/RELEASE" ]; then
-    # Set image build arguments accordingly if this is a source repo and not a distribution archive.
-    #
-    # Note that this will copy all of the example jars directory into the image, and that will
-    # contain a lot of duplicated jars with the main Spark directory. In a proper distribution,
-    # the examples directory is cleaned up before generating the distribution tarball, so this
-    # issue does not occur.
-    IMG_PATH=resource-managers/kubernetes/docker/src/main/dockerfiles
-    JARS=assembly/target/scala-$SPARK_SCALA_VERSION/jars
-    BUILD_ARGS=(
-      ${BUILD_PARAMS}
-      --build-arg
-      img_path=$IMG_PATH
-      --build-arg
-      spark_jars=$JARS
-      --build-arg
-      example_jars=examples/target/scala-$SPARK_SCALA_VERSION/jars
-      --build-arg
-      k8s_tests=resource-managers/kubernetes/integration-tests/tests
-    )
-  else
-    # Not passed as arguments to docker, but used to validate the Spark directory.
-    IMG_PATH="kubernetes/dockerfiles"
-    JARS=jars
-    BUILD_ARGS=(${BUILD_PARAMS})
+  if is_dev_build; then
+    create_dev_build_context || error "Failed to create docker build context."
+    SPARK_ROOT="$CTX_DIR/base"
   fi
 
   # Verify that the Docker image content directory is present
-  if [ ! -d "$IMG_PATH" ]; then
+  if [ ! -d "$SPARK_ROOT/kubernetes/dockerfiles" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
 
   # Verify that Spark has actually been built/is a runnable distribution
   # i.e. the Spark JARs that the Docker files will place into the image are present
-  local TOTAL_JARS=$(ls $JARS/spark-* | wc -l)
+  local TOTAL_JARS=$(ls $SPARK_ROOT/jars/spark-* | wc -l)
   TOTAL_JARS=$(( $TOTAL_JARS ))
   if [ "${TOTAL_JARS}" -eq 0 ]; then
     error "Cannot find Spark JARs. This script assumes that Apache Spark has first been built locally or this is a runnable distribution."
+  fi
+
+  local BUILD_ARGS=(${BUILD_PARAMS})
+
+  # If a custom SPARK_UID was set add it to build arguments
+  if [ -n "$SPARK_UID" ]; then
+    BUILD_ARGS+=(--build-arg spark_uid=$SPARK_UID)
   fi
 
   local BINDING_BUILD_ARGS=(
@@ -103,30 +157,30 @@ function build {
     --build-arg
     base_img=$(image_ref spark)
   )
-  local BASEDOCKERFILE=${BASEDOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
+  local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-false}
   local RDOCKERFILE=${RDOCKERFILE:-false}
 
-  docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
+  (cd $(img_ctx_dir base) && docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
-    -f "$BASEDOCKERFILE" .
+    -f "$BASEDOCKERFILE" .)
   if [ $? -ne 0 ]; then
     error "Failed to build Spark JVM Docker image, please refer to Docker build output for details."
   fi
 
   if [ "${PYDOCKERFILE}" != "false" ]; then
-    docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+    (cd $(img_ctx_dir pyspark) && docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
       -t $(image_ref spark-py) \
-      -f "$PYDOCKERFILE" .
+      -f "$PYDOCKERFILE" .)
       if [ $? -ne 0 ]; then
         error "Failed to build PySpark Docker image, please refer to Docker build output for details."
       fi
   fi
 
   if [ "${RDOCKERFILE}" != "false" ]; then
-    docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+    (cd $(img_ctx_dir sparkr) && docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
       -t $(image_ref spark-r) \
-      -f "$RDOCKERFILE" .
+      -f "$RDOCKERFILE" .)
     if [ $? -ne 0 ]; then
       error "Failed to build SparkR Docker image, please refer to Docker build output for details."
     fi
@@ -159,8 +213,10 @@ Options:
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
   -n                    Build docker image with --no-cache
-  -b arg      Build arg to build or push the image. For multiple build args, this option needs to
-              be used separately for each build arg.
+  -u uid                UID to use in the USER directive to set the user the main Spark process runs as inside the
+                        resulting container
+  -b arg                Build arg to build or push the image. For multiple build args, this option needs to
+                        be used separately for each build arg.
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
 There is no need to push the images into minikube in that case, they'll be automatically
@@ -195,7 +251,8 @@ PYDOCKERFILE=
 RDOCKERFILE=
 NOCACHEARG=
 BUILD_PARAMS=
-while getopts f:p:R:mr:t:nb: option
+SPARK_UID=
+while getopts f:p:R:mr:t:nb:u: option
 do
  case "${option}"
  in
@@ -215,6 +272,7 @@ do
    fi
    eval $(minikube docker-env)
    ;;
+  u) SPARK_UID=${OPTARG};;
  esac
 done
 

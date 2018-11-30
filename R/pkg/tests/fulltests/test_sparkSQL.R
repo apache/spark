@@ -1620,14 +1620,20 @@ test_that("column functions", {
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 
-  # Test from_csv()
+  # Test from_csv(), schema_of_csv()
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, alias(from_csv(df$col, "a INT"), "csv")))
   expect_equal(c[[1]][[1]]$a, 1)
   c <- collect(select(df, alias(from_csv(df$col, lit("a INT")), "csv")))
   expect_equal(c[[1]][[1]]$a, 1)
 
-  # Test to_json(), from_json()
+  df <- as.DataFrame(list(list("col" = "1")))
+  c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
+  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  c <- collect(select(df, schema_of_csv(lit("Amsterdam,2018"))))
+  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+
+  # Test to_json(), from_json(), schema_of_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
   j <- collect(select(df, alias(to_json(df$people), "json")))
   expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
@@ -1653,6 +1659,12 @@ test_that("column functions", {
     expect_is(s[[1]][[1]], "struct")
     expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 })))
   }
+
+  df <- as.DataFrame(list(list("col" = "1")))
+  c <- collect(select(df, schema_of_json('{"name":"Bob"}')))
+  expect_equal(c[[1]], "struct<name:string>")
+  c <- collect(select(df, schema_of_json(lit('{"name":"Bob"}'))))
+  expect_equal(c[[1]], "struct<name:string>")
 
   # Test to_json() supports arrays of primitive types and arrays
   df <- sql("SELECT array(19, 42, 70) as age")
@@ -2458,6 +2470,7 @@ test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataF
   expect_equal(count(unioned), 6)
   expect_equal(first(unioned)$name, "Michael")
   expect_equal(count(arrange(suppressWarnings(union(df, df2)), df$age)), 6)
+  expect_equal(count(arrange(suppressWarnings(unionAll(df, df2)), df$age)), 6)
 
   df1 <- select(df2, "age", "name")
   unioned1 <- arrange(unionByName(df1, df), df1$age)

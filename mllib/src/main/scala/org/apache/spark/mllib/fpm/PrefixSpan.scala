@@ -45,7 +45,7 @@ import org.apache.spark.storage.StorageLevel
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
  * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
  * Efficiently by Prefix-Projected Pattern Growth
- * (see <a href="http://doi.org/10.1109/ICDE.2001.914830">here</a>).
+ * (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
  *
  * @param minSupport the minimal support level of the sequential pattern, any pattern that appears
  *                   more than (minSupport * size-of-the-dataset) times will be output

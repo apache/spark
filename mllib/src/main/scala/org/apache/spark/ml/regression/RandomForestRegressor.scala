@@ -133,7 +133,7 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
       .map(_.asInstanceOf[DecisionTreeRegressionModel])
 
-    val numFeatures = oldDataset.first().features.size
+    val numFeatures = trees.head.numFeatures
     instr.logNamedValue(Instrumentation.loggerTags.numFeatures, numFeatures)
     new RandomForestRegressionModel(uid, trees, numFeatures)
   }

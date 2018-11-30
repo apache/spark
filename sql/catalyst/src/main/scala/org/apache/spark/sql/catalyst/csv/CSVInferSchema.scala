@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import java.math.BigDecimal
-
 import scala.util.control.Exception.allCatch
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.DateTimeFormatter
 import org.apache.spark.sql.types._
 
@@ -33,6 +32,10 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     options.timestampFormat,
     options.timeZone,
     options.locale)
+
+  private val decimalParser = {
+    ExprUtils.getDecimalParser(options.locale)
+  }
 
   /**
    * Similar to the JSON schema inference
@@ -131,8 +134,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private def tryParseDecimal(field: String): DataType = {
     val decimalTry = allCatch opt {
-      // `BigDecimal` conversion can fail when the `field` is not a form of number.
-      val bigDecimal = new BigDecimal(field)
+      // The conversion can fail when the `field` is not a form of number.
+      val bigDecimal = decimalParser(field)
       // Because many other formats do not support decimal, it reduces the cases for
       // decimals by disallowing values having scale (eg. `1.1`).
       if (bigDecimal.scale <= 0) {
