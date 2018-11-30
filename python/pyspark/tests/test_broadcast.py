@@ -67,6 +67,21 @@ class BroadcastTest(unittest.TestCase):
     def test_broadcast_no_encryption(self):
         self._test_multiple_broadcasts()
 
+    def _test_broadcast_on_driver(self, *extra_confs):
+        conf = SparkConf()
+        for key, value in extra_confs:
+            conf.set(key, value)
+        conf.setMaster("local-cluster[2,1,1024]")
+        self.sc = SparkContext(conf=conf)
+        bs = self.sc.broadcast(value=5)
+        self.assertEqual(5, bs.value)
+
+    def test_broadcast_value_driver_no_encryption(self):
+        self._test_broadcast_on_driver()
+
+    def test_broadcast_value_driver_encryption(self):
+        self._test_broadcast_on_driver(("spark.io.encryption.enabled", "true"))
+
 
 class BroadcastFrameProtocolTest(unittest.TestCase):
 
