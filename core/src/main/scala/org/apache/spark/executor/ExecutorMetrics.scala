@@ -53,8 +53,8 @@ class ExecutorMetrics private[spark] extends Serializable {
    */
   private[spark] def this(executorMetrics: Map[String, Long]) {
     this()
-    ExecutorMetricType.metricToOffset.map { m =>
-      metrics(m._2) = executorMetrics.getOrElse(m._1, 0L)
+    ExecutorMetricType.metricToOffset.foreach { case(name, idx) =>
+      metrics(idx) = executorMetrics.getOrElse(name, 0L)
     }
   }
 

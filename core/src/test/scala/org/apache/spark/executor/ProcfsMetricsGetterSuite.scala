@@ -22,7 +22,7 @@ import org.apache.spark.SparkFunSuite
 
 class ProcfsMetricsGetterSuite extends SparkFunSuite {
 
-  val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"), 4096L)
+  val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
 
   test("testGetProcessInfo") {
     var r = ProcfsMetrics(0, 0, 0, 0, 0, 0)

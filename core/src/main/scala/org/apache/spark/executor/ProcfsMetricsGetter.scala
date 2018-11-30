@@ -41,9 +41,7 @@ private[spark] case class ProcfsMetrics(
 
 // Some of the ideas here are taken from the ProcfsBasedProcessTree class in hadoop
 // project.
-private[spark] class ProcfsMetricsGetter(
-    val procfsDir: String = "/proc/",
-    val pSizeForTest: Long = 0) extends Logging {
+private[spark] class ProcfsMetricsGetter(val procfsDir: String = "/proc/") extends Logging {
   val procfsStatFile = "stat"
   val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
   val pageSize = computePageSize()
@@ -91,7 +89,7 @@ private[spark] class ProcfsMetricsGetter(
 
   private def computePageSize(): Long = {
     if (testing) {
-      return pSizeForTest;
+      return 4096;
     }
     try {
       val cmd = Array("getconf", "PAGESIZE")
@@ -114,10 +112,10 @@ private[spark] class ProcfsMetricsGetter(
     ptree += pid
     val queue = mutable.Queue.empty[Int]
     queue += pid
-    while( !queue.isEmpty ) {
+    while ( !queue.isEmpty ) {
       val p = queue.dequeue()
       val c = getChildPids(p)
-      if(!c.isEmpty) {
+      if (!c.isEmpty) {
         queue ++= c
         ptree ++= c.toSet
       }
@@ -142,9 +140,7 @@ private[spark] class ProcfsMetricsGetter(
       val stdErrThread = Utils.processStreamByLine(
         "stderr for pgrep",
         process.getErrorStream,
-        { line =>
-        errorStringBuilder.append(line)
-      })
+        line => errorStringBuilder.append(line))
       val exitCode = process.waitFor()
       stdoutThread.join()
       stdErrThread.join()
@@ -203,7 +199,7 @@ private[spark] class ProcfsMetricsGetter(
         }
       }
     } catch {
-      case f: FileNotFoundException =>
+      case f: IOException =>
         logWarning("There was a problem with reading" +
           " the stat file of the process. ", f)
         ProcfsMetrics(0, 0, 0, 0, 0, 0)
@@ -219,7 +215,7 @@ private[spark] class ProcfsMetricsGetter(
     for (p <- pids) {
       allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
     }
-    return allMetrics
+    allMetrics
   }
 }
 
