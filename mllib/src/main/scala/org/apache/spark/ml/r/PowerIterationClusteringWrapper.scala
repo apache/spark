@@ -28,11 +28,11 @@ private[r] object PowerIterationClusteringWrapper {
       dstCol: String,
       weightCol: String): PowerIterationClustering = {
     val pic = new PowerIterationClustering()
-        .setK(k)
-        .setInitMode(initMode)
-        .setMaxIter(maxIter)
-        .setSrcCol(srcCol)
-        .setDstCol(dstCol)
+      .setK(k)
+      .setInitMode(initMode)
+      .setMaxIter(maxIter)
+      .setSrcCol(srcCol)
+      .setDstCol(dstCol)
     if (weightCol != null) pic.setWeightCol(weightCol)
     pic
   }

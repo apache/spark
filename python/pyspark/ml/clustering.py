@@ -1210,8 +1210,8 @@ class PowerIterationClustering(HasMaxIter, HasWeightCol, JavaParams, JavaMLReada
 
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
     `Lin and Cohen <http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>`_. From the
-    PIC finds a very low-dimensional embedding of a dataset using truncated power
-    abstract: iteration on a normalized pair-wise similarity matrix of the data.
+    abstract: PIC finds a very low-dimensional embedding of a dataset using truncated power
+    iteration on a normalized pair-wise similarity matrix of the data.
 
     This class is not yet an Estimator/Transformer, use :py:func:`assignClusters` method
     to run the PowerIterationClustering algorithm.
