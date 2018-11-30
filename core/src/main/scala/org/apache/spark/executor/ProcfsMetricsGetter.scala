@@ -174,14 +174,14 @@ private[spark] class ProcfsMetricsGetter(
     // http://man7.org/linux/man-pages/man5/proc.5.html
     try {
       val pidDir = new File(procfsDir, pid.toString)
-      Utils.tryWithResource( new InputStreamReader(
+      Utils.tryWithResource(new InputStreamReader(
         new FileInputStream(
           new File(pidDir, procfsStatFile)), Charset.forName("UTF-8"))) { fReader =>
         Utils.tryWithResource( new BufferedReader(fReader)) { in =>
           val procInfo = in.readLine
           val procInfoSplit = procInfo.split(" ")
           val vmem = procInfoSplit(22).toLong
-          val rssMem = procInfoSplit(23).toLong*pageSize
+          val rssMem = procInfoSplit(23).toLong * pageSize
           if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
             allMetrics.copy(
               jvmVmemTotal = allMetrics.jvmVmemTotal + vmem,
