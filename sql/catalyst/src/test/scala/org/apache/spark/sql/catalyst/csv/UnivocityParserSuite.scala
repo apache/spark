@@ -222,7 +222,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       val options = new CSVOptions(Map("locale" -> langTag), false, "GMT")
       val parser = new UnivocityParser(new StructType().add("d", decimalType), options)
 
-      assert(parser.makeConverter("_1", decimalType, options = options).apply(input) === expected)
+      assert(parser.makeConverter("_1", decimalType).apply(input) === expected)
     }
 
     Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
