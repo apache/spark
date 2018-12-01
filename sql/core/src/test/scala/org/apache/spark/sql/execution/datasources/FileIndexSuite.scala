@@ -52,7 +52,7 @@ class FileIndexSuite extends SharedSQLContext {
 
   test("SPARK-26188: don't infer data types of partition columns if user specifies schema") {
     withTempDir { dir =>
-      val partitionDirectory = new File(dir, s"a=4d")
+      val partitionDirectory = new File(dir, "a=4d")
       partitionDirectory.mkdir()
       val file = new File(partitionDirectory, "text.txt")
       stringToFile(file, "text")
@@ -67,11 +67,11 @@ class FileIndexSuite extends SharedSQLContext {
 
   test("SPARK-26230: if case sensitive, validate partitions with original column names") {
     withTempDir { dir =>
-      val partitionDirectory = new File(dir, s"a=1")
+      val partitionDirectory = new File(dir, "a=1")
       partitionDirectory.mkdir()
       val file = new File(partitionDirectory, "text.txt")
       stringToFile(file, "text")
-      val partitionDirectory2 = new File(dir, s"A=2")
+      val partitionDirectory2 = new File(dir, "A=2")
       partitionDirectory2.mkdir()
       val file2 = new File(partitionDirectory2, "text.txt")
       stringToFile(file2, "text")
@@ -88,6 +88,8 @@ class FileIndexSuite extends SharedSQLContext {
           val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
           fileIndex.partitionSpec()
         }.getMessage
+        msg.matches("Partition column name list #[0,1]: A")
+        msg.matches("Partition column name list #[0,1]: a")
         assert(msg.contains("Conflicting partition column names detected"))
       }
     }

@@ -351,13 +351,13 @@ object PartitioningUtils {
     if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
     } else {
-      val distinctPartColNames = if (caseSensitive) {
+      val partColNames = if (caseSensitive) {
         pathsWithPartitionValues.map(_._2.columnNames)
       } else {
         pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase()))
       }
       assert(
-        distinctPartColNames.distinct.size == 1,
+        partColNames.distinct.size == 1,
         listConflictingPartitionColumns(pathsWithPartitionValues))
 
       // Resolves possible type conflicts for each column
