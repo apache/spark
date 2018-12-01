@@ -19,8 +19,6 @@ package org.apache.spark.deploy.security
 
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.Utils
@@ -33,6 +31,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
     assert(manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
     assert(manager.isProviderLoaded("hive"))
+    assert(manager.isProviderLoaded("kafka"))
   }
 
   test("disable hive credential provider") {
@@ -41,6 +40,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
     assert(manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
     assert(!manager.isProviderLoaded("hive"))
+    assert(manager.isProviderLoaded("kafka"))
   }
 
   test("using deprecated configurations") {
@@ -51,6 +51,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
     assert(!manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
     assert(!manager.isProviderLoaded("hive"))
+    assert(manager.isProviderLoaded("kafka"))
   }
 
   test("SPARK-23209: obtain tokens when Hive classes are not available") {

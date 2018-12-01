@@ -97,7 +97,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    * @throws UnsupportedOperationException if this buffer's size exceeds the maximum array size.
    */
   def toArray: Array[Byte] = {
-    if (size >= Integer.MAX_VALUE) {
+    if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       throw new UnsupportedOperationException(
         s"cannot call toArray because buffer size ($size bytes) exceeds maximum array size")
     }
@@ -172,8 +172,6 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 
 private[spark] object ChunkedByteBuffer {
 
-
-  // TODO SPARK-25905 eliminate this method if we switch BlockManager to getting InputStreams
   def fromManagedBuffer(data: ManagedBuffer): ChunkedByteBuffer = {
     data match {
       case f: FileSegmentManagedBuffer =>
@@ -222,7 +220,8 @@ private[spark] class ChunkedByteBufferInputStream(
     dispose: Boolean)
   extends InputStream {
 
-  private[this] var chunks = chunkedByteBuffer.getChunks().iterator
+  // Filter out empty chunks since `read()` assumes all chunks are non-empty.
+  private[this] var chunks = chunkedByteBuffer.getChunks().filter(_.hasRemaining).iterator
   private[this] var currentChunk: ByteBuffer = {
     if (chunks.hasNext) {
       chunks.next()

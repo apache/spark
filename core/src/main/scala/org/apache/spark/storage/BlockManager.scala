@@ -33,10 +33,9 @@ import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
-import com.google.common.io.CountingOutputStream
 
 import org.apache.spark._
-import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
+import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
@@ -50,7 +49,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.{ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
@@ -237,7 +236,7 @@ private[spark] class BlockManager(
       val priorityClass = conf.get(
         "spark.storage.replication.policy", classOf[RandomBlockReplicationPolicy].getName)
       val clazz = Utils.classForName(priorityClass)
-      val ret = clazz.newInstance.asInstanceOf[BlockReplicationPolicy]
+      val ret = clazz.getConstructor().newInstance().asInstanceOf[BlockReplicationPolicy]
       logInfo(s"Using $priorityClass for block replication policy")
       ret
     }
@@ -693,9 +692,9 @@ private[spark] class BlockManager(
    */
   private def getRemoteValues[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
     val ct = implicitly[ClassTag[T]]
-    getRemoteBytes(blockId).map { data =>
+    getRemoteManagedBuffer(blockId).map { data =>
       val values =
-        serializerManager.dataDeserializeStream(blockId, data.toInputStream(dispose = true))(ct)
+        serializerManager.dataDeserializeStream(blockId, data.createInputStream())(ct)
       new BlockResult(values, DataReadMethod.Network, data.size)
     }
   }
@@ -718,13 +717,9 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Get block from remote block managers as serialized bytes.
+   * Get block from remote block managers as a ManagedBuffer.
    */
-  def getRemoteBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
-    // TODO SPARK-25905 if we change this method to return the ManagedBuffer, then getRemoteValues
-    // could just use the inputStream on the temp file, rather than reading the file into memory.
-    // Until then, replication can cause the process to use too much memory and get killed
-    // even though we've read the data to disk.
+  private def getRemoteManagedBuffer(blockId: BlockId): Option[ManagedBuffer] = {
     logDebug(s"Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
     var runningFailureCount = 0
@@ -789,19 +784,34 @@ private[spark] class BlockManager(
       }
 
       if (data != null) {
-        // SPARK-24307 undocumented "escape-hatch" in case there are any issues in converting to
-        // ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
-        // new path is stable.
-        if (remoteReadNioBufferConversion) {
-          return Some(new ChunkedByteBuffer(data.nioByteBuffer()))
-        } else {
-          return Some(ChunkedByteBuffer.fromManagedBuffer(data))
-        }
+        // If the ManagedBuffer is a BlockManagerManagedBuffer, the disposal of the
+        // byte buffers backing it may need to be handled after reading the bytes.
+        // In this case, since we just fetched the bytes remotely, we do not have
+        // a BlockManagerManagedBuffer. The assert here is to ensure that this holds
+        // true (or the disposal is handled).
+        assert(!data.isInstanceOf[BlockManagerManagedBuffer])
+        return Some(data)
       }
       logDebug(s"The value of block $blockId is null")
     }
     logDebug(s"Block $blockId not found")
     None
+  }
+
+  /**
+   * Get block from remote block managers as serialized bytes.
+   */
+  def getRemoteBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
+    getRemoteManagedBuffer(blockId).map { data =>
+      // SPARK-24307 undocumented "escape-hatch" in case there are any issues in converting to
+      // ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
+      // new path is stable.
+      if (remoteReadNioBufferConversion) {
+        new ChunkedByteBuffer(data.nioByteBuffer())
+      } else {
+        ChunkedByteBuffer.fromManagedBuffer(data)
+      }
+    }
   }
 
   /**
@@ -932,7 +942,7 @@ private[spark] class BlockManager(
       file: File,
       serializerInstance: SerializerInstance,
       bufferSize: Int,
-      writeMetrics: ShuffleWriteMetrics): DiskBlockObjectWriter = {
+      writeMetrics: ShuffleWriteMetricsReporter): DiskBlockObjectWriter = {
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
     new DiskBlockObjectWriter(file, serializerManager, serializerInstance, bufferSize,
       syncWrites, writeMetrics, blockId)

@@ -337,7 +337,7 @@ Configuration for SSL is organized hierarchically. The user can configure the de
 which will be used for all the supported communication protocols unless they are overwritten by
 protocol-specific settings. This way the user can easily provide the common settings for all the
 protocols without disabling the ability to configure each one individually. The following table
-describes the the SSL configuration namespaces:
+describes the SSL configuration namespaces:
 
 <table class="table">
   <tr>
@@ -820,4 +820,15 @@ should correspond to the super user who is running the Spark History Server.
 
 This will allow all users to write to the directory but will prevent unprivileged users from
 reading, removing or renaming a file unless they own it. The event log files will be created by
+Spark with permissions such that only the user and group have read and write access.
+
+# Persisting driver logs in client mode
+
+If your applications persist driver logs in client mode by enabling `spark.driver.log.persistToDfs.enabled`,
+the directory where the driver logs go (`spark.driver.log.dfsDir`) should be manually created with proper
+permissions. To secure the log files, the directory permissions should be set to `drwxrwxrwxt`. The owner
+and group of the directory should correspond to the super user who is running the Spark History Server.
+
+This will allow all users to write to the directory but will prevent unprivileged users from
+reading, removing or renaming a file unless they own it. The driver log files will be created by
 Spark with permissions such that only the user and group have read and write access.

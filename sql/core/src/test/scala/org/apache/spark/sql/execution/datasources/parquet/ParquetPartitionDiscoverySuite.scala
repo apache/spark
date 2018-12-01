@@ -101,7 +101,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       "hdfs://host:9000/path/a=10.5/b=hello")
 
     var exception = intercept[AssertionError] {
-      parsePartitions(paths.map(new Path(_)), true, Set.empty[Path], timeZoneId)
+      parsePartitions(paths.map(new Path(_)), true, Set.empty[Path], None, true, timeZoneId)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
 
@@ -115,6 +115,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       paths.map(new Path(_)),
       true,
       Set(new Path("hdfs://host:9000/path/")),
+      None,
+      true,
       timeZoneId)
 
     // Valid
@@ -128,6 +130,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       paths.map(new Path(_)),
       true,
       Set(new Path("hdfs://host:9000/path/something=true/table")),
+      None,
+      true,
       timeZoneId)
 
     // Valid
@@ -141,6 +145,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       paths.map(new Path(_)),
       true,
       Set(new Path("hdfs://host:9000/path/table=true")),
+      None,
+      true,
       timeZoneId)
 
     // Invalid
@@ -154,6 +160,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         paths.map(new Path(_)),
         true,
         Set(new Path("hdfs://host:9000/path/")),
+        None,
+        true,
         timeZoneId)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
@@ -174,6 +182,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         paths.map(new Path(_)),
         true,
         Set(new Path("hdfs://host:9000/tmp/tables/")),
+        None,
+        true,
         timeZoneId)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
@@ -181,13 +191,13 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
   test("parse partition") {
     def check(path: String, expected: Option[PartitionValues]): Unit = {
-      val actual = parsePartition(new Path(path), true, Set.empty[Path], timeZone)._1
+      val actual = parsePartition(new Path(path), true, Set.empty[Path], Map.empty, timeZone)._1
       assert(expected === actual)
     }
 
     def checkThrows[T <: Throwable: Manifest](path: String, expected: String): Unit = {
       val message = intercept[T] {
-        parsePartition(new Path(path), true, Set.empty[Path], timeZone)
+        parsePartition(new Path(path), true, Set.empty[Path], Map.empty, timeZone)
       }.getMessage
 
       assert(message.contains(expected))
@@ -231,6 +241,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       path = new Path("file://path/a=10"),
       typeInference = true,
       basePaths = Set(new Path("file://path/a=10")),
+      Map.empty,
       timeZone = timeZone)._1
 
     assert(partitionSpec1.isEmpty)
@@ -240,6 +251,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       path = new Path("file://path/a=10"),
       typeInference = true,
       basePaths = Set(new Path("file://path")),
+      Map.empty,
       timeZone = timeZone)._1
 
     assert(partitionSpec2 ==
@@ -258,6 +270,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           paths.map(new Path(_)),
           true,
           rootPaths,
+          None,
+          true,
           timeZoneId)
       assert(actualSpec.partitionColumns === spec.partitionColumns)
       assert(actualSpec.partitions.length === spec.partitions.length)
@@ -370,7 +384,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
   test("parse partitions with type inference disabled") {
     def check(paths: Seq[String], spec: PartitionSpec): Unit = {
       val actualSpec =
-        parsePartitions(paths.map(new Path(_)), false, Set.empty[Path], timeZoneId)
+        parsePartitions(paths.map(new Path(_)), false, Set.empty[Path], None, true, timeZoneId)
       assert(actualSpec === spec)
     }
 

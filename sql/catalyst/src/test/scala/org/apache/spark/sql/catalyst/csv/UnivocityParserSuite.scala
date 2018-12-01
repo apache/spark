@@ -18,13 +18,17 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.math.BigDecimal
+import java.text.{DecimalFormat, DecimalFormatSymbols}
+import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class UnivocityParserSuite extends SparkFunSuite {
+class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
   private val parser = new UnivocityParser(
     StructType(Seq.empty),
     new CSVOptions(Map.empty[String, String], false, "GMT"))
@@ -211,4 +215,20 @@ class UnivocityParserSuite extends SparkFunSuite {
     assert(doubleVal2 == Double.PositiveInfinity)
   }
 
+  test("parse decimals using locale") {
+    def checkDecimalParsing(langTag: String): Unit = {
+      val decimalVal = new BigDecimal("1000.001")
+      val decimalType = new DecimalType(10, 5)
+      val expected = Decimal(decimalVal, decimalType.precision, decimalType.scale)
+      val df = new DecimalFormat("", new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
+      val input = df.format(expected.toBigDecimal)
+
+      val options = new CSVOptions(Map("locale" -> langTag), false, "GMT")
+      val parser = new UnivocityParser(new StructType().add("d", decimalType), options)
+
+      assert(parser.makeConverter("_1", decimalType, options = options).apply(input) === expected)
+    }
+
+    Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalParsing)
+  }
 }

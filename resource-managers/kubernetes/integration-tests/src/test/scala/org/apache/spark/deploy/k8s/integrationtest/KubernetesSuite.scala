@@ -19,9 +19,11 @@ package org.apache.spark.deploy.k8s.integrationtest
 import java.io.File
 import java.nio.file.{Path, Paths}
 import java.util.UUID
-import java.util.regex.Pattern
 
-import com.google.common.io.PatternFilenameFilter
+import scala.collection.JavaConverters._
+
+import com.google.common.base.Charsets
+import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
@@ -29,24 +31,22 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
 import org.scalatest.Matchers
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
-import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.deploy.k8s.integrationtest.TestConfig._
+import org.apache.spark.{SPARK_VERSION, SparkFunSuite}
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
 import org.apache.spark.internal.Logging
 
-private[spark] class KubernetesSuite extends SparkFunSuite
+class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
   with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
   with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 
-  private var sparkHomeDir: Path = _
-  private var pyImage: String = _
-  private var rImage: String = _
+  protected var sparkHomeDir: Path = _
+  protected var pyImage: String = _
+  protected var rImage: String = _
 
   protected var image: String = _
   protected var testBackend: IntegrationTestBackend = _
@@ -67,6 +67,30 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   private val extraExecTotalMemory =
     s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}Mi"
 
+  /**
+   * Build the image ref for the given image name, taking the repo and tag from the
+   * test configuration.
+   */
+  private def testImageRef(name: String): String = {
+    val tag = sys.props.get(CONFIG_KEY_IMAGE_TAG_FILE)
+      .map { path =>
+        val tagFile = new File(path)
+        require(tagFile.isFile,
+          s"No file found for image tag at ${tagFile.getAbsolutePath}.")
+        Files.toString(tagFile, Charsets.UTF_8).trim
+      }
+      .orElse(sys.props.get(CONFIG_KEY_IMAGE_TAG))
+      .getOrElse {
+        throw new IllegalArgumentException(
+          s"One of $CONFIG_KEY_IMAGE_TAG_FILE or $CONFIG_KEY_IMAGE_TAG is required.")
+      }
+    val repo = sys.props.get(CONFIG_KEY_IMAGE_REPO)
+      .map { _ + "/" }
+      .getOrElse("")
+
+    s"$repo$name:$tag"
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     // The scalatest-maven-plugin gives system properties that are referenced but not set null
@@ -83,17 +107,16 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     sparkHomeDir = Paths.get(sparkDirProp)
     require(sparkHomeDir.toFile.isDirectory,
       s"No directory found for spark home specified at $sparkHomeDir.")
-    val imageTag = getTestImageTag
-    val imageRepo = getTestImageRepo
-    image = s"$imageRepo/spark:$imageTag"
-    pyImage = s"$imageRepo/spark-py:$imageTag"
-    rImage = s"$imageRepo/spark-r:$imageTag"
+    image = testImageRef("spark")
+    pyImage = testImageRef("spark-py")
+    rImage = testImageRef("spark-r")
 
-    val sparkDistroExamplesJarFile: File = sparkHomeDir.resolve(Paths.get("examples", "jars"))
-      .toFile
-      .listFiles(new PatternFilenameFilter(Pattern.compile("^spark-examples_.*\\.jar$")))(0)
-    containerLocalSparkDistroExamplesJar = s"local:///opt/spark/examples/jars/" +
-      s"${sparkDistroExamplesJarFile.getName}"
+    val scalaVersion = scala.util.Properties.versionNumberString
+      .split("\\.")
+      .take(2)
+      .mkString(".")
+    containerLocalSparkDistroExamplesJar =
+      s"local:///opt/spark/examples/jars/spark-examples_$scalaVersion-${SPARK_VERSION}.jar"
     testBackend = IntegrationTestBackendFactory.getTestBackend
     testBackend.initialize()
     kubernetesTestComponents = new KubernetesTestComponents(testBackend.getKubernetesClient)

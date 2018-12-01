@@ -25,13 +25,12 @@ import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.History._
 import org.apache.spark.status.KVUtils
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.util.kvstore.KVStore
 
 class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
-
-  import config._
 
   private val MAX_USAGE = 3L
 
