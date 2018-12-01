@@ -60,7 +60,8 @@ private[spark] object Config extends Logging {
       .doc("Comma separated list of the Kubernetes secrets used " +
         "to access private image registries.")
       .stringConf
-      .createOptional
+      .toSequence
+      .createWithDefault(Nil)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
@@ -112,16 +113,16 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  // For testing only.
+  val KUBERNETES_DRIVER_POD_NAME_PREFIX =
+    ConfigBuilder("spark.kubernetes.driver.resourceNamePrefix")
+      .internal()
+      .stringConf
+      .createOptional
+
   val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names.")
-      .internal()
-      .stringConf
-      .createWithDefault("spark")
-
-  val KUBERNETES_PYSPARK_PY_FILES =
-    ConfigBuilder("spark.kubernetes.python.pyFiles")
-      .doc("The PyFiles that are distributed via client arguments")
       .internal()
       .stringConf
       .createOptional
