@@ -326,7 +326,7 @@ object SQLConf {
       "factor as the estimated data size, in case the data is compressed in the file and lead to" +
       " a heavily underestimated result.")
     .doubleConf
-    .checkValue(_ > 0, "the value of fileDataSizeFactor must be larger than 0")
+    .checkValue(_ > 0, "the value of fileDataSizeFactor must be greater than 0")
     .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
@@ -673,7 +673,7 @@ object SQLConf {
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed. Defaults to 100000")
     .intConf
-    .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be larger than 0")
+    .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be greater than 0")
     .createWithDefault(100000)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
@@ -1154,7 +1154,7 @@ object SQLConf {
       .internal()
       .doc("The number of bins when generating histograms.")
       .intConf
-      .checkValue(num => num > 1, "The number of bins must be larger than 1.")
+      .checkValue(num => num > 1, "The number of bins must be greater than 1.")
       .createWithDefault(254)
 
   val PERCENTILE_ACCURACY =
