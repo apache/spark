@@ -16,9 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.HasMetadata
-
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
 import org.apache.spark.internal.Logging
@@ -28,21 +26,15 @@ import org.apache.spark.internal.Logging
  * containing Hadoop config files mounted as volumes and an ENV variable
  * pointed to the mounted file directory.
  */
-private[spark] class HadoopConfExecutorFeatureStep(
-    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+private[spark] class HadoopConfExecutorFeatureStep(conf: KubernetesExecutorConf)
   extends KubernetesFeatureConfigStep with Logging {
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val sparkConf = kubernetesConf.sparkConf
-    val hadoopConfDirCMapName = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
+    val hadoopConfDirCMapName = conf.getOption(HADOOP_CONFIG_MAP_NAME)
     require(hadoopConfDirCMapName.isDefined,
       "Ensure that the env `HADOOP_CONF_DIR` is defined either in the client or " +
         " using pre-existing ConfigMaps")
     logInfo("HADOOP_CONF_DIR defined")
     HadoopBootstrapUtil.bootstrapHadoopConfDir(None, None, hadoopConfDirCMapName, pod)
   }
-
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }
