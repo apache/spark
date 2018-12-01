@@ -57,14 +57,17 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
 
     val factory = new JsonFactory()
-    def enforceCorrectType(value: Any, dataType: DataType): Any = {
+    def enforceCorrectType(
+        value: Any,
+        dataType: DataType,
+        options: Map[String, String] = Map.empty): Any = {
       val writer = new StringWriter()
       Utils.tryWithResource(factory.createGenerator(writer)) { generator =>
         generator.writeObject(value)
         generator.flush()
       }
 
-      val dummyOption = new JSONOptions(Map.empty[String, String], "GMT")
+      val dummyOption = new JSONOptions(options, "GMT")
       val dummySchema = StructType(Seq.empty)
       val parser = new JacksonParser(dummySchema, dummyOption, allowArrayAsStructs = true)
 
@@ -96,19 +99,26 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(intNumber.toLong * 1000L)),
         enforceCorrectType(intNumber.toLong, TimestampType))
     val strTime = "2014-09-30 12:34:56"
-    checkTypePromotion(DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(strTime)),
-        enforceCorrectType(strTime, TimestampType))
+    checkTypePromotion(
+      expected = 1412080496000000L,
+      enforceCorrectType(strTime, TimestampType, Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss")))
 
     val strDate = "2014-10-15"
     checkTypePromotion(
       DateTimeUtils.fromJavaDate(Date.valueOf(strDate)), enforceCorrectType(strDate, DateType))
 
     val ISO8601Time1 = "1970-01-01T01:00:01.0Z"
-    val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(3601000)),
-        enforceCorrectType(ISO8601Time1, TimestampType))
+        enforceCorrectType(
+          ISO8601Time1,
+          TimestampType,
+          Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SX")))
+    val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
     checkTypePromotion(DateTimeUtils.fromJavaTimestamp(new Timestamp(10801000)),
-        enforceCorrectType(ISO8601Time2, TimestampType))
+        enforceCorrectType(
+          ISO8601Time2,
+          TimestampType,
+          Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ssXXX")))
 
     val ISO8601Date = "1970-01-01"
     checkTypePromotion(DateTimeUtils.millisToDays(32400000),
