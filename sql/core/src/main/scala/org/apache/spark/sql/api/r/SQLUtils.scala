@@ -226,9 +226,7 @@ private[sql] object SQLUtils extends Logging {
     sparkSession.sessionState.catalog.listTables(db).map(_.table).toArray
   }
 
-  def createArrayType(elementType: DataType): ArrayType = DataTypes.createArrayType(elementType)
-
-  def createArrayType(elementType: Column): ArrayType = {
-    new ArrayType(ExprUtils.evalTypeExpr(elementType.expr), true)
+  def createArrayType(column: Column): ArrayType = {
+    new ArrayType(ExprUtils.evalTypeExpr(column.expr), true)
   }
 }

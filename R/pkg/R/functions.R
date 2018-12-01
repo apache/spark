@@ -203,7 +203,7 @@ NULL
 #'          \item \code{from_json}: a structType object to use as the schema to use
 #'              when parsing the JSON string. Since Spark 2.3, the DDL-formatted string is
 #'              also supported for the schema. Since Spark 3.0, \code{schema_of_json} or
-#'              a string literal can also be accepted.
+#'              the DDL-formatted string literal can also be accepted.
 #'          \item \code{from_csv}: a structType object, DDL-formatted string or \code{schema_of_csv}
 #'          }
 #' @param ... additional argument(s).
@@ -2294,9 +2294,15 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructTypeOr
               # R side has 'as.json.array' option to indicate if the schema should be
               # treated as struct or element type of array in order to make it more
               # R-friendly.
-              jschema <-  callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-                                      "createArrayType",
-                                      jschema)
+              if (class(schema) == "Column") {
+                jschema <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                                       "createArrayType",
+                                       jschema)
+              } else {
+                jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
+                                       "createArrayType",
+                                       jschema)
+              }
             }
             options <- varargsToStrEnv(...)
             jc <- callJStatic("org.apache.spark.sql.functions",
