@@ -1995,8 +1995,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       df1.write.format("csv").option("header", true).save(path.getAbsolutePath)
       val df2 = spark.read.format("csv").option("header", true).option("inferSchema", false)
         .load(path.getAbsolutePath)
-      assert(df1.rdd.getNumPartitions == 2)
-      assert(df2.rdd.getNumPartitions == 1)
       assert(df1.schema === df2.schema)
       checkAnswer(df1, df2)
     }
