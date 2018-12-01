@@ -1284,7 +1284,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       }
 
       val listener = new AppStatusListener(store, testConf, live)
-      
+
       Seq("1", "2").foreach { execId =>
         listener.onExecutorAdded(SparkListenerExecutorAdded(0L, execId,
           new ExecutorInfo("host1", 1, Map.empty)))
