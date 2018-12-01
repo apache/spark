@@ -191,7 +191,7 @@ of the most common options to set are:
     shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
     is added to executor resource requests.
 
-    NOTE: This configuration is not supported on Windows.
+    NOTE: Python memory usage may not be limited on platforms that do not support resource limiting, such as Windows.
   </td>
 </tr>
 <tr>
