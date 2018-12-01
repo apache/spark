@@ -2730,13 +2730,25 @@ setMethod("union",
             dataFrame(unioned)
           })
 
-#' Return a new SparkDataFrame containing the union of rows
+#' Return a new SparkDataFrame containing the union of rows.
 #'
-#' This is an alias for `union`.
+#' This is an alias for \code{union}.
 #'
-#' @rdname union
-#' @name unionAll
+#' @param x a SparkDataFrame.
+#' @param y a SparkDataFrame.
+#' @return A SparkDataFrame containing the result of the unionAll operation.
+#' @family SparkDataFrame functions
 #' @aliases unionAll,SparkDataFrame,SparkDataFrame-method
+#' @rdname unionAll
+#' @name unionAll
+#' @seealso \link{union}
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- read.json(path)
+#' df2 <- read.json(path2)
+#' unionAllDF <- unionAll(df1, df2)
+#' }
 #' @note unionAll since 1.4.0
 setMethod("unionAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
