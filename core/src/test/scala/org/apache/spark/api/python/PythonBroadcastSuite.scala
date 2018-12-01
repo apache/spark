@@ -31,7 +31,6 @@ import org.apache.spark.util.Utils
 // a PythonBroadcast:
 class PythonBroadcastSuite extends SparkFunSuite with Matchers with SharedSparkContext {
   test("PythonBroadcast can be serialized with Kryo (SPARK-4882)") {
-    val tempDir = Utils.createTempDir()
     val broadcastedString = "Hello, world!"
     def assertBroadcastIsValid(broadcast: PythonBroadcast): Unit = {
       val source = Source.fromFile(broadcast.path)
@@ -39,7 +38,7 @@ class PythonBroadcastSuite extends SparkFunSuite with Matchers with SharedSparkC
       source.close()
       contents should be (broadcastedString)
     }
-    try {
+    withTempDir { tempDir =>
       val broadcastDataFile: File = {
         val file = new File(tempDir, "broadcastData")
         val printWriter = new PrintWriter(file)
@@ -53,8 +52,6 @@ class PythonBroadcastSuite extends SparkFunSuite with Matchers with SharedSparkC
       val deserializedBroadcast =
         Utils.clone[PythonBroadcast](broadcast, new KryoSerializer(conf).newInstance())
       assertBroadcastIsValid(deserializedBroadcast)
-    } finally {
-      Utils.deleteRecursively(tempDir)
     }
   }
 }

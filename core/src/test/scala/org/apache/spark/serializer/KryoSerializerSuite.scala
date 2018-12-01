@@ -369,27 +369,27 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("SPARK-12222: deserialize RoaringBitmap throw Buffer underflow exception") {
-    val dir = Utils.createTempDir()
-    val tmpfile = dir.toString + "/RoaringBitmap"
-    val outStream = new FileOutputStream(tmpfile)
-    val output = new KryoOutput(outStream)
-    val bitmap = new RoaringBitmap
-    bitmap.add(1)
-    bitmap.add(3)
-    bitmap.add(5)
-    // Ignore Kryo because it doesn't use writeObject
-    bitmap.serialize(new KryoOutputObjectOutputBridge(null, output))
-    output.flush()
-    output.close()
+    withTempDir { dir =>
+      val tmpfile = dir.toString + "/RoaringBitmap"
+      val outStream = new FileOutputStream(tmpfile)
+      val output = new KryoOutput(outStream)
+      val bitmap = new RoaringBitmap
+      bitmap.add(1)
+      bitmap.add(3)
+      bitmap.add(5)
+      // Ignore Kryo because it doesn't use writeObject
+      bitmap.serialize(new KryoOutputObjectOutputBridge(null, output))
+      output.flush()
+      output.close()
 
-    val inStream = new FileInputStream(tmpfile)
-    val input = new KryoInput(inStream)
-    val ret = new RoaringBitmap
-    // Ignore Kryo because it doesn't use readObject
-    ret.deserialize(new KryoInputObjectInputBridge(null, input))
-    input.close()
-    assert(ret == bitmap)
-    Utils.deleteRecursively(dir)
+      val inStream = new FileInputStream(tmpfile)
+      val input = new KryoInput(inStream)
+      val ret = new RoaringBitmap
+      // Ignore Kryo because it doesn't use readObject
+      ret.deserialize(new KryoInputObjectInputBridge(null, input))
+      input.close()
+      assert(ret == bitmap)
+    }
   }
 
   test("KryoOutputObjectOutputBridge.writeObject and KryoInputObjectInputBridge.readObject") {
