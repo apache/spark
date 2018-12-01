@@ -107,6 +107,7 @@ function create_dev_build_context {(
     "$PYSPARK_CTX/kubernetes/dockerfiles"
   mkdir "$PYSPARK_CTX/python"
   cp -r "python/lib" "$PYSPARK_CTX/python/lib"
+  cp -r "python/pyspark" "$PYSPARK_CTX/python/pyspark"
 
   local R_CTX="$CTX_DIR/sparkr"
   mkdir -p "$R_CTX/kubernetes"
