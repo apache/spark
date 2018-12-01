@@ -154,8 +154,14 @@ class LegacyFallbackDateFormatter(
     timeZone: TimeZone,
     locale: Locale) extends LegacyDateFormatter(pattern, timeZone, locale) {
   override def parse(s: String): Int = {
-    Try(super.parse(s)).getOrElse {
-      DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(s).getTime)
+    Try(super.parse(s)).orElse {
+      // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+      // compatibility.
+      Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(s).getTime))
+    }.getOrElse {
+      // In Spark 1.5.0, we store the data as number of days since epoch in string.
+      // So, we just convert it to Int.
+      s.toInt
     }
   }
 }
