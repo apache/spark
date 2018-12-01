@@ -42,7 +42,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, ByteBufferInputStream, SerializableConfiguration, SerializableJobConf, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -215,6 +215,12 @@ class KryoSerializer(conf: SparkConf)
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
     // We load them safely, ignore it if the class not found.
     Seq(
+      "org.apache.spark.ml.attribute.Attribute",
+      "org.apache.spark.ml.attribute.AttributeGroup",
+      "org.apache.spark.ml.attribute.BinaryAttribute",
+      "org.apache.spark.ml.attribute.NominalAttribute",
+      "org.apache.spark.ml.attribute.NumericAttribute",
+
       "org.apache.spark.ml.feature.Instance",
       "org.apache.spark.ml.feature.LabeledPoint",
       "org.apache.spark.ml.feature.OffsetInstance",
@@ -224,6 +230,7 @@ class KryoSerializer(conf: SparkConf)
       "org.apache.spark.ml.linalg.SparseMatrix",
       "org.apache.spark.ml.linalg.SparseVector",
       "org.apache.spark.ml.linalg.Vector",
+      "org.apache.spark.ml.stat.distribution.MultivariateGaussian",
       "org.apache.spark.ml.tree.impl.TreePoint",
       "org.apache.spark.mllib.clustering.VectorWithNorm",
       "org.apache.spark.mllib.linalg.DenseMatrix",
@@ -232,7 +239,8 @@ class KryoSerializer(conf: SparkConf)
       "org.apache.spark.mllib.linalg.SparseMatrix",
       "org.apache.spark.mllib.linalg.SparseVector",
       "org.apache.spark.mllib.linalg.Vector",
-      "org.apache.spark.mllib.regression.LabeledPoint"
+      "org.apache.spark.mllib.regression.LabeledPoint",
+      "org.apache.spark.mllib.stat.distribution.MultivariateGaussian"
     ).foreach { name =>
       try {
         val clazz = Utils.classForName(name)
@@ -409,7 +417,12 @@ private[spark] class KryoSerializerInstance(
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     val kryo = borrowKryo()
     try {
-      input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      if (bytes.hasArray) {
+        input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      } else {
+        input.setBuffer(new Array[Byte](4096))
+        input.setInputStream(new ByteBufferInputStream(bytes))
+      }
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       releaseKryo(kryo)
@@ -421,7 +434,12 @@ private[spark] class KryoSerializerInstance(
     val oldClassLoader = kryo.getClassLoader
     try {
       kryo.setClassLoader(loader)
-      input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      if (bytes.hasArray) {
+        input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      } else {
+        input.setBuffer(new Array[Byte](4096))
+        input.setInputStream(new ByteBufferInputStream(bytes))
+      }
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       kryo.setClassLoader(oldClassLoader)

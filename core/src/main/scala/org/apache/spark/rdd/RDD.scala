@@ -1258,7 +1258,7 @@ abstract class RDD[T: ClassTag](
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (`sp` is greater
    * than `p`) would trigger sparse representation of registers, which may reduce the memory
@@ -1290,7 +1290,7 @@ abstract class RDD[T: ClassTag](
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.

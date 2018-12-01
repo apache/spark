@@ -102,16 +102,18 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
-  def executeAndCheck(plan: LogicalPlan): LogicalPlan = AnalysisHelper.markInAnalyzer {
-    val analyzed = execute(plan)
-    try {
-      checkAnalysis(analyzed)
-      analyzed
-    } catch {
-      case e: AnalysisException =>
-        val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
-        ae.setStackTrace(e.getStackTrace)
-        throw ae
+  def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
+    AnalysisHelper.markInAnalyzer {
+      val analyzed = executeAndTrack(plan, tracker)
+      try {
+        checkAnalysis(analyzed)
+        analyzed
+      } catch {
+        case e: AnalysisException =>
+          val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
+          ae.setStackTrace(e.getStackTrace)
+          throw ae
+      }
     }
   }
 
@@ -871,7 +873,7 @@ class Analyzer(
     private def dedupOuterReferencesInSubquery(
         plan: LogicalPlan,
         attrMap: AttributeMap[Attribute]): LogicalPlan = {
-      plan resolveOperatorsDown { case currentFragment =>
+      plan transformDown { case currentFragment =>
         currentFragment transformExpressions {
           case OuterReference(a: Attribute) =>
             OuterReference(dedupAttr(a, attrMap))

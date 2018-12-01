@@ -631,6 +631,9 @@ setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 #' @rdname union
 setGeneric("union", function(x, y) { standardGeneric("union") })
 
+#' @rdname union
+setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
+
 #' @rdname unionByName
 setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
 
@@ -1202,6 +1205,14 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("rtrim", function(x, trimString) { standardGeneric("rtrim") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("schema_of_csv", function(x, ...) { standardGeneric("schema_of_csv") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("schema_of_json", function(x, ...) { standardGeneric("schema_of_json") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL

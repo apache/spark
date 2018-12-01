@@ -27,7 +27,7 @@ from pyspark.sql.functions import UserDefinedFunction
 from pyspark.sql.types import *
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
-from pyspark.tests import QuietTest
+from pyspark.testing.utils import QuietTest
 
 
 class UDFTests(ReusedSQLTestCase):
@@ -206,6 +206,18 @@ class UDFTests(ReusedSQLTestCase):
         df = left.join(right, f("a", "b"))
         with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
             df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            self.assertEqual(df.collect(), [Row(a=1, b=1)])
+
+    def test_udf_in_left_outer_join_condition(self):
+        # regression test for SPARK-26147
+        from pyspark.sql.functions import udf, col
+        left = self.spark.createDataFrame([Row(a=1)])
+        right = self.spark.createDataFrame([Row(b=1)])
+        f = udf(lambda a: str(a), StringType())
+        # The join condition can't be pushed down, as it refers to attributes from both sides.
+        # The Python UDF only refer to attributes from one side, so it's evaluable.
+        df = left.join(right, f("a") == col("b").cast("string"), how="left_outer")
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
             self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
@@ -649,6 +661,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
     except ImportError:
-        unittest.main(verbosity=2)
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

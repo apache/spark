@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Uns
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetrics, SQLShuffleMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.MutablePair
@@ -48,7 +48,8 @@ case class ShuffleExchangeExec(
   //       e.g. it can be null on the Executor side
 
   override lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"))
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size")
+  ) ++ SQLShuffleMetricsReporter.createShuffleReadMetrics(sparkContext)
 
   override def nodeName: String = {
     val extraInfo = coordinator match {
@@ -108,7 +109,7 @@ case class ShuffleExchangeExec(
       assert(newPartitioning.isInstanceOf[HashPartitioning])
       newPartitioning = UnknownPartitioning(indices.length)
     }
-    new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
+    new ShuffledRowRDD(shuffleDependency, metrics, specifiedPartitionStartIndices)
   }
 
   /**
@@ -280,7 +281,7 @@ object ShuffleExchangeExec {
           }
           // The comparator for comparing row hashcode, which should always be Integer.
           val prefixComparator = PrefixComparators.LONG
-          val canUseRadixSort = SparkEnv.get.conf.get(SQLConf.RADIX_SORT_ENABLED)
+          val canUseRadixSort = SQLConf.get.enableRadixSort
           // The prefix computer generates row hashcode as the prefix, so we may decrease the
           // probability that the prefixes are equal when input rows choose column values from a
           // limited range.

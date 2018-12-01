@@ -23,7 +23,7 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
+import org.apache.spark.annotation._
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
@@ -54,7 +54,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
-@InterfaceStability.Stable
+@Stable
 class SQLContext private[sql](val sparkSession: SparkSession)
   extends Logging with Serializable {
 
@@ -86,7 +86,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * that listen for execution metrics.
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def listenerManager: ExecutionListenerManager = sparkSession.listenerManager
 
   /**
@@ -158,7 +158,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    */
   @Experimental
   @transient
-  @InterfaceStability.Unstable
+  @Unstable
   def experimental: ExperimentalMethods = sparkSession.experimental
 
   /**
@@ -244,7 +244,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   object implicits extends SQLImplicits with Serializable {
     protected override def _sqlContext: SQLContext = self
   }
@@ -258,7 +258,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     sparkSession.createDataFrame(rdd)
   }
@@ -271,7 +271,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
     sparkSession.createDataFrame(data)
   }
@@ -319,7 +319,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @DeveloperApi
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
   }
@@ -363,7 +363,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataset
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -401,7 +401,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataset
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -428,7 +428,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @DeveloperApi
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
   }
@@ -443,7 +443,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.6.0
    */
   @DeveloperApi
-  @InterfaceStability.Evolving
+  @Evolving
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rows, schema)
   }
@@ -507,7 +507,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    *
    * @since 2.0.0
    */
-  @InterfaceStability.Evolving
+  @Evolving
   def readStream: DataStreamReader = sparkSession.readStream
 
 
@@ -631,7 +631,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def range(end: Long): DataFrame = sparkSession.range(end).toDF()
 
   /**
@@ -643,7 +643,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def range(start: Long, end: Long): DataFrame = sparkSession.range(start, end).toDF()
 
   /**
@@ -655,7 +655,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def range(start: Long, end: Long, step: Long): DataFrame = {
     sparkSession.range(start, end, step).toDF()
   }
@@ -670,7 +670,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
     sparkSession.range(start, end, step, numPartitions).toDF()
   }

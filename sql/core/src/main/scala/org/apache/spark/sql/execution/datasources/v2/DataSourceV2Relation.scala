@@ -22,13 +22,13 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, BatchWriteSupportProvider, DataSourceOptions, DataSourceV2}
-import org.apache.spark.sql.sources.v2.reader.{BatchReadSupport, ReadSupport, ScanConfigBuilder, SupportsReportStatistics}
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.writer.BatchWriteSupport
 import org.apache.spark.sql.types.StructType
 
@@ -40,32 +40,38 @@ import org.apache.spark.sql.types.StructType
  * @param userSpecifiedSchema The user-specified schema for this scan.
  */
 case class DataSourceV2Relation(
-    source: DataSourceV2,
-    readSupport: BatchReadSupport,
+    // TODO: remove `source` when we finish API refactor for write.
+    source: TableProvider,
+    table: SupportsBatchRead,
     output: Seq[AttributeReference],
     options: Map[String, String],
-    tableIdent: Option[TableIdentifier] = None,
     userSpecifiedSchema: Option[StructType] = None)
-  extends LeafNode with MultiInstanceRelation with NamedRelation with DataSourceV2StringFormat {
+  extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   import DataSourceV2Relation._
 
-  override def name: String = {
-    tableIdent.map(_.unquotedString).getOrElse(s"${source.name}:unknown")
+  override def name: String = table.name()
+
+  override def simpleString: String = {
+    s"RelationV2${truncatedString(output, "[", ", ", "]")} $name"
   }
-
-  override def pushedFilters: Seq[Expression] = Seq.empty
-
-  override def simpleString: String = "RelationV2 " + metadataString
 
   def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options, schema)
 
-  override def computeStats(): Statistics = readSupport match {
-    case r: SupportsReportStatistics =>
-      val statistics = r.estimateStatistics(readSupport.newScanConfigBuilder().build())
-      Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
-    case _ =>
-      Statistics(sizeInBytes = conf.defaultSizeInBytes)
+  def newScanBuilder(): ScanBuilder = {
+    val dsOptions = new DataSourceOptions(options.asJava)
+    table.newScanBuilder(dsOptions)
+  }
+
+  override def computeStats(): Statistics = {
+    val scan = newScanBuilder().build()
+    scan match {
+      case r: SupportsReportStatistics =>
+        val statistics = r.estimateStatistics()
+        Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+      case _ =>
+        Statistics(sizeInBytes = conf.defaultSizeInBytes)
+    }
   }
 
   override def newInstance(): DataSourceV2Relation = {
@@ -109,7 +115,7 @@ case class StreamingDataSourceV2Relation(
   }
 
   override def computeStats(): Statistics = readSupport match {
-    case r: SupportsReportStatistics =>
+    case r: OldSupportsReportStatistics =>
       val statistics = r.estimateStatistics(scanConfigBuilder.build())
       Statistics(sizeInBytes = statistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
     case _ =>
@@ -119,15 +125,6 @@ case class StreamingDataSourceV2Relation(
 
 object DataSourceV2Relation {
   private implicit class SourceHelpers(source: DataSourceV2) {
-    def asReadSupportProvider: BatchReadSupportProvider = {
-      source match {
-        case provider: BatchReadSupportProvider =>
-          provider
-        case _ =>
-          throw new AnalysisException(s"Data source is not readable: $name")
-      }
-    }
-
     def asWriteSupportProvider: BatchWriteSupportProvider = {
       source match {
         case provider: BatchWriteSupportProvider =>
@@ -146,18 +143,6 @@ object DataSourceV2Relation {
       }
     }
 
-    def createReadSupport(
-        options: Map[String, String],
-        userSpecifiedSchema: Option[StructType]): BatchReadSupport = {
-      val v2Options = new DataSourceOptions(options.asJava)
-      userSpecifiedSchema match {
-        case Some(s) =>
-          asReadSupportProvider.createBatchReadSupport(s, v2Options)
-        case _ =>
-          asReadSupportProvider.createBatchReadSupport(v2Options)
-      }
-    }
-
     def createWriteSupport(
         options: Map[String, String],
         schema: StructType): BatchWriteSupport = {
@@ -170,20 +155,21 @@ object DataSourceV2Relation {
   }
 
   def create(
-      source: DataSourceV2,
+      provider: TableProvider,
+      table: SupportsBatchRead,
       options: Map[String, String],
-      tableIdent: Option[TableIdentifier] = None,
       userSpecifiedSchema: Option[StructType] = None): DataSourceV2Relation = {
-    val readSupport = source.createReadSupport(options, userSpecifiedSchema)
-    val output = readSupport.fullSchema().toAttributes
-    val ident = tableIdent.orElse(tableFromOptions(options))
-    DataSourceV2Relation(
-      source, readSupport, output, options, ident, userSpecifiedSchema)
+    val output = table.schema().toAttributes
+    DataSourceV2Relation(provider, table, output, options, userSpecifiedSchema)
   }
 
-  private def tableFromOptions(options: Map[String, String]): Option[TableIdentifier] = {
-    options
-      .get(DataSourceOptions.TABLE_KEY)
-      .map(TableIdentifier(_, options.get(DataSourceOptions.DATABASE_KEY)))
+  // TODO: remove this when we finish API refactor for write.
+  def createRelationForWrite(
+      source: DataSourceV2,
+      options: Map[String, String]): DataSourceV2Relation = {
+    val provider = source.asInstanceOf[TableProvider]
+    val dsOptions = new DataSourceOptions(options.asJava)
+    val table = provider.getTable(dsOptions)
+    create(provider, table.asInstanceOf[SupportsBatchRead], options)
   }
 }

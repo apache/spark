@@ -16,8 +16,14 @@
 #
 
 ARG base_img
+ARG spark_uid=185
+
 FROM $base_img
 WORKDIR /
+
+# Reset to root to run installation tasks
+USER 0
+
 RUN mkdir ${SPARK_HOME}/python
 # TODO: Investigate running both pip and pip3 via virtualenvs
 RUN apk add --no-cache python && \
@@ -38,3 +44,6 @@ ENV PYTHONPATH ${SPARK_HOME}/python/lib/pyspark.zip:${SPARK_HOME}/python/lib/py4
 
 WORKDIR /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]
+
+# Specify the User that the actual main process will run as
+USER ${spark_uid}

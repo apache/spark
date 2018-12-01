@@ -733,7 +733,7 @@ for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.strea
 <span class="badge" style="background-color: grey">Python API</span> As of Spark {{site.SPARK_VERSION_SHORT}},
 out of these sources, Kafka and Kinesis are available in the Python API.
 
-This category of sources require interfacing with external non-Spark libraries, some of them with
+This category of sources requires interfacing with external non-Spark libraries, some of them with
 complex dependencies (e.g., Kafka). Hence, to minimize issues related to version conflicts
 of dependencies, the functionality to create DStreams from these sources has been moved to separate
 libraries that can be [linked](#linking) to explicitly when necessary.

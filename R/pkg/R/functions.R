@@ -205,11 +205,18 @@ NULL
 #'              also supported for the schema.
 #'          \item \code{from_csv}: a DDL-formatted string
 #'          }
-#' @param ... additional argument(s). In \code{to_json}, \code{to_csv} and \code{from_json},
-#'            this contains additional named properties to control how it is converted, accepts
-#'            the same options as the JSON/CSV data source. Additionally \code{to_json} supports
-#'            the "pretty" option which enables pretty JSON generation. In \code{arrays_zip},
-#'            this contains additional Columns of arrays to be merged.
+#' @param ... additional argument(s).
+#'          \itemize{
+#'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
+#'              additional named properties to control how it is converted and accepts the
+#'              same options as the JSON data source.
+#'          \item \code{to_json}: it supports the "pretty" option which enables pretty
+#'              JSON generation.
+#'          \item \code{to_csv}, \code{from_csv} and \code{schema_of_csv}: this contains
+#'              additional named properties to control how it is converted and accepts the
+#'              same options as the CSV data source.
+#'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
+#'          }
 #' @name column_collection_functions
 #' @rdname column_collection_functions
 #' @family collection functions
@@ -1771,12 +1778,16 @@ setMethod("to_date",
 #' df2 <- mutate(df2, people_json = to_json(df2$people))
 #'
 #' # Converts a map into a JSON object
-#' df2 <- sql("SELECT map('name', 'Bob')) as people")
+#' df2 <- sql("SELECT map('name', 'Bob') as people")
 #' df2 <- mutate(df2, people_json = to_json(df2$people))
 #'
 #' # Converts an array of maps into a JSON array
 #' df2 <- sql("SELECT array(map('name', 'Bob'), map('name', 'Alice')) as people")
-#' df2 <- mutate(df2, people_json = to_json(df2$people))}
+#' df2 <- mutate(df2, people_json = to_json(df2$people))
+#'
+#' # Converts a map into a pretty JSON object
+#' df2 <- sql("SELECT map('name', 'Bob') as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people, pretty = TRUE))}
 #' @note to_json since 2.2.0
 setMethod("to_json", signature(x = "Column"),
           function(x, ...) {
@@ -2286,6 +2297,32 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
           })
 
 #' @details
+#' \code{schema_of_json}: Parses a JSON string and infers its schema in DDL format.
+#'
+#' @rdname column_collection_functions
+#' @aliases schema_of_json schema_of_json,characterOrColumn-method
+#' @examples
+#'
+#' \dontrun{
+#' json <- "{\"name\":\"Bob\"}"
+#' df <- sql("SELECT * FROM range(1)")
+#' head(select(df, schema_of_json(json)))}
+#' @note schema_of_json since 3.0.0
+setMethod("schema_of_json", signature(x = "characterOrColumn"),
+          function(x, ...) {
+            if (class(x) == "character") {
+              col <- callJStatic("org.apache.spark.sql.functions", "lit", x)
+            } else {
+              col <- x@jc
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "schema_of_json",
+                              col, options)
+            column(jc)
+          })
+
+#' @details
 #' \code{from_csv}: Parses a column containing a CSV string into a Column of \code{structType}
 #' with the specified \code{schema}.
 #' If the string is unparseable, the Column will contain the value NA.
@@ -2312,6 +2349,32 @@ setMethod("from_csv", signature(x = "Column", schema = "characterOrColumn"),
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_csv",
                               x@jc, jschema, options)
+            column(jc)
+          })
+
+#' @details
+#' \code{schema_of_csv}: Parses a CSV string and infers its schema in DDL format.
+#'
+#' @rdname column_collection_functions
+#' @aliases schema_of_csv schema_of_csv,characterOrColumn-method
+#' @examples
+#'
+#' \dontrun{
+#' csv <- "Amsterdam,2018"
+#' df <- sql("SELECT * FROM range(1)")
+#' head(select(df, schema_of_csv(csv)))}
+#' @note schema_of_csv since 3.0.0
+setMethod("schema_of_csv", signature(x = "characterOrColumn"),
+          function(x, ...) {
+            if (class(x) == "character") {
+              col <- callJStatic("org.apache.spark.sql.functions", "lit", x)
+            } else {
+              col <- x@jc
+            }
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "schema_of_csv",
+                              col, options)
             column(jc)
           })
 
@@ -3370,7 +3433,7 @@ setMethod("flatten",
 #'
 #' @rdname column_collection_functions
 #' @aliases map_entries map_entries,Column-method
-#' @note map_entries since 2.4.0
+#' @note map_entries since 3.0.0
 setMethod("map_entries",
           signature(x = "Column"),
           function(x) {

@@ -25,7 +25,7 @@ import py4j
 from pyspark import HiveContext, Row
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
-from pyspark.tests import ReusedPySparkTestCase
+from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
@@ -258,6 +258,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
     except ImportError:
-        unittest.main(verbosity=2)
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

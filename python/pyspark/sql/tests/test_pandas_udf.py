@@ -21,7 +21,7 @@ from pyspark.sql.types import *
 from pyspark.sql.utils import ParseException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
-from pyspark.tests import QuietTest
+from pyspark.testing.utils import QuietTest
 
 
 @unittest.skipIf(
@@ -211,6 +211,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'), verbosity=2)
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
     except ImportError:
-        unittest.main(verbosity=2)
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

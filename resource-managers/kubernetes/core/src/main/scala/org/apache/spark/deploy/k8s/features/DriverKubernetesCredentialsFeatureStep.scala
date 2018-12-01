@@ -28,7 +28,7 @@ import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
-private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf[_])
+private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
   // TODO clean up this class, and credentials in general. See also SparkKubernetesClientFactory.
   // We should use a struct to hold all creds-related fields. A lot of the code is very repetitive.
@@ -66,7 +66,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     clientCertDataBase64.isDefined
 
   private val driverCredentialsSecretName =
-    s"${kubernetesConf.appResourceNamePrefix}-kubernetes-credentials"
+    s"${kubernetesConf.resourceNamePrefix}-kubernetes-credentials"
 
   override def configurePod(pod: SparkPod): SparkPod = {
     if (!shouldMountSecret) {
@@ -122,7 +122,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     val redactedTokens = kubernetesConf.sparkConf.getAll
       .filter(_._1.endsWith(OAUTH_TOKEN_CONF_SUFFIX))
       .toMap
-      .mapValues( _ => "<present_but_redacted>")
+      .map { case (k, v) => (k, "<present_but_redacted>") }
     redactedTokens ++
       resolvedMountedCaCertFile.map { file =>
         Map(
