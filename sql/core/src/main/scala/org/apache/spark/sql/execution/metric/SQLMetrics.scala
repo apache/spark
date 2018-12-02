@@ -78,6 +78,7 @@ object SQLMetrics {
   private val SUM_METRIC = "sum"
   private val SIZE_METRIC = "size"
   private val TIMING_METRIC = "timing"
+  private val NANO_TIMING_METRIC = "nanosecond"
   private val AVERAGE_METRIC = "average"
 
   private val baseForAvgMetric: Int = 10
@@ -117,6 +118,15 @@ object SQLMetrics {
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
     val acc = new SQLMetric(TIMING_METRIC, -1)
+    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
+    acc
+  }
+
+  def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
+    // The final result of this metric in physical operator UI may looks like:
+    // duration(min, med, max):
+    // 5s (800ms, 1s, 2s)
+    val acc = new SQLMetric(NANO_TIMING_METRIC, -1)
     acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
     acc
   }
@@ -163,6 +173,8 @@ object SQLMetrics {
         Utils.bytesToString
       } else if (metricsType == TIMING_METRIC) {
         Utils.msDurationToString
+      } else if (metricsType == NANO_TIMING_METRIC) {
+        duration => Utils.msDurationToString(duration / 100000)
       } else {
         throw new IllegalStateException("unexpected metrics type: " + metricsType)
       }

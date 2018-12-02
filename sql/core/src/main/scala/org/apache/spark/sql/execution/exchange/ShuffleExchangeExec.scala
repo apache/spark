@@ -23,6 +23,7 @@ import java.util.function.Supplier
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -90,7 +91,11 @@ case class ShuffleExchangeExec(
   private[exchange] def prepareShuffleDependency()
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     ShuffleExchangeExec.prepareShuffleDependency(
-      child.execute(), child.output, newPartitioning, serializer)
+      child.execute(),
+      child.output,
+      newPartitioning,
+      serializer,
+      child.createShuffleWriteMetricsReporter())
   }
 
   /**
@@ -204,7 +209,9 @@ object ShuffleExchangeExec {
       rdd: RDD[InternalRow],
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
-      serializer: Serializer): ShuffleDependency[Int, InternalRow, InternalRow] = {
+      serializer: Serializer,
+      shuffleWriteMetricsReporter: ShuffleWriteMetricsReporter)
+    : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(_, n) =>
@@ -333,7 +340,8 @@ object ShuffleExchangeExec {
       new ShuffleDependency[Int, InternalRow, InternalRow](
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
-        serializer)
+        serializer,
+        shuffleWriteMetricsReporter = Some(shuffleWriteMetricsReporter))
 
     dependency
   }

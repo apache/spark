@@ -43,7 +43,11 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
     val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
-        locallyLimited, child.output, SinglePartition, serializer),
+        locallyLimited,
+        child.output,
+        SinglePartition,
+        serializer,
+        child.createShuffleWriteMetricsReporter()),
       metrics)
     shuffled.mapPartitionsInternal(_.take(limit))
   }
@@ -165,7 +169,11 @@ case class TakeOrderedAndProjectExec(
     }
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
-        localTopK, child.output, SinglePartition, serializer),
+        localTopK,
+        child.output,
+        SinglePartition,
+        serializer,
+        child.createShuffleWriteMetricsReporter()),
       metrics)
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)

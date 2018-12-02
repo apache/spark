@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ReusedExchangeExec}
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
 
 /**
@@ -53,8 +54,17 @@ private[execution] object SparkPlanInfo {
       case ReusedExchangeExec(_, child) => child :: Nil
       case _ => plan.children ++ plan.subqueries
     }
-    val metrics = plan.metrics.toSeq.map { case (key, metric) =>
+    val metrics = plan.metricsWithShuffleWrite.toSeq.map { case (key, metric) =>
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
+    }
+
+    // create shuffle write metrics for child of ShuffleExchangeExec
+    plan match {
+      case ShuffleExchangeExec(_, WholeStageCodegenExec(child), _) =>
+        child.createShuffleWriteMetrics()
+      case ShuffleExchangeExec(_, child, _) =>
+        child.createShuffleWriteMetrics()
+      case _ =>
     }
 
     // dump the file scan metadata (e.g file path) to event log

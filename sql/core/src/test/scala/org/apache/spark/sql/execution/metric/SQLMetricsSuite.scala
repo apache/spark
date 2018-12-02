@@ -207,6 +207,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
           "local blocks fetched" -> 2L,
           "remote blocks fetched" -> 0L))))
       )
+      Thread.sleep(30000)
     }
   }
 
@@ -225,14 +226,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
           // It's 8 because we read 6 rows in the left and 2 row in the right one
           "number of output rows" -> 8L))))
       )
-
-      val df2 = spark.sql(
-        "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
-      testSparkPlanMetrics(df2, 1, Map(
-        0L -> (("SortMergeJoin", Map(
-          // It's 8 because we read 6 rows in the left and 2 row in the right one
-          "number of output rows" -> 8L))))
-      )
+      Thread.sleep(30000)
     }
   }
 
@@ -609,5 +603,6 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       // The final Filter should produce 1 rows, because the input is just one row.
       assert(filters.head.metrics("numOutputRows").value == 1)
     }
+    Thread.sleep(100000)
   }
 }

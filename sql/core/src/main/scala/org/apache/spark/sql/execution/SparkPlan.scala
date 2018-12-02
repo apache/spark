@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate, _}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.ThreadUtils
 
@@ -77,6 +77,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @return All metrics containing metrics of this SparkPlan.
    */
   def metrics: Map[String, SQLMetric] = Map.empty
+
+  def metricsWithShuffleWrite: Map[String, SQLMetric] = if (shuffleWriteMetricsCreated) {
+    metrics ++ shuffleWriteMetrics
+  } else {
+    metrics
+  }
 
   /**
    * Resets all the metrics.
@@ -420,6 +426,27 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
     }
     newOrdering(order, Seq.empty)
+  }
+
+  private var shuffleWriteMetrics: Map[String, SQLMetric] = Map.empty
+  private var shuffleWriteMetricsCreated: Boolean = false
+
+  final def createShuffleWriteMetrics(): Unit = {
+    if (!shuffleWriteMetricsCreated) {
+      shuffleWriteMetricsCreated = true
+      shuffleWriteMetrics =
+        SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+    }
+  }
+
+  final def createShuffleWriteMetricsReporter(): SQLShuffleWriteMetricsReporter = {
+    if (shuffleWriteMetrics.nonEmpty) {
+      SQLShuffleWriteMetricsReporter(shuffleWriteMetrics)
+    } else {
+      require(sqlContext.conf.wholeStageEnabled && this.isInstanceOf[WholeStageCodegenExec])
+      SQLShuffleWriteMetricsReporter(
+        this.asInstanceOf[WholeStageCodegenExec].child.shuffleWriteMetrics)
+    }
   }
 }
 
