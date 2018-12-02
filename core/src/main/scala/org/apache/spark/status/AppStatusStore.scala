@@ -268,16 +268,12 @@ private[spark] class AppStatusStore(
           .index(index)
           .first(0L)
           .asScala
-          .filter {_.status == "SUCCESS"} // Filter "SUCCESS" tasks
-          .zipWithIndex
-          .filter { x => indices.contains(x._2) }
+          .filter { _.status == "SUCCESS"} // Filter "SUCCESS" tasks
+          .toIndexedSeq
 
-        if (quantileTasks.size >= indices.length) {
-          quantileTasks.map(task => fn(task._1).toDouble).toIndexedSeq
-        } else {
-          indices.map(index =>
-            fn(quantileTasks.find(_._2 == index).get._1).toDouble).toIndexedSeq
-        }
+        indices.map { index =>
+          fn(quantileTasks(index.toInt)).toDouble
+        }.toIndexedSeq
       }
     }
 
