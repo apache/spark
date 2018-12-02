@@ -42,6 +42,7 @@ class IncrementalExecution(
     logicalPlan: LogicalPlan,
     val outputMode: OutputMode,
     val checkpointLocation: String,
+    val queryId: UUID,
     val runId: UUID,
     val currentBatchId: Long,
     val offsetSeqMetadata: OffsetSeqMetadata)
