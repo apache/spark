@@ -260,9 +260,6 @@ class UnivocityParser(
       if (badRecordException.isEmpty) {
         row
       } else {
-        // For corrupted records with the number of tokens same as the schema,
-        // CSV reader doesn't support partial results. All fields other than the field
-        // configured by `columnNameOfCorruptRecord` are set to `null`.
         throw BadRecordException(() => getCurrentInput, () => Some(row), badRecordException.get)
       }
     }
