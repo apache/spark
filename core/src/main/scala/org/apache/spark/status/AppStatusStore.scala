@@ -230,6 +230,12 @@ private[spark] class AppStatusStore(
     // stabilize once the stage finishes. It's also slow, especially with disk stores.
     val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
 
+    // TODO Summary metrics needs to display all the successful tasks' metrics (SPARK-26119).
+    // For InMemory case, it is efficient to find using the following code. But for diskStore case
+    // we need an efficient solution to avoid deserialization time overhead. For that, we need to
+    // rework on the way indexing works, so that we can index by specific metrics for successful
+    // and failed tasks differently (would be tricky). Also would require changing the disk store
+    // version (to invalidate old stores).
     def scanTasks(index: String)(fn: TaskDataWrapper => Long): IndexedSeq[Double] = {
       if (store.isInstanceOf[LevelDB]) {
         Utils.tryWithResource(
@@ -265,6 +271,7 @@ private[spark] class AppStatusStore(
           .filter {_.status == "SUCCESS"} // Filter "SUCCESS" tasks
           .zipWithIndex
           .filter { x => indices.contains(x._2) }
+
         if (quantileTasks.size >= indices.length) {
           quantileTasks.map(task => fn(task._1).toDouble).toIndexedSeq
         } else {
