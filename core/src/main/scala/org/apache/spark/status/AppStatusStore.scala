@@ -25,7 +25,7 @@ import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.{Distribution, Utils}
-import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
+import org.apache.spark.util.kvstore.{InMemoryStore, KVStore, LevelDB}
 
 /**
  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
@@ -148,11 +148,20 @@ private[spark] class AppStatusStore(
     // cheaper for disk stores (avoids deserialization).
     val count = {
       Utils.tryWithResource(
-        store.view(classOf[TaskDataWrapper])
-          .parent(stageKey)
-          .index(TaskIndexNames.EXEC_RUN_TIME)
-          .first(0L)
-          .closeableIterator()
+        if (store.isInstanceOf[LevelDB]) {
+          store.view(classOf[TaskDataWrapper])
+            .parent(stageKey)
+            .index(TaskIndexNames.EXEC_RUN_TIME)
+            .first(0L)
+            .closeableIterator()
+        } else {
+          store.view(classOf[TaskDataWrapper])
+            .parent(stageKey)
+            .index(TaskIndexNames.STATUS)
+            .first("SUCCESS")
+            .last("SUCCESS")
+            .closeableIterator()
+        }
       ) { it =>
         var _count = 0L
         while (it.hasNext()) {
@@ -222,29 +231,46 @@ private[spark] class AppStatusStore(
     val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
 
     def scanTasks(index: String)(fn: TaskDataWrapper => Long): IndexedSeq[Double] = {
-      Utils.tryWithResource(
-        store.view(classOf[TaskDataWrapper])
+      if (store.isInstanceOf[LevelDB]) {
+        Utils.tryWithResource(
+          store.view(classOf[TaskDataWrapper])
+            .parent(stageKey)
+            .index(index)
+            .first(0L)
+            .closeableIterator()
+        ) { it =>
+          var last = Double.NaN
+          var currentIdx = -1L
+          indices.map { idx =>
+            if (idx == currentIdx) {
+              last
+            } else {
+              val diff = idx - currentIdx
+              currentIdx = idx
+              if (it.skip(diff - 1)) {
+                last = fn(it.next()).toDouble
+                last
+              } else {
+                Double.NaN
+              }
+            }
+          }.toIndexedSeq
+        }
+      } else {
+        val quantileTasks = store.view(classOf[TaskDataWrapper])
           .parent(stageKey)
           .index(index)
           .first(0L)
-          .closeableIterator()
-      ) { it =>
-        var last = Double.NaN
-        var currentIdx = -1L
-        indices.map { idx =>
-          if (idx == currentIdx) {
-            last
-          } else {
-            val diff = idx - currentIdx
-            currentIdx = idx
-            if (it.skip(diff - 1)) {
-              last = fn(it.next()).toDouble
-              last
-            } else {
-              Double.NaN
-            }
-          }
-        }.toIndexedSeq
+          .asScala
+          .filter {_.status == "SUCCESS"} // Filter "SUCCESS" tasks
+          .zipWithIndex
+          .filter { x => indices.contains(x._2) }
+        if (quantileTasks.size >= indices.length) {
+          quantileTasks.map(task => fn(task._1).toDouble).toIndexedSeq
+        } else {
+          indices.map(index =>
+            fn(quantileTasks.find(_._2 == index).get._1).toDouble).toIndexedSeq
+        }
       }
     }
 

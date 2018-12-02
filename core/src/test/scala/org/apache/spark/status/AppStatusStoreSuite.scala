@@ -77,6 +77,34 @@ class AppStatusStoreSuite extends SparkFunSuite {
     assert(store.count(classOf[CachedQuantile]) === 2)
   }
 
+  test("only successfull task have taskSummary") {
+    val store = new InMemoryStore()
+    (0 until 5).foreach { i => store.write(newTaskData(i, "FAILED")) }
+    val appStore = new AppStatusStore(store).taskSummary(stageId, attemptId, uiQuantiles)
+    assert(appStore.size === 0)
+  }
+
+  test("summary should contain task metrics of only successfull tasks") {
+    val store = new InMemoryStore()
+
+    for (i <- 0 to 5) {
+      if (i % 2 == 1) {
+        store.write(newTaskData(i, "FAILED"))
+      } else {
+        store.write(newTaskData(i))
+      }
+    }
+
+    val summary = new AppStatusStore(store).taskSummary(stageId, attemptId, uiQuantiles).get
+
+    val values = Array(0.0, 2.0, 4.0)
+
+    val dist = new Distribution(values, 0, values.length).getQuantiles(uiQuantiles.sorted)
+    dist.zip(summary.executorRunTime).foreach { case (expected, actual) =>
+      assert(expected === actual)
+    }
+  }
+
   private def compareQuantiles(count: Int, quantiles: Array[Double]): Unit = {
     val store = new InMemoryStore()
     val values = (0 until count).map { i =>
@@ -93,12 +121,11 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
-  private def newTaskData(i: Int): TaskDataWrapper = {
+  private def newTaskData(i: Int, status: String = "SUCCESS"): TaskDataWrapper = {
     new TaskDataWrapper(
-      i, i, i, i, i, i, i.toString, i.toString, i.toString, i.toString, false, Nil, None,
+      i, i, i, i, i, i, i.toString, i.toString, status, i.toString, false, Nil, None,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, stageId, attemptId)
   }
-
 }
