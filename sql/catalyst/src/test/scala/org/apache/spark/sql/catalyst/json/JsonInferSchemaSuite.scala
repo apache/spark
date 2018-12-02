@@ -20,20 +20,45 @@ package org.apache.spark.sql.catalyst.json
 import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.TimestampType
+import org.apache.spark.sql.types._
 
-class JsonInferSchemaSuite extends SparkFunSuite{
-  def checkTimestampType(pattern: String, json: String): Unit = {
-    val options = new JSONOptions(Map("timestampFormat" -> pattern), "GMT", "")
-    val inferSchema = new JsonInferSchema(options)
+class JsonInferSchemaSuite extends SparkFunSuite {
+
+  def checkType(options: Map[String, String], json: String, `type`: DataType): Unit = {
+    val jsonOptions = new JSONOptions(options, "GMT", "")
+    val inferSchema = new JsonInferSchema(jsonOptions)
     val factory = new JsonFactory()
-    options.setJacksonOptions(factory)
+    jsonOptions.setJacksonOptions(factory)
     val parser = CreateJacksonParser.string(factory, json)
+    parser.nextToken()
+    val expectedType = StructType(Seq(StructField("a", `type`, true)))
 
-    assert(inferSchema.inferField(parser) === TimestampType)
+    assert(inferSchema.inferField(parser) === expectedType)
   }
 
-  test("Timestamp field types are inferred correctly via custom data format") {
-    checkTimestampType("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "2018-12-02T21:04:00.123")
+  def checkTimestampType(pattern: String, json: String): Unit = {
+    checkType(Map("timestampFormat" -> pattern), json, TimestampType)
+  }
+
+  test("inferring timestamp type") {
+    checkTimestampType("yyyy", """{"a": "2018"}""")
+    checkTimestampType("yyyy-MM", """{"a": "2018-12"}""")
+    checkTimestampType("yyyy-MM-dd", """{"a": "2018-12-02"}""")
+    checkTimestampType(
+      "yyyy-MM-dd'T'HH:mm:ss.SSS",
+      """{"a": "2018-12-02T21:04:00.123"}""")
+    checkTimestampType(
+      "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
+      """{"a": "2018-12-02T21:04:00.123567+01:00"}""")
+  }
+
+  def checkDateType(pattern: String, json: String): Unit = {
+    checkType(Map("dateFormat" -> pattern), json, DateType)
+  }
+
+  test("inferring date type") {
+    checkDateType("yyyy", """{"a": "2018"}""")
+    checkDateType("yyyy-MM", """{"a": "2018-12"}""")
+    checkDateType("yyyy-MM-dd", """{"a": "2018-12-02"}""")
   }
 }
