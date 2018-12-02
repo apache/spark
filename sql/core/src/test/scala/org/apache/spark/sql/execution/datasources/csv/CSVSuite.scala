@@ -1987,6 +1987,19 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(errMsg2.contains("'lineSep' can contain only 1 character"))
   }
 
+  test("SPARK-26208: write and read empty data to csv file with headers") {
+    withTempPath { path =>
+      val df1 = spark.range(10).repartition(2).filter(_ < 0).map(_.toString).toDF
+      // we have 2 partitions but they are both empty and will be filtered out upon writing
+      // thanks to SPARK-23271 one new empty partition will be inserted
+      df1.write.format("csv").option("header", true).save(path.getAbsolutePath)
+      val df2 = spark.read.format("csv").option("header", true).option("inferSchema", false)
+        .load(path.getAbsolutePath)
+      assert(df1.schema === df2.schema)
+      checkAnswer(df1, df2)
+    }
+  }
+
   test("do not produce empty files for empty partitions") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
