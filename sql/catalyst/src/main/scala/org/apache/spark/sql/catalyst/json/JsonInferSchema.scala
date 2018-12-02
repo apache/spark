@@ -28,7 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
-import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -121,7 +121,18 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             DecimalType(bigDecimal.precision, bigDecimal.scale)
         }
         decimalTry.getOrElse(StringType)
-      case VALUE_STRING => StringType
+      case VALUE_STRING =>
+        val stringValue = parser.getText
+        if ((allCatch opt options.timestampFormat.parse(stringValue)).isDefined) {
+          TimestampType
+        } else if ((allCatch opt options.dateFormat.parse(stringValue)).isDefined) {
+          DateType
+        } else if ((allCatch opt DateTimeUtils.stringToTime(stringValue)).isDefined) {
+          // We keep this for backwards compatibility.
+          TimestampType
+        } else {
+          StringType
+        }
 
       case START_OBJECT =>
         val builder = Array.newBuilder[StructField]
