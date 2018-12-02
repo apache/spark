@@ -123,7 +123,9 @@ class Iso8601DateFormatter(
 
   override def parse(s: String): Int = {
     val seconds = dateTimeFormatter.toInstant(s).getEpochSecond
-    (seconds / DateTimeUtils.SECONDS_PER_DAY).toInt
+    val days = Math.floorDiv(seconds, DateTimeUtils.SECONDS_PER_DAY)
+
+    days.toInt
   }
 
   override def format(days: Int): String = {
