@@ -49,8 +49,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   override def beforeAll() {
     super.beforeAll()
     TestHive.setCacheTables(true)
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    // Timezone is fixed to GMT for those timezone sensitive tests (timestamp_*)
+    TimeZone.setDefault(TimeZone.getTimeZone("GMT"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
     // Set a relatively small column batch size for testing purposes
