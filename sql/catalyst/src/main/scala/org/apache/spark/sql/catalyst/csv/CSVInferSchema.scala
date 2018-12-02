@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import java.text.ParsePosition
+
 import scala.util.control.Exception.allCatch
 
 import org.apache.spark.rdd.RDD
@@ -98,6 +100,7 @@ class CSVInferSchema(options: CSVOptions) extends Serializable {
           compatibleType(typeSoFar, tryParseDecimal(field)).getOrElse(StringType)
         case DoubleType => tryParseDouble(field)
         case TimestampType => tryParseTimestamp(field)
+        case DateType => tryParseDate(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
@@ -159,6 +162,21 @@ class CSVInferSchema(options: CSVOptions) extends Serializable {
     } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
       // We keep this for backwards compatibility.
       TimestampType
+    } else {
+      tryParseDate(field)
+    }
+  }
+
+  private def tryParseDate(field: String): DataType = {
+    val dateTry = allCatch opt {
+      val pos = new ParsePosition(0)
+      options.dateFormat.parse(field, pos)
+      if (pos.getErrorIndex != -1 || pos.getIndex != field.length) {
+        throw new IllegalArgumentException(s"${field} cannot be parsed as ${DateType.simpleString}")
+      }
+    }
+    if (dateTry.isDefined) {
+      DateType
     } else {
       tryParseBoolean(field)
     }
