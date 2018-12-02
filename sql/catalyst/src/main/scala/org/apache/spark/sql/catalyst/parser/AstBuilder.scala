@@ -1654,6 +1654,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a Float Literal expression.
+   */
+  override def visitFloatLiteral(ctx: FloatLiteralContext): Literal = {
+    numericLiteral(ctx, Float.MinValue, Float.MaxValue, FloatType.simpleString)(_.toFloat)
+  }
+
+  /**
    * Create a BigDecimal Literal expression.
    */
   override def visitBigDecimalLiteral(ctx: BigDecimalLiteralContext): Literal = {

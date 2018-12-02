@@ -53,6 +53,10 @@ select .e3;
 -- very large decimals (overflowing double).
 select 1E309, -1E309;
 
+-- float
+select 0F, 1F, 1.2F, -1F, -1.2F, 3.4028235E30F;
+select 3.4028235E39F;
+
 -- decimal parsing
 select 0.3, -0.8, .5, -.18, 0.1111, .1111;
 

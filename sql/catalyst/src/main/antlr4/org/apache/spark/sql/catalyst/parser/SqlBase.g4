@@ -740,6 +740,7 @@ number
     | MINUS? SMALLINT_LITERAL         #smallIntLiteral
     | MINUS? TINYINT_LITERAL          #tinyIntLiteral
     | MINUS? DOUBLE_LITERAL           #doubleLiteral
+    | MINUS? FLOAT_LITERAL            #floatLiteral
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
@@ -1043,6 +1044,11 @@ DECIMAL_VALUE
 DOUBLE_LITERAL
     : DIGIT+ EXPONENT? 'D'
     | DECIMAL_DIGITS EXPONENT? 'D' {isValidDecimal()}?
+    ;
+
+FLOAT_LITERAL
+    : DIGIT+ EXPONENT? 'F'
+    | DECIMAL_DIGITS EXPONENT? 'F' {isValidDecimal()}?
     ;
 
 BIGDECIMAL_LITERAL
