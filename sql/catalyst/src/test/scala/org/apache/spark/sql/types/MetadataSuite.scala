@@ -26,6 +26,7 @@ class MetadataSuite extends SparkFunSuite {
     assert(meta.## !== 0)
     assert(meta.getString("key") === "value")
     assert(meta.contains("key"))
+    assert(meta === Metadata.fromJson(meta.json))
     intercept[NoSuchElementException](meta.getString("no_such_key"))
     intercept[ClassCastException](meta.getBoolean("key"))
   }
@@ -36,6 +37,7 @@ class MetadataSuite extends SparkFunSuite {
     assert(meta.## !== 0)
     assert(meta.getLong("key") === 12)
     assert(meta.contains("key"))
+    assert(meta === Metadata.fromJson(meta.json))
     intercept[NoSuchElementException](meta.getLong("no_such_key"))
     intercept[ClassCastException](meta.getBoolean("key"))
   }
@@ -46,6 +48,7 @@ class MetadataSuite extends SparkFunSuite {
     assert(meta.## !== 0)
     assert(meta.getDouble("key") === 12)
     assert(meta.contains("key"))
+    assert(meta === Metadata.fromJson(meta.json))
     intercept[NoSuchElementException](meta.getDouble("no_such_key"))
     intercept[ClassCastException](meta.getBoolean("key"))
   }
@@ -56,6 +59,7 @@ class MetadataSuite extends SparkFunSuite {
     assert(meta.## !== 0)
     assert(meta.getBoolean("key") === true)
     assert(meta.contains("key"))
+    assert(meta === Metadata.fromJson(meta.json))
     intercept[NoSuchElementException](meta.getBoolean("no_such_key"))
     intercept[ClassCastException](meta.getString("key"))
   }
@@ -69,6 +73,7 @@ class MetadataSuite extends SparkFunSuite {
     assert(meta.getLong("key") === 0)
     assert(meta.getBoolean("key") === false)
     assert(meta.contains("key"))
+    assert(meta === Metadata.fromJson(meta.json))
     intercept[NoSuchElementException](meta.getLong("no_such_key"))
   }
 }
