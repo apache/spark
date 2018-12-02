@@ -188,4 +188,14 @@ class CSVInferSchemaSuite extends SparkFunSuite  with SQLHelper {
 
     Seq("en-US", "ko-KR", "ru-RU", "de-DE").foreach(checkDecimalInfer(_, DecimalType(7, 0)))
   }
+
+  test("inferring date type") {
+    var options = new CSVOptions(Map("dateFormat" -> "yyyy/MM/dd"), false, "GMT")
+    var inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(NullType, "2018/12/02") == DateType)
+
+    options = new CSVOptions(Map("dateFormat" -> "MMM yyyy"), false, "GMT")
+    inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(NullType, "Dec 2018") == DateType)
+  }
 }
