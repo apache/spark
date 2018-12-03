@@ -68,8 +68,9 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("Timestamp field types are inferred correctly via custom data format") {
-    var options = new CSVOptions(Map("timestampFormat" -> "yyyy-MM"), false, "GMT")
+    var options = new CSVOptions(Map("timestampFormat" -> "yyyy-mm"), false, "GMT")
     var inferSchema = new CSVInferSchema(options)
+
     assert(inferSchema.inferField(TimestampType, "2015-08") == TimestampType)
 
     options = new CSVOptions(Map("timestampFormat" -> "yyyy"), false, "GMT")
@@ -130,6 +131,7 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
   test("Merging Nulltypes should yield Nulltype.") {
     val options = new CSVOptions(Map.empty[String, String], false, "GMT")
     val inferSchema = new CSVInferSchema(options)
+
     val mergedNullTypes = inferSchema.mergeRowTypes(Array(NullType), Array(NullType))
     assert(mergedNullTypes.deep == Array(NullType).deep)
   }

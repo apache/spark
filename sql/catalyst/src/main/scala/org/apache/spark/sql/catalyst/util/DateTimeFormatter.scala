@@ -58,15 +58,13 @@ class Iso8601DateTimeFormatter(
     }
   }
 
-  private def instantToMicros(instant: Instant, secMul: Long, nanoDiv: Long): Long = {
-    val sec = Math.multiplyExact(instant.getEpochSecond, secMul)
-    val result = Math.addExact(sec, instant.getNano / nanoDiv)
+  private def instantToMicros(instant: Instant): Long = {
+    val sec = Math.multiplyExact(instant.getEpochSecond, DateTimeUtils.MICROS_PER_SECOND)
+    val result = Math.addExact(sec, instant.getNano / DateTimeUtils.NANOS_PER_MICROS)
     result
   }
 
-  def parse(s: String): Long = {
-    instantToMicros(toInstant(s), DateTimeUtils.MICROS_PER_SECOND, DateTimeUtils.NANOS_PER_MICROS)
-  }
+  def parse(s: String): Long = instantToMicros(toInstant(s))
 
   def format(us: Long): String = {
     val secs = Math.floorDiv(us, DateTimeUtils.MICROS_PER_SECOND)
@@ -125,7 +123,9 @@ class Iso8601DateFormatter(
 
   override def parse(s: String): Int = {
     val seconds = dateTimeFormatter.toInstant(s).getEpochSecond
-    (seconds / DateTimeUtils.SECONDS_PER_DAY).toInt
+    val days = Math.floorDiv(seconds, DateTimeUtils.SECONDS_PER_DAY)
+
+    days.toInt
   }
 
   override def format(days: Int): String = {
@@ -156,8 +156,14 @@ class LegacyFallbackDateFormatter(
     timeZone: TimeZone,
     locale: Locale) extends LegacyDateFormatter(pattern, timeZone, locale) {
   override def parse(s: String): Int = {
-    Try(super.parse(s)).getOrElse {
-      DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(s).getTime)
+    Try(super.parse(s)).orElse {
+      // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+      // compatibility.
+      Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(s).getTime))
+    }.getOrElse {
+      // In Spark 1.5.0, we store the data as number of days since epoch in string.
+      // So, we just convert it to Int.
+      s.toInt
     }
   }
 }
