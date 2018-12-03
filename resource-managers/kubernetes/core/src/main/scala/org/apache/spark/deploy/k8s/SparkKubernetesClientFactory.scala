@@ -67,9 +67,9 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
 
     // Allow for specifying a context used to auto-configure from the users K8S config file
-    val kubeContext = sparkConf.get(KUBERNETES_CONTEXT).filter(c => StringUtils.isNotBlank(c))
+    val kubeContext = sparkConf.get(KUBERNETES_CONTEXT).filter(_.nonEmpty)
     logInfo(s"Auto-configuring K8S client using " +
-      s"${if (kubeContext.isEmpty) s"context ${kubeContext.get}" else "current context"}" +
+      s"${if (!kubeContext.isEmpty) s"context ${kubeContext.get}" else "current context"}" +
       s" from users K8S config file")
 
     // Start from an auto-configured config with the desired context
