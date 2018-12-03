@@ -243,21 +243,24 @@ class UnivocityParser(
         () => getPartialResult(),
         new RuntimeException("Malformed CSV record"))
     } else {
-      try {
-        // When the length of the returned tokens is identical to the length of the parsed schema,
-        // we just need to convert the tokens that correspond to the required columns.
-        var i = 0
-        while (i < requiredSchema.length) {
+      // When the length of the returned tokens is identical to the length of the parsed schema,
+      // we just need to convert the tokens that correspond to the required columns.
+      var badRecordException: Option[Throwable] = None
+      var i = 0
+      while (i < requiredSchema.length) {
+        try {
           row(i) = valueConverters(i).apply(getToken(tokens, i))
-          i += 1
+        } catch {
+          case NonFatal(e) =>
+            badRecordException = badRecordException.orElse(Some(e))
         }
+        i += 1
+      }
+
+      if (badRecordException.isEmpty) {
         row
-      } catch {
-        case NonFatal(e) =>
-          // For corrupted records with the number of tokens same as the schema,
-          // CSV reader doesn't support partial results. All fields other than the field
-          // configured by `columnNameOfCorruptRecord` are set to `null`.
-          throw BadRecordException(() => getCurrentInput, () => None, e)
+      } else {
+        throw BadRecordException(() => getCurrentInput, () => Some(row), badRecordException.get)
       }
     }
   }
