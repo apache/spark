@@ -124,6 +124,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(file.toString)
     val stream = localfs.create(file, true)
+
     try {
       assertStats(tracker, 1, 0)
       stream.write(data1)
@@ -148,7 +149,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
   test("Three files, last one empty") {
     val file1 = new Path(tempDirPath, "f-3-1")
     val file2 = new Path(tempDirPath, "f-3-2")
-    val file3 = new Path(tempDirPath, "f-3-2")
+    val file3 = new Path(tempDirPath, "f-3-3")
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(file1.toString)
     write1(file1)
@@ -176,6 +177,21 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     write2(file3)
 
     // the expected size is file1 + file3; only two files are reported
+    // as found
+    assertStats(tracker, 2, len1 + len2)
+  }
+
+  test("Three files, one duplicated") {
+    val file1 = new Path(tempDirPath, "f-3-1")
+    val file2 = new Path(tempDirPath, "f-3-2")
+    val tracker = new BasicWriteTaskStatsTracker(conf)
+    tracker.newFile(file1.toString)
+    write1(file1)
+    tracker.newFile(file2.toString)
+    write2(file2)
+    // file 2 is noted again
+    tracker.newFile(file2.toString)
+    // the expected size is file1 + file2; only two files are reported
     // as found
     assertStats(tracker, 2, len1 + len2)
   }
