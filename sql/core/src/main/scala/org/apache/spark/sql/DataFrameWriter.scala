@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties, UUID}
+import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
@@ -241,32 +241,26 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
-    val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
-    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val source = cls.getConstructor().newInstance().asInstanceOf[DataSourceV2]
-      source match {
-        case provider: BatchWriteSupportProvider =>
-          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-            source,
-            df.sparkSession.sessionState.conf)
-          val options = sessionOptions ++ extraOptions
-
+    val session = df.sparkSession
+    val cls = DataSource.lookupDataSource(source, session.sessionState.conf)
+    if (classOf[TableProvider].isAssignableFrom(cls)) {
+      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+        provider, session.sessionState.conf)
+      val options = sessionOptions ++ extraOptions
+      val dsOptions = new DataSourceOptions(options.asJava)
+      provider.getTable(dsOptions) match {
+        case table: SupportsBatchWrite =>
+          val relation = DataSourceV2Relation.create(table, dsOptions)
           if (mode == SaveMode.Append) {
-            val relation = DataSourceV2Relation.createRelationForWrite(source, options)
             runCommand(df.sparkSession, "save") {
               AppendData.byName(relation, df.logicalPlan)
             }
-
           } else {
-            val writer = provider.createBatchWriteSupport(
-              UUID.randomUUID().toString,
-              df.logicalPlan.output.toStructType,
-              mode,
-              new DataSourceOptions(options.asJava))
-
-            if (writer.isPresent) {
+            val write = relation.newWriteBuilder(df.logicalPlan.schema).buildWithSaveMode(mode)
+            if (write.isPresent) {
               runCommand(df.sparkSession, "save") {
-                WriteToDataSourceV2(writer.get, df.logicalPlan)
+                WriteToDataSourceV2(write.get, df.logicalPlan)
               }
             }
           }

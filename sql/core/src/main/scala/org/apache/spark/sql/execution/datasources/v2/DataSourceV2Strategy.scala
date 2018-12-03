@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.{sources, Strategy}
+import org.apache.spark.sql.{sources, SaveMode, Strategy}
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Repartition}
@@ -110,7 +110,7 @@ object DataSourceV2Strategy extends Strategy {
       val (scan, output) = pruneColumns(scanBuilder, relation, project ++ postScanFilters)
       logInfo(
         s"""
-           |Pushing operators to ${relation.source.getClass}
+           |Pushing operators to ${relation.name}
            |Pushed Filters: ${pushedFilters.mkString(", ")}
            |Post-Scan Filters: ${postScanFilters.mkString(",")}
            |Output: ${output.mkString(", ")}
@@ -136,7 +136,8 @@ object DataSourceV2Strategy extends Strategy {
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
-      WriteToDataSourceV2Exec(r.newWriteSupport(), planLater(query)) :: Nil
+      val write = r.newWriteBuilder(query.schema).buildWithSaveMode(SaveMode.Append).get()
+      WriteToDataSourceV2Exec(write, planLater(query)) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil

@@ -15,12 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.sources.v2.writer;
+
+import java.util.Optional;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.SaveMode;
 
-/**
- * TODO: remove it when we finish the API refactor for streaming side.
- */
 @Evolving
-public interface DataSourceV2 {}
+public interface WriteBuilder {
+
+  // TODO: remove it after we finish all the new write operators.
+  Optional<BatchWrite> buildWithSaveMode(SaveMode mode);
+}

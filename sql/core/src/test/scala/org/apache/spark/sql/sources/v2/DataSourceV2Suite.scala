@@ -329,8 +329,8 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         .format(classOf[DataSourceV2WithSessionConfig].getName).load()
       val options = df.queryExecution.optimizedPlan.collectFirst {
         case d: DataSourceV2Relation => d.options
-      }
-      assert(options.get.get(optionName) == Some("false"))
+      }.get
+      assert(options.get(optionName).get == "false")
     }
   }
 
@@ -347,24 +347,6 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
           assert(!new File(sessionPath).exists)
           checkAnswer(spark.read.format(format).option("path", optionPath).load(), df)
         }
-      }
-    }
-  }
-
-  test("SPARK-25700: do not read schema when writing in other modes except append mode") {
-    withTempPath { file =>
-      val cls = classOf[SimpleWriteOnlyDataSource]
-      val path = file.getCanonicalPath
-      val df = spark.range(5).select('id as 'i, -'id as 'j)
-      try {
-        df.write.format(cls.getName).option("path", path).mode("error").save()
-        df.write.format(cls.getName).option("path", path).mode("overwrite").save()
-        df.write.format(cls.getName).option("path", path).mode("ignore").save()
-      } catch {
-        case e: SchemaReadAttemptException => fail("Schema read was attempted.", e)
-      }
-      intercept[SchemaReadAttemptException] {
-        df.write.format(cls.getName).option("path", path).mode("append").save()
       }
     }
   }
@@ -674,16 +656,5 @@ object SpecificReaderFactory extends PartitionReaderFactory {
 
       override def close(): Unit = {}
     }
-  }
-}
-
-class SchemaReadAttemptException(m: String) extends RuntimeException(m)
-
-class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
-  override def writeSchema(): StructType = {
-    // This is a bit hacky since this source implements read support but throws
-    // during schema retrieval. Might have to rewrite but it's done
-    // such so for minimised changes.
-    throw new SchemaReadAttemptException("read is not supported")
   }
 }

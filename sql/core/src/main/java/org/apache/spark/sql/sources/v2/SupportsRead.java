@@ -29,7 +29,10 @@ interface SupportsRead extends Table {
 
   /**
    * Returns a {@link ScanBuilder} which can be used to build a {@link Scan}. Spark will call this
-   * method to configure each scan.
+   * method to configure each data source scan.
+   *
+   * @param options The options for writing, which is an immutable case-insensitive
+   *                string-to-string map.
    */
   ScanBuilder newScanBuilder(DataSourceOptions options);
 }

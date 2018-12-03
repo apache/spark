@@ -17,38 +17,29 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.UUID
-
-import scala.collection.JavaConverters._
-
-import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.writer.BatchWriteSupport
+import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.types.StructType
 
 /**
- * A logical plan representing a data source v2 scan.
+ * A logical plan representing a data source v2 table.
  *
- * @param source An instance of a [[DataSourceV2]] implementation.
- * @param options The options for this scan. Used to create fresh [[BatchWriteSupport]].
- * @param userSpecifiedSchema The user-specified schema for this scan.
+ * @param table   The table that this relation represents.
+ * @param options The options for this table operation. It's used to create fresh [[ScanBuilder]]
+ *                and [[WriteBuilder]].
  */
 case class DataSourceV2Relation(
-    // TODO: remove `source` when we finish API refactor for write.
-    source: TableProvider,
-    table: SupportsBatchRead,
+    table: Table,
     output: Seq[AttributeReference],
-    options: Map[String, String],
-    userSpecifiedSchema: Option[StructType] = None)
+    // TODO: use a simple case insensitive map instead.
+    options: DataSourceOptions)
   extends LeafNode with MultiInstanceRelation with NamedRelation {
-
-  import DataSourceV2Relation._
 
   override def name: String = table.name()
 
@@ -56,11 +47,16 @@ case class DataSourceV2Relation(
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
-  def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options, schema)
+  def newScanBuilder(): ScanBuilder = table match {
+    case s: SupportsBatchRead => s.newScanBuilder(options)
+    case _ => throw new AnalysisException(s"Table is not readable: ${table.name()}")
+  }
 
-  def newScanBuilder(): ScanBuilder = {
-    val dsOptions = new DataSourceOptions(options.asJava)
-    table.newScanBuilder(dsOptions)
+
+
+  def newWriteBuilder(schema: StructType): WriteBuilder = table match {
+    case s: SupportsBatchWrite => s.newWriteBuilder(schema, options)
+    case _ => throw new AnalysisException(s"Table is not writable: ${table.name()}")
   }
 
   override def computeStats(): Statistics = {
@@ -126,52 +122,8 @@ case class StreamingDataSourceV2Relation(
 }
 
 object DataSourceV2Relation {
-  private implicit class SourceHelpers(source: DataSourceV2) {
-    def asWriteSupportProvider: BatchWriteSupportProvider = {
-      source match {
-        case provider: BatchWriteSupportProvider =>
-          provider
-        case _ =>
-          throw new AnalysisException(s"Data source is not writable: $name")
-      }
-    }
-
-    def name: String = {
-      source match {
-        case registered: DataSourceRegister =>
-          registered.shortName()
-        case _ =>
-          source.getClass.getSimpleName
-      }
-    }
-
-    def createWriteSupport(
-        options: Map[String, String],
-        schema: StructType): BatchWriteSupport = {
-      asWriteSupportProvider.createBatchWriteSupport(
-        UUID.randomUUID().toString,
-        schema,
-        SaveMode.Append,
-        new DataSourceOptions(options.asJava)).get
-    }
-  }
-
-  def create(
-      provider: TableProvider,
-      table: SupportsBatchRead,
-      options: Map[String, String],
-      userSpecifiedSchema: Option[StructType] = None): DataSourceV2Relation = {
+  def create(table: Table, options: DataSourceOptions): DataSourceV2Relation = {
     val output = table.schema().toAttributes
-    DataSourceV2Relation(provider, table, output, options, userSpecifiedSchema)
-  }
-
-  // TODO: remove this when we finish API refactor for write.
-  def createRelationForWrite(
-      source: DataSourceV2,
-      options: Map[String, String]): DataSourceV2Relation = {
-    val provider = source.asInstanceOf[TableProvider]
-    val dsOptions = new DataSourceOptions(options.asJava)
-    val table = provider.getTable(dsOptions)
-    create(provider, table.asInstanceOf[SupportsBatchRead], options)
+    DataSourceV2Relation(table, output, options)
   }
 }

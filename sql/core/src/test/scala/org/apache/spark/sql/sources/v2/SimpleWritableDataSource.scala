@@ -18,7 +18,7 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
-import java.util.Optional
+import java.util.{Optional, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -35,15 +35,13 @@ import org.apache.spark.util.SerializableConfiguration
 
 /**
  * A HDFS based transactional writable data source.
- * Each task writes data to `target/_temporary/queryId/$jobId-$partitionId-$attemptNumber`.
- * Each job moves files from `target/_temporary/queryId/` to `target`.
+ * Each task writes data to `target/_temporary/uniqueId/$jobId-$partitionId-$attemptNumber`.
+ * Each job moves files from `target/_temporary/uniqueId/` to `target`.
  */
 class SimpleWritableDataSource extends DataSourceV2
-  with TableProvider
-  with BatchWriteSupportProvider
-  with SessionConfigSupport {
+  with TableProvider with SessionConfigSupport {
 
-  protected def writeSchema(): StructType = new StructType().add("i", "long").add("j", "long")
+  private val tableSchema = new StructType().add("i", "long").add("j", "long")
 
   override def keyPrefix: String = "simpleWritableDataSource"
 
@@ -68,22 +66,35 @@ class SimpleWritableDataSource extends DataSourceV2
       new CSVReaderFactory(serializableConf)
     }
 
-    override def readSchema(): StructType = writeSchema
+    override def readSchema(): StructType = tableSchema
   }
 
-  override def getTable(options: DataSourceOptions): Table = {
-    val path = new Path(options.get("path").get())
-    val conf = SparkContext.getActive.get.hadoopConfiguration
-    new SimpleBatchTable {
-      override def newScanBuilder(options: DataSourceOptions): ScanBuilder = {
-        new MyScanBuilder(path.toUri.toString, conf)
+  class MyWriteBuilder(path: String, uniqueId: String) extends WriteBuilder {
+    override def buildWithSaveMode(mode: SaveMode): Optional[BatchWrite] = {
+      val hadoopPath = new Path(path)
+      val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
+      val fs = hadoopPath.getFileSystem(hadoopConf)
+
+      if (mode == SaveMode.ErrorIfExists) {
+        if (fs.exists(hadoopPath)) {
+          throw new RuntimeException("data already exists.")
+        }
+      }
+      if (mode == SaveMode.Ignore) {
+        if (fs.exists(hadoopPath)) {
+          return Optional.empty()
+        }
+      }
+      if (mode == SaveMode.Overwrite) {
+        fs.delete(hadoopPath, true)
       }
 
-      override def schema(): StructType = writeSchema
+      val pathStr = hadoopPath.toUri.toString
+      Optional.of(new MyBatchWrite(uniqueId, pathStr, hadoopConf))
     }
   }
 
-  class WritSupport(queryId: String, path: String, conf: Configuration) extends BatchWriteSupport {
+  class MyBatchWrite(queryId: String, path: String, conf: Configuration) extends BatchWrite {
     override def createBatchWriterFactory(): DataWriterFactory = {
       SimpleCounter.resetCounter
       new CSVDataWriterFactory(path, queryId, new SerializableConfiguration(conf))
@@ -116,34 +127,25 @@ class SimpleWritableDataSource extends DataSourceV2
     }
   }
 
-  override def createBatchWriteSupport(
-      queryId: String,
-      schema: StructType,
-      mode: SaveMode,
-      options: DataSourceOptions): Optional[BatchWriteSupport] = {
-    assert(!SparkContext.getActive.get.conf.getBoolean("spark.speculation", false))
-
+  override def getTable(options: DataSourceOptions): Table = {
     val path = new Path(options.get("path").get())
     val conf = SparkContext.getActive.get.hadoopConfiguration
-    val fs = path.getFileSystem(conf)
+    new SimpleBatchTable with SupportsBatchWrite {
 
-    if (mode == SaveMode.ErrorIfExists) {
-      if (fs.exists(path)) {
-        throw new RuntimeException("data already exists.")
+      override def schema(): StructType = tableSchema
+
+      override def newScanBuilder(options: DataSourceOptions): ScanBuilder = {
+        new MyScanBuilder(path.toUri.toString, conf)
+      }
+
+      override def newWriteBuilder(schema: StructType, options: DataSourceOptions): WriteBuilder = {
+        val path = options.get("path").get()
+        val uniqueId = UUID.randomUUID().toString
+        new MyWriteBuilder(path, uniqueId)
       }
     }
-    if (mode == SaveMode.Ignore) {
-      if (fs.exists(path)) {
-        return Optional.empty()
-      }
-    }
-    if (mode == SaveMode.Overwrite) {
-      fs.delete(path, true)
-    }
-
-    val pathStr = path.toUri.toString
-    Optional.of(new WritSupport(queryId, pathStr, conf))
   }
+
 }
 
 case class CSVInputPartitionReader(path: String) extends InputPartition
