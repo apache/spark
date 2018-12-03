@@ -18,12 +18,7 @@
 import unittest
 
 from pyspark import SparkContext
-from pyspark.serializers import PickleSerializer
 from pyspark.sql import SparkSession
-
-
-def make_serializer():
-    return PickleSerializer()
 
 
 class MLlibTestCase(unittest.TestCase):
