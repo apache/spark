@@ -173,6 +173,10 @@ object InternalRow {
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
     case NullType => (input, _) => input.setNullAt(ordinal)
+    case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
+    case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
+    case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
+    case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())
     case _ => (input, v) => input.update(ordinal, v)
   }
 }
