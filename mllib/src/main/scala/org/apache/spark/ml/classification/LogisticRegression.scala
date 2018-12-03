@@ -255,9 +255,10 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * Default is none.
    *
    * @group expertParam */
-  @Since("2.4.0")
-  val priorMean: DoubleArrayParam = new DoubleArrayParam(this, "priorMean",
-  "The prior mean used for Prior regularization.")
+  @Since("3.0.0")
+  val priorMean: DoubleArrayParam = new DoubleArrayParam(this,
+    "priorMean",
+    "The prior mean used for Prior regularization.")
 
   /** @group expertGetParam */
   def getPriorMean: Array[Double] = $(priorMean)
@@ -272,9 +273,10 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * Default is none.
    *
    * @group expertParam */
-  @Since("2.4.0")
-  val priorPrecisions: DoubleArrayParam = new DoubleArrayParam(this, "priorPrecisions",
-  "The prior precisions used for Prior regularization")
+  @Since("3.0.0")
+  val priorPrecisions: DoubleArrayParam = new DoubleArrayParam(this,
+    "priorPrecisions",
+    "The prior precisions used for Prior regularization")
 
   /** @group expertGetParam */
   def getPriorPrecisions: Array[Double] = $(priorPrecisions)

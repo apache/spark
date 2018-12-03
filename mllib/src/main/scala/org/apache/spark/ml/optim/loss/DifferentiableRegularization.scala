@@ -71,8 +71,6 @@ private[ml] class L2Regularization(
                 val temp = coef / (std * std)
                 sum += coef * temp
                 gradient(j) = regParam * temp
-              } else {
-                0.0
               }
             case None =>
               // If `standardization` is true, compute L2 regularization normally.
@@ -134,8 +132,6 @@ private[ml] class PriorRegularization(
                 val temp = (coef - priorCoef) / (std * std)
                 sum += (coef - priorCoef) * temp * priorPrecision
                 gradient(j) = regParam * priorPrecision * temp
-              } else {
-                0.0
               }
             case None =>
               // If `standardization` is true, compute regularization normally.

@@ -16,11 +16,9 @@
  */
 package org.apache.spark.ml.optim.loss
 
-import org.scalactic.{Equality, TolerantNumerics}
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{BLAS, Vectors}
-
+import org.apache.spark.ml.util.TestingUtils._
 
 
 class DifferentiableRegularizationSuite extends SparkFunSuite {
@@ -65,7 +63,7 @@ class DifferentiableRegularizationSuite extends SparkFunSuite {
   }
 
   test("Prior regularization") {
-    implicit val doubleEquality: Equality[Double] = TolerantNumerics.tolerantDoubleEquality(1E-12)
+
     val shouldApply = (_: Int) => true
     val regParam = 0.3
     val coefficients = Vectors.dense(Array(1.0, 3.0, -2.0))
@@ -81,12 +79,12 @@ class DifferentiableRegularizationSuite extends SparkFunSuite {
     val expectedSum = (0 until numFeatures).map { i =>
       priorPrecisions(i) * (coefficients(i) - priorCoefficients(i)) *
         (coefficients(i) - priorCoefficients(i))}.toArray.sum
-    assert(actualLoss ===  0.5 * regParam * expectedSum)
+    assert(actualLoss ~==  0.5 * regParam * expectedSum absTol 1E-12)
 
     val expectedGradient = Vectors.dense((0 until numFeatures).map { i =>
       regParam * priorPrecisions(i) * (coefficients(i) - priorCoefficients(i))}.toArray)
     for (i <- 0 until numFeatures)
-      assert(actualGradient(i) === expectedGradient(i))
+      assert(actualGradient(i) ~== expectedGradient(i) absTol 1E-12)
 
     // check with features standard
     val featuresStd = Array(0.1, 1.1, 0.5)
@@ -98,13 +96,13 @@ class DifferentiableRegularizationSuite extends SparkFunSuite {
       priorPrecisions(i) * (coefficients(i) - priorCoefficients(i)) *
         (coefficients(i) - priorCoefficients(i)) / (featuresStd(i) * featuresStd(i))}.toArray.sum
     val expectedLossStd = 0.5 * regParam * expectedSumStd
-    assert(actualLossStd === expectedLossStd)
+    assert(actualLossStd ~== expectedLossStd absTol 1E-12)
 
     val expectedGradientStd = Vectors.dense((0 until numFeatures).map { i =>
       regParam * priorPrecisions(i) * (coefficients(i) - priorCoefficients(i)) /
         (featuresStd(i) * featuresStd(i))}.toArray)
     for (i <- 0 until numFeatures)
-      assert(actualGradientStd(i) === expectedGradientStd(i))
+      assert(actualGradientStd(i) ~== expectedGradientStd(i) absTol 1E-12)
 
     // check should apply
     val shouldApply2 = (i: Int) => i == 1
@@ -114,12 +112,12 @@ class DifferentiableRegularizationSuite extends SparkFunSuite {
 
     val expectedSumApply = priorPrecisions(1) * (coefficients(1) - priorCoefficients(1)) *
         (coefficients(1) - priorCoefficients(1))
-    assert(actualLossApply ===  0.5 * regParam * expectedSumApply)
+    assert(actualLossApply ~==  0.5 * regParam * expectedSumApply absTol 1E-12)
 
     val expectedGradientApply = Vectors.dense(0.0,
       regParam * priorPrecisions(1) * (coefficients(1) - priorCoefficients(1)), 0.0)
     for (i <- 0 until numFeatures)
-      assert(actualGradientApply(i) === expectedGradientApply(i))
+      assert(actualGradientApply(i) ~== expectedGradientApply(i) absTol 1E-12)
 
     // check with zero features standard
     val featuresStdZero = Array(0.1, 0.0, 0.5)
