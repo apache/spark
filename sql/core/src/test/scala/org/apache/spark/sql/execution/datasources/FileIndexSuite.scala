@@ -88,9 +88,9 @@ class FileIndexSuite extends SharedSQLContext {
           val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
           fileIndex.partitionSpec()
         }.getMessage
-        msg.matches("Partition column name list #[0,1]: A")
-        msg.matches("Partition column name list #[0,1]: a")
         assert(msg.contains("Conflicting partition column names detected"))
+        assert("Partition column name list #[0-1]: A".r.findFirstIn(msg).isDefined)
+        assert("Partition column name list #[0-1]: a".r.findFirstIn(msg).isDefined)
       }
     }
   }
