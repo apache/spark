@@ -187,26 +187,23 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
   }
 
   protected def testORCTableLocation(isConvertMetastore: Boolean): Unit = {
-    val tableName1 = "spark_orc1"
-    val tableName2 = "spark_orc2"
-
     withTempDir { dir =>
       val someDF1 = Seq((1, 1, "orc1"), (2, 2, "orc2")).toDF("c1", "c2", "c3").repartition(1)
-      withTable(tableName1, tableName2) {
+      withTable("tbl1", "tbl2") {
         val dataDir = s"${dir.getCanonicalPath}/dir1/"
         val parentDir = s"${dir.getCanonicalPath}/"
         val wildCardDir = new File(s"${dir}/*").toURI
         someDF1.write.orc(dataDir)
         val parentDirStatement =
           s"""
-             |CREATE EXTERNAL TABLE $tableName1(
+             |CREATE EXTERNAL TABLE tbl1(
              |  c1 int,
              |  c2 int,
              |  c3 string)
              |STORED AS orc
              |LOCATION '${parentDir}'""".stripMargin
         sql(parentDirStatement)
-        val parentDirSqlStatement = s"select * from ${tableName1}"
+        val parentDirSqlStatement = s"select * from tbl1"
         if (isConvertMetastore) {
           checkAnswer(sql(parentDirSqlStatement), Nil)
         } else {
@@ -216,14 +213,14 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
 
         val wildCardStatement =
           s"""
-             |CREATE EXTERNAL TABLE $tableName2(
+             |CREATE EXTERNAL TABLE tbl2(
              |  c1 int,
              |  c2 int,
              |  c3 string)
              |STORED AS orc
              |LOCATION '$wildCardDir'""".stripMargin
         sql(wildCardStatement)
-        val wildCardSqlStatement = s"select * from ${tableName2}"
+        val wildCardSqlStatement = s"select * from tbl2"
         if (isConvertMetastore) {
           checkAnswer(sql(wildCardSqlStatement),
             (1 to 2).map(i => Row(i, i, s"orc$i")))

@@ -2370,4 +2370,38 @@ class HiveDDLSuite
       ))
     }
   }
+
+  test("SPARK-25993 Add test cases for resolution of Parquet table location") {
+    withTempPath { path =>
+        val someDF1 = Seq((1, 1, "parq1"), (2, 2, "parq2")).toDF("c1", "c2", "c3").repartition(1)
+        withTable("tbl1", "tbl2") {
+        val dataDir = s"${path.getCanonicalPath}/dir1/"
+        val parentDir = s"${path.getCanonicalPath}/"
+        val wildCardDir = new File(s"${path}/*").toURI
+        someDF1.write.parquet(dataDir)
+        val parentDirStatement =
+          s"""
+             |CREATE EXTERNAL TABLE tbl1(
+             |  c1 int,
+             |  c2 int,
+             |  c3 string)
+             |STORED AS parquet
+             |LOCATION '${parentDir}'""".stripMargin
+        sql(parentDirStatement)
+        checkAnswer(sql("select * from tbl1"), Nil)
+
+        val wildCardStatement =
+          s"""
+             |CREATE EXTERNAL TABLE tbl2(
+             |  c1 int,
+             |  c2 int,
+             |  c3 string)
+             |STORED AS parquet
+             |LOCATION '${wildCardDir}'""".stripMargin
+        sql(wildCardStatement)
+        checkAnswer(sql("select * from tbl2"),
+          (1 to 2).map(i => Row(i, i, s"parq$i")))
+      }
+    }
+  }
 }
