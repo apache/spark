@@ -1116,7 +1116,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .schema(schema)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df1,
-        Row(null, null) ::
+        Row(0, null) ::
         Row(1, java.sql.Date.valueOf("1983-08-04")) ::
         Nil)
 
@@ -1131,7 +1131,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .schema(schemaWithCorrField1)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df2,
-        Row(null, null, "0,2013-111-11 12:13:14") ::
+        Row(0, null, "0,2013-111-11 12:13:14") ::
         Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
         Nil)
 
@@ -1148,7 +1148,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .schema(schemaWithCorrField2)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df3,
-        Row(null, "0,2013-111-11 12:13:14", null) ::
+        Row(0, "0,2013-111-11 12:13:14", null) ::
         Row(1, null, java.sql.Date.valueOf("1983-08-04")) ::
         Nil)
 
@@ -1985,5 +1985,27 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect
     }.getMessage
     assert(errMsg2.contains("'lineSep' can contain only 1 character"))
+  }
+
+  test("SPARK-26208: write and read empty data to csv file with headers") {
+    withTempPath { path =>
+      val df1 = spark.range(10).repartition(2).filter(_ < 0).map(_.toString).toDF
+      // we have 2 partitions but they are both empty and will be filtered out upon writing
+      // thanks to SPARK-23271 one new empty partition will be inserted
+      df1.write.format("csv").option("header", true).save(path.getAbsolutePath)
+      val df2 = spark.read.format("csv").option("header", true).option("inferSchema", false)
+        .load(path.getAbsolutePath)
+      assert(df1.schema === df2.schema)
+      checkAnswer(df1, df2)
+    }
+  }
+
+  test("do not produce empty files for empty partitions") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.emptyDataset[String].write.csv(path)
+      val files = new File(path).listFiles()
+      assert(!files.exists(_.getName.endsWith("csv")))
+    }
   }
 }

@@ -278,7 +278,8 @@ private[spark] class HadoopDelegationTokenManager(
       new HadoopFSDelegationTokenProvider(
         () => HadoopDelegationTokenManager.this.fileSystemsToAccess())) ++
       safeCreateProvider(new HiveDelegationTokenProvider) ++
-      safeCreateProvider(new HBaseDelegationTokenProvider)
+      safeCreateProvider(new HBaseDelegationTokenProvider) ++
+      safeCreateProvider(new KafkaDelegationTokenProvider)
 
     // Filter out providers for which spark.security.credentials.{service}.enabled is false.
     providers

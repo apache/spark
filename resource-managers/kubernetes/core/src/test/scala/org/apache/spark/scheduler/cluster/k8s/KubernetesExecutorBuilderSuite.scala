@@ -27,6 +27,7 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features._
 import org.apache.spark.deploy.k8s.submit.PodBuilderSuiteUtils
+import org.apache.spark.util.SparkConfWithEnv
 
 class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val BASIC_STEP_TYPE = "basic"
@@ -57,36 +58,14 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     _ => mountVolumesStep)
 
   test("Basic steps are consistently applied.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      None)
+    val conf = KubernetesTestConf.createExecutorConf()
     validateStepTypesApplied(builderUnderTest.buildFromFeatures(conf))
   }
 
   test("Apply secrets step if secrets are present.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map("secret" -> "secretMountPath"),
-      Map("secret-name" -> "secret-key"),
-      Map.empty,
-      Nil,
-      None)
+    val conf = KubernetesTestConf.createExecutorConf(
+      secretEnvNamesToKeyRefs = Map("secret-name" -> "secret-key"),
+      secretNamesToMountPaths = Map("secret" -> "secretMountPath"))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       SECRETS_STEP_TYPE,
@@ -100,19 +79,8 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       "",
       false,
       KubernetesHostPathVolumeConf("/checkpoint"))
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      volumeSpec :: Nil,
-      None)
+    val conf = KubernetesTestConf.createExecutorConf(
+      volumes = Seq(volumeSpec))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       MOUNT_VOLUMES_STEP_TYPE)
@@ -135,25 +103,14 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       .set("spark.driver.host", "https://driver.host.com")
       .set(Config.CONTAINER_IMAGE, "spark-executor:latest")
       .set(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE, "template-file.yaml")
-    val kubernetesConf = KubernetesConf(
-      sparkConf,
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder()
-          .withNewMetadata()
+    val kubernetesConf = KubernetesTestConf.createExecutorConf(
+      sparkConf = sparkConf,
+      driverPod = Some(new PodBuilder()
+        .withNewMetadata()
           .withName("driver")
           .endMetadata()
-          .build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Option.empty)
-    val sparkPod = KubernetesExecutorBuilder
-      .apply(kubernetesClient, sparkConf)
+        .build()))
+    val sparkPod = KubernetesExecutorBuilder(kubernetesClient, sparkConf)
       .buildFromFeatures(kubernetesConf)
     PodBuilderSuiteUtils.verifyPodWithSupportedFeatures(sparkPod)
   }

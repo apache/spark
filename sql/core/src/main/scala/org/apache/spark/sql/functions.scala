@@ -4259,7 +4259,7 @@ object functions {
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
     // TODO: should call SparkUserDefinedFunction.create() instead but inputSchemas is currently
     // unavailable. We may need to create type-safe overloaded versions of udf() methods.
-    new UserDefinedFunction(f, dataType, inputTypes = None)
+    SparkUserDefinedFunction(f, dataType, inputTypes = None, nullableTypes = None)
   }
 
   /**

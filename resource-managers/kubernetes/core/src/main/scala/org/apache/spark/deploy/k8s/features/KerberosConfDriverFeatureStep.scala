@@ -27,11 +27,10 @@ import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -48,16 +47,16 @@ import org.apache.spark.util.Utils
  *   tokens which will be provided to the driver. The driver will handle distribution of the
  *   tokens to executors.
  */
-private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesConf[_])
-  extends KubernetesFeatureConfigStep with Logging {
+private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDriverConf)
+  extends KubernetesFeatureConfigStep {
 
-  private val conf = kubernetesConf.sparkConf
-  private val principal = conf.get(org.apache.spark.internal.config.PRINCIPAL)
-  private val keytab = conf.get(org.apache.spark.internal.config.KEYTAB)
-  private val krb5File = conf.get(KUBERNETES_KERBEROS_KRB5_FILE)
-  private val krb5CMap = conf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
-  private val existingDtSecret = conf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
-  private val existingDtItemKey = conf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
+  private val principal = kubernetesConf.get(org.apache.spark.internal.config.PRINCIPAL)
+  private val keytab = kubernetesConf.get(org.apache.spark.internal.config.KEYTAB)
+  private val existingSecretName = kubernetesConf.get(KUBERNETES_KERBEROS_DT_SECRET_NAME)
+  private val existingSecretItemKey = kubernetesConf.get(KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY)
+  private val krb5File = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
+  private val krb5CMap = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
+  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf)
 
   KubernetesUtils.requireNandDefined(
     krb5File,
@@ -254,5 +253,4 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesCon
       }
     }
   }
-
 }

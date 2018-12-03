@@ -485,10 +485,12 @@ class DataFrame(object):
         if not isinstance(name, str):
             raise TypeError("name should be provided as str, got {0}".format(type(name)))
 
+        allowed_types = (basestring, list, float, int)
         for p in parameters:
-            if not isinstance(p, str):
+            if not isinstance(p, allowed_types):
                 raise TypeError(
-                    "all parameters should be str, got {0} of type {1}".format(p, type(p)))
+                    "all parameters should be in {0}, got {1} of type {2}".format(
+                        allowed_types, p, type(p)))
 
         jdf = self._jdf.hint(name, self._jseq(parameters))
         return DataFrame(jdf, self.sql_ctx)

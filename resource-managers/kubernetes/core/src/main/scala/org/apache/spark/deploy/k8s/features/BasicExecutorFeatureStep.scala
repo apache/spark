@@ -29,8 +29,7 @@ import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
-private[spark] class BasicExecutorFeatureStep(
-    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+private[spark] class BasicExecutorFeatureStep(kubernetesConf: KubernetesExecutorConf)
   extends KubernetesFeatureConfigStep {
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
@@ -42,7 +41,7 @@ private[spark] class BasicExecutorFeatureStep(
     .sparkConf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
-  private val executorPodNamePrefix = kubernetesConf.appResourceNamePrefix
+  private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
   private val driverUrl = RpcEndpointAddress(
     kubernetesConf.get("spark.driver.host"),
@@ -76,7 +75,7 @@ private[spark] class BasicExecutorFeatureStep(
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val name = s"$executorPodNamePrefix-exec-${kubernetesConf.roleSpecificConf.executorId}"
+    val name = s"$executorPodNamePrefix-exec-${kubernetesConf.executorId}"
 
     // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
     // name as the hostname.  This preserves uniqueness since the end of name contains
@@ -98,7 +97,7 @@ private[spark] class BasicExecutorFeatureStep(
       .get(EXECUTOR_JAVA_OPTIONS)
       .map { opts =>
         val subsOpts = Utils.substituteAppNExecIds(opts, kubernetesConf.appId,
-          kubernetesConf.roleSpecificConf.executorId)
+          kubernetesConf.executorId)
         val delimitedOpts = Utils.splitCommandString(subsOpts)
         delimitedOpts.zipWithIndex.map {
           case (opt, index) =>
@@ -112,8 +111,8 @@ private[spark] class BasicExecutorFeatureStep(
       (ENV_APPLICATION_ID, kubernetesConf.appId),
       // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
       (ENV_SPARK_CONF_DIR, SPARK_CONF_DIR_INTERNAL),
-      (ENV_EXECUTOR_ID, kubernetesConf.roleSpecificConf.executorId)) ++
-      kubernetesConf.roleEnvs)
+      (ENV_EXECUTOR_ID, kubernetesConf.executorId)) ++
+      kubernetesConf.environment)
       .map(env => new EnvVarBuilder()
         .withName(env._1)
         .withValue(env._2)
@@ -138,7 +137,7 @@ private[spark] class BasicExecutorFeatureStep(
     val executorContainer = new ContainerBuilder(pod.container)
       .withName(Option(pod.container.getName).getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME))
       .withImage(executorContainerImage)
-      .withImagePullPolicy(kubernetesConf.imagePullPolicy())
+      .withImagePullPolicy(kubernetesConf.imagePullPolicy)
       .editOrNewResources()
         .addToRequests("memory", executorMemoryQuantity)
         .addToLimits("memory", executorMemoryQuantity)
@@ -162,27 +161,27 @@ private[spark] class BasicExecutorFeatureStep(
           .endResources()
         .build()
     }.getOrElse(executorContainer)
-    val driverPod = kubernetesConf.roleSpecificConf.driverPod
-    val ownerReference = driverPod.map(pod =>
+    val ownerReference = kubernetesConf.driverPod.map { pod =>
       new OwnerReferenceBuilder()
         .withController(true)
         .withApiVersion(pod.getApiVersion)
         .withKind(pod.getKind)
         .withName(pod.getMetadata.getName)
         .withUid(pod.getMetadata.getUid)
-        .build())
+        .build()
+    }
     val executorPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
-        .addToLabels(kubernetesConf.roleLabels.asJava)
-        .addToAnnotations(kubernetesConf.roleAnnotations.asJava)
+        .addToLabels(kubernetesConf.labels.asJava)
+        .addToAnnotations(kubernetesConf.annotations.asJava)
         .addToOwnerReferences(ownerReference.toSeq: _*)
         .endMetadata()
       .editOrNewSpec()
         .withHostname(hostname)
         .withRestartPolicy("Never")
-        .addToNodeSelector(kubernetesConf.nodeSelector().asJava)
-        .addToImagePullSecrets(kubernetesConf.imagePullSecrets(): _*)
+        .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
+        .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
         .endSpec()
       .build()
 

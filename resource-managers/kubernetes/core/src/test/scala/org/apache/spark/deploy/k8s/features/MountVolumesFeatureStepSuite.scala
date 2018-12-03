@@ -16,29 +16,12 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 
 class MountVolumesFeatureStepSuite extends SparkFunSuite {
-  private val sparkConf = new SparkConf(false)
-  private val emptyKubernetesConf = KubernetesConf(
-    sparkConf = sparkConf,
-    roleSpecificConf = KubernetesDriverSpecificConf(
-      JavaMainAppResource(None),
-      "app-name",
-      "main",
-      Seq.empty),
-    appResourceNamePrefix = "resource",
-    appId = "app-id",
-    roleLabels = Map.empty,
-    roleAnnotations = Map.empty,
-    roleSecretNamesToMountPaths = Map.empty,
-    roleSecretEnvNamesToKeyRefs = Map.empty,
-    roleEnvs = Map.empty,
-    roleVolumes = Nil,
-    hadoopConfSpec = None)
-
   test("Mounts hostPath volumes") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
@@ -47,7 +30,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       false,
       KubernetesHostPathVolumeConf("/hostPath/tmp")
     )
-    val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
@@ -67,7 +50,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       true,
       KubernetesPVCVolumeConf("pvcClaim")
     )
-    val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
@@ -89,7 +72,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       false,
       KubernetesEmptyDirVolumeConf(Some("Memory"), Some("6G"))
     )
-    val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
@@ -111,7 +94,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       false,
       KubernetesEmptyDirVolumeConf(None, None)
     )
-    val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
@@ -140,8 +123,8 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       true,
       KubernetesPVCVolumeConf("pvcClaim")
     )
-    val volumesConf = hpVolumeConf :: pvcVolumeConf :: Nil
-    val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumesConf)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(
+      volumes = Seq(hpVolumeConf, pvcVolumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
@@ -157,7 +140,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       false,
       KubernetesEmptyDirVolumeConf(None, None)
     )
-    val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
@@ -176,7 +159,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       true,
       KubernetesPVCVolumeConf("pvcClaim")
     )
-    val kubernetesConf = emptyKubernetesConf.copy(roleVolumes = volumeConf :: Nil)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val step = new MountVolumesFeatureStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
@@ -206,19 +189,18 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
       true,
       KubernetesEmptyDirVolumeConf(None, None)
     )
-    val kubernetesConf = emptyKubernetesConf.copy(
-      roleVolumes = emptyDirSpec :: pvcSpec :: Nil)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(emptyDirSpec, pvcSpec))
     val step = new MountVolumesFeatureStep(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 2)
-    val mounts = configuredPod.container.getVolumeMounts
-    assert(mounts.size() === 2)
-    assert(mounts.get(0).getName === "testEmptyDir")
-    assert(mounts.get(0).getMountPath === "/tmp/foo")
-    assert(mounts.get(0).getSubPath === "foo")
-    assert(mounts.get(1).getName === "testPVC")
-    assert(mounts.get(1).getMountPath === "/tmp/bar")
-    assert(mounts.get(1).getSubPath === "bar")
+    val mounts = configuredPod.container.getVolumeMounts.asScala.sortBy(_.getName())
+    assert(mounts.size === 2)
+    assert(mounts(0).getName === "testEmptyDir")
+    assert(mounts(0).getMountPath === "/tmp/foo")
+    assert(mounts(0).getSubPath === "foo")
+    assert(mounts(1).getName === "testPVC")
+    assert(mounts(1).getMountPath === "/tmp/bar")
+    assert(mounts(1).getSubPath === "bar")
   }
 }

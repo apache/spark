@@ -23,6 +23,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
@@ -53,6 +54,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
 
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
+
+  private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
@@ -85,11 +88,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
       pollEvents.stop()
     }
 
-    Utils.tryLogNonFatalError {
-      kubernetesClient.pods()
-        .withLabel(SPARK_APP_ID_LABEL, applicationId())
-        .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-        .delete()
+    if (shouldDeleteExecutors) {
+      Utils.tryLogNonFatalError {
+        kubernetesClient.pods()
+          .withLabel(SPARK_APP_ID_LABEL, applicationId())
+          .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+          .delete()
+      }
     }
 
     Utils.tryLogNonFatalError {
