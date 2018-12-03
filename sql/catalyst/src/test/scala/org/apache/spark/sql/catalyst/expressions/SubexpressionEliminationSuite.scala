@@ -35,13 +35,16 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     assert(b1 != b2)
     assert(a != b1)
     assert(b1.semanticEquals(b2))
+    assert(b1.sameResult(b2))
     assert(!b1.semanticEquals(a))
+    assert(!b1.sameResult(a))
     assert(a.hashCode != b1.hashCode)
     assert(b1.hashCode != b2.hashCode)
     assert(b1.semanticHash() == b2.semanticHash())
     assert(a != b3)
     assert(a.hashCode != b3.hashCode)
     assert(a.semanticEquals(b3))
+    assert(a.sameResult(b3))
   }
 
   test("Expression Equivalence - basic") {
@@ -160,6 +163,25 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
     // only ifExpr and its predicate expression
     assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 2)
+  }
+
+  test("SPARK-25951: Aliases handling") {
+    val a = AttributeReference("a", IntegerType)()
+    val oneAlias = Alias(a, "a1")()
+    val twoAlias = Alias(Alias(a, "a2")(), "a1")()
+
+    assert(!a.semanticEquals(oneAlias))
+    assert(a.sameResult(oneAlias) && oneAlias.sameResult(a))
+    assert(!a.semanticEquals(twoAlias))
+    assert(a.sameResult(twoAlias) && twoAlias.sameResult(a))
+    assert(!oneAlias.semanticEquals(twoAlias))
+    assert(oneAlias.sameResult(twoAlias) && twoAlias.sameResult(oneAlias))
+
+    val a2 = AttributeReference("a", IntegerType)()
+    assert(!a.semanticEquals(a2))
+    assert(!a2.sameResult(a))
+    assert(!a2.sameResult(oneAlias))
+    assert(!a2.sameResult(twoAlias))
   }
 }
 

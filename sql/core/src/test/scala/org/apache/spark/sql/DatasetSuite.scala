@@ -1568,6 +1568,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         case HashPartitioning(Seq(a: AttributeReference), _) => a.name == "k3"
         case _ => false
       }))
+
+      // In this case the requirement is not satisfied
+      val agg3 = t2.groupBy("k2").agg(count(lit("1")).as("cnt2")).withColumn("k3", $"k2" + 1)
+      val finalPlan2 = agg1.join(agg3, $"k1" === $"k3")
+      val exchanges2 = finalPlan2.queryExecution.executedPlan.collect {
+        case se: ShuffleExchangeExec => se
+      }
+      assert(exchanges2.size == 3)
+      assert(exchanges2.exists(_.newPartitioning match {
+        case HashPartitioning(Seq(a: AttributeReference), _) => a.name == "k3"
+        case _ => false
+      }))
     }
   }
 
