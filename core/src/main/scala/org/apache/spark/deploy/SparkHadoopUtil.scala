@@ -473,7 +473,9 @@ object SparkHadoopUtil {
       val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
       // the builder api does not resolve relative paths, nor does it create parent dirs, while
       // the old api does.
-      fs.mkdirs(path.getParent())
+      if (!fs.mkdirs(path.getParent())) {
+        throw new IOException(s"Failed to create parents of $path")
+      }
       val qualifiedPath = fs.makeQualified(path)
       val builder = builderMethod.invoke(fs, qualifiedPath)
       val builderCls = builder.getClass()
