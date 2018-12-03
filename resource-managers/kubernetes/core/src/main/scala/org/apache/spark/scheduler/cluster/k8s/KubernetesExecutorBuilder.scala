@@ -27,7 +27,7 @@ import org.apache.spark.deploy.k8s.features._
 
 private[spark] class KubernetesExecutorBuilder(
     provideBasicStep: (KubernetesExecutorConf, SecurityManager) => BasicExecutorFeatureStep =
-      new BasicExecutorFeatureStep(_),
+      new BasicExecutorFeatureStep(_, _),
     provideSecretsStep: (KubernetesConf => MountSecretsFeatureStep) =
       new MountSecretsFeatureStep(_),
     provideEnvSecretsStep: (KubernetesConf => EnvSecretsFeatureStep) =

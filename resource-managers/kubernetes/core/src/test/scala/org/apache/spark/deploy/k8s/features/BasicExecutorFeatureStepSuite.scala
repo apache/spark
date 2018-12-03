@@ -126,7 +126,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())
 
-    checkEnv(executor, conf,
+    checkEnv(executor, baseConf,
       Map("SPARK_JAVA_OPT_0" -> "foo=bar",
         ENV_CLASSPATH -> "bar=baz",
         "qux" -> "quux"))
@@ -151,19 +151,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val secMgr = new SecurityManager(conf)
     secMgr.initializeAuth()
 
-    val step = new BasicExecutorFeatureStep(
-      KubernetesConf(
-        conf,
-        KubernetesExecutorSpecificConf("1", Some(DRIVER_POD)),
-        RESOURCE_NAME_PREFIX,
-        APP_ID,
-        LABELS,
-        ANNOTATIONS,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Nil,
-        hadoopConfSpec = None),
+    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
       secMgr)
 
     val executor = step.configurePod(SparkPod.initialPod())
