@@ -670,6 +670,14 @@ case class FilterEstimation(plan: Filter) extends Logging {
         logDebug("[CBO] No range comparison statistics for String/Binary type " + attrLeft)
         return None
       case _ =>
+        if (!colStatsMap.hasMinMaxStats(attrLeft)) {
+          logDebug("[CBO] No min/max statistics for " + attrLeft)
+          return None
+        }
+        if (!colStatsMap.hasMinMaxStats(attrRight)) {
+          logDebug("[CBO] No min/max statistics for " + attrRight)
+          return None
+        }
     }
 
     val colStatLeft = colStatsMap(attrLeft)
