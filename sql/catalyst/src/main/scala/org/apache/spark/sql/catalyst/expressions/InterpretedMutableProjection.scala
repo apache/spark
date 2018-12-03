@@ -59,7 +59,7 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
     this
   }
 
-  private[this] val fieldWriters = validExprs.map { case (e, i) =>
+  private[this] val fieldWriters: Array[Any => Unit] = validExprs.map { case (e, i) =>
     val writer = InternalRow.getWriter(i, e.dataType)
     if (!e.nullable) {
       (v: Any) => writer(mutableRow, v)
@@ -72,7 +72,7 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
         }
       }
     }
-  }
+  }.toArray
 
   override def apply(input: InternalRow): InternalRow = {
     var i = 0
