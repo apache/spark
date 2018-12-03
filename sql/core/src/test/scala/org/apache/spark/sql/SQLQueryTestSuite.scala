@@ -157,7 +157,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       // When we are regenerating the golden files we don't need to run all the configs as they
       // all need to return the same result
       if (regenerateGoldenFiles) {
-        configs.take(1)
+        if (configs.nonEmpty) {
+          configs.take(1)
+        } else {
+          Array.empty[Array[(String, String)]]
+        }
       } else {
         if (configs.nonEmpty) {
           codegenConfigSets.flatMap { codegenConfig =>
