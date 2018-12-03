@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import java.text.ParsePosition
 import java.util.Comparator
 
 import scala.util.control.Exception.allCatch
@@ -123,10 +124,18 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         decimalTry.getOrElse(StringType)
       case VALUE_STRING =>
         val stringValue = parser.getText
-        if ((allCatch opt options.timestampFormat.parse(stringValue)).isDefined) {
-          TimestampType
-        } else if ((allCatch opt options.dateFormat.parse(stringValue)).isDefined) {
+        val dateTry = allCatch opt {
+          val pos = new ParsePosition(0)
+          options.dateFormat.parse(stringValue, pos)
+          if (pos.getErrorIndex != -1 || pos.getIndex != stringValue.length) {
+            throw new IllegalArgumentException(
+              s"$stringValue cannot be parsed as ${DateType.simpleString}")
+          }
+        }
+        if (dateTry.isDefined) {
           DateType
+        } else if ((allCatch opt options.timestampFormat.parse(stringValue)).isDefined) {
+          TimestampType
         } else if ((allCatch opt DateTimeUtils.stringToTime(stringValue)).isDefined) {
           // We keep this for backwards compatibility.
           TimestampType
