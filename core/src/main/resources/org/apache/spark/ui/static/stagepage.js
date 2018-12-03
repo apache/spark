@@ -221,7 +221,10 @@ function createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTable) {
             "searching": false,
             "order": [[0, "asc"]],
             "bSort": false,
-            "bAutoWidth": false
+            "bAutoWidth": false,
+            "oLanguage": {
+                "sEmptyTable": "No tasks have reported metrics yet"
+            }
         };
         taskSummaryMetricsDataTable = $(taskMetricsTable).DataTable(taskConf);
     }
@@ -426,7 +429,10 @@ $(document).ready(function () {
                         }
                     ],
                     "order": [[0, "asc"]],
-                    "bAutoWidth": false
+                    "bAutoWidth": false,
+                    "oLanguage": {
+                        "sEmptyTable": "No data to show yet"
+                    }
                 }
                 var executorSummaryTableSelector =
                     $("#summary-executor-table").DataTable(executorSummaryConf);

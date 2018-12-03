@@ -190,6 +190,8 @@ of the most common options to set are:
     and it is up to the application to avoid exceeding the overhead memory space
     shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
     is added to executor resource requests.
+
+    NOTE: Python memory usage may not be limited on platforms that do not support resource limiting, such as Windows.
   </td>
 </tr>
 <tr>
@@ -498,7 +500,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Reuse Python worker or not. If yes, it will use a fixed number of Python workers,
     does not need to fork() a Python process for every task. It will be very useful
-    if there is large broadcast, then the broadcast will not be needed to transferred
+    if there is a large broadcast, then the broadcast will not need to be transferred
     from JVM to Python worker for every task.
   </td>
 </tr>

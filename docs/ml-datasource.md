@@ -5,7 +5,7 @@ displayTitle: Data sources
 ---
 
 In this section, we introduce how to use data source in ML to load data.
-Beside some general data sources such as Parquet, CSV, JSON and JDBC, we also provide some specific data sources for ML.
+Besides some general data sources such as Parquet, CSV, JSON and JDBC, we also provide some specific data sources for ML.
 
 **Table of Contents**
 

@@ -26,25 +26,14 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, _}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
-class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestBase {
+class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestBase
+    with ExpressionEvalHelper {
 
   private def roundedSize(size: Int) = ByteArrayMethods.roundNumberOfBytesToNearestWord(size)
-
-  private def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
-    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
-    for (fallbackMode <- modes) {
-      test(s"$name with $fallbackMode") {
-        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
-          f
-        }
-      }
-    }
-  }
 
   testBothCodegenAndInterpreted("basic conversion with only primitive types") {
     val factory = UnsafeProjection
