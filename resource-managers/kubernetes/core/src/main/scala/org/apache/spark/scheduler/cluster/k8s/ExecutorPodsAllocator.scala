@@ -93,6 +93,8 @@ private[spark] class ExecutorPodsAllocator(
           Utils.tryLogNonFatalError {
             kubernetesClient
               .pods()
+              .withLabel(SPARK_APP_ID_LABEL, applicationId)
+              .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
               .withLabel(SPARK_EXECUTOR_ID_LABEL, execId.toString)
               .delete()
           }
