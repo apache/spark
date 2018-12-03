@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Uns
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.{SQLMetrics, SQLShuffleMetricsReporter, SQLShuffleWriteMetricsReporter}
+import org.apache.spark.sql.execution.metric.{SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.MutablePair
@@ -52,7 +52,7 @@ case class ShuffleExchangeExec(
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size")
-  ) ++ SQLShuffleMetricsReporter.createShuffleReadMetrics(sparkContext) ++ writeMetrics
+  ) ++ SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext) ++ writeMetrics
 
   override def nodeName: String = {
     val extraInfo = coordinator match {

@@ -17,16 +17,17 @@
 
 package org.apache.spark.executor
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.util.LongAccumulator
 
-import scala.collection.mutable.ArrayBuffer
-
 /**
  * :: DeveloperApi ::
  * A collection of accumulators that represent metrics about writing shuffle data.
- * Operations are not thread-safe.
+ * Operations are not thread-safe. Also response for updating external reporters of
+ * [[ShuffleWriteMetricsReporter]].
  */
 @DeveloperApi
 class ShuffleWriteMetrics private[spark] () extends ShuffleWriteMetricsReporter with Serializable {

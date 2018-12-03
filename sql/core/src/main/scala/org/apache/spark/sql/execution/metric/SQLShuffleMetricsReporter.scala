@@ -22,28 +22,28 @@ import org.apache.spark.executor.TempShuffleReadMetrics
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 
 /**
- * A shuffle metrics reporter for SQL exchange operators.
+ * A shuffle read metrics reporter for SQL exchange operators.
  * @param tempMetrics [[TempShuffleReadMetrics]] created in TaskContext.
  * @param metrics All metrics in current SparkPlan. This param should not empty and
  *   contains all shuffle metrics defined in createShuffleReadMetrics.
  */
-private[spark] class SQLShuffleMetricsReporter(
+private[spark] class SQLShuffleReadMetricsReporter(
     tempMetrics: TempShuffleReadMetrics,
     metrics: Map[String, SQLMetric]) extends TempShuffleReadMetrics {
   private[this] val _remoteBlocksFetched =
-    metrics(SQLShuffleMetricsReporter.REMOTE_BLOCKS_FETCHED)
+    metrics(SQLShuffleReadMetricsReporter.REMOTE_BLOCKS_FETCHED)
   private[this] val _localBlocksFetched =
-    metrics(SQLShuffleMetricsReporter.LOCAL_BLOCKS_FETCHED)
+    metrics(SQLShuffleReadMetricsReporter.LOCAL_BLOCKS_FETCHED)
   private[this] val _remoteBytesRead =
-    metrics(SQLShuffleMetricsReporter.REMOTE_BYTES_READ)
+    metrics(SQLShuffleReadMetricsReporter.REMOTE_BYTES_READ)
   private[this] val _remoteBytesReadToDisk =
-    metrics(SQLShuffleMetricsReporter.REMOTE_BYTES_READ_TO_DISK)
+    metrics(SQLShuffleReadMetricsReporter.REMOTE_BYTES_READ_TO_DISK)
   private[this] val _localBytesRead =
-    metrics(SQLShuffleMetricsReporter.LOCAL_BYTES_READ)
+    metrics(SQLShuffleReadMetricsReporter.LOCAL_BYTES_READ)
   private[this] val _fetchWaitTime =
-    metrics(SQLShuffleMetricsReporter.FETCH_WAIT_TIME)
+    metrics(SQLShuffleReadMetricsReporter.FETCH_WAIT_TIME)
   private[this] val _recordsRead =
-    metrics(SQLShuffleMetricsReporter.RECORDS_READ)
+    metrics(SQLShuffleReadMetricsReporter.RECORDS_READ)
 
   override def incRemoteBlocksFetched(v: Long): Unit = {
     _remoteBlocksFetched.add(v)
@@ -75,7 +75,7 @@ private[spark] class SQLShuffleMetricsReporter(
   }
 }
 
-private[spark] object SQLShuffleMetricsReporter {
+private[spark] object SQLShuffleReadMetricsReporter {
   val REMOTE_BLOCKS_FETCHED = "remoteBlocksFetched"
   val LOCAL_BLOCKS_FETCHED = "localBlocksFetched"
   val REMOTE_BYTES_READ = "remoteBytesRead"
@@ -97,13 +97,19 @@ private[spark] object SQLShuffleMetricsReporter {
     RECORDS_READ -> SQLMetrics.createMetric(sc, "records read"))
 }
 
+/**
+ * A shuffle write metrics reporter for SQL exchange operators. Different with
+ * [[SQLShuffleReadMetricsReporter]], write metrics reporter will be set and serialized
+ * in ShuffleDependency, so the local SQLMetric should transient and create on executor.
+ * @param metrics Shuffle write metrics in current SparkPlan.
+ */
 private[spark] class SQLShuffleWriteMetricsReporter(
   metrics: Map[String, SQLMetric]) extends ShuffleWriteMetricsReporter with Serializable {
-  @transient private[spark] lazy val _bytesWritten =
+  @transient private[this] lazy val _bytesWritten =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_BYTES_WRITTEN)
-  @transient private[spark] lazy val _recordsWritten =
+  @transient private[this] lazy val _recordsWritten =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN)
-  @transient private[spark] lazy val _writeTime =
+  @transient private[this] lazy val _writeTime =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_WRITE_TIME)
 
   override private[spark] def incBytesWritten(v: Long): Unit = {
@@ -132,6 +138,9 @@ private[spark] object SQLShuffleWriteMetricsReporter {
     new SQLShuffleWriteMetricsReporter(metrics)
   }
 
+  /**
+   * Create all shuffle write relative metrics and return the Map.
+   */
   def createShuffleWriteMetrics(sc: SparkContext): Map[String, SQLMetric] = Map(
     SHUFFLE_BYTES_WRITTEN ->
       SQLMetrics.createSizeMetric(sc, "shuffle bytes written"),

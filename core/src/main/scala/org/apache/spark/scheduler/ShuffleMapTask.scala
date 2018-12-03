@@ -27,7 +27,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.shuffle.{ProxyShuffleWriteMetricsReporter, ShuffleWriter}
+import org.apache.spark.shuffle.ShuffleWriter
 
 /**
  * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
@@ -92,6 +92,7 @@ private[spark] class ShuffleMapTask(
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
 
+    // Register the shuffle write metrics reporter to shuffleWriteMetrics.
     if (dep.shuffleWriteMetricsReporter.isDefined) {
       context.taskMetrics().shuffleWriteMetrics.registerExternalShuffleWriteReporter(
         dep.shuffleWriteMetricsReporter.get)

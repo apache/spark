@@ -214,6 +214,9 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.shuffle.sort.UnsafeShuffleWriter.this"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.storage.TimeTrackingOutputStream.this"),
 
+    // [SPARK-26139] Implement shuffle write metrics in SQL
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ShuffleDependency.this"),
+
     // Data Source V2 API changes
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) =>

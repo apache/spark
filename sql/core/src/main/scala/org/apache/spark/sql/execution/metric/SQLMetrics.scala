@@ -123,9 +123,7 @@ object SQLMetrics {
   }
 
   def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
-    // The final result of this metric in physical operator UI may looks like:
-    // duration(min, med, max):
-    // 5s (800ms, 1s, 2s)
+    // Same with createTimingMetric, just mark the unit of time to nanosecond.
     val acc = new SQLMetric(NANO_TIMING_METRIC, -1)
     acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
     acc
