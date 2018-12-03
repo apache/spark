@@ -169,7 +169,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
 
       val plan = df.queryExecution.executedPlan
       assert(!plan.find(p =>
-        p.isInstanceOf[WholeStageCodegenExec] &&
+        p.isInstanceOf[WholeStageCodegenExec] && p.isInstanceOf[SortMergeJoinExec] &&
           p.asInstanceOf[WholeStageCodegenExec].child.children(0)
             .isInstanceOf[SortMergeJoinExec]).isDefined)
       assert(df.collect() === Array(Row(1), Row(2)))

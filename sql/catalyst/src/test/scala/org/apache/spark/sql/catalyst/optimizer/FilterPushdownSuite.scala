@@ -34,11 +34,15 @@ class FilterPushdownSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
+      Batch("Subquery", Once,
+        PullupCorrelatedPredicates,
+        RewritePredicateSubquery) ::
       Batch("Filter Pushdown", FixedPoint(10),
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
         PushPredicateThroughJoin,
+        PushLeftSemiLeftAntiThroughJoin,
         CollapseProject) :: Nil
   }
 
@@ -876,12 +880,15 @@ class FilterPushdownSuite extends PlanTest {
       .join(y, Inner, Option("x.a".attr === "y.a".attr))
       .where(Exists(z.where("x.a".attr === "z.a".attr)))
       .analyze
+
     val answer = x
       .where(Exists(z.where("x.a".attr === "z.a".attr)))
       .join(y, Inner, Option("x.a".attr === "y.a".attr))
       .analyze
-    val optimized = Optimize.execute(Optimize.execute(query))
-    comparePlans(optimized, answer)
+
+    val optimized = Optimize.execute(query)
+    val expected = Optimize.execute(answer)
+    comparePlans(optimized, expected)
   }
 
   test("predicate subquery: push down complex") {
@@ -900,8 +907,10 @@ class FilterPushdownSuite extends PlanTest {
       .join(x, Inner, Option("w.a".attr === "x.a".attr))
       .join(y, LeftOuter, Option("x.a".attr === "y.a".attr))
       .analyze
-    val optimized = Optimize.execute(Optimize.execute(query))
-    comparePlans(optimized, answer)
+
+    val optimized = Optimize.execute(query)
+    val expected = Optimize.execute(answer)
+    comparePlans(optimized, expected)
   }
 
   test("SPARK-20094: don't push predicate with IN subquery into join condition") {
@@ -915,13 +924,14 @@ class FilterPushdownSuite extends PlanTest {
         ("x.a".attr > 1 || "z.c".attr.in(ListQuery(w.select("w.d".attr)))))
       .analyze
 
-    val expectedPlan = x
+    val answer = x
       .join(z, Inner, Some("x.b".attr === "z.b".attr))
       .where("x.a".attr > 1 || "z.c".attr.in(ListQuery(w.select("w.d".attr))))
       .analyze
 
     val optimized = Optimize.execute(queryPlan)
-    comparePlans(optimized, expectedPlan)
+    val expected = Optimize.execute(answer)
+    comparePlans(optimized, expected)
   }
 
   test("Window: predicate push down -- basic") {
