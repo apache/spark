@@ -157,4 +157,26 @@ object InternalRow {
       getValueNullSafe
     }
   }
+
+  /**
+   * Returns a writer for an `InternalRow` with given data type.
+   */
+  def getWriter(ordinal: Int, dt: DataType): (InternalRow, Any) => Unit = dt match {
+    case BooleanType => (input, v) => input.setBoolean(ordinal, v.asInstanceOf[Boolean])
+    case ByteType => (input, v) => input.setByte(ordinal, v.asInstanceOf[Byte])
+    case ShortType => (input, v) => input.setShort(ordinal, v.asInstanceOf[Short])
+    case IntegerType | DateType => (input, v) => input.setInt(ordinal, v.asInstanceOf[Int])
+    case LongType | TimestampType => (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
+    case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
+    case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
+    case DecimalType.Fixed(precision, _) =>
+      (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
+    case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
+    case NullType => (input, _) => input.setNullAt(ordinal)
+    case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
+    case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
+    case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
+    case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())
+    case _ => (input, v) => input.update(ordinal, v)
+  }
 }
