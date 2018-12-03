@@ -1615,7 +1615,7 @@ object SQLConf {
     .doc("Maximum number of characters to output for a plan string.  If the plan is " +
       "longer, it will end with a ... and further output will be truncated.")
     .longConf
-    .createWithDefault(8192)
+    .createWithDefault(Long.MaxValue)
 }
 
 /**
