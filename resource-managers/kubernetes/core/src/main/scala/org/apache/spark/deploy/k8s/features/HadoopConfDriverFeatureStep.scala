@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
@@ -32,12 +32,17 @@ import org.apache.spark.deploy.k8s.Constants._
  * Mounts the Hadoop configuration - either a pre-defined config map, or a local configuration
  * directory - on the driver pod.
  */
-private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf[_])
+private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
 
-  private val confSpec = conf.hadoopConfSpec
-  private val confDir = confSpec.flatMap(_.hadoopConfDir)
-  private val confMap = confSpec.flatMap(_.hadoopConfigMapName)
+  private val confDir = Option(conf.sparkConf.getenv(ENV_HADOOP_CONF_DIR))
+  private val existingConfMap = conf.get(KUBERNETES_HADOOP_CONF_CONFIG_MAP)
+
+  KubernetesUtils.requireNandDefined(
+    confDir,
+    existingConfMap,
+    "Do not specify both the `HADOOP_CONF_DIR` in your ENV and the ConfigMap " +
+    "as the creation of an additional ConfigMap, when one is already specified is extraneous")
 
   private lazy val confFiles: Seq[File] = {
     val dir = new File(confDir.get)
@@ -48,8 +53,12 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf[_])
     }
   }
 
+  private def newConfigMapName: String = s"${conf.resourceNamePrefix}-hadoop-config"
+
+  private def hasHadoopConf: Boolean = confDir.isDefined || existingConfMap.isDefined
+
   override def configurePod(original: SparkPod): SparkPod = {
-    original.transform { case pod if confSpec.isDefined =>
+    original.transform { case pod if hasHadoopConf =>
       val confVolume = if (confDir.isDefined) {
         val keyPaths = confFiles.map { file =>
           new KeyToPathBuilder()
@@ -60,7 +69,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf[_])
         new VolumeBuilder()
           .withName(HADOOP_CONF_VOLUME)
           .withNewConfigMap()
-            .withName(conf.hadoopConfigMapName)
+            .withName(newConfigMapName)
             .withItems(keyPaths.asJava)
             .endConfigMap()
           .build()
@@ -68,7 +77,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf[_])
         new VolumeBuilder()
           .withName(HADOOP_CONF_VOLUME)
           .withNewConfigMap()
-            .withName(confMap.get)
+            .withName(existingConfMap.get)
             .endConfigMap()
           .build()
       }
@@ -103,7 +112,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf[_])
 
       Seq(new ConfigMapBuilder()
         .withNewMetadata()
-          .withName(conf.hadoopConfigMapName)
+          .withName(newConfigMapName)
           .endMetadata()
         .addToData(fileMap)
         .build())

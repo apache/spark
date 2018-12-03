@@ -41,13 +41,12 @@ private[spark] class KubernetesDriverBuilder(
       new MountVolumesFeatureStep(_),
     provideDriverCommandStep: (KubernetesDriverConf => DriverCommandFeatureStep) =
       new DriverCommandFeatureStep(_),
-    provideHadoopConfStep: (KubernetesConf[_] => HadoopConfDriverFeatureStep) =
+    provideHadoopConfStep: (KubernetesConf => HadoopConfDriverFeatureStep) =
       new HadoopConfDriverFeatureStep(_),
-    provideKerberosConfStep: (KubernetesConf[_] => KerberosConfDriverFeatureStep) =
+    provideKerberosConfStep: (KubernetesDriverConf => KerberosConfDriverFeatureStep) =
       new KerberosConfDriverFeatureStep(_),
-    providePodTemplateConfigMapStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => PodTemplateConfigMapStep) =
-    new PodTemplateConfigMapStep(_),
+    providePodTemplateConfigMapStep: (KubernetesConf => PodTemplateConfigMapStep) =
+      new PodTemplateConfigMapStep(_),
     provideInitialPod: () => SparkPod = () => SparkPod.initialPod) {
 
   def buildFromFeatures(kubernetesConf: KubernetesDriverConf): KubernetesDriverSpec = {

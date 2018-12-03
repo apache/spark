@@ -121,13 +121,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val conf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeSpec))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      CREDENTIALS_STEP_TYPE,
-      SERVICE_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      MOUNT_VOLUMES_STEP_TYPE,
-      DRIVER_CMD_STEP_TYPE,
-      HADOOP_GLOBAL_STEP_TYPE)
+      MOUNT_VOLUMES_STEP_TYPE)
   }
 
   test("Apply volumes step if a mount subpath is present.") {
@@ -140,6 +134,15 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val conf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeSpec))
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
+      MOUNT_VOLUMES_STEP_TYPE)
+  }
+
+  test("Apply template volume step if executor template is present.") {
+    val sparkConf = new SparkConf(false)
+      .set(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE, "filename")
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
       TEMPLATE_VOLUME_STEP_TYPE)
   }
 
@@ -149,7 +152,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     val addedProperties = resolvedSpec.systemProperties
       .filter { case (k, _) => !k.startsWith("spark.") }
       .toMap
-    assert(resolvedSpec.systemProperties.keys === validSteps)
+    assert(addedProperties.keys.toSet === validSteps.toSet)
     validSteps.foreach { stepType =>
       assert(resolvedSpec.pod.pod.getMetadata.getLabels.get(stepType) === stepType)
       assert(resolvedSpec.driverKubernetesResources.containsSlice(

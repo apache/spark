@@ -31,6 +31,7 @@ import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, Spark
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -48,7 +49,7 @@ import org.apache.spark.util.Utils
  *   tokens to executors.
  */
 private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDriverConf)
-  extends KubernetesFeatureConfigStep {
+  extends KubernetesFeatureConfigStep with Logging {
 
   private val principal = kubernetesConf.get(org.apache.spark.internal.config.PRINCIPAL)
   private val keytab = kubernetesConf.get(org.apache.spark.internal.config.KEYTAB)
@@ -71,8 +72,8 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
     "If a Kerberos keytab is specified you must also specify a Kerberos principal")
 
   KubernetesUtils.requireBothOrNeitherDefined(
-    existingDtSecret,
-    existingDtItemKey,
+    existingSecretName,
+    existingSecretItemKey,
     "If a secret data item-key where the data of the Kerberos Delegation Token is specified" +
       " you must also specify the name of the secret",
     "If a secret storing a Kerberos Delegation Token is specified you must also" +
@@ -87,29 +88,33 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   // unnecessarily. But it needs to be accessible to different methods in this class,
   // since it's not clear based solely on available configuration options that delegation
   // tokens are needed when other credentials are not available.
-  private lazy val delegationTokens: Array[Byte] = if (keytab.isEmpty && existingDtSecret.isEmpty) {
-    val tokenManager = new HadoopDelegationTokenManager(conf,
-      SparkHadoopUtil.get.newConfiguration(conf))
-    val creds = UserGroupInformation.getCurrentUser().getCredentials()
-    tokenManager.obtainDelegationTokens(creds)
-    // If no tokens and no secrets are stored in the credentials, make sure nothing is returned, to
-    // avoid creating an unnecessary secret.
-    if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
-      SparkHadoopUtil.get.serialize(creds)
+  private lazy val delegationTokens: Array[Byte] = {
+    if (keytab.isEmpty && existingSecretName.isEmpty) {
+      val tokenManager = new HadoopDelegationTokenManager(kubernetesConf.sparkConf,
+        SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf))
+      val creds = UserGroupInformation.getCurrentUser().getCredentials()
+      tokenManager.obtainDelegationTokens(creds)
+      // If no tokens and no secrets are stored in the credentials, make sure nothing is returned,
+      // to avoid creating an unnecessary secret.
+      if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
+        SparkHadoopUtil.get.serialize(creds)
+      } else {
+        null
+      }
     } else {
       null
     }
-  } else {
-    null
   }
 
   private def needKeytabUpload: Boolean = keytab.exists(!Utils.isLocalUri(_))
 
-  private def dtSecretName: String = s"${kubernetesConf.appResourceNamePrefix}-delegation-tokens"
+  private def dtSecretName: String = s"${kubernetesConf.resourceNamePrefix}-delegation-tokens"
 
-  private def ktSecretName: String = s"${kubernetesConf.appResourceNamePrefix}-kerberos-keytab"
+  private def ktSecretName: String = s"${kubernetesConf.resourceNamePrefix}-kerberos-keytab"
 
   private def hasKerberosConf: Boolean = krb5CMap.isDefined | krb5File.isDefined
+
+  private def newConfigMapName: String = s"${kubernetesConf.resourceNamePrefix}-krb5-file"
 
   override def configurePod(original: SparkPod): SparkPod = {
     original.transform { case pod if hasKerberosConf =>
@@ -125,7 +130,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
         new VolumeBuilder()
           .withName(KRB_FILE_VOLUME)
           .withNewConfigMap()
-          .withName(kubernetesConf.krbConfigMapName)
+          .withName(newConfigMapName)
           .withItems(new KeyToPathBuilder()
             .withKey(krb5Conf.getName())
             .withPath(krb5Conf.getName())
@@ -174,9 +179,9 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
 
         SparkPod(podWitKeytab, containerWithKeytab)
 
-      case pod if existingDtSecret.isDefined | delegationTokens != null =>
-        val secretName = existingDtSecret.getOrElse(dtSecretName)
-        val itemKey = existingDtItemKey.getOrElse(KERBEROS_SECRET_KEY)
+      case pod if existingSecretName.isDefined | delegationTokens != null =>
+        val secretName = existingSecretName.getOrElse(dtSecretName)
+        val itemKey = existingSecretItemKey.getOrElse(KERBEROS_SECRET_KEY)
 
         val podWithTokens = new PodBuilder(pod.pod)
           .editOrNewSpec()
@@ -221,7 +226,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
         val file = new File(path)
         new ConfigMapBuilder()
           .withNewMetadata()
-            .withName(kubernetesConf.krbConfigMapName)
+            .withName(newConfigMapName)
             .endMetadata()
           .addToData(
             Map(file.getName() -> Files.toString(file, StandardCharsets.UTF_8)).asJava)

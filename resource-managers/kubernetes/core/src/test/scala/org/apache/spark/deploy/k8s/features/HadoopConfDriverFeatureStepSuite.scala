@@ -28,7 +28,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
 
@@ -36,21 +36,9 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
   import SecretVolumeUtils._
 
   test("mount hadoop config map if defined") {
-    val configMap = "testConfigMap"
-    val hadoopSpec = HadoopConfSpec(None, Some(configMap))
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(JavaMainAppResource(None), "class", "name", Nil),
-      "resource-name-prefix",
-      "app-id",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = Some(hadoopSpec))
-
+    val sparkConf = new SparkConf(false)
+      .set(Config.KUBERNETES_HADOOP_CONF_CONFIG_MAP, "testConfigMap")
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
     val step = new HadoopConfDriverFeatureStep(conf)
     checkPod(step.configurePod(SparkPod.initialPod()))
     assert(step.getAdditionalKubernetesResources().isEmpty)
@@ -64,19 +52,8 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
       Files.write("some data", new File(confDir, f), UTF_8)
     }
 
-    val hadoopSpec = HadoopConfSpec(Some(confDir.getAbsolutePath()), None)
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesDriverSpecificConf(JavaMainAppResource(None), "class", "name", Nil),
-      "resource-name-prefix",
-      "app-id",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      hadoopConfSpec = Some(hadoopSpec))
+    val sparkConf = new SparkConfWithEnv(Map(ENV_HADOOP_CONF_DIR -> confDir.getAbsolutePath()))
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
 
     val step = new HadoopConfDriverFeatureStep(conf)
     checkPod(step.configurePod(SparkPod.initialPod()))

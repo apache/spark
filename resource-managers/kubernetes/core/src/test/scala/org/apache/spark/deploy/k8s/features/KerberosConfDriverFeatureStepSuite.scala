@@ -164,18 +164,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
   }
 
   private def createStep(conf: SparkConf): KerberosConfDriverFeatureStep = {
-    val kconf = KubernetesConf(
-      conf,
-      KubernetesDriverSpecificConf(JavaMainAppResource(None), "class", "name", Nil),
-      "resource-name-prefix",
-      "app-id",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      None)
+    val kconf = KubernetesTestConf.createDriverConf(sparkConf = conf)
     new KerberosConfDriverFeatureStep(kconf)
   }
 
