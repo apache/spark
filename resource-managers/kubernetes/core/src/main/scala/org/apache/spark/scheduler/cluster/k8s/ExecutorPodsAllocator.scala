@@ -52,6 +52,8 @@ private[spark] class ExecutorPodsAllocator(
   private val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
 
+  private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
+
   private val driverPod = kubernetesDriverPodName
     .map(name => Option(kubernetesClient.pods()
       .withName(name)
@@ -87,11 +89,14 @@ private[spark] class ExecutorPodsAllocator(
           s" cluster after $podCreationTimeout milliseconds despite the fact that a" +
           " previous allocation attempt tried to create it. The executor may have been" +
           " deleted but the application missed the deletion event.")
-        Utils.tryLogNonFatalError {
-          kubernetesClient
-            .pods()
-            .withLabel(SPARK_EXECUTOR_ID_LABEL, execId.toString)
-            .delete()
+
+        if (shouldDeleteExecutors) {
+          Utils.tryLogNonFatalError {
+            kubernetesClient
+              .pods()
+              .withLabel(SPARK_EXECUTOR_ID_LABEL, execId.toString)
+              .delete()
+          }
         }
         newlyCreatedExecutors -= execId
       } else {

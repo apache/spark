@@ -20,13 +20,13 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesDriverConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{Clock, SystemClock}
 
 private[spark] class DriverServiceFeatureStep(
-    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
+    kubernetesConf: KubernetesDriverConf,
     clock: Clock = new SystemClock)
   extends KubernetesFeatureConfigStep with Logging {
   import DriverServiceFeatureStep._
@@ -38,7 +38,7 @@ private[spark] class DriverServiceFeatureStep(
     s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be " +
       "managed via a Kubernetes service.")
 
-  private val preferredServiceName = s"${kubernetesConf.appResourceNamePrefix}$DRIVER_SVC_POSTFIX"
+  private val preferredServiceName = s"${kubernetesConf.resourceNamePrefix}$DRIVER_SVC_POSTFIX"
   private val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
     preferredServiceName
   } else {
@@ -58,7 +58,7 @@ private[spark] class DriverServiceFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = pod
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
-    val driverHostname = s"$resolvedServiceName.${kubernetesConf.namespace()}.svc"
+    val driverHostname = s"$resolvedServiceName.${kubernetesConf.namespace}.svc"
     Map(DRIVER_HOST_KEY -> driverHostname,
       "spark.driver.port" -> driverPort.toString,
       org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT.key ->
@@ -72,7 +72,7 @@ private[spark] class DriverServiceFeatureStep(
         .endMetadata()
       .withNewSpec()
         .withClusterIP("None")
-        .withSelector(kubernetesConf.roleLabels.asJava)
+        .withSelector(kubernetesConf.labels.asJava)
         .addNewPort()
           .withName(DRIVER_PORT_NAME)
           .withPort(driverPort)

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.io.InputStream
-import java.math.BigDecimal
 
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -27,7 +26,7 @@ import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils, FailureSafeParser}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -104,6 +103,8 @@ class UnivocityParser(
     requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
   }
 
+  private val decimalParser = ExprUtils.getDecimalParser(options.locale)
+
   /**
    * Create a converter which converts the string value to a value according to a desired type.
    * Currently, we do not support complex types (`ArrayType`, `MapType`, `StructType`).
@@ -149,8 +150,7 @@ class UnivocityParser(
 
     case dt: DecimalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        val value = new BigDecimal(datum.replaceAll(",", ""))
-        Decimal(value, dt.precision, dt.scale)
+        Decimal(decimalParser(datum), dt.precision, dt.scale)
       }
 
     case _: TimestampType => (d: String) =>
@@ -243,21 +243,24 @@ class UnivocityParser(
         () => getPartialResult(),
         new RuntimeException("Malformed CSV record"))
     } else {
-      try {
-        // When the length of the returned tokens is identical to the length of the parsed schema,
-        // we just need to convert the tokens that correspond to the required columns.
-        var i = 0
-        while (i < requiredSchema.length) {
+      // When the length of the returned tokens is identical to the length of the parsed schema,
+      // we just need to convert the tokens that correspond to the required columns.
+      var badRecordException: Option[Throwable] = None
+      var i = 0
+      while (i < requiredSchema.length) {
+        try {
           row(i) = valueConverters(i).apply(getToken(tokens, i))
-          i += 1
+        } catch {
+          case NonFatal(e) =>
+            badRecordException = badRecordException.orElse(Some(e))
         }
+        i += 1
+      }
+
+      if (badRecordException.isEmpty) {
         row
-      } catch {
-        case NonFatal(e) =>
-          // For corrupted records with the number of tokens same as the schema,
-          // CSV reader doesn't support partial results. All fields other than the field
-          // configured by `columnNameOfCorruptRecord` are set to `null`.
-          throw BadRecordException(() => getCurrentInput, () => None, e)
+      } else {
+        throw BadRecordException(() => getCurrentInput, () => Some(row), badRecordException.get)
       }
     }
   }

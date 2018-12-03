@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.sources.v2.{BatchReadSupportProvider, DataSourceOptions, DataSourceV2}
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -194,20 +194,26 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
-    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val ds = cls.getConstructor().newInstance().asInstanceOf[DataSourceV2]
-      if (ds.isInstanceOf[BatchReadSupportProvider]) {
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          ds = ds, conf = sparkSession.sessionState.conf)
-        val pathsOption = {
-          val objectMapper = new ObjectMapper()
-          DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
-        }
-        Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
-          ds, sessionOptions ++ extraOptions.toMap + pathsOption,
-          userSpecifiedSchema = userSpecifiedSchema))
-      } else {
-        loadV1Source(paths: _*)
+    if (classOf[TableProvider].isAssignableFrom(cls)) {
+      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+        ds = provider, conf = sparkSession.sessionState.conf)
+      val pathsOption = {
+        val objectMapper = new ObjectMapper()
+        DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
+      }
+      val finalOptions = sessionOptions ++ extraOptions.toMap + pathsOption
+      val dsOptions = new DataSourceOptions(finalOptions.asJava)
+      val table = userSpecifiedSchema match {
+        case Some(schema) => provider.getTable(dsOptions, schema)
+        case _ => provider.getTable(dsOptions)
+      }
+      table match {
+        case s: SupportsBatchRead =>
+          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
+            provider, s, finalOptions, userSpecifiedSchema = userSpecifiedSchema))
+
+        case _ => loadV1Source(paths: _*)
       }
     } else {
       loadV1Source(paths: _*)
