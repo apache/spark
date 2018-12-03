@@ -42,8 +42,8 @@ class JsonInferSchemaSuite extends SparkFunSuite {
 
   test("inferring timestamp type") {
     checkTimestampType("yyyy", """{"a": "2018"}""")
-    checkTimestampType("yyyy-MM", """{"a": "2018-12"}""")
-    checkTimestampType("yyyy-MM-dd", """{"a": "2018-12-02"}""")
+    checkTimestampType("yyyy=MM", """{"a": "2018=12"}""")
+    checkTimestampType("yyyy MM dd", """{"a": "2018 12 02"}""")
     checkTimestampType(
       "yyyy-MM-dd'T'HH:mm:ss.SSS",
       """{"a": "2018-12-02T21:04:00.123"}""")
@@ -60,5 +60,24 @@ class JsonInferSchemaSuite extends SparkFunSuite {
     checkDateType("yyyy", """{"a": "2018"}""")
     checkDateType("yyyy-MM", """{"a": "2018-12"}""")
     checkDateType("yyyy-MM-dd", """{"a": "2018-12-02"}""")
+  }
+
+  test("inferring the date type before timestamps") {
+    checkType(
+      options = Map(
+        "dateFormat" -> "yyyy-MM-dd",
+        "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SSS"
+      ),
+      json = """{"a": "2018-12-02T21:04:00.123"}""",
+      `type` = TimestampType
+    )
+    checkType(
+      options = Map(
+        "dateFormat" -> "yyyy-MM-dd",
+        "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SSS"
+      ),
+      json = """{"a": "2018-12-02"}""",
+    `type` = DateType
+    )
   }
 }
