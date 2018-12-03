@@ -197,5 +197,13 @@ class CSVInferSchemaSuite extends SparkFunSuite  with SQLHelper {
     options = new CSVOptions(Map("dateFormat" -> "MMM yyyy"), false, "GMT")
     inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(NullType, "Dec 2018") == DateType)
+
+    options = new CSVOptions(
+      Map("dateFormat" -> "yyyy-MM-dd", "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
+      columnPruning = false,
+      defaultTimeZoneId = "GMT")
+    inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(NullType, "2018-12-03T11:00:00") == TimestampType)
+    assert(inferSchema.inferField(NullType, "2018-12-03") == DateType)
   }
 }
