@@ -612,11 +612,14 @@ private[yarn] class YarnAllocator(
             val message = "Container killed by YARN for exceeding physical memory limits. " +
               s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
             (true, message)
-          case _ =>
-            // all the failures which not covered above, like:
-            // disk failure, kill by app master or resource manager, ...
-            allocatorBlacklistTracker.handleResourceAllocationFailure(hostOpt)
+          case exit_code if NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(exit_code) =>
             (true, "Container marked as failed: " + containerId + onHostStr +
+              ". Exit status: " + completedContainer.getExitStatus +
+              ". Diagnostics: " + completedContainer.getDiagnostics)
+          case _ =>
+            // completed container from a bad node
+            allocatorBlacklistTracker.handleResourceAllocationFailure(hostOpt)
+            (true, "Container from a bad node: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +
               ". Diagnostics: " + completedContainer.getDiagnostics)
 
@@ -744,4 +747,17 @@ private object YarnAllocator {
   val MEM_REGEX = "[0-9.]+ [KMG]B"
   val VMEM_EXCEEDED_EXIT_CODE = -103
   val PMEM_EXCEEDED_EXIT_CODE = -104
+
+  val NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS = Set(
+    ContainerExitStatus.SUCCESS,
+    ContainerExitStatus.PREEMPTED,
+    ContainerExitStatus.KILLED_EXCEEDED_VMEM,
+    ContainerExitStatus.KILLED_EXCEEDED_PMEM,
+
+    ContainerExitStatus.KILLED_BY_RESOURCEMANAGER,
+    ContainerExitStatus.KILLED_BY_APPMASTER,
+    ContainerExitStatus.KILLED_AFTER_APP_COMPLETION,
+    ContainerExitStatus.ABORTED,
+    ContainerExitStatus.DISKS_FAILED
+  )
 }
