@@ -56,7 +56,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
     val index = keyToIndex.getOrDefault(key, -1)
     if (index == -1) {
       if (withSizeCheck && size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw new RuntimeException(s"Unsuccessful attempt to concat maps with $size elements " +
+        throw new RuntimeException(s"Unsuccessful attempt to build maps with $size elements " +
           s"due to exceeding the map size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       }
       keyToIndex.put(key, values.length)
