@@ -19,6 +19,7 @@ package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
 import java.util.{List => JList}
+import java.util.Locale
 import java.util.NoSuchElementException
 
 import scala.annotation.varargs
@@ -522,6 +523,52 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
     implicit val formats = DefaultFormats
     parse(json).extract[Boolean]
   }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Specialized version of `Param[Boolean]` for Java.
+ */
+@DeveloperApi
+class StringParam(
+    parent: String,
+    name: String,
+    doc: String,
+    isValid: String => Boolean,
+    val normalize: String => String)
+  extends Param[String](parent, name, doc, isValid) {
+
+  def this(parent: Identifiable, name: String, doc: String) =
+    this(parent.uid, name, doc, ParamValidators.alwaysTrue, StringParamNormalizer.identical)
+
+  /** Creates a param pair with the given value (for Java). */
+  override def w(value: String): ParamPair[String] = super.w(value)
+
+  override def jsonEncode(value: String): String = {
+    compact(render(JString(value)))
+  }
+
+  override def jsonDecode(json: String): String = {
+    implicit val formats = DefaultFormats
+    parse(json).extract[String]
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Factory methods for common string normalization functions for `StringParam.normalize`.
+ */
+@DeveloperApi
+object StringParamNormalizer {
+
+  /** (private[param]) Default Normalizer always return the original value */
+  private[param] def identical: String => String = (s: String) => s
+
+  /** (private[param]) Default Normalizer always return the lower case */
+  private[param] def lower: String => String = (s: String) => s.toLowerCase(Locale.ROOT)
+
+  /** (private[param]) Default Normalizer always return the upper case */
+  private[param] def upper: String => String = (s: String) => s.toUpperCase(Locale.ROOT)
 }
 
 /**
