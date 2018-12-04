@@ -578,11 +578,20 @@ private[yarn] class YarnAllocator(
             (true, memLimitExceededLogMessage(
               completedContainer.getDiagnostics,
               PMEM_EXCEEDED_PATTERN))
-          case _ =>
-            // all the failures which not covered above, like:
-            // disk failure, kill by app master or resource manager, ...
-            allocatorBlacklistTracker.handleResourceAllocationFailure(hostOpt)
+            val pmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX physical memory used".r
+            val diag = pmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
+              .map(_.concat(".")).getOrElse("")
+            val message = "Container killed by YARN for exceeding physical memory limits. " +
+              s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
+            (true, message)
+          case exit_code if NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(exit_code) =>
             (true, "Container marked as failed: " + containerId + onHostStr +
+              ". Exit status: " + completedContainer.getExitStatus +
+              ". Diagnostics: " + completedContainer.getDiagnostics)
+          case _ =>
+            // completed container from a bad node
+            allocatorBlacklistTracker.handleResourceAllocationFailure(hostOpt)
+            (true, "Container from a bad node: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +
               ". Diagnostics: " + completedContainer.getDiagnostics)
 
@@ -722,4 +731,16 @@ private object YarnAllocator {
       "Consider boosting spark.yarn.executor.memoryOverhead or " +
       "disabling yarn.nodemanager.vmem-check-enabled because of YARN-4714."
   }
+  val NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS = Set(
+    ContainerExitStatus.SUCCESS,
+    ContainerExitStatus.PREEMPTED,
+    ContainerExitStatus.KILLED_EXCEEDED_VMEM,
+    ContainerExitStatus.KILLED_EXCEEDED_PMEM,
+
+    ContainerExitStatus.KILLED_BY_RESOURCEMANAGER,
+    ContainerExitStatus.KILLED_BY_APPMASTER,
+    ContainerExitStatus.KILLED_AFTER_APP_COMPLETION,
+    ContainerExitStatus.ABORTED,
+    ContainerExitStatus.DISKS_FAILED
+  )
 }
