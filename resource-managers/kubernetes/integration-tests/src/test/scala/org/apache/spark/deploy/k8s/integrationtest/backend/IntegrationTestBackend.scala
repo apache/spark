@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.k8s.integrationtest.backend
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
+
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.cloud.KubeConfigBackend
 import org.apache.spark.deploy.k8s.integrationtest.backend.docker.DockerForDesktopBackend
@@ -35,7 +36,8 @@ private[spark] object IntegrationTestBackendFactory {
       .getOrElse(BACKEND_MINIKUBE)
     deployMode match {
       case BACKEND_MINIKUBE => MinikubeTestBackend
-      case BACKEND_CLOUD => new KubeConfigBackend(System.getProperty(CONFIG_KEY_KUBE_CONFIG_CONTEXT))
+      case BACKEND_CLOUD =>
+        new KubeConfigBackend(System.getProperty(CONFIG_KEY_KUBE_CONFIG_CONTEXT))
       case BACKEND_DOCKER_FOR_DESKTOP => DockerForDesktopBackend
       case _ => throw new IllegalArgumentException("Invalid " +
         CONFIG_KEY_DEPLOY_MODE + ": " + deployMode)

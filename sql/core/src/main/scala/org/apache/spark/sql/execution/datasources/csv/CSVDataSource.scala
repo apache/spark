@@ -95,7 +95,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       headerChecker: CSVHeaderChecker,
       requiredSchema: StructType): Iterator[InternalRow] = {
     val lines = {
-      val linesReader = new HadoopFileLinesReader(file, conf)
+      val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
@@ -135,7 +135,7 @@ object TextInputCSVDataSource extends CSVDataSource {
           val parser = new CsvParser(parsedOptions.asParserSettings)
           linesWithoutHeader.map(parser.parseLine)
         }
-        CSVInferSchema.infer(tokenRDD, header, parsedOptions)
+        new CSVInferSchema(parsedOptions).infer(tokenRDD, header)
       case _ =>
         // If the first line could not be read, just return the empty schema.
         StructType(Nil)
@@ -192,7 +192,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
       UnivocityParser.tokenizeStream(
         CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
         shouldDropHeader = false,
-        new CsvParser(parsedOptions.asParserSettings))
+        new CsvParser(parsedOptions.asParserSettings),
+        encoding = parsedOptions.charset)
     }.take(1).headOption match {
       case Some(firstRow) =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
@@ -203,10 +204,11 @@ object MultiLineCSVDataSource extends CSVDataSource {
               lines.getConfiguration,
               new Path(lines.getPath())),
             parsedOptions.headerFlag,
-            new CsvParser(parsedOptions.asParserSettings))
+            new CsvParser(parsedOptions.asParserSettings),
+            encoding = parsedOptions.charset)
         }
         val sampled = CSVUtils.sample(tokenRDD, parsedOptions)
-        CSVInferSchema.infer(sampled, header, parsedOptions)
+        new CSVInferSchema(parsedOptions).infer(sampled, header)
       case None =>
         // If the first row could not be read, just return the empty schema.
         StructType(Nil)
