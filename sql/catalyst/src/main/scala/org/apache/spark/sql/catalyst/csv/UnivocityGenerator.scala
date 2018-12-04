@@ -22,7 +22,7 @@ import java.io.Writer
 import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeFormatter}
 import org.apache.spark.sql.types._
 
 class UnivocityGenerator(
@@ -32,7 +32,6 @@ class UnivocityGenerator(
   private val writerSettings = options.asWriterSettings
   writerSettings.setHeaders(schema.fieldNames: _*)
   private val gen = new CsvWriter(writer, writerSettings)
-  private var printHeader = options.headerFlag
 
   // A `ValueConverter` is responsible for converting a value of an `InternalRow` to `String`.
   // When the value is null, this converter should not be called.
@@ -42,14 +41,18 @@ class UnivocityGenerator(
   private val valueConverters: Array[ValueConverter] =
     schema.map(_.dataType).map(makeConverter).toArray
 
+  private val timeFormatter = DateTimeFormatter(
+    options.timestampFormat,
+    options.timeZone,
+    options.locale)
+  private val dateFormatter = DateFormatter(options.dateFormat, options.timeZone, options.locale)
+
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case DateType =>
-      (row: InternalRow, ordinal: Int) =>
-        options.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
+      (row: InternalRow, ordinal: Int) => dateFormatter.format(row.getInt(ordinal))
 
     case TimestampType =>
-      (row: InternalRow, ordinal: Int) =>
-        options.timestampFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
+      (row: InternalRow, ordinal: Int) => timeFormatter.format(row.getLong(ordinal))
 
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 
@@ -72,15 +75,15 @@ class UnivocityGenerator(
     values
   }
 
+  def writeHeaders(): Unit = {
+    gen.writeHeaders()
+  }
+
   /**
    * Writes a single InternalRow to CSV using Univocity.
    */
   def write(row: InternalRow): Unit = {
-    if (printHeader) {
-      gen.writeHeaders()
-    }
     gen.writeRow(convertRow(row): _*)
-    printHeader = false
   }
 
   def writeToString(row: InternalRow): String = {

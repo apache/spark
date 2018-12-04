@@ -227,7 +227,11 @@ object MimaExcludes {
       case ReversedMissingMethodProblem(meth) =>
         !meth.owner.fullName.startsWith("org.apache.spark.sql.sources.v2")
       case _ => true
-    }
+    },
+
+    // [SPARK-26216][SQL] Do not use case class as public API (UserDefinedFunction)
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.UserDefinedFunction$"),
+    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.sql.expressions.UserDefinedFunction")
   )
 
   // Exclude rules for 2.4.x

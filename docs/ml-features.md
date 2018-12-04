@@ -359,7 +359,7 @@ Assume that we have the following DataFrame with columns `id` and `raw`:
 ~~~~
  id | raw
 ----|----------
- 0  | [I, saw, the, red, baloon]
+ 0  | [I, saw, the, red, balloon]
  1  | [Mary, had, a, little, lamb]
 ~~~~
 
@@ -369,7 +369,7 @@ column, we should get the following:
 ~~~~
  id | raw                         | filtered
 ----|-----------------------------|--------------------
- 0  | [I, saw, the, red, baloon]  |  [saw, red, baloon]
+ 0  | [I, saw, the, red, balloon]  |  [saw, red, balloon]
  1  | [Mary, had, a, little, lamb]|[Mary, little, lamb]
 ~~~~
 
@@ -1302,7 +1302,7 @@ need to know vector size, can use that column as an input.
 To use `VectorSizeHint` a user must set the `inputCol` and `size` parameters. Applying this
 transformer to a dataframe produces a new dataframe with updated metadata for `inputCol` specifying
 the vector size. Downstream operations on the resulting dataframe can get this size using the
-meatadata.
+metadata.
 
 `VectorSizeHint` can also take an optional `handleInvalid` parameter which controls its
 behaviour when the vector column contains nulls or vectors of the wrong size. By default
@@ -1310,7 +1310,7 @@ behaviour when the vector column contains nulls or vectors of the wrong size. By
 also be set to "skip", indicating that rows containing invalid values should be filtered out from
 the resulting dataframe, or "optimistic", indicating that the column should not be checked for
 invalid values and all rows should be kept. Note that the use of "optimistic" can cause the
-resulting dataframe to be in an inconsistent state, me:aning the metadata for the column
+resulting dataframe to be in an inconsistent state, meaning the metadata for the column
 `VectorSizeHint` was applied to does not match the contents of that column. Users should take care
 to avoid this kind of inconsistent state.
 
