@@ -312,13 +312,13 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       assert(msg.contains("CSV data source does not support array<int> data type"))
 
       msg = intercept[AnalysisException] {
-        Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
+        Seq((1, new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
           .write.mode("overwrite").csv(csvDir)
       }.getMessage
       assert(msg.contains("CSV data source does not support array<double> data type"))
 
       msg = intercept[AnalysisException] {
-        val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
+        val schema = StructType(StructField("a", new TestUDT.MyDenseVectorUDT(), true) :: Nil)
         spark.range(1).write.mode("overwrite").csv(csvDir)
         spark.read.schema(schema).csv(csvDir).collect()
       }.getMessage
