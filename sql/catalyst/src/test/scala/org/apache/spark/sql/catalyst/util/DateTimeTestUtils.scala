@@ -26,7 +26,7 @@ object DateTimeTestUtils {
 
   val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
 
-  val outstandingTimezones: Seq[TimeZone] = Seq(
+  val outstandingTimezonesIds: Seq[String] = Seq(
     "UTC",
     "PST",
     "CET",
@@ -34,7 +34,8 @@ object DateTimeTestUtils {
     "America/Los_Angeles",
     "Antarctica/Vostok",
     "Asia/Hong_Kong",
-    "Europe/Amsterdam").map(TimeZone.getTimeZone)
+    "Europe/Amsterdam")
+  val outstandingTimezones: Seq[TimeZone] = outstandingTimezonesIds.map(TimeZone.getTimeZone)
 
   def withDefaultTimeZone[T](newDefaultTimeZone: TimeZone)(block: => T): T = {
     val originalDefaultTimeZone = TimeZone.getDefault
