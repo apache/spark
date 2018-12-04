@@ -252,7 +252,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           val options = sessionOptions ++ extraOptions
 
           if (mode == SaveMode.Append) {
-            val relation = DataSourceV2Relation.create(source, options)
+            val relation = DataSourceV2Relation.createRelationForWrite(source, options)
             runCommand(df.sparkSession, "save") {
               AppendData.byName(relation, df.logicalPlan)
             }

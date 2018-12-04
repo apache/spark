@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.metric.SQLShuffleMetricsReporter
 
 /**
  * Take the first `limit` elements and collect them to a single partition.
@@ -37,11 +38,13 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+  override lazy val metrics = SQLShuffleMetricsReporter.createShuffleReadMetrics(sparkContext)
   protected override def doExecute(): RDD[InternalRow] = {
     val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
-        locallyLimited, child.output, SinglePartition, serializer))
+        locallyLimited, child.output, SinglePartition, serializer),
+      metrics)
     shuffled.mapPartitionsInternal(_.take(limit))
   }
 }
@@ -151,6 +154,8 @@ case class TakeOrderedAndProjectExec(
 
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
+  override lazy val metrics = SQLShuffleMetricsReporter.createShuffleReadMetrics(sparkContext)
+
   protected override def doExecute(): RDD[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val localTopK: RDD[InternalRow] = {
@@ -160,7 +165,8 @@ case class TakeOrderedAndProjectExec(
     }
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
-        localTopK, child.output, SinglePartition, serializer))
+        localTopK, child.output, SinglePartition, serializer),
+      metrics)
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
       if (projectList != child.output) {

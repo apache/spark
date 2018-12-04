@@ -60,7 +60,8 @@ private[spark] object Config extends Logging {
       .doc("Comma separated list of the Kubernetes secrets used " +
         "to access private image registries.")
       .stringConf
-      .createOptional
+      .toSequence
+      .createWithDefault(Nil)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
@@ -112,16 +113,16 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  // For testing only.
+  val KUBERNETES_DRIVER_POD_NAME_PREFIX =
+    ConfigBuilder("spark.kubernetes.driver.resourceNamePrefix")
+      .internal()
+      .stringConf
+      .createOptional
+
   val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names.")
-      .internal()
-      .stringConf
-      .createWithDefault("spark")
-
-  val KUBERNETES_PYSPARK_PY_FILES =
-    ConfigBuilder("spark.kubernetes.python.pyFiles")
-      .doc("The PyFiles that are distributed via client arguments")
       .internal()
       .stringConf
       .createOptional
@@ -280,6 +281,13 @@ private[spark] object Config extends Logging {
     "spark.kubernetes.authenticate.submission"
 
   val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
+
+  val KUBERNETES_DELETE_EXECUTORS =
+    ConfigBuilder("spark.kubernetes.executor.deleteOnTermination")
+      .doc("If set to false then executor pods will not be deleted in case " +
+        "of failure or normal termination.")
+      .booleanConf
+      .createWithDefault(true)
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
