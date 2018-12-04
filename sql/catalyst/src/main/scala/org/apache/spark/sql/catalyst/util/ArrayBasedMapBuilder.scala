@@ -48,14 +48,14 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
   private lazy val keyGetter = InternalRow.getAccessor(keyType)
   private lazy val valueGetter = InternalRow.getAccessor(valueType)
 
-  def put(key: Any, value: Any, withSizeCheck: Boolean = false): Unit = {
+  def put(key: Any, value: Any): Unit = {
     if (key == null) {
       throw new RuntimeException("Cannot use null as map key.")
     }
 
     val index = keyToIndex.getOrDefault(key, -1)
     if (index == -1) {
-      if (withSizeCheck && size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+      if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
         throw new RuntimeException(s"Unsuccessful attempt to build maps with $size elements " +
           s"due to exceeding the map size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       }
@@ -81,11 +81,10 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       throw new RuntimeException(
         "The key array and value array of MapData must have the same length.")
     }
-    val sizeCheckRequired =
-      size + keyArray.numElements() > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+
     var i = 0
     while (i < keyArray.numElements()) {
-      put(keyGetter(keyArray, i), valueGetter(valueArray, i), withSizeCheck = sizeCheckRequired)
+      put(keyGetter(keyArray, i), valueGetter(valueArray, i))
       i += 1
     }
   }
