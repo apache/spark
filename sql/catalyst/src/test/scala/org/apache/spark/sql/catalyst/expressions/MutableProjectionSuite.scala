@@ -51,7 +51,7 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val unsafeBuffer = UnsafeRow.createFromByteArray(numBytes, fixedLengthTypes.length)
     val proj = createMutableProjection(fixedLengthTypes)
     val projUnsafeRow = proj.target(unsafeBuffer)(inputRow)
-    assert(FromUnsafeProjection.apply(fixedLengthTypes)(projUnsafeRow) === inputRow)
+    assert(SafeProjection.create(fixedLengthTypes)(projUnsafeRow) === inputRow)
   }
 
   testBothCodegenAndInterpreted("variable-length types") {
