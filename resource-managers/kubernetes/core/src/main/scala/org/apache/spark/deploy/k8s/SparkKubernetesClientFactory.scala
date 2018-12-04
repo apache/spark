@@ -24,7 +24,6 @@ import io.fabric8.kubernetes.client.Config.autoConfigure
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
 import io.fabric8.kubernetes.client.utils.HttpClientUtils
 import okhttp3.Dispatcher
-import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.Logging

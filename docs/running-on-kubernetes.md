@@ -430,7 +430,7 @@ See the [configuration page](configuration.html) for information on Spark config
     auto-configuration of the Kubernetes client library.  When not specified then
     the users current context is used.  <strong>NB:</strong> Many of the 
     auto-configured settings can be overridden by the use of other Spark 
-    configuration properties e.g. <code>spark.kuberentes.namespace</code>.
+    configuration properties e.g. <code>spark.kubernetes.namespace</code>.
   </td>
 </tr>
 <tr>
