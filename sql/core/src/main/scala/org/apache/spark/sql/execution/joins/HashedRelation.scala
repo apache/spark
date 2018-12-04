@@ -724,8 +724,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     writeLong(maxKey)
     writeLong(numKeys)
     writeLong(numValues)
-    writeLong(numKeyLookups)
-    writeLong(numProbes)
+    writeLong(numKeyLookups.longValue())
+    writeLong(numProbes.longValue())
 
     writeLong(array.length)
     writeLongArray(writeBuffer, array, array.length)
