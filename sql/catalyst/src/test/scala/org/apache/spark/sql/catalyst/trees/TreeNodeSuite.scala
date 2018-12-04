@@ -597,13 +597,24 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(result === expected)
   }
 
-  test("treeString limits plan length") {
-    val ds = (1 until 100).foldLeft(Literal("TestLiteral"): Expression) { case (treeNode, x) =>
+  test("treeString default doesn't limit plan length") {
+    val ds = (1 until 20).foldLeft(Literal("TestLiteral"): Expression) { case (treeNode, x) =>
       Add(Literal(x), treeNode)
     }
 
     val planString = ds.treeString
-    assert(planString.endsWith("..."))
-    assert(planString.length === SQLConf.get.maxPlanStringLength)
+    assert(!planString.endsWith("..."))
+  }
+
+  test("treeString limits plan length") {
+    withSQLConf(SQLConf.MAX_PLAN_STRING_LENGTH.key -> "200") {
+      val ds = (1 until 20).foldLeft(Literal("TestLiteral"): Expression) { case (treeNode, x) =>
+        Add(Literal(x), treeNode)
+      }
+
+      val planString = ds.treeString
+      assert(planString.endsWith("..."))
+      assert(planString.length === SQLConf.get.maxPlanStringLength)
+    }
   }
 }
