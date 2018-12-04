@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
  * A builder of [[ArrayBasedMapData]], which fails if a null map key is detected, and removes
@@ -47,13 +48,17 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
   private lazy val keyGetter = InternalRow.getAccessor(keyType)
   private lazy val valueGetter = InternalRow.getAccessor(valueType)
 
-  def put(key: Any, value: Any): Unit = {
+  def put(key: Any, value: Any, withSizeCheck: Boolean = false): Unit = {
     if (key == null) {
       throw new RuntimeException("Cannot use null as map key.")
     }
 
     val index = keyToIndex.getOrDefault(key, -1)
     if (index == -1) {
+      if (withSizeCheck && size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+        throw new RuntimeException(s"Unsuccessful attempt to concat maps with $size elements " +
+          s"due to exceeding the map size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+      }
       keyToIndex.put(key, values.length)
       keys.append(key)
       values.append(value)
@@ -76,10 +81,11 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       throw new RuntimeException(
         "The key array and value array of MapData must have the same length.")
     }
-
+    val sizeCheckRequired =
+      size + keyArray.numElements() > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
     var i = 0
     while (i < keyArray.numElements()) {
-      put(keyGetter(keyArray, i), valueGetter(valueArray, i))
+      put(keyGetter(keyArray, i), valueGetter(valueArray, i), withSizeCheck = sizeCheckRequired)
       i += 1
     }
   }
@@ -117,4 +123,9 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       build()
     }
   }
+
+  /**
+   * Returns the current size of the map which is going to be produced by the current builder.
+   */
+  def size: Int = keys.size
 }
