@@ -85,6 +85,51 @@ class StreamingSessionWindowSuite extends StateStoreMetricsTest
         ("2018-08-22 19:39:56", "2018-08-22 19:40:06", "a", 6),
         ("2018-08-22 19:40:10", "2018-08-22 19:40:25", "a", 4),
         ("2018-08-22 19:39:56", "2018-08-22 19:40:16", "b", 8)),
+      // batch 5, add a new window of key 'b'
+      AddData(inputData, ("2018-08-22 19:40:30", "b", 3)),
+      CheckAnswer(("2018-08-22 19:39:27", "2018-08-22 19:39:45", "a", 14),
+        ("2018-08-22 19:39:56", "2018-08-22 19:40:06", "a", 6),
+        ("2018-08-22 19:40:10", "2018-08-22 19:40:25", "a", 4),
+        ("2018-08-22 19:39:56", "2018-08-22 19:40:16", "b", 8),
+        ("2018-08-22 19:40:30", "2018-08-22 19:40:40", "b", 3)),
+      StopStream
+    )
+  }
+
+  test("session window with single key and single partitions, complete mode") {
+    spark.conf.set("spark.sql.shuffle.partitions", "1")
+    val inputData = MemoryStream[(String, Int, Int)]
+    val aggregated =
+      inputData.toDS().toDF("time", "key", "value")
+        .selectExpr("CAST(time as TIMESTAMP)", "key", "value")
+        .withWatermark("time", "3 seconds")
+        .groupBy(session_window($"time", "3 seconds"), $"key")
+        .agg(sum($"value").as("res"))
+        .orderBy($"session_window.start".asc)
+        .select($"session_window.start".cast(StringType),
+             $"session_window.end".cast(StringType), $"key", $"res")
+
+    aggregated.explain(true)
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, ("2018-11-29 09:56:58", 0, 0),
+        ("2018-11-29 09:56:58", 1, 0),
+        ("2018-11-29 09:56:58", 2, 0)),
+      CheckAnswer(("2018-11-29 09:56:58", "2018-11-29 09:57:01", 0, 0),
+        ("2018-11-29 09:56:58", "2018-11-29 09:57:01", 1, 0),
+        ("2018-11-29 09:56:58", "2018-11-29 09:57:01", 2, 0)),
+      AddData(inputData, ("2018-11-29 09:58:13", 0, 0),
+        ("2018-11-29 09:58:13", 1, 0),
+        ("2018-11-29 09:58:13", 2, 0),
+        ("2018-11-29 09:58:13", 0, 1),
+        ("2018-11-29 09:58:13", 1, 1),
+        ("2018-11-29 09:58:13", 2, 1)),
+      CheckAnswer(("2018-11-29 09:56:58", "2018-11-29 09:57:01", 0, 0),
+        ("2018-11-29 09:56:58", "2018-11-29 09:57:01", 1, 0),
+        ("2018-11-29 09:56:58", "2018-11-29 09:57:01", 2, 0),
+        ("2018-11-29 09:58:13", "2018-11-29 09:58:16", 0, 1),
+        ("2018-11-29 09:58:13", "2018-11-29 09:58:16", 1, 1),
+        ("2018-11-29 09:58:13", "2018-11-29 09:58:16", 2, 1)),
       StopStream
     )
   }

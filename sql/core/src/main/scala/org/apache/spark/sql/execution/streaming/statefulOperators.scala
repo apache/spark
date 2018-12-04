@@ -461,10 +461,26 @@ case class SessionWindowStateStoreRestoreExec(
         val key = getKey(row)
         var savedState: UnsafeRow = null
 
-        // For one key, we only get once from state store
+        // For one key, we only get once from state store.
+        // e.g. the iterator may contains elements below
+        // |  key  |  window | value |
+        // |   a   |   w1    | xx    |
+        // |   a   |   w2    | xx    |
+        // |   b   |   w3    | xx    |
+        // |   c   |   w4    | xx    |
+        // for the key a of different window, we only got once
+        // from statestore, otherwise will get error result
         if (preKey == null || key != preKey) {
           savedState = store.get(key)
-          preKey = key
+
+          // must copy the key. The key is a UnsafeRow and pointer to some memory
+          // when next `getKey` invoke the value of the memory will change, so the value of
+          // preKey will change automatically
+          //
+          // e.g. If the key = a, assign preKey by key without copy, when next step of flapMap
+          // after the `getKey` the key = b, the preKey also is b, however, the expected value
+          // of preKey is a
+          preKey = key.copy
         }
         numOutputRows += 1
 
@@ -664,7 +680,7 @@ case class SessionWindowStateStoreSaveExec(
         values.clear
         values += row.copy
       }
-      preKey = key
+      preKey = key.copy
     }
 
     if (values.nonEmpty) {
