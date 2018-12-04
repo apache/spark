@@ -2293,7 +2293,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
                 Row(1) :: Row(2) :: Row(3) :: Nil)
 
               val ctasDSCommand = df.queryExecution.analyzed.collect {
-                case _: CreateHiveTableAsSelectWithDataSourceCommand => true
+                case _: OptimizedCreateHiveTableAsSelectCommand => true
               }.headOption
               val ctasCommand = df.queryExecution.analyzed.collect {
                 case _: CreateHiveTableAsSelectCommand => true

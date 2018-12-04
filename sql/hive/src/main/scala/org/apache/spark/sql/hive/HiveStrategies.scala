@@ -211,7 +211,7 @@ case class RelationConversions(
           if DDLUtils.isHiveTable(tableDesc) && tableDesc.partitionColumnNames.isEmpty &&
             isConvertible(tableDesc) =>
         DDLUtils.checkDataColNames(tableDesc)
-        CreateHiveTableAsSelectWithDataSourceCommand(
+        OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)
     }
   }

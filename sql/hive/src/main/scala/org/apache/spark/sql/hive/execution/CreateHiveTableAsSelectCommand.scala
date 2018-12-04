@@ -51,7 +51,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
         return Seq.empty
       }
 
-      val command = getDataWritingCommand(catalog, tableDesc, tableExists)
+      val command = writingCommandForExistingTable(catalog, tableDesc)
       command.run(sparkSession, child)
     } else {
       // TODO ideally, we should get the output data ready first and then
@@ -64,7 +64,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
       try {
         // Read back the metadata of the table which was created just now.
         val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
-        val command = getDataWritingCommand(catalog, createdTableMeta, tableExists)
+        val command = writingCommandForNewTable(catalog, createdTableMeta)
         command.run(sparkSession, child)
       } catch {
         case NonFatal(e) =>
@@ -77,10 +77,15 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
     Seq.empty[Row]
   }
 
-  def getDataWritingCommand(
+  // Returns `DataWritingCommand` used to write data when the table exists.
+  def writingCommandForExistingTable(
     catalog: SessionCatalog,
-    tableDesc: CatalogTable,
-    tableExists: Boolean): DataWritingCommand
+    tableDesc: CatalogTable): DataWritingCommand
+
+  // Returns `DataWritingCommand` used to write data when the table doesn't exist.
+  def writingCommandForNewTable(
+    catalog: SessionCatalog,
+    tableDesc: CatalogTable): DataWritingCommand
 
   override def argString: String = {
     s"[Database:${tableDesc.database}, " +
@@ -92,7 +97,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
 /**
  * Create table and insert the query result into it.
  *
- * @param tableDesc the Table Describe, which may contain serde, storage handler etc.
+ * @param tableDesc the table description, which may contain serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
  * @param mode SaveMode
  */
@@ -103,29 +108,30 @@ case class CreateHiveTableAsSelectCommand(
     mode: SaveMode)
   extends CreateHiveTableAsSelectBase {
 
-  override def getDataWritingCommand(
+  override def writingCommandForExistingTable(
       catalog: SessionCatalog,
-      tableDesc: CatalogTable,
-      tableExists: Boolean): DataWritingCommand = {
-    if (tableExists) {
-      InsertIntoHiveTable(
-        tableDesc,
-        Map.empty,
-        query,
-        overwrite = false,
-        ifPartitionNotExists = false,
-        outputColumnNames = outputColumnNames)
-    } else {
-      // For CTAS, there is no static partition values to insert.
-      val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
-      InsertIntoHiveTable(
-        tableDesc,
-        partition,
-        query,
-        overwrite = true,
-        ifPartitionNotExists = false,
-        outputColumnNames = outputColumnNames)
-    }
+      tableDesc: CatalogTable): DataWritingCommand = {
+    InsertIntoHiveTable(
+      tableDesc,
+      Map.empty,
+      query,
+      overwrite = false,
+      ifPartitionNotExists = false,
+      outputColumnNames = outputColumnNames)
+  }
+
+  override def writingCommandForNewTable(
+      catalog: SessionCatalog,
+      tableDesc: CatalogTable): DataWritingCommand = {
+    // For CTAS, there is no static partition values to insert.
+    val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
+    InsertIntoHiveTable(
+      tableDesc,
+      partition,
+      query,
+      overwrite = true,
+      ifPartitionNotExists = false,
+      outputColumnNames = outputColumnNames)
   }
 }
 
@@ -133,30 +139,34 @@ case class CreateHiveTableAsSelectCommand(
  * Create table and insert the query result into it. This creates Hive table but inserts
  * the query result into it by using data source.
  *
- * @param tableDesc the Table Describe, which may contain serde, storage handler etc.
+ * @param tableDesc the table description, which may contain serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
  * @param mode SaveMode
  */
-case class CreateHiveTableAsSelectWithDataSourceCommand(
+case class OptimizedCreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
     outputColumnNames: Seq[String],
     mode: SaveMode)
   extends CreateHiveTableAsSelectBase {
 
-  override def getDataWritingCommand(
+  private def getHadoopRelation(
       catalog: SessionCatalog,
-      tableDesc: CatalogTable,
-      tableExists: Boolean): DataWritingCommand = {
+      tableDesc: CatalogTable): HadoopFsRelation = {
     val metastoreCatalog = catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
     val hiveTable = DDLUtils.readHiveTable(tableDesc)
 
-    val hadoopRelation = metastoreCatalog.convert(hiveTable) match {
+    metastoreCatalog.convert(hiveTable) match {
       case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
       case _ => throw new AnalysisException(s"$tableIdentifier should be converted to " +
         "HadoopFsRelation.")
     }
+  }
 
+  override def writingCommandForExistingTable(
+      catalog: SessionCatalog,
+      tableDesc: CatalogTable): DataWritingCommand = {
+    val hadoopRelation = getHadoopRelation(catalog, tableDesc)
     InsertIntoHadoopFsRelationCommand(
       hadoopRelation.location.rootPaths.head,
       Map.empty, // We don't support to convert partitioned table.
@@ -166,7 +176,26 @@ case class CreateHiveTableAsSelectWithDataSourceCommand(
       hadoopRelation.fileFormat,
       hadoopRelation.options,
       query,
-      if (tableExists) mode else SaveMode.Overwrite,
+      mode,
+      Some(tableDesc),
+      Some(hadoopRelation.location),
+      query.output.map(_.name))
+  }
+
+  override def writingCommandForNewTable(
+      catalog: SessionCatalog,
+      tableDesc: CatalogTable): DataWritingCommand = {
+    val hadoopRelation = getHadoopRelation(catalog, tableDesc)
+    InsertIntoHadoopFsRelationCommand(
+      hadoopRelation.location.rootPaths.head,
+      Map.empty, // We don't support to convert partitioned table.
+      false,
+      Seq.empty, // We don't support to convert partitioned table.
+      hadoopRelation.bucketSpec,
+      hadoopRelation.fileFormat,
+      hadoopRelation.options,
+      query,
+      SaveMode.Overwrite,
       Some(tableDesc),
       Some(hadoopRelation.location),
       query.output.map(_.name))
