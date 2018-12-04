@@ -272,9 +272,13 @@ object PartitioningUtils {
       val literal = if (userSpecifiedDataTypes.contains(columnName)) {
         // SPARK-26188: if user provides corresponding column schema, get the column value without
         //              inference, and then cast it as user specified data type.
-        val columnValue = inferPartitionColumnValue(rawColumnValue, false, timeZone)
-        val castedValue =
-          Cast(columnValue, userSpecifiedDataTypes(columnName), Option(timeZone.getID)).eval()
+        val dataType = userSpecifiedDataTypes(columnName)
+        val columnValueLiteral = inferPartitionColumnValue(rawColumnValue, false, timeZone)
+        val columnValue = columnValueLiteral.eval()
+        val castedValue = Cast(columnValueLiteral, dataType, Option(timeZone.getID)).eval()
+        if (columnValue != null && castedValue == null) {
+          throw new RuntimeException(s"Failed to cast partition value `$columnValue` to $dataType")
+        }
         Literal.create(castedValue, userSpecifiedDataTypes(columnName))
       } else {
         inferPartitionColumnValue(rawColumnValue, typeInference, timeZone)
