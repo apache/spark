@@ -638,10 +638,8 @@ Spark supports the following ways to authenticate against Kafka cluster:
   configuration feature). For further information about delegation tokens, see
   [Kafka delegation token docs](http://kafka.apache.org/documentation/#security_delegation_token).
 
-  The process is initiated by Spark's Kafka delegation token provider. This is enabled by default
-  but can be turned off with `spark.security.credentials.kafka.enabled`. When
-  `spark.kafka.bootstrap.servers` set Spark looks for authentication information in the following
-  order and choose the first available to log in:
+  The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.bootstrap.servers`
+  set Spark looks for authentication information in the following order and choose the first available to log in:
   - **JAAS login configuration**
   - **Keytab file**, such as,
 
@@ -657,15 +655,18 @@ Spark supports the following ways to authenticate against Kafka cluster:
             --conf spark.kafka.bootstrap.servers=<KAFKA_SERVERS> \
             ...
 
-  Spark supports the following authentication protocols to obtain token:
+  Kafka delegation token provider can be turned off by setting `spark.security.credentials.kafka.enabled` to `false` (default: `true`).
+
+  Spark can be configured to use the following authentication protocols to obtain token:
   - **SASL SSL (default)**: With `GSSAPI` mechanism Kerberos used for authentication and SSL for encryption.
   - **SSL**: It's leveraging a capability from SSL called 2-way authentication. The server authenticates
     clients through certificates. Please note 2-way authentication must be enabled on Kafka brokers.
   - **SASL PLAINTEXT (for testing)**: With `GSSAPI` mechanism Kerberos used for authentication but
     because there is no encryption it's only for testing purposes.
 
-  After obtaining delegation token successfully, Spark spreads it across nodes and renews it accordingly.
-  Delegation token uses `SCRAM` login module for authentication.
+  After obtaining delegation token successfully, Spark distributes it across nodes and renews it accordingly.
+  Delegation token uses `SCRAM` login module for authentication and because of that the appropriate
+  `sasl.mechanism` has to be configured on source/sink.
 
   When delegation token is available on an executor it can be overridden with JAAS login configuration.
 - **JAAS login configuration**: JAAS login configuration must placed on all nodes where Spark
