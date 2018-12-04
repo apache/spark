@@ -143,7 +143,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     val (comments, code) = input.split("\n").partition(_.startsWith("--"))
 
-    // Runs all the tests on both codegen-only and interpreter modes
+    // Runs all the tests on mixed config sets: WHOLESTAGE_CODEGEN_ENABLED and CODEGEN_FACTORY_MODE
     val codegenConfigSets = Array(
       ("true", "CODEGEN_ONLY"),
       ("true", "NO_CODEGEN"),
