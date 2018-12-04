@@ -79,7 +79,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
 
   test("only successfull task have taskSummary") {
     val store = new InMemoryStore()
-    (0 until 5).foreach { i => store.write(newTaskData(i, "FAILED")) }
+    (0 until 5).foreach { i => store.write(newTaskData(i, status = "FAILED")) }
     val appStore = new AppStatusStore(store).taskSummary(stageId, attemptId, uiQuantiles)
     assert(appStore.size === 0)
   }

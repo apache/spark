@@ -25,7 +25,7 @@ import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.{Distribution, Utils}
-import org.apache.spark.util.kvstore.{InMemoryStore, KVStore, LevelDB}
+import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
 /**
  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
@@ -148,18 +148,18 @@ private[spark] class AppStatusStore(
     // cheaper for disk stores (avoids deserialization).
     val count = {
       Utils.tryWithResource(
-        if (store.isInstanceOf[LevelDB]) {
-          store.view(classOf[TaskDataWrapper])
-            .parent(stageKey)
-            .index(TaskIndexNames.EXEC_RUN_TIME)
-            .first(0L)
-            .closeableIterator()
-        } else {
+        if (store.isInstanceOf[InMemoryStore]) {
           store.view(classOf[TaskDataWrapper])
             .parent(stageKey)
             .index(TaskIndexNames.STATUS)
             .first("SUCCESS")
             .last("SUCCESS")
+            .closeableIterator()
+        } else {
+          store.view(classOf[TaskDataWrapper])
+            .parent(stageKey)
+            .index(TaskIndexNames.EXEC_RUN_TIME)
+            .first(0L)
             .closeableIterator()
         }
       ) { it =>
@@ -230,14 +230,26 @@ private[spark] class AppStatusStore(
     // stabilize once the stage finishes. It's also slow, especially with disk stores.
     val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
 
-    // TODO Summary metrics needs to display all the successful tasks' metrics (SPARK-26119).
+    // TODO: Summary metrics needs to display all the successful tasks' metrics (SPARK-26119).
     // For InMemory case, it is efficient to find using the following code. But for diskStore case
     // we need an efficient solution to avoid deserialization time overhead. For that, we need to
     // rework on the way indexing works, so that we can index by specific metrics for successful
     // and failed tasks differently (would be tricky). Also would require changing the disk store
     // version (to invalidate old stores).
     def scanTasks(index: String)(fn: TaskDataWrapper => Long): IndexedSeq[Double] = {
-      if (store.isInstanceOf[LevelDB]) {
+      if (store.isInstanceOf[InMemoryStore]) {
+        val quantileTasks = store.view(classOf[TaskDataWrapper])
+          .parent(stageKey)
+          .index(index)
+          .first(0L)
+          .asScala
+          .filter { _.status == "SUCCESS"} // Filter "SUCCESS" tasks
+          .toIndexedSeq
+
+        indices.map { index =>
+          fn(quantileTasks(index.toInt)).toDouble
+        }.toIndexedSeq
+      } else {
         Utils.tryWithResource(
           store.view(classOf[TaskDataWrapper])
             .parent(stageKey)
@@ -262,18 +274,6 @@ private[spark] class AppStatusStore(
             }
           }.toIndexedSeq
         }
-      } else {
-        val quantileTasks = store.view(classOf[TaskDataWrapper])
-          .parent(stageKey)
-          .index(index)
-          .first(0L)
-          .asScala
-          .filter { _.status == "SUCCESS"} // Filter "SUCCESS" tasks
-          .toIndexedSeq
-
-        indices.map { index =>
-          fn(quantileTasks(index.toInt)).toDouble
-        }.toIndexedSeq
       }
     }
 
