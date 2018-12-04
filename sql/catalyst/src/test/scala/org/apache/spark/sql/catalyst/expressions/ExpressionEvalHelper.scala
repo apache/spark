@@ -321,8 +321,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
     plan.initialize(0)
-    actual = FromUnsafeProjection(expression.dataType :: Nil)(
-      plan(inputRow)).get(0, expression.dataType)
+    val ref = new BoundReference(0, expression.dataType, nullable = true)
+    actual = GenerateSafeProjection.generate(ref :: Nil)(plan(inputRow)).get(0, expression.dataType)
     assert(checkResult(actual, expected, expression))
   }
 
@@ -454,6 +454,17 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         s"$x or $y is extremely close to zero, so the relative tolerance is meaningless.", 0)
     } else {
       diff < eps * math.min(absX, absY)
+    }
+  }
+
+  def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
+    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+    for (fallbackMode <- modes) {
+      test(s"$name with $fallbackMode") {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+          f
+        }
+      }
     }
   }
 }

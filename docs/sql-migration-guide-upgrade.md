@@ -33,7 +33,7 @@ displayTitle: Spark SQL Upgrading Guide
 
   - Spark applications which are built with Spark version 2.4 and prior, and call methods of `UserDefinedFunction`, need to be re-compiled with Spark 3.0, as they are not binary compatible with Spark 3.0.
 
-  - Since Spark 3.0, JSON datasource uses java.time API for parsing and generating JSON content. New formatting implementation supports date/timestamp patterns conformed to ISO 8601. To switch back to the implementation used in Spark 2.4 and earlier, set `spark.sql.legacy.timeParser.enabled` to `true`.
+  - Since Spark 3.0, CSV/JSON datasources use java.time API for parsing and generating CSV/JSON content. New formatting implementation supports date/timestamp patterns conformed to ISO 8601. To switch back to the implementation used in Spark 2.4 and earlier, set `spark.sql.legacy.timeParser.enabled` to `true`.
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 
