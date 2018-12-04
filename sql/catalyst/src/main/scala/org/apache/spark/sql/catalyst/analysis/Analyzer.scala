@@ -976,7 +976,7 @@ class Analyzer(
       // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
       // names leading to ambiguous references exception.
       case a @ Aggregate(groupingExprs, aggExprs, appendColumns: AppendColumns) =>
-        a.mapExpressions(resolve(_, appendColumns))
+        a.mapExpressions(resolveExpressionTopDown(_, appendColumns))
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
