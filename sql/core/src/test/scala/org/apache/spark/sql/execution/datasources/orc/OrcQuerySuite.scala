@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType, TestUDT}
 import org.apache.spark.util.Utils
 
 case class AllDataTypesWithNonPrimitiveType(
@@ -103,7 +103,7 @@ abstract class OrcQueryTest extends OrcTest {
 
   test("Read/write UserDefinedType") {
     withTempPath { path =>
-      val data = Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
+      val data = Seq((1, new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
       val udtDF = data.toDF("id", "vectors")
       udtDF.write.orc(path.getAbsolutePath)
       val readBack = spark.read.schema(udtDF.schema).orc(path.getAbsolutePath)

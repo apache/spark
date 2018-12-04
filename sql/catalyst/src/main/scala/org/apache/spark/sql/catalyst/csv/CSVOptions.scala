@@ -25,6 +25,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
@@ -36,8 +37,19 @@ class CSVOptions(
   def this(
     parameters: Map[String, String],
     columnPruning: Boolean,
+    defaultTimeZoneId: String) = {
+    this(
+      CaseInsensitiveMap(parameters),
+      columnPruning,
+      defaultTimeZoneId,
+      SQLConf.get.columnNameOfCorruptRecord)
+  }
+
+  def this(
+    parameters: Map[String, String],
+    columnPruning: Boolean,
     defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String = "") = {
+    defaultColumnNameOfCorruptRecord: String) = {
       this(
         CaseInsensitiveMap(parameters),
         columnPruning,
@@ -180,6 +192,20 @@ class CSVOptions(
    */
   val emptyValueInWrite = emptyValue.getOrElse("\"\"")
 
+  /**
+   * A string between two consecutive JSON records.
+   */
+  val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
+    require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
+    require(sep.length == 1, "'lineSep' can contain only 1 character.")
+    sep
+  }
+
+  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
+    lineSep.getBytes(charset)
+  }
+  val lineSeparatorInWrite: Option[String] = lineSeparator
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -188,6 +214,8 @@ class CSVOptions(
     format.setQuoteEscape(escape)
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
+    lineSeparatorInWrite.foreach(format.setLineSeparator)
+
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
@@ -204,8 +232,10 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
+    lineSeparator.foreach(format.setLineSeparator)
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
     format.setComment(comment)
+
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
@@ -215,7 +245,10 @@ class CSVOptions(
     settings.setEmptyValue(emptyValueInRead)
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
-    settings.setLineSeparatorDetectionEnabled(multiLine == true)
+    settings.setLineSeparatorDetectionEnabled(lineSeparatorInRead.isEmpty && multiLine)
+    lineSeparatorInRead.foreach { _ =>
+      settings.setNormalizeLineEndingsWithinQuotes(!multiLine)
+    }
 
     settings
   }

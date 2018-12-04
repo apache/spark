@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.writer.streaming;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.writer.DataWriter;
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
 
@@ -27,7 +27,7 @@ import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
  * Streaming queries are divided into intervals of data called epochs, with a monotonically
  * increasing numeric ID. This writer handles commits and aborts for each successive epoch.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface StreamingWriteSupport {
 
   /**

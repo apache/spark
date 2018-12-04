@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -46,6 +46,25 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
 
   protected def create_row(values: Any*): InternalRow = {
     InternalRow.fromSeq(values.map(CatalystTypeConverters.convertToCatalyst))
+  }
+
+  // Currently MapData just stores the key and value arrays. Its equality is not well implemented,
+  // as the order of the map entries should not matter for equality. This method creates MapData
+  // with the entries ordering preserved, so that we can deterministically test expressions with
+  // map input/output.
+  protected def create_map(entries: (_, _)*): ArrayBasedMapData = {
+    create_map(entries.map(_._1), entries.map(_._2))
+  }
+
+  protected def create_map(keys: Seq[_], values: Seq[_]): ArrayBasedMapData = {
+    assert(keys.length == values.length)
+    val keyArray = CatalystTypeConverters
+      .convertToCatalyst(keys)
+      .asInstanceOf[ArrayData]
+    val valueArray = CatalystTypeConverters
+      .convertToCatalyst(values)
+      .asInstanceOf[ArrayData]
+    new ArrayBasedMapData(keyArray, valueArray)
   }
 
   private def prepareEvaluation(expression: Expression): Expression = {
@@ -302,8 +321,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
     plan.initialize(0)
-    actual = FromUnsafeProjection(expression.dataType :: Nil)(
-      plan(inputRow)).get(0, expression.dataType)
+    val ref = new BoundReference(0, expression.dataType, nullable = true)
+    actual = GenerateSafeProjection.generate(ref :: Nil)(plan(inputRow)).get(0, expression.dataType)
     assert(checkResult(actual, expected, expression))
   }
 
@@ -435,6 +454,17 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
         s"$x or $y is extremely close to zero, so the relative tolerance is meaningless.", 0)
     } else {
       diff < eps * math.min(absX, absY)
+    }
+  }
+
+  def testBothCodegenAndInterpreted(name: String)(f: => Unit): Unit = {
+    val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+    for (fallbackMode <- modes) {
+      test(s"$name with $fallbackMode") {
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+          f
+        }
+      }
     }
   }
 }
