@@ -56,7 +56,7 @@ private[spark] class ResultTask[T, U](
     stageAttemptId: Int,
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
-    locs: Seq[TaskLocation],
+    @transient private var locs: Seq[TaskLocation],
     val outputId: Int,
     localProperties: Properties,
     serializedTaskMetrics: Array[Byte],
