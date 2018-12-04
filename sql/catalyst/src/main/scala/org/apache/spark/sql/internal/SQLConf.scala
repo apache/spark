@@ -1397,7 +1397,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val VALIDATE_PARTITION_VALUE_WITH_PROVIDED_SCHEMA =
-    buildConf("spark.sql.legacy.validatePartitionValueWithProvidedSchema")
+    buildConf("spark.sql.validatePartitionValueWithProvidedSchema.enabled")
       .internal()
       .doc("When this option is set to true, partition column values will be validated with " +
         "provided schema. If the validation fails, a runtime exception is thrown." +
