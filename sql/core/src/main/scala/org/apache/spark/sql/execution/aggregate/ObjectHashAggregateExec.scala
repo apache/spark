@@ -95,7 +95,10 @@ case class ObjectHashAggregateExec(
     }
   }
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputPartitioning: Partitioning = {
+    Partitioning.updatePartitioningWithNewOutput(
+      child.outputPartitioning, resultExpressions, outputSet)
+  }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numOutputRows = longMetric("numOutputRows")

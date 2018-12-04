@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
  * each operator by inserting [[ShuffleExchangeExec]] Operators where required.  Also ensure that
  * the input partition ordering requirements are met.
  */
-case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] with PredicateHelper {
+case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   private def defaultNumPreShufflePartitions: Int = conf.numShufflePartitions
 
   private def targetPostShuffleInputSize: Long = conf.targetPostShuffleInputSize
@@ -145,14 +145,10 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] with Predic
     assert(requiredChildDistributions.length == children.length)
     assert(requiredChildOrderings.length == children.length)
 
-    val aliasMap = AttributeMap[Expression](children.flatMap(_.expressions.collect {
-      case a: Alias => (a.toAttribute, a)
-    }))
 
     // Ensure that the operator's children satisfy their output distribution requirements.
     children = children.zip(requiredChildDistributions).map {
-      case (child, distribution) if child.outputPartitioning.satisfies(
-          distribution.mapExpressions(replaceAlias(_, aliasMap))) =>
+      case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         child
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
@@ -214,10 +210,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] with Predic
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
-      val requiredOrderingWithAlias =
-        requiredOrdering.map(replaceAlias(_, aliasMap).asInstanceOf[SortOrder])
       // If child.outputOrdering already satisfies the requiredOrdering, we do not need to sort.
-      if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrderingWithAlias)) {
+      if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
         child
       } else {
         SortExec(requiredOrdering, global = false, child = child)

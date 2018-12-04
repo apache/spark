@@ -76,7 +76,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputPartitioning: Partitioning = {
+    Partitioning.updatePartitioningWithNewOutput(child.outputPartitioning, projectList, outputSet)
+  }
 }
 
 

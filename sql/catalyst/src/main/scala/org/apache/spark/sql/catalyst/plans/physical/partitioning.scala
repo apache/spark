@@ -42,12 +42,6 @@ sealed trait Distribution {
    * matching the given number of partitions.
    */
   def createPartitioning(numPartitions: Int): Partitioning
-
-  /**
-   * Returns a new `Distribution` with its `Expression`s transformed according to the provided
-   * function.
-   */
-  def mapExpressions(f: Expression => Expression): Distribution = this
 }
 
 /**
@@ -95,10 +89,6 @@ case class ClusteredDistribution(
         s"the actual number of partitions is $numPartitions.")
     HashPartitioning(clustering, numPartitions)
   }
-
-  override def mapExpressions(f: Expression => Expression): ClusteredDistribution = {
-    copy(clustering = clustering.map(f))
-  }
 }
 
 /**
@@ -124,10 +114,6 @@ case class HashClusteredDistribution(
         s"the actual number of partitions is $numPartitions.")
     HashPartitioning(expressions, numPartitions)
   }
-
-  override def mapExpressions(f: Expression => Expression): HashClusteredDistribution = {
-    copy(expressions = expressions.map(f))
-  }
 }
 
 /**
@@ -148,10 +134,6 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
 
   override def createPartitioning(numPartitions: Int): Partitioning = {
     RangePartitioning(ordering, numPartitions)
-  }
-
-  override def mapExpressions(f: Expression => Expression): OrderedDistribution = {
-    copy(ordering = ordering.map(f(_).asInstanceOf[SortOrder]))
   }
 }
 
@@ -203,6 +185,60 @@ trait Partitioning {
     case UnspecifiedDistribution => true
     case AllTuples => numPartitions == 1
     case _ => false
+  }
+}
+
+object Partitioning {
+  /**
+   * Gets as input the `Partitioning` of an expressions and returns the valid `Partitioning`s for
+   * the node w.r.t its output and its expressions.
+   */
+  def updatePartitioningWithNewOutput(
+      inputPartitioning: Partitioning,
+      expressions: Seq[NamedExpression],
+      outputSet: AttributeSet): Partitioning = {
+    inputPartitioning match {
+      case partitioning: Expression =>
+        val invalidReferences = partitioning.references.filterNot(outputSet.contains)
+        val exprToEquiv = invalidReferences.map { e => e -> expressions.filter(_.sameResult(e)) }
+        val initValue = partitioning match {
+          case PartitioningCollection(partitionings) => partitionings
+          case other => Seq(other)
+        }
+        val validPartitionings = exprToEquiv.foldLeft(initValue) {
+          case (partitionings, (toReplace, equivalents)) =>
+            if (equivalents.isEmpty) {
+              partitionings.map {
+                case hp: HashPartitioning if hp.references.contains(toReplace) =>
+                  UnknownPartitioning(hp.numPartitions)
+                case rp: RangePartitioning if rp.references.contains(toReplace) =>
+                  val validExprs = rp.children.takeWhile(!_.references.contains(toReplace))
+                  if (validExprs.isEmpty) {
+                    UnknownPartitioning(rp.numPartitions)
+                  } else {
+                    RangePartitioning(validExprs, rp.numPartitions)
+                  }
+                case other => other
+              }
+            } else {
+              partitionings.flatMap {
+                case p: Expression if p.references.contains(toReplace) =>
+                  equivalents.map { equiv =>
+                    p.transformDown {
+                      case e if e == toReplace => equiv.toAttribute
+                    }.asInstanceOf[Partitioning]
+                  }
+                case other => Seq(other)
+              }
+            }
+        }
+        if (validPartitionings.size == 1) {
+          validPartitionings.head
+        } else {
+          PartitioningCollection(validPartitionings)
+        }
+      case other => other
+    }
   }
 }
 

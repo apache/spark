@@ -66,7 +66,10 @@ case class SortAggregateExec(
     groupingExpressions.map(SortOrder(_, Ascending)) :: Nil
   }
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputPartitioning: Partitioning = {
+    Partitioning.updatePartitioningWithNewOutput(
+      child.outputPartitioning, resultExpressions, outputSet)
+  }
 
   override def outputOrdering: Seq[SortOrder] = {
     groupingExpressions.map(SortOrder(_, Ascending))
