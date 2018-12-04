@@ -89,7 +89,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
 
     for (i <- 0 to 5) {
       if (i % 2 == 1) {
-        store.write(newTaskData(i, "FAILED"))
+        store.write(newTaskData(i, status = "FAILED"))
       } else {
         store.write(newTaskData(i))
       }
