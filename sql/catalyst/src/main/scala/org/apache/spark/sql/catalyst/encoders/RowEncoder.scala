@@ -108,12 +108,12 @@ object RowEncoder {
         returnNullable = false)
 
     case d: DecimalType =>
-      StaticInvoke(
+      CheckOverflow(StaticInvoke(
         Decimal.getClass,
         d,
         "fromDecimal",
         inputObject :: Nil,
-        returnNullable = false)
+        returnNullable = false), d)
 
     case StringType =>
       StaticInvoke(
