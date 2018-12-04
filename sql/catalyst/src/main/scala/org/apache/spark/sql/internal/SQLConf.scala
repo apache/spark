@@ -1396,6 +1396,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val VALIDATE_PARTITION_VALUE_WITH_PROVIDED_SCHEMA =
+    buildConf("spark.sql.legacy.validatePartitionValueWithProvidedSchema")
+      .internal()
+      .doc("When this option is set to true, partition column values will be validated with " +
+        "provided schema. If the validation fails, a runtime exception is thrown." +
+        "When this option is set to false, the partition column value will be converted to null " +
+        "if it can not be converted to corresponding provided schema.")
+      .booleanConf
+      .createWithDefault(true)
+
   val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.executorQueueSize")
     .internal()
@@ -2013,6 +2023,9 @@ class SQLConf extends Serializable with Logging {
 
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
+
+  def validatePartitionValueWithProvidedSchema: Boolean =
+    getConf(VALIDATE_PARTITION_VALUE_WITH_PROVIDED_SCHEMA)
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))

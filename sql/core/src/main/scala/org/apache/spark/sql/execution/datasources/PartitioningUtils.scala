@@ -26,12 +26,13 @@ import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -96,9 +97,10 @@ object PartitioningUtils {
       basePaths: Set[Path],
       userSpecifiedSchema: Option[StructType],
       caseSensitive: Boolean,
+      validatePartitionValueWithProvidedSchema: Boolean,
       timeZoneId: String): PartitionSpec = {
-    parsePartitions(paths, typeInference, basePaths, userSpecifiedSchema,
-      caseSensitive, DateTimeUtils.getTimeZone(timeZoneId))
+    parsePartitions(paths, typeInference, basePaths, userSpecifiedSchema, caseSensitive,
+      validatePartitionValueWithProvidedSchema, DateTimeUtils.getTimeZone(timeZoneId))
   }
 
   private[datasources] def parsePartitions(
@@ -107,6 +109,7 @@ object PartitioningUtils {
       basePaths: Set[Path],
       userSpecifiedSchema: Option[StructType],
       caseSensitive: Boolean,
+      validatePartitionValueWithProvidedSchema: Boolean,
       timeZone: TimeZone): PartitionSpec = {
     val userSpecifiedDataTypes = if (userSpecifiedSchema.isDefined) {
       val nameToDataType = userSpecifiedSchema.get.fields.map(f => f.name -> f.dataType).toMap
@@ -121,7 +124,8 @@ object PartitioningUtils {
 
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
-      parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes, timeZone)
+      parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes,
+        validatePartitionValueWithProvidedSchema, timeZone)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
@@ -203,6 +207,7 @@ object PartitioningUtils {
       typeInference: Boolean,
       basePaths: Set[Path],
       userSpecifiedDataTypes: Map[String, DataType],
+      validatePartitionValueWithProvidedSchema: Boolean,
       timeZone: TimeZone): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
@@ -224,7 +229,8 @@ object PartitioningUtils {
         // Let's say currentPath is a path of "/table/a=1/", currentPath.getName will give us a=1.
         // Once we get the string, we try to parse it and find the partition column and value.
         val maybeColumn =
-          parsePartitionColumn(currentPath.getName, typeInference, userSpecifiedDataTypes, timeZone)
+          parsePartitionColumn(currentPath.getName, typeInference, userSpecifiedDataTypes,
+            validatePartitionValueWithProvidedSchema, timeZone)
         maybeColumn.foreach(columns += _)
 
         // Now, we determine if we should stop.
@@ -258,6 +264,7 @@ object PartitioningUtils {
       columnSpec: String,
       typeInference: Boolean,
       userSpecifiedDataTypes: Map[String, DataType],
+      validatePartitionValueWithProvidedSchema: Boolean,
       timeZone: TimeZone): Option[(String, Literal)] = {
     val equalSignIndex = columnSpec.indexOf('=')
     if (equalSignIndex == -1) {
@@ -276,7 +283,8 @@ object PartitioningUtils {
         val columnValueLiteral = inferPartitionColumnValue(rawColumnValue, false, timeZone)
         val columnValue = columnValueLiteral.eval()
         val castedValue = Cast(columnValueLiteral, dataType, Option(timeZone.getID)).eval()
-        if (columnValue != null && castedValue == null) {
+        if (validatePartitionValueWithProvidedSchema
+          && columnValue != null && castedValue == null) {
           throw new RuntimeException(s"Failed to cast partition value `$columnValue` to $dataType")
         }
         Literal.create(castedValue, userSpecifiedDataTypes(columnName))
