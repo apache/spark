@@ -166,6 +166,9 @@ object UnsafeProjection
   }
 }
 
+/**
+ * A projection that could turn UnsafeRow into GenericInternalRow
+ */
 object SafeProjection extends CodeGeneratorWithInterpretedFallback[Seq[Expression], Projection] {
 
   override protected def createCodeGeneratedObject(in: Seq[Expression]): Projection = {

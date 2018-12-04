@@ -609,19 +609,17 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
       MapType(StringType, IntegerType),
       MapType(MapType(IntegerType, StringType), MapType(StringType, ShortType)))
 
+    val mapResultRow = convertBackToInternalRow(mapRow, fields4).toSeq(fields4)
+    val mapExpectedRow = mapRow.toSeq(fields4)
     // Since `ArrayBasedMapData` does not override `equals` and `hashCode`,
-    // we need to take care of it to compare rows.
+    // we convert it into the two `Seq`s of keys and values for correct comparisons.
     def toComparable(d: Any): Any = d match {
-      case ar: GenericArrayData =>
-        ar.array.map(toComparable).toSeq
       case map: ArrayBasedMapData =>
         val keys = map.keyArray.array.map(toComparable).toSeq
         val values = map.valueArray.array.map(toComparable).toSeq
         (keys, values)
       case o => o
     }
-    val mapResultRow = convertBackToInternalRow(mapRow, fields4).toSeq(fields4)
-    val mapExpectedRow = mapRow.toSeq(fields4)
     assert(mapResultRow.map(toComparable) === mapExpectedRow.map(toComparable))
 
     // UDT tests
