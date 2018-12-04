@@ -41,11 +41,11 @@ private[spark] case class ProcfsMetrics(
 
 // Some of the ideas here are taken from the ProcfsBasedProcessTree class in hadoop
 // project.
-private[spark] class ProcfsMetricsGetter(val procfsDir: String = "/proc/") extends Logging {
-  val procfsStatFile = "stat"
-  val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
-  val pageSize = computePageSize()
-  var isAvailable: Boolean = isProcfsAvailable
+private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends Logging {
+  private val procfsStatFile = "stat"
+  private val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
+  private val pageSize = computePageSize()
+  private var isAvailable: Boolean = isProcfsAvailable
   private val pid = computePid()
 
   private lazy val isProcfsAvailable: Boolean = {
@@ -170,32 +170,33 @@ private[spark] class ProcfsMetricsGetter(val procfsDir: String = "/proc/") exten
     // http://man7.org/linux/man-pages/man5/proc.5.html
     try {
       val pidDir = new File(procfsDir, pid.toString)
-      Utils.tryWithResource(new InputStreamReader(
-        new FileInputStream(
-          new File(pidDir, procfsStatFile)), Charset.forName("UTF-8"))) { fReader =>
-          val in = new BufferedReader(fReader)
-          val procInfo = in.readLine
-          val procInfoSplit = procInfo.split(" ")
-          val vmem = procInfoSplit(22).toLong
-          val rssMem = procInfoSplit(23).toLong * pageSize
-          if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
-            allMetrics.copy(
-              jvmVmemTotal = allMetrics.jvmVmemTotal + vmem,
-              jvmRSSTotal = allMetrics.jvmRSSTotal + (rssMem)
-            )
-          }
-          else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
-            allMetrics.copy(
-              pythonVmemTotal = allMetrics.pythonVmemTotal + vmem,
-              pythonRSSTotal = allMetrics.pythonRSSTotal + (rssMem)
-            )
-          }
-          else {
-            allMetrics.copy(
-              otherVmemTotal = allMetrics.otherVmemTotal + vmem,
-              otherRSSTotal = allMetrics.otherRSSTotal + (rssMem)
-            )
-          }
+      def openReader(): BufferedReader = {
+        val f = new File(new File(procfsDir, pid.toString), procfsStatFile)
+        new BufferedReader(new InputStreamReader(new FileInputStream(f), Charset.forName("UTF-8")))
+      }
+      Utils.tryWithResource(openReader) { in =>
+        val procInfo = in.readLine
+        val procInfoSplit = procInfo.split(" ")
+        val vmem = procInfoSplit(22).toLong
+        val rssMem = procInfoSplit(23).toLong * pageSize
+        if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
+          allMetrics.copy(
+            jvmVmemTotal = allMetrics.jvmVmemTotal + vmem,
+            jvmRSSTotal = allMetrics.jvmRSSTotal + (rssMem)
+          )
+        }
+        else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
+          allMetrics.copy(
+            pythonVmemTotal = allMetrics.pythonVmemTotal + vmem,
+            pythonRSSTotal = allMetrics.pythonRSSTotal + (rssMem)
+          )
+        }
+        else {
+          allMetrics.copy(
+            otherVmemTotal = allMetrics.otherVmemTotal + vmem,
+            otherRSSTotal = allMetrics.otherRSSTotal + (rssMem)
+          )
+        }
       }
     } catch {
       case f: IOException =>
@@ -213,6 +214,11 @@ private[spark] class ProcfsMetricsGetter(val procfsDir: String = "/proc/") exten
     var allMetrics = ProcfsMetrics(0, 0, 0, 0, 0, 0)
     for (p <- pids) {
       allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
+      // if we had an error getting any of the metrics, we don't want to report partial metrics, as
+      // that would be misleading.
+      if (!isAvailable) {
+        return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+      }
     }
     allMetrics
   }
