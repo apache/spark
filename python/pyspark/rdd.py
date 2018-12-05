@@ -127,7 +127,7 @@ class BoundedFloat(float):
 def _parse_memory(s):
     """
     Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MB
+    return the value in MiB
 
     >>> _parse_memory("256m")
     256

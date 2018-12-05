@@ -1037,7 +1037,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // See SPARK-11227 for details.
     FileSystem.getLocal(hadoopConfiguration)
 
-    // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
+    // A Hadoop configuration can be about 10 KiB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableConfiguration(hadoopConfiguration))
     val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
     new HadoopRDD(
@@ -2783,7 +2783,7 @@ object SparkContext extends Logging {
         val memoryPerSlaveInt = memoryPerSlave.toInt
         if (sc.executorMemory > memoryPerSlaveInt) {
           throw new SparkException(
-            "Asked to launch cluster with %d MB RAM / worker but requested %d MB/worker".format(
+            "Asked to launch cluster with %d MiB RAM / worker but requested %d MiB/worker".format(
               memoryPerSlaveInt, sc.executorMemory))
         }
 

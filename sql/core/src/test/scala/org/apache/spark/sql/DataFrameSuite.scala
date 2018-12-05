@@ -2388,7 +2388,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val e = intercept[SparkException] {
         df.filter(filter).count()
       }.getMessage
-      assert(e.contains("grows beyond 64 KB"))
+      assert(e.contains("grows beyond 64 KiB"))
     }
   }
 

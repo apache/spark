@@ -128,7 +128,7 @@ private[yarn] class YarnAllocator(
   private var numUnexpectedContainerRelease = 0L
   private val containerIdToExecutorId = new HashMap[ContainerId, String]
 
-  // Executor memory in MB.
+  // Executor memory in MiB.
   protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
   // Additional memory overhead.
   protected val memoryOverhead: Int = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
@@ -290,7 +290,7 @@ private[yarn] class YarnAllocator(
     if (missing > 0) {
       logInfo(s"Will request $missing executor container(s), each with " +
         s"${resource.getVirtualCores} core(s) and " +
-        s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)")
+        s"${resource.getMemory} MiB memory (including $memoryOverhead MiB of overhead)")
 
       // Split the pending container request into three groups: locality matched list, locality
       // unmatched list and non-locality list. Take the locality matched container request into

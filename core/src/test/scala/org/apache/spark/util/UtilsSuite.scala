@@ -141,7 +141,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
 
     // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
-    // This demonstrates that we can have e.g 1024^3 PB without overflowing.
+    // This demonstrates that we can have e.g 1024^3 PiB without overflowing.
     assert(Utils.byteStringAsGb("1073741824p") === ByteUnit.PiB.toGiB(1073741824))
     assert(Utils.byteStringAsMb("1073741824p") === ByteUnit.PiB.toMiB(1073741824))
 
@@ -157,7 +157,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     // Test overflow exception
     intercept[IllegalArgumentException] {
-      // This value exceeds Long.MAX when converted to TB
+      // This value exceeds Long.MAX when converted to TiB
       ByteUnit.PiB.toTiB(9223372036854775807L)
     }
 

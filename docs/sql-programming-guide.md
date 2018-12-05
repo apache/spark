@@ -1548,14 +1548,14 @@ that these options will be deprecated in future release as more optimizations ar
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.sql.files.maxPartitionBytes</code></td>
-    <td>134217728 (128 MB)</td>
+    <td>134217728 (128 MiB)</td>
     <td>
       The maximum number of bytes to pack into a single partition when reading files.
     </td>
   </tr>
   <tr>
     <td><code>spark.sql.files.openCostInBytes</code></td>
-    <td>4194304 (4 MB)</td>
+    <td>4194304 (4 MiB)</td>
     <td>
       The estimated cost to open a file, measured by the number of bytes could be scanned in the same
       time. This is used when putting multiple files into a partition. It is better to over estimated,
@@ -1574,7 +1574,7 @@ that these options will be deprecated in future release as more optimizations ar
   </tr>
   <tr>
     <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
-    <td>10485760 (10 MB)</td>
+    <td>10485760 (10 MiB)</td>
     <td>
       Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
       performing a join. By setting this value to -1 broadcasting can be disabled. Note that currently

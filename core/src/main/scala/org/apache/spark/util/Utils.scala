@@ -1140,13 +1140,13 @@ private[spark] object Utils extends Logging {
    * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of mebibytes.
    */
   def memoryStringToMb(str: String): Int = {
-    // Convert to bytes, rather than directly to MB, because when no units are specified the unit
+    // Convert to bytes, rather than directly to MiB, because when no units are specified the unit
     // is assumed to be bytes
     (JavaUtils.byteStringAsBytes(str) / 1024 / 1024).toInt
   }
 
   /**
-   * Convert a quantity in bytes to a human-readable string such as "4.0 MB".
+   * Convert a quantity in bytes to a human-readable string such as "4.0 MiB".
    */
   def bytesToString(size: Long): String = bytesToString(BigInt(size))
 
@@ -1205,7 +1205,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a quantity in megabytes to a human-readable string such as "4.0 MB".
+   * Convert a quantity in megabytes to a human-readable string such as "4.0 MiB".
    */
   def megabytesToString(megabytes: Long): String = {
     bytesToString(megabytes * 1024L * 1024L)

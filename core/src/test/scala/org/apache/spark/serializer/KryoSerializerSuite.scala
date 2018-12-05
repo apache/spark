@@ -71,7 +71,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val thrown3 = intercept[IllegalArgumentException](newKryoInstance(conf, "2g", "3g"))
     assert(thrown3.getMessage.contains(kryoBufferProperty))
     assert(!thrown3.getMessage.contains(kryoBufferMaxProperty))
-    // test configuration with mb is supported properly
+    // test configuration with mib is supported properly
     newKryoInstance(conf, "8m", "9m")
   }
 
