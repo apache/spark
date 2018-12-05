@@ -92,17 +92,20 @@ private[spark] class ShuffleMapTask(
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
 
-    // Register the shuffle write metrics reporter to shuffleWriteMetrics.
-    if (dep.shuffleWriteMetricsReporter.isDefined) {
-      context.taskMetrics().shuffleWriteMetrics.registerExternalShuffleWriteReporter(
-        dep.shuffleWriteMetricsReporter.get)
+    // Get `SQLShuffleWriteMetricsReporter` if needed, it will update its own metrics for
+    // SQL exchange operator, as well as the shuffle write metrics in task context.
+    val contextMetricsReporter = context.taskMetrics().shuffleWriteMetrics
+    val metricsReporter = if (dep.writeMetricsReporterCreator.isDefined) {
+      dep.writeMetricsReporterCreator.get.apply(contextMetricsReporter)
+    } else {
+      contextMetricsReporter
     }
 
     var writer: ShuffleWriter[Any, Any] = null
     try {
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](
-        dep.shuffleHandle, partitionId, context, context.taskMetrics().shuffleWriteMetrics)
+        dep.shuffleHandle, partitionId, context, metricsReporter)
       writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       writer.stop(success = true).get
     } catch {

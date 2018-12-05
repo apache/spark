@@ -212,7 +212,7 @@ object ShuffleExchangeExec {
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
       serializer: Serializer,
-      shuffleWriteMetricsReporter: ShuffleWriteMetricsReporter)
+      writeMetricsReporterCreator: ShuffleWriteMetricsReporter => ShuffleWriteMetricsReporter)
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
@@ -343,7 +343,7 @@ object ShuffleExchangeExec {
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
         serializer,
-        shuffleWriteMetricsReporter = Some(shuffleWriteMetricsReporter))
+        writeMetricsReporterCreator = Some(writeMetricsReporterCreator))
 
     dependency
   }

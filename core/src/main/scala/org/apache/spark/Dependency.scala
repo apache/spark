@@ -65,7 +65,8 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  * @param keyOrdering key ordering for RDD's shuffles
  * @param aggregator map/reduce-side aggregator for RDD's shuffle
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
- * @param shuffleWriteMetricsReporter the shuffle write metrics reporter for this shuffle stage.
+ * @param writeMetricsReporterCreator the function to create an external shuffle write metrics
+ *                                    reporter for this shuffle stage.
  */
 @DeveloperApi
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
@@ -75,7 +76,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false,
-    val shuffleWriteMetricsReporter: Option[ShuffleWriteMetricsReporter] = None)
+    val writeMetricsReporterCreator
+      : Option[ShuffleWriteMetricsReporter => ShuffleWriteMetricsReporter] = None)
   extends Dependency[Product2[K, V]] {
 
   if (mapSideCombine) {

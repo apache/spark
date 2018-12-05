@@ -17,26 +17,21 @@
 
 package org.apache.spark.executor
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.util.LongAccumulator
 
+
 /**
  * :: DeveloperApi ::
  * A collection of accumulators that represent metrics about writing shuffle data.
- * Operations are not thread-safe. Also response for updating external reporters of
- * [[ShuffleWriteMetricsReporter]].
+ * Operations are not thread-safe.
  */
 @DeveloperApi
 class ShuffleWriteMetrics private[spark] () extends ShuffleWriteMetricsReporter with Serializable {
   private[executor] val _bytesWritten = new LongAccumulator
   private[executor] val _recordsWritten = new LongAccumulator
   private[executor] val _writeTime = new LongAccumulator
-
-  @transient private[this] lazy val externalReporters =
-    new ArrayBuffer[ShuffleWriteMetricsReporter]
 
   /**
    * Number of bytes written for the shuffle by this task.
@@ -53,28 +48,13 @@ class ShuffleWriteMetrics private[spark] () extends ShuffleWriteMetricsReporter 
    */
   def writeTime: Long = _writeTime.sum
 
-  private[spark] override def incBytesWritten(v: Long): Unit = {
-    _bytesWritten.add(v)
-    externalReporters.foreach(_.incBytesWritten(v))
-  }
-  private[spark] override def incRecordsWritten(v: Long): Unit = {
-    _recordsWritten.add(v)
-    externalReporters.foreach(_.incRecordsWritten(v))
-  }
-  private[spark] override def incWriteTime(v: Long): Unit = {
-    _writeTime.add(v)
-    externalReporters.foreach(_.incWriteTime(v))
-  }
+  private[spark] override def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
+  private[spark] override def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
+  private[spark] override def incWriteTime(v: Long): Unit = _writeTime.add(v)
   private[spark] override def decBytesWritten(v: Long): Unit = {
     _bytesWritten.setValue(bytesWritten - v)
-    externalReporters.foreach(_.decBytesWritten(v))
   }
   private[spark] override def decRecordsWritten(v: Long): Unit = {
     _recordsWritten.setValue(recordsWritten - v)
-    externalReporters.foreach(_.decRecordsWritten(v))
-  }
-  private[spark] def registerExternalShuffleWriteReporter(
-      reporter: ShuffleWriteMetricsReporter): Unit = {
-    externalReporters.append(reporter)
   }
 }
