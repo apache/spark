@@ -144,6 +144,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
    * @param df `DataFrame` to run
    * @param expectedNumOfJobs number of jobs that will run
    * @param expectedNodeIds the node ids of the metrics to collect from execution data.
+   * @param enableWholeStage enable whole-stage code generation or not.
    */
   protected def getSparkPlanMetrics(
        df: DataFrame,
@@ -192,16 +193,19 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
    * @param expectedNumOfJobs number of jobs that will run
    * @param expectedMetrics the expected metrics. The format is
    *                        `nodeId -> (operatorName, metric name -> metric value)`.
+   * @param enableWholeStage enable whole-stage code generation or not.
    */
   protected def testSparkPlanMetrics(
       df: DataFrame,
       expectedNumOfJobs: Int,
-      expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
+      expectedMetrics: Map[Long, (String, Map[String, Any])],
+      enableWholeStage: Boolean = false): Unit = {
     val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
       (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
         (actualMetricValue: Any) => expectedMetricValue.toString === actualMetricValue))
     }
-    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates)
+    testSparkPlanMetricsWithPredicates(
+      df, expectedNumOfJobs, expectedMetricsPredicates, enableWholeStage)
   }
 
   /**
@@ -210,13 +214,15 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
    * @param expectedNumOfJobs number of jobs that will run
    * @param expectedMetricsPredicates the expected metrics predicates. The format is
    *                                  `nodeId -> (operatorName, metric name -> metric predicate)`.
+   * @param enableWholeStage enable whole-stage code generation or not.
    */
   protected def testSparkPlanMetricsWithPredicates(
       df: DataFrame,
       expectedNumOfJobs: Int,
-      expectedMetricsPredicates: Map[Long, (String, Map[String, Any => Boolean])]): Unit = {
+      expectedMetricsPredicates: Map[Long, (String, Map[String, Any => Boolean])],
+      enableWholeStage: Boolean = false): Unit = {
     val optActualMetrics =
-      getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetricsPredicates.keySet)
+      getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetricsPredicates.keySet, enableWholeStage)
     optActualMetrics.foreach { actualMetrics =>
       assert(expectedMetricsPredicates.keySet === actualMetrics.keySet)
       for ((nodeId, (expectedNodeName, expectedMetricsPredicatesMap))
