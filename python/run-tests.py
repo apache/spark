@@ -93,18 +93,17 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         "pyspark-shell"
     ]
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
-    str_test_name = " ".join(test_name)
-    LOGGER.info("Starting test(%s): %s", pyspark_python, str_test_name)
+    LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
         per_test_output = tempfile.TemporaryFile()
         retcode = subprocess.Popen(
-            (os.path.join(SPARK_HOME, "bin/pyspark"), ) + test_name,
+            [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
         shutil.rmtree(tmp_dir, ignore_errors=True)
     except:
         LOGGER.exception(
-            "Got exception while running %s with %s", str_test_name, pyspark_python)
+            "Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
         # this code is invoked from a thread other than the main thread.
         os._exit(1)
@@ -126,7 +125,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             LOGGER.exception("Got an exception while trying to print failed test output")
         finally:
             print_red("\nHad test failures in %s with %s; see logs." % (
-                str_test_name, pyspark_python))
+                test_name, pyspark_python))
             # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
             # this code is invoked from a thread other than the main thread.
             os._exit(-1)
@@ -142,7 +141,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
                 decoded_lines))
             skipped_counts = len(skipped_tests)
             if skipped_counts > 0:
-                key = (pyspark_python, str_test_name)
+                key = (pyspark_python, test_name)
                 SKIPPED_TESTS[key] = skipped_tests
             per_test_output.close()
         except:
@@ -155,10 +154,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         if skipped_counts != 0:
             LOGGER.info(
                 "Finished test(%s): %s (%is) ... %s tests were skipped", pyspark_python,
-                str_test_name, duration, skipped_counts)
+                test_name, duration, skipped_counts)
         else:
             LOGGER.info(
-                "Finished test(%s): %s (%is)", pyspark_python, str_test_name, duration)
+                "Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
 
 
 def get_default_python_executables():
@@ -278,10 +277,10 @@ def main():
                             priority = 0
                         else:
                             priority = 100
-                        task_queue.put((priority, (python_exec, (test_goal, ))))
+                        task_queue.put((priority, (python_exec, test_goal)))
         else:
             for test_goal in testnames_to_test:
-                task_queue.put((0, (python_exec, tuple(test_goal.split()))))
+                task_queue.put((0, (python_exec, test_goal)))
 
     # Create the target directory before starting tasks to avoid races.
     target_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'target'))
