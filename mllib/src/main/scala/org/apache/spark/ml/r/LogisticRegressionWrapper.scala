@@ -199,7 +199,7 @@ private[r] object LogisticRegressionWrapper
 
   class LogisticRegressionWrapperReader extends MLReader[LogisticRegressionWrapper] {
 
-    override def load(path: String): LogisticRegressionWrapper = {
+    override protected def loadImpl(path: String): LogisticRegressionWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

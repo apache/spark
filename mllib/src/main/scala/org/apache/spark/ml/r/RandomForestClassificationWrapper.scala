@@ -145,7 +145,7 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
 
   class RandomForestClassifierWrapperReader extends MLReader[RandomForestClassifierWrapper] {
 
-    override def load(path: String): RandomForestClassifierWrapper = {
+    override protected def loadImpl(path: String): RandomForestClassifierWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

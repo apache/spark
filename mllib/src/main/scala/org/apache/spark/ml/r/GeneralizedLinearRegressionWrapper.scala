@@ -179,7 +179,7 @@ private[r] object GeneralizedLinearRegressionWrapper
   class GeneralizedLinearRegressionWrapperReader
     extends MLReader[GeneralizedLinearRegressionWrapper] {
 
-    override def load(path: String): GeneralizedLinearRegressionWrapper = {
+    override protected def loadImpl(path: String): GeneralizedLinearRegressionWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

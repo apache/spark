@@ -137,7 +137,7 @@ private[r] object DecisionTreeClassifierWrapper extends MLReadable[DecisionTreeC
 
   class DecisionTreeClassifierWrapperReader extends MLReader[DecisionTreeClassifierWrapper] {
 
-    override def load(path: String): DecisionTreeClassifierWrapper = {
+    override protected def loadImpl(path: String): DecisionTreeClassifierWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

@@ -199,7 +199,8 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   }
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): Bucketizer = {
+  override def fit(dataset: Dataset[_]): Bucketizer = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): Bucketizer = {
     transformSchema(dataset.schema, logging = true)
     val bucketizer = new Bucketizer(uid).setHandleInvalid($(handleInvalid))
     if (isSet(inputCols)) {

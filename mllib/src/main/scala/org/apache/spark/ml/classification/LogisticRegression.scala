@@ -1248,7 +1248,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[LogisticRegressionModel].getName
 
-    override def load(path: String): LogisticRegressionModel = {
+    override protected def loadImpl(path: String): LogisticRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 

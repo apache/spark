@@ -22,7 +22,7 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.{PredictionModel, Predictor}
+import org.apache.spark.ml.{MLEvents, PredictionModel, Predictor}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
@@ -188,7 +188,8 @@ class DecisionTreeRegressionModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(
+      dataset: Dataset[_]): DataFrame = MLEvents.withTransformEvent(this, dataset) {
     transformSchema(dataset.schema, logging = true)
     transformImpl(dataset)
   }
@@ -275,7 +276,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     /** Checked against metadata when loading model */
     private val className = classOf[DecisionTreeRegressionModel].getName
 
-    override def load(path: String): DecisionTreeRegressionModel = {
+    override protected def loadImpl(path: String): DecisionTreeRegressionModel = {
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]

@@ -193,7 +193,8 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   }
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): RFormulaModel = {
+  override def fit(dataset: Dataset[_]): RFormulaModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): RFormulaModel = {
     transformSchema(dataset.schema, logging = true)
     require(isDefined(formula), "Formula must be defined first.")
     val parsedFormula = RFormulaParser.parse($(formula))
@@ -338,7 +339,8 @@ class RFormulaModel private[feature](
   extends Model[RFormulaModel] with RFormulaBase with MLWritable {
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     checkCanTransform(dataset.schema)
     transformLabel(pipelineModel.transform(dataset))
   }
@@ -431,7 +433,7 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[RFormulaModel].getName
 
-    override def load(path: String): RFormulaModel = {
+    override protected def loadImpl(path: String): RFormulaModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
@@ -462,7 +464,7 @@ private class ColumnPruner(override val uid: String, val columnsToPrune: Set[Str
   def this(columnsToPrune: Set[String]) =
     this(Identifiable.randomUID("columnPruner"), columnsToPrune)
 
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val columnsToKeep = dataset.columns.filter(!columnsToPrune.contains(_))
     dataset.select(columnsToKeep.map(dataset.col): _*)
   }
@@ -502,7 +504,7 @@ private object ColumnPruner extends MLReadable[ColumnPruner] {
     /** Checked against metadata when loading model */
     private val className = classOf[ColumnPruner].getName
 
-    override def load(path: String): ColumnPruner = {
+    override protected def loadImpl(path: String): ColumnPruner = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
@@ -535,7 +537,7 @@ private class VectorAttributeRewriter(
   def this(vectorCol: String, prefixesToRewrite: Map[String, String]) =
     this(Identifiable.randomUID("vectorAttrRewriter"), vectorCol, prefixesToRewrite)
 
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val metadata = {
       val group = AttributeGroup.fromStructField(dataset.schema(vectorCol))
       val attrs = group.attributes.get.map { attr =>
@@ -593,7 +595,7 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
     /** Checked against metadata when loading model */
     private val className = classOf[VectorAttributeRewriter].getName
 
-    override def load(path: String): VectorAttributeRewriter = {
+    override protected def loadImpl(path: String): VectorAttributeRewriter = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString

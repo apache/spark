@@ -90,7 +90,8 @@ class PCA @Since("1.5.0") (
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.
    */
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): PCAModel = {
+  override def fit(dataset: Dataset[_]): PCAModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): PCAModel = {
     transformSchema(dataset.schema, logging = true)
     val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
@@ -147,7 +148,8 @@ class PCAModel private[ml] (
    * to `PCA.fit()`.
    */
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val pcaModel = new feature.PCAModel($(k),
       OldMatrices.fromML(pc).asInstanceOf[OldDenseMatrix],
@@ -203,7 +205,7 @@ object PCAModel extends MLReadable[PCAModel] {
      * @param path path to serialized model data
      * @return a [[PCAModel]]
      */
-    override def load(path: String): PCAModel = {
+    override protected def loadImpl(path: String): PCAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString

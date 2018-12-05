@@ -303,7 +303,8 @@ class ALSModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
     // create a new column named map(predictionCol) by running the predict UDF.
     val predictions = dataset
@@ -519,7 +520,7 @@ object ALSModel extends MLReadable[ALSModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[ALSModel].getName
 
-    override def load(path: String): ALSModel = {
+    override protected def loadImpl(path: String): ALSModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       implicit val format = DefaultFormats
       val rank = (metadata.metadata \ "rank").extract[Int]
@@ -655,7 +656,8 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   }
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): ALSModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): ALSModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): ALSModel = instrumented { instr =>
     transformSchema(dataset.schema)
     import dataset.sparkSession.implicits._
 

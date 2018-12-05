@@ -119,7 +119,8 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   def setCollectSubModels(value: Boolean): this.type = set(collectSubModels, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): CrossValidatorModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): CrossValidatorModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): CrossValidatorModel = instrumented { instr =>
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sparkSession = dataset.sparkSession
@@ -226,7 +227,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
     /** Checked against metadata when loading model */
     private val className = classOf[CrossValidator].getName
 
-    override def load(path: String): CrossValidator = {
+    override protected def loadImpl(path: String): CrossValidator = {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
@@ -299,7 +300,8 @@ class CrossValidatorModel private[ml] (
   def hasSubModels: Boolean = _subModels.isDefined
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
   }
@@ -392,7 +394,10 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[CrossValidatorModel].getName
 
-    override def load(path: String): CrossValidatorModel = {
+    // Explicitly call parent's load. Otherwise, MiMa complains.
+    override def load(path: String): CrossValidatorModel = super.load(path)
+
+    override protected def loadImpl(path: String): CrossValidatorModel = {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =

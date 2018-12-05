@@ -82,7 +82,8 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   setDefault(handleInvalid, VectorAssembler.ERROR_INVALID)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     // Schema transformation.
     val schema = dataset.schema

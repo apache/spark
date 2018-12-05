@@ -102,7 +102,7 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
 
   class ALSWrapperReader extends MLReader[ALSWrapper] {
 
-    override def load(path: String): ALSWrapper = {
+    override protected def loadImpl(path: String): ALSWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val modelPath = new Path(path, "model").toString

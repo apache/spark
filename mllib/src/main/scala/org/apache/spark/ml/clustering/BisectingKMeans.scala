@@ -105,7 +105,8 @@ class BisectingKMeansModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol),
@@ -191,7 +192,7 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[BisectingKMeansModel].getName
 
-    override def load(path: String): BisectingKMeansModel = {
+    override protected def loadImpl(path: String): BisectingKMeansModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val mllibModel = MLlibBisectingKMeansModel.load(sc, dataPath)
@@ -261,7 +262,9 @@ class BisectingKMeans @Since("2.0.0") (
   def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): BisectingKMeansModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): BisectingKMeansModel = super.fit(dataset)
+  override protected def fitImpl(
+      dataset: Dataset[_]): BisectingKMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
     val rdd = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
 

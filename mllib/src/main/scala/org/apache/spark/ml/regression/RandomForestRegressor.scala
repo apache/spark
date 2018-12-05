@@ -268,7 +268,7 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
     private val className = classOf[RandomForestRegressionModel].getName
     private val treeClassName = classOf[DecisionTreeRegressionModel].getName
 
-    override def load(path: String): RandomForestRegressionModel = {
+    override protected def loadImpl(path: String): RandomForestRegressionModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
         EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)

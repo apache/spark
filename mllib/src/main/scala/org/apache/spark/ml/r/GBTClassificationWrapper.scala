@@ -144,7 +144,7 @@ private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] 
 
   class GBTClassifierWrapperReader extends MLReader[GBTClassifierWrapper] {
 
-    override def load(path: String): GBTClassifierWrapper = {
+    override protected def loadImpl(path: String): GBTClassifierWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

@@ -95,7 +95,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    */
   protected[ml] def hashDistance(x: Seq[Vector], y: Seq[Vector]): Double
 
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val transformUDF = udf(hashFunction(_: Vector), DataTypes.createArrayType(new VectorUDT))
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
@@ -323,7 +323,7 @@ private[ml] abstract class LSH[T <: LSHModel[T]]
    */
   protected[this] def createRawLSHModel(inputDim: Int): T
 
-  override def fit(dataset: Dataset[_]): T = {
+  override protected def fitImpl(dataset: Dataset[_]): T = {
     transformSchema(dataset.schema, logging = true)
     val inputDim = dataset.select(col($(inputCol))).head().get(0).asInstanceOf[Vector].size
     val model = createRawLSHModel(inputDim).setParent(this)

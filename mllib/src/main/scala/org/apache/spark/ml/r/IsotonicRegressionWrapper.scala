@@ -106,7 +106,7 @@ private[r] object IsotonicRegressionWrapper
 
   class IsotonicRegressionWrapperReader extends MLReader[IsotonicRegressionWrapper] {
 
-    override def load(path: String): IsotonicRegressionWrapper = {
+    override protected def loadImpl(path: String): IsotonicRegressionWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

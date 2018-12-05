@@ -337,7 +337,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
     private val className = classOf[GBTRegressionModel].getName
     private val treeClassName = classOf[DecisionTreeRegressionModel].getName
 
-    override def load(path: String): GBTRegressionModel = {
+    override protected def loadImpl(path: String): GBTRegressionModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
         EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)

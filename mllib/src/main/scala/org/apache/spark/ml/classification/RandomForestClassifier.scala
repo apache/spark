@@ -310,7 +310,7 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
     private val className = classOf[RandomForestClassificationModel].getName
     private val treeClassName = classOf[DecisionTreeClassificationModel].getName
 
-    override def load(path: String): RandomForestClassificationModel = {
+    override protected def loadImpl(path: String): RandomForestClassificationModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], _) =
         EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)

@@ -124,7 +124,8 @@ class KMeansModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
     val predictUDF = udf((vector: Vector) => predict(vector))
@@ -238,7 +239,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[KMeansModel].getName
 
-    override def load(path: String): KMeansModel = {
+    override protected def loadImpl(path: String): KMeansModel = {
       // Import implicits for Dataset Encoder
       val sparkSession = super.sparkSession
       import sparkSession.implicits._
@@ -321,7 +322,8 @@ class KMeans @Since("1.5.0") (
   def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): KMeansModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE

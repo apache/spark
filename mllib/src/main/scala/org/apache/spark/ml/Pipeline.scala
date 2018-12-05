@@ -132,7 +132,8 @@ class Pipeline @Since("1.4.0") (
    * @return fitted pipeline
    */
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): PipelineModel = {
+  override def fit(dataset: Dataset[_]): PipelineModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): PipelineModel = {
     transformSchema(dataset.schema, logging = true)
     val theStages = $(stages)
     // Search for the last estimator.
@@ -210,7 +211,7 @@ object Pipeline extends MLReadable[Pipeline] {
     /** Checked against metadata when loading model */
     private val className = classOf[Pipeline].getName
 
-    override def load(path: String): Pipeline = {
+    override protected def loadImpl(path: String): Pipeline = {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)
       new Pipeline(uid).setStages(stages)
     }
@@ -301,7 +302,8 @@ class PipelineModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
   }
@@ -344,7 +346,7 @@ object PipelineModel extends MLReadable[PipelineModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[PipelineModel].getName
 
-    override def load(path: String): PipelineModel = {
+    override protected def loadImpl(path: String): PipelineModel = {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)
       val transformers = stages map {
         case stage: Transformer => stage

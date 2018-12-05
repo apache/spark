@@ -782,7 +782,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[LinearRegressionModel].getName
 
-    override def load(path: String): LinearRegressionModel = {
+    override protected def loadImpl(path: String): LinearRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString

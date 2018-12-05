@@ -455,7 +455,8 @@ abstract class LDAModel private[ml] (
    *          This implementation may be changed in the future.
    */
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     if ($(topicDistributionCol).nonEmpty) {
 
       // TODO: Make the transformer natively in ml framework to avoid extra conversion.
@@ -619,7 +620,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
 
     private val className = classOf[LocalLDAModel].getName
 
-    override def load(path: String): LocalLDAModel = {
+    override protected def loadImpl(path: String): LocalLDAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
@@ -772,7 +773,7 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
 
     private val className = classOf[DistributedLDAModel].getName
 
-    override def load(path: String): DistributedLDAModel = {
+    override protected def loadImpl(path: String): DistributedLDAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val modelPath = new Path(path, "oldModel").toString
       val oldModel = OldDistributedLDAModel.load(sc, modelPath)
@@ -895,7 +896,8 @@ class LDA @Since("1.6.0") (
   override def copy(extra: ParamMap): LDA = defaultCopy(extra)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): LDAModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): LDAModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): LDAModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
     instr.logPipelineStage(this)
@@ -952,7 +954,7 @@ object LDA extends MLReadable[LDA] {
 
     private val className = classOf[LDA].getName
 
-    override def load(path: String): LDA = {
+    override protected def loadImpl(path: String): LDA = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val model = new LDA(metadata.uid)
       LDAParams.getAndSetParams(model, metadata)

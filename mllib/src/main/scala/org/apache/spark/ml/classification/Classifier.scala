@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
+import org.apache.spark.ml.{MLEvents, PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
@@ -156,7 +156,8 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * @param dataset input dataset
    * @return transformed dataset
    */
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(
+      dataset: Dataset[_]): DataFrame = MLEvents.withTransformEvent(this, dataset) {
     transformSchema(dataset.schema, logging = true)
 
     // Output selected columns only.

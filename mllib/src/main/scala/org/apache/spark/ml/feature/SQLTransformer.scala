@@ -64,7 +64,8 @@ class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) 
   private val tableIdentifier: String = "__THIS__"
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val tableName = Identifiable.randomUID(uid)
     dataset.createOrReplaceTempView(tableName)

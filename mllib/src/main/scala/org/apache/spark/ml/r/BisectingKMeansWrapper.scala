@@ -126,7 +126,7 @@ private[r] object BisectingKMeansWrapper extends MLReadable[BisectingKMeansWrapp
 
   class BisectingKMeansWrapperReader extends MLReader[BisectingKMeansWrapper] {
 
-    override def load(path: String): BisectingKMeansWrapper = {
+    override protected def loadImpl(path: String): BisectingKMeansWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

@@ -197,7 +197,8 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
+  override def fit(dataset: Dataset[_]): ChiSqSelectorModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): ChiSqSelectorModel = {
     transformSchema(dataset.schema, logging = true)
     val input: RDD[OldLabeledPoint] =
       dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
@@ -263,7 +264,8 @@ final class ChiSqSelectorModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema, logging = true)
     val newField = transformedSchema.last
 
@@ -327,7 +329,7 @@ object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
 
     private val className = classOf[ChiSqSelectorModel].getName
 
-    override def load(path: String): ChiSqSelectorModel = {
+    override protected def loadImpl(path: String): ChiSqSelectorModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("selectedFeatures").head()

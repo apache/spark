@@ -171,7 +171,8 @@ final class Word2Vec @Since("1.4.0") (
   def setMaxSentenceLength(value: Int): this.type = set(maxSentenceLength, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): Word2VecModel = {
+  override def fit(dataset: Dataset[_]): Word2VecModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
     val wordVectors = new feature.Word2Vec()
@@ -286,7 +287,8 @@ class Word2VecModel private[ml] (
    * is performed by averaging all word vectors it contains.
    */
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val vectors = wordVectors.getVectors
       .mapValues(vv => Vectors.dense(vv.map(_.toDouble)))
@@ -385,7 +387,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
 
     private val className = classOf[Word2VecModel].getName
 
-    override def load(path: String): Word2VecModel = {
+    override protected def loadImpl(path: String): Word2VecModel = {
       val spark = sparkSession
       import spark.implicits._
 

@@ -163,7 +163,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
    */
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
-  def save(path: String): Unit = {
+  def save(path: String): Unit = MLEvents.withSaveInstanceEvent(this, path) {
     new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sc)
     saveImpl(path)
   }
@@ -329,7 +329,19 @@ abstract class MLReader[T] extends BaseReadWrite {
    * Loads the ML component from the input path.
    */
   @Since("1.6.0")
-  def load(path: String): T
+  def load(path: String): T = MLEvents.withLoadInstanceEvent(this, path) {
+    loadImpl(path)
+  }
+
+  /**
+   * `load()` handles events and then calls this method. Subclasses should override this
+   * method to implement the actual loading of the instance.
+   */
+  @Since("3.0.0")
+  protected def loadImpl(path: String): T = {
+    // Keep this default body for backward compatibility.
+    throw new UnsupportedOperationException("loadImpl is not implemented.")
+  }
 
   // override for Java compatibility
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
@@ -467,7 +479,7 @@ private[ml] object DefaultParamsWriter {
  */
 private[ml] class DefaultParamsReader[T] extends MLReader[T] {
 
-  override def load(path: String): T = {
+  override protected def loadImpl(path: String): T = {
     val metadata = DefaultParamsReader.loadMetadata(path, sc)
     val cls = Utils.classForName(metadata.className)
     val instance =

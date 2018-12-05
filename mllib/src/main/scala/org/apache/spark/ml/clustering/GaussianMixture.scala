@@ -106,7 +106,8 @@ class GaussianMixtureModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val predUDF = udf((vector: Vector) => predict(vector))
     val probUDF = udf((vector: Vector) => predictProbability(vector))
@@ -218,7 +219,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[GaussianMixtureModel].getName
 
-    override def load(path: String): GaussianMixtureModel = {
+    override protected def loadImpl(path: String): GaussianMixtureModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
@@ -336,7 +337,9 @@ class GaussianMixture @Since("2.0.0") (
   private val numSamples = 5
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): GaussianMixtureModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): GaussianMixtureModel = super.fit(dataset)
+  override protected def fitImpl(
+      dataset: Dataset[_]): GaussianMixtureModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
     val sc = dataset.sparkSession.sparkContext

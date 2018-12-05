@@ -129,7 +129,7 @@ private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
 
   class KMeansWrapperReader extends MLReader[KMeansWrapper] {
 
-    override def load(path: String): KMeansWrapper = {
+    override protected def loadImpl(path: String): KMeansWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

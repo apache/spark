@@ -275,7 +275,7 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
     /** Checked against metadata when loading model */
     private val className = classOf[DecisionTreeClassificationModel].getName
 
-    override def load(path: String): DecisionTreeClassificationModel = {
+    override protected def loadImpl(path: String): DecisionTreeClassificationModel = {
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]

@@ -91,7 +91,8 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def setBinary(value: Boolean): this.type = set(binary, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
     val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
     // TODO: Make the hashingTF.transform natively in ml framework to avoid extra conversion.

@@ -98,7 +98,8 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     // Validity checks
     transformSchema(dataset.schema)
     val inputAttr = AttributeGroup.fromStructField(dataset.schema($(inputCol)))

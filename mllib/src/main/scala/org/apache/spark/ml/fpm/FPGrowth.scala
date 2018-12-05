@@ -157,7 +157,8 @@ class FPGrowth @Since("2.2.0") (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   @Since("2.2.0")
-  override def fit(dataset: Dataset[_]): FPGrowthModel = {
+  override def fit(dataset: Dataset[_]): FPGrowthModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): FPGrowthModel = {
     transformSchema(dataset.schema, logging = true)
     genericFit(dataset)
   }
@@ -277,7 +278,8 @@ class FPGrowthModel private[ml] (
    * efficiency. This may bring pressure to driver memory for large set of association rules.
    */
   @Since("2.2.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     genericTransform(dataset)
   }
@@ -342,7 +344,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[FPGrowthModel].getName
 
-    override def load(path: String): FPGrowthModel = {
+    override protected def loadImpl(path: String): FPGrowthModel = {
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)

@@ -211,7 +211,9 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   }
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): AFTSurvivalRegressionModel = super.fit(dataset)
+  override protected def fitImpl(
+      dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
     val instances = extractAFTPoints(dataset)
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
@@ -353,7 +355,8 @@ class AFTSurvivalRegressionModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val predictUDF = udf { features: Vector => predict(features) }
     val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
@@ -412,7 +415,7 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
     /** Checked against metadata when loading model */
     private val className = classOf[AFTSurvivalRegressionModel].getName
 
-    override def load(path: String): AFTSurvivalRegressionModel = {
+    override protected def loadImpl(path: String): AFTSurvivalRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString

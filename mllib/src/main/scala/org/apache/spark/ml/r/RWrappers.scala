@@ -30,7 +30,7 @@ import org.apache.spark.ml.util.MLReader
  */
 private[r] object RWrappers extends MLReader[Object] {
 
-  override def load(path: String): Object = {
+  override protected def loadImpl(path: String): Object = {
     implicit val format = DefaultFormats
     val rMetadataPath = new Path(path, "rMetadata").toString
     val rMetadataStr = sc.textFile(rMetadataPath, 1).first()

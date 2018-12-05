@@ -84,7 +84,8 @@ final class IDF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): IDFModel = {
+  override def fit(dataset: Dataset[_]): IDFModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): IDFModel = {
     transformSchema(dataset.schema, logging = true)
     val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
@@ -129,7 +130,8 @@ class IDFModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     // TODO: Make the idfModel.transform natively in ml framework to avoid extra conversion.
     val idf = udf { vec: Vector => idfModel.transform(OldVectors.fromML(vec)).asML }
@@ -174,7 +176,7 @@ object IDFModel extends MLReadable[IDFModel] {
 
     private val className = classOf[IDFModel].getName
 
-    override def load(path: String): IDFModel = {
+    override protected def loadImpl(path: String): IDFModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)

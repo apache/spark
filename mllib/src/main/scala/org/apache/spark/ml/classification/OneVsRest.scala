@@ -165,7 +165,8 @@ final class OneVsRestModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     // Check schema
     transformSchema(dataset.schema, logging = true)
 
@@ -289,7 +290,7 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[OneVsRestModel].getName
 
-    override def load(path: String): OneVsRestModel = {
+    override protected def loadImpl(path: String): OneVsRestModel = {
       implicit val format = DefaultFormats
       val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
       val labelMetadata = Metadata.fromJson((metadata.metadata \ "labelMetadata").extract[String])
@@ -372,7 +373,8 @@ final class OneVsRest @Since("1.4.0") (
   }
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): OneVsRestModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): OneVsRestModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): OneVsRestModel = instrumented { instr =>
     transformSchema(dataset.schema)
 
     instr.logPipelineStage(this)
@@ -492,7 +494,7 @@ object OneVsRest extends MLReadable[OneVsRest] {
     /** Checked against metadata when loading model */
     private val className = classOf[OneVsRest].getName
 
-    override def load(path: String): OneVsRest = {
+    override protected def loadImpl(path: String): OneVsRest = {
       val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
       val ovr = new OneVsRest(metadata.uid)
       metadata.getAndSetParams(ovr)

@@ -96,7 +96,8 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   setDefault(handleInvalid, VectorSizeHint.ERROR_INVALID)
 
   @Since("2.3.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val localInputCol = getInputCol
     val localSize = getSize
     val localHandleInvalid = getHandleInvalid

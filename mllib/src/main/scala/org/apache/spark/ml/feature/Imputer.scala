@@ -120,7 +120,10 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
 
   setDefault(strategy -> Imputer.mean, missingValue -> Double.NaN)
 
-  override def fit(dataset: Dataset[_]): ImputerModel = {
+  // Explicitly call parent's load. Otherwise, MiMa complains.
+  override def fit(dataset: Dataset[_]): ImputerModel = super.fit(dataset)
+
+  override protected def fitImpl(dataset: Dataset[_]): ImputerModel = {
     transformSchema(dataset.schema, logging = true)
     val spark = dataset.sparkSession
 
@@ -211,7 +214,7 @@ class ImputerModel private[ml] (
   /** @group setParam */
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val surrogates = surrogateDF.select($(inputCols).map(col): _*).head().toSeq
 
@@ -257,7 +260,7 @@ object ImputerModel extends MLReadable[ImputerModel] {
 
     private val className = classOf[ImputerModel].getName
 
-    override def load(path: String): ImputerModel = {
+    override protected def loadImpl(path: String): ImputerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val surrogateDF = sqlContext.read.parquet(dataPath)

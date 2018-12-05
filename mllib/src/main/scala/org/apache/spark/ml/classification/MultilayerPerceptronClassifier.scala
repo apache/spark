@@ -359,7 +359,7 @@ object MultilayerPerceptronClassificationModel
     /** Checked against metadata when loading model */
     private val className = classOf[MultilayerPerceptronClassificationModel].getName
 
-    override def load(path: String): MultilayerPerceptronClassificationModel = {
+    override protected def loadImpl(path: String): MultilayerPerceptronClassificationModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString

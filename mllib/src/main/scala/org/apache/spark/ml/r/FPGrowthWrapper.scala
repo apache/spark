@@ -61,7 +61,7 @@ private[r] object FPGrowthWrapper extends MLReadable[FPGrowthWrapper] {
   override def read: MLReader[FPGrowthWrapper] = new FPGrowthWrapperReader
 
   class FPGrowthWrapperReader extends MLReader[FPGrowthWrapper] {
-    override def load(path: String): FPGrowthWrapper = {
+    override protected def loadImpl(path: String): FPGrowthWrapper = {
       val modelPath = new Path(path, "model").toString
       val fPGrowthModel = FPGrowthModel.load(modelPath)
 

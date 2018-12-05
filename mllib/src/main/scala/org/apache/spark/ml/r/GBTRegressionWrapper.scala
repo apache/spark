@@ -128,7 +128,7 @@ private[r] object GBTRegressorWrapper extends MLReadable[GBTRegressorWrapper] {
 
   class GBTRegressorWrapperReader extends MLReader[GBTRegressorWrapper] {
 
-    override def load(path: String): GBTRegressorWrapper = {
+    override protected def loadImpl(path: String): GBTRegressorWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

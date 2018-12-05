@@ -120,7 +120,7 @@ private[r] object DecisionTreeRegressorWrapper extends MLReadable[DecisionTreeRe
 
   class DecisionTreeRegressorWrapperReader extends MLReader[DecisionTreeRegressorWrapper] {
 
-    override def load(path: String): DecisionTreeRegressorWrapper = {
+    override protected def loadImpl(path: String): DecisionTreeRegressorWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

@@ -206,7 +206,7 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
 
   class LDAWrapperReader extends MLReader[LDAWrapper] {
 
-    override def load(path: String): LDAWrapper = {
+    override protected def loadImpl(path: String): LDAWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

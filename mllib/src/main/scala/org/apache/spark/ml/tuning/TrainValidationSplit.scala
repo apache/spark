@@ -118,7 +118,9 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   def setCollectSubModels(value: Boolean): this.type = set(collectSubModels, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): TrainValidationSplitModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): TrainValidationSplitModel = super.fit(dataset)
+  override protected def fitImpl(
+      dataset: Dataset[_]): TrainValidationSplitModel = instrumented { instr =>
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val est = $(estimator)
@@ -220,7 +222,7 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
     /** Checked against metadata when loading model */
     private val className = classOf[TrainValidationSplit].getName
 
-    override def load(path: String): TrainValidationSplit = {
+    override protected def loadImpl(path: String): TrainValidationSplit = {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =
@@ -290,7 +292,8 @@ class TrainValidationSplitModel private[ml] (
   def hasSubModels: Boolean = _subModels.isDefined
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
   }
@@ -380,7 +383,10 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[TrainValidationSplitModel].getName
 
-    override def load(path: String): TrainValidationSplitModel = {
+    // Explicitly call parent's load. Otherwise, MiMa complains.
+    override def load(path: String): TrainValidationSplitModel = super.load(path)
+
+    override protected def loadImpl(path: String): TrainValidationSplitModel = {
       implicit val format = DefaultFormats
 
       val (metadata, estimator, evaluator, estimatorParamMaps) =

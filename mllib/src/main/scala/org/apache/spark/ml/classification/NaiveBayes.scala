@@ -399,7 +399,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[NaiveBayesModel].getName
 
-    override def load(path: String): NaiveBayesModel = {
+    override protected def loadImpl(path: String): NaiveBayesModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString

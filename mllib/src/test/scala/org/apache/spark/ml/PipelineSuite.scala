@@ -18,10 +18,13 @@
 package org.apache.spark.ml
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.when
+import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
@@ -31,10 +34,15 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
-class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class PipelineSuite
+    extends SparkFunSuite
+    with MLlibTestSparkContext
+    with DefaultReadWriteTest
+    with Eventually {
 
   import testImplicits._
 
@@ -91,6 +99,66 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(output.eq(dataset4))
   }
 
+  test("pipeline fit events") {
+    val estimator0 = mock[Estimator[MyModel]]
+    val model0 = mock[MyModel]
+    val transformer1 = mock[Transformer]
+    val estimator2 = mock[Estimator[MyModel]]
+    val model2 = mock[MyModel]
+    val transformer3 = mock[Transformer]
+
+    when(estimator0.copy(any[ParamMap])).thenReturn(estimator0)
+    when(model0.copy(any[ParamMap])).thenReturn(model0)
+    when(transformer1.copy(any[ParamMap])).thenReturn(transformer1)
+    when(estimator2.copy(any[ParamMap])).thenReturn(estimator2)
+    when(model2.copy(any[ParamMap])).thenReturn(model2)
+    when(transformer3.copy(any[ParamMap])).thenReturn(transformer3)
+
+    val dataset0 = mock[DataFrame]
+    val dataset1 = mock[DataFrame]
+    val dataset2 = mock[DataFrame]
+    val dataset3 = mock[DataFrame]
+    val dataset4 = mock[DataFrame]
+
+    when(dataset0.toDF).thenReturn(dataset0)
+    when(dataset1.toDF).thenReturn(dataset1)
+    when(dataset2.toDF).thenReturn(dataset2)
+    when(dataset3.toDF).thenReturn(dataset3)
+    when(dataset4.toDF).thenReturn(dataset4)
+
+    when(estimator0.fit(meq(dataset0))).thenReturn(model0)
+    when(model0.transform(meq(dataset0))).thenReturn(dataset1)
+    when(model0.parent).thenReturn(estimator0)
+    when(transformer1.transform(meq(dataset1))).thenReturn(dataset2)
+    when(estimator2.fit(meq(dataset2))).thenReturn(model2)
+    when(model2.transform(meq(dataset2))).thenReturn(dataset3)
+    when(model2.parent).thenReturn(estimator2)
+    when(transformer3.transform(meq(dataset3))).thenReturn(dataset4)
+
+    val actual = mutable.ArrayBuffer.empty[MLEvent]
+    val listener = new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+        case e: MLEvent => actual.append(e)
+        case _ =>
+      }
+    }
+    val pipeline = new Pipeline()
+      .setStages(Array(estimator0, transformer1, estimator2, transformer3))
+
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      val pipelineModel = pipeline.fit(dataset0)
+      val expected =
+        FitStart(pipeline, dataset0) ::
+        FitEnd(pipeline, pipelineModel) :: Nil
+      eventually(timeout(10 seconds), interval(1 second)) {
+        assert(expected === actual)
+      }
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
   test("pipeline with duplicate stages") {
     val estimator = mock[Estimator[MyModel]]
     val pipeline = new Pipeline()
@@ -128,6 +196,38 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       "copy should create an instance with the same parent")
   }
 
+  test("pipeline model transform tracker") {
+    val dataset = mock[DataFrame]
+    when(dataset.toDF).thenReturn(dataset)
+    val transform1 = mock[Transformer]
+    val model = mock[MyModel]
+    val transform2 = mock[Transformer]
+
+    val stages = Array(transform1, model, transform2)
+    val newPipelineModel = new PipelineModel("pipeline0", stages)
+    val actual = mutable.ArrayBuffer.empty[MLEvent]
+    val listener = new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+        case e: MLEvent => actual.append(e)
+        case _ =>
+      }
+    }
+
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      val output = newPipelineModel.transform(dataset)
+      val expected =
+        TransformStart(newPipelineModel, dataset) ::
+        TransformEnd(newPipelineModel, output) :: Nil
+      eventually(timeout(10 seconds), interval(1 second)) {
+        assert(expected === actual)
+      }
+
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
   test("pipeline model constructors") {
     val transform0 = mock[Transformer]
     val model1 = mock[MyModel]
@@ -154,6 +254,36 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(writableStage.getIntParam === writableStage2.getIntParam)
   }
 
+  test("pipeline read/write events") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath, "pipeline").toUri.toString
+      val writableStage = new WritableStage("writableStage")
+      val newPipeline = new Pipeline().setStages(Array(writableStage))
+      val actual = mutable.ArrayBuffer.empty[MLEvent]
+      val listener = new SparkListener {
+        override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+          case e: SaveInstanceStart if e.path.endsWith("pipeline") => actual.append(e)
+          case e: SaveInstanceEnd if e.path.endsWith("pipeline") => actual.append(e)
+          case _ =>
+        }
+      }
+
+      spark.sparkContext.addSparkListener(listener)
+      try {
+        val pipelineWriter = newPipeline.write
+        pipelineWriter.save(path)
+
+        val expected = SaveInstanceStart(pipelineWriter, path) ::
+          SaveInstanceEnd(pipelineWriter, path) :: Nil
+        eventually(timeout(10 seconds), interval(1 second)) {
+          assert(expected === actual)
+        }
+      } finally {
+        spark.sparkContext.removeSparkListener(listener)
+      }
+    }
+  }
+
   test("Pipeline read/write with non-Writable stage") {
     val unWritableStage = new UnWritableStage("unwritableStage")
     val unWritablePipeline = new Pipeline().setStages(Array(unWritableStage))
@@ -174,6 +304,38 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(pipeline2.stages(0).isInstanceOf[WritableStage])
     val writableStage2 = pipeline2.stages(0).asInstanceOf[WritableStage]
     assert(writableStage.getIntParam === writableStage2.getIntParam)
+  }
+
+  test("PipelineModel read/write events") {
+    withTempDir { dir =>
+      val path = new Path(dir.getCanonicalPath, "pipeline").toUri.toString
+      val writableStage = new WritableStage("writableStage")
+      val pipelineModel =
+        new PipelineModel("pipeline_89329329", Array(writableStage.asInstanceOf[Transformer]))
+
+      val actual = mutable.ArrayBuffer.empty[MLEvent]
+      val listener = new SparkListener {
+        override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+          case e: SaveInstanceStart if e.path.endsWith("pipeline") => actual.append(e)
+          case e: SaveInstanceEnd if e.path.endsWith("pipeline") => actual.append(e)
+          case _ =>
+        }
+      }
+
+      spark.sparkContext.addSparkListener(listener)
+      try {
+        val pipelineWriter = pipelineModel.write
+        pipelineWriter.save(path)
+
+        val expected = SaveInstanceStart(pipelineWriter, path) ::
+          SaveInstanceEnd(pipelineWriter, path) :: Nil
+        eventually(timeout(10 seconds), interval(1 second)) {
+          assert(expected === actual)
+        }
+      } finally {
+        spark.sparkContext.removeSparkListener(listener)
+      }
+    }
   }
 
   test("PipelineModel read/write: getStagePath") {

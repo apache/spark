@@ -94,7 +94,10 @@ abstract class Predictor[
   /** @group setParam */
   def setPredictionCol(value: String): Learner = set(predictionCol, value).asInstanceOf[Learner]
 
-  override def fit(dataset: Dataset[_]): M = {
+  // Explictly call parent's load. Otherwise, MiMa complains.
+  override def fit(dataset: Dataset[_]): M = super.fit(dataset)
+
+  override protected def fitImpl(dataset: Dataset[_]): M = {
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
@@ -199,7 +202,8 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
    * @param dataset input dataset
    * @return transformed dataset with [[predictionCol]] of type `Double`
    */
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(
+      dataset: Dataset[_]): DataFrame = MLEvents.withTransformEvent(this, dataset) {
     transformSchema(dataset.schema, logging = true)
     if ($(predictionCol).nonEmpty) {
       transformImpl(dataset)
@@ -210,7 +214,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
     }
   }
 
-  protected def transformImpl(dataset: Dataset[_]): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val predictUDF = udf { (features: Any) =>
       predict(features.asInstanceOf[FeaturesType])
     }

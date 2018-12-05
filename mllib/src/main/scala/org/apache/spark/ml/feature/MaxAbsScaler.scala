@@ -68,7 +68,8 @@ class MaxAbsScaler @Since("2.0.0") (@Since("2.0.0") override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): MaxAbsScalerModel = {
+  override def fit(dataset: Dataset[_]): MaxAbsScalerModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): MaxAbsScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
@@ -119,7 +120,8 @@ class MaxAbsScalerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     // TODO: this looks hack, we may have to handle sparse and dense vectors separately.
     val maxAbsUnzero = Vectors.dense(maxAbs.toArray.map(x => if (x == 0) 1 else x))
@@ -165,7 +167,7 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
 
     private val className = classOf[MaxAbsScalerModel].getName
 
-    override def load(path: String): MaxAbsScalerModel = {
+    override protected def loadImpl(path: String): MaxAbsScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val Row(maxAbs: Vector) = sparkSession.read.parquet(dataPath)

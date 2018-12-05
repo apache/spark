@@ -147,7 +147,8 @@ class OneHotEncoder @Since("3.0.0") (@Since("3.0.0") override val uid: String)
   }
 
   @Since("3.0.0")
-  override def fit(dataset: Dataset[_]): OneHotEncoderModel = {
+  override def fit(dataset: Dataset[_]): OneHotEncoderModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): OneHotEncoderModel = {
     transformSchema(dataset.schema)
 
     // Compute the plain number of categories without `handleInvalid` and
@@ -324,7 +325,8 @@ class OneHotEncoderModel private[ml] (
   }
 
   @Since("3.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema, logging = true)
     val keepInvalid = $(handleInvalid) == OneHotEncoder.KEEP_INVALID
 
@@ -378,7 +380,7 @@ object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
 
     private val className = classOf[OneHotEncoderModel].getName
 
-    override def load(path: String): OneHotEncoderModel = {
+    override protected def loadImpl(path: String): OneHotEncoderModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)

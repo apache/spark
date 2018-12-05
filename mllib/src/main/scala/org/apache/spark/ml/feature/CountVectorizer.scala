@@ -181,7 +181,8 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   def setBinary(value: Boolean): this.type = set(binary, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): CountVectorizerModel = {
+  override def fit(dataset: Dataset[_]): CountVectorizerModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): CountVectorizerModel = {
     transformSchema(dataset.schema, logging = true)
     val vocSize = $(vocabSize)
     val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
@@ -291,7 +292,8 @@ class CountVectorizerModel(
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
       val dict = vocabulary.zipWithIndex.toMap
@@ -358,7 +360,7 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
 
     private val className = classOf[CountVectorizerModel].getName
 
-    override def load(path: String): CountVectorizerModel = {
+    override protected def loadImpl(path: String): CountVectorizerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)

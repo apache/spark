@@ -140,7 +140,8 @@ class VectorIndexer @Since("1.4.0") (
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): VectorIndexerModel = {
+  override def fit(dataset: Dataset[_]): VectorIndexerModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): VectorIndexerModel = {
     transformSchema(dataset.schema, logging = true)
     val firstRow = dataset.select($(inputCol)).take(1)
     require(firstRow.length == 1, s"VectorIndexer cannot be fit on an empty dataset.")
@@ -425,7 +426,8 @@ class VectorIndexerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)
     val transformUDF = udf { (vector: Vector) => transformFunc(vector) }
@@ -528,7 +530,7 @@ object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
 
     private val className = classOf[VectorIndexerModel].getName
 
-    override def load(path: String): VectorIndexerModel = {
+    override protected def loadImpl(path: String): VectorIndexerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)

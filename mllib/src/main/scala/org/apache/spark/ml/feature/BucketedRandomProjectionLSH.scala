@@ -225,7 +225,7 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
     /** Checked against metadata when loading model */
     private val className = classOf[BucketedRandomProjectionLSHModel].getName
 
-    override def load(path: String): BucketedRandomProjectionLSHModel = {
+    override protected def loadImpl(path: String): BucketedRandomProjectionLSHModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString

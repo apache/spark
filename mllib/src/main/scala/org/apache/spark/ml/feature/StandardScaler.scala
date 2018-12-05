@@ -108,7 +108,8 @@ class StandardScaler @Since("1.4.0") (
   def setWithStd(value: Boolean): this.type = set(withStd, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): StandardScalerModel = {
+  override def fit(dataset: Dataset[_]): StandardScalerModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
@@ -158,7 +159,8 @@ class StandardScalerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
 
@@ -204,7 +206,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
 
     private val className = classOf[StandardScalerModel].getName
 
-    override def load(path: String): StandardScalerModel = {
+    override protected def loadImpl(path: String): StandardScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)

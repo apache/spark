@@ -131,7 +131,8 @@ class StringIndexer @Since("1.4.0") (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): StringIndexerModel = {
+  override def fit(dataset: Dataset[_]): StringIndexerModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): StringIndexerModel = {
     transformSchema(dataset.schema, logging = true)
     val values = dataset.na.drop(Array($(inputCol)))
       .select(col($(inputCol)).cast(StringType))
@@ -218,7 +219,8 @@ class StringIndexerModel (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     if (!dataset.schema.fieldNames.contains($(inputCol))) {
       logInfo(s"Input column ${$(inputCol)} does not exist during transformation. " +
         "Skip StringIndexerModel.")
@@ -307,7 +309,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
 
     private val className = classOf[StringIndexerModel].getName
 
-    override def load(path: String): StringIndexerModel = {
+    override protected def loadImpl(path: String): StringIndexerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
@@ -386,7 +388,8 @@ class IndexToString @Since("2.2.0") (@Since("1.5.0") override val uid: String)
   }
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val inputColSchema = dataset.schema($(inputCol))
     // If the labels array is empty use column metadata

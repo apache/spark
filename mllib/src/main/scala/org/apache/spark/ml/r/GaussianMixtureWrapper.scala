@@ -120,7 +120,7 @@ private[r] object GaussianMixtureWrapper extends MLReadable[GaussianMixtureWrapp
 
   class GaussianMixtureWrapperReader extends MLReader[GaussianMixtureWrapper] {
 
-    override def load(path: String): GaussianMixtureWrapper = {
+    override protected def loadImpl(path: String): GaussianMixtureWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

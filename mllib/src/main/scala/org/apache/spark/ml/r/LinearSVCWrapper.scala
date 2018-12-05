@@ -144,7 +144,7 @@ private[r] object LinearSVCWrapper
 
   class LinearSVCWrapperReader extends MLReader[LinearSVCWrapper] {
 
-    override def load(path: String): LinearSVCWrapper = {
+    override protected def loadImpl(path: String): LinearSVCWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

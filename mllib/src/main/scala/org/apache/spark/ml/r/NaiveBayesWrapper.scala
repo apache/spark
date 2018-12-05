@@ -109,7 +109,7 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
 
   class NaiveBayesWrapperReader extends MLReader[NaiveBayesWrapper] {
 
-    override def load(path: String): NaiveBayesWrapper = {
+    override protected def loadImpl(path: String): NaiveBayesWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

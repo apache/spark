@@ -194,7 +194,7 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[MinHashLSHModel].getName
 
-    override def load(path: String): MinHashLSHModel = {
+    override protected def loadImpl(path: String): MinHashLSHModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString

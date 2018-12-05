@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.{MLEvents, PredictorParams}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
@@ -1034,7 +1034,8 @@ class GeneralizedLinearRegressionModel private[ml] (
     BLAS.dot(features, coefficients) + intercept + offset
   }
 
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(
+      dataset: Dataset[_]): DataFrame = MLEvents.withTransformEvent(this, dataset) {
     transformSchema(dataset.schema)
     transformImpl(dataset)
   }
@@ -1140,7 +1141,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
     /** Checked against metadata when loading model */
     private val className = classOf[GeneralizedLinearRegressionModel].getName
 
-    override def load(path: String): GeneralizedLinearRegressionModel = {
+    override protected def loadImpl(path: String): GeneralizedLinearRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString

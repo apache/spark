@@ -162,7 +162,9 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   override def copy(extra: ParamMap): IsotonicRegression = defaultCopy(extra)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): IsotonicRegressionModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): IsotonicRegressionModel = super.fit(dataset)
+  override protected def fitImpl(
+      dataset: Dataset[_]): IsotonicRegressionModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val instances = extractWeightedLabeledPoints(dataset)
@@ -239,7 +241,8 @@ class IsotonicRegressionModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val predict = dataset.schema($(featuresCol)).dataType match {
       case DoubleType =>
@@ -296,7 +299,7 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
     /** Checked against metadata when loading model */
     private val className = classOf[IsotonicRegressionModel].getName
 
-    override def load(path: String): IsotonicRegressionModel = {
+    override protected def loadImpl(path: String): IsotonicRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString

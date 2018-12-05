@@ -140,7 +140,8 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
   def setCategoricalCols(value: Array[String]): this.type = set(categoricalCols, value)
 
   @Since("2.3.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val hashFunc: Any => Int = FeatureHasher.murmur3Hash
     val n = $(numFeatures)
     val localInputCols = $(inputCols)

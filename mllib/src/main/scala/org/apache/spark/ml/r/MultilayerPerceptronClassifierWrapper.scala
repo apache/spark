@@ -124,7 +124,7 @@ private[r] object MultilayerPerceptronClassifierWrapper
   class MultilayerPerceptronClassifierWrapperReader
     extends MLReader[MultilayerPerceptronClassifierWrapper]{
 
-    override def load(path: String): MultilayerPerceptronClassifierWrapper = {
+    override protected def loadImpl(path: String): MultilayerPerceptronClassifierWrapper = {
       implicit val format = DefaultFormats
       val pipelinePath = new Path(path, "pipeline").toString
 

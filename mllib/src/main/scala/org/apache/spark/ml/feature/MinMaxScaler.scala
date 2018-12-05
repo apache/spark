@@ -115,7 +115,8 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   def setMax(value: Double): this.type = set(max, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): MinMaxScalerModel = {
+  override def fit(dataset: Dataset[_]): MinMaxScalerModel = super.fit(dataset)
+  override protected def fitImpl(dataset: Dataset[_]): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
@@ -174,7 +175,8 @@ class MinMaxScalerModel private[ml] (
   def setMax(value: Double): this.type = set(max, value)
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = super.transform(dataset)
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val originalRange = (originalMax.asBreeze - originalMin.asBreeze).toArray
     val minArray = originalMin.toArray
@@ -234,7 +236,7 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
 
     private val className = classOf[MinMaxScalerModel].getName
 
-    override def load(path: String): MinMaxScalerModel = {
+    override protected def loadImpl(path: String): MinMaxScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)

@@ -128,7 +128,7 @@ private[r] object RandomForestRegressorWrapper extends MLReadable[RandomForestRe
 
   class RandomForestRegressorWrapperReader extends MLReader[RandomForestRegressorWrapper] {
 
-    override def load(path: String): RandomForestRegressorWrapper = {
+    override protected def loadImpl(path: String): RandomForestRegressorWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString

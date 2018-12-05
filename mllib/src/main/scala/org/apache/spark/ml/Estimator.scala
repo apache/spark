@@ -65,7 +65,19 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    * Fits a model to the input data.
    */
   @Since("2.0.0")
-  def fit(dataset: Dataset[_]): M
+  def fit(dataset: Dataset[_]): M = MLEvents.withFitEvent(this, dataset) {
+    fitImpl(dataset)
+  }
+
+  /**
+   * `fit()` handles events and then calls this method. Subclasses should override this
+   * method to implement the actual fiting a model to the input data.
+   */
+  @Since("3.0.0")
+  protected def fitImpl(dataset: Dataset[_]): M = {
+    // Keep this default body for backward compatibility.
+    throw new UnsupportedOperationException("fitImpl is not implemented.")
+  }
 
   /**
    * Fits multiple models to the input data with multiple sets of parameters.
