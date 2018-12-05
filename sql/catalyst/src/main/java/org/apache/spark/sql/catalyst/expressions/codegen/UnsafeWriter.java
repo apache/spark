@@ -198,11 +198,45 @@ public abstract class UnsafeWriter {
     Platform.putLong(getBuffer(), offset, value);
   }
 
+  // We need to take care of NaN and -0.0 in several places:
+  //   1. When compare values, different NaNs should be treated as same, `-0.0` and `0.0` should be
+  //      treated as same.
+  //   2. In range partitioner, different NaNs should belong to the same partition, -0.0 and 0.0
+  //      should belong to the same partition.
+  //   3. In GROUP BY, different NaNs should belong to the same group, -0.0 and 0.0 should belong
+  //      to the same group.
+  //   4. As join keys, different NaNs should be treated as same, `-0.0` and `0.0` should be
+  //      treated as same.
+  //
+  // Case 1 is fine, as we handle NaN and -0.0 well during comparison. For complex types, we
+  // recursively compare the fields/elements, so it's also fine.
+  //
+  // Case 2 is problematic, as the sorter of range partitioner uses prefix comparator, which
+  // thinks 0.0 > -0.0.
+  //
+  // Case 3 and 4 are problematic, as they compare `UnsafeRow` binary directly, and different NaNs
+  // have different binary representation, and the same thing happens for -0.0 and 0.0.
+  //
+  // Here we normalize NaN and -0.0, so that we don't need to care about NaN and -0.0 for
+  // `UnsafeRow`s created by `UnsafeProjection`. It fixes case 2, because the input of the sorter
+  // of the range partitioner are `UnsafeRow`s created by `UnsafeProjection`. It also fixes case 3
+  // and 4, because Spark uses `UnsafeProjection` to extract join keys/grouping keys.
   protected final void writeFloat(long offset, float value) {
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
+    } else if (value == -0.0f) {
+      value = 0.0f;
+    }
     Platform.putFloat(getBuffer(), offset, value);
   }
 
+  // See comments for `writeFloat`.
   protected final void writeDouble(long offset, double value) {
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    } else if (value == -0.0d) {
+      value = 0.0d;
+    }
     Platform.putDouble(getBuffer(), offset, value);
   }
 }
