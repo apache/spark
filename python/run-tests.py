@@ -92,6 +92,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
         "pyspark-shell"
     ]
+
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
     LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
@@ -102,8 +103,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
         shutil.rmtree(tmp_dir, ignore_errors=True)
     except:
-        LOGGER.exception(
-            "Got exception while running %s with %s", test_name, pyspark_python)
+        LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
         # this code is invoked from a thread other than the main thread.
         os._exit(1)
@@ -124,8 +124,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         except:
             LOGGER.exception("Got an exception while trying to print failed test output")
         finally:
-            print_red("\nHad test failures in %s with %s; see logs." % (
-                test_name, pyspark_python))
+            print_red("\nHad test failures in %s with %s; see logs." % (test_name, pyspark_python))
             # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
             # this code is invoked from a thread other than the main thread.
             os._exit(-1)
@@ -153,8 +152,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             os._exit(-1)
         if skipped_counts != 0:
             LOGGER.info(
-                "Finished test(%s): %s (%is) ... %s tests were skipped", pyspark_python,
-                test_name, duration, skipped_counts)
+                "Finished test(%s): %s (%is) ... %s tests were skipped", pyspark_python, test_name,
+                duration, skipped_counts)
         else:
             LOGGER.info(
                 "Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
