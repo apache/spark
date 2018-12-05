@@ -67,6 +67,7 @@ case class AnalyzeColumnCommand(
       colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColStats)
 
     sessionState.catalog.alterTableStats(tableIdentWithDB, Some(statistics))
+    sessionState.catalog.refreshTable(tableIdentWithDB)
 
     Seq.empty[Row]
   }
