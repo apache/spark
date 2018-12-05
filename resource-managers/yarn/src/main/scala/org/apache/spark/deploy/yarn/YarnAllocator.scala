@@ -584,7 +584,7 @@ private[yarn] class YarnAllocator(
             val message = "Container killed by YARN for exceeding physical memory limits. " +
               s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
             (true, message)
-          case exit_code if NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(exit_code) =>
+          case exit_status if NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(exit_status) =>
             (true, "Container marked as failed: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +
               ". Diagnostics: " + completedContainer.getDiagnostics)

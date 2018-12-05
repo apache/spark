@@ -17,9 +17,10 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.{Arrays, Collections}
+import java.util.Collections
 
 import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
@@ -27,11 +28,11 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.yarn.YarnAllocator._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.config.{BLACKLIST_TIMEOUT_CONF, MAX_FAILED_EXEC_PER_NODE}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.ManualClock
@@ -109,13 +110,19 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       clock)
   }
 
-  def createContainer(host: String): Container = {
-    // When YARN 2.6+ is required, avoid deprecation by using version with long second arg
-    val containerId = ContainerId.newInstance(appAttemptId, containerNum)
+  def createContainer(
+      host: String,
+      containerId: ContainerId = ContainerId.newContainerId(appAttemptId, containerNum),
+      resource: Resource = containerResource): Container = {
     containerNum += 1
     val nodeId = NodeId.newInstance(host, 1000)
     Container.newInstance(containerId, nodeId, "", containerResource, RM_REQUEST_PRIORITY, null)
   }
+
+  def createContainers(hosts: Seq[String], containerIds: Seq[ContainerId]): Seq[Container] = {
+    hosts.zip(containerIds).map{case (host, id) => createContainer(host, id)}
+  }
+
 
   test("single container allocated") {
     // request a single container and receive it
@@ -133,6 +140,29 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
     size should be (0)
+  }
+
+  test("custom resource requested from yarn") {
+    assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+    ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
+
+    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+    val handler = createAllocator(1, mockAmClient,
+      Map(YARN_EXECUTOR_RESOURCE_TYPES_PREFIX + "gpu" -> "2G"))
+
+    handler.updateResourceRequests()
+    val container = createContainer("host1", resource = handler.resource)
+    handler.handleAllocatedContainers(Array(container))
+
+    // get amount of memory and vcores from resource, so effectively skipping their validation
+    val expectedResources = Resource.newInstance(handler.resource.getMemory(),
+      handler.resource.getVirtualCores)
+    ResourceRequestHelper.setResourceRequests(Map("gpu" -> "2G"), expectedResources)
+    val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
+
+    verify(mockAmClient).addContainerRequest(captor.capture())
+    val containerRequest: ContainerRequest = captor.getValue
+    assert(containerRequest.getCapability === expectedResources)
   }
 
   test("container should not be created if requested number if met") {
@@ -402,47 +432,58 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumExecutorsFailed should be (0)
   }
 
-  test("YarnAllocator should have same blacklist behaviour with YARN") {
-    val amrmClientMock = mock(classOf[AMRMClient[ContainerRequest]])
+  test("SPARK-26296: YarnAllocator should have same blacklist behaviour with YARN") {
+    val rmClientSpy = spy(rmClient)
+    val maxExecutors = 11
 
     val handler = createAllocator(
-      2,
-      amrmClientMock,
+      maxExecutors,
+      rmClientSpy,
       Map(
         "spark.yarn.blacklist.executor.launch.blacklisting.enabled" -> "true",
         "spark.blacklist.application.maxFailedExecutorsPerNode" -> "0"))
-    val container1 = createContainer("host1")
     handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(container1))
 
-    val cs1 = ContainerStatus.newInstance(container1.getId, ContainerState.COMPLETE,
+    val hosts = (0 until maxExecutors).map(i => s"host$i")
+    val ids = (0 to maxExecutors).map(i => ContainerId.newContainerId(appAttemptId, i))
+    val containers = createContainers(hosts, ids)
+    handler.handleAllocatedContainers(containers.slice(0, 9))
+    val cs0 = ContainerStatus.newInstance(containers(0).getId, ContainerState.COMPLETE,
       "success", ContainerExitStatus.SUCCESS)
-    val cs2 = ContainerStatus.newInstance(container1.getId, ContainerState.COMPLETE,
+    val cs1 = ContainerStatus.newInstance(containers(1).getId, ContainerState.COMPLETE,
       "preempted", ContainerExitStatus.PREEMPTED)
-    val cs3 = ContainerStatus.newInstance(container1.getId, ContainerState.COMPLETE,
+    val cs2 = ContainerStatus.newInstance(containers(2).getId, ContainerState.COMPLETE,
       "killed_exceeded_vmem", ContainerExitStatus.KILLED_EXCEEDED_VMEM)
-    val cs4 = ContainerStatus.newInstance(container1.getId, ContainerState.COMPLETE,
+    val cs3 = ContainerStatus.newInstance(containers(3).getId, ContainerState.COMPLETE,
       "killed_exceeded_pmem", ContainerExitStatus.KILLED_EXCEEDED_PMEM)
-    val cs5 = ContainerStatus.newInstance(container1.getId, ContainerState.COMPLETE,
+    val cs4 = ContainerStatus.newInstance(containers(4).getId, ContainerState.COMPLETE,
       "killed_by_resourcemanager", ContainerExitStatus.KILLED_BY_RESOURCEMANAGER)
-    val cs6 = ContainerStatus.newInstance(container1.getId, ContainerState.COMPLETE,
+    val cs5 = ContainerStatus.newInstance(containers(5).getId, ContainerState.COMPLETE,
       "killed_by_appmaster", ContainerExitStatus.KILLED_BY_APPMASTER)
-    val cs7 = ContainerStatus.newInstance(container1.getId, ContainerState.COMPLETE,
+    val cs6 = ContainerStatus.newInstance(containers(6).getId, ContainerState.COMPLETE,
       "killed_after_app_completion", ContainerExitStatus.KILLED_AFTER_APP_COMPLETION)
-    val cs8 = ContainerStatus.newInstance(container1.getId, ContainerState.COMPLETE,
+    val cs7 = ContainerStatus.newInstance(containers(7).getId, ContainerState.COMPLETE,
       "aborted", ContainerExitStatus.ABORTED)
-    val cs9 = ContainerStatus.newInstance(container1.getId, ContainerState.COMPLETE,
+    val cs8 = ContainerStatus.newInstance(containers(8).getId, ContainerState.COMPLETE,
       "disk_failed", ContainerExitStatus.DISKS_FAILED)
-    handler.processCompletedContainers(Seq(cs1, cs2, cs3, cs4, cs5, cs6, cs7, cs8, cs9))
+    handler.processCompletedContainers(Seq(cs0, cs1, cs2, cs3, cs4, cs5, cs6, cs7, cs8))
 
-    verify(amrmClientMock, never())
-      .updateBlacklist(Arrays.asList("host1"), Collections.emptyList())
+    verify(rmClientSpy, never())
+      .updateBlacklist(hosts.slice(0, 9).asJava, Collections.emptyList())
 
-    val cs10 = ContainerStatus.newInstance(container1.getId, ContainerState.COMPLETE,
+    handler.handleAllocatedContainers(Array(containers(9)))
+    val cs9 = ContainerStatus.newInstance(containers(9).getId, ContainerState.COMPLETE,
       "invalid", ContainerExitStatus.INVALID)
-    handler.processCompletedContainers(Seq(cs10))
-    verify(amrmClientMock)
-      .updateBlacklist(Arrays.asList("host1"), Collections.emptyList())
+    handler.processCompletedContainers(Seq(cs9))
+    verify(rmClientSpy)
+      .updateBlacklist(Seq(hosts(9)).asJava, Collections.emptyList())
 
+    handler.handleAllocatedContainers(Array(containers(10)))
+    val UNKNOWN_EXIT_CODE = 1
+    val cs10 = ContainerStatus.newInstance(containers(10).getId, ContainerState.COMPLETE,
+      "unknown_exit_code", UNKNOWN_EXIT_CODE)
+    handler.processCompletedContainers(Seq(cs10))
+    verify(rmClientSpy)
+      .updateBlacklist(Seq(hosts(10)).asJava, Collections.emptyList())
   }
 }
