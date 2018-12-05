@@ -1731,22 +1731,22 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
     at most a single one-value per row that indicates the input category index.
     For example with 5 categories, an input value of 2.0 would map to an output vector of
     `[0.0, 0.0, 1.0, 0.0]`.
-    The last category is not included by default (configurable via `dropLast`),
+    The last category is not included by default (configurable via :py:attr:`dropLast`),
     because it makes the vector entries sum up to one, and hence linearly dependent.
     So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
 
-    Note: This is different from scikit-learn's OneHotEncoder, which keeps all categories.
-    The output vectors are sparse.
+    .. note:: This is different from scikit-learn's OneHotEncoder, which keeps all categories.
+        The output vectors are sparse.
 
-    When `handleInvalid` is configured to 'keep', an extra "category" indicating invalid values is
-    added as last category. So when `dropLast` is true, invalid values are encoded as all-zeros
-    vector.
+    When :py:attr:`handleInvalid` is configured to 'keep', an extra "category" indicating invalid
+    values is added as last category. So when :py:attr:`dropLast` is true, invalid values are
+    encoded as all-zeros vector.
 
-    Note: When encoding multi-column by using `inputCols` and `outputCols` params, input/output
-    cols come in pairs, specified by the order in the arrays, and each pair is treated
-    independently.
+    .. note:: When encoding multi-column by using :py:attr:`inputCols` and
+        :py:attr:`outputCols` params, input/output cols come in pairs, specified by the order in
+        the arrays, and each pair is treated independently.
 
-    See `StringIndexer` for converting categorical values into category indices
+    .. seealso:: :py:class:`StringIndexer` for converting categorical values into category indices
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
@@ -1754,7 +1754,7 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
     >>> model = ohe.fit(df)
     >>> model.transform(df).head().output
     SparseVector(2, {0: 1.0})
-    >>> ohePath = temp_path + "/oheEstimator"
+    >>> ohePath = temp_path + "/ohe"
     >>> ohe.save(ohePath)
     >>> loadedOHE = OneHotEncoderEstimator.load(ohePath)
     >>> loadedOHE.getInputCols() == ohe.getInputCols()
