@@ -35,7 +35,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.io.{CompressionCodec, ZStdCompressionCodec}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
@@ -402,11 +402,7 @@ private[spark] object EventLoggingListener extends Logging {
       val codec = codecName(log).map { c =>
         codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
       }
-      if(codec.isDefined && codec.get.isInstanceOf[ZStdCompressionCodec]) {
-        codec.map(_.zstdEventLogCompressedInputStream(in)).get
-      } else {
-        codec.map(_.compressedInputStream(in)).getOrElse(in)
-      }
+      codec.map(_.compressedInputStreamForPartialFrame(in)).getOrElse(in)
     } catch {
       case e: Throwable =>
         in.close()
