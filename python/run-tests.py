@@ -92,8 +92,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         "--conf", "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
         "pyspark-shell"
     ]
-
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
+
     LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
