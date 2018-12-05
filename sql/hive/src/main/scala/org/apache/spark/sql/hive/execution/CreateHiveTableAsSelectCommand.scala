@@ -150,54 +150,43 @@ case class OptimizedCreateHiveTableAsSelectCommand(
     mode: SaveMode)
   extends CreateHiveTableAsSelectBase {
 
-  private def getHadoopRelation(
+  private def getWritingCommand(
       catalog: SessionCatalog,
-      tableDesc: CatalogTable): HadoopFsRelation = {
+      tableDesc: CatalogTable,
+      tableExists: Boolean): DataWritingCommand = {
     val metastoreCatalog = catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
     val hiveTable = DDLUtils.readHiveTable(tableDesc)
 
-    metastoreCatalog.convert(hiveTable) match {
+    val hadoopRelation = metastoreCatalog.convert(hiveTable) match {
       case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
       case _ => throw new AnalysisException(s"$tableIdentifier should be converted to " +
         "HadoopFsRelation.")
     }
+
+    InsertIntoHadoopFsRelationCommand(
+      hadoopRelation.location.rootPaths.head,
+      Map.empty, // We don't support to convert partitioned table.
+      false,
+      Seq.empty, // We don't support to convert partitioned table.
+      hadoopRelation.bucketSpec,
+      hadoopRelation.fileFormat,
+      hadoopRelation.options,
+      query,
+      if (tableExists) mode else SaveMode.Overwrite,
+      Some(tableDesc),
+      Some(hadoopRelation.location),
+      query.output.map(_.name))
   }
 
   override def writingCommandForExistingTable(
       catalog: SessionCatalog,
       tableDesc: CatalogTable): DataWritingCommand = {
-    val hadoopRelation = getHadoopRelation(catalog, tableDesc)
-    InsertIntoHadoopFsRelationCommand(
-      hadoopRelation.location.rootPaths.head,
-      Map.empty, // We don't support to convert partitioned table.
-      false,
-      Seq.empty, // We don't support to convert partitioned table.
-      hadoopRelation.bucketSpec,
-      hadoopRelation.fileFormat,
-      hadoopRelation.options,
-      query,
-      mode,
-      Some(tableDesc),
-      Some(hadoopRelation.location),
-      query.output.map(_.name))
+    getWritingCommand(catalog, tableDesc, tableExists = true)
   }
 
   override def writingCommandForNewTable(
       catalog: SessionCatalog,
       tableDesc: CatalogTable): DataWritingCommand = {
-    val hadoopRelation = getHadoopRelation(catalog, tableDesc)
-    InsertIntoHadoopFsRelationCommand(
-      hadoopRelation.location.rootPaths.head,
-      Map.empty, // We don't support to convert partitioned table.
-      false,
-      Seq.empty, // We don't support to convert partitioned table.
-      hadoopRelation.bucketSpec,
-      hadoopRelation.fileFormat,
-      hadoopRelation.options,
-      query,
-      SaveMode.Overwrite,
-      Some(tableDesc),
-      Some(hadoopRelation.location),
-      query.output.map(_.name))
+    getWritingCommand(catalog, tableDesc, tableExists = false)
   }
 }
