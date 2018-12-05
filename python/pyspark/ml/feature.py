@@ -1654,7 +1654,7 @@ class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHand
     So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
 
     .. note:: This is different from scikit-learn's OneHotEncoder, which keeps all categories.
-    The output vectors are sparse.
+        The output vectors are sparse.
 
     When :py:attr:`handleInvalid` is configured to 'keep', an extra "category" indicating invalid
     values is added as last category. So when :py:attr:`dropLast` is true, invalid values are
