@@ -562,4 +562,18 @@ public class UnsafeShuffleWriterSuite {
     }
   }
 
+  @Test
+  public void writeEmptyIteratorNotCreateEmptySpillFile() throws Exception {
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
+    writer.write(Iterators.emptyIterator());
+    final Option<MapStatus> mapStatus = writer.stop(true);
+    assertTrue(mapStatus.isDefined());
+    assertTrue(mergedOutputFile.exists());
+    assertEquals(0, spillFilesCreated.size());
+    assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
+    assertEquals(0, taskMetrics.shuffleWriteMetrics().recordsWritten());
+    assertEquals(0, taskMetrics.shuffleWriteMetrics().bytesWritten());
+    assertEquals(0, taskMetrics.diskBytesSpilled());
+    assertEquals(0, taskMetrics.memoryBytesSpilled());
+  }
 }
