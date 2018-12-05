@@ -43,6 +43,10 @@ trait CompressionCodec {
   def compressedOutputStream(s: OutputStream): OutputStream
 
   def compressedInputStream(s: InputStream): InputStream
+
+  private[spark] def zstdEventLogCompressedInputStream(s: InputStream): InputStream = {
+    compressedInputStream(s)
+  }
 }
 
 private[spark] object CompressionCodec {
@@ -196,5 +200,9 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     // Wrap the zstd input stream in a buffered input stream so that we can
     // avoid overhead excessive of JNI call while trying to uncompress small amount of data.
     new BufferedInputStream(new ZstdInputStream(s), bufferSize)
+  }
+
+  override def zstdEventLogCompressedInputStream(s: InputStream): InputStream = {
+    new BufferedInputStream(new ZstdInputStream(s).setContinuous(true), bufferSize)
   }
 }
