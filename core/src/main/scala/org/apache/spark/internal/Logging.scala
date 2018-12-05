@@ -95,10 +95,6 @@ trait Logging {
     if (log.isErrorEnabled) log.error(msg, throwable)
   }
 
-  protected def isTraceEnabled(): Boolean = {
-    log.isTraceEnabled
-  }
-
   protected def initializeLogIfNecessary(isInterpreter: Boolean): Unit = {
     initializeLogIfNecessary(isInterpreter, silent = false)
   }
