@@ -16,28 +16,19 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.HasMetadata
-
-import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesExecutorSpecificConf
 import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
-import org.apache.spark.internal.Logging
 
 /**
  * This step is responsible for setting ENV_SPARK_USER when HADOOP_FILES are detected
  * however, this step would not be run if Kerberos is enabled, as Kerberos sets SPARK_USER
  */
-private[spark] class HadoopSparkUserExecutorFeatureStep(
-    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
-  extends KubernetesFeatureConfigStep with Logging {
+private[spark] class HadoopSparkUserExecutorFeatureStep(conf: KubernetesExecutorConf)
+  extends KubernetesFeatureConfigStep {
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val sparkUserName = kubernetesConf.sparkConf.get(KERBEROS_SPARK_USER_NAME)
+    val sparkUserName = conf.get(KERBEROS_SPARK_USER_NAME)
     HadoopBootstrapUtil.bootstrapSparkUserPod(sparkUserName, pod)
   }
-
-  override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

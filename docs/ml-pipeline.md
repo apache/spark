@@ -62,7 +62,7 @@ In addition to the types listed in the Spark SQL guide, `DataFrame` can use ML [
 
 A `DataFrame` can be created either implicitly or explicitly from a regular `RDD`.  See the code examples below and the [Spark SQL programming guide](sql-programming-guide.html) for examples.
 
-Columns in a `DataFrame` are named.  The code examples below use names such as "text," "features," and "label."
+Columns in a `DataFrame` are named. The code examples below use names such as "text", "features", and "label".
 
 ## Pipeline components
 

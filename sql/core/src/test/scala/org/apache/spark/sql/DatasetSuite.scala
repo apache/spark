@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -697,15 +698,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-11894: Incorrect results are returned when using null") {
     val nullInt = null.asInstanceOf[java.lang.Integer]
-    val ds1 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
-    val ds2 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
+    val ds1 = Seq((nullInt, "1"), (java.lang.Integer.valueOf(22), "2")).toDS()
+    val ds2 = Seq((nullInt, "1"), (java.lang.Integer.valueOf(22), "2")).toDS()
 
     checkDataset(
       ds1.joinWith(ds2, lit(true), "cross"),
       ((nullInt, "1"), (nullInt, "1")),
-      ((nullInt, "1"), (new java.lang.Integer(22), "2")),
-      ((new java.lang.Integer(22), "2"), (nullInt, "1")),
-      ((new java.lang.Integer(22), "2"), (new java.lang.Integer(22), "2")))
+      ((nullInt, "1"), (java.lang.Integer.valueOf(22), "2")),
+      ((java.lang.Integer.valueOf(22), "2"), (nullInt, "1")),
+      ((java.lang.Integer.valueOf(22), "2"), (java.lang.Integer.valueOf(22), "2")))
   }
 
   test("change encoder with compatible schema") {
@@ -881,7 +882,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.rdd.map(r => r.id).count === 2)
     assert(ds2.rdd.map(r => r.id).count === 2)
 
-    val ds3 = ds.map(g => new java.lang.Long(g.id))
+    val ds3 = ds.map(g => java.lang.Long.valueOf(g.id))
     assert(ds3.rdd.map(r => r).count === 2)
   }
 
@@ -1311,15 +1312,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(dsString, arrayString)
   }
 
-  test("SPARK-18251: the type of Dataset can't be Option of Product type") {
-    checkDataset(Seq(Some(1), None).toDS(), Some(1), None)
-
-    val e = intercept[UnsupportedOperationException] {
-      Seq(Some(1 -> "a"), None).toDS()
-    }
-    assert(e.getMessage.contains("Cannot create encoder for Option of Product type"))
-  }
-
   test ("SPARK-17460: the sizeInBytes in Statistics shouldn't overflow to a negative number") {
     // Since the sizeInBytes in Statistics could exceed the limit of an Int, we should use BigInt
     // instead of Int for avoiding possible overflow.
@@ -1499,7 +1491,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(e.getCause.isInstanceOf[NullPointerException])
 
     withTempPath { path =>
-      Seq(new Integer(1), null).toDF("i").write.parquet(path.getCanonicalPath)
+      Seq(Integer.valueOf(1), null).toDF("i").write.parquet(path.getCanonicalPath)
       // If the primitive values are from files, we need to do runtime null check.
       val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
       intercept[NullPointerException](ds.collect())
@@ -1553,8 +1545,116 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
     checkAnswer(df.where('city === 'X'), Seq(Row("X")))
     checkAnswer(
-      df.where($"city".contains(new java.lang.Character('A'))),
+      df.where($"city".contains(java.lang.Character.valueOf('A'))),
       Seq(Row("Amsterdam")))
+  }
+
+  test("SPARK-24762: Enable top-level Option of Product encoders") {
+    val data = Seq(Some((1, "a")), Some((2, "b")), None)
+    val ds = data.toDS()
+
+    checkDataset(
+      ds,
+      data: _*)
+
+    val schema = new StructType().add(
+      "value",
+      new StructType()
+        .add("_1", IntegerType, nullable = false)
+        .add("_2", StringType, nullable = true),
+      nullable = true)
+
+    assert(ds.schema == schema)
+
+    val nestedOptData = Seq(Some((Some((1, "a")), 2.0)), Some((Some((2, "b")), 3.0)))
+    val nestedDs = nestedOptData.toDS()
+
+    checkDataset(
+      nestedDs,
+      nestedOptData: _*)
+
+    val nestedSchema = StructType(Seq(
+      StructField("value", StructType(Seq(
+        StructField("_1", StructType(Seq(
+          StructField("_1", IntegerType, nullable = false),
+          StructField("_2", StringType, nullable = true)))),
+        StructField("_2", DoubleType, nullable = false)
+      )), nullable = true)
+    ))
+    assert(nestedDs.schema == nestedSchema)
+  }
+
+  test("SPARK-24762: Resolving Option[Product] field") {
+    val ds = Seq((1, ("a", 1.0)), (2, ("b", 2.0)), (3, null)).toDS()
+      .as[(Int, Option[(String, Double)])]
+    checkDataset(ds,
+      (1, Some(("a", 1.0))), (2, Some(("b", 2.0))), (3, None))
+  }
+
+  test("SPARK-24762: select Option[Product] field") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    val ds1 = ds.select(expr("struct(_2, _2 + 1)").as[Option[(Int, Int)]])
+    checkDataset(ds1,
+      Some((1, 2)), Some((2, 3)), Some((3, 4)))
+
+    val ds2 = ds.select(expr("if(_2 > 2, struct(_2, _2 + 1), null)").as[Option[(Int, Int)]])
+    checkDataset(ds2,
+      None, None, Some((3, 4)))
+  }
+
+  test("SPARK-24762: joinWith on Option[Product]") {
+    val ds1 = Seq(Some((1, 2)), Some((2, 3)), None).toDS().as("a")
+    val ds2 = Seq(Some((1, 2)), Some((2, 3)), None).toDS().as("b")
+    val joined = ds1.joinWith(ds2, $"a.value._1" === $"b.value._2", "inner")
+    checkDataset(joined, (Some((2, 3)), Some((1, 2))))
+  }
+
+  test("SPARK-24762: typed agg on Option[Product] type") {
+    val ds = Seq(Some((1, 2)), Some((2, 3)), Some((1, 3))).toDS()
+    assert(ds.groupByKey(_.get._1).count().collect() === Seq((1, 2), (2, 1)))
+
+    assert(ds.groupByKey(x => x).count().collect() ===
+      Seq((Some((1, 2)), 1), (Some((2, 3)), 1), (Some((1, 3)), 1)))
+  }
+
+  test("SPARK-25942: typed aggregation on primitive type") {
+    val ds = Seq(1, 2, 3).toDS()
+
+    val agg = ds.groupByKey(_ >= 2)
+      .agg(sum("value").as[Long], sum($"value" + 1).as[Long])
+    checkDatasetUnorderly(agg, (false, 1L, 2L), (true, 5L, 7L))
+  }
+
+  test("SPARK-25942: typed aggregation on product type") {
+    val ds = Seq((1, 2), (2, 3), (3, 4)).toDS()
+    val agg = ds.groupByKey(x => x).agg(sum("_1").as[Long], sum($"_2" + 1).as[Long])
+    checkDatasetUnorderly(agg, ((1, 2), 1L, 3L), ((2, 3), 2L, 4L), ((3, 4), 3L, 5L))
+  }
+
+  test("SPARK-26085: fix key attribute name for atomic type for typed aggregation") {
+    val ds = Seq(1, 2, 3).toDS()
+    assert(ds.groupByKey(x => x).count().schema.head.name == "key")
+
+    // Enable legacy flag to follow previous Spark behavior
+    withSQLConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE.key -> "true") {
+      assert(ds.groupByKey(x => x).count().schema.head.name == "value")
+    }
+  }
+
+  test("SPARK-8288: class with only a companion object constructor") {
+    val data = Seq(ScroogeLikeExample(1), ScroogeLikeExample(2))
+    val ds = data.toDS
+    checkDataset(ds, data: _*)
+    checkAnswer(ds.select("x"), Seq(Row(1), Row(2)))
+  }
+
+  test("SPARK-26233: serializer should enforce decimal precision and scale") {
+    val s = StructType(Seq(StructField("a", StringType), StructField("b", DecimalType(38, 8))))
+    val encoder = RowEncoder(s)
+    implicit val uEnc = encoder
+    val df = spark.range(2).map(l => Row(l.toString, BigDecimal.valueOf(l + 0.1111)))
+    checkAnswer(df.groupBy(col("a")).agg(first(col("b"))),
+      Seq(Row("0", BigDecimal.valueOf(0.1111)), Row("1", BigDecimal.valueOf(1.1111))))
   }
 }
 

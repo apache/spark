@@ -257,7 +257,7 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        Scan ExistingRDD[age#0,name#1]
+        *(1) Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -485,10 +485,12 @@ class DataFrame(object):
         if not isinstance(name, str):
             raise TypeError("name should be provided as str, got {0}".format(type(name)))
 
+        allowed_types = (basestring, list, float, int)
         for p in parameters:
-            if not isinstance(p, str):
+            if not isinstance(p, allowed_types):
                 raise TypeError(
-                    "all parameters should be str, got {0} of type {1}".format(p, type(p)))
+                    "all parameters should be in {0}, got {1} of type {2}".format(
+                        allowed_types, p, type(p)))
 
         jdf = self._jdf.hint(name, self._jseq(parameters))
         return DataFrame(jdf, self.sql_ctx)
@@ -731,6 +733,11 @@ class DataFrame(object):
 
         At least one partition-by expression must be specified.
         When no explicit sort order is specified, "ascending nulls first" is assumed.
+
+        Note that due to performance reasons this method uses sampling to estimate the ranges.
+        Hence, the output may not be consistent, since sampling can return different values.
+        The sample size can be controlled by the config
+        `spark.sql.execution.rangeExchange.sampleSizePerPartition`.
 
         >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
         2
@@ -1443,6 +1450,17 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.union(other._jdf), self.sql_ctx)
 
+    @since(1.3)
+    def unionAll(self, other):
+        """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
+
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        Also as standard in SQL, this function resolves columns by position (not by name).
+        """
+        return self.union(other)
+
     @since(2.3)
     def unionByName(self, other):
         """ Returns a new :class:`DataFrame` containing union of rows in this and another frame.
@@ -1801,7 +1819,7 @@ class DataFrame(object):
 
         This method implements a variation of the Greenwald-Khanna
         algorithm (with some speed optimizations). The algorithm was first
-        present in [[http://dx.doi.org/10.1145/375663.375670
+        present in [[https://doi.org/10.1145/375663.375670
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
@@ -1923,7 +1941,7 @@ class DataFrame(object):
         """
         Finding frequent items for columns, possibly with false positives. Using the
         frequent element count algorithm described in
-        "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
+        "https://doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
         .. note:: This function is meant for exploratory data analysis, as we make no

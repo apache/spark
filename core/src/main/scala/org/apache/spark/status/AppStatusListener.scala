@@ -473,6 +473,7 @@ private[spark] class AppStatusListener(
       val locality = event.taskInfo.taskLocality.toString()
       val count = stage.localitySummary.getOrElse(locality, 0L) + 1L
       stage.localitySummary = stage.localitySummary ++ Map(locality -> count)
+      stage.activeTasksPerExecutor(event.taskInfo.executorId) += 1
       maybeUpdate(stage, now)
 
       stage.jobs.foreach { job =>
@@ -558,6 +559,7 @@ private[spark] class AppStatusListener(
       if (killedDelta > 0) {
         stage.killedSummary = killedTasksSummary(event.reason, stage.killedSummary)
       }
+      stage.activeTasksPerExecutor(event.taskInfo.executorId) -= 1
       // [SPARK-24415] Wait for all tasks to finish before removing stage from live list
       val removeStage =
         stage.activeTasks == 0 &&
@@ -582,7 +584,11 @@ private[spark] class AppStatusListener(
         if (killedDelta > 0) {
           job.killedSummary = killedTasksSummary(event.reason, job.killedSummary)
         }
-        conditionalLiveUpdate(job, now, removeStage)
+        if (removeStage) {
+          update(job, now)
+        } else {
+          maybeUpdate(job, now)
+        }
       }
 
       val esummary = stage.executorSummary(event.taskInfo.executorId)
@@ -593,7 +599,16 @@ private[spark] class AppStatusListener(
       if (metricsDelta != null) {
         esummary.metrics = LiveEntityHelpers.addMetrics(esummary.metrics, metricsDelta)
       }
-      conditionalLiveUpdate(esummary, now, removeStage)
+
+      val isLastTask = stage.activeTasksPerExecutor(event.taskInfo.executorId) == 0
+
+      // If the last task of the executor finished, then update the esummary
+      // for both live and history events.
+      if (isLastTask) {
+        update(esummary, now)
+      } else {
+        maybeUpdate(esummary, now)
+      }
 
       if (!stage.cleaning && stage.savedTasks.get() > maxTasksPerStage) {
         stage.cleaning = true
@@ -626,9 +641,14 @@ private[spark] class AppStatusListener(
         }
       }
 
-      // Force an update on live applications when the number of active tasks reaches 0. This is
-      // checked in some tests (e.g. SQLTestUtilsBase) so it needs to be reliably up to date.
-      conditionalLiveUpdate(exec, now, exec.activeTasks == 0)
+      // Force an update on both live and history applications when the number of active tasks
+      // reaches 0. This is checked in some tests (e.g. SQLTestUtilsBase) so it needs to be
+      // reliably up to date.
+      if (exec.activeTasks == 0) {
+        update(exec, now)
+      } else {
+        maybeUpdate(exec, now)
+      }
     }
   }
 
@@ -1006,14 +1026,6 @@ private[spark] class AppStatusListener(
   private def liveUpdate(entity: LiveEntity, now: Long): Unit = {
     if (live) {
       update(entity, now)
-    }
-  }
-
-  private def conditionalLiveUpdate(entity: LiveEntity, now: Long, condition: Boolean): Unit = {
-    if (condition) {
-      liveUpdate(entity, now)
-    } else {
-      maybeUpdate(entity, now)
     }
   }
 

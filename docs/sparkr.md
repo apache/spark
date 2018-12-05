@@ -133,7 +133,7 @@ specifying `--packages` with `spark-submit` or `sparkR` commands, or if initiali
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
+sparkR.session(sparkPackages = "org.apache.spark:spark-avro_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION}}")
 {% endhighlight %}
 </div>
 
@@ -296,7 +296,7 @@ head(agg(rollup(df, "cyl", "disp", "gear"), avg(df$mpg)))
 
 ### Operating on Columns
 
-SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
+SparkR also provides a number of functions that can be directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -718,4 +718,4 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 ## Upgrading to SparkR 3.0.0
 
  - The deprecated methods `sparkR.init`, `sparkRSQL.init`, `sparkRHive.init` have been removed. Use `sparkR.session` instead.
- - The deprecated methods `parquetFile`, `saveAsParquetFile`, `jsonFile`, `registerTempTable`, `createExternalTable`, `dropTempTable`, `unionAll` have been removed. Use `read.parquet`, `write.parquet`, `read.json`, `createOrReplaceTempView`, `createTable`, `dropTempView`, `union` instead.
+ - The deprecated methods `parquetFile`, `saveAsParquetFile`, `jsonFile`, `registerTempTable`, `createExternalTable`, and `dropTempTable` have been removed. Use `read.parquet`, `write.parquet`, `read.json`, `createOrReplaceTempView`, `createTable`, `dropTempView`, `union` instead.

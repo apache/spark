@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -56,8 +57,8 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
       case (key, value) =>
         key + ": " + StringUtils.abbreviate(redact(value), 100)
     }
-    val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
-    s"$nodeNamePrefix$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
+    val metadataStr = truncatedString(metadataEntries, " ", ", ", "")
+    s"$nodeNamePrefix$nodeName${truncatedString(output, "[", ",", "]")}$metadataStr"
   }
 
   override def verboseString: String = redact(super.verboseString)
@@ -83,7 +84,7 @@ case class RowDataSourceScanExec(
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val tableIdentifier: Option[TableIdentifier])
-  extends DataSourceScanExec {
+  extends DataSourceScanExec with InputRDDCodegen {
 
   def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
 
@@ -103,30 +104,10 @@ case class RowDataSourceScanExec(
     }
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    rdd :: Nil
-  }
+  // Input can be InternalRow, has to be turned into UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = true
 
-  override protected def doProduce(ctx: CodegenContext): String = {
-    val numOutputRows = metricTerm(ctx, "numOutputRows")
-    // PhysicalRDD always just has one input
-    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];")
-    val exprRows = output.zipWithIndex.map{ case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable)
-    }
-    val row = ctx.freshName("row")
-    ctx.INPUT_ROW = row
-    ctx.currentVars = null
-    val columnsRowInput = exprRows.map(_.genCode(ctx))
-    s"""
-       |while ($input.hasNext()) {
-       |  InternalRow $row = (InternalRow) $input.next();
-       |  $numOutputRows.add(1);
-       |  ${consume(ctx, columnsRowInput).trim}
-       |  if (shouldStop()) return;
-       |}
-     """.stripMargin
-  }
+  override def inputRDD: RDD[InternalRow] = rdd
 
   override val metadata: Map[String, String] = {
     val markedFilters = for (filter <- filters) yield {
@@ -387,7 +368,7 @@ case class FileSourceScanExec(
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
-        p.files.map { f =>
+        p.files.filter(_.getLen > 0).map { f =>
           val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
           PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
         }
@@ -437,7 +418,7 @@ case class FileSourceScanExec(
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
     val splitFiles = selectedPartitions.flatMap { partition =>
-      partition.files.flatMap { file =>
+      partition.files.filter(_.getLen > 0).flatMap { file =>
         val blockLocations = getBlockLocations(file)
         if (fsRelation.fileFormat.isSplitable(
             fsRelation.sparkSession, fsRelation.options, file.getPath)) {
