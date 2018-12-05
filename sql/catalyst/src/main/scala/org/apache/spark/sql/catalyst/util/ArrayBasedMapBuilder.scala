@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
  * A builder of [[ArrayBasedMapData]], which fails if a null map key is detected, and removes
@@ -54,6 +55,10 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
 
     val index = keyToIndex.getOrDefault(key, -1)
     if (index == -1) {
+      if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+        throw new RuntimeException(s"Unsuccessful attempt to build maps with $size elements " +
+          s"due to exceeding the map size limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+      }
       keyToIndex.put(key, values.length)
       keys.append(key)
       values.append(value)
@@ -117,4 +122,9 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       build()
     }
   }
+
+  /**
+   * Returns the current size of the map which is going to be produced by the current builder.
+   */
+  def size: Int = keys.size
 }
