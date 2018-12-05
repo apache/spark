@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.metric
 import java.text.NumberFormat
 import java.util.Locale
 
+import scala.concurrent.duration._
+
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
@@ -172,7 +174,7 @@ object SQLMetrics {
       } else if (metricsType == TIMING_METRIC) {
         Utils.msDurationToString
       } else if (metricsType == NS_TIMING_METRIC) {
-        duration => Utils.msDurationToString(duration / 1000 / 1000)
+        duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
         throw new IllegalStateException("unexpected metrics type: " + metricsType)
       }
