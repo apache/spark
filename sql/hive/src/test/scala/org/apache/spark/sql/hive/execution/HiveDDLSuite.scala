@@ -2374,10 +2374,12 @@ class HiveDDLSuite
   test("SPARK-25993 Add test cases for resolution of Parquet table location") {
     withTempPath { path =>
         val someDF1 = Seq((1, 1, "parq1"), (2, 2, "parq2")).toDF("c1", "c2", "c3").repartition(1)
-        withTable("tbl1", "tbl2") {
-        val dataDir = s"${path.getCanonicalPath}/dir1/"
-        val parentDir = s"${path.getCanonicalPath}/"
-        val wildCardDir = new File(s"${path}/*").toURI
+        withTable("tbl1", "tbl2", "tbl3") {
+        val dataDir = s"${path.getCanonicalPath}/l3/l2/l1/"
+        val parentDir = s"${path.getCanonicalPath}/l3/l2/"
+        val l3Dir = s"${path.getCanonicalPath}/l3/"
+        val wildcardParentDir = new File(s"${path}/l3/l2/*").toURI
+        val wildcardL3Dir = new File(s"${path}/l3/*").toURI
         someDF1.write.parquet(dataDir)
         val parentDirStatement =
           s"""
@@ -2390,17 +2392,28 @@ class HiveDDLSuite
         sql(parentDirStatement)
         checkAnswer(sql("select * from tbl1"), Nil)
 
-        val wildCardStatement =
+        val wildcardStatement =
           s"""
              |CREATE EXTERNAL TABLE tbl2(
              |  c1 int,
              |  c2 int,
              |  c3 string)
              |STORED AS parquet
-             |LOCATION '${wildCardDir}'""".stripMargin
-        sql(wildCardStatement)
+             |LOCATION '${wildcardParentDir}'""".stripMargin
+        sql(wildcardStatement)
         checkAnswer(sql("select * from tbl2"),
           (1 to 2).map(i => Row(i, i, s"parq$i")))
+
+        val wildcardL3Statement =
+            s"""
+               |CREATE EXTERNAL TABLE tbl3(
+               |  c1 int,
+               |  c2 int,
+               |  c3 string)
+               |STORED AS parquet
+               |LOCATION '${wildcardL3Dir}'""".stripMargin
+        sql(wildcardL3Statement)
+        checkAnswer(sql("select * from tbl3"), Nil)
       }
     }
   }
