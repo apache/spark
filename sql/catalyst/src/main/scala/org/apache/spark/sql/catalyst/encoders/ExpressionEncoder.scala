@@ -303,7 +303,7 @@ case class ExpressionEncoder[T](
   private lazy val inputRow = new GenericInternalRow(1)
 
   @transient
-  private lazy val constructProjection = GenerateSafeProjection.generate(deserializer :: Nil)
+  private lazy val constructProjection = SafeProjection.create(deserializer :: Nil)
 
   /**
    * Returns a new set (with unique ids) of [[NamedExpression]] that represent the serialized form

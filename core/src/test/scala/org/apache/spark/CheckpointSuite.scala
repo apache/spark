@@ -586,8 +586,7 @@ object CheckpointSuite {
 class CheckpointCompressionSuite extends SparkFunSuite with LocalSparkContext {
 
   test("checkpoint compression") {
-    val checkpointDir = Utils.createTempDir()
-    try {
+    withTempDir { checkpointDir =>
       val conf = new SparkConf()
         .set("spark.checkpoint.compress", "true")
         .set("spark.ui.enabled", "false")
@@ -616,8 +615,6 @@ class CheckpointCompressionSuite extends SparkFunSuite with LocalSparkContext {
 
       // Verify that the compressed content can be read back
       assert(rdd.collect().toSeq === (1 to 20))
-    } finally {
-      Utils.deleteRecursively(checkpointDir)
     }
   }
 }

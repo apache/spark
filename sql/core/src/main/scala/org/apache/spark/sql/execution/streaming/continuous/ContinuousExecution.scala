@@ -200,6 +200,7 @@ class ContinuousExecution(
         withSink,
         outputMode,
         checkpointFile("state"),
+        id,
         runId,
         currentBatchId,
         offsetSeqMetadata)
