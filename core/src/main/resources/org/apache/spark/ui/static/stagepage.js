@@ -667,8 +667,9 @@ $(document).ready(function () {
                         {data : "launchTime", name: "Launch Time", render: formatDate},
                         {
                             data : function (row, type) {
-                                if (row.duration) {
-                                    return type === 'display' ? formatDuration(row.duration) : row.duration;
+                                // SPARK-26281: Duration column of task table should be executorRunTime instead of real duration
+                                if (row.taskMetrics && row.taskMetrics.executorRunTime) {
+                                    return type === 'display' ? formatDuration(row.taskMetrics.executorRunTime) : row.taskMetrics.executorRunTime;
                                 } else {
                                     return "";
                                 }
