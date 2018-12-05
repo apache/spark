@@ -32,6 +32,7 @@ import org.apache.spark.util.Utils
 class HiveParquetSourceSuite extends ParquetPartitioningTest {
   import testImplicits._
   import spark._
+  import java.io.IOException
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -220,6 +221,68 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
       val df4 = read.parquet(filePath2)
       checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
       assert(df4.columns === Array("str", "max_int"))
+    }
+  }
+
+  test("SPARK-25993 CREATE EXTERNAL TABLE with subdirectories") {
+    withTempPath { path =>
+      withTable("tbl1", "tbl2", "tbl3") {
+        val someDF1 = Seq((1, 1, "parq1"), (2, 2, "parq2")).
+          toDF("c1", "c2", "c3").repartition(1)
+        val dataDir = s"${path.getCanonicalPath}/l3/l2/l1/"
+        val parentDir = s"${path.getCanonicalPath}/l3/l2/"
+        val wildcardParentDir = new File(s"${path}/l3/l2/*").toURI
+        val wildcardL3Dir = new File(s"${path}/l3/*").toURI
+        someDF1.write.parquet(dataDir)
+        val parentDirStatement =
+          s"""
+             |CREATE EXTERNAL TABLE tbl1(
+             |  c1 int,
+             |  c2 int,
+             |  c3 string)
+             |STORED AS parquet
+             |LOCATION '${parentDir}'""".stripMargin
+        sql(parentDirStatement)
+        val wildcardStatement =
+          s"""
+             |CREATE EXTERNAL TABLE tbl2(
+             |  c1 int,
+             |  c2 int,
+             |  c3 string)
+             |STORED AS parquet
+             |LOCATION '${wildcardParentDir}'""".stripMargin
+        sql(wildcardStatement)
+        val wildcardL3Statement =
+          s"""
+             |CREATE EXTERNAL TABLE tbl3(
+             |  c1 int,
+             |  c2 int,
+             |  c3 string)
+             |STORED AS parquet
+             |LOCATION '${wildcardL3Dir}'""".stripMargin
+        sql(wildcardL3Statement)
+
+        Seq("true", "false").foreach { parquetConversion =>
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> parquetConversion) {
+            if (parquetConversion == "true") {
+              checkAnswer(sql("select * from tbl1"), Nil)
+              checkAnswer(sql("select * from tbl2"),
+                (1 to 2).map(i => Row(i, i, s"parq$i")))
+              checkAnswer(sql("select * from tbl3"), Nil)
+            } else {
+              Seq("select * from tbl1", "select * from tbl2", "select * from tbl3").foreach {
+                sqlStmt =>
+                  try {
+                    sql(sqlStmt)
+                  } catch {
+                    case e: IOException =>
+                      assert(e.getMessage().contains("java.io.IOException: Not a file"))
+                  }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
