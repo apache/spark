@@ -318,7 +318,7 @@ private[spark] class SparkSubmit extends Logging {
 
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
         args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
-        if (args.isPython) {
+        if (args.isPython || isInternal(args.primaryResource)) {
           args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
         }
       }
@@ -335,7 +335,7 @@ private[spark] class SparkSubmit extends Logging {
     val targetDir = Utils.createTempDir()
 
     // assure a keytab is available from any place in a JVM
-    if (clusterManager == YARN || clusterManager == LOCAL || isMesosClient) {
+    if (clusterManager == YARN || clusterManager == LOCAL || isMesosClient || isKubernetesCluster) {
       if (args.principal != null) {
         if (args.keytab != null) {
           require(new File(args.keytab).exists(), s"Keytab file: ${args.keytab} does not exist")
@@ -646,7 +646,8 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    if (clusterManager == MESOS && UserGroupInformation.isSecurityEnabled) {
+    if ((clusterManager == MESOS || clusterManager == KUBERNETES)
+       && UserGroupInformation.isSecurityEnabled) {
       setRMPrincipal(sparkConf)
     }
 
@@ -762,8 +763,8 @@ private[spark] class SparkSubmit extends Logging {
   }
 
   // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
-  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos mode, we
-  // must trick it into thinking we're YARN.
+  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos or Kubernetes
+  // mode, we must trick it into thinking we're YARN.
   private def setRMPrincipal(sparkConf: SparkConf): Unit = {
     val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
     val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
@@ -812,14 +813,14 @@ private[spark] class SparkSubmit extends Logging {
       mainClass = Utils.classForName(childMainClass)
     } catch {
       case e: ClassNotFoundException =>
-        logWarning(s"Failed to load $childMainClass.", e)
+        logError(s"Failed to load class $childMainClass.")
         if (childMainClass.contains("thriftserver")) {
           logInfo(s"Failed to load main class $childMainClass.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
         throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
       case e: NoClassDefFoundError =>
-        logWarning(s"Failed to load $childMainClass: ${e.getMessage()}")
+        logError(s"Failed to load $childMainClass: ${e.getMessage()}")
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
           logInfo(s"Failed to load hive class.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
@@ -828,7 +829,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
-      mainClass.newInstance().asInstanceOf[SparkApplication]
+      mainClass.getConstructor().newInstance().asInstanceOf[SparkApplication]
     } else {
       // SPARK-4170
       if (classOf[scala.App].isAssignableFrom(mainClass)) {
@@ -914,6 +915,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
           override protected def logInfo(msg: => String): Unit = self.logInfo(msg)
 
           override protected def logWarning(msg: => String): Unit = self.logWarning(msg)
+
+          override protected def logError(msg: => String): Unit = self.logError(msg)
         }
       }
 
@@ -921,14 +924,14 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
       override protected def logWarning(msg: => String): Unit = printMessage(s"Warning: $msg")
 
+      override protected def logError(msg: => String): Unit = printMessage(s"Error: $msg")
+
       override def doSubmit(args: Array[String]): Unit = {
         try {
           super.doSubmit(args)
         } catch {
           case e: SparkUserAppException =>
             exitFn(e.exitCode)
-          case e: SparkException =>
-            printErrorAndExit(e.getMessage())
         }
       }
 
@@ -993,9 +996,9 @@ private[spark] object SparkSubmitUtils {
 
   // Exposed for testing.
   // These components are used to make the default exclusion rules for Spark dependencies.
-  // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
-  // other spark-streaming utility components. Underscore is there to differentiate between
-  // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
+  // We need to specify each component explicitly, otherwise we miss
+  // spark-streaming utility components. Underscore is there to differentiate between
+  // spark-streaming_2.1x and spark-streaming-kafka-0-10-assembly_2.1x
   val IVY_DEFAULT_EXCLUDES = Seq("catalyst_", "core_", "graphx_", "kvstore_", "launcher_", "mllib_",
     "mllib-local_", "network-common_", "network-shuffle_", "repl_", "sketch_", "sql_", "streaming_",
     "tags_", "unsafe_")

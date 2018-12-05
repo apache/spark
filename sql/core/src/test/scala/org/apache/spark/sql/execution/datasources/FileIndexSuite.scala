@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
 
 class FileIndexSuite extends SharedSQLContext {
@@ -46,6 +47,51 @@ class FileIndexSuite extends SharedSQLContext {
       }
       assert(catalog.leafFilePaths.forall(p => p.toString.startsWith("file:/")))
       assert(catalog.leafDirPaths.forall(p => p.toString.startsWith("file:/")))
+    }
+  }
+
+  test("SPARK-26188: don't infer data types of partition columns if user specifies schema") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=4d")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val schema = StructType(Seq(StructField("a", StringType, false)))
+      val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+      val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
+      assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
+        partitionValues(0).getString(0) == "4d")
+    }
+  }
+
+  test("SPARK-26230: if case sensitive, validate partitions with original column names") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=1")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val partitionDirectory2 = new File(dir, "A=2")
+      partitionDirectory2.mkdir()
+      val file2 = new File(partitionDirectory2, "text.txt")
+      stringToFile(file2, "text")
+      val path = new Path(dir.getCanonicalPath)
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+        val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
+        assert(partitionValues.length == 2)
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val msg = intercept[AssertionError] {
+          val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+          fileIndex.partitionSpec()
+        }.getMessage
+        assert(msg.contains("Conflicting partition column names detected"))
+        assert("Partition column name list #[0-1]: A".r.findFirstIn(msg).isDefined)
+        assert("Partition column name list #[0-1]: a".r.findFirstIn(msg).isDefined)
+      }
     }
   }
 

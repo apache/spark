@@ -12,6 +12,23 @@ Kubernetes scheduler that has been added to Spark.
 In future versions, there may be behavioral changes around configuration,
 container images and entrypoints.**
 
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific advice below before running Spark.
+
+## User Identity
+
+Images built from the project provided Dockerfiles contain a default [`USER`](https://docs.docker.com/engine/reference/builder/#user) directive with a default UID of `185`.  This means that the resulting images will be running the Spark processes as this UID inside the container. Security conscious deployments should consider providing custom images with `USER` directives specifying their desired unprivileged UID and GID.  The resulting UID should include the root group in its supplementary groups in order to be able to run the Spark executables.  Users building their own images with the provided `docker-image-tool.sh` script can use the `-u <uid>` option to specify the desired UID.
+
+Alternatively the [Pod Template](#pod-template) feature can be used to add a [Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#volumes-and-file-systems) with a `runAsUser` to the pods that Spark submits.  This can be used to override the `USER` directives in the images themselves.  Please bear in mind that this requires cooperation from your users and as such may not be a suitable solution for shared environments.  Cluster administrators should use [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#users-and-groups) if they wish to limit the users that pods may run as.
+
+## Volume Mounts
+
+As described later in this document under [Using Kubernetes Volumes](#using-kubernetes-volumes) Spark on K8S provides configuration options that allow for mounting certain volume types into the driver and executor pods.  In particular it allows for [`hostPath`](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath) volumes which as described in the Kubernetes documentation have known security vulnerabilities.
+
+Cluster administrators should use [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/) to limit the ability to mount `hostPath` volumes appropriately for their environments.
+
 # Prerequisites
 
 * A runnable distribution of Spark 2.3 or above.
@@ -45,7 +62,8 @@ logs and remains in "completed" state in the Kubernetes API until it's eventuall
 
 Note that in the completed state, the driver pod does *not* use any computational or memory resources.
 
-The driver and executor pod scheduling is handled by Kubernetes. It is possible to schedule the
+The driver and executor pod scheduling is handled by Kubernetes. Communication to the Kubernetes API is done via fabric8, and we are 
+currently running <code>kubernetes-client</code> version <code>4.1.0</code>. Make sure that when you are making infrastructure additions that you are aware of said version. It is possible to schedule the
 driver and executor pods on a subset of available nodes through a [node selector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
 using the configuration property for it. It will be possible to use more advanced
 scheduling hints like [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) in a future release.
@@ -68,6 +86,19 @@ Example usage is:
 ```bash
 $ ./bin/docker-image-tool.sh -r <repo> -t my-tag build
 $ ./bin/docker-image-tool.sh -r <repo> -t my-tag push
+```
+This will build using the projects provided default `Dockerfiles`. To see more options available for customising the behaviour of this tool, including providing custom `Dockerfiles`, please run with the `-h` flag.
+
+By default `bin/docker-image-tool.sh` builds docker image for running JVM jobs. You need to opt-in to build additional 
+language binding docker images.
+
+Example usage is
+```bash
+# To build additional PySpark docker image
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
+
+# To build additional SparkR docker image
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile build
 ```
 
 ## Cluster Mode
@@ -136,7 +167,7 @@ hostname via `spark.driver.host` and your spark driver's port to `spark.driver.p
 
 ### Client Mode Executor Pod Garbage Collection
 
-If you run your Spark driver in a pod, it is highly recommended to set `spark.driver.pod.name` to the name of that pod.
+If you run your Spark driver in a pod, it is highly recommended to set `spark.kubernetes.driver.pod.name` to the name of that pod.
 When this property is set, the Spark scheduler will deploy the executor pods with an
 [OwnerReference](https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/), which in turn will
 ensure that once the driver pod is deleted from the cluster, all of the application's executor pods will also be deleted.
@@ -145,7 +176,7 @@ an OwnerReference pointing to that pod will be added to each executor pod's Owne
 setting the OwnerReference to a pod that is not actually that driver pod, or else the executors may be terminated
 prematurely when the wrong pod is deleted.
 
-If your application is not running inside a pod, or if `spark.driver.pod.name` is not set when your application is
+If your application is not running inside a pod, or if `spark.kubernetes.driver.pod.name` is not set when your application is
 actually running in a pod, keep in mind that the executor pods may not be properly deleted from the cluster when the
 application exits. The Spark scheduler attempts to delete these pods, but if the network request to the API server fails
 for any reason, these pods will remain in the cluster. The executor processes should exit when they cannot reach the
@@ -185,6 +216,22 @@ To use a secret through an environment variable use the following options to the
 --conf spark.kubernetes.executor.secretKeyRef.ENV_NAME=name:key
 ```
 
+## Pod Template
+Kubernetes allows defining pods from [template files](https://kubernetes.io/docs/concepts/workloads/pods/pod-overview/#pod-templates).
+Spark users can similarly use template files to define the driver or executor pod configurations that Spark configurations do not support.
+To do so, specify the spark properties `spark.kubernetes.driver.podTemplateFile` and `spark.kubernetes.executor.podTemplateFile`
+to point to local files accessible to the `spark-submit` process. To allow the driver pod access the executor pod template
+file, the file will be automatically mounted onto a volume in the driver pod when it's created.
+Spark does not do any validation after unmarshalling these template files and relies on the Kubernetes API server for validation.
+
+It is important to note that Spark is opinionated about certain pod configurations so there are values in the
+pod template that will always be overwritten by Spark. Therefore, users of this feature should note that specifying
+the pod template file only lets Spark start with a template pod instead of an empty pod during the pod-building process.
+For details, see the [full list](#pod-template-properties) of pod template values that will be overwritten by spark.
+
+Pod template files can also define multiple containers. In such cases, Spark will always assume that the first container in
+the list will be the driver or executor container.
+
 ## Using Kubernetes Volumes
 
 Starting with Spark 2.4.0, users can mount the following types of Kubernetes [volumes](https://kubernetes.io/docs/concepts/storage/volumes/) into the driver and executor pods:
@@ -192,11 +239,14 @@ Starting with Spark 2.4.0, users can mount the following types of Kubernetes [vo
 * [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir): an initially empty volume created when a pod is assigned to a node.
 * [persistentVolumeClaim](https://kubernetes.io/docs/concepts/storage/volumes/#persistentvolumeclaim): used to mount a `PersistentVolume` into a pod.
 
+**NB:** Please see the [Security](#security) section of this document for security issues related to volume mounts.
+
 To mount a volume of any of the types above into the driver pod, use the following configuration property:
 
 ```
 --conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.path=<mount path>
 --conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.readOnly=<true|false>
+--conf spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.subPath=<mount subPath>
 ``` 
 
 Specifically, `VolumeType` can be one of the following values: `hostPath`, `emptyDir`, and `persistentVolumeClaim`. `VolumeName` is the name you want to use for the volume under the `volumes` field in the pod specification.
@@ -759,6 +809,14 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.subPath</code></td>
+  <td>(none)</td>
+  <td>
+   Specifies a <a href="https://kubernetes.io/docs/concepts/storage/volumes/#using-subpath">subpath</a> to be mounted from the volume into the driver pod.
+   <code>spark.kubernetes.driver.volumes.persistentVolumeClaim.checkpointpvc.mount.subPath=checkpoint</code>.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.readOnly</code></td>
   <td>(none)</td>
   <td>
@@ -780,6 +838,14 @@ specific to Spark on Kubernetes.
   <td>
    Add the <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Kubernetes Volume</a> named <code>VolumeName</code> of the <code>VolumeType</code> type to the executor pod on the path specified in the value. For example,
    <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.mount.path=/checkpoint</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].mount.subPath</code></td>
+  <td>(none)</td>
+  <td>
+   Specifies a <a href="https://kubernetes.io/docs/concepts/storage/volumes/#using-subpath">subpath</a> to be mounted from the volume into the executor pod.
+   <code>spark.kubernetes.executor.volumes.persistentVolumeClaim.checkpointpvc.mount.subPath=checkpoint</code>.
   </td>
 </tr>
 <tr>
@@ -816,9 +882,221 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
-  <td><code>"2"</code></td>
+  <td><code>"3"</code></td>
   <td>
    This sets the major Python version of the docker image used to run the driver and executor containers. Can either be 2 or 3. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.krb5.path</code></td>
+  <td><code>(none)</code></td>
+  <td>
+   Specify the local location of the krb5.conf file to be mounted on the driver and executors for Kerberos interaction.
+   It is important to note that the KDC defined needs to be visible from inside the containers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.krb5.configMapName</code></td>
+  <td><code>(none)</code></td>
+  <td>
+   Specify the name of the ConfigMap, containing the krb5.conf file, to be mounted on the driver and executors
+   for Kerberos interaction. The KDC defined needs to be visible from inside the containers. The ConfigMap must also
+   be in the same namespace of the driver and executor pods.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.hadoop.configMapName</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, to be mounted on the driver 
+    and executors for custom Hadoop configuration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokenSecret.name</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the name of the secret where your existing delegation tokens are stored. This removes the need for the job user
+    to provide any kerberos credentials for launching a job. 
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.kerberos.tokenSecret.itemKey</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Specify the item key of the data where your existing delegation tokens are stored. This removes the need for the job user 
+    to provide any kerberos credentials for launching a job.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.podTemplateFile</code></td>
+  <td>(none)</td>
+  <td>
+   Specify the local file that contains the driver [pod template](#pod-template). For example
+   <code>spark.kubernetes.driver.podTemplateFile=/path/to/driver-pod-template.yaml`</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.podTemplateFile</code></td>
+  <td>(none)</td>
+  <td>
+   Specify the local file that contains the executor [pod template](#pod-template). For example
+   <code>spark.kubernetes.executor.podTemplateFile=/path/to/executor-pod-template.yaml`</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.deleteOnTermination</code></td>
+  <td>true</td>
+  <td>
+  Specify whether executor pods should be deleted in case of failure or normal termination.
+  </td>
+</tr>
+</table>
+
+#### Pod template properties
+
+See the below table for the full list of pod specifications that will be overwritten by spark.
+
+### Pod Metadata
+
+<table class="table">
+<tr><th>Pod metadata key</th><th>Modified value</th><th>Description</th></tr>
+<tr>
+  <td>name</td>
+  <td>Value of <code>spark.kubernetes.driver.pod.name</code></td>
+  <td>
+    The driver pod name will be overwritten with either the configured or default value of
+    <code>spark.kubernetes.driver.pod.name</code>. The executor pod names will be unaffected.
+  </td>
+</tr>
+<tr>
+  <td>namespace</td>
+  <td>Value of <code>spark.kubernetes.namespace</code></td>
+  <td>
+    Spark makes strong assumptions about the driver and executor namespaces. Both driver and executor namespaces will
+    be replaced by either the configured or default spark conf value.
+  </td>
+</tr>
+<tr>
+  <td>labels</td>
+  <td>Adds the labels from <code>spark.kubernetes.{driver,executor}.label.*</code></td>
+  <td>
+    Spark will add additional labels specified by the spark configuration.
+  </td>
+</tr>
+<tr>
+  <td>annotations</td>
+  <td>Adds the annotations from <code>spark.kubernetes.{driver,executor}.annotation.*</code></td>
+  <td>
+    Spark will add additional labels specified by the spark configuration.
+  </td>
+</tr>
+</table>
+
+### Pod Spec
+
+<table class="table">
+<tr><th>Pod spec key</th><th>Modified value</th><th>Description</th></tr>
+<tr>
+  <td>imagePullSecrets</td>
+  <td>Adds image pull secrets from <code>spark.kubernetes.container.image.pullSecrets</code></td>
+  <td>
+    Additional pull secrets will be added from the spark configuration to both executor pods.
+  </td>
+</tr>
+<tr>
+  <td>nodeSelector</td>
+  <td>Adds node selectors from <code>spark.kubernetes.node.selector.*</code></td>
+  <td>
+    Additional node selectors will be added from the spark configuration to both executor pods.
+  </td>
+</tr>
+<tr>
+  <td>restartPolicy</td>
+  <td><code>"never"</code></td>
+  <td>
+    Spark assumes that both drivers and executors never restart.
+  </td>
+</tr>
+<tr>
+  <td>serviceAccount</td>
+  <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
+  <td>
+    Spark will override <code>serviceAccount</code> with the value of the spark configuration for only
+    driver pods, and only if the spark configuration is specified. Executor pods will remain unaffected.
+  </td>
+</tr>
+<tr>
+  <td>serviceAccountName</td>
+  <td>Value of <code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
+  <td>
+    Spark will override <code>serviceAccountName</code> with the value of the spark configuration for only
+    driver pods, and only if the spark configuration is specified. Executor pods will remain unaffected.
+  </td>
+</tr>
+<tr>
+  <td>volumes</td>
+  <td>Adds volumes from <code>spark.kubernetes.{driver,executor}.volumes.[VolumeType].[VolumeName].mount.path</code></td>
+  <td>
+    Spark will add volumes as specified by the spark conf, as well as additional volumes necessary for passing
+    spark conf and pod template files.
+  </td>
+</tr>
+</table>
+
+### Container spec
+
+The following affect the driver and executor containers. All other containers in the pod spec will be unaffected.
+
+<table class="table">
+<tr><th>Container spec key</th><th>Modified value</th><th>Description</th></tr>
+<tr>
+  <td>env</td>
+  <td>Adds env variables from <code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td>
+  <td>
+    Spark will add driver env variables from <code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code>, and
+    executor env variables from <code>spark.executorEnv.[EnvironmentVariableName]</code>.
+  </td>
+</tr>
+<tr>
+  <td>image</td>
+  <td>Value of <code>spark.kubernetes.{driver,executor}.container.image</code></td>
+  <td>
+    The image will be defined by the spark configurations.
+  </td>
+</tr>
+<tr>
+  <td>imagePullPolicy</td>
+  <td>Value of <code>spark.kubernetes.container.image.pullPolicy</code></td>
+  <td>
+    Spark will override the pull policy for both driver and executors.
+  </td>
+</tr>
+<tr>
+  <td>name</td>
+  <td>See description.</code></td>
+  <td>
+    The container name will be assigned by spark ("spark-kubernetes-driver" for the driver container, and
+    "executor" for each executor container) if not defined by the pod template. If the container is defined by the
+    template, the template's name will be used.
+  </td>
+</tr>
+<tr>
+  <td>resources</td>
+  <td>See description</td>
+  <td>
+    The cpu limits are set by <code>spark.kubernetes.{driver,executor}.limit.cores</code>. The cpu is set by
+    <code>spark.{driver,executor}.cores</code>. The memory request and limit are set by summing the values of
+    <code>spark.{driver,executor}.memory</code> and <code>spark.{driver,executor}.memoryOverhead</code>.
+
+  </td>
+</tr>
+<tr>
+  <td>volumeMounts</td>
+  <td>Add volumes from <code>spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].mount.{path,readOnly}</code></td>
+  <td>
+    Spark will add volumes as specified by the spark conf, as well as additional volumes necessary for passing
+    spark conf and pod template files.
   </td>
 </tr>
 </table>

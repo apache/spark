@@ -349,7 +349,7 @@ object KMeansSuite extends SparkFunSuite {
       case (ca: DenseVector, cb: DenseVector) =>
         assert(ca === cb)
       case _ =>
-        throw new AssertionError("checkEqual failed since the two clusters were not identical.\n")
+        fail("checkEqual failed since the two clusters were not identical.\n")
     }
   }
 }

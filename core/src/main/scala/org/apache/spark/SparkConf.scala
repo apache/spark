@@ -25,9 +25,9 @@ import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
-import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.History._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -729,9 +729,11 @@ private[spark] object SparkConf extends Logging {
     EXECUTOR_MEMORY_OVERHEAD.key -> Seq(
       AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3")),
     KEYTAB.key -> Seq(
-      AlternateConfig("spark.yarn.keytab", "2.5")),
+      AlternateConfig("spark.yarn.keytab", "3.0")),
     PRINCIPAL.key -> Seq(
-      AlternateConfig("spark.yarn.principal", "2.5"))
+      AlternateConfig("spark.yarn.principal", "3.0")),
+    KERBEROS_RELOGIN_PERIOD.key -> Seq(
+      AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0"))
   )
 
   /**

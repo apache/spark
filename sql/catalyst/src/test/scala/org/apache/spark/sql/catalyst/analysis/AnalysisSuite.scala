@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
 
@@ -25,6 +25,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
   RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -314,24 +316,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     // non-primitive parameters do not need special null handling
-    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil)
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil, true :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
-      nullableTypes = true :: false :: Nil)
+      true :: false :: Nil)
     val expected2 =
-      If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
+      If(IsNull(double), nullResult, udf2.copy(inputsNullSafe = true :: true :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
     val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
-      nullableTypes = false :: false :: Nil)
+      false :: false :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3.copy(children = KnownNotNull(short) :: KnownNotNull(double) :: Nil))
+      udf3.copy(inputsNullSafe = true :: true :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
@@ -340,19 +342,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       (s: Short, d: Double) => "x",
       StringType,
       short :: double.withNullability(false) :: Nil,
-      nullableTypes = false :: false :: Nil)
+      false :: false :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4.copy(children = KnownNotNull(short) :: double.withNullability(false) :: Nil))
+      udf4.copy(inputsNullSafe = true :: true :: Nil))
     // checkUDF(udf4, expected4)
   }
 
   test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
     val a = testRelation.output(0)
     val func = (x: Int, y: Int) => x + y
-    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil)
-    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil)
+    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil, false :: false :: Nil)
+    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil, false :: false :: Nil)
     val plan = Project(Alias(udf2, "")() :: Nil, testRelation)
     comparePlans(plan.analyze, plan.analyze.analyze)
   }
@@ -603,5 +605,26 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))()), testRelation).analyze
       checkAnalysis(input, expected)
     }
+  }
+
+  test("SPARK-25691: AliasViewChild with different nullabilities") {
+    object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("View", Once, AliasViewChild(conf), EliminateView) :: Nil
+    }
+    val relation = LocalRelation('a.int.notNull, 'b.string)
+    val view = View(CatalogTable(
+        identifier = TableIdentifier("v1"),
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+      output = Seq('a.int, 'b.string),
+      child = relation)
+    val tz = Option(conf.sessionLocalTimeZone)
+    val expected = Project(Seq(
+        Alias(Cast('a.int.notNull, IntegerType, tz), "a")(),
+        Alias(Cast('b.string, StringType, tz), "b")()),
+      relation)
+    val res = ViewAnalyzer.execute(view)
+    comparePlans(res, expected)
   }
 }

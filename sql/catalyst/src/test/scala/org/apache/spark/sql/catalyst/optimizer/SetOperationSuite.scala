@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, GreaterThanOrEqual, If, Literal, ReplicateRows}
+import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, GreaterThanOrEqual, If, Literal, Rand, ReplicateRows}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -195,5 +195,32 @@ class SetOperationSuite extends PlanTest {
         planFragment
       ))
     comparePlans(expectedPlan, rewrittenPlan)
+  }
+
+  test("SPARK-23356 union: expressions with literal in project list are pushed down") {
+    val unionQuery = testUnion.select(('a + 1).as("aa"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(('a + 1).as("aa")) ::
+        testRelation2.select(('d + 1).as("aa")) ::
+        testRelation3.select(('g + 1).as("aa")) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: expressions in project list are pushed down") {
+    val unionQuery = testUnion.select(('a + 'b).as("ab"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(('a + 'b).as("ab")) ::
+        testRelation2.select(('d + 'e).as("ab")) ::
+        testRelation3.select(('g + 'h).as("ab")) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: no pushdown for non-deterministic expression") {
+    val unionQuery = testUnion.select('a, Rand(10).as("rnd"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer = unionQuery.analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
   }
 }
