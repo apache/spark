@@ -231,11 +231,16 @@ object Partitioning {
                 case other => Seq(other)
               }
             }
-        }
+        }.distinct
         if (validPartitionings.size == 1) {
           validPartitionings.head
         } else {
-          PartitioningCollection(validPartitionings)
+          validPartitionings.filterNot(_.isInstanceOf[UnknownPartitioning]) match {
+            case Seq() => PartitioningCollection(validPartitionings)
+            case Seq(knownPartitioning) => knownPartitioning
+            case knownPartitionings => PartitioningCollection(knownPartitionings)
+          }
+
         }
       case other => other
     }
