@@ -2354,7 +2354,7 @@ class RDD(object):
         The algorithm used is based on streamlib's implementation of
         `"HyperLogLog in Practice: Algorithmic Engineering of a State
         of The Art Cardinality Estimation Algorithm", available here
-        <http://dx.doi.org/10.1145/2452376.2452456>`_.
+        <https://doi.org/10.1145/2452376.2452456>`_.
 
         :param relativeSD: Relative accuracy. Smaller values create
                            counters that require more space.
@@ -2399,7 +2399,7 @@ class RDD(object):
         :return: an :class:`RDDBarrier` instance that provides actions within a barrier stage.
 
         .. seealso:: :class:`BarrierTaskContext`
-        .. seealso:: `SPIP: Barrier Execution Mode \
+        .. seealso:: `SPIP: Barrier Execution Mode
             <http://jira.apache.org/jira/browse/SPARK-24374>`_
         .. seealso:: `Design Doc <https://jira.apache.org/jira/browse/SPARK-24582>`_
 

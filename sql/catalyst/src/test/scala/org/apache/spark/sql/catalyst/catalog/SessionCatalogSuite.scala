@@ -1427,6 +1427,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     Seq(true, false) foreach { caseSensitive =>
       val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
       val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
+      catalog.setCurrentDatabase("db1")
       try {
         val analyzer = new Analyzer(catalog, conf)
 
@@ -1440,6 +1441,8 @@ abstract class SessionCatalogSuite extends AnalysisTest {
         }
 
         assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
+        // SPARK-21318: the error message should contains the current database name
+        assert(cause.getMessage.contains("db1"))
       } finally {
         catalog.reset()
       }

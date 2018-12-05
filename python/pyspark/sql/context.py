@@ -485,7 +485,8 @@ class HiveContext(SQLContext):
             "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
             DeprecationWarning)
         if jhiveContext is None:
-            sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
+            sparkContext._conf.set("spark.sql.catalogImplementation", "hive")
+            sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)

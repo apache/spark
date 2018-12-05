@@ -81,7 +81,7 @@ public class PlatformUtilSuite {
     MemoryAllocator.HEAP.free(block);
     Assert.assertNull(block.getBaseObject());
     Assert.assertEquals(0, block.getBaseOffset());
-    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.getPageNumber());
+    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.pageNumber);
   }
 
   @Test
@@ -92,7 +92,7 @@ public class PlatformUtilSuite {
     MemoryAllocator.UNSAFE.free(block);
     Assert.assertNull(block.getBaseObject());
     Assert.assertEquals(0, block.getBaseOffset());
-    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.getPageNumber());
+    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, block.pageNumber);
   }
 
   @Test(expected = AssertionError.class)
@@ -156,5 +156,23 @@ public class PlatformUtilSuite {
     MemoryBlock onheap4 = heapMem.allocate(1024 * 1024 + 7);
     Assert.assertEquals(onheap4.size(), 1024 * 1024 + 7);
     Assert.assertEquals(obj3, onheap4.getBaseObject());
+  }
+
+  @Test
+  // SPARK-26021
+  public void writeMinusZeroIsReplacedWithZero() {
+    byte[] doubleBytes = new byte[Double.BYTES];
+    byte[] floatBytes = new byte[Float.BYTES];
+    Platform.putDouble(doubleBytes, Platform.BYTE_ARRAY_OFFSET, -0.0d);
+    Platform.putFloat(floatBytes, Platform.BYTE_ARRAY_OFFSET, -0.0f);
+
+    byte[] doubleBytes2 = new byte[Double.BYTES];
+    byte[] floatBytes2 = new byte[Float.BYTES];
+    Platform.putDouble(doubleBytes, Platform.BYTE_ARRAY_OFFSET, 0.0d);
+    Platform.putFloat(floatBytes, Platform.BYTE_ARRAY_OFFSET, 0.0f);
+
+    // Make sure the bytes we write from 0.0 and -0.0 are same.
+    Assert.assertArrayEquals(doubleBytes, doubleBytes2);
+    Assert.assertArrayEquals(floatBytes, floatBytes2);
   }
 }

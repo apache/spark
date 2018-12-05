@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommand
 case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
-    outputColumns: Seq[Attribute],
+    outputColumnNames: Seq[String],
     mode: SaveMode)
   extends DataWritingCommand {
 
@@ -63,13 +63,14 @@ case class CreateHiveTableAsSelectCommand(
         query,
         overwrite = false,
         ifPartitionNotExists = false,
-        outputColumns = outputColumns).run(sparkSession, child)
+        outputColumnNames = outputColumnNames).run(sparkSession, child)
     } else {
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
       assert(tableDesc.schema.isEmpty)
-      catalog.createTable(tableDesc.copy(schema = query.schema), ignoreIfExists = false)
+      catalog.createTable(
+        tableDesc.copy(schema = outputColumns.toStructType), ignoreIfExists = false)
 
       try {
         // Read back the metadata of the table which was created just now.
@@ -82,7 +83,7 @@ case class CreateHiveTableAsSelectCommand(
           query,
           overwrite = true,
           ifPartitionNotExists = false,
-          outputColumns = outputColumns).run(sparkSession, child)
+          outputColumnNames = outputColumnNames).run(sparkSession, child)
       } catch {
         case NonFatal(e) =>
           // drop the created table.
@@ -95,7 +96,7 @@ case class CreateHiveTableAsSelectCommand(
   }
 
   override def argString: String = {
-    s"[Database:${tableDesc.database}}, " +
+    s"[Database:${tableDesc.database}, " +
     s"TableName: ${tableDesc.identifier.table}, " +
     s"InsertIntoHiveTable]"
   }

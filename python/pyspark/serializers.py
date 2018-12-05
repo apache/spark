@@ -731,6 +731,57 @@ def write_with_length(obj, stream):
     stream.write(obj)
 
 
+class ChunkedStream(object):
+
+    """
+    This is a file-like object takes a stream of data, of unknown length, and breaks it into fixed
+    length frames.  The intended use case is serializing large data and sending it immediately over
+    a socket -- we do not want to buffer the entire data before sending it, but the receiving end
+    needs to know whether or not there is more data coming.
+
+    It works by buffering the incoming data in some fixed-size chunks.  If the buffer is full, it
+    first sends the buffer size, then the data.  This repeats as long as there is more data to send.
+    When this is closed, it sends the length of whatever data is in the buffer, then that data, and
+    finally a "length" of -1 to indicate the stream has completed.
+    """
+
+    def __init__(self, wrapped, buffer_size):
+        self.buffer_size = buffer_size
+        self.buffer = bytearray(buffer_size)
+        self.current_pos = 0
+        self.wrapped = wrapped
+
+    def write(self, bytes):
+        byte_pos = 0
+        byte_remaining = len(bytes)
+        while byte_remaining > 0:
+            new_pos = byte_remaining + self.current_pos
+            if new_pos < self.buffer_size:
+                # just put it in our buffer
+                self.buffer[self.current_pos:new_pos] = bytes[byte_pos:]
+                self.current_pos = new_pos
+                byte_remaining = 0
+            else:
+                # fill the buffer, send the length then the contents, and start filling again
+                space_left = self.buffer_size - self.current_pos
+                new_byte_pos = byte_pos + space_left
+                self.buffer[self.current_pos:self.buffer_size] = bytes[byte_pos:new_byte_pos]
+                write_int(self.buffer_size, self.wrapped)
+                self.wrapped.write(self.buffer)
+                byte_remaining -= space_left
+                byte_pos = new_byte_pos
+                self.current_pos = 0
+
+    def close(self):
+        # if there is anything left in the buffer, write it out first
+        if self.current_pos > 0:
+            write_int(self.current_pos, self.wrapped)
+            self.wrapped.write(self.buffer[:self.current_pos])
+        # -1 length indicates to the receiving end that we're done.
+        write_int(-1, self.wrapped)
+        self.wrapped.close()
+
+
 if __name__ == '__main__':
     import doctest
     (failure_count, test_count) = doctest.testmod()

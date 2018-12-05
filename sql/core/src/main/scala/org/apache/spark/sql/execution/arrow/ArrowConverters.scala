@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.arrow
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, OutputStream}
-import java.nio.channels.{Channels, SeekableByteChannel}
+import java.nio.channels.{Channels, ReadableByteChannel}
 
 import scala.collection.JavaConverters._
 
@@ -31,6 +31,7 @@ import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 import org.apache.spark.TaskContext
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
@@ -189,7 +190,7 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Create a DataFrame from a JavaRDD of serialized ArrowRecordBatches.
+   * Create a DataFrame from an RDD of serialized ArrowRecordBatches.
    */
   private[sql] def toDataFrame(
       arrowBatchRDD: JavaRDD[Array[Byte]],
@@ -221,7 +222,7 @@ private[sql] object ArrowConverters {
   /**
    * Read an Arrow stream input and return an iterator of serialized ArrowRecordBatches.
    */
-  private[sql] def getBatchesFromStream(in: SeekableByteChannel): Iterator[Array[Byte]] = {
+  private[sql] def getBatchesFromStream(in: ReadableByteChannel): Iterator[Array[Byte]] = {
 
     // Iterate over the serialized Arrow RecordBatch messages from a stream
     new Iterator[Array[Byte]] {
@@ -271,7 +272,7 @@ private[sql] object ArrowConverters {
         } else {
           if (bodyLength > 0) {
             // Skip message body if not a RecordBatch
-            in.position(in.position() + bodyLength)
+            Channels.newInputStream(in).skip(bodyLength)
           }
 
           // Proceed to next message

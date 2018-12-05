@@ -115,6 +115,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   def withQualifier(newQualifier: Seq[String]): Attribute
   def withName(newName: String): Attribute
   def withMetadata(newMetadata: Metadata): Attribute
+  def withExprId(newExprId: ExprId): Attribute
 
   override def toAttribute: Attribute = this
   def newInstance(): Attribute
@@ -128,6 +129,9 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
  *
  * Note that exprId and qualifiers are in a separate parameter list because
  * we only pattern match on child and name.
+ *
+ * Note that when creating a new Alias, all the [[AttributeReference]] that refer to
+ * the original alias should be updated to the new one.
  *
  * @param child The computation being performed
  * @param name The name to be associated with the result of computing [[child]].
@@ -299,7 +303,7 @@ case class AttributeReference(
     }
   }
 
-  def withExprId(newExprId: ExprId): AttributeReference = {
+  override def withExprId(newExprId: ExprId): AttributeReference = {
     if (exprId == newExprId) {
       this
     } else {
@@ -362,6 +366,8 @@ case class PrettyAttribute(
     throw new UnsupportedOperationException
   override def qualifier: Seq[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
+  override def withExprId(newExprId: ExprId): Attribute =
+    throw new UnsupportedOperationException
   override def nullable: Boolean = true
 }
 

@@ -226,23 +226,23 @@ private[spark] object RandomForest extends Logging with Serializable {
       case Some(uid) =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(uid, rootNode.toClassificationNode(prune),
-              numFeatures, strategy.getNumClasses)
+            new DecisionTreeClassificationModel(uid, rootNode.toNode(prune), numFeatures,
+              strategy.getNumClasses)
           }
         } else {
           topNodes.map { rootNode =>
-            new DecisionTreeRegressionModel(uid, rootNode.toRegressionNode(prune), numFeatures)
+            new DecisionTreeRegressionModel(uid, rootNode.toNode(prune), numFeatures)
           }
         }
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(rootNode.toClassificationNode(prune), numFeatures,
+            new DecisionTreeClassificationModel(rootNode.toNode(prune), numFeatures,
               strategy.getNumClasses)
           }
         } else {
           topNodes.map(rootNode =>
-            new DecisionTreeRegressionModel(rootNode.toRegressionNode(prune), numFeatures))
+            new DecisionTreeRegressionModel(rootNode.toNode(prune), numFeatures))
         }
     }
   }

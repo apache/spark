@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import java.io.{IOException, ObjectInputStream}
+import java.io.{File, IOException, ObjectInputStream}
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._

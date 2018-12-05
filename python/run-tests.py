@@ -59,9 +59,7 @@ FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
 
 # Find out where the assembly jars are located.
-# Later, add back 2.12 to this list:
-# for scala in ["2.11", "2.12"]:
-for scala in ["2.11"]:
+for scala in ["2.11", "2.12"]:
     build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
     if os.path.isdir(build_dir):
         SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
@@ -138,7 +136,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             # 2 (or --verbose option is enabled).
             decoded_lines = map(lambda line: line.decode(), iter(per_test_output))
             skipped_tests = list(filter(
-                lambda line: re.search('test_.* \(pyspark\..*\) ... skipped ', line),
+                lambda line: re.search(r'test_.* \(pyspark\..*\) ... skipped ', line),
                 decoded_lines))
             skipped_counts = len(skipped_tests)
             if skipped_counts > 0:
@@ -251,8 +249,9 @@ def main():
         for module in modules_to_test:
             if python_implementation not in module.blacklisted_python_implementations:
                 for test_goal in module.python_test_goals:
-                    if test_goal in ('pyspark.streaming.tests', 'pyspark.mllib.tests',
-                                     'pyspark.tests', 'pyspark.sql.tests'):
+                    heavy_tests = ['pyspark.streaming.tests', 'pyspark.mllib.tests',
+                                   'pyspark.tests', 'pyspark.sql.tests', 'pyspark.ml.tests']
+                    if any(map(lambda prefix: test_goal.startswith(prefix), heavy_tests)):
                         priority = 0
                     else:
                         priority = 100

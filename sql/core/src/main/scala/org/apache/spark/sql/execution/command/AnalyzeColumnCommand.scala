@@ -33,13 +33,17 @@ import org.apache.spark.sql.types._
 
 /**
  * Analyzes the given columns of the given table to generate statistics, which will be used in
- * query optimizations.
+ * query optimizations. Parameter `allColumns` may be specified to generate statistics of all the
+ * columns of a given table.
  */
 case class AnalyzeColumnCommand(
     tableIdent: TableIdentifier,
-    columnNames: Seq[String]) extends RunnableCommand {
+    columnNames: Option[Seq[String]],
+    allColumns: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    require((columnNames.isDefined ^ allColumns), "Parameter `columnNames` or `allColumns` are " +
+      "mutually exclusive. Only one of them should be specified.")
     val sessionState = sparkSession.sessionState
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
@@ -48,9 +52,12 @@ case class AnalyzeColumnCommand(
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
     val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+    val relation = sparkSession.table(tableIdent).logicalPlan
+    val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
 
-    // Compute stats for each column
-    val (rowCount, newColStats) = computeColumnStats(sparkSession, tableIdentWithDB, columnNames)
+    // Compute stats for the computed list of columns.
+    val (rowCount, newColStats) =
+      computeColumnStats(sparkSession, relation, columnsToAnalyze)
 
     // We also update table-level stats in order to keep them consistent with column-level stats.
     val statistics = CatalogStatistics(
@@ -64,31 +71,39 @@ case class AnalyzeColumnCommand(
     Seq.empty[Row]
   }
 
-  /**
-   * Compute stats for the given columns.
-   * @return (row count, map from column name to CatalogColumnStats)
-   */
-  private def computeColumnStats(
-      sparkSession: SparkSession,
+  private def getColumnsToAnalyze(
       tableIdent: TableIdentifier,
-      columnNames: Seq[String]): (Long, Map[String, CatalogColumnStat]) = {
-
-    val conf = sparkSession.sessionState.conf
-    val relation = sparkSession.table(tableIdent).logicalPlan
-    // Resolve the column names and dedup using AttributeSet
-    val attributesToAnalyze = columnNames.map { col =>
-      val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
-      exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
+      relation: LogicalPlan,
+      columnNames: Option[Seq[String]],
+      allColumns: Boolean = false): Seq[Attribute] = {
+    val columnsToAnalyze = if (allColumns) {
+      relation.output
+    } else {
+      columnNames.get.map { col =>
+        val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
+        exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
+      }
     }
-
     // Make sure the column types are supported for stats gathering.
-    attributesToAnalyze.foreach { attr =>
+    columnsToAnalyze.foreach { attr =>
       if (!supportsType(attr.dataType)) {
         throw new AnalysisException(
           s"Column ${attr.name} in table $tableIdent is of type ${attr.dataType}, " +
             "and Spark does not support statistics collection on this column type.")
       }
     }
+    columnsToAnalyze
+  }
+
+  /**
+   * Compute stats for the given columns.
+   * @return (row count, map from column name to CatalogColumnStats)
+   */
+  private def computeColumnStats(
+      sparkSession: SparkSession,
+      relation: LogicalPlan,
+      columns: Seq[Attribute]): (Long, Map[String, CatalogColumnStat]) = {
+    val conf = sparkSession.sessionState.conf
 
     // Collect statistics per column.
     // If no histogram is required, we run a job to compute basic column stats such as
@@ -99,20 +114,20 @@ case class AnalyzeColumnCommand(
     // 2. use the percentiles as value intervals of bins, e.g. [p(0), p(1/n)],
     // [p(1/n), p(2/n)], ..., [p((n-1)/n), p(1)], and then count ndv in each bin.
     // Basic column stats will be computed together in the second job.
-    val attributePercentiles = computePercentiles(attributesToAnalyze, sparkSession, relation)
+    val attributePercentiles = computePercentiles(columns, sparkSession, relation)
 
     // The first element in the result will be the overall row count, the following elements
     // will be structs containing all column stats.
     // The layout of each struct follows the layout of the ColumnStats.
     val expressions = Count(Literal(1)).toAggregateExpression() +:
-      attributesToAnalyze.map(statExprs(_, conf, attributePercentiles))
+      columns.map(statExprs(_, conf, attributePercentiles))
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
     val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation))
       .executedPlan.executeTake(1).head
 
     val rowCount = statsRow.getLong(0)
-    val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>
+    val columnStats = columns.zipWithIndex.map { case (attr, i) =>
       // according to `statExprs`, the stats struct always have 7 fields.
       (attr.name, rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
         attributePercentiles.get(attr)).toCatalogColumnStat(attr.name, attr.dataType))
@@ -195,13 +210,13 @@ case class AnalyzeColumnCommand(
     def struct(exprs: Expression*): CreateNamedStruct = CreateStruct(exprs.map { expr =>
       expr.transformUp { case af: AggregateFunction => af.toAggregateExpression() }
     })
-    val one = Literal(1, LongType)
+    val one = Literal(1L, LongType)
 
     // the approximate ndv (num distinct value) should never be larger than the number of rows
     val numNonNulls = if (col.nullable) Count(col) else Count(one)
     val ndv = Least(Seq(HyperLogLogPlusPlus(col, conf.ndvMaxError), numNonNulls))
     val numNulls = Subtract(Count(one), numNonNulls)
-    val defaultSize = Literal(col.dataType.defaultSize, LongType)
+    val defaultSize = Literal(col.dataType.defaultSize.toLong, LongType)
     val nullArray = Literal(null, ArrayType(LongType))
 
     def fixedLenTypeStruct: CreateNamedStruct = {

@@ -805,6 +805,80 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
+  test("Insert overwrite table command should output correct schema: basic") {
+    withTable("tbl", "tbl2") {
+      withView("view1") {
+        val df = spark.range(10).toDF("id")
+        df.write.format("parquet").saveAsTable("tbl")
+        spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+        spark.sql("CREATE TABLE tbl2(ID long) USING parquet")
+        spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT ID FROM view1")
+        val identifier = TableIdentifier("tbl2")
+        val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
+        val expectedSchema = StructType(Seq(StructField("ID", LongType, true)))
+        assert(spark.read.parquet(location).schema == expectedSchema)
+        checkAnswer(spark.table("tbl2"), df)
+      }
+    }
+  }
+
+  test("Insert overwrite table command should output correct schema: complex") {
+    withTable("tbl", "tbl2") {
+      withView("view1") {
+        val df = spark.range(10).map(x => (x, x.toInt, x.toInt)).toDF("col1", "col2", "col3")
+        df.write.format("parquet").saveAsTable("tbl")
+        spark.sql("CREATE VIEW view1 AS SELECT * FROM tbl")
+        spark.sql("CREATE TABLE tbl2(COL1 long, COL2 int, COL3 int) USING parquet PARTITIONED " +
+          "BY (COL2) CLUSTERED BY (COL3) INTO 3 BUCKETS")
+        spark.sql("INSERT OVERWRITE TABLE tbl2 SELECT COL1, COL2, COL3 FROM view1")
+        val identifier = TableIdentifier("tbl2")
+        val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
+        val expectedSchema = StructType(Seq(
+          StructField("COL1", LongType, true),
+          StructField("COL3", IntegerType, true),
+          StructField("COL2", IntegerType, true)))
+        assert(spark.read.parquet(location).schema == expectedSchema)
+        checkAnswer(spark.table("tbl2"), df)
+      }
+    }
+  }
+
+  test("Create table as select command should output correct schema: basic") {
+    withTable("tbl", "tbl2") {
+      withView("view1") {
+        val df = spark.range(10).toDF("id")
+        df.write.format("parquet").saveAsTable("tbl")
+        spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
+        spark.sql("CREATE TABLE tbl2 USING parquet AS SELECT ID FROM view1")
+        val identifier = TableIdentifier("tbl2")
+        val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
+        val expectedSchema = StructType(Seq(StructField("ID", LongType, true)))
+        assert(spark.read.parquet(location).schema == expectedSchema)
+        checkAnswer(spark.table("tbl2"), df)
+      }
+    }
+  }
+
+  test("Create table as select command should output correct schema: complex") {
+    withTable("tbl", "tbl2") {
+      withView("view1") {
+        val df = spark.range(10).map(x => (x, x.toInt, x.toInt)).toDF("col1", "col2", "col3")
+        df.write.format("parquet").saveAsTable("tbl")
+        spark.sql("CREATE VIEW view1 AS SELECT * FROM tbl")
+        spark.sql("CREATE TABLE tbl2 USING parquet PARTITIONED BY (COL2) " +
+          "CLUSTERED BY (COL3) INTO 3 BUCKETS AS SELECT COL1, COL2, COL3 FROM view1")
+        val identifier = TableIdentifier("tbl2")
+        val location = spark.sessionState.catalog.getTableMetadata(identifier).location.toString
+        val expectedSchema = StructType(Seq(
+          StructField("COL1", LongType, true),
+          StructField("COL3", IntegerType, true),
+          StructField("COL2", IntegerType, true)))
+        assert(spark.read.parquet(location).schema == expectedSchema)
+        checkAnswer(spark.table("tbl2"), df)
+      }
+    }
+  }
+
   test("use Spark jobs to list files") {
     withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1") {
       withTempDir { dir =>

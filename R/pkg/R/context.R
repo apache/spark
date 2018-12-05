@@ -167,18 +167,30 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # 2-tuples of raws
   serializedSlices <- lapply(slices, serialize, connection = NULL)
 
-  # The PRC backend cannot handle arguments larger than 2GB (INT_MAX)
+  # The RPC backend cannot handle arguments larger than 2GB (INT_MAX)
   # If serialized data is safely less than that threshold we send it over the PRC channel.
   # Otherwise, we write it to a file and send the file name
   if (objectSize < sizeLimit) {
     jrdd <- callJStatic("org.apache.spark.api.r.RRDD", "createRDDFromArray", sc, serializedSlices)
   } else {
-    fileName <- writeToTempFile(serializedSlices)
-    jrdd <- tryCatch(callJStatic(
-        "org.apache.spark.api.r.RRDD", "createRDDFromFile", sc, fileName, as.integer(numSlices)),
-      finally = {
-        file.remove(fileName)
-    })
+    if (callJStatic("org.apache.spark.api.r.RUtils", "getEncryptionEnabled", sc)) {
+      # the length of slices here is the parallelism to use in the jvm's sc.parallelize()
+      parallelism <- as.integer(numSlices)
+      jserver <- newJObject("org.apache.spark.api.r.RParallelizeServer", sc, parallelism)
+      authSecret <- callJMethod(jserver, "secret")
+      port <- callJMethod(jserver, "port")
+      conn <- socketConnection(port = port, blocking = TRUE, open = "wb", timeout = 1500)
+      doServerAuth(conn, authSecret)
+      writeToConnection(serializedSlices, conn)
+      jrdd <- callJMethod(jserver, "getResult")
+    } else {
+      fileName <- writeToTempFile(serializedSlices)
+      jrdd <- tryCatch(callJStatic(
+          "org.apache.spark.api.r.RRDD", "createRDDFromFile", sc, fileName, as.integer(numSlices)),
+        finally = {
+          file.remove(fileName)
+      })
+    }
   }
 
   RDD(jrdd, "byte")
@@ -194,14 +206,21 @@ getMaxAllocationLimit <- function(sc) {
   ))
 }
 
+writeToConnection <- function(serializedSlices, conn) {
+  tryCatch({
+    for (slice in serializedSlices) {
+      writeBin(as.integer(length(slice)), conn, endian = "big")
+      writeBin(slice, conn, endian = "big")
+    }
+  }, finally = {
+    close(conn)
+  })
+}
+
 writeToTempFile <- function(serializedSlices) {
   fileName <- tempfile()
   conn <- file(fileName, "wb")
-  for (slice in serializedSlices) {
-    writeBin(as.integer(length(slice)), conn, endian = "big")
-    writeBin(slice, conn, endian = "big")
-  }
-  close(conn)
+  writeToConnection(serializedSlices, conn)
   fileName
 }
 

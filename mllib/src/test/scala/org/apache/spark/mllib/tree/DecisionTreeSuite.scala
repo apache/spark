@@ -607,7 +607,7 @@ object DecisionTreeSuite extends SparkFunSuite {
       checkEqual(a.topNode, b.topNode)
     } catch {
       case ex: Exception =>
-        throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
+        fail("checkEqual failed since the two trees were not identical.\n" +
           "TREE A:\n" + a.toDebugString + "\n" +
           "TREE B:\n" + b.toDebugString + "\n", ex)
     }
@@ -628,20 +628,21 @@ object DecisionTreeSuite extends SparkFunSuite {
       // TODO: Check other fields besides the information gain.
       case (Some(aStats), Some(bStats)) => assert(aStats.gain === bStats.gain)
       case (None, None) =>
-      case _ => throw new AssertionError(
-          s"Only one instance has stats defined. (a.stats: ${a.stats}, b.stats: ${b.stats})")
+      case _ => fail(s"Only one instance has stats defined. (a.stats: ${a.stats}, " +
+        s"b.stats: ${b.stats})")
     }
     (a.leftNode, b.leftNode) match {
       case (Some(aNode), Some(bNode)) => checkEqual(aNode, bNode)
       case (None, None) =>
-      case _ => throw new AssertionError("Only one instance has leftNode defined. " +
-        s"(a.leftNode: ${a.leftNode}, b.leftNode: ${b.leftNode})")
+      case _ =>
+        fail("Only one instance has leftNode defined. (a.leftNode: ${a.leftNode}," +
+          " b.leftNode: ${b.leftNode})")
     }
     (a.rightNode, b.rightNode) match {
       case (Some(aNode: Node), Some(bNode: Node)) => checkEqual(aNode, bNode)
       case (None, None) =>
-      case _ => throw new AssertionError("Only one instance has rightNode defined. " +
-        s"(a.rightNode: ${a.rightNode}, b.rightNode: ${b.rightNode})")
+      case _ => fail("Only one instance has rightNode defined. (a.rightNode: ${a.rightNode}, " +
+        "b.rightNode: ${b.rightNode})")
     }
   }
 }

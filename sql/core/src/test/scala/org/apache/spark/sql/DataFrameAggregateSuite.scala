@@ -557,13 +557,11 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-18004 limit + aggregates") {
-    withSQLConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT.key -> "true") {
-      val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value")
-      val limit2Df = df.limit(2)
-      checkAnswer(
-        limit2Df.groupBy("id").count().select($"id"),
-        limit2Df.select($"id"))
-    }
+    val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value")
+    val limit2Df = df.limit(2)
+    checkAnswer(
+      limit2Df.groupBy("id").count().select($"id"),
+      limit2Df.select($"id"))
   }
 
   test("SPARK-17237 remove backticks in a pivot result schema") {
@@ -671,23 +669,19 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  Seq(true, false).foreach { codegen =>
-    test("SPARK-22951: dropDuplicates on empty dataFrames should produce correct aggregate " +
-      s"results when codegen is enabled: $codegen") {
-      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, codegen.toString)) {
-        // explicit global aggregations
-        val emptyAgg = Map.empty[String, String]
-        checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.groupBy().agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.groupBy().agg(count("*")), Seq(Row(0)))
-        checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(emptyAgg), Seq(Row()))
-        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(count("*")), Seq(Row(0)))
+  testWithWholeStageCodegenOnAndOff("SPARK-22951: dropDuplicates on empty dataFrames " +
+    "should produce correct aggregate") { _ =>
+    // explicit global aggregations
+    val emptyAgg = Map.empty[String, String]
+    checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.groupBy().agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.groupBy().agg(count("*")), Seq(Row(0)))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(emptyAgg), Seq(Row()))
+    checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(count("*")), Seq(Row(0)))
 
-        // global aggregation is converted to grouping aggregation:
-        assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
-      }
-    }
+    // global aggregation is converted to grouping aggregation:
+    assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
   }
 
   test("SPARK-21896: Window functions inside aggregate functions") {
@@ -728,5 +722,19 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(testData.groupBy(current_date()).toString.contains(
       "grouping expressions: [current_date(None)], value: [key: int, value: string], " +
         "type: GroupBy]"))
+  }
+
+  test("SPARK-26021: Double and Float 0.0/-0.0 should be equal when grouping") {
+    val colName = "i"
+    val doubles = Seq(0.0d, -0.0d, 0.0d).toDF(colName).groupBy(colName).count().collect()
+    val floats = Seq(0.0f, -0.0f, 0.0f).toDF(colName).groupBy(colName).count().collect()
+
+    assert(doubles.length == 1)
+    assert(floats.length == 1)
+    // using compare since 0.0 == -0.0 is true
+    assert(java.lang.Double.compare(doubles(0).getDouble(0), 0.0d) == 0)
+    assert(java.lang.Float.compare(floats(0).getFloat(0), 0.0f) == 0)
+    assert(doubles(0).getLong(1) == 3)
+    assert(floats(0).getLong(1) == 3)
   }
 }

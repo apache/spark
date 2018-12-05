@@ -119,25 +119,6 @@ class DataFrame(object):
         rdd = self._jdf.toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
-    @since(1.3)
-    def registerTempTable(self, name):
-        """Registers this DataFrame as a temporary table using the given name.
-
-        The lifetime of this temporary table is tied to the :class:`SparkSession`
-        that was used to create this :class:`DataFrame`.
-
-        >>> df.registerTempTable("people")
-        >>> df2 = spark.sql("select * from people")
-        >>> sorted(df.collect()) == sorted(df2.collect())
-        True
-        >>> spark.catalog.dropTempView("people")
-
-        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
-        """
-        warnings.warn(
-            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
-        self._jdf.createOrReplaceTempView(name)
-
     @since(2.0)
     def createTempView(self, name):
         """Creates a local temporary view with this DataFrame.
@@ -276,7 +257,7 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        Scan ExistingRDD[age#0,name#1]
+        *(1) Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -504,10 +485,12 @@ class DataFrame(object):
         if not isinstance(name, str):
             raise TypeError("name should be provided as str, got {0}".format(type(name)))
 
+        allowed_types = (basestring, list, float, int)
         for p in parameters:
-            if not isinstance(p, str):
+            if not isinstance(p, allowed_types):
                 raise TypeError(
-                    "all parameters should be str, got {0} of type {1}".format(p, type(p)))
+                    "all parameters should be in {0}, got {1} of type {2}".format(
+                        allowed_types, p, type(p)))
 
         jdf = self._jdf.hint(name, self._jseq(parameters))
         return DataFrame(jdf, self.sql_ctx)
@@ -751,6 +734,11 @@ class DataFrame(object):
         At least one partition-by expression must be specified.
         When no explicit sort order is specified, "ascending nulls first" is assumed.
 
+        Note that due to performance reasons this method uses sampling to estimate the ranges.
+        Hence, the output may not be consistent, since sampling can return different values.
+        The sample size can be controlled by the config
+        `spark.sql.execution.rangeExchange.sampleSizePerPartition`.
+
         >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
         2
         >>> df.show()
@@ -880,16 +868,23 @@ class DataFrame(object):
         |  0|    5|
         |  1|    9|
         +---+-----+
+        >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
+        33
 
+        .. versionchanged:: 3.0
+           Added sampling by a column of :class:`Column`
         """
-        if not isinstance(col, basestring):
-            raise ValueError("col must be a string, but got %r" % type(col))
+        if isinstance(col, basestring):
+            col = Column(col)
+        elif not isinstance(col, Column):
+            raise ValueError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):
             raise ValueError("fractions must be a dict but got %r" % type(fractions))
         for k, v in fractions.items():
             if not isinstance(k, (float, int, long, basestring)):
                 raise ValueError("key must be float, int, long, or string, but got %r" % type(k))
             fractions[k] = float(v)
+        col = col._jc
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         return DataFrame(self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
 
@@ -1463,10 +1458,7 @@ class DataFrame(object):
         (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
-
-        .. note:: Deprecated in 2.0, use :func:`union` instead.
         """
-        warnings.warn("Deprecated in 2.0, use union instead.", DeprecationWarning)
         return self.union(other)
 
     @since(2.3)
@@ -1827,7 +1819,7 @@ class DataFrame(object):
 
         This method implements a variation of the Greenwald-Khanna
         algorithm (with some speed optimizations). The algorithm was first
-        present in [[http://dx.doi.org/10.1145/375663.375670
+        present in [[https://doi.org/10.1145/375663.375670
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
@@ -1949,7 +1941,7 @@ class DataFrame(object):
         """
         Finding frequent items for columns, possibly with false positives. Using the
         frequent element count algorithm described in
-        "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
+        "https://doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
         .. note:: This function is meant for exploratory data analysis, as we make no

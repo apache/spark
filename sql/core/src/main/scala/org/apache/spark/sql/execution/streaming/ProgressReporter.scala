@@ -22,20 +22,14 @@ import java.util.{Date, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.util.control.NonFatal
-
-import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.MicroBatchWritSupport
-import org.apache.spark.sql.sources.v2.CustomMetrics
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, SupportsCustomReaderMetrics}
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingWriteSupport, SupportsCustomWriterMetrics}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2StreamingScanExec
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -162,31 +156,7 @@ trait ProgressReporter extends Logging {
     }
     logDebug(s"Execution stats: $executionStats")
 
-    // extracts and validates custom metrics from readers and writers
-    def extractMetrics(
-        getMetrics: () => Option[CustomMetrics],
-        onInvalidMetrics: (Exception) => Unit): Option[String] = {
-      try {
-        getMetrics().map(m => {
-          val json = m.json()
-          parse(json)
-          json
-        })
-      } catch {
-        case ex: Exception if NonFatal(ex) =>
-          onInvalidMetrics(ex)
-          None
-      }
-    }
-
     val sourceProgress = sources.distinct.map { source =>
-      val customReaderMetrics = source match {
-        case s: SupportsCustomReaderMetrics =>
-          extractMetrics(() => Option(s.getCustomMetrics), s.onInvalidMetrics)
-
-        case _ => None
-      }
-
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
       new SourceProgress(
         description = source.toString,
@@ -194,19 +164,11 @@ trait ProgressReporter extends Logging {
         endOffset = currentTriggerEndOffsets.get(source).orNull,
         numInputRows = numRecords,
         inputRowsPerSecond = numRecords / inputTimeSec,
-        processedRowsPerSecond = numRecords / processingTimeSec,
-        customReaderMetrics.orNull
+        processedRowsPerSecond = numRecords / processingTimeSec
       )
     }
 
-    val customWriterMetrics = extractWriteSupport() match {
-      case Some(s: SupportsCustomWriterMetrics) =>
-        extractMetrics(() => Option(s.getCustomMetrics), s.onInvalidMetrics)
-
-      case _ => None
-    }
-
-    val sinkProgress = new SinkProgress(sink.toString, customWriterMetrics.orNull)
+    val sinkProgress = new SinkProgress(sink.toString)
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -233,18 +195,6 @@ trait ProgressReporter extends Logging {
     }
 
     currentStatus = currentStatus.copy(isTriggerActive = false)
-  }
-
-  /** Extract writer from the executed query plan. */
-  private def extractWriteSupport(): Option[StreamingWriteSupport] = {
-    if (lastExecution == null) return None
-    lastExecution.executedPlan.collect {
-      case p if p.isInstanceOf[WriteToDataSourceV2Exec] =>
-        p.asInstanceOf[WriteToDataSourceV2Exec].writeSupport
-    }.headOption match {
-      case Some(w: MicroBatchWritSupport) => Some(w.writeSupport)
-      case _ => None
-    }
   }
 
   /** Extract statistics about stateful operators from the executed query plan. */
@@ -290,9 +240,6 @@ trait ProgressReporter extends Logging {
   /** Extract number of input sources for each streaming source in plan */
   private def extractSourceToNumInputRows(): Map[BaseStreamingSource, Long] = {
 
-    import java.util.IdentityHashMap
-    import scala.collection.JavaConverters._
-
     def sumRows(tuples: Seq[(BaseStreamingSource, Long)]): Map[BaseStreamingSource, Long] = {
       tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
     }
@@ -305,40 +252,15 @@ trait ProgressReporter extends Logging {
     }
 
     if (onlyDataSourceV2Sources) {
-      // DataSourceV2ScanExec is the execution plan leaf that is responsible for reading data
-      // from a V2 source and has a direct reference to the V2 source that generated it. Each
-      // DataSourceV2ScanExec records the number of rows it has read using SQLMetrics. However,
-      // just collecting all DataSourceV2ScanExec nodes and getting the metric is not correct as
-      // a DataSourceV2ScanExec instance may be referred to in the execution plan from two (or
-      // even multiple times) points and considering it twice will lead to double counting. We
-      // can't dedup them using their hashcode either because two different instances of
-      // DataSourceV2ScanExec can have the same hashcode but account for separate sets of
-      // records read, and deduping them to consider only one of them would be undercounting the
-      // records read. Therefore the right way to do this is to consider the unique instances of
-      // DataSourceV2ScanExec (using their identity hash codes) and get metrics from them.
-      // Hence we calculate in the following way.
-      //
-      // 1. Collect all the unique DataSourceV2ScanExec instances using IdentityHashMap.
-      //
-      // 2. Extract the source and the number of rows read from the DataSourceV2ScanExec instanes.
-      //
-      // 3. Multiple DataSourceV2ScanExec instance may refer to the same source (can happen with
-      //    self-unions or self-joins). Add up the number of rows for each unique source.
-      val uniqueStreamingExecLeavesMap =
-        new IdentityHashMap[DataSourceV2ScanExec, DataSourceV2ScanExec]()
-
-      lastExecution.executedPlan.collectLeaves().foreach {
-        case s: DataSourceV2ScanExec if s.readSupport.isInstanceOf[BaseStreamingSource] =>
-          uniqueStreamingExecLeavesMap.put(s, s)
-        case _ =>
-      }
-
-      val sourceToInputRowsTuples =
-        uniqueStreamingExecLeavesMap.values.asScala.map { execLeaf =>
-          val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          val source = execLeaf.readSupport.asInstanceOf[BaseStreamingSource]
+      // It's possible that multiple DataSourceV2ScanExec instances may refer to the same source
+      // (can happen with self-unions or self-joins). This means the source is scanned multiple
+      // times in the query, we should count the numRows for each scan.
+      val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
+        case s: DataSourceV2StreamingScanExec if s.readSupport.isInstanceOf[BaseStreamingSource] =>
+          val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+          val source = s.readSupport.asInstanceOf[BaseStreamingSource]
           source -> numRows
-        }.toSeq
+      }
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
       sumRows(sourceToInputRowsTuples)
     } else {

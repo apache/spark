@@ -347,21 +347,19 @@ class ParquetFileFormat
     val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+    val isCaseSensitive = sqlConf.caseSensitiveAnalysis
 
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
-      val fileSplit =
-        new FileSplit(new Path(new URI(file.filePath)), file.start, file.length, Array.empty)
-      val filePath = fileSplit.getPath
-
+      val filePath = new Path(new URI(file.filePath))
       val split =
         new org.apache.parquet.hadoop.ParquetInputSplit(
           filePath,
-          fileSplit.getStart,
-          fileSplit.getStart + fileSplit.getLength,
-          fileSplit.getLength,
-          fileSplit.getLocations,
+          file.start,
+          file.start + file.length,
+          file.length,
+          Array.empty,
           null)
 
       val sharedConf = broadcastedHadoopConf.value.value
@@ -372,7 +370,7 @@ class ParquetFileFormat
       val pushed = if (enableParquetFilterPushDown) {
         val parquetSchema = footerFileMetaData.getSchema
         val parquetFilters = new ParquetFilters(pushDownDate, pushDownTimestamp, pushDownDecimal,
-          pushDownStringStartWith, pushDownInFilterThreshold)
+          pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`

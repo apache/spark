@@ -112,7 +112,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       checkEqual(a.rootNode, b.rootNode)
     } catch {
       case ex: Exception =>
-        throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
+        fail("checkEqual failed since the two trees were not identical.\n" +
           "TREE A:\n" + a.toDebugString + "\n" +
           "TREE B:\n" + b.toDebugString + "\n", ex)
     }
@@ -133,7 +133,7 @@ private[ml] object TreeTests extends SparkFunSuite {
         checkEqual(aye.rightChild, bee.rightChild)
       case (aye: LeafNode, bee: LeafNode) => // do nothing
       case _ =>
-        throw new AssertionError("Found mismatched nodes")
+        fail("Found mismatched nodes")
     }
   }
 
@@ -148,7 +148,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       }
       assert(a.treeWeights === b.treeWeights)
     } catch {
-      case ex: Exception => throw new AssertionError(
+      case ex: Exception => fail(
         "checkEqual failed since the two tree ensembles were not identical")
     }
   }
@@ -159,7 +159,7 @@ private[ml] object TreeTests extends SparkFunSuite {
    * @param split  Split for parent node
    * @return  Parent node with children attached
    */
-  def buildParentNode(left: Node, right: Node, split: Split, isClassification: Boolean): Node = {
+  def buildParentNode(left: Node, right: Node, split: Split): Node = {
     val leftImp = left.impurityStats
     val rightImp = right.impurityStats
     val parentImp = leftImp.copy.add(rightImp)
@@ -168,15 +168,7 @@ private[ml] object TreeTests extends SparkFunSuite {
     val gain = parentImp.calculate() -
       (leftWeight * leftImp.calculate() + rightWeight * rightImp.calculate())
     val pred = parentImp.predict
-    if (isClassification) {
-      new ClassificationInternalNode(pred, parentImp.calculate(), gain,
-        left.asInstanceOf[ClassificationNode], right.asInstanceOf[ClassificationNode],
-        split, parentImp)
-    } else {
-      new RegressionInternalNode(pred, parentImp.calculate(), gain,
-        left.asInstanceOf[RegressionNode], right.asInstanceOf[RegressionNode],
-        split, parentImp)
-    }
+    new InternalNode(pred, parentImp.calculate(), gain, left, right, split, parentImp)
   }
 
   /**

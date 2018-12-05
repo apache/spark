@@ -54,7 +54,7 @@ case class Rating @Since("0.8.0") (
  *
  * For implicit preference data, the algorithm used is based on
  * "Collaborative Filtering for Implicit Feedback Datasets", available at
- * <a href="http://dx.doi.org/10.1109/ICDM.2008.22">here</a>, adapted for the blocked approach
+ * <a href="https://doi.org/10.1109/ICDM.2008.22">here</a>, adapted for the blocked approach
  * used here.
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
