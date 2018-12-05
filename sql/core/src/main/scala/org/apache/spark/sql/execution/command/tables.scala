@@ -489,6 +489,7 @@ case class TruncateTableCommand(
       val newStats = CatalogStatistics(sizeInBytes = 0, rowCount = Some(0))
       catalog.alterTableStats(tableName, Some(newStats))
     }
+    catalog.refreshTable(table.identifier)
     Seq.empty[Row]
   }
 }

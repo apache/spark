@@ -167,6 +167,37 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       assert(e.message.contains("It doesn't match the specified format"))
     }
   }
+
+  test("SPARK-25403 refresh the table after inserting data") {
+    withTable("t") {
+      val catalog = spark.sessionState.catalog
+      val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+      sql("CREATE TABLE t (a INT) USING parquet")
+      sql("INSERT INTO TABLE t VALUES (1)")
+      assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
+      assert(spark.table("t").count() === 1)
+      assert(catalog.getCachedTable(table) !== null, "Table relation should be cached.")
+    }
+  }
+
+  test("SPARK-19784 refresh the table after altering the table location") {
+    withTable("t") {
+      withTempDir { dir =>
+        val catalog = spark.sessionState.catalog
+        val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
+        val p1 = s"${dir.getCanonicalPath}/p1"
+        val p2 = s"${dir.getCanonicalPath}/p2"
+        sql(s"CREATE TABLE t (a INT) USING parquet LOCATION '$p1'")
+        sql("INSERT INTO TABLE t VALUES (1)")
+        assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
+        spark.range(5).toDF("a").write.parquet(p2)
+        spark.sql(s"ALTER TABLE t SET LOCATION '$p2'")
+        assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
+        assert(spark.table("t").count() === 5)
+        assert(catalog.getCachedTable(table) !== null, "Table relation should be cached.")
+      }
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -2714,36 +2745,5 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql(s"SET ${config.CPUS_PER_TASK.key} = 4")
     }
     assert(ex.getMessage.contains("Spark config"))
-  }
-
-  test("SPARK-25403 refresh the table after inserting data") {
-    withTable("t") {
-      val catalog = spark.sessionState.catalog
-      val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
-      sql("CREATE TABLE t (a INT) USING parquet")
-      sql("INSERT INTO TABLE t VALUES (1)")
-      assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
-      assert(spark.table("t").count() === 1)
-      assert(catalog.getCachedTable(table) !== null, "Table relation should be cached.")
-    }
-  }
-
-  test("SPARK-19784 refresh the table after altering the table location") {
-    withTable("t") {
-      withTempDir { dir =>
-        val catalog = spark.sessionState.catalog
-        val table = QualifiedTableName(catalog.getCurrentDatabase, "t")
-        val p1 = s"${dir.getCanonicalPath}/p1"
-        val p2 = s"${dir.getCanonicalPath}/p2"
-        sql(s"CREATE TABLE t (a INT) USING parquet LOCATION '$p1'")
-        sql("INSERT INTO TABLE t VALUES (1)")
-        assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
-        spark.range(5).toDF("a").write.parquet(p2)
-        spark.sql(s"ALTER TABLE t SET LOCATION '$p2'")
-        assert(catalog.getCachedTable(table) === null, "Table relation should be invalidated.")
-        assert(spark.table("t").count() === 5)
-        assert(catalog.getCachedTable(table) !== null, "Table relation should be cached.")
-      }
-    }
   }
 }
