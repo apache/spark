@@ -62,8 +62,7 @@ class OutputRedirector {
       while ((line = reader.readLine()) != null) {
         if (active) {
           sink.info(line.replaceFirst("\\s*$", ""));
-          if (error == null && containsIgnoreCase(line, "Error") || containsIgnoreCase(line,
-                  "Exception")) {
+          if (containsIgnoreCase(line, "Error") || containsIgnoreCase(line, "Exception")) {
             error = new RuntimeException(line);
           }
         }
