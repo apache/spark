@@ -18,7 +18,6 @@ package org.apache.spark.deploy.kubernetes.docker.gradle;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import org.gradle.api.Project;
 import org.gradle.api.provider.Property;
 import org.gradle.process.ExecSpec;
@@ -32,39 +31,39 @@ import org.mockito.runners.MockitoJUnitRunner;
 @RunWith(MockitoJUnitRunner.class)
 public final class LazyExecTaskSuite {
 
-  @Mock
-  private LazyExecTask taskUnderTest;
+    @Mock
+    private org.apache.spark.deploy.kubernetes.docker.gradle.LazyExecTask taskUnderTest;
 
-  @Mock
-  private Project project;
+    @Mock
+    private Project project;
 
-  @Mock
-  private ExecSpec execSpec;
+    @Mock
+    private ExecSpec execSpec;
 
-  @Before
-  public void before() {
-    ProjectExecUtils.invokeExecSpecAction(project, execSpec);
-    Mockito.when(taskUnderTest.getProject()).thenReturn(project);
-  }
+    @Before
+    public void before() {
+        org.apache.spark.deploy.kubernetes.docker.gradle.ProjectExecUtils.invokeExecSpecAction(project, execSpec);
+        Mockito.when(taskUnderTest.getProject()).thenReturn(project);
+    }
 
-  @Test
-  public void testRunCommand_setsCommandLineOnExecSpec() {
-    List<Property<String>> command = new ArrayList<>();
-    command.add(constProperty("ls"));
-    command.add(constProperty("-lahrt"));
-    command.add(constProperty("git"));
-    List<String> expectedCommand = new ArrayList<>();
-    expectedCommand.add("ls");
-    expectedCommand.add("-lahrt");
-    expectedCommand.add("git");
-    taskUnderTest.setCommandLine(command);
-    taskUnderTest.runCommand();
-    Mockito.verify(execSpec).commandLine(expectedCommand);
-  }
+    @Test
+    public void testRunCommand_setsCommandLineOnExecSpec() {
+        List<Property<String>> command = new ArrayList<>();
+        command.add(constProperty("ls"));
+        command.add(constProperty("-lahrt"));
+        command.add(constProperty("git"));
+        List<String> expectedCommand = new ArrayList<>();
+        expectedCommand.add("ls");
+        expectedCommand.add("-lahrt");
+        expectedCommand.add("git");
+        taskUnderTest.setCommandLine(command);
+        taskUnderTest.runCommand();
+        Mockito.verify(execSpec).commandLine(expectedCommand);
+    }
 
-  private <T> Property<T> constProperty(T value) {
-    Property<T> property = (Property<T>) Mockito.mock(Property.class);
-    Mockito.when(property.get()).thenReturn(value);
-    return property;
-  }
+    private <T> Property<T> constProperty(T value) {
+        Property<T> property = (Property<T>) Mockito.mock(Property.class);
+        Mockito.when(property.get()).thenReturn(value);
+        return property;
+    }
 }

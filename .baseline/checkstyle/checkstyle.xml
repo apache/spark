@@ -124,11 +124,17 @@
             <message key="import.illegal" value="Use JUnit 4-style (org.junit.*) test classes and assertions instead of JUnit 3 (junit.framework.*)."/>
         </module>
         <module name="IllegalImport"> <!-- Java Coding Guidelines: Import the canonical package -->
-            <property name="illegalPkgs" value="org.elasticsearch.common.base, jersey.repackaged.com.google.common, com.google.api.client.repackaged, org.apache.hadoop.thirdparty.guava, com.clearspring.analytics.util, org.spark_project.guava"/>
+            <property name="illegalPkgs" value="org.elasticsearch.common.base, com.clearspring.analytics.util, org.spark_project.guava"/>
+            <message key="import.illegal" value="Must not import repackaged classes."/>
+        </module>
+        <module name="IllegalImport"> <!-- Java Coding Guidelines: Import the canonical package -->
+            <property name="illegalPkgs" value=".*\.(repackaged|shaded|thirdparty)"/>
+            <property name="regexp" value="true" />
             <message key="import.illegal" value="Must not import repackaged classes."/>
         </module>
         <module name="IllegalImport">
-            <property name="illegalPkgs" value="^org\.gradle\..*internal"/>
+            <property name="illegalPkgs" value="^org\.gradle\.(internal|.*\.internal)"/>
+            <property name="regexp" value="true" />
             <message key="import.illegal" value="Do not rely on gradle internal classes as these may change in minor releases - use org.gradle.api versions instead."/>
         </module>
         <module name="IllegalImport">
@@ -147,6 +153,10 @@
             <property name="id" value="BanLoggingImplementations"/>
             <property name="illegalPkgs" value="org.apache.log4j, org.apache.logging.log4j, java.util.logging, ch.qos.logback"/>
             <message key="import.illegal" value="Use SLF4J instead of a logging framework directly."/>
+        </module>
+        <module name="IllegalImport">
+            <property name="illegalClasses" value="com.google.common.base.Optional, com.google.common.base.Supplier"/>
+            <message key="import.illegal" value="Use the Java8 version of Guava objects."/>
         </module>
         <module name="IllegalInstantiation"> <!-- Java Coding Guidelines: Never instantiate primitive types -->
             <property name="classes" value="java.lang.Boolean"/>
@@ -171,17 +181,15 @@
             <property name="illegalClassNames" value="com.google.common.cache.CacheBuilder, com.google.common.cache.Cache, com.google.common.cache.LoadingCache"/>
             <message key="illegal.type" value="Do not use Guava caches, they are outperformed by and harder to use than Caffeine caches"/>
         </module>
-        <!-- Use Spark's built-in import ordering -->
-        <module name="ImportOrder">
+        <module name="ImportOrder"> <!-- Java Style Guide: Ordering and spacing -->
+            <property name="groups" value="/.*/"/>
+            <property name="option" value="top"/>
             <property name="separated" value="true"/>
-            <property name="ordered" value="true"/>
-            <property name="groups" value="/^javax?\./,scala,*,org.apache.spark"/>
             <property name="sortStaticImportsAlphabetically" value="true"/>
         </module>
-        <module name="Indentation"> <!-- Java Style Guide: Block indentation: +2 spaces -->
-            <property name="arrayInitIndent" value="4"/>
-            <property name="lineWrappingIndentation" value="4"/>
-            <property name="basicOffset" value="2"/>
+        <module name="Indentation"> <!-- Java Style Guide: Block indentation: +4 spaces -->
+            <property name="arrayInitIndent" value="8"/>
+            <property name="lineWrappingIndentation" value="8"/>
         </module>
         <module name="InnerAssignment"/> <!-- Java Coding Guidelines: Inner assignments: Not used -->
         <module name="LeftCurly"/> <!-- Java Style Guide: Nonempty blocks: K & R style -->
@@ -272,6 +280,11 @@
             <property name="format" value="CoreMatchers\.equalTo"/>
             <property name="message" value="Use Assert.assertEquals()."/>
         </module>
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="BanJacksonFindAndRegisterModulesMethod"/>
+            <property name="format" value="findAndRegisterModules"/>
+            <property name="message" value="Use ObjectMapper#registerModule(&lt;yourModule&gt;) explicitly. ObjectMapper#findAndRegisterModules() is dangerous because it will change behaviour depending on which modules are on your classpath (including transitive dependencies)."/>
+        </module>
         <module name="RegexpSinglelineJava"> <!-- Java Coding Guidelines: Use appropriate assertion methods -->
             <property name="format" value="CoreMatchers\.notNull"/>
             <property name="message" value="Use better assertion method(s): Assert.assertEquals(), assertNull(), assertSame(), etc."/>
@@ -320,6 +333,18 @@
         <module name="RegexpSinglelineJava">
             <property name="format" value="\.printStackTrace\(\)"/>
             <property name="message" value="printStackTrace is not generally allowed."/>
+            <property name="ignoreComments" value="true"/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="BanSystemOut"/>
+            <property name="format" value="System\.out\."/>
+            <property name="message" value="Logging with System.out is not allowed because it has no metadata and can't be configured at runtime. Please use an SLF4J logger instead, e.g. log.info(&quot;Message&quot;)."/>
+            <property name="ignoreComments" value="true"/>
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="id" value="BanSystemErr"/>
+            <property name="format" value="System\.err\."/>
+            <property name="message" value="Logging with System.err is not allowed because it has no metadata and can't be configured at runtime. Please use an SLF4J logger instead, e.g. log.info(&quot;Message&quot;)."/>
             <property name="ignoreComments" value="true"/>
         </module>
         <module name="RegexpSinglelineJava">

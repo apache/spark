@@ -23,42 +23,23 @@ buildscript {
   }
 
   dependencies {
-    classpath 'com.palantir.baseline:gradle-baseline-java:0.29.2'
+    classpath 'com.palantir.baseline:gradle-baseline-java:0.41.0'
+    classpath 'com.palantir.gradle.gitversion:gradle-git-version:0.11.0'
     classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.8.4'
-    classpath 'com.netflix.nebula:nebula-dependency-recommender:5.2.0'
-    classpath 'com.netflix.nebula:nebula-publishing-plugin:5.1.5'
+    classpath 'com.netflix.nebula:nebula-publishing-plugin:9.2.0'
   }
 }
 
-plugins {
-  id 'com.palantir.git-version' version '0.9.1'
-  id "org.inferred.processors" version "1.2.16"
-}
-
-apply plugin: 'com.palantir.baseline-config' // provides baselineUpdateConfig task
-apply plugin: 'com.palantir.baseline-idea'
 apply plugin: 'com.palantir.baseline'
-apply plugin: 'com.palantir.baseline-class-uniqueness'
-
-dependencies {
-  baseline "com.palantir.baseline:gradle-baseline-java-config:0.29.2@zip"
-}
+apply plugin: 'com.palantir.git-version'
 
 allprojects {
   group 'org.apache.spark'
   version System.env.CIRCLE_TAG ?: gitVersion()
   buildDir = 'gradle-build'
 
-  apply plugin: 'idea'
-  apply plugin: 'nebula.dependency-recommender'
-
   repositories {
     jcenter()
     maven { url "http://palantir.bintray.com/releases" }
-  }
-
-  dependencyRecommendations {
-    strategy OverrideTransitives
-    propertiesFile file: project.rootProject.file('versions.props')
   }
 }

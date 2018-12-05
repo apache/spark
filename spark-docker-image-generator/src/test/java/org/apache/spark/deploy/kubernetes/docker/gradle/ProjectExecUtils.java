@@ -23,12 +23,13 @@ import org.mockito.Mockito;
 
 public final class ProjectExecUtils {
 
-  public static void invokeExecSpecAction(Project project, ExecSpec execSpec) {
-    Mockito.when(project.exec(Mockito.any(Action.class))).thenAnswer(invocation -> {
-      ((Action<ExecSpec>) invocation.getArgument(0)).execute(execSpec);
-      return null;
-    });
-  }
+    public static void invokeExecSpecAction(Project project, ExecSpec execSpec) {
+        Mockito.when(project.exec(Mockito.any(Action.class))).thenAnswer(invocation -> {
+            ((Action<ExecSpec>) invocation.getArgument(0)).execute(execSpec);
+            return null;
+        });
+    }
 
-  private ProjectExecUtils() {}
+    private ProjectExecUtils() {
+    }
 }

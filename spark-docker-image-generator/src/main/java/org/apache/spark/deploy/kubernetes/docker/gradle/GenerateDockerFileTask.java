@@ -24,7 +24,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import org.gradle.api.DefaultTask;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
@@ -34,58 +33,57 @@ import org.gradle.api.tasks.TaskAction;
 
 public class GenerateDockerFileTask extends DefaultTask {
 
-  private File srcDockerFile;
-  private File destDockerFile;
-  private Property<String> baseImage;
+    private File srcDockerFile;
+    private File destDockerFile;
+    private Property<String> baseImage;
 
-  public final void setSrcDockerFile(File srcDockerFile) {
-    this.srcDockerFile = srcDockerFile;
-  }
-
-  public final void setDestDockerFile(File destDockerFile) {
-    this.destDockerFile = destDockerFile;
-  }
-
-  public final void setBaseImage(Property<String> baseImage) {
-    this.baseImage = baseImage;
-  }
-
-  @InputFile
-  public final File getSrcDockerFile() {
-    return srcDockerFile;
-  }
-
-  @OutputFile
-  public final File getDestDockerFile() {
-    return destDockerFile;
-  }
-
-  @Input
-  public final Property<String> getBaseImage() {
-    return baseImage;
-  }
-
-  @TaskAction
-  public final void generateDockerFile() throws IOException {
-    if (!baseImage.isPresent()) {
-      Files.copy(srcDockerFile.toPath(), destDockerFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-    } else {
-      File currentSrcDockerFile = getSrcDockerFile();
-      File currentDestDockerFile = getDestDockerFile();
-      List<String> fileLines;
-      try (Stream<String> rawLines = Files.lines(currentSrcDockerFile.toPath(), StandardCharsets.UTF_8)) {
-        fileLines = rawLines
-                .map(line -> {
-                  if (line.equals("FROM openjdk:8-alpine")) {
-                    return String.format("FROM %s", baseImage.get());
-                  } else {
-                    return line;
-                  }
-                }).collect(Collectors.toList());
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-      Files.write(currentDestDockerFile.toPath(), fileLines, StandardCharsets.UTF_8);
+    public final void setSrcDockerFile(File srcDockerFile) {
+        this.srcDockerFile = srcDockerFile;
     }
-  }
+
+    public final void setDestDockerFile(File destDockerFile) {
+        this.destDockerFile = destDockerFile;
+    }
+
+    public final void setBaseImage(Property<String> baseImage) {
+        this.baseImage = baseImage;
+    }
+
+    @InputFile
+    public final File getSrcDockerFile() {
+        return srcDockerFile;
+    }
+
+    @OutputFile
+    public final File getDestDockerFile() {
+        return destDockerFile;
+    }
+
+    @Input
+    public final Property<String> getBaseImage() {
+        return baseImage;
+    }
+
+    @TaskAction
+    public final void generateDockerFile() throws IOException {
+        if (!baseImage.isPresent()) {
+            Files.copy(srcDockerFile.toPath(), destDockerFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } else {
+            File currentSrcDockerFile = getSrcDockerFile();
+            File currentDestDockerFile = getDestDockerFile();
+            List<String> fileLines;
+            try (Stream<String> rawLines = Files.lines(currentSrcDockerFile.toPath(), StandardCharsets.UTF_8)) {
+                fileLines = rawLines.map(line -> {
+                    if (line.equals("FROM openjdk:8-alpine")) {
+                        return String.format("FROM %s", baseImage.get());
+                    } else {
+                        return line;
+                    }
+                }).collect(Collectors.toList());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            Files.write(currentDestDockerFile.toPath(), fileLines, StandardCharsets.UTF_8);
+        }
+    }
 }

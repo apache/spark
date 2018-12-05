@@ -50,6 +50,7 @@
         <option name="JD_KEEP_EMPTY_EXCEPTION" value="false" />
         <option name="JD_KEEP_EMPTY_PARAMETER" value="false" />
         <option name="JD_KEEP_EMPTY_RETURN" value="false" />
+        <option name="JD_PRESERVE_LINE_FEEDS" value="true" />
         <option name="KEEP_BLANK_LINES_IN_CODE" value="1" />
         <option name="KEEP_CONTROL_STATEMENT_IN_ONE_LINE" value="false" />
         <option name="METHOD_CALL_CHAIN_WRAP" value="1" />
@@ -85,31 +86,39 @@
           <option name="ALIGN_MULTILINE_PARAMETERS" value="false" />
           <option name="ALIGN_MULTILINE_RESOURCES" value="false" />
           <option name="ARRAY_INITIALIZER_WRAP" value="1" />
+          <option name="ASSIGNMENT_WRAP" value="1" />
           <option name="BINARY_OPERATION_SIGN_ON_NEXT_LINE" value="true" />
           <option name="BINARY_OPERATION_WRAP" value="1" />
           <option name="BLANK_LINES_AROUND_METHOD_IN_INTERFACE" value="0" />
-          <option name="CALL_PARAMETERS_WRAP" value="1" />
+          <option name="CALL_PARAMETERS_LPAREN_ON_NEXT_LINE" value="true" />
+          <option name="CALL_PARAMETERS_WRAP" value="5" />
           <option name="DOWHILE_BRACE_FORCE" value="3" />
+          <option name="ENUM_CONSTANTS_WRAP" value="2" />
           <option name="EXTENDS_KEYWORD_WRAP" value="1" />
           <option name="EXTENDS_LIST_WRAP" value="1" />
           <option name="FIELD_ANNOTATION_WRAP" value="1" />
           <option name="FOR_BRACE_FORCE" value="3" />
           <option name="FOR_STATEMENT_WRAP" value="1" />
           <option name="IF_BRACE_FORCE" value="3" />
-          <option name="KEEP_BLANK_LINES_BEFORE_RBRACE" value="1" />
+          <option name="KEEP_BLANK_LINES_BEFORE_RBRACE" value="0" />
+          <option name="KEEP_BLANK_LINES_IN_CODE" value="1" />
+          <option name="KEEP_BLANK_LINES_IN_DECLARATIONS" value="1" />
           <option name="KEEP_CONTROL_STATEMENT_IN_ONE_LINE" value="false" />
           <option name="KEEP_FIRST_COLUMN_COMMENT" value="false" />
           <option name="KEEP_SIMPLE_CLASSES_IN_ONE_LINE" value="true" />
+          <option name="KEEP_SIMPLE_LAMBDAS_IN_ONE_LINE" value="true" />
           <option name="KEEP_SIMPLE_METHODS_IN_ONE_LINE" value="true" />
           <option name="LINE_COMMENT_AT_FIRST_COLUMN" value="false" />
           <option name="LINE_COMMENT_ADD_SPACE" value="true" />
-          <option name="METHOD_PARAMETERS_WRAP" value="1" />
+          <option name="METHOD_CALL_CHAIN_WRAP" value="5" />
+          <option name="METHOD_PARAMETERS_LPAREN_ON_NEXT_LINE" value="true" />
+          <option name="METHOD_PARAMETERS_WRAP" value="5" />
           <option name="OPTIMIZE_IMPORTS_ON_THE_FLY" value="true" />
           <option name="PARENT_SETTINGS_INSTALLED" value="true" />
           <option name="RESOURCE_LIST_WRAP" value="5" />
           <option name="SPACE_BEFORE_ARRAY_INITIALIZER_LBRACE" value="true" />
           <option name="TERNARY_OPERATION_SIGNS_ON_NEXT_LINE" value="true" />
-          <option name="TERNARY_OPERATION_WRAP" value="1" />
+          <option name="TERNARY_OPERATION_WRAP" value="5" />
           <option name="THROWS_KEYWORD_WRAP" value="1" />
           <option name="THROWS_LIST_WRAP" value="1" />
           <option name="WHILE_BRACE_FORCE" value="3" />

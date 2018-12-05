@@ -24,10 +24,10 @@ import com.google.common.collect.ImmutableList;
 
 public final class HelloWorld {
 
-  private HelloWorld() { }
+    private HelloWorld() { }
 
-  public static void main(String[] args) {
-    List<String> strs = ImmutableList.of("Hello", "World");
-    System.out.println(Joiner.on(",").join(strs));
-  }
+    public static void main(String[] args) {
+        List<String> strs = ImmutableList.of("Hello", "World");
+        System.out.println(Joiner.on(",").join(strs));
+    }
 }

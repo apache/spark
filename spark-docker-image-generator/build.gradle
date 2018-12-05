@@ -15,15 +15,12 @@
  * limitations under the License.
  */
 
-plugins {
-  id 'java-gradle-plugin'
-}
-
-apply plugin: 'java'
-apply plugin: 'idea'
+apply plugin: 'java-gradle-plugin'
 apply from: "${rootDir}/gradle/publish.gradle"
 
-sourceCompatibility = 1.8
+java {
+    sourceCompatibility JavaVersion.VERSION_1_8
+}
 
 dependencies {
   compile gradleApi()
@@ -34,11 +31,6 @@ dependencies {
   testCompile 'junit:junit'
   testCompile 'com.spotify:docker-client'
   testCompile gradleTestKit()
-}
-
-test {
-  minHeapSize = "512m"
-  maxHeapSize = "512m"
 }
 
 task prepareDockerBundleDir(type: Zip) {
@@ -83,6 +75,8 @@ publishing {
 
 test {
     systemProperty 'docker-resources-zip-path', "${buildDir}/docker-resources/docker-resources.zip"
+    minHeapSize = "512m"
+    maxHeapSize = "512m"
 }
 
 tasks.test.dependsOn tasks.publishDockerBundlePublicationToMavenTestRepository

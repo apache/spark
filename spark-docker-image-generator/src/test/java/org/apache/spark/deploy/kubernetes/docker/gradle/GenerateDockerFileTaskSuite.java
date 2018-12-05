@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-
 import org.apache.commons.io.IOUtils;
 import org.assertj.core.api.Assertions;
 import org.gradle.api.provider.Property;
@@ -40,63 +39,61 @@ import org.junit.rules.TemporaryFolder;
 import org.mockito.Mockito;
 
 public final class GenerateDockerFileTaskSuite {
-  @Rule
-  public TemporaryFolder tempFolder = new TemporaryFolder();
+    @Rule
+    public TemporaryFolder tempFolder = new TemporaryFolder();
 
-  private File srcDockerFile;
-  private File destDockerFile;
+    private File srcDockerFile;
+    private File destDockerFile;
 
-  @Before
-  public void before() throws IOException {
-    File dockerFileDir = tempFolder.newFolder("docker");
-    destDockerFile = new File(dockerFileDir, "Dockerfile");
-    srcDockerFile = tempFolder.newFile("Dockerfile.original");
+    @Before
+    public void before() throws IOException {
+        File dockerFileDir = tempFolder.newFolder("docker");
+        destDockerFile = new File(dockerFileDir, "Dockerfile");
+        srcDockerFile = tempFolder.newFile("Dockerfile.original");
+        File dockerResourcesFile = new File(System.getProperty("docker-resources-zip-path"));
 
-    try (InputStream originalDockerBundleZipped = new FileInputStream(
-            new File(System.getProperty("docker-resources-zip-path")));
-        ZipInputStream unzipped = new ZipInputStream(originalDockerBundleZipped);
-        FileOutputStream srcDockerFileStream = new FileOutputStream(srcDockerFile)) {
-      ZipEntry currentEntry = unzipped.getNextEntry();
-      boolean foundDockerFile = false;
-      while (currentEntry != null && !foundDockerFile) {
-        if (currentEntry.getName().equals("kubernetes/dockerfiles/spark/Dockerfile.original")) {
-          IOUtils.copy(unzipped, srcDockerFileStream);
-          foundDockerFile = true;
-        } else {
-          currentEntry = unzipped.getNextEntry();
+        try (InputStream originalDockerBundleZipped = new FileInputStream(dockerResourcesFile);
+                ZipInputStream unzipped = new ZipInputStream(originalDockerBundleZipped);
+                FileOutputStream srcDockerFileStream = new FileOutputStream(srcDockerFile)) {
+            ZipEntry currentEntry = unzipped.getNextEntry();
+            boolean foundDockerFile = false;
+            while (currentEntry != null && !foundDockerFile) {
+                if (currentEntry.getName().equals("kubernetes/dockerfiles/spark/Dockerfile.original")) {
+                    IOUtils.copy(unzipped, srcDockerFileStream);
+                    foundDockerFile = true;
+                } else {
+                    currentEntry = unzipped.getNextEntry();
+                }
+            }
+            if (!foundDockerFile) {
+                throw new IllegalStateException("Dockerfile not found.");
+            }
         }
-      }
-      if (!foundDockerFile) {
-        throw new IllegalStateException("Dockerfile not found.");
-      }
     }
-  }
 
-  @Test
-  public void testGenerateDockerFile() throws IOException {
-    GenerateDockerFileTask task = Mockito.mock(GenerateDockerFileTask.class);
-    task.setDestDockerFile(destDockerFile);
-    task.setSrcDockerFile(srcDockerFile);
-    Property<String> baseImageProperty = Mockito.mock(Property.class);
-    Mockito.when(baseImageProperty.isPresent()).thenReturn(true);
-    Mockito.when(baseImageProperty.get()).thenReturn("fabric8/java-centos-openjdk8-jdk:latest");
-    task.setBaseImage(baseImageProperty);
-    task.generateDockerFile();
-    Assertions.assertThat(destDockerFile).isFile();
-    List<String> writtenLines = Files.readAllLines(
-        destDockerFile.toPath(), StandardCharsets.UTF_8);
-    try (InputStream expectedDockerFileInput =
-        getClass().getResourceAsStream("/ExpectedDockerfile");
-        InputStreamReader expectedDockerFileReader =
-            new InputStreamReader(expectedDockerFileInput, StandardCharsets.UTF_8);
-        BufferedReader expectedDockerFileBuffered =
-            new BufferedReader(expectedDockerFileReader)) {
-      List<String> expectedFileLines = expectedDockerFileBuffered
-          .lines()
-          .collect(Collectors.toList());
-      Assertions.assertThat(writtenLines).isEqualTo(expectedFileLines);
+    @Test
+    public void testGenerateDockerFile() throws IOException {
+        GenerateDockerFileTask task = Mockito.mock(GenerateDockerFileTask.class);
+        task.setDestDockerFile(destDockerFile);
+        task.setSrcDockerFile(srcDockerFile);
+        Property<String> baseImageProperty = Mockito.mock(Property.class);
+        Mockito.when(baseImageProperty.isPresent()).thenReturn(true);
+        Mockito.when(baseImageProperty.get()).thenReturn("fabric8/java-centos-openjdk8-jdk:latest");
+        task.setBaseImage(baseImageProperty);
+        task.generateDockerFile();
+        Assertions.assertThat(destDockerFile).isFile();
+        List<String> writtenLines = Files.readAllLines(
+                destDockerFile.toPath(), StandardCharsets.UTF_8);
+        try (InputStream expectedDockerFileInput = getClass().getResourceAsStream("/ExpectedDockerfile");
+                InputStreamReader expectedDockerFileReader =
+                        new InputStreamReader(expectedDockerFileInput, StandardCharsets.UTF_8);
+                BufferedReader expectedDockerFileBuffered =
+                        new BufferedReader(expectedDockerFileReader)) {
+            List<String> expectedFileLines = expectedDockerFileBuffered
+                    .lines()
+                    .collect(Collectors.toList());
+            Assertions.assertThat(writtenLines).isEqualTo(expectedFileLines);
+        }
     }
-  }
 
 }
-
