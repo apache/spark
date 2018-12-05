@@ -75,7 +75,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * A linked list for tracking all allocated data pages so that we can free all of our memory.
    */
-  private final LinkedList<MemoryBlock> dataPages = new LinkedList<>();
+  private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<>();
 
   /**
    * The data page that will be used to store keys and values for new hashtable entries. When this
@@ -269,14 +269,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
     private void advanceToNextPage() {
       synchronized (this) {
-        int nextIdx = dataPages.indexOf(currentPage) + 1;
+        int nextIdx = allocatedPages.indexOf(currentPage) + 1;
         if (destructive && currentPage != null) {
-          dataPages.remove(currentPage);
+          allocatedPages.remove(currentPage);
           freePage(currentPage);
           nextIdx --;
         }
-        if (dataPages.size() > nextIdx) {
-          currentPage = dataPages.get(nextIdx);
+        if (allocatedPages.size() > nextIdx) {
+          currentPage = allocatedPages.get(nextIdx);
           pageBaseObject = currentPage.getBaseObject();
           offsetInPage = currentPage.getBaseOffset();
           recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
@@ -344,7 +344,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
     public long spill(long numBytes) throws IOException {
       synchronized (this) {
-        if (!destructive || dataPages.size() == 1) {
+        if (!destructive || allocatedPages.size() == 1) {
           return 0L;
         }
 
@@ -354,8 +354,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
         ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
 
         long released = 0L;
-        while (dataPages.size() > 0) {
-          MemoryBlock block = dataPages.getLast();
+        while (allocatedPages.size() > 0) {
+          MemoryBlock block = allocatedPages.getLast();
           // The currentPage is used, cannot be released
           if (block == currentPage) {
             break;
@@ -377,7 +377,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
           writer.close();
           spillWriters.add(writer);
 
-          dataPages.removeLast();
+          allocatedPages.removeLast();
           released += block.size();
           freePage(block);
 
@@ -761,7 +761,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     } catch (SparkOutOfMemoryError e) {
       return false;
     }
-    dataPages.add(currentPage);
+    allocatedPages.add(currentPage);
     UnsafeAlignedOffset.putSize(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
     pageCursor = UnsafeAlignedOffset.getUaoSize();
     return true;
@@ -804,13 +804,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
       freeArray(longArray);
       longArray = null;
     }
-    Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
+    Iterator<MemoryBlock> dataPagesIterator = allocatedPages.iterator();
     while (dataPagesIterator.hasNext()) {
       MemoryBlock dataPage = dataPagesIterator.next();
       dataPagesIterator.remove();
       freePage(dataPage);
     }
-    assert(dataPages.isEmpty());
+    assert(allocatedPages.isEmpty());
 
     while (!spillWriters.isEmpty()) {
       File file = spillWriters.removeFirst().getFile();
@@ -835,7 +835,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   public long getTotalMemoryConsumption() {
     long totalDataPagesSize = 0L;
-    for (MemoryBlock dataPage : dataPages) {
+    for (MemoryBlock dataPage : allocatedPages) {
       totalDataPagesSize += dataPage.size();
     }
     return totalDataPagesSize + ((longArray != null) ? longArray.memoryBlock().size() : 0L);
@@ -868,7 +868,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   @VisibleForTesting
   public int getNumDataPages() {
-    return dataPages.size();
+    return allocatedPages.size();
   }
 
   /**
@@ -887,8 +887,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
     numKeys = 0;
     numValues = 0;
     freeArray(longArray);
-    while (dataPages.size() > 0) {
-      MemoryBlock dataPage = dataPages.removeLast();
+    while (allocatedPages.size() > 0) {
+      MemoryBlock dataPage = allocatedPages.removeLast();
       freePage(dataPage);
     }
     allocate(initialCapacity);

@@ -95,7 +95,7 @@ public class TaskMemoryManager {
   /**
    * Bitmap for tracking free pages.
    */
-  private final BitSet allocatedPages = new BitSet(PAGE_TABLE_SIZE);
+  private final BitSet pagesBitSet = new BitSet(PAGE_TABLE_SIZE);
 
   private final MemoryManager memoryManager;
 
@@ -293,13 +293,13 @@ public class TaskMemoryManager {
 
     final int pageNumber;
     synchronized (this) {
-      pageNumber = allocatedPages.nextClearBit(0);
+      pageNumber = pagesBitSet.nextClearBit(0);
       if (pageNumber >= PAGE_TABLE_SIZE) {
         releaseExecutionMemory(acquired, consumer);
         throw new IllegalStateException(
           "Have already allocated a maximum of " + PAGE_TABLE_SIZE + " pages");
       }
-      allocatedPages.set(pageNumber);
+      pagesBitSet.set(pageNumber);
     }
     MemoryBlock page = null;
     try {
@@ -310,7 +310,7 @@ public class TaskMemoryManager {
       // MemoryManager thought, we should keep the acquired memory.
       synchronized (this) {
         acquiredButNotUsed += acquired;
-        allocatedPages.clear(pageNumber);
+        pagesBitSet.clear(pageNumber);
       }
       // this could trigger spilling to free some pages.
       return allocatePage(size, consumer);
@@ -333,10 +333,10 @@ public class TaskMemoryManager {
       "Called freePage() on a memory block that has already been freed";
     assert (page.pageNumber != MemoryBlock.FREED_IN_TMM_PAGE_NUMBER) :
             "Called freePage() on a memory block that has already been freed";
-    assert(allocatedPages.get(page.pageNumber));
+    assert(pagesBitSet.get(page.pageNumber));
     pageTable[page.pageNumber] = null;
     synchronized (this) {
-      allocatedPages.clear(page.pageNumber);
+      pagesBitSet.clear(page.pageNumber);
     }
     if (logger.isTraceEnabled()) {
       logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
