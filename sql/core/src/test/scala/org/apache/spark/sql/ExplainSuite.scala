@@ -30,7 +30,7 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
   private def checkKeywordsExistsInExplain(df: DataFrame, keywords: String*): Unit = {
     val output = new java.io.ByteArrayOutputStream()
     Console.withOut(output) {
-      df.explain(extended = false)
+      df.explain(extended = true)
     }
     val normalizedOutput = output.toString.replaceAll("#\\d+", "#x")
     for (key <- keywords) {
