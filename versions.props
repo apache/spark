@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-org.apache.commons:commons-compress = 1.8.1
-commons-io:commons-io = 2.4
-com.spotify:docker-client = 8.11.2
-org.assertj:assertj-core = 3.5.2
-org.mockito:mockito-core = 2.2.11
+org.apache.commons:commons-compress = 1.18
+commons-io:commons-io = 2.6
+com.spotify:docker-client = 8.14.5
+org.assertj:assertj-core = 3.11.1
+org.mockito:mockito-core = 2.23.4
 junit:junit = 4.12
