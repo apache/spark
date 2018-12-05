@@ -728,13 +728,6 @@ class GBTParams(TreeEnsembleParams, HasMaxIter, HasStepSize, HasValidationIndica
                           typeConverter=TypeConverters.toFloat)
 
     @since("3.0.0")
-    def setValidationTol(self, value):
-        """
-        Sets the value of :py:attr:`validationTol`.
-        """
-        return self._set(validationTol=value)
-
-    @since("3.0.0")
     def getValidationTol(self):
         """
         Gets the value of validationTol or its default value.
@@ -757,11 +750,11 @@ class GBTRegressorParams(GBTParams, TreeRegressorParams):
                      typeConverter=TypeConverters.toString)
 
     @since("1.4.0")
-    def setLossType(self, value):
+    def getLossType(self):
         """
-        Sets the value of :py:attr:`lossType`.
+        Gets the value of lossType or its default value.
         """
-        return self._set(lossType=value)
+        return self.getOrDefault(self.lossType)
 
 
 @inherit_doc
@@ -1186,6 +1179,13 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
 
     def _create_model(self, java_model):
         return GBTRegressionModel(java_model)
+
+    @since("1.4.0")
+    def setLossType(self, value):
+        """
+        Sets the value of :py:attr:`lossType`.
+        """
+        return self._set(lossType=value)
 
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):

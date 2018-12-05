@@ -1179,12 +1179,12 @@ class GBTClassifierParams(GBTParams, HasVarianceImpurity):
                      "Supported options: " + ", ".join(supportedLossTypes),
                      typeConverter=TypeConverters.toString)
 
-    @since("3.0.0")
-    def setLossType(self, value):
+    @since("1.4.0")
+    def getLossType(self):
         """
-        Sets the value of :py:attr:`lossType`.
+        Gets the value of lossType or its default value.
         """
-        return self._set(lossType=value)
+        return self.getOrDefault(self.lossType)
 
 
 @inherit_doc
@@ -1310,6 +1310,13 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
 
     def _create_model(self, java_model):
         return GBTClassificationModel(java_model)
+
+    @since("1.4.0")
+    def setLossType(self, value):
+        """
+        Sets the value of :py:attr:`lossType`.
+        """
+        return self._set(lossType=value)
 
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):
