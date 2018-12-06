@@ -44,7 +44,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def pandas_scalar_time_two(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        from pyspark.sql.functions import pandas_udf
         return pandas_udf(lambda v: v * 2, 'double')
 
     @property
@@ -123,7 +123,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
             .rangeBetween(-3, Window.unboundedFollowing)
 
     def test_simple(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType, percent_rank, mean, max
+        from pyspark.sql.functions import mean
 
         df = self.data
         w = self.unbounded_window
@@ -266,7 +266,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(result1.first()['v2'], [1.0, 2.0])
 
     def test_invalid_args(self):
-        from pyspark.sql.functions import mean, pandas_udf, PandasUDFType
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         df = self.data
         w = self.unbounded_window
@@ -355,7 +355,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
     def test_bounded_mixed(self):
-        from pyspark.sql.functions import mean, max, min, count
+        from pyspark.sql.functions import mean, max
 
         df = self.data
         w1 = self.sliding_row_window
