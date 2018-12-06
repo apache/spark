@@ -201,26 +201,27 @@ public abstract class UnsafeWriter {
   // We need to take care of NaN and -0.0 in several places:
   //   1. When compare values, different NaNs should be treated as same, `-0.0` and `0.0` should be
   //      treated as same.
-  //   2. In range partitioner, different NaNs should belong to the same partition, -0.0 and 0.0
-  //      should belong to the same partition.
-  //   3. In GROUP BY, different NaNs should belong to the same group, -0.0 and 0.0 should belong
+  //   2. In GROUP BY, different NaNs should belong to the same group, -0.0 and 0.0 should belong
   //      to the same group.
-  //   4. As join keys, different NaNs should be treated as same, `-0.0` and `0.0` should be
+  //   3. As join keys, different NaNs should be treated as same, `-0.0` and `0.0` should be
   //      treated as same.
+  //   4. As window partition keys, different NaNs should be treated as same, `-0.0` and `0.0`
+  //      should be treated as same.
   //
   // Case 1 is fine, as we handle NaN and -0.0 well during comparison. For complex types, we
   // recursively compare the fields/elements, so it's also fine.
   //
-  // Case 2 is problematic, as the sorter of range partitioner uses prefix comparator, which
-  // thinks 0.0 > -0.0.
+  // Case 2, 3 and 4 are problematic, as they compare `UnsafeRow` binary directly, and different
+  // NaNs have different binary representation, and the same thing happens for -0.0 and 0.0.
   //
-  // Case 3 and 4 are problematic, as they compare `UnsafeRow` binary directly, and different NaNs
-  // have different binary representation, and the same thing happens for -0.0 and 0.0.
+  // Here we normalize NaN and -0.0, so that `UnsafeProjection` will normalize them when writing
+  // float/double columns and nested fields to `UnsafeRow`.
   //
-  // Here we normalize NaN and -0.0, so that we don't need to care about NaN and -0.0 for
-  // `UnsafeRow`s created by `UnsafeProjection`. It fixes case 2, because the input of the sorter
-  // of the range partitioner are `UnsafeRow`s created by `UnsafeProjection`. It also fixes case 3
-  // and 4, because Spark uses `UnsafeProjection` to extract join keys/grouping keys.
+  // Note that, we must do this for all the `UnsafeProjection`s, not only the ones that extract
+  // join/grouping/window partition keys. `UnsafeProjection` copies unsafe data directly for complex
+  // types, so nested float/double may not be normalized. We need to make sure that all the unsafe
+  // data(`UnsafeRow`, `UnsafeArrayData`, `UnsafeMapData`) will have flat/double normalized during
+  // creation.
   protected final void writeFloat(long offset, float value) {
     if (Float.isNaN(value)) {
       value = Float.NaN;
