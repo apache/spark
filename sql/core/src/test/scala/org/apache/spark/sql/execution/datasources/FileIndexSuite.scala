@@ -108,7 +108,7 @@ class FileIndexSuite extends SharedSQLContext {
         val msg = intercept[RuntimeException] {
           fileIndex.partitionSpec()
         }.getMessage
-        assert(msg == "Failed to cast partition value `foo` to IntegerType")
+        assert(msg == "Failed to cast value `foo` to `IntegerType` for partition column `a`")
       }
 
       withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {

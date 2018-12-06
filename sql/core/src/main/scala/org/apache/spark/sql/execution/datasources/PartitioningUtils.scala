@@ -284,7 +284,8 @@ object PartitioningUtils {
         val columnValue = columnValueLiteral.eval()
         val castedValue = Cast(columnValueLiteral, dataType, Option(timeZone.getID)).eval()
         if (validatePartitionColumns && columnValue != null && castedValue == null) {
-          throw new RuntimeException(s"Failed to cast partition value `$columnValue` to $dataType")
+          throw new RuntimeException(s"Failed to cast value `$columnValue` to `$dataType` " +
+            s"for partition column `$columnName`")
         }
         Literal.create(castedValue, userSpecifiedDataTypes(columnName))
       } else {
