@@ -23,13 +23,9 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
   import DecommissionSuite._
   import KubernetesSuite.k8sTestTag
 
-  private val pySparkDockerImage =
-    s"${getTestImageRepo}/spark-py:${getTestImageTag}"
-
   test("Run SparkPi with env and mount secrets.", k8sTestTag) {
     sparkAppConf
       .set("spark.worker.decommission.enabled", "true")
-      .set("spark.kubernetes.container.image", pySparkDockerImage)
       .set("spark.kubernetes.pyspark.pythonVersion", "2")
 
     runSparkApplicationAndVerifyCompletion(
