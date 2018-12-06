@@ -402,7 +402,7 @@ private[spark] object EventLoggingListener extends Logging {
       val codec = codecName(log).map { c =>
         codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
       }
-      codec.map(_.compressedInputStreamForPartialFrame(in)).getOrElse(in)
+      codec.map(_.compressedInputStream(in)).getOrElse(in)
     } catch {
       case e: Throwable =>
         in.close()
