@@ -38,9 +38,11 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
-  private val writeMetrics = SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
-  override lazy val metrics =
-    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext) ++ writeMetrics
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
     val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
     val shuffled = new ShuffledRowRDD(
@@ -50,7 +52,7 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
         SinglePartition,
         serializer,
         SQLShuffleWriteMetricsReporter(writeMetrics)),
-      metrics)
+      readMetrics)
     shuffled.mapPartitionsInternal(_.take(limit))
   }
 }
@@ -160,10 +162,11 @@ case class TakeOrderedAndProjectExec(
 
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
-  private val writeMetrics = SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
-
-  override lazy val metrics =
-    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext) ++ writeMetrics
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
 
   protected override def doExecute(): RDD[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
@@ -179,7 +182,7 @@ case class TakeOrderedAndProjectExec(
         SinglePartition,
         serializer,
         SQLShuffleWriteMetricsReporter(writeMetrics)),
-      metrics)
+      readMetrics)
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
       if (projectList != child.output) {
