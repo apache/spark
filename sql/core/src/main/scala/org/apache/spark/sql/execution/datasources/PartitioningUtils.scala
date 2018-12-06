@@ -287,7 +287,7 @@ object PartitioningUtils {
           throw new RuntimeException(s"Failed to cast value `$columnValue` to `$dataType` " +
             s"for partition column `$columnName`")
         }
-        Literal.create(castedValue, userSpecifiedDataTypes(columnName))
+        Literal.create(castedValue, dataType)
       } else {
         inferPartitionColumnValue(rawColumnValue, typeInference, timeZone)
       }
