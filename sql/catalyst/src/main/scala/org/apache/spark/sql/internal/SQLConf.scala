@@ -1400,9 +1400,9 @@ object SQLConf {
     buildConf("spark.sql.sources.validatePartitionColumns")
       .internal()
       .doc("When this option is set to true, partition column values will be validated with " +
-        "provided schema. If the validation fails, a runtime exception is thrown." +
+        "user-specified schema. If the validation fails, a runtime exception is thrown." +
         "When this option is set to false, the partition column value will be converted to null " +
-        "if it can not be converted to corresponding provided schema.")
+        "if it can not be casted to corresponding user-specified schema.")
       .booleanConf
       .createWithDefault(true)
 

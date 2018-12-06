@@ -95,7 +95,7 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
-  test("SPARK-26263: Throw exception when partition value can't be converted to specific type") {
+  test("SPARK-26263: Throw exception when partition value can't be casted to user-specified type") {
     withTempDir { dir =>
       val partitionDirectory = new File(dir, "a=foo")
       partitionDirectory.mkdir()
