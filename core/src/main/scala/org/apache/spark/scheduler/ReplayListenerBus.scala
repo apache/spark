@@ -119,11 +119,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
         // Just stop replay.
       case _: EOFException if maybeTruncated =>
       case ioe: IOException =>
-        if (maybeTruncated) {
-          logWarning(s"Failed to read Spark event log: $sourceName")
-        } else {
-          throw ioe
-        }
+        throw ioe
       case e: Exception =>
         logError(s"Exception parsing Spark event log: $sourceName", e)
         logError(s"Malformed line #$lineNumber: $currentLine\n")
