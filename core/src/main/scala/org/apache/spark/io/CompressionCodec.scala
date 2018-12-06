@@ -204,9 +204,9 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedInputStreamForPartialFrame(s: InputStream): InputStream = {
     // SPARK-26283: Enable reading from open frames of zstd (for eg: zstd compressed eventLog
-    // Reading). By default `isContinous` is false, and when we try to read from open frames,
+    // Reading). By default `isContinuous` is false, and when we try to read from open frames,
     // `compressedInputStream` method above throws truncated error exception. This method set
-    // `isContinous` true to allow reading from open frames.
+    // `isContinuous` true to allow reading from open frames.
     new BufferedInputStream(new ZstdInputStream(s).setContinuous(true), bufferSize)
   }
 }
