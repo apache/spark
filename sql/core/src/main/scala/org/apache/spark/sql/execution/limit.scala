@@ -51,7 +51,7 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
         child.output,
         SinglePartition,
         serializer,
-        SQLShuffleWriteMetricsReporter(writeMetrics)),
+        writeMetrics),
       readMetrics)
     shuffled.mapPartitionsInternal(_.take(limit))
   }
@@ -181,7 +181,7 @@ case class TakeOrderedAndProjectExec(
         child.output,
         SinglePartition,
         serializer,
-        SQLShuffleWriteMetricsReporter(writeMetrics)),
+        writeMetrics),
       readMetrics)
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)

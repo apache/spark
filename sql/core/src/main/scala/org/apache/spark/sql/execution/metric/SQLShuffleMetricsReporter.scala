@@ -98,20 +98,18 @@ private[spark] object SQLShuffleReadMetricsReporter {
 }
 
 /**
- * A shuffle write metrics reporter for SQL exchange operators. Different with
- * [[SQLShuffleReadMetricsReporter]], we need a function of (reporter => reporter) set in
- * shuffle dependency, so the local SQLMetric should transient and create on executor.
- * @param metrics Shuffle write metrics in current SparkPlan.
+ * A shuffle write metrics reporter for SQL exchange operators.
  * @param metricsReporter Other reporter need to be updated in this SQLShuffleWriteMetricsReporter.
+ * @param metrics Shuffle write metrics in current SparkPlan.
  */
-private[spark] case class SQLShuffleWriteMetricsReporter(
-    metrics: Map[String, SQLMetric])(metricsReporter: ShuffleWriteMetricsReporter)
-  extends ShuffleWriteMetricsReporter with Serializable {
-  @transient private[this] lazy val _bytesWritten =
+private[spark] class SQLShuffleWriteMetricsReporter(
+    metricsReporter: ShuffleWriteMetricsReporter,
+    metrics: Map[String, SQLMetric]) extends ShuffleWriteMetricsReporter {
+  private[this] val _bytesWritten =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_BYTES_WRITTEN)
-  @transient private[this] lazy val _recordsWritten =
+  private[this] val _recordsWritten =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN)
-  @transient private[this] lazy val _writeTime =
+  private[this] val _writeTime =
     metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_WRITE_TIME)
 
   override private[spark] def incBytesWritten(v: Long): Unit = {

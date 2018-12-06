@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.{DefaultShuffleWriteProcessor, ShuffleHandle, ShuffleWriteProcessor}
 
 /**
  * :: DeveloperApi ::
@@ -65,8 +65,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  * @param keyOrdering key ordering for RDD's shuffles
  * @param aggregator map/reduce-side aggregator for RDD's shuffle
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
- * @param writeMetricsReporterCreator the function to create an external shuffle write metrics
- *                                    reporter for this shuffle stage.
+ * @param shuffleWriterProcessor the processor to control the write behavior in ShuffleMapTask.
  */
 @DeveloperApi
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
@@ -76,8 +75,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false,
-    val writeMetricsReporterCreator
-      : Option[ShuffleWriteMetricsReporter => ShuffleWriteMetricsReporter] = None)
+    val shuffleWriterProcessor: ShuffleWriteProcessor = new DefaultShuffleWriteProcessor)
   extends Dependency[Product2[K, V]] {
 
   if (mapSideCombine) {

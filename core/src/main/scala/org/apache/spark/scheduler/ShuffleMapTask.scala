@@ -92,34 +92,7 @@ private[spark] class ShuffleMapTask(
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
 
-    // Get `SQLShuffleWriteMetricsReporter` if needed, it will update its own metrics for
-    // SQL exchange operator, as well as the shuffle write metrics in task context.
-    val contextMetricsReporter = context.taskMetrics().shuffleWriteMetrics
-    val metricsReporter = if (dep.writeMetricsReporterCreator.isDefined) {
-      dep.writeMetricsReporterCreator.get.apply(contextMetricsReporter)
-    } else {
-      contextMetricsReporter
-    }
-
-    var writer: ShuffleWriter[Any, Any] = null
-    try {
-      val manager = SparkEnv.get.shuffleManager
-      writer = manager.getWriter[Any, Any](
-        dep.shuffleHandle, partitionId, context, metricsReporter)
-      writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
-      writer.stop(success = true).get
-    } catch {
-      case e: Exception =>
-        try {
-          if (writer != null) {
-            writer.stop(success = false)
-          }
-        } catch {
-          case e: Exception =>
-            log.debug("Could not stop writer", e)
-        }
-        throw e
-    }
+    dep.shuffleWriterProcessor.writeProcess(rdd, dep, partitionId, context, partition)
   }
 
   override def preferredLocations: Seq[TaskLocation] = preferredLocs

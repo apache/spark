@@ -23,7 +23,7 @@ import java.util.function.Supplier
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
+import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Uns
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.{SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.MutablePair
@@ -98,7 +98,7 @@ case class ShuffleExchangeExec(
       child.output,
       newPartitioning,
       serializer,
-      SQLShuffleWriteMetricsReporter(writeMetrics))
+      writeMetrics)
   }
 
   /**
@@ -213,7 +213,7 @@ object ShuffleExchangeExec {
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
       serializer: Serializer,
-      writeMetricsReporterCreator: ShuffleWriteMetricsReporter => ShuffleWriteMetricsReporter)
+      writeMetrics: Map[String, SQLMetric])
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
@@ -344,8 +344,18 @@ object ShuffleExchangeExec {
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
         serializer,
-        writeMetricsReporterCreator = Some(writeMetricsReporterCreator))
+        shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics))
 
     dependency
+  }
+
+  /**
+   * Create a customized [[ShuffleWriteProcessor]] for SQL which wrapping the default metrics
+   * reporter with [[SQLShuffleWriteMetricsReporter]].
+   */
+  def createShuffleWriteProcessor(metrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
+    (reporter: ShuffleWriteMetricsReporter) => {
+      new SQLShuffleWriteMetricsReporter(reporter, metrics)
+    }
   }
 }
