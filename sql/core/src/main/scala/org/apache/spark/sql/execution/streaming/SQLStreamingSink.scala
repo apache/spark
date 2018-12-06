@@ -62,7 +62,7 @@ case class SQLStreamingSink(sparkSession: SparkSession,
    */
   private def parseTrigger(): Trigger = {
     val trigger = Utils.timeStringAsMs(sqlConf.sqlStreamTrigger)
-    Trigger.ProcessingTime(trigger, TimeUnit.MICROSECONDS)
+    Trigger.ProcessingTime(trigger, TimeUnit.MILLISECONDS)
   }
 
   /**

@@ -631,29 +631,29 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
-  val SQLSTREAM_WATERMARK_ENABLE = buildConf("spark.sqlstreaming.watermark.enable")
+  val SQLSTREAM_WATERMARK_ENABLE = buildConf("spark.sql.streaming.watermark.enable")
     .doc("Whether use watermark in sqlstreaming.")
     .booleanConf
     .createWithDefault(false)
 
-  val SQLSTREAM_OUTPUTMODE = buildConf("spark.sqlstreaming.outputMode")
+  val SQLSTREAM_OUTPUTMODE = buildConf("spark.sql.streaming.outputMode")
     .doc("The output mode used in sqlstreaming")
     .stringConf
     .createWithDefault("append")
 
-  val SQLSTREAM_TRIGGER = buildConf("spark.sqlstreaming.trigger")
+  val SQLSTREAM_TRIGGER = buildConf("spark.sql.streaming.trigger")
     .doc("The structstreaming trigger used in sqlstreaming")
     .stringConf
     .createWithDefault("0s")
 
-  val SQLSTREAM_QUERY_NAME = buildConf("spark.sqlstreaming.queryName")
+  val SQLSTREAM_QUERY_NAME = buildConf("spark.sql.streaming.queryName")
     .doc("The structstreaming query name used in sqlstreaming. " +
       "User must use spark.sql.streaming.checkpointLocation and " +
       "spark.sqlstreaming.queryName to ensure the unique checkpointLocation")
     .stringConf
     .createOptional
 
-  val SQLSTREAM_QUERY_ENABLE = buildConf("spark.sqlstreaming.query.enable")
+  val SQLSTREAM_QUERY_ENABLE = buildConf("spark.sql.streaming.query.enable")
     .doc("Whether to enable use sqlstreaming in spark")
     .booleanConf
     .createWithDefault(false)
