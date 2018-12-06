@@ -378,6 +378,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       pageCursor + required > currentPage.getBaseOffset() + currentPage.size() ) {
       // TODO: try to find space in previous pages
       currentPage = allocatePage(required);
+      assert(currentPage != null);
       pageCursor = currentPage.getBaseOffset();
       allocatedPages.add(currentPage);
     }
@@ -403,7 +404,6 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     final int required = length + uaoSize;
     acquireNewPageIfNecessary(required);
 
-    assert(currentPage != null);
     final Object base = currentPage.getBaseObject();
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
     UnsafeAlignedOffset.putSize(base, pageCursor, length);
