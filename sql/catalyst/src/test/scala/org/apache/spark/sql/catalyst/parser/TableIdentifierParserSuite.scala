@@ -42,7 +42,7 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "tblproperties", "temporary", "terminated", "tinyint", "touch", "transactions", "unarchive",
     "undo", "uniontype", "unlock", "unset", "unsigned", "uri", "use", "utc", "utctimestamp",
     "view", "while", "year", "work", "transaction", "write", "isolation", "level", "snapshot",
-    "autocommit", "all", "any", "alter", "array", "as", "authorization", "between", "bigint",
+    "autocommit", "alter", "array", "as", "authorization", "between", "bigint",
     "binary", "boolean", "both", "by", "create", "cube", "current_date", "current_timestamp",
     "cursor", "date", "decimal", "delete", "describe", "double", "drop", "exists", "external",
     "false", "fetch", "float", "for", "grant", "group", "grouping", "import", "in",
@@ -74,6 +74,15 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     assert(TableIdentifier("z", Some("`x.y`")) === parseTableIdentifier("```x.y```.z"))
     assert(TableIdentifier("`y.z`", Some("x")) === parseTableIdentifier("x.```y.z```"))
     assert(TableIdentifier("x.y.z", None) === parseTableIdentifier("`x.y.z`"))
+  }
+
+  test("table identifier - reserved by the SQL-2011 standard") {
+    Seq("all", "any").foreach { keyword =>
+      val errMsg = intercept[ParseException] { parseTableIdentifier(keyword) }.getMessage
+      assert(errMsg.contains(s"'$keyword' is reserved in the ANSI SQL-2011 standard."))
+      assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
+      assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
+    }
   }
 
   test("table identifier - strict keywords") {
