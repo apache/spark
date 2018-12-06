@@ -381,6 +381,34 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertPandasEqual(pdf, df_from_python.toPandas())
         self.assertPandasEqual(pdf, df_from_pandas.toPandas())
 
+    def test_toPandas_batch_order(self):
+
+        def delay_first_part(partition_index, iterator):
+            if partition_index == 0:
+                time.sleep(0.1)
+            return iterator
+
+        # Collects Arrow RecordBatches out of order in driver JVM then re-orders in Python
+        def run_test(num_records, num_parts, max_records, use_delay=False):
+            df = self.spark.range(num_records, numPartitions=num_parts).toDF("a")
+            if use_delay:
+                df = df.rdd.mapPartitionsWithIndex(delay_first_part).toDF()
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": max_records}):
+                pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
+                self.assertPandasEqual(pdf, pdf_arrow)
+
+        cases = [
+            (1024, 512, 2),    # Use large num partitions for more likely collecting out of order
+            (64, 8, 2, True),  # Use delay in first partition to force collecting out of order
+            (64, 64, 1),       # Test single batch per partition
+            (64, 1, 64),       # Test single partition, single batch
+            (64, 1, 8),        # Test single partition, multiple batches
+            (30, 7, 2),        # Test different sized partitions
+        ]
+
+        for case in cases:
+            run_test(*case)
+
 
 class EncryptionArrowTests(ArrowTests):
 

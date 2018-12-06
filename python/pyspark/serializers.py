@@ -185,6 +185,39 @@ class FramedSerializer(Serializer):
         raise NotImplementedError
 
 
+class ArrowCollectSerializer(Serializer):
+    """
+    Deserialize a stream of batches followed by batch order information. Used in
+    DataFrame._collectAsArrow() after invoking Dataset.collectAsArrowToPython() in the JVM.
+    """
+
+    def __init__(self):
+        self.serializer = ArrowStreamSerializer()
+
+    def dump_stream(self, iterator, stream):
+        return self.serializer.dump_stream(iterator, stream)
+
+    def load_stream(self, stream):
+        """
+        Load a stream of un-ordered Arrow RecordBatches, where the last iteration yields
+        a list of indices that can be used to put the RecordBatches in the correct order.
+        """
+        # load the batches
+        for batch in self.serializer.load_stream(stream):
+            yield batch
+
+        # load the batch order indices
+        num = read_int(stream)
+        batch_order = []
+        for i in xrange(num):
+            index = read_int(stream)
+            batch_order.append(index)
+        yield batch_order
+
+    def __repr__(self):
+        return "ArrowCollectSerializer(%s)" % self.serializer
+
+
 class ArrowStreamSerializer(Serializer):
     """
     Serializes Arrow record batches as a stream.

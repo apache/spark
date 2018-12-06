@@ -29,7 +29,7 @@ import warnings
 
 from pyspark import copy_func, since, _NoValue
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import ArrowStreamSerializer, BatchedSerializer, PickleSerializer, \
+from pyspark.serializers import ArrowCollectSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
@@ -2168,7 +2168,14 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(sock_info, ArrowStreamSerializer()))
+
+        # Collect list of un-ordered batches where last element is a list of correct order indices
+        results = list(_load_from_socket(sock_info, ArrowCollectSerializer()))
+        batches = results[:-1]
+        batch_order = results[-1]
+
+        # Re-order the batch list using the correct order
+        return [batches[i] for i in batch_order]
 
     ##########################################################################################
     # Pandas compatibility
