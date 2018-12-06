@@ -669,7 +669,7 @@ Kafka broker configuration):
 
 After obtaining delegation token successfully, Spark distributes it across nodes and renews it accordingly.
 Delegation token uses `SCRAM` login module for authentication and because of that the appropriate
-`sasl.mechanism` has to be configured on source/sink:
+`sasl.mechanism` has to be configured on source/sink (it must match with Kafka broker configuration):
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
