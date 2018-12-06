@@ -17,12 +17,13 @@
 
 package org.apache.spark.deploy
 
+import java.io.{File, IOException}
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.crypto.AuthServerBootstrap
@@ -31,6 +32,7 @@ import org.apache.spark.network.server.{TransportServer, TransportServerBootstra
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+
 
 /**
  * Provides a server from which Executors can read shuffle files (rather than reading directly from
@@ -48,6 +50,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private val enabled = sparkConf.get(config.SHUFFLE_SERVICE_ENABLED)
   private val port = sparkConf.get(config.SHUFFLE_SERVICE_PORT)
 
+  private val registeredExecutorsDB = "registeredExecutors.ldb"
+
   private val transportConf =
     SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
   private val blockHandler = newShuffleBlockHandler(transportConf)
@@ -56,11 +60,51 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private var server: TransportServer = _
 
+  private final val  MAX_DIR_CREATION_ATTEMPTS = 10
+
   private val shuffleServiceSource = new ExternalShuffleServiceSource
 
+  protected  def createDirectory(root: String,name: String): File = {
+    var attempts = 0
+    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
+    var dir: File = null
+    while (dir == null) {
+      attempts += 1
+      if (attempts > maxAttempts) {
+        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
+          maxAttempts + " attempts!")
+      }
+      try {
+        dir = new File(root, "registeredExecutors")
+        if (!dir.exists() && !dir.mkdirs()) {
+          dir = null
+        }
+      } catch { case e: SecurityException => dir = null; }
+    }
+    logInfo(s"registeredExecutorsDb path is : {}  \n ${dir.getAbsolutePath}")
+    new File(dir.getAbsolutePath,name)
+  }
+
+  protected def initRegisteredExecutorsDB(dbName: String): File = {
+    val localDirs = sparkConf.get("spark.local.dir", "").split(",")
+    if (localDirs.length >= 1 && !"".equals(localDirs(0))) {
+      createDirectory(localDirs(0), dbName)
+    }
+    else
+    {
+      logWarning(s"The ExternalShuffleService's initRegisteredExecutorsDB is't used ,'spark.local.dir' should be set first " +
+        s"when you want to use initRegisteredExecutorsDB on ExternalShuffleService.")
+      null
+    }
+  }
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
-    new ExternalShuffleBlockHandler(conf, null)
+    if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED)) {
+      new ExternalShuffleBlockHandler(conf, initRegisteredExecutorsDB(registeredExecutorsDB))
+    }
+    else {
+      new ExternalShuffleBlockHandler(conf, null)
+    }
   }
 
   /** Starts the external shuffle service if the user has configured us to. */

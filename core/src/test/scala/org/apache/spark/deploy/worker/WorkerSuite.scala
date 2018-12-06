@@ -19,7 +19,6 @@ package org.apache.spark.deploy.worker
 
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.function.Supplier
-
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.Matchers._
@@ -27,12 +26,13 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfter, Matchers}
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
 import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged}
 import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.internal.config
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
+import org.apache.spark.util.Utils
 
 class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
@@ -242,5 +242,14 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     worker.handleExecutorStateChanged(
       ExecutorStateChanged("app1", 0, ExecutorState.EXITED, None, None))
     assert(cleanupCalled.get() == value)
+  }
+  test("test  initRegisteredExecutorsDB  ") {
+    val sparkConf = new SparkConf()
+    Utils.loadDefaultSparkProperties(sparkConf)
+    val securityManager = new SecurityManager(sparkConf)
+    sparkConf.set(config.SHUFFLE_SERVICE_DB_ENABLED.key, "true")
+    sparkConf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
+    sparkConf.set("spark.local.dir", "/tmp")
+    val externalShuffleService = new ExternalShuffleService(sparkConf, securityManager)
   }
 }
