@@ -137,33 +137,39 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  // For better test coverage, runs the tests on mixed config sets: WHOLESTAGE_CODEGEN_ENABLED
+  // and CODEGEN_FACTORY_MODE.
+  private lazy val codegenConfigSets = Array(
+    ("true", "CODEGEN_ONLY"),
+    ("false", "CODEGEN_ONLY"),
+    ("false", "NO_CODEGEN")
+  ).map { case (wholeStageCodegenEnabled, codegenFactoryMode) =>
+    Array(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegenEnabled,
+      SQLConf.CODEGEN_FACTORY_MODE.key -> codegenFactoryMode)
+  }
+
   /** Run a test case. */
   private def runTest(testCase: TestCase): Unit = {
     val input = fileToString(new File(testCase.inputFile))
 
     val (comments, code) = input.split("\n").partition(_.startsWith("--"))
 
-    // Runs all the tests on mixed config sets: WHOLESTAGE_CODEGEN_ENABLED and CODEGEN_FACTORY_MODE
-    val codegenConfigSets = Array(
-      ("true", "CODEGEN_ONLY"),
-      ("true", "NO_CODEGEN"),
-      ("false", "CODEGEN_ONLY"),
-      ("false", "NO_CODEGEN")
-    ).map { case (wholeStageCodegenEnabled, codegenFactoryMode) =>
-      Array(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStageCodegenEnabled,
-        SQLConf.CODEGEN_FACTORY_MODE.key -> codegenFactoryMode)
-    }
-    val configSets = {
-      val configLines = comments.filter(_.startsWith("--SET")).map(_.substring(5))
-      val configs = configLines.map(_.split(",").map { confAndValue =>
-        val (conf, value) = confAndValue.span(_ != '=')
-        conf.trim -> value.substring(1).trim
-      })
-      // When we are regenerating the golden files, we don't need to set any config as they
-      // all need to return the same result
-      if (regenerateGoldenFiles) {
-        Array.empty[Array[(String, String)]]
-      } else {
+    // List of SQL queries to run
+    // note: this is not a robust way to split queries using semicolon, but works for now.
+    val queries = code.mkString("\n").split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
+
+    // When we are regenerating the golden files, we don't need to set any config as they
+    // all need to return the same result
+    if (regenerateGoldenFiles) {
+      runQueries(queries, testCase.resultFile, None)
+    } else {
+      val configSets = {
+        val configLines = comments.filter(_.startsWith("--SET")).map(_.substring(5))
+        val configs = configLines.map(_.split(",").map { confAndValue =>
+          val (conf, value) = confAndValue.span(_ != '=')
+          conf.trim -> value.substring(1).trim
+        })
+
         if (configs.nonEmpty) {
           codegenConfigSets.flatMap { codegenConfig =>
             configs.map { config =>
@@ -174,15 +180,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
           codegenConfigSets
         }
       }
-    }
 
-    // List of SQL queries to run
-    // note: this is not a robust way to split queries using semicolon, but works for now.
-    val queries = code.mkString("\n").split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
-
-    if (configSets.isEmpty) {
-      runQueries(queries, testCase.resultFile, None)
-    } else {
       configSets.foreach { configSet =>
         try {
           runQueries(queries, testCase.resultFile, Some(configSet))
