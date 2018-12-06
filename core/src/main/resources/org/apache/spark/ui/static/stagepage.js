@@ -654,7 +654,7 @@ $(document).ready(function () {
                     "columns": [
                         {data: function (row, type) {
                             return type !== 'display' ? (isNaN(row.index) ? 0 : row.index ) : row.index;
-                            },sql-migration-guide-upgrade.md
+                            },
                             name: "Index"
                         },
                         {data : "taskId", name: "ID"},
