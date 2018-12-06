@@ -1612,7 +1612,7 @@ object SQLConf {
     .createWithDefault(25)
 
   val SET_COMMAND_REJECTS_SPARK_CONFS =
-    buildConf("spark.sql.legacy.execution.setCommandRejectsSparkConfs")
+    buildConf("spark.sql.legacy.setCommandRejectsSparkConfs")
       .internal()
       .doc("If it is set to true, SET command will fail when the key is registered as " +
         "a SparkConf entry.")
