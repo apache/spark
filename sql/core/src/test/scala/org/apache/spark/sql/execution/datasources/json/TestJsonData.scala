@@ -229,6 +229,12 @@ private[json] trait TestJsonData {
       """{"date": "27/10/2014 18:30"}""" ::
       """{"date": "28/01/2016 20:00"}""" :: Nil))(Encoders.STRING)
 
+  def badRecords: Dataset[String] =
+    spark.createDataset(spark.sparkContext.parallelize(
+      """{"a":0.1,"b":"abc","c":"2018-12-06T22:"""" ::
+        """{"a":"-","b":"abc","c":"2018-12-06T22:18:00.123"""" ::
+        """{"a":0.2,"b":{},"c":"2018-12-06T22:19:00.123"""" :: Nil))(Encoders.STRING)
+
   lazy val singleRow: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize("""{"a":123}""" :: Nil))(Encoders.STRING)
 
