@@ -127,16 +127,13 @@ abstract class PartitioningAwareFileIndex(
     val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
       .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
-    val caseSensitive = sparkSession.sqlContext.conf.caseSensitiveAnalysis
-    val validatePartitionValueWithProvidedSchema =
-      sparkSession.sqlContext.conf.validatePartitionValueWithProvidedSchema
     PartitioningUtils.parsePartitions(
       leafDirs,
       typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
       basePaths = basePaths,
       userSpecifiedSchema = userSpecifiedSchema,
-      caseSensitive = caseSensitive,
-      validatePartitionValueWithProvidedSchema = validatePartitionValueWithProvidedSchema,
+      caseSensitive = sparkSession.sqlContext.conf.caseSensitiveAnalysis,
+      validatePartitionColumns = sparkSession.sqlContext.conf.validatePartitionColumns,
       timeZoneId = timeZoneId)
   }
 

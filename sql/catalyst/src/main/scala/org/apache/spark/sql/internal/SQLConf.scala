@@ -1396,8 +1396,8 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val VALIDATE_PARTITION_VALUE_WITH_PROVIDED_SCHEMA =
-    buildConf("spark.sql.validatePartitionValueWithProvidedSchema.enabled")
+  val VALIDATE_PARTITION_COLUMNS =
+    buildConf("spark.sql.sources.validatePartitionColumns")
       .internal()
       .doc("When this option is set to true, partition column values will be validated with " +
         "provided schema. If the validation fails, a runtime exception is thrown." +
@@ -2024,8 +2024,7 @@ class SQLConf extends Serializable with Logging {
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
-  def validatePartitionValueWithProvidedSchema: Boolean =
-    getConf(VALIDATE_PARTITION_VALUE_WITH_PROVIDED_SCHEMA)
+  def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))

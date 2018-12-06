@@ -103,7 +103,7 @@ class FileIndexSuite extends SharedSQLContext {
       stringToFile(file, "text")
       val path = new Path(dir.getCanonicalPath)
       val schema = StructType(Seq(StructField("a", IntegerType, false)))
-      withSQLConf(SQLConf.VALIDATE_PARTITION_VALUE_WITH_PROVIDED_SCHEMA.key -> "true") {
+      withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "true") {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
         val msg = intercept[RuntimeException] {
           fileIndex.partitionSpec()
@@ -111,7 +111,7 @@ class FileIndexSuite extends SharedSQLContext {
         assert(msg == "Failed to cast partition value `foo` to IntegerType")
       }
 
-      withSQLConf(SQLConf.VALIDATE_PARTITION_VALUE_WITH_PROVIDED_SCHEMA.key -> "false") {
+      withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
         val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
         val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
         assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
