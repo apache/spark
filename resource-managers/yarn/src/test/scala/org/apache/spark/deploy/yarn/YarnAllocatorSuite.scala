@@ -118,15 +118,24 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   def createContainer(
       host: String,
-      containerId: ContainerId = ContainerId.newContainerId(appAttemptId, containerNum),
+      containerNumber: Int = containerNum,
       resource: Resource = containerResource): Container = {
+    val  containerId: ContainerId = ContainerId.newContainerId(appAttemptId, containerNum)
     containerNum += 1
     val nodeId = NodeId.newInstance(host, 1000)
     Container.newInstance(containerId, nodeId, "", resource, RM_REQUEST_PRIORITY, null)
   }
 
-  def createContainers(hosts: Seq[String], containerIds: Seq[ContainerId]): Seq[Container] = {
+  def createContainers(hosts: Seq[String], containerIds: Seq[Int]): Seq[Container] = {
     hosts.zip(containerIds).map{case (host, id) => createContainer(host, id)}
+  }
+
+  def createContainerStatus(
+      containerId: ContainerId,
+      exitStatus: Int,
+      containerState: ContainerState = ContainerState.COMPLETE,
+      diagnostics: String = "diagnostics"): ContainerStatus = {
+    ContainerStatus.newInstance(containerId, containerState, diagnostics, exitStatus)
   }
 
 
@@ -427,7 +436,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumExecutorsFailed should be (0)
   }
 
-  test("SPARK-26296: YarnAllocator should have same blacklist behaviour with YARN") {
+  test("SPARK-26269: YarnAllocator should have same blacklist behaviour with YARN") {
     val rmClientSpy = spy(rmClient)
     val maxExecutors = 11
 
@@ -440,45 +449,41 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.updateResourceRequests()
 
     val hosts = (0 until maxExecutors).map(i => s"host$i")
-    val ids = (0 to maxExecutors).map(i => ContainerId.newContainerId(appAttemptId, i))
+    val ids = 0 to maxExecutors
     val containers = createContainers(hosts, ids)
-    handler.handleAllocatedContainers(containers.slice(0, 9))
-    val cs0 = ContainerStatus.newInstance(containers(0).getId, ContainerState.COMPLETE,
-      "success", ContainerExitStatus.SUCCESS)
-    val cs1 = ContainerStatus.newInstance(containers(1).getId, ContainerState.COMPLETE,
-      "preempted", ContainerExitStatus.PREEMPTED)
-    val cs2 = ContainerStatus.newInstance(containers(2).getId, ContainerState.COMPLETE,
-      "killed_exceeded_vmem", ContainerExitStatus.KILLED_EXCEEDED_VMEM)
-    val cs3 = ContainerStatus.newInstance(containers(3).getId, ContainerState.COMPLETE,
-      "killed_exceeded_pmem", ContainerExitStatus.KILLED_EXCEEDED_PMEM)
-    val cs4 = ContainerStatus.newInstance(containers(4).getId, ContainerState.COMPLETE,
-      "killed_by_resourcemanager", ContainerExitStatus.KILLED_BY_RESOURCEMANAGER)
-    val cs5 = ContainerStatus.newInstance(containers(5).getId, ContainerState.COMPLETE,
-      "killed_by_appmaster", ContainerExitStatus.KILLED_BY_APPMASTER)
-    val cs6 = ContainerStatus.newInstance(containers(6).getId, ContainerState.COMPLETE,
-      "killed_after_app_completion", ContainerExitStatus.KILLED_AFTER_APP_COMPLETION)
-    val cs7 = ContainerStatus.newInstance(containers(7).getId, ContainerState.COMPLETE,
-      "aborted", ContainerExitStatus.ABORTED)
-    val cs8 = ContainerStatus.newInstance(containers(8).getId, ContainerState.COMPLETE,
-      "disk_failed", ContainerExitStatus.DISKS_FAILED)
-    handler.processCompletedContainers(Seq(cs0, cs1, cs2, cs3, cs4, cs5, cs6, cs7, cs8))
 
+    val nonBlacklistedStatuses = Seq(
+      ContainerExitStatus.SUCCESS,
+      ContainerExitStatus.PREEMPTED,
+      ContainerExitStatus.KILLED_EXCEEDED_VMEM,
+      ContainerExitStatus.KILLED_EXCEEDED_PMEM,
+      ContainerExitStatus.KILLED_BY_RESOURCEMANAGER,
+      ContainerExitStatus.KILLED_BY_APPMASTER,
+      ContainerExitStatus.KILLED_AFTER_APP_COMPLETION,
+      ContainerExitStatus.ABORTED,
+      ContainerExitStatus.DISKS_FAILED)
+
+    val nonBlacklistedContainerStatuses = nonBlacklistedStatuses.zipWithIndex.map {
+      case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
+    }
+
+    val BLACKLISTED_EXIT_CODE = 1
+    val blacklistedStatuses = Seq(ContainerExitStatus.INVALID, BLACKLISTED_EXIT_CODE)
+
+    val blacklistedContainerStatuses = blacklistedStatuses.zip(9 until maxExecutors).map {
+      case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
+    }
+
+    handler.handleAllocatedContainers(containers.slice(0, 9))
+    handler.processCompletedContainers(nonBlacklistedContainerStatuses)
     verify(rmClientSpy, never())
       .updateBlacklist(hosts.slice(0, 9).asJava, Collections.emptyList())
 
-    handler.handleAllocatedContainers(Array(containers(9)))
-    val cs9 = ContainerStatus.newInstance(containers(9).getId, ContainerState.COMPLETE,
-      "invalid", ContainerExitStatus.INVALID)
-    handler.processCompletedContainers(Seq(cs9))
+    handler.handleAllocatedContainers(containers.slice(9, 11))
+    handler.processCompletedContainers(blacklistedContainerStatuses)
     verify(rmClientSpy)
-      .updateBlacklist(Seq(hosts(9)).asJava, Collections.emptyList())
-
-    handler.handleAllocatedContainers(Array(containers(10)))
-    val UNKNOWN_EXIT_CODE = 1
-    val cs10 = ContainerStatus.newInstance(containers(10).getId, ContainerState.COMPLETE,
-      "unknown_exit_code", UNKNOWN_EXIT_CODE)
-    handler.processCompletedContainers(Seq(cs10))
+      .updateBlacklist(hosts.slice(9, 10).asJava, Collections.emptyList())
     verify(rmClientSpy)
-      .updateBlacklist(Seq(hosts(10)).asJava, Collections.emptyList())
+      .updateBlacklist(hosts.slice(10, 11).asJava, Collections.emptyList())
   }
 }
