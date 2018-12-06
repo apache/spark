@@ -62,7 +62,8 @@ class OutputRedirector {
       while ((line = reader.readLine()) != null) {
         if (active) {
           sink.info(line.replaceFirst("\\s*$", ""));
-          if (containsIgnoreCase(line, "Error") || containsIgnoreCase(line, "Exception")) {
+          if ((containsIgnoreCase(line, "Error") || containsIgnoreCase(line, "Exception")) &&
+              !line.contains("at ")) {
             error = new RuntimeException(line);
           }
         }
