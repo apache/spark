@@ -28,7 +28,7 @@ sparkR.session(appName = "SparkR-ML-powerIterationCLustering-example")
 df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
                            list(1L, 2L, 1.0), list(3L, 4L, 1.0),
                            list(4L, 0L, 0.1)), schema = c("src", "dst", "weight"))
-#assign clusters
+# assign clusters
 clusters <- spark.assignClusters(df, k=2L, maxIter=20L, initMode="degree", weightCol="weight")
 
 showDF(arrange(clusters, clusters$id))

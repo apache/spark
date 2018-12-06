@@ -623,13 +623,13 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #' return a cluster assignment for each input vertex.
 #'
 #  Run the PIC algorithm and returns a cluster assignment for each input vertex.
-#' @param data A SparkDataFrame.
-#' @param k The number of clusters to create.
-#' @param initMode Param for the initialization algorithm.
-#' @param maxIter Param for maximum number of iterations.
-#' @param sourceCol Param for the name of the input column for source vertex IDs.
-#' @param destinationCol Name of the input column for destination vertex IDs.
-#' @param weightCol Param for weight column name. If this is not set or \code{NULL},
+#' @param data a SparkDataFrame.
+#' @param k the number of clusters to create.
+#' @param initMode the initialization algorithm.
+#' @param maxIter the maximum number of iterations.
+#' @param sourceCol the name of the input column for source vertex IDs.
+#' @param destinationCol the name of the input column for destination vertex IDs
+#' @param weightCol weight column name. If this is not set or \code{NULL},
 #'                  we treat all instance weights as 1.0.
 #' @param ... additional argument(s) passed to the method.
 #' @return A dataset that contains columns of vertex id and the corresponding cluster for the id.

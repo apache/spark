@@ -269,7 +269,7 @@ Refer to the [R API docs](api/R/spark.gaussianMixture.html) for more details.
 ## Power Iteration Clustering (PIC)
 
 Power Iteration Clustering (PIC) is  a scalable graph clustering algorithm
-developed by <a href=http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>Lin and Cohen</a>.
+developed by [Lin and Cohen](http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf).
 From the abstract: PIC finds a very low-dimensional embedding of a dataset
 using truncated power iteration on a normalized pair-wise similarity matrix of the data.
 
