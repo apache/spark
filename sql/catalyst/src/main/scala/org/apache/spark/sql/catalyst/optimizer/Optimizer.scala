@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable
-
+import scala.collection.{immutable, mutable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -611,6 +610,30 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
+    // If current project or child references to nested fields, we substitute them
+    // by alias attributes; then a project of the nested fields as aliases
+    // on the children of the child will be created.
+    // Note that if the child is a [[Project]], it will be handled by the previous rule;
+    // if the child is a [[Filter]], TODO: doc
+    case p @ Project(_, child) if !child.isInstanceOf[Project] && !child.isInstanceOf[Filter] &&
+      !child.isInstanceOf[SerializeFromObject] &&
+        getAliasSubMap(p, child).nonEmpty =>
+      val aliasSub: Map[AttributeSet, Seq[(Expression, Alias)]] = getAliasSubMap(p, child)
+      val nestedFieldToAlias = aliasSub.values.flatten.toMap
+      val attrToAliases: Map[AttributeSet, Seq[Alias]] = aliasSub.map(x => (x._1, x._2.map(_._2)))
+
+      val newChild = child.withNewChildren(child.children.map { plan =>
+        // Creating a project of nested fields using aliases.
+        Project(plan.output.flatMap(a => attrToAliases.getOrElse(AttributeSet(a), Seq(a))), plan)
+      })
+      val newProjectList = p.projectList.map(_.transform {
+        // Replacing the `GetStructField` by alias attribute.
+        case f: GetStructField if nestedFieldToAlias.contains(f.canonicalized) =>
+          nestedFieldToAlias(f.canonicalized).toAttribute
+        // TODO: Support GetArrayStructFields, GetMapValue, GetArrayItem
+      }.asInstanceOf[NamedExpression])
+      Project(newProjectList, newChild)
+
     // for all other logical plans that inherits the output from it's children
     // Project over project is handled by the first case, skip it here.
     case p @ Project(_, child) if !child.isInstanceOf[Project] =>
@@ -622,6 +645,81 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
   })
+
+  /**
+   * Similar to [[QueryPlan.references]], but this only returns all attributes
+   * that are explicitly referenced on the root levels in a [[LogicalPlan]].
+   */
+  private def getRootReferences(plan: LogicalPlan): AttributeSet = {
+    def helper(e: Expression): AttributeSet = e match {
+      case attr: AttributeReference => AttributeSet(attr)
+      case _: GetStructField => AttributeSet.empty
+      case es if es.children.nonEmpty => AttributeSet(es.children.flatMap(helper))
+      case _ => AttributeSet.empty
+    }
+
+    AttributeSet.fromAttributeSets(plan.expressions.map(helper))
+  }
+
+  /**
+   * Returns all the nested fields that are explicitly referenced as [[Expression]]
+   * in a [[LogicalPlan]].
+   */
+  private def getNestedFieldReferences(plan: LogicalPlan): Seq[Expression] = {
+    // TODO: Currently, we only support to have [[GetStructField]] in the chain
+    // of the expressions. If the chain contains GetArrayStructFields, GetMapValue, or
+    // GetArrayItem, the nested field alias substitution will not be performed.
+    def isGetStructFieldOrAttr(e: Expression): Boolean = e match {
+      case _: AttributeReference => true
+      case GetStructField(child, _, _) => isGetStructFieldOrAttr(child)
+      case _ => false
+    }
+
+    def helper(e: Expression): Seq[Expression] = e match {
+      case f @ GetStructField(child, _, _) if isGetStructFieldOrAttr(child) => Seq(f)
+      case es if es.children.nonEmpty => es.children.flatMap(e => helper(e))
+      case _ => Seq.empty[Expression]
+    }
+
+    plan.expressions.flatMap(helper)
+  }
+
+  /**
+   * The first map is used to replace `GetStructField` in current project to alias attributes.
+   * The second map is used in the children projects to convert attributes of entire nested
+   * columns into each referred nested columns as aliases. The key in the first map,
+   * `GetStructField` is canonicalized to remove the cosmetic differences.
+   *
+   * Note that when all of the nested fields in a root column are referred, this substitution
+   * will not be performed. For example, let's say `name` has three nested fields, `first`,
+   * `middle`, and `last`, and if all of them are referred, it's not necessary to replace each of
+   * them by alias variables.
+   */
+  private def getAliasSubMap(plans: LogicalPlan*): Map[AttributeSet, Seq[(Expression, Alias)]] = {
+    val rootReferences: AttributeSet = plans.map(getRootReferences).reduce(_ ++ _)
+    val nestedFieldReferences = plans.map(getNestedFieldReferences).reduce(_ ++ _)
+
+    nestedFieldReferences
+      // If a referenced nested field is part of the rootReferences, we can filter it out
+      // because we have to read the entire root column which already contains the nested field.
+      .filter(!_.references.subsetOf(rootReferences))
+      .groupBy(_.references)
+      .flatMap { case (attrSet: AttributeSet, nestedFields: Seq[Expression]) =>
+        // Note that each attrSet contains only one attribute. Each attribute can
+        // contain multiple nested fields.
+        val nestedFieldToAlias: Seq[(Expression, Alias)] =
+          nestedFields.map(_.canonicalized).distinct.flatMap {
+            case f: GetStructField => Some((f, Alias(f, f.sql)()))
+            // TODO: Top level extractor such as GetArrayStructFields is not supported yet.
+            case _ => None
+          }
+        if (nestedFieldToAlias.nonEmpty) {
+          Some(attrSet -> nestedFieldToAlias)
+        } else {
+          None
+        }
+      }
+  }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
   private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =

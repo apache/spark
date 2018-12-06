@@ -25,27 +25,46 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
+
+case class FullName(first: String, middle: String, last: String)
+case class Company(name: String, address: String)
+case class Employer(id: Int, company: Company)
+case class Contact(
+  id: Int,
+  name: FullName,
+  address: String,
+  pets: Option[Int],
+  friends: Array[FullName] = Array.empty,
+  relatives: Map[String, FullName] = Map.empty,
+  employer: Employer = null)
+
+case class Name(first: String, last: String)
+case class BriefContact(id: Int, name: Name, address: String)
+
+case class ContactWithDataPartitionColumn(
+  id: Int,
+  name: FullName,
+  address: String,
+  pets: Option[Int],
+  friends: Array[FullName] = Array(),
+  relatives: Map[String, FullName] = Map(),
+  employer: Employer = null,
+  p: Int)
+
+case class BriefContactWithDataPartitionColumn(id: Int, name: Name, address: String, p: Int)
+
+case class MixedCaseColumn(a: String, B: Int)
+case class MixedCase(id: Int, CoL1: String, coL2: MixedCaseColumn)
 
 class ParquetSchemaPruningSuite
     extends QueryTest
     with ParquetTest
     with SchemaPruningTest
     with SharedSQLContext {
-  case class FullName(first: String, middle: String, last: String)
-  case class Company(name: String, address: String)
-  case class Employer(id: Int, company: Company)
-  case class Contact(
-    id: Int,
-    name: FullName,
-    address: String,
-    pets: Int,
-    friends: Array[FullName] = Array.empty,
-    relatives: Map[String, FullName] = Map.empty,
-    employer: Employer = null)
-
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
   val susanSmith = FullName("Susan", "Z.", "Smith")
@@ -54,29 +73,15 @@ class ParquetSchemaPruningSuite
   val employerWithNullCompany = Employer(1, null)
 
   private val contacts =
-    Contact(0, janeDoe, "123 Main Street", 1, friends = Array(susanSmith),
+    Contact(0, janeDoe, "123 Main Street", Some(1), friends = Array(susanSmith),
       relatives = Map("brother" -> johnDoe), employer = employer) ::
-    Contact(1, johnDoe, "321 Wall Street", 3, relatives = Map("sister" -> janeDoe),
+    Contact(1, johnDoe, "321 Wall Street", Some(3), relatives = Map("sister" -> janeDoe),
       employer = employerWithNullCompany) :: Nil
-
-  case class Name(first: String, last: String)
-  case class BriefContact(id: Int, name: Name, address: String)
 
   private val briefContacts =
     BriefContact(2, Name("Janet", "Jones"), "567 Maple Drive") ::
     BriefContact(3, Name("Jim", "Jones"), "6242 Ash Street") :: Nil
 
-  case class ContactWithDataPartitionColumn(
-    id: Int,
-    name: FullName,
-    address: String,
-    pets: Int,
-    friends: Array[FullName] = Array(),
-    relatives: Map[String, FullName] = Map(),
-    employer: Employer = null,
-    p: Int)
-
-  case class BriefContactWithDataPartitionColumn(id: Int, name: Name, address: String, p: Int)
 
   private val contactsWithDataPartitionColumn =
     contacts.map { case Contact(id, name, address, pets, friends, relatives, employer) =>
@@ -85,10 +90,94 @@ class ParquetSchemaPruningSuite
     briefContacts.map { case BriefContact(id, name, address) =>
       BriefContactWithDataPartitionColumn(id, name, address, 2) }
 
+  testSchemaPruning("testing bug") {
+    val data = sql("select * from contacts")
+    import data.sqlContext.implicits._
+
+    val firstAndLastName = udf((first: String, last: String) => first + " " + last)
+
+    data.show(10)
+
+    val query = data.as[Contact]
+      .map(c => c.copy(id = 2))
+      .select("id", "name", "address", "friends")
+      .select(col("id"), firstAndLastName(col("name.first"), col("name.last")))
+
+    query.show(true)
+
+    val a =10
+  }
+
   testSchemaPruning("select a single complex field") {
-    val query = sql("select name.middle from contacts")
-    checkScan(query, "struct<name:struct<middle:string>>")
-    checkAnswer(query.orderBy("id"), Row("X.") :: Row("Y.") :: Row(null) :: Row(null) :: Nil)
+    def testSelectSingleNestedField(input: DataFrame, checkResult: Boolean = true): Unit = {
+      val query = input.select("id", "name.middle")
+      checkScan(query, "struct<id:int,name:struct<middle:string>>")
+      if (checkResult) {
+        checkAnswer(query.orderBy("id"),
+          Row(0, "X.") :: Row(1, "Y.") :: Row(2, null) :: Row(3, null) :: Nil)
+      }
+    }
+
+    // It should push the project of nested fields down through various operators
+    // such as `repartition`, `limit`, `sort`, or `sample`. Thus, not only will
+    // less data be passed through those operators, but also we can leverage on columnar
+    // data structures in Parquet to only read required nested columns.
+    val data = sql("select * from contacts")
+    testSelectSingleNestedField(data)
+    testSelectSingleNestedField(data.coalesce(1))
+    testSelectSingleNestedField(data.limit(100))
+    testSelectSingleNestedField(data.sort(col("id")))
+    testSelectSingleNestedField(data.sample(0.1, 0L), false)
+    testSelectSingleNestedField(data.coalesce(1).limit(100))
+  }
+
+  testSchemaPruning("select a new complex column constructed by nested field inputs") {
+    def testSelectNewComplexColumn(input: DataFrame, checkResult: Boolean = true): Unit = {
+      val nameCol = struct(input("name.first"), input("name.last")) as "name"
+      val query = input.select(col("id"), nameCol)
+      query.explain(true)
+      checkScan(query, "struct<id:int,name:struct<first:string,last:string>>")
+      if (checkResult) {
+        checkAnswer(query.orderBy("id"),
+          Row(0, Row("Jane", "Doe")) ::
+            Row(1, Row("John", "Doe")) ::
+            Row(2, Row("Janet", "Jones")) ::
+            Row(3, Row("Jim", "Jones")) ::
+            Nil)
+      }
+    }
+
+    val data = sql("select * from contacts")
+    testSelectNewComplexColumn(data)
+    testSelectNewComplexColumn(data.coalesce(1))
+    testSelectNewComplexColumn(data.limit(100))
+    testSelectNewComplexColumn(data.sort(col("id")))
+    testSelectNewComplexColumn(data.sample(0.1, 0L), false)
+    testSelectNewComplexColumn(data.coalesce(1).limit(100))
+  }
+
+  testSchemaPruning("select the UDF with nested field inputs") {
+    def testSelectUDFWithNestedFieldInputs(input: DataFrame, checkResult: Boolean = true): Unit = {
+      val firstAndLastName = udf((first: String, last: String) => first + " " + last)
+      val query = input.select(col("id"), firstAndLastName(col("name.first"), col("name.last")))
+      checkScan(query, "struct<id:int,name:struct<first:string,last:string>>")
+      if (checkResult) {
+        checkAnswer(query.orderBy("id"),
+          Row(0, "Jane Doe") ::
+            Row(1, "John Doe") ::
+            Row(2, "Janet Jones") ::
+            Row(3, "Jim Jones") ::
+            Nil)
+      }
+    }
+
+    val data = sql("select * from contacts")
+    testSelectUDFWithNestedFieldInputs(data)
+    testSelectUDFWithNestedFieldInputs(data.coalesce(1))
+    testSelectUDFWithNestedFieldInputs(data.limit(100))
+    testSelectUDFWithNestedFieldInputs(data.sort(col("id")))
+    testSelectUDFWithNestedFieldInputs(data.sample(0.1, 0L), false)
+    testSelectUDFWithNestedFieldInputs(data.coalesce(1).limit(100))
   }
 
   testSchemaPruning("select a single complex field and its parent struct") {
@@ -266,9 +355,6 @@ class ParquetSchemaPruningSuite
       testThunk
     }
   }
-
-  case class MixedCaseColumn(a: String, B: Int)
-  case class MixedCase(id: Int, CoL1: String, coL2: MixedCaseColumn)
 
   private val mixedCaseData =
     MixedCase(0, "r0c1", MixedCaseColumn("abc", 1)) ::
