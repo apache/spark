@@ -75,8 +75,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       // https://docs.oracle.com/javase/9/docs/api/java/lang/ProcessHandle.html
       val cmd = Array("bash", "-c", "echo $PPID")
       val out = Utils.executeAndGetOutput(cmd)
-      val pid = Integer.parseInt(out.split("\n")(0))
-      return pid;
+      Integer.parseInt(out.split("\n")(0))
     }
     catch {
       case e: SparkException =>
