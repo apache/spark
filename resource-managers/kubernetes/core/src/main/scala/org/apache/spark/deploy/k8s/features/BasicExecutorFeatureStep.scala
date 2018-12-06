@@ -157,7 +157,7 @@ private[spark] class BasicExecutorFeatureStep(kubernetesConf: KubernetesExecutor
           .endResources()
         .build()
     }.getOrElse(executorContainer)
-    val containerWithLifecycle = kubernetesConf.workerDecomissioning() match {
+    val containerWithLifecycle = kubernetesConf.workerDecomissioning match {
       case true =>
         new ContainerBuilder(executorContainer).editOrNewLifecycle()
           .withNewPreStop()
