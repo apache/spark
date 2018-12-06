@@ -350,8 +350,8 @@ object ShuffleExchangeExec {
   }
 
   /**
-   * Create a customized [[ShuffleWriteProcessor]] for SQL which wrapping the default metrics
-   * reporter with [[SQLShuffleWriteMetricsReporter]].
+   * Create a customized [[ShuffleWriteProcessor]] for SQL which wrap the default metrics reporter
+   * with [[SQLShuffleWriteMetricsReporter]] as new reporter for [[ShuffleWriteProcessor]].
    */
   def createShuffleWriteProcessor(metrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
     (reporter: ShuffleWriteMetricsReporter) => {

@@ -22,10 +22,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.MapStatus
 
-
 /**
  * The interface for customizing shuffle write process. The driver create a ShuffleWriteProcessor
- * and put it into [[ShuffleDependency]], and executors use it for write processing.
+ * and put it into [[ShuffleDependency]], and executors use it in each ShuffleMapTask.
  */
 private[spark] trait ShuffleWriteProcessor extends Serializable with Logging {
 
@@ -75,7 +74,7 @@ private[spark] trait ShuffleWriteProcessor extends Serializable with Logging {
 
 
 /**
- * Default shuffle write processor use the shuffle write metrics reporter in context.
+ * Default shuffle write processor which use the shuffle write metrics reporter in context.
  */
 private[spark] class DefaultShuffleWriteProcessor extends ShuffleWriteProcessor {
   override def createMetricsReporter(
