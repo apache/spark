@@ -32,18 +32,18 @@
     "JVMOffHeapMemory" : 104976128,
     "OffHeapExecutionMemory" : 0,
     "OnHeapUnifiedMemory" : 554933,
-    "ProcessTreeJVMVMemory" : 5067235328,
     "OnHeapExecutionMemory" : 0,
     "OffHeapUnifiedMemory" : 0,
     "DirectPoolMemory" : 228407,
-    "ProcessTreePythonRSSMemory" : 40284160,
-    "ProcessTreeOtherRSSMemory" : 0,
-    "ProcessTreeJVMRSSMemory" : 710475776,
     "MappedPoolMemory" : 0,
-    "ProcessTreeOtherVMemory" : 0,
     "JVMHeapMemory" : 350990264,
     "OffHeapStorageMemory" : 0,
-    "ProcessTreePythonVMemory" : 408375296
+    "ProcessTreeJVMVMemory" : 5067235328,
+    "ProcessTreeJVMRSSMemory" : 710475776,
+    "ProcessTreePythonVMemory" : 408375296,
+    "ProcessTreePythonRSSMemory" : 40284160,
+    "ProcessTreeOtherVMemory" : 0,
+    "ProcessTreeOtherRSSMemory" : 0
   }
 }, {
   "id" : "9",
@@ -82,17 +82,17 @@
     "JVMOffHeapMemory" : 59006656,
     "OffHeapExecutionMemory" : 0,
     "OnHeapUnifiedMemory" : 1088805,
-    "ProcessTreeJVMVMemory" : 3016261632,
     "OnHeapExecutionMemory" : 0,
     "OffHeapUnifiedMemory" : 0,
     "DirectPoolMemory" : 20181,
-    "ProcessTreePythonRSSMemory" : 69013504,
-    "ProcessTreeOtherRSSMemory" : 0,
-    "ProcessTreeJVMRSSMemory" : 405860352,
     "MappedPoolMemory" : 0,
-    "ProcessTreeOtherVMemory" : 0,
     "JVMHeapMemory" : 193766856,
     "OffHeapStorageMemory" : 0,
-    "ProcessTreePythonVMemory" : 625926144
+    "ProcessTreeJVMVMemory" : 3016261632,
+    "ProcessTreeJVMRSSMemory" : 405860352,
+    "ProcessTreePythonVMemory" : 625926144,
+    "ProcessTreePythonRSSMemory" : 69013504,
+    "ProcessTreeOtherVMemory" : 0,
+    "ProcessTreeOtherRSSMemory" : 0
   }
 } ]
