@@ -112,6 +112,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def withQualifier(newQualifier: Seq[String]): UnresolvedAttribute = this
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
   override def withMetadata(newMetadata: Metadata): Attribute = this
+  override def withExprId(newExprId: ExprId): UnresolvedAttribute = this
 
   override def toString: String = s"'$name"
 
@@ -203,10 +204,10 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
 
   override def terminate(): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw new UnsupportedOperationException(s"Cannot terminate expression: $this")
 }
 
 case class UnresolvedFunction(

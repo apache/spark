@@ -224,9 +224,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    if (Double.isNaN(value)) {
-      value = Double.NaN;
-    }
     Platform.putDouble(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -255,9 +252,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    if (Float.isNaN(value)) {
-      value = Float.NaN;
-    }
     Platform.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 

@@ -26,9 +26,15 @@ IMAGE_TAG="N/A"
 SPARK_MASTER=
 NAMESPACE=
 SERVICE_ACCOUNT=
+CONTEXT=
 INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
-SCALA_VERSION="$($TEST_ROOT_DIR/build/mvn org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=scala.binary.version | grep -v '\[' )"
+MVN="$TEST_ROOT_DIR/build/mvn"
+
+SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
+    | grep -v "INFO"\
+    | grep -v "WARNING"\
+    | tail -n 1)
 
 # Parse arguments
 while (( "$#" )); do
@@ -59,6 +65,10 @@ while (( "$#" )); do
       ;;
     --service-account)
       SERVICE_ACCOUNT="$2"
+      shift
+      ;;
+    --context)
+      CONTEXT="$2"
       shift
       ;;
     --include-tags)
@@ -92,6 +102,11 @@ fi
 if [ -n $SERVICE_ACCOUNT ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.serviceAccountName=$SERVICE_ACCOUNT )
+fi
+
+if [ -n $CONTEXT ];
+then
+  properties=( ${properties[@]} -Dspark.kubernetes.test.kubeConfigContext=$CONTEXT )
 fi
 
 if [ -n $SPARK_MASTER ];

@@ -252,8 +252,6 @@ _window_functions = {
 
 # Wraps deprecated functions (keys) with the messages (values).
 _functions_deprecated = {
-    'toDegrees': 'Deprecated in 2.1, use degrees instead.',
-    'toRadians': 'Deprecated in 2.1, use radians instead.',
 }
 
 for _name, _doc in _functions.items():
@@ -273,15 +271,6 @@ for _name, _message in _functions_deprecated.items():
 for _name, _doc in _functions_2_4.items():
     globals()[_name] = since(2.4)(_create_function(_name, _doc))
 del _name, _doc
-
-
-@since(1.3)
-def approxCountDistinct(col, rsd=None):
-    """
-    .. note:: Deprecated in 2.1, use :func:`approx_count_distinct` instead.
-    """
-    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", DeprecationWarning)
-    return approx_count_distinct(col, rsd)
 
 
 @since(2.1)
@@ -2364,6 +2353,55 @@ def schema_of_json(json, options={}):
     return Column(jc)
 
 
+@ignore_unicode_prefix
+@since(3.0)
+def schema_of_csv(csv, options={}):
+    """
+    Parses a CSV string and infers its schema in DDL format.
+
+    :param col: a CSV string or a string literal containing a CSV string.
+    :param options: options to control parsing. accepts the same options as the CSV datasource
+
+    >>> df = spark.range(1)
+    >>> df.select(schema_of_csv(lit('1|a'), {'sep':'|'}).alias("csv")).collect()
+    [Row(csv=u'struct<_c0:int,_c1:string>')]
+    >>> df.select(schema_of_csv('1|a', {'sep':'|'}).alias("csv")).collect()
+    [Row(csv=u'struct<_c0:int,_c1:string>')]
+    """
+    if isinstance(csv, basestring):
+        col = _create_column_from_literal(csv)
+    elif isinstance(csv, Column):
+        col = _to_java_column(csv)
+    else:
+        raise TypeError("schema argument should be a column or string")
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.schema_of_csv(col, options)
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(3.0)
+def to_csv(col, options={}):
+    """
+    Converts a column containing a :class:`StructType` into a CSV string.
+    Throws an exception, in the case of an unsupported type.
+
+    :param col: name of column containing a struct.
+    :param options: options to control converting. accepts the same options as the CSV datasource.
+
+    >>> from pyspark.sql import Row
+    >>> data = [(1, Row(name='Alice', age=2))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_csv(df.value).alias("csv")).collect()
+    [Row(csv=u'2,Alice')]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.to_csv(_to_java_column(col), options)
+    return Column(jc)
+
+
 @since(1.5)
 def size(col):
     """
@@ -2538,7 +2576,7 @@ def map_values(col):
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
-@since(2.4)
+@since(3.0)
 def map_entries(col):
     """
     Collection function: Returns an unordered array of all entries in the given map.
@@ -2618,11 +2656,11 @@ def map_concat(*cols):
     >>> from pyspark.sql.functions import map_concat
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c', 1, 'd') as map2")
     >>> df.select(map_concat("map1", "map2").alias("map3")).show(truncate=False)
-    +--------------------------------+
-    |map3                            |
-    +--------------------------------+
-    |[1 -> a, 2 -> b, 3 -> c, 1 -> d]|
-    +--------------------------------+
+    +------------------------+
+    |map3                    |
+    +------------------------+
+    |[1 -> d, 2 -> b, 3 -> c]|
+    +------------------------+
     """
     sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
@@ -2664,13 +2702,13 @@ def from_csv(col, schema, options={}):
     :param schema: a string with schema in DDL format to use when parsing the CSV column.
     :param options: options to control parsing. accepts the same options as the CSV datasource
 
-    >>> data = [(1, '1')]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(from_csv(df.value, "a INT").alias("csv")).collect()
-    [Row(csv=Row(a=1))]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(from_csv(df.value, lit("a INT")).alias("csv")).collect()
-    [Row(csv=Row(a=1))]
+    >>> data = [("1,2,3",)]
+    >>> df = spark.createDataFrame(data, ("value",))
+    >>> df.select(from_csv(df.value, "a INT, b INT, c INT").alias("csv")).collect()
+    [Row(csv=Row(a=1, b=2, c=3))]
+    >>> value = data[0][0]
+    >>> df.select(from_csv(df.value, schema_of_csv(value)).alias("csv")).collect()
+    [Row(csv=Row(_c0=1, _c1=2, _c2=3))]
     """
 
     sc = SparkContext._active_spark_context

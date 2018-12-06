@@ -22,12 +22,11 @@ import java.nio.charset.StandardCharsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, PodBuilder}
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
-private[spark] class PodTemplateConfigMapStep(
-   conf: KubernetesConf[_ <: KubernetesRoleSpecificConf])
+private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
   def configurePod(pod: SparkPod): SparkPod = {
     val podWithVolume = new PodBuilder(pod.pod)
@@ -54,11 +53,11 @@ private[spark] class PodTemplateConfigMapStep(
     SparkPod(podWithVolume, containerWithVolume)
   }
 
-  def getAdditionalPodSystemProperties(): Map[String, String] = Map[String, String](
+  override def getAdditionalPodSystemProperties(): Map[String, String] = Map[String, String](
     KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key ->
       (EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH + "/" + EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
 
-  def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     require(conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).isDefined)
     val podTemplateFile = conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE).get
     val podTemplateString = Files.toString(new File(podTemplateFile), StandardCharsets.UTF_8)

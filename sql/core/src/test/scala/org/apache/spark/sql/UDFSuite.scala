@@ -413,7 +413,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-25044 Verify null input handling for primitive types - with udf.register") {
     withTable("t") {
-      Seq((null, new Integer(1), "x"), ("M", null, "y"), ("N", new Integer(3), null))
+      Seq((null, Integer.valueOf(1), "x"), ("M", null, "y"), ("N", Integer.valueOf(3), null))
         .toDF("a", "b", "c").write.format("json").saveAsTable("t")
       spark.udf.register("f", (a: String, b: Int, c: Any) => a + b + c)
       val df = spark.sql("SELECT f(a, b, c) FROM t")

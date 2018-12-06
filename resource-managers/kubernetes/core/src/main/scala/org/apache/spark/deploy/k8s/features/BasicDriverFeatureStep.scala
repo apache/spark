@@ -28,14 +28,14 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.util.Utils
 
-private[spark] class BasicDriverFeatureStep(
-    conf: KubernetesConf[KubernetesDriverSpecificConf])
+private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep {
 
   private val driverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
-    .getOrElse(s"${conf.appResourceNamePrefix}-driver")
+    .getOrElse(s"${conf.resourceNamePrefix}-driver")
 
   private val driverContainerImage = conf
     .get(DRIVER_CONTAINER_IMAGE)
@@ -47,15 +47,27 @@ private[spark] class BasicDriverFeatureStep(
 
   // Memory settings
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
+
+  // The memory overhead factor to use. If the user has not set it, then use a different
+  // value for non-JVM apps. This value is propagated to executors.
+  private val overheadFactor =
+    if (conf.mainAppResource.isInstanceOf[NonJVMResource]) {
+      if (conf.contains(MEMORY_OVERHEAD_FACTOR)) {
+        conf.get(MEMORY_OVERHEAD_FACTOR)
+      } else {
+        NON_JVM_MEMORY_OVERHEAD_FACTOR
+      }
+    } else {
+      conf.get(MEMORY_OVERHEAD_FACTOR)
+    }
+
   private val memoryOverheadMiB = conf
     .get(DRIVER_MEMORY_OVERHEAD)
-    .getOrElse(math.max((conf.get(MEMORY_OVERHEAD_FACTOR) * driverMemoryMiB).toInt,
-      MEMORY_OVERHEAD_MIN_MIB))
+    .getOrElse(math.max((overheadFactor * driverMemoryMiB).toInt, MEMORY_OVERHEAD_MIN_MIB))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val driverCustomEnvs = conf.roleEnvs
-      .toSeq
+    val driverCustomEnvs = conf.environment.toSeq
       .map { env =>
         new EnvVarBuilder()
           .withName(env._1)
@@ -82,7 +94,7 @@ private[spark] class BasicDriverFeatureStep(
     val driverContainer = new ContainerBuilder(pod.container)
       .withName(Option(pod.container.getName).getOrElse(DEFAULT_DRIVER_CONTAINER_NAME))
       .withImage(driverContainerImage)
-      .withImagePullPolicy(conf.imagePullPolicy())
+      .withImagePullPolicy(conf.imagePullPolicy)
       .addNewPort()
         .withName(DRIVER_PORT_NAME)
         .withContainerPort(driverPort)
@@ -116,13 +128,13 @@ private[spark] class BasicDriverFeatureStep(
     val driverPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(driverPodName)
-        .addToLabels(conf.roleLabels.asJava)
-        .addToAnnotations(conf.roleAnnotations.asJava)
+        .addToLabels(conf.labels.asJava)
+        .addToAnnotations(conf.annotations.asJava)
         .endMetadata()
       .editOrNewSpec()
         .withRestartPolicy("Never")
-        .addToNodeSelector(conf.nodeSelector().asJava)
-        .addToImagePullSecrets(conf.imagePullSecrets(): _*)
+        .addToNodeSelector(conf.nodeSelector.asJava)
+        .addToImagePullSecrets(conf.imagePullSecrets: _*)
         .endSpec()
       .build()
 
@@ -133,21 +145,19 @@ private[spark] class BasicDriverFeatureStep(
     val additionalProps = mutable.Map(
       KUBERNETES_DRIVER_POD_NAME.key -> driverPodName,
       "spark.app.id" -> conf.appId,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> conf.appResourceNamePrefix,
-      KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true")
+      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> conf.resourceNamePrefix,
+      KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
+      MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
 
-    val resolvedSparkJars = KubernetesUtils.resolveFileUrisAndPath(
-      conf.sparkJars())
-    val resolvedSparkFiles = KubernetesUtils.resolveFileUrisAndPath(
-      conf.sparkFiles)
-    if (resolvedSparkJars.nonEmpty) {
-      additionalProps.put("spark.jars", resolvedSparkJars.mkString(","))
+    Seq("spark.jars", "spark.files").foreach { key =>
+      conf.getOption(key).foreach { value =>
+        val resolved = KubernetesUtils.resolveFileUrisAndPath(Utils.stringToSeq(value))
+        if (resolved.nonEmpty) {
+          additionalProps.put(key, resolved.mkString(","))
+        }
+      }
     }
-    if (resolvedSparkFiles.nonEmpty) {
-      additionalProps.put("spark.files", resolvedSparkFiles.mkString(","))
-    }
+
     additionalProps.toMap
   }
-
-  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

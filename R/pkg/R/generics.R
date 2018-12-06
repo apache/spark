@@ -631,6 +631,9 @@ setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 #' @rdname union
 setGeneric("union", function(x, y) { standardGeneric("union") })
 
+#' @rdname unionAll
+setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
+
 #' @rdname unionByName
 setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
 
@@ -745,6 +748,10 @@ setGeneric("windowOrderBy", function(col, ...) { standardGeneric("windowOrderBy"
 #' @rdname column_datetime_diff_functions
 #' @name NULL
 setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("approx_count_distinct", function(x, ...) { standardGeneric("approx_count_distinct") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
@@ -1199,6 +1206,14 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @name NULL
 setGeneric("rtrim", function(x, trimString) { standardGeneric("rtrim") })
 
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("schema_of_csv", function(x, ...) { standardGeneric("schema_of_csv") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("schema_of_json", function(x, ...) { standardGeneric("schema_of_json") })
+
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
@@ -1289,7 +1304,15 @@ setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
 #' @rdname column_math_functions
 #' @name NULL
+setGeneric("degrees", function(x) { standardGeneric("degrees") })
+
+#' @rdname column_math_functions
+#' @name NULL
 setGeneric("toDegrees", function(x) { standardGeneric("toDegrees") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("radians", function(x) { standardGeneric("radians") })
 
 #' @rdname column_math_functions
 #' @name NULL
@@ -1302,6 +1325,10 @@ setGeneric("to_date", function(x, format) { standardGeneric("to_date") })
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("to_json", function(x, ...) { standardGeneric("to_json") })
+
+#' @rdname column_collection_functions
+#' @name NULL
+setGeneric("to_csv", function(x, ...) { standardGeneric("to_csv") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

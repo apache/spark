@@ -152,7 +152,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
     }
 
     (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").createOrReplaceTempView("jt")
-    (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a")
+    (1 to 10).map(i => Tuple1(Seq(Integer.valueOf(i), null))).toDF("a")
       .createOrReplaceTempView("jt_array")
 
     assert(spark.sqlContext.getConf(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
