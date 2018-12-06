@@ -19,63 +19,63 @@ package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.SparkContext
 import org.apache.spark.executor.TempShuffleReadMetrics
-import org.apache.spark.shuffle.{ShuffleReadMetricsReporter, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 
 /**
- * A shuffle read metrics reporter for SQL exchange operators.
+ * A shuffle metrics reporter for SQL exchange operators.
  * @param tempMetrics [[TempShuffleReadMetrics]] created in TaskContext.
  * @param metrics All metrics in current SparkPlan. This param should not empty and
  *   contains all shuffle metrics defined in createShuffleReadMetrics.
  */
-private[spark] class SQLShuffleReadMetricsReporter(
+private[spark] class SQLShuffleMetricsReporter(
     tempMetrics: TempShuffleReadMetrics,
-    metrics: Map[String, SQLMetric]) extends ShuffleReadMetricsReporter {
+    metrics: Map[String, SQLMetric]) extends TempShuffleReadMetrics {
   private[this] val _remoteBlocksFetched =
-    metrics(SQLShuffleReadMetricsReporter.REMOTE_BLOCKS_FETCHED)
+    metrics(SQLShuffleMetricsReporter.REMOTE_BLOCKS_FETCHED)
   private[this] val _localBlocksFetched =
-    metrics(SQLShuffleReadMetricsReporter.LOCAL_BLOCKS_FETCHED)
+    metrics(SQLShuffleMetricsReporter.LOCAL_BLOCKS_FETCHED)
   private[this] val _remoteBytesRead =
-    metrics(SQLShuffleReadMetricsReporter.REMOTE_BYTES_READ)
+    metrics(SQLShuffleMetricsReporter.REMOTE_BYTES_READ)
   private[this] val _remoteBytesReadToDisk =
-    metrics(SQLShuffleReadMetricsReporter.REMOTE_BYTES_READ_TO_DISK)
+    metrics(SQLShuffleMetricsReporter.REMOTE_BYTES_READ_TO_DISK)
   private[this] val _localBytesRead =
-    metrics(SQLShuffleReadMetricsReporter.LOCAL_BYTES_READ)
+    metrics(SQLShuffleMetricsReporter.LOCAL_BYTES_READ)
   private[this] val _fetchWaitTime =
-    metrics(SQLShuffleReadMetricsReporter.FETCH_WAIT_TIME)
+    metrics(SQLShuffleMetricsReporter.FETCH_WAIT_TIME)
   private[this] val _recordsRead =
-    metrics(SQLShuffleReadMetricsReporter.RECORDS_READ)
+    metrics(SQLShuffleMetricsReporter.RECORDS_READ)
 
-  override private[spark] def incRemoteBlocksFetched(v: Long): Unit = {
+  override def incRemoteBlocksFetched(v: Long): Unit = {
     _remoteBlocksFetched.add(v)
     tempMetrics.incRemoteBlocksFetched(v)
   }
-  override private[spark] def incLocalBlocksFetched(v: Long): Unit = {
+  override def incLocalBlocksFetched(v: Long): Unit = {
     _localBlocksFetched.add(v)
     tempMetrics.incLocalBlocksFetched(v)
   }
-  override private[spark] def incRemoteBytesRead(v: Long): Unit = {
+  override def incRemoteBytesRead(v: Long): Unit = {
     _remoteBytesRead.add(v)
     tempMetrics.incRemoteBytesRead(v)
   }
-  override private[spark] def incRemoteBytesReadToDisk(v: Long): Unit = {
+  override def incRemoteBytesReadToDisk(v: Long): Unit = {
     _remoteBytesReadToDisk.add(v)
     tempMetrics.incRemoteBytesReadToDisk(v)
   }
-  override private[spark] def incLocalBytesRead(v: Long): Unit = {
+  override def incLocalBytesRead(v: Long): Unit = {
     _localBytesRead.add(v)
     tempMetrics.incLocalBytesRead(v)
   }
-  override private[spark] def incFetchWaitTime(v: Long): Unit = {
+  override def incFetchWaitTime(v: Long): Unit = {
     _fetchWaitTime.add(v)
     tempMetrics.incFetchWaitTime(v)
   }
-  override private[spark] def incRecordsRead(v: Long): Unit = {
+  override def incRecordsRead(v: Long): Unit = {
     _recordsRead.add(v)
     tempMetrics.incRecordsRead(v)
   }
 }
 
-private[spark] object SQLShuffleReadMetricsReporter {
+private[spark] object SQLShuffleMetricsReporter {
   val REMOTE_BLOCKS_FETCHED = "remoteBlocksFetched"
   val LOCAL_BLOCKS_FETCHED = "localBlocksFetched"
   val REMOTE_BYTES_READ = "remoteBytesRead"
