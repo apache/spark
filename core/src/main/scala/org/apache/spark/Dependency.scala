@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{DefaultShuffleWriteProcessor, ShuffleHandle, ShuffleWriteProcessor}
+import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
 
 /**
  * :: DeveloperApi ::
@@ -75,7 +75,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false,
-    val shuffleWriterProcessor: ShuffleWriteProcessor = new DefaultShuffleWriteProcessor)
+    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor)
   extends Dependency[Product2[K, V]] {
 
   if (mapSideCombine) {

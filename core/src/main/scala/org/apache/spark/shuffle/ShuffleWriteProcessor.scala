@@ -26,14 +26,16 @@ import org.apache.spark.scheduler.MapStatus
  * The interface for customizing shuffle write process. The driver create a ShuffleWriteProcessor
  * and put it into [[ShuffleDependency]], and executors use it in each ShuffleMapTask.
  */
-private[spark] trait ShuffleWriteProcessor extends Serializable with Logging {
+private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
 
   /**
-   * Create a [[ShuffleWriteMetricsReporter]] from the default reporter, always return a proxy
+   * Create a [[ShuffleWriteMetricsReporter]] from the task context, always return a proxy
    * reporter for both local accumulator and original reporter updating. As the reporter is a
    * per-row operator, here need a careful consideration on performance.
    */
-  def createMetricsReporter(reporter: ShuffleWriteMetricsReporter): ShuffleWriteMetricsReporter
+  def createMetricsReporter(context: TaskContext): ShuffleWriteMetricsReporter = {
+    context.taskMetrics().shuffleWriteMetrics
+  }
 
   /**
    * The write process for particular partition, it controls the life circle of [[ShuffleWriter]]
@@ -53,7 +55,7 @@ private[spark] trait ShuffleWriteProcessor extends Serializable with Logging {
         dep.shuffleHandle,
         partitionId,
         context,
-        createMetricsReporter(context.taskMetrics().shuffleWriteMetrics))
+        createMetricsReporter(context))
       writer.write(
         rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       writer.stop(success = true).get
@@ -70,13 +72,4 @@ private[spark] trait ShuffleWriteProcessor extends Serializable with Logging {
         throw e
     }
   }
-}
-
-
-/**
- * Default shuffle write processor which use the shuffle write metrics reporter in context.
- */
-private[spark] class DefaultShuffleWriteProcessor extends ShuffleWriteProcessor {
-  override def createMetricsReporter(
-      reporter: ShuffleWriteMetricsReporter): ShuffleWriteMetricsReporter = reporter
 }
