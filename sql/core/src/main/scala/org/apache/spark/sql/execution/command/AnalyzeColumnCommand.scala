@@ -210,13 +210,13 @@ case class AnalyzeColumnCommand(
     def struct(exprs: Expression*): CreateNamedStruct = CreateStruct(exprs.map { expr =>
       expr.transformUp { case af: AggregateFunction => af.toAggregateExpression() }
     })
-    val one = Literal(1, LongType)
+    val one = Literal(1L, LongType)
 
     // the approximate ndv (num distinct value) should never be larger than the number of rows
     val numNonNulls = if (col.nullable) Count(col) else Count(one)
     val ndv = Least(Seq(HyperLogLogPlusPlus(col, conf.ndvMaxError), numNonNulls))
     val numNulls = Subtract(Count(one), numNonNulls)
-    val defaultSize = Literal(col.dataType.defaultSize, LongType)
+    val defaultSize = Literal(col.dataType.defaultSize.toLong, LongType)
     val nullArray = Literal(null, ArrayType(LongType))
 
     def fixedLenTypeStruct: CreateNamedStruct = {

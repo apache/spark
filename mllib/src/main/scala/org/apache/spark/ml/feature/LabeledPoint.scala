@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.beans.BeanInfo
-
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.Vector
 
@@ -30,8 +28,12 @@ import org.apache.spark.ml.linalg.Vector
  * @param features List of features for this data point.
  */
 @Since("2.0.0")
-@BeanInfo
 case class LabeledPoint(@Since("2.0.0") label: Double, @Since("2.0.0") features: Vector) {
+
+  def getLabel: Double = label
+
+  def getFeatures: Vector = features
+
   override def toString: String = {
     s"($label,$features)"
   }

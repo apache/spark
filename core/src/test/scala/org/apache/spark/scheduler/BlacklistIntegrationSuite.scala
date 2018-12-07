@@ -96,15 +96,16 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     assertDataStructuresEmpty(noFailure = true)
   }
 
-  // Make sure that if we've failed on all executors, but haven't hit task.maxFailures yet, the job
-  // doesn't hang
+  // Make sure that if we've failed on all executors, but haven't hit task.maxFailures yet, we try
+  // to acquire a new executor and if we aren't able to get one, the job doesn't hang and we abort
   testScheduler(
     "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
       config.BLACKLIST_ENABLED.key -> "true",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "1",
-      "spark.testing.nCoresPerExecutor" -> "1"
+      "spark.testing.nCoresPerExecutor" -> "1",
+      "spark.scheduler.blacklist.unschedulableTaskSetTimeout" -> "0s"
     )
   ) {
     def runBackend(): Unit = {

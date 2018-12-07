@@ -574,7 +574,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       "list1",
       StorageLevel.MEMORY_ONLY,
       ClassTag.Any,
-      () => throw new AssertionError("attempted to compute locally")).isLeft)
+      () => fail("attempted to compute locally")).isLeft)
   }
 
   test("in-memory LRU storage") {

@@ -32,9 +32,11 @@ import org.apache.spark.sql.types._
  * Benchmark to measure ORC read performance.
  * {{{
  *   To run this benchmark:
- *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   1. without sbt: bin/spark-submit --class <this class>
+ *        --jars <catalyst test jar>,<core test jar>,<sql jar>,<hive-exec jar>,<spark-hive jar>
+ *       <spark-hive test jar>
+ *   2. build/sbt "hive/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/test:runMain <this class>"
  *      Results will be written to "benchmarks/OrcReadBenchmark-results.txt".
  * }}}
  *
@@ -266,8 +268,9 @@ object OrcReadBenchmark extends BenchmarkBase with SQLHelper {
             s"SELECT IF(RAND(1) < $fractionOfNulls, NULL, CAST(id as STRING)) AS c1, " +
             s"IF(RAND(2) < $fractionOfNulls, NULL, CAST(id as STRING)) AS c2 FROM t1"))
 
+        val percentageOfNulls = fractionOfNulls * 100
         val benchmark =
-          new Benchmark(s"String with Nulls Scan ($fractionOfNulls%)", values, output = output)
+          new Benchmark(s"String with Nulls Scan ($percentageOfNulls%)", values, output = output)
 
         benchmark.addCase("Native ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
@@ -336,7 +339,7 @@ object OrcReadBenchmark extends BenchmarkBase with SQLHelper {
     }
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
       Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dataType =>
         numericScanBenchmark(1024 * 1024 * 15, dataType)
