@@ -160,7 +160,7 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AtLeastNNonNulls(4, nullOnly), false, EmptyRow)
   }
 
-  test("Coalesce should not throw 64kb exception") {
+  test("Coalesce should not throw 64KiB exception") {
     val inputs = (1 to 2500).map(x => Literal(s"x_$x"))
     checkEvaluation(Coalesce(inputs), "x_1")
   }
@@ -171,7 +171,7 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx.inlinedMutableStates.size == 1)
   }
 
-  test("AtLeastNNonNulls should not throw 64kb exception") {
+  test("AtLeastNNonNulls should not throw 64KiB exception") {
     val inputs = (1 to 4000).map(x => Literal(s"x_$x"))
     checkEvaluation(AtLeastNNonNulls(1, inputs), true)
   }
