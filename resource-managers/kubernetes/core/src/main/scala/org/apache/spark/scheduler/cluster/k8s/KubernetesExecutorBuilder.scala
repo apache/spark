@@ -20,56 +20,47 @@ import java.io.File
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features._
 
 private[spark] class KubernetesExecutorBuilder(
-    provideBasicStep: (KubernetesConf [KubernetesExecutorSpecificConf])
-      => BasicExecutorFeatureStep =
-      new BasicExecutorFeatureStep(_),
-    provideSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
-      => MountSecretsFeatureStep =
+    provideBasicStep: (KubernetesExecutorConf, SecurityManager) => BasicExecutorFeatureStep =
+      new BasicExecutorFeatureStep(_, _),
+    provideSecretsStep: (KubernetesConf => MountSecretsFeatureStep) =
       new MountSecretsFeatureStep(_),
-    provideEnvSecretsStep:
-      (KubernetesConf[_ <: KubernetesRoleSpecificConf] => EnvSecretsFeatureStep) =
+    provideEnvSecretsStep: (KubernetesConf => EnvSecretsFeatureStep) =
       new EnvSecretsFeatureStep(_),
-    provideLocalDirsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf])
-      => LocalDirsFeatureStep =
+    provideLocalDirsStep: (KubernetesConf => LocalDirsFeatureStep) =
       new LocalDirsFeatureStep(_),
-    provideVolumesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-      => MountVolumesFeatureStep) =
+    provideVolumesStep: (KubernetesConf => MountVolumesFeatureStep) =
       new MountVolumesFeatureStep(_),
-    provideHadoopConfStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
-      => HadoopConfExecutorFeatureStep) =
+    provideHadoopConfStep: (KubernetesExecutorConf => HadoopConfExecutorFeatureStep) =
       new HadoopConfExecutorFeatureStep(_),
-    provideKerberosConfStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
-      => KerberosConfExecutorFeatureStep) =
+    provideKerberosConfStep: (KubernetesExecutorConf => KerberosConfExecutorFeatureStep) =
       new KerberosConfExecutorFeatureStep(_),
-    provideHadoopSparkUserStep: (
-      KubernetesConf[KubernetesExecutorSpecificConf]
-      => HadoopSparkUserExecutorFeatureStep) =
+    provideHadoopSparkUserStep: (KubernetesExecutorConf => HadoopSparkUserExecutorFeatureStep) =
       new HadoopSparkUserExecutorFeatureStep(_),
     provideInitialPod: () => SparkPod = () => SparkPod.initialPod()) {
 
   def buildFromFeatures(
-    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {
+      kubernetesConf: KubernetesExecutorConf,
+      secMgr: SecurityManager): SparkPod = {
     val sparkConf = kubernetesConf.sparkConf
     val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
     val maybeDTSecretName = sparkConf.getOption(KERBEROS_DT_SECRET_NAME)
     val maybeDTDataItem = sparkConf.getOption(KERBEROS_DT_SECRET_KEY)
 
-    val baseFeatures = Seq(provideBasicStep(kubernetesConf), provideLocalDirsStep(kubernetesConf))
-    val secretFeature = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
+    val baseFeatures = Seq(provideBasicStep(kubernetesConf, secMgr),
+      provideLocalDirsStep(kubernetesConf))
+    val secretFeature = if (kubernetesConf.secretNamesToMountPaths.nonEmpty) {
       Seq(provideSecretsStep(kubernetesConf))
     } else Nil
-    val secretEnvFeature = if (kubernetesConf.roleSecretEnvNamesToKeyRefs.nonEmpty) {
+    val secretEnvFeature = if (kubernetesConf.secretEnvNamesToKeyRefs.nonEmpty) {
       Seq(provideEnvSecretsStep(kubernetesConf))
     } else Nil
-    val volumesFeature = if (kubernetesConf.roleVolumes.nonEmpty) {
+    val volumesFeature = if (kubernetesConf.volumes.nonEmpty) {
       Seq(provideVolumesStep(kubernetesConf))
     } else Nil
 

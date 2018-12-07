@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
@@ -31,6 +31,7 @@ import org.apache.spark.util.{Clock, Utils}
 
 private[spark] class ExecutorPodsAllocator(
     conf: SparkConf,
+    secMgr: SecurityManager,
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
@@ -50,6 +51,8 @@ private[spark] class ExecutorPodsAllocator(
 
   private val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
+
+  private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
   private val driverPod = kubernetesDriverPodName
     .map(name => Option(kubernetesClient.pods()
@@ -86,11 +89,16 @@ private[spark] class ExecutorPodsAllocator(
           s" cluster after $podCreationTimeout milliseconds despite the fact that a" +
           " previous allocation attempt tried to create it. The executor may have been" +
           " deleted but the application missed the deletion event.")
-        Utils.tryLogNonFatalError {
-          kubernetesClient
-            .pods()
-            .withLabel(SPARK_EXECUTOR_ID_LABEL, execId.toString)
-            .delete()
+
+        if (shouldDeleteExecutors) {
+          Utils.tryLogNonFatalError {
+            kubernetesClient
+              .pods()
+              .withLabel(SPARK_APP_ID_LABEL, applicationId)
+              .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+              .withLabel(SPARK_EXECUTOR_ID_LABEL, execId.toString)
+              .delete()
+          }
         }
         newlyCreatedExecutors -= execId
       } else {
@@ -128,7 +136,7 @@ private[spark] class ExecutorPodsAllocator(
             newExecutorId.toString,
             applicationId,
             driverPod)
-          val executorPod = executorBuilder.buildFromFeatures(executorConf)
+          val executorPod = executorBuilder.buildFromFeatures(executorConf, secMgr)
           val podWithAttachedContainer = new PodBuilder(executorPod.pod)
             .editOrNewSpec()
             .addToContainers(executorPod.container)

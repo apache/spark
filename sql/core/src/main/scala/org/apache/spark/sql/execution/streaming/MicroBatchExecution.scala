@@ -521,6 +521,7 @@ class MicroBatchExecution(
         triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
+        id,
         runId,
         currentBatchId,
         offsetSeqMetadata)

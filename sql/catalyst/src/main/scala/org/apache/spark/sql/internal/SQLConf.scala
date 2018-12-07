@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
 
 object SQLConf {
 
-  private val sqlConfEntries = java.util.Collections.synchronizedMap(
+  private[sql] val sqlConfEntries = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, ConfigEntry[_]]())
 
   val staticConfKeys: java.util.Set[String] =
@@ -326,7 +326,7 @@ object SQLConf {
       "factor as the estimated data size, in case the data is compressed in the file and lead to" +
       " a heavily underestimated result.")
     .doubleConf
-    .checkValue(_ > 0, "the value of fileDataSizeFactor must be larger than 0")
+    .checkValue(_ > 0, "the value of fileDataSizeFactor must be greater than 0")
     .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
@@ -673,7 +673,7 @@ object SQLConf {
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed. Defaults to 100000")
     .intConf
-    .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be larger than 0")
+    .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be greater than 0")
     .createWithDefault(100000)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
@@ -1154,7 +1154,7 @@ object SQLConf {
       .internal()
       .doc("The number of bins when generating histograms.")
       .intConf
-      .checkValue(num => num > 1, "The number of bins must be larger than 1.")
+      .checkValue(num => num > 1, "The number of bins must be greater than 1.")
       .createWithDefault(254)
 
   val PERCENTILE_ACCURACY =
@@ -1396,13 +1396,23 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val VALIDATE_PARTITION_COLUMNS =
+    buildConf("spark.sql.sources.validatePartitionColumns")
+      .internal()
+      .doc("When this option is set to true, partition column values will be validated with " +
+        "user-specified schema. If the validation fails, a runtime exception is thrown." +
+        "When this option is set to false, the partition column value will be converted to null " +
+        "if it can not be casted to corresponding user-specified schema.")
+      .booleanConf
+      .createWithDefault(true)
+
   val CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.epochBacklogQueueSize")
-    .internal()
-    .doc("The max number of entries to be stored in queue to wait for late epochs. " +
-      "If this parameter is exceeded by the size of the queue, stream will stop with an error.")
-    .intConf
-    .createWithDefault(10000)
+      .internal()
+      .doc("The max number of entries to be stored in queue to wait for late epochs. " +
+        "If this parameter is exceeded by the size of the queue, stream will stop with an error.")
+      .intConf
+      .createWithDefault(10000)
 
   val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.executorQueueSize")
@@ -1618,6 +1628,21 @@ object SQLConf {
       """ "... N more fields" placeholder.""")
     .intConf
     .createWithDefault(25)
+
+  val SET_COMMAND_REJECTS_SPARK_CONFS =
+    buildConf("spark.sql.legacy.execution.setCommandRejectsSparkConfs")
+      .internal()
+      .doc("If it is set to true, SET command will fail when the key is registered as " +
+        "a SparkConf entry.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val LEGACY_TIME_PARSER_ENABLED = buildConf("spark.sql.legacy.timeParser.enabled")
+    .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
+      " dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
+      "java.time.* packages are used for the same purpose.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
@@ -2010,6 +2035,8 @@ class SQLConf extends Serializable with Logging {
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
+  def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
+
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
@@ -2040,6 +2067,10 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
+
+  def setCommandRejectsSparkConfs: Boolean = getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CONFS)
+
+  def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 
