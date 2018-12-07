@@ -143,14 +143,11 @@ private[spark] object KafkaTokenUtil extends Logging {
   }
 
   private[security] def getKeytabJaasParams(sparkConf: SparkConf): String = {
-    val serviceName = sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)
-    require(serviceName.nonEmpty, "Kerberos service name must be defined")
-
     val params =
       s"""
       |${getKrb5LoginModuleName} required
       | useKeyTab=true
-      | serviceName="${serviceName.get}"
+      | serviceName="${sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)}"
       | keyTab="${sparkConf.get(KEYTAB).get}"
       | principal="${sparkConf.get(PRINCIPAL).get}";
       """.stripMargin.replace("\n", "")
@@ -166,7 +163,7 @@ private[spark] object KafkaTokenUtil extends Logging {
       s"""
       |${getKrb5LoginModuleName} required
       | useTicketCache=true
-      | serviceName="${serviceName.get}";
+      | serviceName="${sparkConf.get(Kafka.KERBEROS_SERVICE_NAME)}";
       """.stripMargin.replace("\n", "")
     logDebug(s"Krb ticket cache JAAS params: $params")
     params

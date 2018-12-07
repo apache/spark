@@ -40,7 +40,7 @@ private[spark] object Kafka {
         "Kafka's JAAS config or in Kafka's config. For further details please see kafka " +
         "documentation. Only used to obtain delegation token.")
       .stringConf
-      .createOptional
+      .createWithDefault("kafka")
 
   val TRUSTSTORE_LOCATION =
     ConfigBuilder("spark.kafka.ssl.truststore.location")

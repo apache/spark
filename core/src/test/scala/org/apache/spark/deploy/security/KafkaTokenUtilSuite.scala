@@ -36,7 +36,6 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
   private val keyStorePassword = "keyStoreSecret"
   private val keyPassword = "keySecret"
   private val keytab = "/path/to/keytab"
-  private val kerberosServiceName = "kafka"
   private val principal = "user@domain.com"
 
   private var sparkConf: SparkConf = null
@@ -96,7 +95,6 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkConf.set(Kafka.KEYSTORE_LOCATION, keyStoreLocation)
     sparkConf.set(Kafka.KEYSTORE_PASSWORD, keyStorePassword)
     sparkConf.set(Kafka.KEY_PASSWORD, keyPassword)
-    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
@@ -119,7 +117,6 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkConf.set(Kafka.KEYSTORE_LOCATION, keyStoreLocation)
     sparkConf.set(Kafka.KEYSTORE_PASSWORD, keyStorePassword)
     sparkConf.set(Kafka.KEY_PASSWORD, keyPassword)
-    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
@@ -143,7 +140,6 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkConf.set(Kafka.KEYSTORE_LOCATION, keyStoreLocation)
     sparkConf.set(Kafka.KEYSTORE_PASSWORD, keyStorePassword)
     sparkConf.set(Kafka.KEY_PASSWORD, keyPassword)
-    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
@@ -177,7 +173,6 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
     sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
     sparkConf.set(KEYTAB, keytab)
-    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
     sparkConf.set(PRINCIPAL, principal)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
@@ -195,7 +190,6 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("createAdminClientProperties without keytab should set ticket cache dynamic jaas config") {
     sparkConf.set(Kafka.BOOTSTRAP_SERVERS, bootStrapServers)
     sparkConf.set(Kafka.SECURITY_PROTOCOL, SASL_SSL.name)
-    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
 
     val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf)
 
@@ -217,23 +211,5 @@ class KafkaTokenUtilSuite extends SparkFunSuite with BeforeAndAfterEach {
     setGlobalKafkaClientConfig()
 
     assert(KafkaTokenUtil.isGlobalJaasConfigurationProvided)
-  }
-
-  test("getKeytabJaasParams with keytab no service should throw exception") {
-    sparkConf.set(KEYTAB, keytab)
-
-    val thrown = intercept[IllegalArgumentException] {
-      KafkaTokenUtil.getKeytabJaasParams(sparkConf)
-    }
-
-    assert(thrown.getMessage contains "Kerberos service name must be defined")
-  }
-
-  test("getTicketCacheJaasParams without service should throw exception") {
-    val thrown = intercept[IllegalArgumentException] {
-      KafkaTokenUtil.getTicketCacheJaasParams(sparkConf)
-    }
-
-    assert(thrown.getMessage contains "Kerberos service name must be defined")
   }
 }
