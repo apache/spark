@@ -322,14 +322,13 @@ test_that("spark.posterior and spark.perplexity", {
 test_that("spark.assignClusters", {
   df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
                              list(1L, 2L, 1.0), list(3L, 4L, 1.0),
-                             list(4L, 0L, 0.1)), schema = c("src", "dst", "weight"))
+                             list(4L, 0L, 0.1)),
+                        schema = c("src", "dst", "weight"))
   clusters <- spark.assignClusters(df, initMode = "degree", weightCol = "weight")
-  expected_result <- createDataFrame(list(list(4L, 1L),
-                                          list(0L, 0L),
-                                          list(1L, 0L),
-                                          list(3L, 1L),
+  expected_result <- createDataFrame(list(list(4L, 1L), list(0L, 0L),
+                                          list(1L, 0L), list(3L, 1L),
                                           list(2L, 0L)),
-                                          schema = c("id", "cluster"))
+                                     schema = c("id", "cluster"))
   expect_equivalent(expected_result, clusters)
 })
 

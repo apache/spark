@@ -976,8 +976,9 @@ Power Iteration Clustering (PIC) is a scalable graph clustering algorithm. `spar
 
 ```{r}
 df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
-                      list(1L, 2L, 1.0), list(3L, 4L, 1.0),
-                      list(4L, 0L, 0.1)), schema = c("src", "dst", "weight"))
+                           list(1L, 2L, 1.0), list(3L, 4L, 1.0),
+                           list(4L, 0L, 0.1)),
+                      schema = c("src", "dst", "weight"))
 head(spark.assignClusters(df, initMode = "degree", weightCol = "weight"))
 ```
 
