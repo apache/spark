@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
 
 class FileIndexSuite extends SharedSQLContext {
@@ -91,6 +91,31 @@ class FileIndexSuite extends SharedSQLContext {
         assert(msg.contains("Conflicting partition column names detected"))
         assert("Partition column name list #[0-1]: A".r.findFirstIn(msg).isDefined)
         assert("Partition column name list #[0-1]: a".r.findFirstIn(msg).isDefined)
+      }
+    }
+  }
+
+  test("SPARK-26263: Throw exception when partition value can't be casted to user-specified type") {
+    withTempDir { dir =>
+      val partitionDirectory = new File(dir, "a=foo")
+      partitionDirectory.mkdir()
+      val file = new File(partitionDirectory, "text.txt")
+      stringToFile(file, "text")
+      val path = new Path(dir.getCanonicalPath)
+      val schema = StructType(Seq(StructField("a", IntegerType, false)))
+      withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "true") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+        val msg = intercept[RuntimeException] {
+          fileIndex.partitionSpec()
+        }.getMessage
+        assert(msg == "Failed to cast value `foo` to `IntegerType` for partition column `a`")
+      }
+
+      withSQLConf(SQLConf.VALIDATE_PARTITION_COLUMNS.key -> "false") {
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, Some(schema))
+        val partitionValues = fileIndex.partitionSpec().partitions.map(_.values)
+        assert(partitionValues.length == 1 && partitionValues(0).numFields == 1 &&
+          partitionValues(0).isNullAt(0))
       }
     }
   }
