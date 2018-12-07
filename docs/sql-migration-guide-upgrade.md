@@ -37,7 +37,7 @@ displayTitle: Spark SQL Upgrading Guide
 
   - In Spark version 2.4 and earlier, CSV datasource converts a malformed CSV string to a row with all `null`s in the PERMISSIVE mode. Since Spark 3.0, returned row can contain non-`null` fields if some of CSV column values were parsed and converted to desired types successfully.
 
-  - In Spark version 2.4 and earlier, JSON datasource and JSON functions (`from_json`, `get_json_object` and etc.) convert a malformed JSON string to a row with all `null`s in the PERMISSIVE mode when specified schema is `StructType`. Since Spark 3.0, returned row can contain non-`null` fields if some of JSON column values were parsed and converted to desired types successfully.
+  - In Spark version 2.4 and earlier, JSON datasource and JSON functions like `from_json` convert a malformed JSON string to a row with all `null`s in the PERMISSIVE mode when specified schema is `StructType`. Since Spark 3.0, returned row can contain non-`null` fields if some of JSON column values were parsed and converted to desired types successfully.
 
 ## Upgrading From Spark SQL 2.3 to 2.4
 
