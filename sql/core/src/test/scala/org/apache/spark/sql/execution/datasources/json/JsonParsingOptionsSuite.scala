@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.json.JSONOptions
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
@@ -134,5 +135,23 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.last.name == "price")
     assert(df.first().getString(0) == "Cazen Lee")
     assert(df.first().getString(1) == "$10")
+  }
+
+  test("verify options") {
+    withTempPath { dir =>
+      def invalidOptionUsage: Unit = {
+        val ds = Seq("""{"a": "b"}""").toDS()
+        ds.write.option("dropFieldIfAllNull", true).json(dir.getCanonicalPath)
+      }
+      val exception = intercept[IllegalArgumentException] {
+        invalidOptionUsage
+      }
+      assert(exception.getMessage.contains(
+        """The JSON option "dropFieldIfAllNull" is not applicable in write."""))
+
+      withSQLConf(SQLConf.VERIFY_DATASOURCE_OPTIONS.key -> "false") {
+        invalidOptionUsage
+      }
+    }
   }
 }

@@ -27,6 +27,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
@@ -141,9 +142,10 @@ private[sql] object JSONOptions {
       parameters: CaseInsensitiveMap[String],
       option: String,
       where: String): T = {
-    if (parameters.get(option).isDefined) {
+    if (parameters.get(option).isDefined && SQLConf.get.verifyDataSourceOptions) {
       // scalastyle:off throwerror
-      throw new NotImplementedError(s"""The JSON option "${option}" is not applicable in $where.""")
+      throw new IllegalArgumentException(
+        s"""The JSON option "${option}" is not applicable in $where.""")
       // scalastyle:on throwerror
     } else {
       new Array[T](1)(0)

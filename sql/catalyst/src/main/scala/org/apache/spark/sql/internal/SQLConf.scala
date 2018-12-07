@@ -1635,6 +1635,14 @@ object SQLConf {
       "java.time.* packages are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
+
+  val VERIFY_DATASOURCE_OPTIONS = buildConf("spark.sql.verifyDataSourceOptions")
+    .doc("Options passed to datasource are checked that rather they could be applied in read or " +
+      "in write when this configuration property is set to true. For example, If an option can " +
+      "be applied only in read but applied in write, an exception is raised. " +
+      "To disable the verification, set it to false.")
+    .booleanConf
+    .createWithDefault(true)
 }
 
 /**
@@ -1819,6 +1827,8 @@ class SQLConf extends Serializable with Logging {
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
+
+  def verifyDataSourceOptions: Boolean = getConf(VERIFY_DATASOURCE_OPTIONS)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
