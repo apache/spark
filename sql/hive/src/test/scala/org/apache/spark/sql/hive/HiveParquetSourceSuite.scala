@@ -18,13 +18,13 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.io.IOException
 
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * A suite of tests for the Parquet support through the data sources API.
@@ -32,7 +32,6 @@ import org.apache.spark.util.Utils
 class HiveParquetSourceSuite extends ParquetPartitioningTest {
   import testImplicits._
   import spark._
-  import java.io.IOException
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -270,15 +269,10 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
                 (1 to 2).map(i => Row(i, i, s"parq$i")))
               checkAnswer(sql("select * from tbl3"), Nil)
             } else {
-              Seq("select * from tbl1", "select * from tbl2", "select * from tbl3").foreach {
-                sqlStmt =>
-                  try {
-                    sql(sqlStmt)
-                  } catch {
-                    case e: IOException =>
-                      assert(e.getMessage().contains("java.io.IOException: Not a file"))
-                  }
-              }
+              intercept[IOException](sql("select * from tbl1").show())
+              checkAnswer(sql("select * from tbl2"),
+                (1 to 2).map(i => Row(i, i, s"parq$i")))
+              intercept[IOException](sql("select * from tbl3").show())
             }
           }
         }

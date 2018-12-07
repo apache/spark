@@ -73,11 +73,9 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       sql(
         s"""
           |CREATE TABLE $tableName
-
           |USING org.apache.spark.sql.hive.orc
           |OPTIONS (
-          |  PATH '${new File(orcTableAsDir.getAbsolutePath
-        ).toURI}'
+          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
           |)
         """.stripMargin)
 
