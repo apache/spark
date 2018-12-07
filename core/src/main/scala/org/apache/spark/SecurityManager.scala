@@ -397,7 +397,9 @@ private[spark] class SecurityManager(
         case k8sRegex() =>
           val secretFile = new File(secretFilePath)
           require(secretFile.isFile, s"No file found containing the secret key at $secretFilePath.")
-          Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
+          val base64Key = Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
+          require(!base64Key.isEmpty, s"Secret key from file located at $secretFilePath is empty.")
+          base64Key
         case _ =>
           throw new IllegalArgumentException(
             "Secret keys provided via files is only allowed in Kubernetes mode.")
