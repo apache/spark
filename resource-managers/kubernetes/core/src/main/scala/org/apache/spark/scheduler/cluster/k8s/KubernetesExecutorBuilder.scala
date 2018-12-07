@@ -20,14 +20,14 @@ import java.io.File
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features._
 
 private[spark] class KubernetesExecutorBuilder(
-    provideBasicStep: (KubernetesExecutorConf => BasicExecutorFeatureStep) =
-      new BasicExecutorFeatureStep(_),
+    provideBasicStep: (KubernetesExecutorConf, SecurityManager) => BasicExecutorFeatureStep =
+      new BasicExecutorFeatureStep(_, _),
     provideSecretsStep: (KubernetesConf => MountSecretsFeatureStep) =
       new MountSecretsFeatureStep(_),
     provideEnvSecretsStep: (KubernetesConf => EnvSecretsFeatureStep) =
@@ -38,9 +38,12 @@ private[spark] class KubernetesExecutorBuilder(
       new MountVolumesFeatureStep(_),
     provideInitialPod: () => SparkPod = () => SparkPod.initialPod()) {
 
-  def buildFromFeatures(kubernetesConf: KubernetesExecutorConf): SparkPod = {
+  def buildFromFeatures(
+      kubernetesConf: KubernetesExecutorConf,
+      secMgr: SecurityManager): SparkPod = {
     val sparkConf = kubernetesConf.sparkConf
-    val baseFeatures = Seq(provideBasicStep(kubernetesConf), provideLocalDirsStep(kubernetesConf))
+    val baseFeatures = Seq(provideBasicStep(kubernetesConf, secMgr),
+      provideLocalDirsStep(kubernetesConf))
     val secretFeature = if (kubernetesConf.secretNamesToMountPaths.nonEmpty) {
       Seq(provideSecretsStep(kubernetesConf))
     } else Nil

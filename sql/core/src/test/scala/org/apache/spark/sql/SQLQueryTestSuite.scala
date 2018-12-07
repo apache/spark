@@ -154,14 +154,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         val (conf, value) = confAndValue.span(_ != '=')
         conf.trim -> value.substring(1).trim
       })
-      // When we are regenerating the golden files we don't need to run all the configs as they
+      // When we are regenerating the golden files, we don't need to set any config as they
       // all need to return the same result
       if (regenerateGoldenFiles) {
-        if (configs.nonEmpty) {
-          configs.take(1)
-        } else {
-          Array.empty[Array[(String, String)]]
-        }
+        Array.empty[Array[(String, String)]]
       } else {
         if (configs.nonEmpty) {
           codegenConfigSets.flatMap { codegenConfig =>

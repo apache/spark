@@ -94,6 +94,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     val executorPodsAllocator = new ExecutorPodsAllocator(
       sc.conf,
+      sc.env.securityManager,
       KubernetesExecutorBuilder(kubernetesClient, sc.conf),
       kubernetesClient,
       snapshotsStore,

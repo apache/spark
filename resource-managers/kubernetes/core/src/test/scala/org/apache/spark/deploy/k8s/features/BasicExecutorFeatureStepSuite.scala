@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -64,7 +64,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   private var baseConf: SparkConf = _
 
   before {
-    baseConf = new SparkConf()
+    baseConf = new SparkConf(false)
       .set(KUBERNETES_DRIVER_POD_NAME, DRIVER_POD_NAME)
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, RESOURCE_NAME_PREFIX)
       .set(CONTAINER_IMAGE, EXECUTOR_IMAGE)
@@ -85,7 +85,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("basic executor pod has reasonable defaults") {
-    val step = new BasicExecutorFeatureStep(newExecutorConf())
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())
 
     // The executor pod name and default labels.
@@ -107,7 +107,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(executor.pod.getSpec.getNodeSelector.isEmpty)
     assert(executor.pod.getSpec.getVolumes.isEmpty)
 
-    checkEnv(executor, Map())
+    checkEnv(executor, baseConf, Map())
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
@@ -115,7 +115,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val longPodNamePrefix = "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple"
 
     baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, longPodNamePrefix)
-    val step = new BasicExecutorFeatureStep(newExecutorConf())
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length === 63)
   }
 
@@ -123,10 +123,10 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     baseConf.set(EXECUTOR_JAVA_OPTIONS, "foo=bar")
     baseConf.set(EXECUTOR_CLASS_PATH, "bar=baz")
     val kconf = newExecutorConf(environment = Map("qux" -> "quux"))
-    val step = new BasicExecutorFeatureStep(kconf)
+    val step = new BasicExecutorFeatureStep(kconf, new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())
 
-    checkEnv(executor,
+    checkEnv(executor, baseConf,
       Map("SPARK_JAVA_OPT_0" -> "foo=bar",
         ENV_CLASSPATH -> "bar=baz",
         "qux" -> "quux"))
@@ -137,10 +137,25 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     baseConf.set("spark.kubernetes.resource.type", "python")
     baseConf.set(PYSPARK_EXECUTOR_MEMORY, 42L)
 
-    val step = new BasicExecutorFeatureStep(newExecutorConf())
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())
     // This is checking that basic executor + executorMemory = 1408 + 42 = 1450
     assert(executor.container.getResources.getRequests.get("memory").getAmount === "1450Mi")
+  }
+
+  test("auth secret propagation") {
+    val conf = baseConf.clone()
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set("spark.master", "k8s://127.0.0.1")
+
+    val secMgr = new SecurityManager(conf)
+    secMgr.initializeAuth()
+
+    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
+      secMgr)
+
+    val executor = step.configurePod(SparkPod.initialPod())
+    checkEnv(executor, conf, Map(SecurityManager.ENV_AUTH_SECRET -> secMgr.getSecretKey()))
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.
@@ -151,7 +166,10 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   // Check that the expected environment variables are present.
-  private def checkEnv(executorPod: SparkPod, additionalEnvVars: Map[String, String]): Unit = {
+  private def checkEnv(
+      executorPod: SparkPod,
+      conf: SparkConf,
+      additionalEnvVars: Map[String, String]): Unit = {
     val defaultEnvs = Map(
       ENV_EXECUTOR_ID -> "1",
       ENV_DRIVER_URL -> DRIVER_ADDRESS.toString,
@@ -162,12 +180,17 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_EXECUTOR_POD_IP -> null,
       ENV_SPARK_USER -> Utils.getCurrentUserName())
 
-    val allEnvs = defaultEnvs ++ additionalEnvVars
+    val extraJavaOptsStart = additionalEnvVars.keys.count(_.startsWith(ENV_JAVA_OPT_PREFIX))
+    val extraJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
+    val extraJavaOptsEnvs = extraJavaOpts.zipWithIndex.map { case (opt, ind) =>
+      s"$ENV_JAVA_OPT_PREFIX${ind + extraJavaOptsStart}" -> opt
+    }.toMap
 
-    assert(executorPod.container.getEnv.size() === allEnvs.size)
-    val mapEnvs = executorPod.container.getEnv.asScala.map {
+    val containerEnvs = executorPod.container.getEnv.asScala.map {
       x => (x.getName, x.getValue)
     }.toMap
-    assert(allEnvs === mapEnvs)
+
+    val expectedEnvs = defaultEnvs ++ additionalEnvVars ++ extraJavaOptsEnvs
+    assert(containerEnvs === expectedEnvs)
   }
 }
