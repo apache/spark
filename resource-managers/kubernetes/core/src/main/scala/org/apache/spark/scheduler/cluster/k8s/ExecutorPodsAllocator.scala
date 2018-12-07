@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
@@ -31,6 +31,7 @@ import org.apache.spark.util.{Clock, Utils}
 
 private[spark] class ExecutorPodsAllocator(
     conf: SparkConf,
+    secMgr: SecurityManager,
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
@@ -135,7 +136,7 @@ private[spark] class ExecutorPodsAllocator(
             newExecutorId.toString,
             applicationId,
             driverPod)
-          val executorPod = executorBuilder.buildFromFeatures(executorConf)
+          val executorPod = executorBuilder.buildFromFeatures(executorConf, secMgr)
           val podWithAttachedContainer = new PodBuilder(executorPod.pod)
             .editOrNewSpec()
             .addToContainers(executorPod.container)
