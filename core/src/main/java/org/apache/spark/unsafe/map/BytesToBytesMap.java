@@ -159,11 +159,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   private final Location loc;
 
-  private final boolean enablePerfMetrics;
+  private long numProbes = 0L;
 
-  private long numProbes = 0;
-
-  private long numKeyLookups = 0;
+  private long numKeyLookups = 0L;
 
   private long peakMemoryUsedBytes = 0L;
 
@@ -180,8 +178,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       SerializerManager serializerManager,
       int initialCapacity,
       double loadFactor,
-      long pageSizeBytes,
-      boolean enablePerfMetrics) {
+      long pageSizeBytes) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
@@ -189,7 +186,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
     this.loadFactor = loadFactor;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
-    this.enablePerfMetrics = enablePerfMetrics;
     if (initialCapacity <= 0) {
       throw new IllegalArgumentException("Initial capacity must be greater than 0");
     }
@@ -209,14 +205,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
       TaskMemoryManager taskMemoryManager,
       int initialCapacity,
       long pageSizeBytes) {
-    this(taskMemoryManager, initialCapacity, pageSizeBytes, false);
-  }
-
-  public BytesToBytesMap(
-      TaskMemoryManager taskMemoryManager,
-      int initialCapacity,
-      long pageSizeBytes,
-      boolean enablePerfMetrics) {
     this(
       taskMemoryManager,
       SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
@@ -224,8 +212,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       initialCapacity,
       // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
       0.5,
-      pageSizeBytes,
-      enablePerfMetrics);
+      pageSizeBytes);
   }
 
   /**
@@ -462,15 +449,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
 
-    if (enablePerfMetrics) {
-      numKeyLookups++;
-    }
+    numKeyLookups++;
+
     int pos = hash & mask;
     int step = 1;
     while (true) {
-      if (enablePerfMetrics) {
-        numProbes++;
-      }
+      numProbes++;
       if (longArray.get(pos * 2) == 0) {
         // This is a new key.
         loc.with(pos, hash, false);
@@ -860,9 +844,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Returns the average number of probes per key lookup.
    */
   public double getAverageProbesPerLookup() {
-    if (!enablePerfMetrics) {
-      throw new IllegalStateException();
-    }
     return (1.0 * numProbes) / numKeyLookups;
   }
 
