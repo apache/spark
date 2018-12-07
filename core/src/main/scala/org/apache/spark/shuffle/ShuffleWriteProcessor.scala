@@ -29,11 +29,10 @@ import org.apache.spark.scheduler.MapStatus
 private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
 
   /**
-   * Create a [[ShuffleWriteMetricsReporter]] from the task context, always return a proxy
-   * reporter for both local accumulator and original reporter updating. As the reporter is a
+   * Create a [[ShuffleWriteMetricsReporter]] from the task context. As the reporter is a
    * per-row operator, here need a careful consideration on performance.
    */
-  def createMetricsReporter(context: TaskContext): ShuffleWriteMetricsReporter = {
+  protected def createMetricsReporter(context: TaskContext): ShuffleWriteMetricsReporter = {
     context.taskMetrics().shuffleWriteMetrics
   }
 

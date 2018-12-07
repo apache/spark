@@ -80,7 +80,7 @@ object SQLMetrics {
   private val SUM_METRIC = "sum"
   private val SIZE_METRIC = "size"
   private val TIMING_METRIC = "timing"
-  private val NORMALIZE_TIMING_METRIC = "normalizeTiming"
+  private val NS_TIMING_METRIC = "nsTiming"
   private val AVERAGE_METRIC = "average"
 
   private val baseForAvgMetric: Int = 10
@@ -126,7 +126,7 @@ object SQLMetrics {
 
   def createNanoTimingMetric(sc: SparkContext, name: String): SQLMetric = {
     // Same with createTimingMetric, just normalize the unit of time to millisecond.
-    val acc = new SQLMetric(NORMALIZE_TIMING_METRIC, -1)
+    val acc = new SQLMetric(NS_TIMING_METRIC, -1)
     acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
     acc
   }
@@ -173,7 +173,7 @@ object SQLMetrics {
         Utils.bytesToString
       } else if (metricsType == TIMING_METRIC) {
         Utils.msDurationToString
-      } else if (metricsType == NORMALIZE_TIMING_METRIC) {
+      } else if (metricsType == NS_TIMING_METRIC) {
         duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
         throw new IllegalStateException("unexpected metrics type: " + metricsType)

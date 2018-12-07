@@ -355,7 +355,7 @@ object ShuffleExchangeExec {
    */
   def createShuffleWriteProcessor(metrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
     new ShuffleWriteProcessor {
-      override def createMetricsReporter(
+      override protected def createMetricsReporter(
           context: TaskContext): ShuffleWriteMetricsReporter = {
         new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
       }
