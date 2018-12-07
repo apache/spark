@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.json
 import java.nio.charset.{Charset, StandardCharsets}
 import java.util.{Locale, TimeZone}
 
+import scala.reflect.ClassTag
+
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.commons.lang3.time.FastDateFormat
 
@@ -31,7 +33,7 @@ import org.apache.spark.sql.catalyst.util._
  *
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
-private[sql] class JSONOptions(
+private[sql] abstract class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
@@ -65,7 +67,7 @@ private[sql] class JSONOptions(
     parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
   val allowBackslashEscapingAnyCharacter =
     parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
-  private val allowUnquotedControlChars =
+  val allowUnquotedControlChars =
     parameters.get("allowUnquotedControlChars").map(_.toBoolean).getOrElse(false)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
   val parseMode: ParseMode =
@@ -134,6 +136,21 @@ private[sql] class JSONOptions(
   }
 }
 
+private[sql] object JSONOptions {
+  def notApplicable[T: ClassTag](
+      parameters: CaseInsensitiveMap[String],
+      option: String,
+      where: String): T = {
+    if (parameters.get(option).isDefined) {
+      // scalastyle:off throwerror
+      throw new NotImplementedError(s"""The JSON option "${option}" is not applicable in $where.""")
+      // scalastyle:on throwerror
+    } else {
+      new Array[T](1)(0)
+    }
+  }
+}
+
 private[sql] class JSONOptionsInRead(
     @transient override val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
@@ -162,6 +179,13 @@ private[sql] class JSONOptionsInRead(
 
     enc
   }
+
+  override val compressionCodec: Option[String] = notApplicable[Option[String]]("compression")
+  override val pretty: Boolean = notApplicable[Boolean]("pretty")
+
+  def notApplicable[T: ClassTag](option: String): T = {
+    JSONOptions.notApplicable(parameters, option, "read")
+  }
 }
 
 private[sql] object JSONOptionsInRead {
@@ -175,4 +199,39 @@ private[sql] object JSONOptionsInRead {
     Charset.forName("UTF-16"),
     Charset.forName("UTF-32")
   )
+}
+
+private[sql] class JSONOptionsInWrite(
+    @transient override val parameters: CaseInsensitiveMap[String],
+    defaultTimeZoneId: String)
+  extends JSONOptions(parameters, defaultTimeZoneId, "") {
+
+  def this(
+      parameters: Map[String, String],
+      defaultTimeZoneId: String) = {
+    this(
+      CaseInsensitiveMap(parameters),
+      defaultTimeZoneId)
+  }
+
+  override val samplingRatio = notApplicable[Double]("samplingRatio")
+  override val primitivesAsString = notApplicable[Boolean]("primitivesAsString")
+  override val prefersDecimal = notApplicable[Boolean]("prefersDecimal")
+  override val allowComments = notApplicable[Boolean]("allowComments")
+  override val allowUnquotedFieldNames = notApplicable[Boolean]("allowUnquotedFieldNames")
+  override val allowSingleQuotes = notApplicable[Boolean]("allowSingleQuotes")
+  override val allowNumericLeadingZeros = notApplicable[Boolean]("allowNumericLeadingZeros")
+  override val allowNonNumericNumbers = notApplicable[Boolean]("allowNonNumericNumbers")
+  override val allowBackslashEscapingAnyCharacter = {
+    notApplicable[Boolean]("allowBackslashEscapingAnyCharacter")
+  }
+  override val allowUnquotedControlChars = notApplicable[Boolean]("allowUnquotedControlChars")
+  override val parseMode: ParseMode = notApplicable[ParseMode]("mode")
+  override val columnNameOfCorruptRecord = notApplicable[String]("columnNameOfCorruptRecord")
+  override val dropFieldIfAllNull = notApplicable[Boolean]("dropFieldIfAllNull")
+  override val multiLine = notApplicable[Boolean]("multiLine")
+
+  def notApplicable[T: ClassTag](option: String): T = {
+    JSONOptions.notApplicable(parameters, option, "write")
+  }
 }

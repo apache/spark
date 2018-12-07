@@ -569,7 +569,7 @@ case class JsonToStructs(
 
   val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
   @transient lazy val parser = {
-    val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
+    val parsedOptions = new JSONOptionsInRead(options, timeZoneId.get, nameOfCorruptRecord)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
@@ -660,7 +660,7 @@ case class StructsToJson(
 
   @transient
   lazy val gen = new JacksonGenerator(
-    inputSchema, writer, new JSONOptions(options, timeZoneId.get))
+    inputSchema, writer, new JSONOptionsInWrite(options, timeZoneId.get))
 
   @transient
   lazy val inputSchema = child.dataType
@@ -764,7 +764,7 @@ case class SchemaOfJson(
   override def nullable: Boolean = false
 
   @transient
-  private lazy val jsonOptions = new JSONOptions(options, "UTC")
+  private lazy val jsonOptions = new JSONOptionsInRead(options, "UTC")
 
   @transient
   private lazy val jsonFactory = {

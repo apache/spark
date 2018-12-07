@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
 class JacksonGeneratorSuite extends SparkFunSuite {
 
   val gmtId = DateTimeUtils.TimeZoneGMT.getID
-  val option = new JSONOptions(Map.empty, gmtId)
+  val option = new JSONOptionsInRead(Map.empty, gmtId)
 
   test("initial with StructType and write out a row") {
     val dataType = StructType(StructField("a", IntegerType) :: Nil)

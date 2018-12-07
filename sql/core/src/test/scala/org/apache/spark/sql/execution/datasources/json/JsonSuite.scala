@@ -64,7 +64,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         generator.flush()
       }
 
-      val dummyOption = new JSONOptions(Map.empty[String, String], "GMT")
+      val dummyOption = new JSONOptionsInRead(Map.empty[String, String], "GMT")
       val dummySchema = StructType(Seq.empty)
       val parser = new JacksonParser(dummySchema, dummyOption, allowArrayAsStructs = true)
 
@@ -1372,7 +1372,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonInferSchema.infer on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val options = new JSONOptions(Map.empty[String, String], "GMT")
+    val options = new JSONOptionsInRead(Map.empty[String, String], "GMT")
     val emptySchema = new JsonInferSchema(options).infer(
       empty.rdd,
       CreateJacksonParser.string)
@@ -1399,7 +1399,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val options = new JSONOptions(Map.empty[String, String], "GMT")
+    val options = new JSONOptionsInRead(Map.empty[String, String], "GMT")
     val emptySchema = new JsonInferSchema(options).infer(
       emptyRecords.rdd,
       CreateJacksonParser.string)
@@ -2324,7 +2324,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         val ds = spark.createDataset(Seq(("a", 1))).repartition(1)
         ds.write
           .option("encoding", encoding)
-          .option("multiline", false)
           .json(path.getCanonicalPath)
         val jsonFiles = path.listFiles().filter(_.getName.endsWith("json"))
         jsonFiles.foreach { jsonFile =>
