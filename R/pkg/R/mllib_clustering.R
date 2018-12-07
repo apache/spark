@@ -641,8 +641,9 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
-#'                       list(1L, 2L, 1.0), list(3L, 4L, 1.0),
-#'                       list(4L, 0L, 0.1)), schema = c("src", "dst", "weight"))
+#'                            list(1L, 2L, 1.0), list(3L, 4L, 1.0),
+#'                            list(4L, 0L, 0.1)),
+#'                       schema = c("src", "dst", "weight"))
 #' clusters <- spark.assignClusters(df, initMode="degree", weightCol="weight")
 #' showDF(clusters)
 #' }
