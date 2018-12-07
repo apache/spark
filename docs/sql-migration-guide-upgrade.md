@@ -37,6 +37,8 @@ displayTitle: Spark SQL Upgrading Guide
 
   - In Spark version 2.4 and earlier, CSV datasource converts a malformed CSV string to a row with all `null`s in the PERMISSIVE mode. Since Spark 3.0, returned row can contain non-`null` fields if some of CSV column values were parsed and converted to desired types successfully.
 
+  - In Spark version 2.4 and earlier, JSON datasource and JSON functions (`from_json`, `get_json_object` and etc.) convert a malformed JSON string to a row with all `null`s in the PERMISSIVE mode when specified schema is `StructType`. Since Spark 3.0, returned row can contain non-`null` fields if some of JSON column values were parsed and converted to desired types successfully.
+
 ## Upgrading From Spark SQL 2.3 to 2.4
 
   - In Spark version 2.3 and earlier, the second parameter to array_contains function is implicitly promoted to the element type of first array type parameter. This type promotion can be lossy and may cause `array_contains` function to return wrong result. This problem has been addressed in 2.4 by employing a safer type promotion mechanism. This can cause some change in behavior and are illustrated in the table below.
