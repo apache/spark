@@ -75,7 +75,7 @@ the user mounts into their pods.
   <td><code>spark.authenticate.secret.file</code></td>
   <td>None</td>
   <td>
-    Path pointing to the secret key to use for securing SASL connections. Ensure that the
+    Path pointing to the secret key to use for securing connections. Ensure that the
     contents of the file have been securely generated. This file is loaded on both the driver
     and the executors unless other settings override this (see below).
   </td>
