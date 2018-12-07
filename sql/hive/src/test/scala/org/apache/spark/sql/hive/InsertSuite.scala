@@ -752,6 +752,17 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
+  test("CTAS: INSERT a partitioned table using Hive serde") {
+    withTable("tab1") {
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        val df = Seq(("a", 100)).toDF("part", "id")
+        df.write.format("hive").partitionBy("part").mode("overwrite").saveAsTable("tab1")
+        df.write.format("hive").partitionBy("part").mode("append").saveAsTable("tab1")
+      }
+    }
+  }
+
+
   Seq("LOCAL", "").foreach { local =>
     Seq(true, false).foreach { caseSensitivity =>
       Seq("orc", "parquet").foreach { format =>
