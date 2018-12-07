@@ -16,10 +16,13 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
+import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
+import scala.collection.JavaConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
@@ -156,6 +159,25 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
     val executor = step.configurePod(SparkPod.initialPod())
     checkEnv(executor, conf, Map(SecurityManager.ENV_AUTH_SECRET -> secMgr.getSecretKey()))
+  }
+
+  test("Auth secret shouldn't propagate if files are loaded.") {
+    val secretDir = Utils.createTempDir("temp-secret")
+    val secretFile = new File(secretDir, "secret-file.txt")
+    Files.write(secretFile.toPath, "some-secret".getBytes(StandardCharsets.UTF_8))
+    val conf = baseConf.clone()
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET_FILE, secretFile.getAbsolutePath)
+      .set("spark.master", "k8s://127.0.0.1")
+    val secMgr = new SecurityManager(conf)
+    secMgr.initializeAuth()
+
+    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
+      secMgr)
+
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(!executor.container.getEnv.asScala.map(_.getName).contains(
+      SecurityManager.ENV_AUTH_SECRET))
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

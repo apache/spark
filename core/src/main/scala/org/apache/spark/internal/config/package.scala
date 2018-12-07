@@ -419,6 +419,34 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val AUTH_SECRET_FILE =
+    ConfigBuilder("spark.authenticate.secret.file")
+      .doc("Path to a file that contains the authentication secret to use. The secret key is" +
+        " loaded from this path on both the driver and the executors if overrides are not set for" +
+        " either entity (see below).")
+      .stringConf
+      .createOptional
+
+  private[spark] val AUTH_SECRET_FILE_DRIVER =
+    ConfigBuilder("spark.authenticate.secret.driver.file")
+      .doc("Path to a file that contains the authentication secret to use. Loaded by the" +
+        " driver. In Kubernetes client mode it is often useful to set a different secret" +
+        " path for the driver vs. the executors, since the driver may not be running in" +
+        " a pod unlike the executors. If this is set, an accompanying secret file must" +
+        " be specified for the executors. The fallback configuration allows the same path to be" +
+        " used for both the driver and the executors when running in cluster mode.")
+      .fallbackConf(AUTH_SECRET_FILE)
+
+  private[spark] val AUTH_SECRET_FILE_EXECUTOR =
+    ConfigBuilder("spark.authenticate.secret.executor.file")
+      .doc("Path to a file that contains the authentication secret to use. Loaded by the" +
+        " executors only. In Kubernetes client mode it is often useful to set a different" +
+        " secret path for the driver vs. the executors, since the driver may not be running" +
+        " in a pod unlike the executors. If this is set, an accompanying secret file must be" +
+        " specified for the executors. The fallback configuration allows the same path to be" +
+        " used for both the driver and the executors when running in cluster mode.")
+      .fallbackConf(AUTH_SECRET_FILE)
+
   private[spark] val NETWORK_ENCRYPTION_ENABLED =
     ConfigBuilder("spark.network.crypto.enabled")
       .booleanConf

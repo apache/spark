@@ -17,8 +17,11 @@
 
 package org.apache.spark
 
+import java.io.File
 import java.net.{Authenticator, PasswordAuthentication}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
+import java.util.Base64
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -43,7 +46,8 @@ import org.apache.spark.util.Utils
  */
 private[spark] class SecurityManager(
     sparkConf: SparkConf,
-    val ioEncryptionKey: Option[Array[Byte]] = None)
+    val ioEncryptionKey: Option[Array[Byte]] = None,
+    authSecretFileConf: ConfigEntry[Option[String]] = AUTH_SECRET_FILE)
   extends Logging with SecretKeyHolder {
 
   import SecurityManager._
@@ -328,6 +332,7 @@ private[spark] class SecurityManager(
         .orElse(Option(secretKey))
         .orElse(Option(sparkConf.getenv(ENV_AUTH_SECRET)))
         .orElse(sparkConf.getOption(SPARK_AUTH_SECRET_CONF))
+        .orElse(sparkConf.get(authSecretFileConf).map(readSecretFile))
         .getOrElse {
           throw new IllegalArgumentException(
             s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config")
@@ -367,17 +372,38 @@ private[spark] class SecurityManager(
 
       case _ =>
         require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
-          s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
+          s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config")
         return
     }
 
-    secretKey = Utils.createSecret(sparkConf)
+    if (sparkConf.get(AUTH_SECRET_FILE_DRIVER).isDefined
+      && sparkConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty) {
+      throw new IllegalArgumentException(
+        "Invalid secret configuration: Secret file was specified for the driver but it was not" +
+          " specified for the executors.")
+    }
+
+    if (sparkConf.get(AUTH_SECRET_FILE_EXECUTOR).isDefined
+      && sparkConf.get(AUTH_SECRET_FILE_DRIVER).isEmpty) {
+      throw new IllegalArgumentException(
+        "Invalid secret configuration: Secret file was specified for the executors but it was not" +
+          " specified for the driver.")
+    }
+
+    secretKey = sparkConf.get(authSecretFileConf).map(readSecretFile)
+      .getOrElse(Utils.createSecret(sparkConf))
 
     if (storeInUgi) {
       val creds = new Credentials()
       creds.addSecretKey(SECRET_LOOKUP_KEY, secretKey.getBytes(UTF_8))
       UserGroupInformation.getCurrentUser().addCredentials(creds)
     }
+  }
+
+  private def readSecretFile(secretFilePath: String): String = {
+    val secretFile = new File(secretFilePath)
+    require(secretFile.isFile, s"No file found containing the secret key at $secretFilePath.")
+    Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
   }
 
   // Default SecurityManager only has a single secret key, so ignore appId.
