@@ -1611,8 +1611,8 @@ object SQLConf {
     .intConf
     .createWithDefault(25)
 
-  val SET_COMMAND_REJECTS_SPARK_CONFS =
-    buildConf("spark.sql.legacy.setCommandRejectsSparkConfs")
+  val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
+    buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
       .internal()
       .doc("If it is set to true, SET command will fail when the key is registered as " +
         "a SparkConf entry.")
@@ -2045,7 +2045,8 @@ class SQLConf extends Serializable with Logging {
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
-  def setCommandRejectsSparkConfs: Boolean = getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CONFS)
+  def setCommandRejectsSparkCoreConfs: Boolean =
+    getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
   def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
 
