@@ -199,8 +199,11 @@ object Partitioning {
       outputSet: AttributeSet): Partitioning = {
     inputPartitioning match {
       case partitioning: Expression =>
-        val invalidReferences = partitioning.references.filterNot(outputSet.contains)
-        val exprToEquiv = invalidReferences.map { e => e -> expressions.filter(_.sameResult(e)) }
+        val exprToEquiv = partitioning.references.map { attr =>
+          attr -> expressions.filter(_.sameResult(attr))
+        }.filterNot { case (attr, exprs) =>
+          exprs.size == 1 && exprs.forall(_ == attr)
+        }
         val initValue = partitioning match {
           case PartitioningCollection(partitionings) => partitionings
           case other => Seq(other)
