@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.io.File
-import java.nio.charset.StandardCharsets
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
@@ -402,6 +401,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     val secretFileFromDriver = createTempSecretFile("driver-secret")
     val secretFileFromExecutor = createTempSecretFile("executor-secret")
     val conf = new SparkConf()
+      .setMaster("k8s://127.0.0.1")
       .set(AUTH_SECRET_FILE_DRIVER, Some(secretFileFromDriver.getAbsolutePath))
       .set(AUTH_SECRET_FILE_EXECUTOR, Some(secretFileFromExecutor.getAbsolutePath))
       .set(SecurityManager.SPARK_AUTH_CONF, "true")
@@ -424,6 +424,21 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     val mgr2 = new SecurityManager(conf2)
     intercept[IllegalArgumentException] {
       mgr2.initializeAuth()
+    }
+  }
+
+  Seq("yarn", "local", "local[*]", "local[1,2]", "mesos://localhost:8080").foreach { master =>
+    test(s"Master $master cannot use file mounted secrets") {
+      val conf = new SparkConf()
+        .set(AUTH_SECRET_FILE, "/tmp/secret.txt")
+        .set(SecurityManager.SPARK_AUTH_CONF, "true")
+        .setMaster(master)
+      intercept[IllegalArgumentException] {
+        new SecurityManager(conf).getSecretKey()
+      }
+      intercept[IllegalArgumentException] {
+        new SecurityManager(conf).initializeAuth()
+      }
     }
   }
 
@@ -473,6 +488,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
                 intercept[IllegalArgumentException] {
                   mgr.getSecretKey()
                 }
+
               case FILE =>
                 val secretFile = createTempSecretFile()
                 conf.set(AUTH_SECRET_FILE, secretFile.getAbsolutePath)
@@ -492,7 +508,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   private def createTempSecretFile(contents: String = "test-secret"): File = {
     val secretDir = Utils.createTempDir("temp-secrets")
     val secretFile = new File(secretDir, "temp-secret.txt")
-    Files.write(secretFile.toPath, contents.getBytes(StandardCharsets.UTF_8))
+    Files.write(secretFile.toPath, contents.getBytes(UTF_8))
     secretFile
   }
 }

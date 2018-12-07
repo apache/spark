@@ -176,8 +176,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       secMgr)
 
     val executor = step.configurePod(SparkPod.initialPod())
-    assert(!executor.container.getEnv.asScala.map(_.getName).contains(
-      SecurityManager.ENV_AUTH_SECRET))
+    assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(
+      executor.container, SecurityManager.ENV_AUTH_SECRET))
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.
