@@ -20,6 +20,7 @@ import java.io.File
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
+import org.apache.spark.SecurityManager
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
 
@@ -27,6 +28,7 @@ private[spark] class KubernetesExecutorBuilder {
 
   def buildFromFeatures(
       conf: KubernetesExecutorConf,
+      secMgr: SecurityManager,
       client: KubernetesClient): SparkPod = {
     val initialPod = conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
       .map { file =>
@@ -38,7 +40,7 @@ private[spark] class KubernetesExecutorBuilder {
       .getOrElse(SparkPod.initialPod())
 
     val features = Seq(
-      new BasicExecutorFeatureStep(conf),
+      new BasicExecutorFeatureStep(conf, secMgr),
       new MountSecretsFeatureStep(conf),
       new EnvSecretsFeatureStep(conf),
       new LocalDirsFeatureStep(conf),
