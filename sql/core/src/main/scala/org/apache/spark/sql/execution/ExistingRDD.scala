@@ -33,7 +33,7 @@ object RDDConversions {
     data.mapPartitions { iterator =>
       val numColumns = outputTypes.length
       val mutableRow = new GenericInternalRow(numColumns)
-      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter).toArray
       iterator.map { r =>
         var i = 0
         while (i < numColumns) {
@@ -53,7 +53,7 @@ object RDDConversions {
     data.mapPartitions { iterator =>
       val numColumns = outputTypes.length
       val mutableRow = new GenericInternalRow(numColumns)
-      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter).toArray
       iterator.map { r =>
         var i = 0
         while (i < numColumns) {
