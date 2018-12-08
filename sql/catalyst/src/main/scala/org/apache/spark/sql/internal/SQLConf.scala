@@ -1626,7 +1626,7 @@ object SQLConf {
       "longer, it will end with \"...\" and further output will be truncated.  The default " +
       "setting always generates a full plan.  Set this to a lower value such as 8192 if plan " +
       "strings are taking up too much memory or are causing OutOfMemory errors in the driver or " +
-	    "UI processes.")
+      "UI processes.")
     .longConf
     .createWithDefault(Long.MaxValue)
 
