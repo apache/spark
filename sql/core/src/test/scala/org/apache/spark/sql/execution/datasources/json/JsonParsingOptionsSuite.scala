@@ -147,7 +147,7 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
         invalidOptionUsage
       }
       assert(exception.getMessage.contains(
-        """The JSON option "dropFieldIfAllNull" is not applicable in write."""))
+        "The JSON options are not applicable in write : dropFieldIfAllNull"))
 
       withSQLConf(SQLConf.VERIFY_DATASOURCE_OPTIONS.key -> "false") {
         invalidOptionUsage

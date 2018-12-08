@@ -20,8 +20,6 @@ package org.apache.spark.sql.catalyst.json
 import java.nio.charset.{Charset, StandardCharsets}
 import java.util.{Locale, TimeZone}
 
-import scala.reflect.ClassTag
-
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.commons.lang3.time.FastDateFormat
 
@@ -68,7 +66,7 @@ private[sql] abstract class JSONOptions(
     parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
   val allowBackslashEscapingAnyCharacter =
     parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
-  val allowUnquotedControlChars =
+  private val allowUnquotedControlChars =
     parameters.get("allowUnquotedControlChars").map(_.toBoolean).getOrElse(false)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
   val parseMode: ParseMode =
@@ -135,20 +133,15 @@ private[sql] abstract class JSONOptions(
       allowBackslashEscapingAnyCharacter)
     factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, allowUnquotedControlChars)
   }
-}
 
-private[sql] object JSONOptions {
-  def notApplicable[T: ClassTag](
-      parameters: CaseInsensitiveMap[String],
-      option: String,
-      where: String): T = {
-    if (parameters.get(option).isDefined && SQLConf.get.verifyDataSourceOptions) {
+  def notApplicableOptions: Set[String]
+  def checkOptions(where: String): Unit = {
+    val wrongOptions = notApplicableOptions.filter(parameters.contains(_))
+    if (!wrongOptions.isEmpty && SQLConf.get.verifyDataSourceOptions) {
       // scalastyle:off throwerror
       throw new IllegalArgumentException(
-        s"""The JSON option "${option}" is not applicable in $where.""")
+        s"""The JSON options are not applicable $where : ${wrongOptions.mkString(", ")}.""")
       // scalastyle:on throwerror
-    } else {
-      new Array[T](1)(0)
     }
   }
 }
@@ -182,12 +175,10 @@ private[sql] class JSONOptionsInRead(
     enc
   }
 
-  override val compressionCodec: Option[String] = notApplicable[Option[String]]("compression")
-  override val pretty: Boolean = notApplicable[Boolean]("pretty")
-
-  def notApplicable[T: ClassTag](option: String): T = {
-    JSONOptions.notApplicable(parameters, option, "read")
-  }
+  override def notApplicableOptions: Set[String] = Set(
+    "compression",
+    "pretty")
+  checkOptions("in read")
 }
 
 private[sql] object JSONOptionsInRead {
@@ -216,24 +207,20 @@ private[sql] class JSONOptionsInWrite(
       defaultTimeZoneId)
   }
 
-  override val samplingRatio = notApplicable[Double]("samplingRatio")
-  override val primitivesAsString = notApplicable[Boolean]("primitivesAsString")
-  override val prefersDecimal = notApplicable[Boolean]("prefersDecimal")
-  override val allowComments = notApplicable[Boolean]("allowComments")
-  override val allowUnquotedFieldNames = notApplicable[Boolean]("allowUnquotedFieldNames")
-  override val allowSingleQuotes = notApplicable[Boolean]("allowSingleQuotes")
-  override val allowNumericLeadingZeros = notApplicable[Boolean]("allowNumericLeadingZeros")
-  override val allowNonNumericNumbers = notApplicable[Boolean]("allowNonNumericNumbers")
-  override val allowBackslashEscapingAnyCharacter = {
-    notApplicable[Boolean]("allowBackslashEscapingAnyCharacter")
-  }
-  override val allowUnquotedControlChars = notApplicable[Boolean]("allowUnquotedControlChars")
-  override val parseMode: ParseMode = notApplicable[ParseMode]("mode")
-  override val columnNameOfCorruptRecord = notApplicable[String]("columnNameOfCorruptRecord")
-  override val dropFieldIfAllNull = notApplicable[Boolean]("dropFieldIfAllNull")
-  override val multiLine = notApplicable[Boolean]("multiLine")
-
-  def notApplicable[T: ClassTag](option: String): T = {
-    JSONOptions.notApplicable(parameters, option, "write")
-  }
+  override def notApplicableOptions: Set[String] = Set(
+    "samplingRatio",
+    "primitivesAsString",
+    "prefersDecimal",
+    "allowComments",
+    "allowUnquotedFieldNames",
+    "allowSingleQuotes",
+    "allowNumericLeadingZeros",
+    "allowNonNumericNumbers",
+    "allowBackslashEscapingAnyCharacter",
+    "allowUnquotedControlChars",
+    "mode",
+    "columnNameOfCorruptRecord",
+    "dropFieldIfAllNull",
+    "multiLine")
+  checkOptions("in write")
 }
