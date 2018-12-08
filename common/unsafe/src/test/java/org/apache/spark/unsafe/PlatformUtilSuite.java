@@ -157,18 +157,4 @@ public class PlatformUtilSuite {
     Assert.assertEquals(onheap4.size(), 1024 * 1024 + 7);
     Assert.assertEquals(obj3, onheap4.getBaseObject());
   }
-
-  @Test
-  // SPARK-26021
-  public void writeMinusZeroIsReplacedWithZero() {
-    byte[] doubleBytes = new byte[Double.BYTES];
-    byte[] floatBytes = new byte[Float.BYTES];
-    Platform.putDouble(doubleBytes, Platform.BYTE_ARRAY_OFFSET, -0.0d);
-    Platform.putFloat(floatBytes, Platform.BYTE_ARRAY_OFFSET, -0.0f);
-    double doubleFromPlatform = Platform.getDouble(doubleBytes, Platform.BYTE_ARRAY_OFFSET);
-    float floatFromPlatform = Platform.getFloat(floatBytes, Platform.BYTE_ARRAY_OFFSET);
-
-    Assert.assertEquals(Double.doubleToLongBits(0.0d), Double.doubleToLongBits(doubleFromPlatform));
-    Assert.assertEquals(Float.floatToIntBits(0.0f), Float.floatToIntBits(floatFromPlatform));
-  }
 }
