@@ -32,6 +32,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel,
   EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
   LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
@@ -569,13 +570,11 @@ abstract class LDAModel private[ml] (
 class LocalLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
-    private[clustering] val oldLocalModel_ : OldLocalLDAModel,
+    private[clustering] val oldLocalModel : OldLocalLDAModel,
     sparkSession: SparkSession)
   extends LDAModel(uid, vocabSize, sparkSession) {
 
-  override private[clustering] def oldLocalModel: OldLocalLDAModel = {
-    oldLocalModel_.setSeed(getSeed)
-  }
+  oldLocalModel.setSeed(getSeed)
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): LocalLDAModel = {
@@ -896,11 +895,12 @@ class LDA @Since("1.6.0") (
   override def copy(extra: ParamMap): LDA = defaultCopy(extra)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): LDAModel = {
+  override def fit(dataset: Dataset[_]): LDAModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(featuresCol, topicDistributionCol, k, maxIter, subsamplingRate,
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, featuresCol, topicDistributionCol, k, maxIter, subsamplingRate,
       checkpointInterval, keepLastCheckpoint, optimizeDocConcentration, topicConcentration,
       learningDecay, optimizer, learningOffset, seed)
 
@@ -923,9 +923,7 @@ class LDA @Since("1.6.0") (
     }
 
     instr.logNumFeatures(newModel.vocabSize)
-    val model = copyValues(newModel).setParent(this)
-    instr.logSuccess(model)
-    model
+    copyValues(newModel).setParent(this)
   }
 
   @Since("1.6.0")

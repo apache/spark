@@ -35,6 +35,7 @@ final class BufferHolder {
 
   private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 
+  // buffer is guarantee to be word-aligned since UnsafeRow assumes each field is word-aligned.
   private byte[] buffer;
   private int cursor = Platform.BYTE_ARRAY_OFFSET;
   private final UnsafeRow row;
@@ -52,7 +53,8 @@ final class BufferHolder {
           "too many fields (number of fields: " + row.numFields() + ")");
     }
     this.fixedSize = bitsetWidthInBytes + 8 * row.numFields();
-    this.buffer = new byte[fixedSize + initialSize];
+    int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(fixedSize + initialSize);
+    this.buffer = new byte[roundedSize];
     this.row = row;
     this.row.pointTo(buffer, buffer.length);
   }
@@ -61,8 +63,12 @@ final class BufferHolder {
    * Grows the buffer by at least neededSize and points the row to the buffer.
    */
   void grow(int neededSize) {
+    if (neededSize < 0) {
+      throw new IllegalArgumentException(
+        "Cannot grow BufferHolder by size " + neededSize + " because the size is negative");
+    }
     if (neededSize > ARRAY_MAX - totalSize()) {
-      throw new UnsupportedOperationException(
+      throw new IllegalArgumentException(
         "Cannot grow BufferHolder by size " + neededSize + " because the size after growing " +
           "exceeds size limitation " + ARRAY_MAX);
     }
@@ -70,7 +76,8 @@ final class BufferHolder {
     if (buffer.length < length) {
       // This will not happen frequently, because the buffer is re-used.
       int newLength = length < ARRAY_MAX / 2 ? length * 2 : ARRAY_MAX;
-      final byte[] tmp = new byte[newLength];
+      int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(newLength);
+      final byte[] tmp = new byte[roundedSize];
       Platform.copyMemory(
         buffer,
         Platform.BYTE_ARRAY_OFFSET,

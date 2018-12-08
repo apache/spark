@@ -194,8 +194,10 @@ public class TaskMemoryManager {
             throw new RuntimeException(e.getMessage());
           } catch (IOException e) {
             logger.error("error while calling spill() on " + c, e);
+            // checkstyle.off: RegexpSinglelineJava
             throw new SparkOutOfMemoryError("error while calling spill() on " + c + " : "
               + e.getMessage());
+            // checkstyle.on: RegexpSinglelineJava
           }
         }
       }
@@ -215,8 +217,10 @@ public class TaskMemoryManager {
           throw new RuntimeException(e.getMessage());
         } catch (IOException e) {
           logger.error("error while calling spill() on " + consumer, e);
+          // checkstyle.off: RegexpSinglelineJava
           throw new SparkOutOfMemoryError("error while calling spill() on " + consumer + " : "
             + e.getMessage());
+          // checkstyle.on: RegexpSinglelineJava
         }
       }
 
@@ -311,7 +315,7 @@ public class TaskMemoryManager {
       // this could trigger spilling to free some pages.
       return allocatePage(size, consumer);
     }
-    page.setPageNumber(pageNumber);
+    page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
     if (logger.isTraceEnabled()) {
       logger.trace("Allocate page number {} ({} bytes)", pageNumber, acquired);
@@ -323,25 +327,25 @@ public class TaskMemoryManager {
    * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage}.
    */
   public void freePage(MemoryBlock page, MemoryConsumer consumer) {
-    assert (page.getPageNumber() != MemoryBlock.NO_PAGE_NUMBER) :
+    assert (page.pageNumber != MemoryBlock.NO_PAGE_NUMBER) :
       "Called freePage() on memory that wasn't allocated with allocatePage()";
-    assert (page.getPageNumber() != MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER) :
+    assert (page.pageNumber != MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER) :
       "Called freePage() on a memory block that has already been freed";
-    assert (page.getPageNumber() != MemoryBlock.FREED_IN_TMM_PAGE_NUMBER) :
+    assert (page.pageNumber != MemoryBlock.FREED_IN_TMM_PAGE_NUMBER) :
             "Called freePage() on a memory block that has already been freed";
-    assert(allocatedPages.get(page.getPageNumber()));
-    pageTable[page.getPageNumber()] = null;
+    assert(allocatedPages.get(page.pageNumber));
+    pageTable[page.pageNumber] = null;
     synchronized (this) {
-      allocatedPages.clear(page.getPageNumber());
+      allocatedPages.clear(page.pageNumber);
     }
     if (logger.isTraceEnabled()) {
-      logger.trace("Freed page number {} ({} bytes)", page.getPageNumber(), page.size());
+      logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
     long pageSize = page.size();
     // Clear the page number before passing the block to the MemoryAllocator's free().
     // Doing this allows the MemoryAllocator to detect when a TaskMemoryManager-managed
     // page has been inappropriately directly freed without calling TMM.freePage().
-    page.setPageNumber(MemoryBlock.FREED_IN_TMM_PAGE_NUMBER);
+    page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
     memoryManager.tungstenMemoryAllocator().free(page);
     releaseExecutionMemory(pageSize, consumer);
   }
@@ -363,7 +367,7 @@ public class TaskMemoryManager {
       // relative to the page's base offset; this relative offset will fit in 51 bits.
       offsetInPage -= page.getBaseOffset();
     }
-    return encodePageNumberAndOffset(page.getPageNumber(), offsetInPage);
+    return encodePageNumberAndOffset(page.pageNumber, offsetInPage);
   }
 
   @VisibleForTesting
@@ -434,7 +438,7 @@ public class TaskMemoryManager {
       for (MemoryBlock page : pageTable) {
         if (page != null) {
           logger.debug("unreleased page: " + page + " in task " + taskAttemptId);
-          page.setPageNumber(MemoryBlock.FREED_IN_TMM_PAGE_NUMBER);
+          page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
           memoryManager.tungstenMemoryAllocator().free(page);
         }
       }

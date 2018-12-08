@@ -23,6 +23,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
@@ -155,7 +156,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         spark.udf.register("testType", () => new IntervalData())
         sql("select testType()").write.mode("overwrite").orc(orcDir)
       }.getMessage
-      assert(msg.contains("ORC data source does not support interval data type."))
+      assert(msg.contains("ORC data source does not support calendarinterval data type."))
 
       // read path
       msg = intercept[AnalysisException] {
@@ -170,7 +171,23 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         spark.range(1).write.mode("overwrite").orc(orcDir)
         spark.read.schema(schema).orc(orcDir).collect()
       }.getMessage
-      assert(msg.contains("ORC data source does not support interval data type."))
+      assert(msg.contains("ORC data source does not support calendarinterval data type."))
+    }
+  }
+
+  test("Check BloomFilter creation") {
+    Seq(true, false).foreach { convertMetastore =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
+        testBloomFilterCreation(org.apache.orc.OrcProto.Stream.Kind.BLOOM_FILTER) // Before ORC-101
+      }
+    }
+  }
+
+  test("Enforce direct encoding column-wise selectively") {
+    Seq(true, false).foreach { convertMetastore =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
+        testSelectiveDictionaryEncoding(isSelective = false)
+      }
     }
   }
 }

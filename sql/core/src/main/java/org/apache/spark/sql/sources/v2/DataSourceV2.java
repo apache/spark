@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * The base interface for data source v2. Implementations must have a public, 0-arg constructor.
  *
- * Note that this is an empty interface. Data source implementations should mix-in at least one of
- * the plug-in interfaces like {@link ReadSupport} and {@link WriteSupport}. Otherwise it's just
- * a dummy data source which is un-readable/writable.
+ * Note that this is an empty interface. Data source implementations must mix in interfaces such as
+ * {@link BatchReadSupportProvider} or {@link BatchWriteSupportProvider}, which can provide
+ * batch or streaming read/write support instances. Otherwise it's just a dummy data source which
+ * is un-readable/writable.
+ *
+ * If Spark fails to execute any methods in the implementations of this interface (by throwing an
+ * exception), the read action will fail and no Spark job will be submitted.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface DataSourceV2 {}

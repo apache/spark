@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
+
+import scala.reflect.ClassTag
 
 import org.scalatest.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,6 +33,9 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
   RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -233,7 +239,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(plan, expected)
   }
 
-  test("Analysis may leave unnecassary aliases") {
+  test("Analysis may leave unnecessary aliases") {
     val att1 = testRelation.output.head
     var plan = testRelation.select(
       CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
@@ -271,7 +277,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("self intersect should resolve duplicate expression IDs") {
-    val plan = testRelation.intersect(testRelation)
+    val plan = testRelation.intersect(testRelation, isAll = false)
     assertAnalysisSuccess(plan)
   }
 
@@ -310,21 +316,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
 
     // non-primitive parameters do not need special null handling
-    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil)
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil, true :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
-    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
-    val expected2 = If(IsNull(double), nullResult, udf2)
+    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
+      true :: false :: Nil)
+    val expected2 =
+      If(IsNull(double), nullResult, udf2.copy(inputsNullSafe = true :: true :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
-    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil)
+    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
+      false :: false :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3)
+      udf3.copy(inputsNullSafe = true :: true :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
@@ -332,12 +341,22 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val udf4 = ScalaUDF(
       (s: Short, d: Double) => "x",
       StringType,
-      short :: double.withNullability(false) :: Nil)
+      short :: double.withNullability(false) :: Nil,
+      false :: false :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4)
+      udf4.copy(inputsNullSafe = true :: true :: Nil))
     // checkUDF(udf4, expected4)
+  }
+
+  test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
+    val a = testRelation.output(0)
+    val func = (x: Int, y: Int) => x + y
+    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil, false :: false :: Nil)
+    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil, false :: false :: Nil)
+    val plan = Project(Alias(udf2, "")() :: Nil, testRelation)
+    comparePlans(plan.analyze, plan.analyze.analyze)
   }
 
   test("SPARK-11863 mixture of aliases and real columns in order by clause - tpcds 19,55,71") {
@@ -427,8 +446,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val unionPlan = Union(firstTable, secondTable)
     assertAnalysisSuccess(unionPlan)
 
-    val r1 = Except(firstTable, secondTable)
-    val r2 = Intersect(firstTable, secondTable)
+    val r1 = Except(firstTable, secondTable, isAll = false)
+    val r2 = Intersect(firstTable, secondTable, isAll = false)
 
     assertAnalysisSuccess(r1)
     assertAnalysisSuccess(r2)
@@ -519,9 +538,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-22614 RepartitionByExpression partitioning") {
-    def checkPartitioning[T <: Partitioning](numPartitions: Int, exprs: Expression*): Unit = {
+    def checkPartitioning[T <: Partitioning: ClassTag](
+        numPartitions: Int, exprs: Expression*): Unit = {
       val partitioning = RepartitionByExpression(exprs, testRelation2, numPartitions).partitioning
-      assert(partitioning.isInstanceOf[T])
+      val clazz = implicitly[ClassTag[T]].runtimeClass
+      assert(clazz.isInstance(partitioning))
     }
 
     checkPartitioning[HashPartitioning](numPartitions = 10, exprs = Literal(20))
@@ -545,20 +566,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
-  test("SPARK-20392: analysis barrier") {
-    // [[AnalysisBarrier]] will be removed after analysis
-    checkAnalysis(
-      Project(Seq(UnresolvedAttribute("tbl.a")),
-        AnalysisBarrier(SubqueryAlias("tbl", testRelation))),
-      Project(testRelation.output, SubqueryAlias("tbl", testRelation)))
-
-    // Verify we won't go through a plan wrapped in a barrier.
-    // Since we wrap an unresolved plan and analyzer won't go through it. It remains unresolved.
-    val barrier = AnalysisBarrier(Project(Seq(UnresolvedAttribute("tbl.b")),
-      SubqueryAlias("tbl", testRelation)))
-    assertAnalysisError(barrier, Seq("cannot resolve '`tbl.b`'"))
-  }
-
   test("SPARK-24208: analysis fails on self-join with FlatMapGroupsInPandas") {
     val pythonUdf = PythonUDF("pyUDF", null,
       StructType(Seq(StructField("a", LongType))),
@@ -574,5 +581,50 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val join = Join(left, right, Inner, None)
     assertAnalysisSuccess(
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
+  }
+
+  test("SPARK-24488 Generator with multiple aliases") {
+    assertAnalysisSuccess(
+      listRelation.select(Explode('list).as("first_alias").as("second_alias")))
+    assertAnalysisSuccess(
+      listRelation.select(MultiAlias(MultiAlias(
+        PosExplode('list), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
+  }
+
+  test("SPARK-24151: CURRENT_DATE, CURRENT_TIMESTAMP should be case insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val input = Project(Seq(
+        UnresolvedAttribute("current_date"),
+        UnresolvedAttribute("CURRENT_DATE"),
+        UnresolvedAttribute("CURRENT_TIMESTAMP"),
+        UnresolvedAttribute("current_timestamp")), testRelation)
+      val expected = Project(Seq(
+        Alias(CurrentDate(), toPrettySQL(CurrentDate()))(),
+        Alias(CurrentDate(), toPrettySQL(CurrentDate()))(),
+        Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))(),
+        Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))()), testRelation).analyze
+      checkAnalysis(input, expected)
+    }
+  }
+
+  test("SPARK-25691: AliasViewChild with different nullabilities") {
+    object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("View", Once, AliasViewChild(conf), EliminateView) :: Nil
+    }
+    val relation = LocalRelation('a.int.notNull, 'b.string)
+    val view = View(CatalogTable(
+        identifier = TableIdentifier("v1"),
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+      output = Seq('a.int, 'b.string),
+      child = relation)
+    val tz = Option(conf.sessionLocalTimeZone)
+    val expected = Project(Seq(
+        Alias(Cast('a.int.notNull, IntegerType, tz), "a")(),
+        Alias(Cast('b.string, StringType, tz), "b")()),
+      relation)
+    val res = ViewAnalyzer.execute(view)
+    comparePlans(res, expected)
   }
 }

@@ -19,10 +19,12 @@ package org.apache.spark
 
 import java.io._
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
 
+import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
@@ -200,7 +202,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext("local", "test")
       val objs = sc.makeRDD(1 to 3).map { x =>
         val loader = Thread.currentThread().getContextClassLoader
-        Class.forName(className, true, loader).newInstance()
+        Class.forName(className, true, loader).getConstructor().newInstance()
       }
       val outputDir = new File(tempDir, "output").getAbsolutePath
       objs.saveAsObjectFile(outputDir)
@@ -297,6 +299,39 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     for (i <- copyArr.indices) {
       assert(copyArr(i).toArray === testOutput)
     }
+  }
+
+  test("SPARK-22357 test binaryFiles minPartitions") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+      .set("spark.files.openCostInBytes", "0")
+      .set("spark.default.parallelism", "1"))
+
+    withTempDir { tempDir =>
+      val tempDirPath = tempDir.getAbsolutePath
+
+      for (i <- 0 until 8) {
+        val tempFile = new File(tempDir, s"part-0000$i")
+        Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", tempFile,
+          StandardCharsets.UTF_8)
+      }
+
+      for (p <- Seq(1, 2, 8)) {
+        assert(sc.binaryFiles(tempDirPath, minPartitions = p).getNumPartitions === p)
+      }
+    }
+  }
+
+  test("minimum split size per node and per rack should be less than or equal to maxSplitSize") {
+    sc = new SparkContext("local", "test")
+    val testOutput = Array[Byte](1, 2, 3, 4, 5)
+    val outFile = writeBinaryData(testOutput, 1)
+    sc.hadoopConfiguration.setLong(
+      "mapreduce.input.fileinputformat.split.minsize.per.node", 5123456)
+    sc.hadoopConfiguration.setLong(
+      "mapreduce.input.fileinputformat.split.minsize.per.rack", 5123456)
+
+    val (_, data) = sc.binaryFiles(outFile.getAbsolutePath).collect().head
+    assert(data.toArray === testOutput)
   }
 
   test("fixed record length binary file as byte array") {

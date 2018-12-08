@@ -213,14 +213,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       spillWriters.size() > 1 ? " times" : " time");
 
     ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
-    // We only write out contents of the inMemSorter if it is not empty.
-    if (inMemSorter.numRecords() > 0) {
-      final UnsafeSorterSpillWriter spillWriter =
-        new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
-          inMemSorter.numRecords());
-      spillWriters.add(spillWriter);
-      spillIterator(inMemSorter.getSortedIterator(), spillWriter);
-    }
+
+    final UnsafeSorterSpillWriter spillWriter =
+      new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
+        inMemSorter.numRecords());
+    spillWriters.add(spillWriter);
+    spillIterator(inMemSorter.getSortedIterator(), spillWriter);
 
     final long spillSize = freeMemory();
     // Note that this is more-or-less going to be a multiple of the page size, so wasted space in
@@ -402,7 +400,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     growPointerArrayIfNecessary();
     int uaoSize = UnsafeAlignedOffset.getUaoSize();
-    // Need 4 bytes to store the record length.
+    // Need 4 or 8 bytes to store the record length.
     final int required = length + uaoSize;
     acquireNewPageIfNecessary(required);
 
@@ -544,7 +542,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           // is accessing the current record. We free this page in that caller's next loadNext()
           // call.
           for (MemoryBlock page : allocatedPages) {
-            if (!loaded || page.getPageNumber() !=
+            if (!loaded || page.pageNumber !=
                     ((UnsafeInMemorySorter.SortedIterator)upstream).getCurrentPageNumber()) {
               released += page.size();
               freePage(page);

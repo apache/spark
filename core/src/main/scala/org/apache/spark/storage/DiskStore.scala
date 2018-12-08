@@ -29,9 +29,11 @@ import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -44,8 +46,7 @@ private[spark] class DiskStore(
     securityManager: SecurityManager) extends Logging {
 
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
-  private val maxMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests",
-    Int.MaxValue.toString)
+  private val maxMemoryMapBytes = conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS)
   private val blockSizes = new ConcurrentHashMap[BlockId, Long]()
 
   def getSize(blockId: BlockId): Long = blockSizes.get(blockId)
@@ -201,7 +202,7 @@ private class DiskBlockData(
   private def open() = new FileInputStream(file).getChannel
 }
 
-private class EncryptedBlockData(
+private[spark] class EncryptedBlockData(
     file: File,
     blockSize: Long,
     conf: SparkConf,
@@ -217,7 +218,7 @@ private class EncryptedBlockData(
       var remaining = blockSize
       val chunks = new ListBuffer[ByteBuffer]()
       while (remaining > 0) {
-        val chunkSize = math.min(remaining, Int.MaxValue)
+        val chunkSize = math.min(remaining, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
         val chunk = allocator(chunkSize.toInt)
         remaining -= chunkSize
         JavaUtils.readFully(source, chunk)
@@ -235,7 +236,8 @@ private class EncryptedBlockData(
     // This is used by the block transfer service to replicate blocks. The upload code reads
     // all bytes into memory to send the block to the remote executor, so it's ok to do this
     // as long as the block fits in a Java array.
-    assert(blockSize <= Int.MaxValue, "Block is too large to be wrapped in a byte buffer.")
+    assert(blockSize <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+      "Block is too large to be wrapped in a byte buffer.")
     val dst = ByteBuffer.allocate(blockSize.toInt)
     val in = open()
     try {
@@ -261,7 +263,23 @@ private class EncryptedBlockData(
         throw e
     }
   }
+}
 
+private[spark] class EncryptedManagedBuffer(
+    val blockData: EncryptedBlockData) extends ManagedBuffer {
+
+  // This is the size of the decrypted data
+  override def size(): Long = blockData.size
+
+  override def nioByteBuffer(): ByteBuffer = blockData.toByteBuffer()
+
+  override def convertToNetty(): AnyRef = blockData.toNetty()
+
+  override def createInputStream(): InputStream = blockData.toInputStream()
+
+  override def retain(): ManagedBuffer = this
+
+  override def release(): ManagedBuffer = this
 }
 
 private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: Long)
@@ -279,7 +297,7 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
   override def transferred(): Long = _transferred
 
   override def transferTo(target: WritableByteChannel, pos: Long): Long = {
-    assert(pos == transfered(), "Invalid position.")
+    assert(pos == transferred(), "Invalid position.")
 
     var written = 0L
     var lastWrite = -1L

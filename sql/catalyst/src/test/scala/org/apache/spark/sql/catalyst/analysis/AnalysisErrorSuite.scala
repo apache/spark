@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.beans.{BeanInfo, BeanProperty}
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -30,8 +28,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
-@BeanInfo
-private[sql] case class GroupableData(@BeanProperty data: Int)
+private[sql] case class GroupableData(data: Int) {
+  def getData: Int = data
+}
 
 private[sql] class GroupableUDT extends UserDefinedType[GroupableData] {
 
@@ -50,8 +49,9 @@ private[sql] class GroupableUDT extends UserDefinedType[GroupableData] {
   private[spark] override def asNullable: GroupableUDT = this
 }
 
-@BeanInfo
-private[sql] case class UngroupableData(@BeanProperty data: Map[Int, Int])
+private[sql] case class UngroupableData(data: Map[Int, Int]) {
+  def getData: Map[Int, Int] = data
+}
 
 private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
 
@@ -277,13 +277,13 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "intersect with unequal number of columns",
-    testRelation.intersect(testRelation2),
+    testRelation.intersect(testRelation2, isAll = false),
     "intersect" :: "number of columns" :: testRelation2.output.length.toString ::
       testRelation.output.length.toString :: Nil)
 
   errorTest(
     "except with unequal number of columns",
-    testRelation.except(testRelation2),
+    testRelation.except(testRelation2, isAll = false),
     "except" :: "number of columns" :: testRelation2.output.length.toString ::
       testRelation.output.length.toString :: Nil)
 
@@ -299,22 +299,22 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "intersect with incompatible column types",
-    testRelation.intersect(nestedRelation),
+    testRelation.intersect(nestedRelation, isAll = false),
     "intersect" :: "the compatible column types" :: Nil)
 
   errorTest(
     "intersect with a incompatible column type and compatible column types",
-    testRelation3.intersect(testRelation4),
+    testRelation3.intersect(testRelation4, isAll = false),
     "intersect" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
 
   errorTest(
     "except with incompatible column types",
-    testRelation.except(nestedRelation),
+    testRelation.except(nestedRelation, isAll = false),
     "except" :: "the compatible column types" :: Nil)
 
   errorTest(
     "except with a incompatible column type and compatible column types",
-    testRelation3.except(testRelation4),
+    testRelation3.except(testRelation4, isAll = false),
     "except" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
 
   errorTest(
@@ -397,6 +397,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     "generator appears in operator which is not Project",
     listRelation.sortBy(Explode('list).asc),
     "Generators are not supported outside the SELECT clause, but got: Sort" :: Nil
+  )
+
+  errorTest(
+    "an evaluated limit class must not be null",
+    testRelation.limit(Literal(null, IntegerType)),
+    "The evaluated limit expression must not be null, but got " :: Nil
   )
 
   errorTest(
@@ -521,14 +527,14 @@ class AnalysisErrorSuite extends AnalysisTest {
       right,
       joinType = Cross,
       condition = Some('b === 'd))
-    assertAnalysisError(plan2, "EqualTo does not support ordering on type MapType" :: Nil)
+    assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
   }
 
   test("PredicateSubQuery is used outside of a filter") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val plan = Project(
-      Seq(a, Alias(In(a, Seq(ListQuery(LocalRelation(b)))), "c")()),
+      Seq(a, Alias(InSubquery(Seq(a), ListQuery(LocalRelation(b))), "c")()),
       LocalRelation(a))
     assertAnalysisError(plan, "Predicate sub-queries can only be used in a Filter" :: Nil)
   }
@@ -537,12 +543,13 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val c = AttributeReference("c", BooleanType)()
-    val plan1 = Filter(Cast(Not(In(a, Seq(ListQuery(LocalRelation(b))))), BooleanType),
+    val plan1 = Filter(Cast(Not(InSubquery(Seq(a), ListQuery(LocalRelation(b)))), BooleanType),
       LocalRelation(a))
     assertAnalysisError(plan1,
       "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
 
-    val plan2 = Filter(Or(Not(In(a, Seq(ListQuery(LocalRelation(b))))), c), LocalRelation(a, c))
+    val plan2 = Filter(
+      Or(Not(InSubquery(Seq(a), ListQuery(LocalRelation(b)))), c), LocalRelation(a, c))
     assertAnalysisError(plan2,
       "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
   }

@@ -23,12 +23,12 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types.StructType
 
 
 abstract class LogicalPlan
   extends QueryPlan[LogicalPlan]
+  with AnalysisHelper
   with LogicalPlanStats
   with QueryPlanConstraints
   with Logging {
@@ -130,6 +130,20 @@ abstract class LogicalPlan
    * Returns the output ordering that this plan generates.
    */
   def outputOrdering: Seq[SortOrder] = Nil
+
+  /**
+   * Returns true iff `other`'s output is semantically the same, ie.:
+   *  - it contains the same number of `Attribute`s;
+   *  - references are the same;
+   *  - the order is equal too.
+   */
+  def sameOutput(other: LogicalPlan): Boolean = {
+    val thisOutput = this.output
+    val otherOutput = other.output
+    thisOutput.length == otherOutput.length && thisOutput.zip(otherOutput).forall {
+      case (a1, a2) => a1.semanticEquals(a2)
+    }
+  }
 }
 
 /**
@@ -152,14 +166,14 @@ abstract class UnaryNode extends LogicalPlan {
   override final def children: Seq[LogicalPlan] = child :: Nil
 
   /**
-   * Generates an additional set of aliased constraints by replacing the original constraint
-   * expressions with the corresponding alias
+   * Generates all valid constraints including an set of aliased constraints by replacing the
+   * original constraint expressions with the corresponding alias
    */
-  protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
+  protected def getAllValidConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
     var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
     projectList.foreach {
       case a @ Alias(l: Literal, _) =>
-        allConstraints += EqualTo(a.toAttribute, l)
+        allConstraints += EqualNullSafe(a.toAttribute, l)
       case a @ Alias(e, _) =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
         allConstraints ++= allConstraints.map(_ transform {
@@ -170,7 +184,7 @@ abstract class UnaryNode extends LogicalPlan {
       case _ => // Don't change.
     }
 
-    allConstraints -- child.constraints
+    allConstraints
   }
 
   override protected def validConstraints: Set[Expression] = child.constraints

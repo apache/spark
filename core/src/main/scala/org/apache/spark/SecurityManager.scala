@@ -348,15 +348,23 @@ private[spark] class SecurityManager(
    */
   def initializeAuth(): Unit = {
     import SparkMasterRegex._
+    val k8sRegex = "k8s.*".r
 
     if (!sparkConf.get(NETWORK_AUTH_ENABLED)) {
       return
     }
 
+    // TODO: this really should be abstracted somewhere else.
     val master = sparkConf.get(SparkLauncher.SPARK_MASTER, "")
-    master match {
+    val storeInUgi = master match {
       case "yarn" | "local" | LOCAL_N_REGEX(_) | LOCAL_N_FAILURES_REGEX(_, _) =>
-        // Secret generation allowed here
+        true
+
+      case k8sRegex() =>
+        // Don't propagate the secret through the user's credentials in kubernetes. That conflicts
+        // with the way k8s handles propagation of delegation tokens.
+        false
+
       case _ =>
         require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
           s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
@@ -364,9 +372,12 @@ private[spark] class SecurityManager(
     }
 
     secretKey = Utils.createSecret(sparkConf)
-    val creds = new Credentials()
-    creds.addSecretKey(SECRET_LOOKUP_KEY, secretKey.getBytes(UTF_8))
-    UserGroupInformation.getCurrentUser().addCredentials(creds)
+
+    if (storeInUgi) {
+      val creds = new Credentials()
+      creds.addSecretKey(SECRET_LOOKUP_KEY, secretKey.getBytes(UTF_8))
+      UserGroupInformation.getCurrentUser().addCredentials(creds)
+    }
   }
 
   // Default SecurityManager only has a single secret key, so ignore appId.

@@ -120,7 +120,7 @@ class NewHadoopRDD[K, V](
   }
 
   override def getPartitions: Array[Partition] = {
-    val inputFormat = inputFormatClass.newInstance
+    val inputFormat = inputFormatClass.getConstructor().newInstance()
     inputFormat match {
       case configurable: Configurable =>
         configurable.setConf(_conf)
@@ -183,7 +183,7 @@ class NewHadoopRDD[K, V](
         }
       }
 
-      private val format = inputFormatClass.newInstance
+      private val format = inputFormatClass.getConstructor().newInstance()
       format match {
         case configurable: Configurable =>
           configurable.setConf(conf)
@@ -214,7 +214,7 @@ class NewHadoopRDD[K, V](
         }
 
       // Register an on-task-completion callback to close the input stream.
-      context.addTaskCompletionListener { context =>
+      context.addTaskCompletionListener[Unit] { context =>
         // Update the bytesRead before closing is to make sure lingering bytesRead statistics in
         // this thread get correctly added.
         updateBytesRead()

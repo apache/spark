@@ -29,16 +29,17 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Evolving
 
 /**
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
  */
-@InterfaceStability.Evolving
+@Evolving
 class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
-    val memoryUsedBytes: Long
+    val memoryUsedBytes: Long,
+    val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
 
   /** The compact JSON representation of this progress. */
@@ -48,12 +49,20 @@ class StateOperatorProgress private[sql](
   def prettyJson: String = pretty(render(jsonValue))
 
   private[sql] def copy(newNumRowsUpdated: Long): StateOperatorProgress =
-    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes)
+    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes, customMetrics)
 
   private[sql] def jsonValue: JValue = {
     ("numRowsTotal" -> JInt(numRowsTotal)) ~
     ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
-    ("memoryUsedBytes" -> JInt(memoryUsedBytes))
+    ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
+    ("customMetrics" -> {
+      if (!customMetrics.isEmpty) {
+        val keys = customMetrics.keySet.asScala.toSeq.sorted
+        keys.map { k => k -> JInt(customMetrics.get(k).toLong) : JObject }.reduce(_ ~ _)
+      } else {
+        JNothing
+      }
+    })
   }
 
   override def toString: String = prettyJson
@@ -85,7 +94,7 @@ class StateOperatorProgress private[sql](
  * @param sources detailed statistics on data being read from each of the streaming sources.
  * @since 2.1.0
  */
-@InterfaceStability.Evolving
+@Evolving
 class StreamingQueryProgress private[sql](
   val id: UUID,
   val runId: UUID,
@@ -156,7 +165,7 @@ class StreamingQueryProgress private[sql](
  *                               Spark.
  * @since 2.1.0
  */
-@InterfaceStability.Evolving
+@Evolving
 class SourceProgress protected[sql](
   val description: String,
   val startOffset: String,
@@ -200,7 +209,7 @@ class SourceProgress protected[sql](
  * @param description Description of the source corresponding to this status.
  * @since 2.1.0
  */
-@InterfaceStability.Evolving
+@Evolving
 class SinkProgress protected[sql](
     val description: String) extends Serializable {
 

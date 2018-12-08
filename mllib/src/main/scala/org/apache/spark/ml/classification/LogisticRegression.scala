@@ -35,6 +35,7 @@ import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.{BinaryClassificationMetrics, MulticlassMetrics}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
@@ -490,7 +491,7 @@ class LogisticRegression @Since("1.2.0") (
 
   protected[spark] def train(
       dataset: Dataset[_],
-      handlePersistence: Boolean): LogisticRegressionModel = {
+      handlePersistence: Boolean): LogisticRegressionModel = instrumented { instr =>
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
@@ -500,9 +501,11 @@ class LogisticRegression @Since("1.2.0") (
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(regParam, elasticNetParam, standardization, threshold,
-      maxIter, tol, fitIntercept)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
+      probabilityCol, regParam, elasticNetParam, standardization, threshold, maxIter, tol,
+      fitIntercept)
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
@@ -517,7 +520,7 @@ class LogisticRegression @Since("1.2.0") (
         (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
-    instr.logNamedValue(Instrumentation.loggerTags.numExamples, summarizer.count)
+    instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
 
@@ -905,8 +908,6 @@ class LogisticRegression @Since("1.2.0") (
         objectiveHistory)
     }
     model.setSummary(Some(logRegSummary))
-    instr.logSuccess(model)
-    model
   }
 
   @Since("1.4.0")
@@ -1484,7 +1485,7 @@ sealed trait LogisticRegressionSummary extends Serializable {
 
   /**
    * Convenient method for casting to binary logistic regression summary.
-   * This method will throws an Exception if the summary is not a binary summary.
+   * This method will throw an Exception if the summary is not a binary summary.
    */
   @Since("2.3.0")
   def asBinary: BinaryLogisticRegressionSummary = this match {

@@ -21,17 +21,24 @@ import java.nio.charset.StandardCharsets
 
 import scala.util.Random
 
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType}
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.Benchmark
 import org.apache.spark.util.collection.BitSet
 
 /**
  * Benchmark to low level memory access using different ways to manage buffers.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/ColumnarBatchBenchmark-results.txt".
+ * }}}
  */
-object ColumnarBatchBenchmark {
+object ColumnarBatchBenchmark extends BenchmarkBase {
   // This benchmark reads and writes an array of ints.
   // TODO: there is a big (2x) penalty for a random access API for off heap.
   // Note: carefully if modifying this code. It's hard to reason about the JIT.
@@ -260,25 +267,7 @@ object ColumnarBatchBenchmark {
       col.close
     }
 
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.13.1
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-    Int Read/Write:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Java Array                                     177 /  183       1851.1           0.5       1.0X
-    ByteBuffer Unsafe                              314 /  330       1043.7           1.0       0.6X
-    ByteBuffer API                                1298 / 1307        252.4           4.0       0.1X
-    DirectByteBuffer                               465 /  483        704.2           1.4       0.4X
-    Unsafe Buffer                                  179 /  183       1835.5           0.5       1.0X
-    Column(on heap)                                181 /  186       1815.2           0.6       1.0X
-    Column(off heap)                               344 /  349        951.7           1.1       0.5X
-    Column(off heap direct)                        178 /  186       1838.6           0.5       1.0X
-    UnsafeRow (on heap)                            388 /  394        844.8           1.2       0.5X
-    UnsafeRow (off heap)                           400 /  403        819.4           1.2       0.4X
-    Column On Heap Append                          315 /  325       1041.8           1.0       0.6X
-    */
-    val benchmark = new Benchmark("Int Read/Write", count * iters)
+    val benchmark = new Benchmark("Int Read/Write", count * iters, output = output)
     benchmark.addCase("Java Array")(javaArray)
     benchmark.addCase("ByteBuffer Unsafe")(byteBufferUnsafe)
     benchmark.addCase("ByteBuffer API")(byteBufferApi)
@@ -295,7 +284,7 @@ object ColumnarBatchBenchmark {
 
   def booleanAccess(iters: Int): Unit = {
     val count = 8 * 1024
-    val benchmark = new Benchmark("Boolean Read/Write", iters * count.toLong)
+    val benchmark = new Benchmark("Boolean Read/Write", iters * count.toLong, output = output)
     benchmark.addCase("Bitset") { i: Int => {
       val b = new BitSet(count)
       var sum = 0L
@@ -329,15 +318,6 @@ object ColumnarBatchBenchmark {
         }
       }
     }}
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.13.1
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-    Boolean Read/Write:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Bitset                                         741 /  747        452.6           2.2       1.0X
-    Byte Array                                     531 /  542        631.6           1.6       1.4X
-    */
     benchmark.run()
   }
 
@@ -386,16 +366,7 @@ object ColumnarBatchBenchmark {
       }
     }
 
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.13.1
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-    String Read/Write:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    On Heap                                        351 /  362         46.6          21.4       1.0X
-    Off Heap                                       456 /  466         35.9          27.8       0.8X
-    */
-    val benchmark = new Benchmark("String Read/Write", count * iters)
+    val benchmark = new Benchmark("String Read/Write", count * iters, output = output)
     benchmark.addCase("On Heap")(column(MemoryMode.ON_HEAP))
     benchmark.addCase("Off Heap")(column(MemoryMode.OFF_HEAP))
     benchmark.run
@@ -463,30 +434,27 @@ object ColumnarBatchBenchmark {
       }
     }
 
-    val benchmark = new Benchmark("Array Vector Read", count * iters)
+    val benchmark = new Benchmark("Array Vector Read", count * iters, output = output)
     benchmark.addCase("On Heap Read Size Only") { _ => readArrays(true) }
     benchmark.addCase("Off Heap Read Size Only") { _ => readArrays(false) }
     benchmark.addCase("On Heap Read Elements") { _ => readArrayElements(true) }
     benchmark.addCase("Off Heap Read Elements") { _ => readArrayElements(false) }
 
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.13.1
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-    Array Vector Read:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    On Heap Read Size Only                         426 /  437        384.9           2.6       1.0X
-    Off Heap Read Size Only                        406 /  421        404.0           2.5       1.0X
-    On Heap Read Elements                         2636 / 2642         62.2          16.1       0.2X
-    Off Heap Read Elements                        3770 / 3774         43.5          23.0       0.1X
-    */
     benchmark.run
   }
 
-  def main(args: Array[String]): Unit = {
-    intAccess(1024 * 40)
-    booleanAccess(1024 * 40)
-    stringAccess(1024 * 4)
-    arrayAccess(1024 * 40)
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    runBenchmark("Int Read/Write") {
+      intAccess(1024 * 40)
+    }
+    runBenchmark("Boolean Read/Write") {
+      booleanAccess(1024 * 40)
+    }
+    runBenchmark("String Read/Write") {
+      stringAccess(1024 * 4)
+    }
+    runBenchmark("Array Vector Read") {
+      arrayAccess(1024 * 40)
+    }
   }
 }

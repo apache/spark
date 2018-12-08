@@ -127,8 +127,8 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
   }
 
   test("cache UDF result correctly") {
-    val expensiveUDF = udf({x: Int => Thread.sleep(5000); x})
-    val df = spark.range(0, 10).toDF("a").withColumn("b", expensiveUDF($"a"))
+    val expensiveUDF = udf({x: Int => Thread.sleep(2000); x})
+    val df = spark.range(0, 2).toDF("a").repartition(1).withColumn("b", expensiveUDF($"a"))
     val df2 = df.agg(sum(df("b")))
 
     df.cache()
@@ -136,7 +136,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     assertCached(df2)
 
     // udf has been evaluated during caching, and thus should not be re-evaluated here
-    failAfter(3 seconds) {
+    failAfter(2 seconds) {
       df2.collect()
     }
 

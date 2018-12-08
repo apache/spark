@@ -156,8 +156,8 @@ case class Stack(children: Seq[Expression]) extends Generator {
         val j = (i - 1) % numFields
         if (children(i).dataType != elementSchema.fields(j).dataType) {
           return TypeCheckResult.TypeCheckFailure(
-            s"Argument ${j + 1} (${elementSchema.fields(j).dataType.simpleString}) != " +
-              s"Argument $i (${children(i).dataType.simpleString})")
+            s"Argument ${j + 1} (${elementSchema.fields(j).dataType.catalogString}) != " +
+              s"Argument $i (${children(i).dataType.catalogString})")
         }
       }
       TypeCheckResult.TypeCheckSuccess
@@ -224,6 +224,32 @@ case class Stack(children: Seq[Expression]) extends Generator {
 }
 
 /**
+ * Replicate the row N times. N is specified as the first argument to the function.
+ * This is an internal function solely used by optimizer to rewrite EXCEPT ALL AND
+ * INTERSECT ALL queries.
+ */
+case class ReplicateRows(children: Seq[Expression]) extends Generator with CodegenFallback {
+  private lazy val numColumns = children.length - 1 // remove the multiplier value from output.
+
+  override def elementSchema: StructType =
+    StructType(children.tail.zipWithIndex.map {
+      case (e, index) => StructField(s"col$index", e.dataType)
+    })
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val numRows = children.head.eval(input).asInstanceOf[Long]
+    val values = children.tail.map(_.eval(input)).toArray
+    Range.Long(0, numRows, 1).map { _ =>
+      val fields = new Array[Any](numColumns)
+      for (col <- 0 until numColumns) {
+        fields.update(col, values(col))
+      }
+      InternalRow(fields: _*)
+    }
+  }
+}
+
+/**
  * Wrapper around another generator to specify outer behavior. This is used to implement functions
  * such as explode_outer. This expression gets replaced during analysis.
  */
@@ -232,7 +258,7 @@ case class GeneratorOuter(child: Generator) extends UnaryExpression with Generat
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
 
   override def elementSchema: StructType = child.elementSchema
 
@@ -251,7 +277,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
     case _ =>
       TypeCheckResult.TypeCheckFailure(
         "input to function explode should be array or map type, " +
-          s"not ${child.dataType.simpleString}")
+          s"not ${child.dataType.catalogString}")
   }
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
@@ -381,7 +407,7 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
     case _ =>
       TypeCheckResult.TypeCheckFailure(
         s"input to function $prettyName should be array of struct type, " +
-          s"not ${child.dataType.simpleString}")
+          s"not ${child.dataType.catalogString}")
   }
 
   override def elementSchema: StructType = child.dataType match {

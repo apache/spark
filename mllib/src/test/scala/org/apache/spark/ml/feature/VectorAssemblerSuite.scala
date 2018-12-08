@@ -99,9 +99,9 @@ class VectorAssemblerSuite
       assembler.transform(df)
     }
     assert(thrown.getMessage contains
-      "Data type StringType of column a is not supported.\n" +
-      "Data type StringType of column b is not supported.\n" +
-      "Data type StringType of column c is not supported.")
+      "Data type string of column a is not supported.\n" +
+      "Data type string of column b is not supported.\n" +
+      "Data type string of column c is not supported.")
   }
 
   test("ML attributes") {
@@ -256,4 +256,9 @@ class VectorAssemblerSuite
     assert(runWithMetadata("keep", additional_filter = "id1 > 2").count() == 4)
   }
 
+  test("SPARK-25371: VectorAssembler with empty inputCols") {
+    val vectorAssembler = new VectorAssembler().setInputCols(Array()).setOutputCol("a")
+    val output = vectorAssembler.transform(dfWithNullsAndNaNs)
+    assert(output.select("a").limit(1).collect().head == Row(Vectors.sparse(0, Seq.empty)))
+  }
 }

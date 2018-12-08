@@ -109,17 +109,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
 
-    assertError(EqualTo('mapField, 'mapField), "EqualTo does not support ordering on type MapType")
+    assertError(EqualTo('mapField, 'mapField), "EqualTo does not support ordering on type map")
     assertError(EqualNullSafe('mapField, 'mapField),
-      "EqualNullSafe does not support ordering on type MapType")
+      "EqualNullSafe does not support ordering on type map")
     assertError(LessThan('mapField, 'mapField),
-      "LessThan does not support ordering on type MapType")
+      "LessThan does not support ordering on type map")
     assertError(LessThanOrEqual('mapField, 'mapField),
-      "LessThanOrEqual does not support ordering on type MapType")
+      "LessThanOrEqual does not support ordering on type map")
     assertError(GreaterThan('mapField, 'mapField),
-      "GreaterThan does not support ordering on type MapType")
+      "GreaterThan does not support ordering on type map")
     assertError(GreaterThanOrEqual('mapField, 'mapField),
-      "GreaterThanOrEqual does not support ordering on type MapType")
+      "GreaterThanOrEqual does not support ordering on type map")
 
     assertError(If('intField, 'stringField, 'stringField),
       "type of predicate expression in If should be boolean")
@@ -144,6 +144,9 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(Sum('stringField))
     assertSuccess(Average('stringField))
     assertSuccess(Min('arrayField))
+    assertSuccess(new EveryAgg('booleanField))
+    assertSuccess(new AnyAgg('booleanField))
+    assertSuccess(new SomeAgg('booleanField))
 
     assertError(Min('mapField), "min does not support ordering on type")
     assertError(Max('mapField), "max does not support ordering on type")
@@ -169,10 +172,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       CreateNamedStruct(Seq("a", "b", 2.0)), "even number of arguments")
     assertError(
       CreateNamedStruct(Seq(1, "a", "b", 2.0)),
-      "Only foldable StringType expressions are allowed to appear at odd position")
+      "Only foldable string expressions are allowed to appear at odd position")
     assertError(
       CreateNamedStruct(Seq('a.string.at(0), "a", "b", 2.0)),
-      "Only foldable StringType expressions are allowed to appear at odd position")
+      "Only foldable string expressions are allowed to appear at odd position")
     assertError(
       CreateNamedStruct(Seq(Literal.create(null, StringType), "a")),
       "Field name should not be null")

@@ -22,16 +22,22 @@ from __future__ import print_function
 import os
 import sys
 import time
+# 'resource' is a Unix specific module.
+has_resource_module = True
+try:
+    import resource
+except ImportError:
+    has_resource_module = False
 import socket
 import traceback
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
-from pyspark.java_gateway import do_server_auth
-from pyspark.taskcontext import TaskContext
+from pyspark.java_gateway import local_connect_and_auth
+from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.files import SparkFiles
 from pyspark.rdd import PythonEvalType
-from pyspark.serializers import write_with_length, write_int, read_long, \
+from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import to_arrow_type
@@ -96,8 +102,9 @@ def wrap_scalar_pandas_udf(f, return_type):
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
-    assign_cols_by_pos = runner_conf.get(
-        "spark.sql.execution.pandas.groupedMap.assignColumnsByPosition", False)
+    assign_cols_by_name = runner_conf.get(
+        "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")
+    assign_cols_by_name = assign_cols_by_name.lower() == "true"
 
     def wrapped(key_series, value_series):
         import pandas as pd
@@ -118,7 +125,7 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
 
         # Assign result columns by schema name if user labeled with strings, else use position
-        if not assign_cols_by_pos and any(isinstance(name, basestring) for name in result.columns):
+        if assign_cols_by_name and any(isinstance(name, basestring) for name in result.columns):
             return [(result[field.name], to_arrow_type(field.dataType)) for field in return_type]
         else:
             return [(result[result.columns[i]], to_arrow_type(field.dataType))
@@ -259,8 +266,40 @@ def main(infile, outfile):
                              "PYSPARK_DRIVER_PYTHON are correctly set.") %
                             ("%d.%d" % sys.version_info[:2], version))
 
+        # read inputs only for a barrier task
+        isBarrier = read_bool(infile)
+        boundPort = read_int(infile)
+        secret = UTF8Deserializer().loads(infile)
+
+        # set up memory limits
+        memory_limit_mb = int(os.environ.get('PYSPARK_EXECUTOR_MEMORY_MB', "-1"))
+        if memory_limit_mb > 0 and has_resource_module:
+            total_memory = resource.RLIMIT_AS
+            try:
+                (soft_limit, hard_limit) = resource.getrlimit(total_memory)
+                msg = "Current mem limits: {0} of max {1}\n".format(soft_limit, hard_limit)
+                print(msg, file=sys.stderr)
+
+                # convert to bytes
+                new_limit = memory_limit_mb * 1024 * 1024
+
+                if soft_limit == resource.RLIM_INFINITY or new_limit < soft_limit:
+                    msg = "Setting mem limits to {0} of max {1}\n".format(new_limit, new_limit)
+                    print(msg, file=sys.stderr)
+                    resource.setrlimit(total_memory, (new_limit, new_limit))
+
+            except (resource.error, OSError, ValueError) as e:
+                # not all systems support resource limits, so warn instead of failing
+                print("WARN: Failed to set memory limit: {0}\n".format(e), file=sys.stderr)
+
         # initialize global state
-        taskContext = TaskContext._getOrCreate()
+        taskContext = None
+        if isBarrier:
+            taskContext = BarrierTaskContext._getOrCreate()
+            BarrierTaskContext._initialize(boundPort, secret)
+        else:
+            taskContext = TaskContext._getOrCreate()
+        # read inputs for TaskContext info
         taskContext._stageId = read_int(infile)
         taskContext._partitionId = read_int(infile)
         taskContext._attemptNumber = read_int(infile)
@@ -291,15 +330,33 @@ def main(infile, outfile):
             importlib.invalidate_caches()
 
         # fetch names and values of broadcast variables
+        needs_broadcast_decryption_server = read_bool(infile)
         num_broadcast_variables = read_int(infile)
+        if needs_broadcast_decryption_server:
+            # read the decrypted data from a server in the jvm
+            port = read_int(infile)
+            auth_secret = utf8_deserializer.loads(infile)
+            (broadcast_sock_file, _) = local_connect_and_auth(port, auth_secret)
+
         for _ in range(num_broadcast_variables):
             bid = read_long(infile)
             if bid >= 0:
-                path = utf8_deserializer.loads(infile)
-                _broadcastRegistry[bid] = Broadcast(path=path)
+                if needs_broadcast_decryption_server:
+                    read_bid = read_long(broadcast_sock_file)
+                    assert(read_bid == bid)
+                    _broadcastRegistry[bid] = \
+                        Broadcast(sock_file=broadcast_sock_file)
+                else:
+                    path = utf8_deserializer.loads(infile)
+                    _broadcastRegistry[bid] = Broadcast(path=path)
+
             else:
                 bid = - bid - 1
                 _broadcastRegistry.pop(bid)
+
+        if needs_broadcast_decryption_server:
+            broadcast_sock_file.write(b'1')
+            broadcast_sock_file.close()
 
         _accumulatorRegistry.clear()
         eval_type = read_int(infile)
@@ -354,8 +411,5 @@ if __name__ == '__main__':
     # Read information about how to connect back to the JVM from the environment.
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect(("127.0.0.1", java_port))
-    sock_file = sock.makefile("rwb", 65536)
-    do_server_auth(sock_file, auth_secret)
+    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
     main(sock_file, sock_file)

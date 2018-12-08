@@ -73,7 +73,7 @@ case class SortOrder(
     if (RowOrdering.isOrderable(dataType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.simpleString}")
+      TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.catalogString}")
     }
   }
 

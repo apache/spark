@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Properties;
 
 import com.google.common.primitives.Ints;
+import io.netty.util.NettyRuntime;
 
 /**
  * A central location that tracks all the settings we expose to users.
@@ -209,7 +210,7 @@ public class TransportConf {
    * (128 bits by default), which is not generally the case with user passwords.
    */
   public int keyFactoryIterations() {
-    return conf.getInt("spark.networy.crypto.keyFactoryIterations", 1024);
+    return conf.getInt("spark.network.crypto.keyFactoryIterations", 1024);
   }
 
   /**
@@ -280,5 +281,36 @@ public class TransportConf {
    */
   public long maxChunksBeingTransferred() {
     return conf.getLong("spark.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);
+  }
+
+  /**
+   * Percentage of io.serverThreads used by netty to process ChunkFetchRequest.
+   * Shuffle server will use a separate EventLoopGroup to process ChunkFetchRequest messages.
+   * Although when calling the async writeAndFlush on the underlying channel to send
+   * response back to client, the I/O on the channel is still being handled by
+   * {@link org.apache.spark.network.server.TransportServer}'s default EventLoopGroup
+   * that's registered with the Channel, by waiting inside the ChunkFetchRequest handler
+   * threads for the completion of sending back responses, we are able to put a limit on
+   * the max number of threads from TransportServer's default EventLoopGroup that are
+   * going to be consumed by writing response to ChunkFetchRequest, which are I/O intensive
+   * and could take long time to process due to disk contentions. By configuring a slightly
+   * higher number of shuffler server threads, we are able to reserve some threads for
+   * handling other RPC messages, thus making the Client less likely to experience timeout
+   * when sending RPC messages to the shuffle server. The number of threads used for handling
+   * chunked fetch requests are percentage of io.serverThreads (if defined) else it is a percentage
+   * of 2 * #cores. However, a percentage of 0 means netty default number of threads which
+   * is 2 * #cores ignoring io.serverThreads. The percentage here is configured via
+   * spark.shuffle.server.chunkFetchHandlerThreadsPercent. The returned value is rounded off to
+   * ceiling of the nearest integer.
+   */
+  public int chunkFetchHandlerThreads() {
+    if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
+      return 0;
+    }
+    int chunkFetchHandlerThreadsPercent =
+      conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 100);
+    return (int)Math.ceil(
+     (this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors()) *
+     chunkFetchHandlerThreadsPercent/(double)100);
   }
 }

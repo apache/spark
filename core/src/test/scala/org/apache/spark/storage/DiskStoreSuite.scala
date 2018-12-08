@@ -24,6 +24,7 @@ import com.google.common.io.{ByteStreams, Files}
 import io.netty.channel.FileRegion
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config
 import org.apache.spark.network.util.{ByteArrayWritableChannel, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.util.Utils
@@ -94,7 +95,7 @@ class DiskStoreSuite extends SparkFunSuite {
 
   test("blocks larger than 2gb") {
     val conf = new SparkConf()
-      .set("spark.storage.memoryMapLimitForTests", "10k" )
+      .set(config.MEMORY_MAP_LIMIT_FOR_TESTS.key, "10k")
     val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
     val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
 
@@ -131,7 +132,6 @@ class DiskStoreSuite extends SparkFunSuite {
   }
 
   test("block data encryption") {
-    val testDir = Utils.createTempDir()
     val testData = new Array[Byte](128 * 1024)
     new Random().nextBytes(testData)
 
@@ -194,8 +194,8 @@ class DiskStoreSuite extends SparkFunSuite {
     val region = data.toNetty().asInstanceOf[FileRegion]
     val byteChannel = new ByteArrayWritableChannel(data.size.toInt)
 
-    while (region.transfered() < region.count()) {
-      region.transferTo(byteChannel, region.transfered())
+    while (region.transferred() < region.count()) {
+      region.transferTo(byteChannel, region.transferred())
     }
 
     byteChannel.close()

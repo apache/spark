@@ -30,13 +30,13 @@ import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /**
@@ -462,12 +462,12 @@ case class NewInstance(
       val d = outerObj.getClass +: paramTypes
       val c = getConstructor(outerObj.getClass +: paramTypes)
       (args: Seq[AnyRef]) => {
-        c.newInstance(outerObj +: args: _*)
+        c(outerObj +: args)
       }
     }.getOrElse {
       val c = getConstructor(paramTypes)
       (args: Seq[AnyRef]) => {
-        c.newInstance(args: _*)
+        c(args)
       }
     }
   }
@@ -486,10 +486,16 @@ case class NewInstance(
 
     ev.isNull = resultIsNull
 
-    val constructorCall = outer.map { gen =>
-      s"${gen.value}.new ${cls.getSimpleName}($argString)"
-    }.getOrElse {
-      s"new $className($argString)"
+    val constructorCall = cls.getConstructors.size match {
+      // If there are no constructors, the `new` method will fail. In
+      // this case we can try to call the apply method constructor
+      // that might be defined on the companion object.
+      case 0 => s"$className$$.MODULE$$.apply($argString)"
+      case _ => outer.map { gen =>
+        s"${gen.value}.new ${cls.getSimpleName}($argString)"
+      }.getOrElse {
+        s"new $className($argString)"
+      }
     }
 
     val code = code"""
@@ -581,17 +587,13 @@ case class LambdaVariable(
     dataType: DataType,
     nullable: Boolean = true) extends LeafExpression with NonSQLExpression {
 
-  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {
     assert(input.numFields == 1,
       "The input row of interpreted LambdaVariable should have only 1 field.")
-    if (nullable && input.isNullAt(0)) {
-      null
-    } else {
-      accessor(input, 0)
-    }
+    accessor(input, 0)
   }
 
   override def genCode(ctx: CodegenContext): ExprCode = {
@@ -962,25 +964,32 @@ case class MapObjects private(
   }
 }
 
+/**
+ * Similar to [[UnresolvedMapObjects]], this is a placeholder of [[CatalystToExternalMap]].
+ *
+ * @param child An expression that when evaluated returns a map object.
+ * @param keyFunction The function applied on the key collection elements.
+ * @param valueFunction The function applied on the value collection elements.
+ * @param collClass The type of the resulting collection.
+ */
+case class UnresolvedCatalystToExternalMap(
+    child: Expression,
+    @transient keyFunction: Expression => Expression,
+    @transient valueFunction: Expression => Expression,
+    collClass: Class[_]) extends UnaryExpression with Unevaluable {
+
+  override lazy val resolved = false
+
+  override def dataType: DataType = ObjectType(collClass)
+}
+
 object CatalystToExternalMap {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
-  /**
-   * Construct an instance of CatalystToExternalMap case class.
-   *
-   * @param keyFunction The function applied on the key collection elements.
-   * @param valueFunction The function applied on the value collection elements.
-   * @param inputData An expression that when evaluated returns a map object.
-   * @param collClass The type of the resulting collection.
-   */
-  def apply(
-      keyFunction: Expression => Expression,
-      valueFunction: Expression => Expression,
-      inputData: Expression,
-      collClass: Class[_]): CatalystToExternalMap = {
+  def apply(u: UnresolvedCatalystToExternalMap): CatalystToExternalMap = {
     val id = curId.getAndIncrement()
     val keyLoopValue = s"CatalystToExternalMap_keyLoopValue$id"
-    val mapType = inputData.dataType.asInstanceOf[MapType]
+    val mapType = u.child.dataType.asInstanceOf[MapType]
     val keyLoopVar = LambdaVariable(keyLoopValue, "", mapType.keyType, nullable = false)
     val valueLoopValue = s"CatalystToExternalMap_valueLoopValue$id"
     val valueLoopIsNull = if (mapType.valueContainsNull) {
@@ -990,9 +999,9 @@ object CatalystToExternalMap {
     }
     val valueLoopVar = LambdaVariable(valueLoopValue, valueLoopIsNull, mapType.valueType)
     CatalystToExternalMap(
-      keyLoopValue, keyFunction(keyLoopVar),
-      valueLoopValue, valueLoopIsNull, valueFunction(valueLoopVar),
-      inputData, collClass)
+      keyLoopValue, u.keyFunction(keyLoopVar),
+      valueLoopValue, valueLoopIsNull, u.valueFunction(valueLoopVar),
+      u.child, u.collClass)
   }
 }
 
@@ -1089,15 +1098,9 @@ case class CatalystToExternalMap private(
     val tupleLoopValue = ctx.freshName("tupleLoopValue")
     val builderValue = ctx.freshName("builderValue")
 
-    val getLength = s"${genInputData.value}.numElements()"
-
     val keyArray = ctx.freshName("keyArray")
     val valueArray = ctx.freshName("valueArray")
-    val getKeyArray =
-      s"${classOf[ArrayData].getName} $keyArray = ${genInputData.value}.keyArray();"
     val getKeyLoopVar = CodeGenerator.getValue(keyArray, inputDataType(mapType.keyType), loopIndex)
-    val getValueArray =
-      s"${classOf[ArrayData].getName} $valueArray = ${genInputData.value}.valueArray();"
     val getValueLoopVar = CodeGenerator.getValue(
       valueArray, inputDataType(mapType.valueType), loopIndex)
 
@@ -1146,10 +1149,10 @@ case class CatalystToExternalMap private(
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
 
       if (!${genInputData.isNull}) {
-        int $dataLength = $getLength;
+        int $dataLength = ${genInputData.value}.numElements();
         $constructBuilder
-        $getKeyArray
-        $getValueArray
+        ArrayData $keyArray = ${genInputData.value}.keyArray();
+        ArrayData $valueArray = ${genInputData.value}.valueArray();
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
@@ -1727,7 +1730,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
 
   override val dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
 
-  private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
+  private val errMsg = s" is not a valid external type for schema of ${expected.catalogString}"
 
   private lazy val checkType: (Any) => Boolean = expected match {
     case _: DecimalType =>

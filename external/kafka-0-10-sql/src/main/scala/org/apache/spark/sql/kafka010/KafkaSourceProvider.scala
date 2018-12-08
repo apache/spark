@@ -18,21 +18,23 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.{Locale, Optional, UUID}
+import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.deploy.security.KafkaTokenUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, MicroBatchReadSupport, StreamWriteSupport}
-import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousInputPartitionReader
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -46,9 +48,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     with StreamSinkProvider
     with RelationProvider
     with CreatableRelationProvider
-    with StreamWriteSupport
-    with ContinuousReadSupport
-    with MicroBatchReadSupport
+    with StreamingWriteSupportProvider
+    with ContinuousReadSupportProvider
+    with MicroBatchReadSupportProvider
     with Logging {
   import KafkaSourceProvider._
 
@@ -78,15 +80,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
+    val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
 
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
+    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
     val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
       STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
@@ -108,28 +105,22 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   /**
-   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader]] to read batches
-   * of Kafka data in a micro-batch streaming query.
+   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport]] to read
+   * batches of Kafka data in a micro-batch streaming query.
    */
-  override def createMicroBatchReader(
-      schema: Optional[StructType],
+  override def createMicroBatchReadSupport(
       metadataPath: String,
-      options: DataSourceOptions): KafkaMicroBatchReader = {
+      options: DataSourceOptions): KafkaMicroBatchReadSupport = {
 
     val parameters = options.asMap().asScala.toMap
     validateStreamOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
+    val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
 
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
+    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
     val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
       STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
@@ -140,7 +131,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-    new KafkaMicroBatchReader(
+    new KafkaMicroBatchReadSupport(
       kafkaOffsetReader,
       kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
       options,
@@ -150,19 +141,18 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   /**
-   * Creates a [[ContinuousInputPartitionReader]] to read
+   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport]] to read
    * Kafka data in a continuous streaming query.
    */
-  override def createContinuousReader(
-      schema: Optional[StructType],
+  override def createContinuousReadSupport(
       metadataPath: String,
-      options: DataSourceOptions): KafkaContinuousReader = {
+      options: DataSourceOptions): KafkaContinuousReadSupport = {
     val parameters = options.asMap().asScala.toMap
     validateStreamOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
+    val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
 
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val specifiedKafkaParams =
@@ -181,7 +171,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-    new KafkaContinuousReader(
+    new KafkaContinuousReadSupport(
       kafkaOffsetReader,
       kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
       parameters,
@@ -201,12 +191,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters: Map[String, String]): BaseRelation = {
     validateBatchOptions(parameters)
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
+    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
     val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
       caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
@@ -233,8 +218,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       outputMode: OutputMode): Sink = {
     val defaultTopic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(parameters)
-    new KafkaSink(sqlContext,
-      new ju.HashMap[String, Object](specifiedKafkaParams.asJava), defaultTopic)
+    new KafkaSink(sqlContext, specifiedKafkaParams, defaultTopic)
   }
 
   override def createRelation(
@@ -251,8 +235,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
     val topic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(parameters)
-    KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution,
-      new ju.HashMap[String, Object](specifiedKafkaParams.asJava), topic)
+    KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution, specifiedKafkaParams,
+      topic)
 
     /* This method is suppose to return a relation that reads the data that was written.
      * We cannot support this for Kafka. Therefore, in order to make things consistent,
@@ -270,22 +254,20 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  override def createStreamWriter(
+  override def createStreamingWriteSupport(
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceOptions): StreamWriter = {
+      options: DataSourceOptions): StreamingWriteSupport = {
     import scala.collection.JavaConverters._
 
-    val spark = SparkSession.getActiveSession.get
     val topic = Option(options.get(TOPIC_OPTION_KEY).orElse(null)).map(_.trim)
     // We convert the options argument from V2 -> Java map -> scala mutable -> scala immutable.
     val producerParams = kafkaParamsForProducer(options.asMap.asScala.toMap)
 
-    KafkaWriter.validateQuery(
-      schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
+    KafkaWriter.validateQuery(schema.toAttributes, producerParams, topic)
 
-    new KafkaStreamWriter(topic, producerParams, schema)
+    new KafkaStreamingWriteSupport(topic, producerParams, schema)
   }
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =
@@ -484,6 +466,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
 
 
 
+  private val serClassName = classOf[ByteArraySerializer].getName
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
   def getKafkaOffsetRangeLimit(
@@ -513,11 +496,12 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
 
       // So that the driver does not pull too much data
-      .set(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, new java.lang.Integer(1))
+      .set(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, java.lang.Integer.valueOf(1))
 
       // If buffer config is not set, set it to reasonable value to work around
       // buffer issues (see KAFKA-3135)
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
+      .setTokenJaasConfigIfNeeded()
       .build()
 
   def kafkaParamsForExecutors(
@@ -539,7 +523,20 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       // If buffer config is not set, set it to reasonable value to work around
       // buffer issues (see KAFKA-3135)
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
+      .setTokenJaasConfigIfNeeded()
       .build()
+
+  /**
+   * Returns a unique consumer group (group.id), allowing the user to set the prefix of
+   * the consumer group
+   */
+  private def streamingUniqueGroupId(
+      parameters: Map[String, String],
+      metadataPath: String): String = {
+    val groupIdPrefix = parameters
+      .getOrElse("groupIdPrefix", "spark-kafka-source")
+    s"${groupIdPrefix}-${UUID.randomUUID}-${metadataPath.hashCode}"
+  }
 
   /** Class to conveniently update Kafka config params, while logging the changes */
   private case class ConfigUpdater(module: String, kafkaParams: Map[String, String]) {
@@ -559,11 +556,32 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       this
     }
 
+    def setTokenJaasConfigIfNeeded(): ConfigUpdater = {
+      // There are multiple possibilities to log in and applied in the following order:
+      // - JVM global security provided -> try to log in with JVM global security configuration
+      //   which can be configured for example with 'java.security.auth.login.config'.
+      //   For this no additional parameter needed.
+      // - Token is provided -> try to log in with scram module using kafka's dynamic JAAS
+      //   configuration.
+      if (KafkaTokenUtil.isGlobalJaasConfigurationProvided) {
+        logDebug("JVM global security configuration detected, using it for login.")
+      } else if (KafkaSecurityHelper.isTokenAvailable()) {
+        logDebug("Delegation token detected, using it for login.")
+        val jaasParams = KafkaSecurityHelper.getTokenJaasParams(SparkEnv.get.conf)
+        val mechanism = kafkaParams
+          .getOrElse(SaslConfigs.SASL_MECHANISM, SaslConfigs.DEFAULT_SASL_MECHANISM)
+        require(mechanism.startsWith("SCRAM"),
+          "Delegation token works only with SCRAM mechanism.")
+        set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
+      }
+      this
+    }
+
     def build(): ju.Map[String, Object] = map
   }
 
   private[kafka010] def kafkaParamsForProducer(
-      parameters: Map[String, String]): Map[String, String] = {
+      parameters: Map[String, String]): ju.Map[String, Object] = {
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
@@ -571,17 +589,26 @@ private[kafka010] object KafkaSourceProvider extends Logging {
           + "are serialized with ByteArraySerializer.")
     }
 
-    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}"))
-    {
+    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Kafka option '${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}' is not supported as "
           + "value are serialized with ByteArraySerializer.")
     }
+
+    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
+
+    ConfigUpdater("executor", specifiedKafkaParams)
+      .set(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, serClassName)
+      .set(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, serClassName)
+      .setTokenJaasConfigIfNeeded()
+      .build()
+  }
+
+  private def convertToSpecifiedParams(parameters: Map[String, String]): Map[String, String] = {
     parameters
       .keySet
       .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
       .map { k => k.drop(6).toString -> parameters(k) }
-      .toMap + (ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName,
-      ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName)
+      .toMap
   }
 }

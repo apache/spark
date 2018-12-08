@@ -24,10 +24,10 @@ import scala.util.control.NonFatal
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString}
 import org.apache.spark.util.Utils
 
 /**
@@ -95,7 +95,7 @@ import org.apache.spark.util.Utils
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
   /** No-arg constructor for kryo. */
@@ -346,7 +346,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def simpleString: String = {
     val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}")
-    Utils.truncatedString(fieldTypes, "struct<", ",", ">")
+    truncatedString(fieldTypes, "struct<", ",", ">")
   }
 
   override def catalogString: String = {
@@ -359,6 +359,16 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
     s"STRUCT<${fieldTypes.mkString(", ")}>"
   }
+
+  /**
+   * Returns a string containing a schema in DDL format. For example, the following value:
+   * `StructType(Seq(StructField("eventId", IntegerType), StructField("s", StringType)))`
+   * will be converted to `eventId` INT, `s` STRING.
+   * The returned DDL schema can be used in a table creation.
+   *
+   * @since 2.4.0
+   */
+  def toDDL: String = fields.map(_.toDDL).mkString(",")
 
   private[sql] override def simpleString(maxNumberFields: Int): String = {
     val builder = new StringBuilder
@@ -412,7 +422,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object StructType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = new StructType
@@ -426,13 +436,15 @@ object StructType extends AbstractDataType {
   private[sql] def fromString(raw: String): StructType = {
     Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parse(raw)) match {
       case t: StructType => t
-      case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+      case _ => throw new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
     }
   }
 
   /**
    * Creates StructType for a given DDL-formatted string, which is a comma separated list of field
    * definitions, e.g., a INT, b STRING.
+   *
+   * @since 2.2.0
    */
   def fromDDL(ddl: String): StructType = CatalystSqlParser.parseTableSchema(ddl)
 
@@ -528,7 +540,8 @@ object StructType extends AbstractDataType {
         leftType
 
       case _ =>
-        throw new SparkException(s"Failed to merge incompatible data types $left and $right")
+        throw new SparkException(s"Failed to merge incompatible data types ${left.catalogString}" +
+          s" and ${right.catalogString}")
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {

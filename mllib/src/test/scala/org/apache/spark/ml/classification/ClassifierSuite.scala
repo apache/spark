@@ -117,10 +117,10 @@ object ClassifierSuite {
 
     def this() = this(Identifiable.randomUID("mockclassifier"))
 
-    override def copy(extra: ParamMap): MockClassifier = throw new NotImplementedError()
+    override def copy(extra: ParamMap): MockClassifier = throw new UnsupportedOperationException()
 
     override def train(dataset: Dataset[_]): MockClassificationModel =
-      throw new NotImplementedError()
+      throw new UnsupportedOperationException()
 
     // Make methods public
     override def extractLabeledPoints(dataset: Dataset[_], numClasses: Int): RDD[LabeledPoint] =
@@ -133,11 +133,12 @@ object ClassifierSuite {
 
     def this() = this(Identifiable.randomUID("mockclassificationmodel"))
 
-    protected def predictRaw(features: Vector): Vector = throw new NotImplementedError()
+    protected def predictRaw(features: Vector): Vector = throw new UnsupportedOperationException()
 
-    override def copy(extra: ParamMap): MockClassificationModel = throw new NotImplementedError()
+    override def copy(extra: ParamMap): MockClassificationModel =
+      throw new UnsupportedOperationException()
 
-    override def numClasses: Int = throw new NotImplementedError()
+    override def numClasses: Int = throw new UnsupportedOperationException()
   }
 
 }

@@ -26,9 +26,9 @@ import scala.reflect.ClassTag
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.BlockDataManager
 import org.apache.spark.network.buffer.NioManagedBuffer
-import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
+import org.apache.spark.network.client.{RpcResponseCallback, StreamCallbackWithID, TransportClient}
 import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
-import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, OpenBlocks, StreamHandle, UploadBlock}
+import org.apache.spark.network.shuffle.protocol._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
 
@@ -73,9 +73,31 @@ class NettyBlockRpcServer(
         }
         val data = new NioManagedBuffer(ByteBuffer.wrap(uploadBlock.blockData))
         val blockId = BlockId(uploadBlock.blockId)
+        logDebug(s"Receiving replicated block $blockId with level ${level} " +
+          s"from ${client.getSocketAddress}")
         blockManager.putBlockData(blockId, data, level, classTag)
         responseContext.onSuccess(ByteBuffer.allocate(0))
     }
+  }
+
+  override def receiveStream(
+      client: TransportClient,
+      messageHeader: ByteBuffer,
+      responseContext: RpcResponseCallback): StreamCallbackWithID = {
+    val message =
+      BlockTransferMessage.Decoder.fromByteBuffer(messageHeader).asInstanceOf[UploadBlockStream]
+    val (level: StorageLevel, classTag: ClassTag[_]) = {
+      serializer
+        .newInstance()
+        .deserialize(ByteBuffer.wrap(message.metadata))
+        .asInstanceOf[(StorageLevel, ClassTag[_])]
+    }
+    val blockId = BlockId(message.blockId)
+    logDebug(s"Receiving replicated block $blockId with level ${level} as stream " +
+      s"from ${client.getSocketAddress}")
+    // This will return immediately, but will setup a callback on streamData which will still
+    // do all the processing in the netty thread.
+    blockManager.putBlockDataAsStream(blockId, level, classTag)
   }
 
   override def getStreamManager(): StreamManager = streamManager

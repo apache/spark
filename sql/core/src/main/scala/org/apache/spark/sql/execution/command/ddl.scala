@@ -892,7 +892,8 @@ object DDLUtils {
    */
   def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
     val inputPaths = query.collect {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) => r.location.rootPaths
+      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+        r.location.rootPaths
     }.flatten
 
     if (inputPaths.contains(outputPath)) {

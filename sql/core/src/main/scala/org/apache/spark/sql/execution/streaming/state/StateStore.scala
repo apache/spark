@@ -138,6 +138,8 @@ trait StateStoreCustomMetric {
   def name: String
   def desc: String
 }
+
+case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric
 case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric
 case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric
 
@@ -211,7 +213,7 @@ object StateStoreProvider {
    */
   def create(providerClassName: String): StateStoreProvider = {
     val providerClass = Utils.classForName(providerClassName)
-    providerClass.newInstance().asInstanceOf[StateStoreProvider]
+    providerClass.getConstructor().newInstance().asInstanceOf[StateStoreProvider]
   }
 
   /**

@@ -19,36 +19,28 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.datasources.v2.{DataWritingSparkTask, InternalRowDataWriterFactory}
-import org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTask.{logError, logInfo}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.StreamExecution
-import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
 
 /**
- * The physical plan for writing data into a continuous processing [[StreamWriter]].
+ * The physical plan for writing data into a continuous processing [[StreamingWriteSupport]].
  */
-case class WriteToContinuousDataSourceExec(writer: StreamWriter, query: SparkPlan)
-    extends SparkPlan with Logging {
-  override def children: Seq[SparkPlan] = Seq(query)
+case class WriteToContinuousDataSourceExec(writeSupport: StreamingWriteSupport, query: SparkPlan)
+    extends UnaryExecNode with Logging {
+  override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writerFactory = writer match {
-      case w: SupportsWriteInternalRow => w.createInternalRowWriterFactory()
-      case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
-    }
-
+    val writerFactory = writeSupport.createStreamingWriterFactory()
     val rdd = new ContinuousWriteRDD(query.execute(), writerFactory)
 
-    logInfo(s"Start processing data source writer: $writer. " +
+    logInfo(s"Start processing data source write support: $writeSupport. " +
       s"The input RDD has ${rdd.partitions.length} partitions.")
     EpochCoordinatorRef.get(
       sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
@@ -65,7 +57,7 @@ case class WriteToContinuousDataSourceExec(writer: StreamWriter, query: SparkPla
       case cause: Throwable =>
         cause match {
           // Do not wrap interruption exceptions that will be handled by streaming specially.
-          case _ if StreamExecution.isInterruptionException(cause) => throw cause
+          case _ if StreamExecution.isInterruptionException(cause, sparkContext) => throw cause
           // Only wrap non fatal exceptions.
           case NonFatal(e) => throw new SparkException("Writing job aborted.", e)
           case _ => throw cause

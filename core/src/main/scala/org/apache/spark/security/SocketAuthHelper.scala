@@ -42,43 +42,59 @@ private[spark] class SocketAuthHelper(conf: SparkConf) {
    * Read the auth secret from the socket and compare to the expected value. Write the reply back
    * to the socket.
    *
-   * If authentication fails, this method will close the socket.
+   * If authentication fails or error is thrown, this method will close the socket.
    *
    * @param s The client socket.
    * @throws IllegalArgumentException If authentication fails.
    */
   def authClient(s: Socket): Unit = {
-    // Set the socket timeout while checking the auth secret. Reset it before returning.
-    val currentTimeout = s.getSoTimeout()
+    var shouldClose = true
     try {
-      s.setSoTimeout(10000)
-      val clientSecret = readUtf8(s)
-      if (secret == clientSecret) {
-        writeUtf8("ok", s)
-      } else {
-        writeUtf8("err", s)
-        JavaUtils.closeQuietly(s)
+      // Set the socket timeout while checking the auth secret. Reset it before returning.
+      val currentTimeout = s.getSoTimeout()
+      try {
+        s.setSoTimeout(10000)
+        val clientSecret = readUtf8(s)
+        if (secret == clientSecret) {
+          writeUtf8("ok", s)
+          shouldClose = false
+        } else {
+          writeUtf8("err", s)
+          throw new IllegalArgumentException("Authentication failed.")
+        }
+      } finally {
+        s.setSoTimeout(currentTimeout)
       }
     } finally {
-      s.setSoTimeout(currentTimeout)
+      if (shouldClose) {
+        JavaUtils.closeQuietly(s)
+      }
     }
   }
 
   /**
    * Authenticate with a server by writing the auth secret and checking the server's reply.
    *
-   * If authentication fails, this method will close the socket.
+   * If authentication fails or error is thrown, this method will close the socket.
    *
    * @param s The socket connected to the server.
    * @throws IllegalArgumentException If authentication fails.
    */
   def authToServer(s: Socket): Unit = {
-    writeUtf8(secret, s)
+    var shouldClose = true
+    try {
+      writeUtf8(secret, s)
 
-    val reply = readUtf8(s)
-    if (reply != "ok") {
-      JavaUtils.closeQuietly(s)
-      throw new IllegalArgumentException("Authentication failed.")
+      val reply = readUtf8(s)
+      if (reply != "ok") {
+        throw new IllegalArgumentException("Authentication failed.")
+      } else {
+        shouldClose = false
+      }
+    } finally {
+      if (shouldClose) {
+        JavaUtils.closeQuietly(s)
+      }
     }
   }
 

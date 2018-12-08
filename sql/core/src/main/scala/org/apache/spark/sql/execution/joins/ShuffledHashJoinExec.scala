@@ -57,7 +57,7 @@ case class ShuffledHashJoinExec(
     buildTime += (System.nanoTime() - start) / 1000000
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.
-    context.addTaskCompletionListener(_ => relation.close())
+    context.addTaskCompletionListener[Unit](_ => relation.close())
     relation
   }
 

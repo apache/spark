@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, Column, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
@@ -140,7 +140,13 @@ case class AnalyzePartitionCommand(
     val df = tableDf.filter(Column(filter)).groupBy(partitionColumns: _*).count()
 
     df.collect().map { r =>
-      val partitionColumnValues = partitionColumns.indices.map(r.get(_).toString)
+      val partitionColumnValues = partitionColumns.indices.map { i =>
+        if (r.isNullAt(i)) {
+          ExternalCatalogUtils.DEFAULT_PARTITION_NAME
+        } else {
+          r.get(i).toString
+        }
+      }
       val spec = tableMeta.partitionColumnNames.zip(partitionColumnValues).toMap
       val count = BigInt(r.getLong(partitionColumns.size))
       (spec, count)
