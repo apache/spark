@@ -145,6 +145,15 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    */
   private void writeSortedFile(boolean isLastFile) {
 
+    // This call performs the actual sort.
+    final ShuffleInMemorySorter.ShuffleSorterIterator sortedRecords =
+      inMemSorter.getSortedIterator();
+
+    // If there are no sorted records, so we don't need to create an empty spill file.
+    if (!sortedRecords.hasNext()) {
+      return;
+    }
+
     final ShuffleWriteMetricsReporter writeMetricsToUse;
 
     if (isLastFile) {
@@ -157,14 +166,6 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       writeMetricsToUse = new ShuffleWriteMetrics();
     }
 
-    // This call performs the actual sort.
-    final ShuffleInMemorySorter.ShuffleSorterIterator sortedRecords =
-      inMemSorter.getSortedIterator();
-
-    // If there are no sorted records, so we don't need to create an empty spill file.
-    if (!sortedRecords.hasNext()) {
-      return;
-    }
     // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
     // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
     // data through a byte array. This array does not need to be large enough to hold a single
