@@ -360,7 +360,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
-   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To keep
+   *     field configured by `columnNameOfCorruptRecord`, and sets malformed fields to `null`. To keep
    *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
    *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
    *     during parsing. A record with less/more tokens than schema is not a corrupted record to
