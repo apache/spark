@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-FROM buildpack-deps:xenial
+FROM buildpack-deps:cosmic
 
 # make Apt non-interactive
 RUN echo 'APT::Get::Assume-Yes "true";' > /etc/apt/apt.conf.d/90circleci \
@@ -107,10 +107,11 @@ WORKDIR $CIRCLE_HOME
 # Install miniconda, we are using it to test conda support and a bunch of tests expect CONDA_BIN to be set
 ENV CONDA_ROOT=$CIRCLE_HOME/miniconda
 ENV CONDA_BIN=$CIRCLE_HOME/miniconda/bin/conda
-ENV MINICONDA2_VERSION=4.3.31
+ENV MINICONDA2_VERSION=4.5.11
 RUN curl -sO https://repo.continuum.io/miniconda/Miniconda2-${MINICONDA2_VERSION}-Linux-x86_64.sh \
   && bash Miniconda2-${MINICONDA2_VERSION}-Linux-x86_64.sh -b -p ${CONDA_ROOT} \
   && $CONDA_BIN clean --all \
+  && sudo mkdir -m 777 /home/.conda \
   && rm -f Miniconda2-${MINICONDA2_VERSION}-Linux-x86_64.sh
 
 # END IMAGE CUSTOMIZATIONS

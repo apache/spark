@@ -17,9 +17,9 @@
 
 .PHONY: all publish base python r
 
-BASE_IMAGE_NAME = palantirtechnologies/circle-spark-base
-PYTHON_IMAGE_NAME = palantirtechnologies/circle-spark-python
-R_IMAGE_NAME = palantirtechnologies/circle-spark-r
+BASE_IMAGE_NAME = palantirtechnologies/circle-spark-base:0.1.0
+PYTHON_IMAGE_NAME = palantirtechnologies/circle-spark-python:0.1.0
+R_IMAGE_NAME = palantirtechnologies/circle-spark-r:0.1.0
 
 all: base python r
 

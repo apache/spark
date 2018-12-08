@@ -84,14 +84,14 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     |        exit(-1)
     |    sc = SparkContext(conf=SparkConf())
     |
-    |    sc.addCondaPackages('numpy=1.11.1')
+    |    sc.addCondaPackages('numpy=1.14.0')
     |    import numpy
     |
     |    status = open(sys.argv[1],'w')
     |
     |    # Addict exists only in external-conda-forge, not anaconda
     |    sc.addCondaChannel("https://conda.anaconda.org/conda-forge")
-    |    sc.addCondaPackages('addict=1.0.0')
+    |    sc.addCondaPackages('addict=2.2.0')
     |
     |    def numpy_multiply(x):
     |        # Ensure package from non-base channel is installed
@@ -376,8 +376,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
     val extraConf: Map[String, String] = Map(
       "spark.conda.binaryPath" -> sys.env("CONDA_BIN"),
-      "spark.conda.channelUrls" -> "https://repo.continuum.io/pkgs/free",
-      "spark.conda.bootstrapPackages" -> "python=3.5"
+      "spark.conda.channelUrls" -> "https://repo.continuum.io/pkgs/main",
+      "spark.conda.bootstrapPackages" -> "python=3.6"
     )
 
     val moduleDir =

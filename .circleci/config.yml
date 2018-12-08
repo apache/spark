@@ -2,7 +2,7 @@ version: 2
 
 defaults: &defaults
   docker:
-    - image: palantirtechnologies/circle-spark-base
+    - image: palantirtechnologies/circle-spark-base:0.1.0
   resource_class: xlarge
   environment: &defaults-environment
     TERM: dumb
@@ -128,7 +128,7 @@ jobs:
     <<: *defaults
     # Some part of the maven setup fails if there's no R, so we need to use the R image here
     docker:
-      - image: palantirtechnologies/circle-spark-r
+      - image: palantirtechnologies/circle-spark-r:0.1.0
     steps:
       # Saves us from recompiling every time...
       - restore_cache:
@@ -300,7 +300,7 @@ jobs:
     # depends on build-sbt, but we only need the assembly jars
     <<: *defaults
     docker:
-      - image: palantirtechnologies/circle-spark-python
+      - image: palantirtechnologies/circle-spark-python:0.1.0
     parallelism: 2
     steps:
       - *checkout-code
@@ -325,7 +325,7 @@ jobs:
     # depends on build-sbt, but we only need the assembly jars
     <<: *defaults
     docker:
-      - image: palantirtechnologies/circle-spark-r
+      - image: palantirtechnologies/circle-spark-r:0.1.0
     steps:
       - *checkout-code
       - attach_workspace:
@@ -438,7 +438,7 @@ jobs:
     <<: *defaults
     # Some part of the maven setup fails if there's no R, so we need to use the R image here
     docker:
-      - image: palantirtechnologies/circle-spark-r
+      - image: palantirtechnologies/circle-spark-r:0.1.0
     steps:
       - *checkout-code
       - restore_cache:
@@ -458,7 +458,7 @@ jobs:
   deploy-gradle:
     <<: *defaults
     docker:
-      - image: palantirtechnologies/circle-spark-r
+      - image: palantirtechnologies/circle-spark-r:0.1.0
     steps:
       - *checkout-code
       - *restore-gradle-wrapper-cache
@@ -470,7 +470,7 @@ jobs:
     <<: *defaults
     # Some part of the maven setup fails if there's no R, so we need to use the R image here
     docker:
-      - image: palantirtechnologies/circle-spark-r
+      - image: palantirtechnologies/circle-spark-r:0.1.0
     steps:
       # This cache contains the whole project after version was set and mvn package was called
       # Restoring first (and instead of checkout) as mvn versions:set mutates real source code...
