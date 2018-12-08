@@ -68,6 +68,9 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
    *   - 'alphabetAsc': ascending alphabetical order
    * Default is 'frequencyDesc'.
    *
+   * Note: In case of equal frequency when under frequencyDesc/Asc, the strings are further sorted
+   *       by alphabet.
+   *
    * @group param
    */
   @Since("2.3.0")
@@ -112,6 +115,9 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
       schema: StructType,
       skipNonExistsCol: Boolean = false): StructType = {
     val (inputColNames, outputColNames) = getInOutCols()
+
+    require(outputColNames.distinct.length == outputColNames.length,
+      s"Output columns should not be duplicate.")
 
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>
@@ -160,11 +166,11 @@ class StringIndexer @Since("1.4.0") (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  @Since("2.4.0")
+  @Since("3.0.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
-  @Since("2.4.0")
+  @Since("3.0.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
   private def countByValue(
@@ -201,16 +207,22 @@ class StringIndexer @Since("1.4.0") (
         }
       case StringIndexer.alphabetDesc =>
         import dataset.sparkSession.implicits._
-        inputCols.map { inputCol =>
+        filteredDF.persist()
+        val labels = inputCols.map { inputCol =>
           filteredDF.select(inputCol).distinct().sort(dataset(s"$inputCol").desc)
             .as[String].collect()
         }
+        filteredDF.unpersist()
+        labels
       case StringIndexer.alphabetAsc =>
         import dataset.sparkSession.implicits._
-        inputCols.map { inputCol =>
+        filteredDF.persist()
+        val labels = inputCols.map { inputCol =>
           filteredDF.select(inputCol).distinct().sort(dataset(s"$inputCol").asc)
             .as[String].collect()
         }
+        filteredDF.unpersist()
+        labels
      }
     copyValues(new StringIndexerModel(uid, labelsArray).setParent(this))
   }
@@ -256,7 +268,7 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 @Since("1.4.0")
 class StringIndexerModel (
     @Since("1.4.0") override val uid: String,
-    @Since("2.4.0") val labelsArray: Array[Array[String]])
+    @Since("3.0.0") val labelsArray: Array[Array[String]])
   extends Model[StringIndexerModel] with StringIndexerBase with MLWritable {
 
   import StringIndexerModel._
@@ -264,7 +276,7 @@ class StringIndexerModel (
   @Since("1.5.0")
   def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), Array(labels))
 
-  @Since("2.4.0")
+  @Since("3.0.0")
   def this(labelsArray: Array[Array[String]]) = this(Identifiable.randomUID("strIdx"), labelsArray)
 
   @Since("1.5.0")
@@ -279,10 +291,8 @@ class StringIndexerModel (
     for (labels <- labelsArray) yield {
       val n = labels.length
       val map = new OpenHashMap[String, Double](n)
-      var i = 0
-      while (i < n) {
-        map.update(labels(i), i)
-        i += 1
+      labels.zipWithIndex.foreach { case (label, idx) =>
+        map.update(label, idx)
       }
       map
     }
@@ -301,11 +311,11 @@ class StringIndexerModel (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  @Since("2.4.0")
+  @Since("3.0.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
-  @Since("2.4.0")
+  @Since("3.0.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
   // This filters out any null values and also the input labels which are not in
@@ -441,15 +451,15 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
       val dataPath = new Path(path, "data").toString
 
       val (majorVersion, minorVersion) = majorMinorVersion(metadata.sparkVersion)
-      val labelsArray = if (majorVersion < 2 || (majorVersion == 2 && minorVersion <= 3)) {
-        // Spark 2.3 and before.
+      val labelsArray = if (majorVersion < 3) {
+        // Spark 2.4 and before.
         val data = sparkSession.read.parquet(dataPath)
           .select("labels")
           .head()
         val labels = data.getAs[Seq[String]](0).toArray
         Array(labels)
       } else {
-        // After Spark 2.4.
+        // After Spark 3.0.
         val data = sparkSession.read.parquet(dataPath)
           .select("labelsArray")
           .head()

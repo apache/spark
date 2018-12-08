@@ -63,6 +63,11 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
         .setOutputCols(Array("out1", "out2", "out3"))
         .fit(df)
     }
+    intercept[IllegalArgumentException] {
+      new StringIndexer().setInputCols(Array("in1", "in2"))
+        .setOutputCols(Array("out1", "out1"))
+        .fit(df)
+    }
   }
 
   test("StringIndexer") {
