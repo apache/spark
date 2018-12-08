@@ -20,9 +20,10 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
-import scala.collection.JavaConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
