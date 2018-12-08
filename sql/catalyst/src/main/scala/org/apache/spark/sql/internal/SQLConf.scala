@@ -1613,7 +1613,10 @@ object SQLConf {
 
   val MAX_PLAN_STRING_LENGTH = buildConf("spark.sql.maxPlanLength")
     .doc("Maximum number of characters to output for a plan string.  If the plan is " +
-      "longer, it will end with a ... and further output will be truncated.")
+      "longer, it will end with \"...\" and further output will be truncated.  The default " +
+      "setting always generates a full plan.  Set this to a lower value such as 8192 if plan " +
+      "strings are taking up too much memory or are causing OutOfMemory errors in the driver or " +
+	    "UI processes.")
     .longConf
     .createWithDefault(Long.MaxValue)
 
