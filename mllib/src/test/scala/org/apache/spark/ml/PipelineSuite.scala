@@ -138,7 +138,8 @@ class PipelineSuite
     val actual = mutable.ArrayBuffer.empty[MLEvent]
     val listener = new SparkListener {
       override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-        case e: MLEvent => actual.append(e)
+        case e: FitStart[_] => actual.append(e)
+        case e: FitEnd[_] => actual.append(e)
         case _ =>
       }
     }
@@ -208,7 +209,8 @@ class PipelineSuite
     val actual = mutable.ArrayBuffer.empty[MLEvent]
     val listener = new SparkListener {
       override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-        case e: MLEvent => actual.append(e)
+        case e: TransformStart => actual.append(e)
+        case e: TransformEnd => actual.append(e)
         case _ =>
       }
     }
