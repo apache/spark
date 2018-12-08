@@ -2565,11 +2565,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("return partial result for bad records") {
-    val schema = new StructType()
-      .add("a", DoubleType)
-      .add("b", ArrayType(IntegerType))
-      .add("c", StringType)
-      .add("_corrupt_record", StringType)
+    val schema = "a double, b array<int>, c string, _corrupt_record string"
     val df = spark.read.schema(schema).json(badRecords)
 
     checkAnswer(
