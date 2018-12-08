@@ -26,7 +26,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.{FilterExec, RangeExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -197,10 +197,10 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     // Assume the execution plan with node id is
     // Sort(nodeId = 0)
     //   Exchange(nodeId = 1)
-    //     Range(nodeId = 2)
-    val df = spark.range(9, -1, -1).sort('id).toDF()
+    //     LocalTableScan(nodeId = 2)
+    val df = Seq(1, 3, 2).toDF("id").sort('id)
     testSparkPlanMetrics(df, 2, Map.empty)
-    df.queryExecution.executedPlan.find(_.isInstanceOf[SortExec]).getOrElse(assert(false))
+    assert(df.queryExecution.executedPlan.find(_.isInstanceOf[SortExec]).isDefined)
   }
 
   test("SortMergeJoin metrics") {
