@@ -246,13 +246,56 @@ private[yarn] class ExecutorRunnable(
       sys.env.filterKeys(_.endsWith("USER")).foreach { user =>
         val containerId = ConverterUtils.toString(c.getId)
         val address = c.getNodeHttpAddress
-        val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
 
-        env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
-        env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
+        sparkConf.get(config.CUSTOM_LOG_URL) match {
+          case Some(customUrl) =>
+            val pathVariables = ExecutorRunnable.buildPathVariables(httpScheme, address,
+              YarnConfiguration.getClusterId(conf), containerId, user)
+            val envNameToFileNameMap = Map("SPARK_LOG_URL_STDERR" -> "stderr",
+              "SPARK_LOG_URL_STDOUT" -> "stdout")
+            val logUrls = ExecutorRunnable.replaceLogUrls(customUrl, pathVariables,
+              envNameToFileNameMap)
+
+            logUrls.foreach { case (envName, url) =>
+              env(envName) = url
+            }
+          case None =>
+            val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
+            env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
+            env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
+          }
       }
     }
 
     env
+  }
+}
+
+private[yarn] object ExecutorRunnable {
+  val LOG_URL_PATTERN_HTTP_SCHEME = "{{HttpScheme}}"
+  val LOG_URL_PATTERN_NODE_HTTP_ADDRESS = "{{NodeHttpAddress}}"
+  val LOG_URL_PATTERN_CLUSTER_ID = "{{ClusterId}}"
+  val LOG_URL_PATTERN_CONTAINER_ID = "{{ContainerId}}"
+  val LOG_URL_PATTERN_USER = "{{User}}"
+  val LOG_URL_PATTERN_FILE_NAME = "{{FileName}}"
+
+  def buildPathVariables(httpScheme: String, nodeHttpAddress: String, clusterId: String,
+                         containerId: String, user: String): Map[String, String] = {
+    Map(LOG_URL_PATTERN_HTTP_SCHEME -> httpScheme,
+      LOG_URL_PATTERN_NODE_HTTP_ADDRESS -> nodeHttpAddress,
+      LOG_URL_PATTERN_CLUSTER_ID -> clusterId,
+      LOG_URL_PATTERN_CONTAINER_ID -> containerId,
+      LOG_URL_PATTERN_USER -> user)
+  }
+
+  def replaceLogUrls(logUrlPattern: String, pathVariables: Map[String, String],
+                     envNameToFileNameMap: Map[String, String]): Map[String, String] = {
+    var replacingUrl = logUrlPattern
+    pathVariables.foreach { case (pattern, value) =>
+      replacingUrl = replacingUrl.replace(pattern, value)
+    }
+    envNameToFileNameMap.map { case (envName, fileName) =>
+      envName -> replacingUrl.replace(LOG_URL_PATTERN_FILE_NAME, fileName)
+    }
   }
 }

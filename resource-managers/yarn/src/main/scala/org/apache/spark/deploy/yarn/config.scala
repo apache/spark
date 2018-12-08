@@ -258,6 +258,15 @@ package object config {
       "that hosts fs.defaultFS does not need to be listed here.")
     .fallbackConf(NAMENODES_TO_ACCESS)
 
+  /* YARN log url configuration. */
+  private[spark] val CUSTOM_LOG_URL = ConfigBuilder("spark.yarn.custom.log.url")
+    .doc("Specifies custom spark log url for external log service other than node http address. " +
+      "Spark will support some path variables via patterns. " +
+      "Supported patterns are 1. `{{HttpScheme}}` 2. `{{NodeHttpAddress}}` 3. `{{ClusterId}}` " +
+      "4. `{{ContainerId}}` 5. `{{User}}` 6. `{{FileName}}`.")
+    .stringConf
+    .createOptional
+
   /* Rolled log aggregation configuration. */
 
   private[spark] val ROLLED_LOG_INCLUDE_PATTERN =
