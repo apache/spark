@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.SparkContext
 import org.apache.spark.executor.TempShuffleReadMetrics
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 
 /**
  * A shuffle metrics reporter for SQL exchange operators.
@@ -94,4 +95,58 @@ private[spark] object SQLShuffleMetricsReporter {
     LOCAL_BYTES_READ -> SQLMetrics.createSizeMetric(sc, "local bytes read"),
     FETCH_WAIT_TIME -> SQLMetrics.createTimingMetric(sc, "fetch wait time"),
     RECORDS_READ -> SQLMetrics.createMetric(sc, "records read"))
+}
+
+/**
+ * A shuffle write metrics reporter for SQL exchange operators.
+ * @param metricsReporter Other reporter need to be updated in this SQLShuffleWriteMetricsReporter.
+ * @param metrics Shuffle write metrics in current SparkPlan.
+ */
+private[spark] class SQLShuffleWriteMetricsReporter(
+    metricsReporter: ShuffleWriteMetricsReporter,
+    metrics: Map[String, SQLMetric]) extends ShuffleWriteMetricsReporter {
+  private[this] val _bytesWritten =
+    metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_BYTES_WRITTEN)
+  private[this] val _recordsWritten =
+    metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN)
+  private[this] val _writeTime =
+    metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_WRITE_TIME)
+
+  override private[spark] def incBytesWritten(v: Long): Unit = {
+    metricsReporter.incBytesWritten(v)
+    _bytesWritten.add(v)
+  }
+  override private[spark] def decRecordsWritten(v: Long): Unit = {
+    metricsReporter.decBytesWritten(v)
+    _recordsWritten.set(_recordsWritten.value - v)
+  }
+  override private[spark] def incRecordsWritten(v: Long): Unit = {
+    metricsReporter.incRecordsWritten(v)
+    _recordsWritten.add(v)
+  }
+  override private[spark] def incWriteTime(v: Long): Unit = {
+    metricsReporter.incWriteTime(v)
+    _writeTime.add(v)
+  }
+  override private[spark] def decBytesWritten(v: Long): Unit = {
+    metricsReporter.decBytesWritten(v)
+    _bytesWritten.set(_bytesWritten.value - v)
+  }
+}
+
+private[spark] object SQLShuffleWriteMetricsReporter {
+  val SHUFFLE_BYTES_WRITTEN = "shuffleBytesWritten"
+  val SHUFFLE_RECORDS_WRITTEN = "shuffleRecordsWritten"
+  val SHUFFLE_WRITE_TIME = "shuffleWriteTime"
+
+  /**
+   * Create all shuffle write relative metrics and return the Map.
+   */
+  def createShuffleWriteMetrics(sc: SparkContext): Map[String, SQLMetric] = Map(
+    SHUFFLE_BYTES_WRITTEN ->
+      SQLMetrics.createSizeMetric(sc, "shuffle bytes written"),
+    SHUFFLE_RECORDS_WRITTEN ->
+      SQLMetrics.createMetric(sc, "shuffle records written"),
+    SHUFFLE_WRITE_TIME ->
+      SQLMetrics.createNanoTimingMetric(sc, "shuffle write time"))
 }
