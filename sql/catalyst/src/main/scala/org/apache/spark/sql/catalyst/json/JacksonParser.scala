@@ -367,7 +367,7 @@ class JacksonParser(
     if (badRecordException.isEmpty) {
       row
     } else {
-      throw BadRecordException(() => UTF8String.EMPTY_UTF8, () => Some(row), badRecordException.get)
+      throw PartialResultException(row, badRecordException.get)
     }
   }
 
@@ -439,8 +439,11 @@ class JacksonParser(
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
         throw BadRecordException(() => recordLiteral(record), () => None, wrappedCharException)
-      case e: BadRecordException =>
-        throw e.copy(record = () => recordLiteral(record))
+      case PartialResultException(row, cause) =>
+        throw BadRecordException(
+          record = () => recordLiteral(record),
+          partialResult = () => Some(row),
+          cause)
     }
   }
 }
