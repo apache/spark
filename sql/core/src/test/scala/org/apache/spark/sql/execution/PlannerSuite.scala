@@ -780,6 +780,26 @@ class PlannerSuite extends SharedSQLContext {
         classOf[PartitioningCollection])
     }
   }
+
+  test("SPARK-25401: Reorder the join predicates to match child output ordering") {
+    val plan1 = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB),
+      outputPartitioning = HashPartitioning(exprB :: exprA :: Nil, 5))
+    val plan2 = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB),
+      outputPartitioning = HashPartitioning(exprB :: exprA :: Nil, 5))
+    val smjExec = SortMergeJoinExec(
+      exprB :: exprA :: Nil, exprB :: exprA :: Nil, Inner, None, plan1, plan2)
+
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    outputPlan match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _, _, _) =>
+        assert(leftKeys == Seq(exprA, exprB))
+        assert(rightKeys == Seq(exprA, exprB))
+      case _ => fail()
+    }
+    if (outputPlan.collect { case s: SortExec => true }.nonEmpty) {
+      fail(s"No sorts should have been added:\n$outputPlan")
+    }
+  }
 }
 
 // Used for unit-testing EnsureRequirements
