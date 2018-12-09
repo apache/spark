@@ -1463,7 +1463,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
         DateType, TimestampType,
         ArrayType(IntegerType), MapType(StringType, LongType), struct,
-        new UDT.MyDenseVectorUDT())
+        new TestUDT.MyDenseVectorUDT())
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
       StructField(s"col$index", dataType, nullable = true)
     }
@@ -1487,7 +1487,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Seq(2, 3, 4),
         Map("a string" -> 2000L),
         Row(4.75.toFloat, Seq(false, true)),
-        new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))
+        new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25)))
     val data =
       Row.fromSeq(Seq("Spark " + spark.sparkContext.version) ++ constantValues) :: Nil
 
@@ -1842,7 +1842,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val path = dir.getCanonicalPath
       primitiveFieldAndType
         .toDF("value")
-        .repartition(1)
         .write
         .text(path)
 
@@ -1910,7 +1909,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           F.count($"dummy").as("valid"),
           F.count($"_corrupt_record").as("corrupt"),
           F.count("*").as("count"))
-      checkAnswer(counts, Row(1, 4, 6)) // null row for empty file
+      checkAnswer(counts, Row(1, 4, 6))
     }
   }
 
