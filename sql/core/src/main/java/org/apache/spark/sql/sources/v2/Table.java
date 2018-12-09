@@ -18,8 +18,6 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.sources.v2.reader.Scan;
-import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -37,23 +35,14 @@ import org.apache.spark.sql.types.StructType;
 public interface Table {
 
   /**
-   * A name to identify this table. Implementations should provide a meaningful name, like the
-   * database and table name from catalog, or the location of files for this table.
-   */
-  String name();
-
-  /**
-   * Returns the schema of this table.
+   * Returns the schema of this table. If the table is not readable and doesn't have a schema, an
+   * empty schema can be returned here.
    */
   StructType schema();
 
   /**
-   * Returns a {@link ScanBuilder} which can be used to build a {@link Scan} later. Spark will call
-   * this method for each data scanning query.
-   * <p>
-   * The builder can take some query specific information to do operators pushdown, and keep these
-   * information in the created {@link Scan}.
-   * </p>
+   * A name to identify this table. Implementations should provide a meaningful name, like the
+   * database and table name from catalog, or the location of files for this table.
    */
-  ScanBuilder newScanBuilder(DataSourceOptions options);
+  String name();
 }
