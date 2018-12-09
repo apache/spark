@@ -43,6 +43,10 @@ trait CompressionCodec {
   def compressedOutputStream(s: OutputStream): OutputStream
 
   def compressedInputStream(s: InputStream): InputStream
+
+  private[spark] def compressedContinuousInputStream(s: InputStream): InputStream = {
+    compressedInputStream(s)
+  }
 }
 
 private[spark] object CompressionCodec {
@@ -196,5 +200,13 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     // Wrap the zstd input stream in a buffered input stream so that we can
     // avoid overhead excessive of JNI call while trying to uncompress small amount of data.
     new BufferedInputStream(new ZstdInputStream(s), bufferSize)
+  }
+
+  override def compressedContinuousInputStream(s: InputStream): InputStream = {
+    // SPARK-26283: Enable reading from open frames of zstd (for eg: zstd compressed eventLog
+    // Reading). By default `isContinuous` is false, and when we try to read from open frames,
+    // `compressedInputStream` method above throws truncated error exception. This method set
+    // `isContinuous` true to allow reading from open frames.
+    new BufferedInputStream(new ZstdInputStream(s).setContinuous(true), bufferSize)
   }
 }
