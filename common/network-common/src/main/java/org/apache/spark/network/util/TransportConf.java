@@ -272,7 +272,7 @@ public class TransportConf {
    * When disabled a new allocator is created for each transport servers and clients.
    */
   public Boolean sharedByteBufAllocators() {
-    return conf.getBoolean("spark.network.sharedByteBufAllocators", true);
+    return conf.getBoolean("spark.network.sharedByteBufAllocators.enabled", true);
   }
 
   /**
