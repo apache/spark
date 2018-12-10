@@ -17,44 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Encoder, Row, SparkSession}
+import org.apache.spark.sql.{Encoder, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.StructType
-
-object RDDConversions {
-  def productToRowRdd[A <: Product : TypeTag](
-      data: RDD[A],
-      outputSchema: StructType): RDD[InternalRow] = {
-    val converters = ExpressionEncoder[A].resolveAndBind(outputSchema.toAttributes)
-    data.mapPartitions { iterator =>
-      iterator.map { r =>
-        converters.toRow(r)
-      }
-    }
-  }
-
-  /**
-   * Convert the objects inside Row into the types Catalyst expected.
-   */
-  def rowToRowRdd(data: RDD[Row], outputSchema: StructType): RDD[InternalRow] = {
-    val converters = RowEncoder(outputSchema)
-    data.mapPartitions { iterator =>
-      iterator.map { r =>
-        converters.toRow(r)
-      }
-    }
-  }
-}
 
 object ExternalRDD {
 
