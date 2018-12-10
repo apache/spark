@@ -53,12 +53,19 @@ private[hive] object HiveShim {
    * This function in hive-0.13 become private, but we have to do this to work around hive bug
    */
   private def appendReadColumnNames(conf: Configuration, cols: Seq[String]) {
-    val key = ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR
-    val value = Option(conf.get(key, null))
-      .map(old => cols.+:(old))
-      .getOrElse(cols)
-      .mkString(",")
-    conf.set(key, value)
+    val old: String = conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, "")
+    val result: StringBuilder = new StringBuilder(old)
+    var first: Boolean = old.isEmpty
+
+    for (col <- cols) {
+      if (first) {
+        first = false
+      } else {
+        result.append(',')
+      }
+      result.append(col)
+    }
+    conf.set(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, result.toString)
   }
 
   /*
