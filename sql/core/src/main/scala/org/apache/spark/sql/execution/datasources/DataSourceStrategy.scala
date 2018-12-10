@@ -418,9 +418,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
     if (relation.relation.needConversion) {
       val converters = RowEncoder(StructType.fromAttributes(output))
       rdd.mapPartitions { iterator =>
-        iterator.map { r =>
-          converters.toRow(r)
-        }
+        iterator.map(converters.toRow)
       }
     } else {
       rdd.asInstanceOf[RDD[InternalRow]]
