@@ -36,6 +36,10 @@ import io.netty.util.internal.PlatformDependent;
  * Utilities for creating various Netty constructs based on whether we're using EPOLL or NIO.
  */
 public class NettyUtils {
+
+  private static PooledByteBufAllocator[] _sharedPooledByteBufAllocator =
+      new PooledByteBufAllocator[2];
+
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
     return new DefaultThreadFactory(threadPoolPrefix, true);
@@ -93,6 +97,21 @@ public class NettyUtils {
       return channel.remoteAddress().toString();
     }
     return "<unknown remote>";
+  }
+
+  /**
+   * Returns the lazily created shared pooled ByteBuf allocator for the specified allowCache
+   * parameter value.
+   */
+  public static synchronized PooledByteBufAllocator getSharedPooledByteBufAllocator(
+      boolean allowDirectBufs,
+      boolean allowCache) {
+    final int index = allowCache ? 0 : 1;
+    if (_sharedPooledByteBufAllocator[index] == null) {
+      _sharedPooledByteBufAllocator[index] =
+        createPooledByteBufAllocator(allowDirectBufs, allowCache, 0 /* numCores */);
+    }
+    return _sharedPooledByteBufAllocator[index];
   }
 
   /**
