@@ -18,17 +18,15 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.io.InputStream
-import java.math.BigDecimal
 
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.{BadRecordException, DateTimeUtils, FailureSafeParser}
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -76,6 +74,12 @@ class UnivocityParser(
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
+  private val timeFormatter = DateTimeFormatter(
+    options.timestampFormat,
+    options.timeZone,
+    options.locale)
+  private val dateFormatter = DateFormatter(options.dateFormat, options.timeZone, options.locale)
+
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
     UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
@@ -101,8 +105,10 @@ class UnivocityParser(
   //
   //   output row - ["A", 2]
   private val valueConverters: Array[ValueConverter] = {
-    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable)).toArray
   }
+
+  private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   /**
    * Create a converter which converts the string value to a value according to a desired type.
@@ -114,8 +120,7 @@ class UnivocityParser(
   def makeConverter(
       name: String,
       dataType: DataType,
-      nullable: Boolean = true,
-      options: CSVOptions): ValueConverter = dataType match {
+      nullable: Boolean = true): ValueConverter = dataType match {
     case _: ByteType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(_.toByte)
 
@@ -149,39 +154,20 @@ class UnivocityParser(
 
     case dt: DecimalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        val value = new BigDecimal(datum.replaceAll(",", ""))
-        Decimal(value, dt.precision, dt.scale)
+        Decimal(decimalParser(datum), dt.precision, dt.scale)
       }
 
     case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.
-        Try(options.timestampFormat.parse(datum).getTime * 1000L)
-          .getOrElse {
-          // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-          // compatibility.
-          DateTimeUtils.stringToTime(datum).getTime * 1000L
-        }
-      }
+      nullSafeDatum(d, name, nullable, options)(timeFormatter.parse)
 
     case _: DateType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options) { datum =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.x
-        Try(DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime))
-          .getOrElse {
-          // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-          // compatibility.
-          DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
-        }
-      }
+      nullSafeDatum(d, name, nullable, options)(dateFormatter.parse)
 
     case _: StringType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(UTF8String.fromString)
 
     case udt: UserDefinedType[_] => (datum: String) =>
-      makeConverter(name, udt.sqlType, nullable, options)
+      makeConverter(name, udt.sqlType, nullable)
 
     // We don't actually hit this exception though, we keep it for understandability
     case _ => throw new RuntimeException(s"Unsupported type: ${dataType.typeName}")
@@ -243,21 +229,24 @@ class UnivocityParser(
         () => getPartialResult(),
         new RuntimeException("Malformed CSV record"))
     } else {
-      try {
-        // When the length of the returned tokens is identical to the length of the parsed schema,
-        // we just need to convert the tokens that correspond to the required columns.
-        var i = 0
-        while (i < requiredSchema.length) {
+      // When the length of the returned tokens is identical to the length of the parsed schema,
+      // we just need to convert the tokens that correspond to the required columns.
+      var badRecordException: Option[Throwable] = None
+      var i = 0
+      while (i < requiredSchema.length) {
+        try {
           row(i) = valueConverters(i).apply(getToken(tokens, i))
-          i += 1
+        } catch {
+          case NonFatal(e) =>
+            badRecordException = badRecordException.orElse(Some(e))
         }
+        i += 1
+      }
+
+      if (badRecordException.isEmpty) {
         row
-      } catch {
-        case NonFatal(e) =>
-          // For corrupted records with the number of tokens same as the schema,
-          // CSV reader doesn't support partial results. All fields other than the field
-          // configured by `columnNameOfCorruptRecord` are set to `null`.
-          throw BadRecordException(() => getCurrentInput, () => None, e)
+      } else {
+        throw BadRecordException(() => getCurrentInput, () => Some(row), badRecordException.get)
       }
     }
   }
@@ -271,11 +260,12 @@ private[sql] object UnivocityParser {
   def tokenizeStream(
       inputStream: InputStream,
       shouldDropHeader: Boolean,
-      tokenizer: CsvParser): Iterator[Array[String]] = {
+      tokenizer: CsvParser,
+      encoding: String): Iterator[Array[String]] = {
     val handleHeader: () => Unit =
       () => if (shouldDropHeader) tokenizer.parseNext
 
-    convertStream(inputStream, tokenizer, handleHeader)(tokens => tokens)
+    convertStream(inputStream, tokenizer, handleHeader, encoding)(tokens => tokens)
   }
 
   /**
@@ -297,7 +287,7 @@ private[sql] object UnivocityParser {
     val handleHeader: () => Unit =
       () => headerChecker.checkHeaderColumnNames(tokenizer)
 
-    convertStream(inputStream, tokenizer, handleHeader) { tokens =>
+    convertStream(inputStream, tokenizer, handleHeader, parser.options.charset) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
@@ -305,9 +295,10 @@ private[sql] object UnivocityParser {
   private def convertStream[T](
       inputStream: InputStream,
       tokenizer: CsvParser,
-      handleHeader: () => Unit)(
+      handleHeader: () => Unit,
+      encoding: String)(
       convert: Array[String] => T) = new Iterator[T] {
-    tokenizer.beginParsing(inputStream)
+    tokenizer.beginParsing(inputStream, encoding)
 
     // We can handle header here since here the stream is open.
     handleHeader()

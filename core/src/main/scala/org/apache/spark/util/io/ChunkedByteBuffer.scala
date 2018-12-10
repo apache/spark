@@ -172,8 +172,6 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 
 private[spark] object ChunkedByteBuffer {
 
-
-  // TODO SPARK-25905 eliminate this method if we switch BlockManager to getting InputStreams
   def fromManagedBuffer(data: ManagedBuffer): ChunkedByteBuffer = {
     data match {
       case f: FileSegmentManagedBuffer =>
@@ -222,7 +220,8 @@ private[spark] class ChunkedByteBufferInputStream(
     dispose: Boolean)
   extends InputStream {
 
-  private[this] var chunks = chunkedByteBuffer.getChunks().iterator
+  // Filter out empty chunks since `read()` assumes all chunks are non-empty.
+  private[this] var chunks = chunkedByteBuffer.getChunks().filter(_.hasRemaining).iterator
   private[this] var currentChunk: ByteBuffer = {
     if (chunks.hasNext) {
       chunks.next()

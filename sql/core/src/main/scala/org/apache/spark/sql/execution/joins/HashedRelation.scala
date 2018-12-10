@@ -24,7 +24,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
-import org.apache.spark.memory.{MemoryConsumer, StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.memory._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
@@ -248,8 +248,7 @@ private[joins] class UnsafeHashedRelation(
     binaryMap = new BytesToBytesMap(
       taskMemoryManager,
       (nKeys * 1.5 + 1).toInt, // reduce hash collision
-      pageSizeBytes,
-      true)
+      pageSizeBytes)
 
     var i = 0
     var keyBuffer = new Array[Byte](1024)
@@ -299,8 +298,7 @@ private[joins] object UnsafeHashedRelation {
       taskMemoryManager,
       // Only 70% of the slots can be used before growing, more capacity help to reduce collision
       (sizeEstimate * 1.5 + 1).toInt,
-      pageSizeBytes,
-      true)
+      pageSizeBytes)
 
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
@@ -316,7 +314,9 @@ private[joins] object UnsafeHashedRelation {
           row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
         if (!success) {
           binaryMap.free()
-          throw new SparkException("There is no enough memory to build hash map")
+          // scalastyle:off throwerror
+          throw new SparkOutOfMemoryError("There is no enough memory to build hash map")
+          // scalastyle:on throwerror
         }
       }
     }

@@ -28,9 +28,10 @@ sparkR.session(appName = "SparkR-ML-prefixSpan-example")
 # Load training data
 
 df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
-                      list(list(list(1L), list(3L, 2L), list(1L, 2L))),
-                      list(list(list(1L, 2L), list(5L))),
-                      list(list(list(6L)))), schema = c("sequence"))
+                           list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+                           list(list(list(1L, 2L), list(5L))),
+                           list(list(list(6L)))),
+                      schema = c("sequence"))
 
 # Finding frequent sequential patterns
 frequency <- spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L,

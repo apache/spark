@@ -57,6 +57,20 @@ First, let's load and attach the package.
 library(SparkR)
 ```
 
+```{r, include=FALSE}
+# disable eval if java version not supported
+override_eval <- tryCatch(!is.numeric(SparkR:::checkJavaVersion()),
+          error = function(e) { TRUE },
+          warning = function(e) { TRUE })
+
+if (override_eval) {
+  opts_hooks$set(eval = function(options) {
+    options$eval = FALSE
+    options
+  })
+}
+```
+
 `SparkSession` is the entry point into SparkR which connects your R program to a Spark cluster. You can create a `SparkSession` using `sparkR.session` and pass in options such as the application name, any Spark packages depended on, etc.
 
 We use default settings in which it runs in local mode. It auto downloads Spark package in the background if no previous installation is found. For more details about setup, see [Spark Session](#SetupSparkSession).
@@ -1005,9 +1019,10 @@ head(predict(fpm, df))
 
 ```{r}
 df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
-                      list(list(list(1L), list(3L, 2L), list(1L, 2L))),
-                      list(list(list(1L, 2L), list(5L))),
-                      list(list(list(6L)))), schema = c("sequence"))
+                           list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+                           list(list(list(1L, 2L), list(5L))),
+                           list(list(list(6L)))),
+                      schema = c("sequence"))
 head(spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L))
 ```
 
