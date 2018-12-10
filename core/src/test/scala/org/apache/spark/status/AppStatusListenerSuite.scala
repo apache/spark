@@ -1356,6 +1356,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  /** expected stage executor metrics */
+  private case class StageExecutorMetrics(
+      peakExecutorMetrics: ExecutorMetrics,
+      executorMetrics: Map[String, ExecutorMetrics])
+
   test("executor metrics updates") {
     val listener = new AppStatusListener(store, conf, true)
 
@@ -1442,14 +1447,29 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         assert(exec.info.id === id)
         exec.info.peakMemoryMetrics match {
           case Some(actual) =>
-            ExecutorMetricType.metricToOffset.foreach { metric =>
-              assert(actual.getMetricValue(metric._1) === metrics.getMetricValue(metric._1))
-            }
+            checkExecutorMetrics(metrics, actual)
           case _ =>
             assert(false)
         }
       }
     }
+
+    // check stage level executor metrics
+    val expectedStageValues = Map(
+      0 -> StageExecutorMetrics(
+        new ExecutorMetrics(Array(7000L, 80L, 50L, 20L, 50L, 10L, 100L, 30L,
+          80L, 40L, 9000L, 4000L, 8000L, 3000L, 7000L, 2000L)),
+        Map("1" -> new ExecutorMetrics(Array(5000L, 50L, 50L, 20L, 50L, 10L, 100L, 30L,
+          70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L)),
+          "2" -> new ExecutorMetrics(Array(7000L, 80L, 50L, 20L, 10L, 10L, 50L, 30L,
+            80L, 40L, 9000L, 4000L, 8000L, 3000L, 7000L, 2000L)))),
+      1 -> StageExecutorMetrics(new ExecutorMetrics(Array(7000L, 80L, 50L, 40L, 60L, 30L, 80L, 60L,
+        50L, 40L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L)),
+        Map("1" -> new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 80L, 55L,
+          50L, 0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L)),
+          "2" -> new ExecutorMetrics(Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L,
+            40L, 40L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L)))))
+    checkStageExecutorMetrics(expectedStageValues)
   }
 
   test("stage executor metrics") {
@@ -1492,12 +1512,64 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
         assert(exec.info.id === id)
         exec.info.peakMemoryMetrics match {
           case Some(actual) =>
-            ExecutorMetricType.metricToOffset.foreach { metric =>
-              assert(actual.getMetricValue(metric._1) === metrics.getMetricValue(metric._1))
-            }
+            checkExecutorMetrics(metrics, actual)
           case _ =>
             assert(false)
         }
+      }
+    }
+
+    // check stage level executor metrics
+    val expectedStageValues = Map(
+      0 -> StageExecutorMetrics(
+        new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 50L, 10L, 100L, 30L,
+          80L, 40L, 9000L, 4000L, 8000L, 3000L, 7000L, 2000L)),
+        Map("1" -> new ExecutorMetrics(Array(5000L, 50L, 50L, 20L, 50L, 10L, 100L, 30L,
+            70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L)),
+          "2" -> new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L,
+            80L, 40L, 9000L, 4000L, 8000L, 3000L, 7000L, 2000L)))),
+      1 -> StageExecutorMetrics(new ExecutorMetrics(Array(7000L, 80L, 50L, 40L, 60L, 30L, 80L, 60L,
+        50L, 40L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L)),
+        Map("1" -> new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 80L, 55L,
+          50L, 0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L)),
+          "2" -> new ExecutorMetrics(Array(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L,
+            40L, 40L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L)))))
+    checkStageExecutorMetrics(expectedStageValues)
+  }
+
+  private def checkExecutorMetrics(expected: ExecutorMetrics, actual: ExecutorMetrics): Unit = {
+    ExecutorMetricType.metricToOffset.foreach { metric =>
+      assert(actual.getMetricValue(metric._1) === expected.getMetricValue(metric._1))
+    }
+  }
+
+  /** check stage level peak executor metric values, and executor peak values for each stage */
+  private def checkStageExecutorMetrics(expectedStageValues: Map[Int, StageExecutorMetrics]) = {
+    // check stage level peak executor metric values for each stage
+    for ((stageId, expectedMetrics) <- expectedStageValues) {
+      check[StageDataWrapper](Array(stageId, 0)) { stage =>
+        stage.info.peakExecutorMetrics match {
+          case Some(actual) =>
+            checkExecutorMetrics(expectedMetrics.peakExecutorMetrics, actual)
+          case None =>
+            assert(false)
+        }
+      }
+    }
+
+    // check peak executor metric values for each stage and executor
+    val stageExecSummaries = store.view(classOf[ExecutorStageSummaryWrapper]).asScala.toSeq
+    stageExecSummaries.foreach { exec =>
+      expectedStageValues.get(exec.stageId) match {
+        case Some(stageValue) =>
+          (stageValue.executorMetrics.get(exec.executorId), exec.info.peakMemoryMetrics) match {
+            case (Some(expected), Some(actual)) =>
+              checkExecutorMetrics(expected, actual)
+            case _ =>
+              assert(false)
+          }
+        case None =>
+          assert(false)
       }
     }
   }

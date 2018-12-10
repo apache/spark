@@ -165,6 +165,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       "applications/local-1426533911241/2/stages/0/0/taskList",
     "blacklisting for stage" -> "applications/app-20180109111548-0000/stages/0/0",
     "blacklisting node for stage" -> "applications/application_1516285256255_0012/stages/0/0",
+    "stage list with peak metrics" -> "applications/application_1538416563558_0014/stages",
+    "stage with peak metrics" -> "applications/application_1538416563558_0014/stages/0/0",
 
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",

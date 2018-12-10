@@ -26,6 +26,7 @@ import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
@@ -216,7 +217,9 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           Nil,
           None,
           None,
-          Map())
+          Map(),
+          None
+        )
       }
     }
 

@@ -78,7 +78,8 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         accumulatorUpdates = Seq(new UIAccumulableInfo(0L, "acc", None, "value")),
         tasks = None,
         executorSummary = None,
-        killedTasksSummary = Map.empty
+        killedTasksSummary = Map.empty,
+        peakExecutorMetrics = None
       )
       val taskTable = new TaskPagedTable(
         stageData,
