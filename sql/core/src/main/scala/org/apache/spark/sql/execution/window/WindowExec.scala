@@ -24,8 +24,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
@@ -304,20 +304,18 @@ case class WindowExec(
 
         // Get all relevant projections.
         val result = createResultProjection(expressions)
-        val grouping = UnsafeProjection.create(partitionSpec, child.output)
+        val groupOrdering = GenerateOrdering.generate(
+          partitionSpec.map(SortOrder(_, Ascending)), child.output)
 
         // Manage the stream and the grouping.
         var nextRow: UnsafeRow = null
-        var nextGroup: UnsafeRow = null
         var nextRowAvailable: Boolean = false
         private[this] def fetchNextRow() {
           nextRowAvailable = stream.hasNext
           if (nextRowAvailable) {
             nextRow = stream.next().asInstanceOf[UnsafeRow]
-            nextGroup = grouping(nextRow)
           } else {
             nextRow = null
-            nextGroup = null
           }
         }
         fetchNextRow()
@@ -333,13 +331,13 @@ case class WindowExec(
         val numFrames = frames.length
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
-          // Before we start to fetch new input rows, make a copy of nextGroup.
-          val currentGroup = nextGroup.copy()
+          // Before we start to fetch new input rows, make a copy of nextRow.
+          val currentRow = nextRow.copy()
 
           // clear last partition
           buffer.clear()
 
-          while (nextRowAvailable && nextGroup == currentGroup) {
+          while (nextRowAvailable && groupOrdering.compare(currentRow, nextRow) == 0) {
             buffer.add(nextRow)
             fetchNextRow()
           }
