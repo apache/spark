@@ -213,10 +213,6 @@ trait HashJoin {
           s"BroadcastHashJoin should not take $x as the JoinType")
     }
 
-    // At the end of the task, we update the avg hash probe.
-    TaskContext.get().addTaskCompletionListener[Unit](_ =>
-      avgHashProbe.set(hashed.getAverageProbesPerLookup))
-
     val resultProj = createResultProjection
     joinedIter.map { r =>
       numOutputRows += 1
