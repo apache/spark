@@ -57,9 +57,11 @@ case class CreateHiveTableAsSelectCommand(
         return Seq.empty
       }
 
+      // For CTAS, there is no static partition values to insert.
+      val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
       InsertIntoHiveTable(
         tableDesc,
-        Map.empty,
+        partition,
         query,
         overwrite = false,
         ifPartitionNotExists = false,
