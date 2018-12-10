@@ -264,12 +264,12 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           // If `ordering` is a prefix of `requiredOrdering`:
           //   - Let's say `ordering` is [a, b] and `requiredOrdering` is [a, b, c]. If a row is
           //     larger than another row w.r.t. [a, b], it's also larger w.r.t. [a, b, c]. So
-          //     `RangePartitioning(a, b)` satisfy `OrderedDistribution(a, b, c)`.
+          //     `RangePartitioning(a, b)` satisfies `OrderedDistribution(a, b, c)`.
           //
           // If `requiredOrdering` is a prefix of `ordering`:
           //   - Let's say `ordering` is [a, b, c] and `requiredOrdering` is [a, b]. If a row is
           //     larger than another row w.r.t. [a, b, c], this row will not be smaller w.r.t.
-          //     [a. b].  So `RangePartitioning(a, b, c)` satisfy `OrderedDistribution(a, b)`.
+          //     [a. b].  So `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
         case ClusteredDistribution(requiredClustering, _) =>
