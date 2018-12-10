@@ -416,7 +416,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.relation.needConversion) {
-      execution.RDDConversions.rowToRowRdd(rdd, output.map(_.dataType))
+      execution.RDDConversions.rowToRowRdd(rdd, StructType.fromAttributes(output))
     } else {
       rdd.asInstanceOf[RDD[InternalRow]]
     }
