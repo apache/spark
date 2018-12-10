@@ -132,7 +132,6 @@ class DiskStoreSuite extends SparkFunSuite {
   }
 
   test("block data encryption") {
-    val testDir = Utils.createTempDir()
     val testData = new Array[Byte](128 * 1024)
     new Random().nextBytes(testData)
 

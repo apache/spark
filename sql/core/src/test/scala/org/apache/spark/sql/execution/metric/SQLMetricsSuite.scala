@@ -94,8 +94,14 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
       Map("number of output rows" -> 1L,
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
+    val shuffleExpected1 = Map(
+      "records read" -> 2L,
+      "local blocks fetched" -> 2L,
+      "remote blocks fetched" -> 0L,
+      "shuffle records written" -> 2L)
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("HashAggregate", expected1(0))),
+      1L -> (("Exchange", shuffleExpected1)),
       0L -> (("HashAggregate", expected1(1))))
     )
 
@@ -106,8 +112,14 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
       Map("number of output rows" -> 3L,
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
+    val shuffleExpected2 = Map(
+      "records read" -> 4L,
+      "local blocks fetched" -> 4L,
+      "remote blocks fetched" -> 0L,
+      "shuffle records written" -> 4L)
     testSparkPlanMetrics(df2, 1, Map(
       2L -> (("HashAggregate", expected2(0))),
+      1L -> (("Exchange", shuffleExpected2)),
       0L -> (("HashAggregate", expected2(1))))
     )
   }
@@ -160,6 +172,11 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df = testData2.groupBy().agg(collect_set('a)) // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("ObjectHashAggregate", Map("number of output rows" -> 2L))),
+      1L -> (("Exchange", Map(
+        "shuffle records written" -> 2L,
+        "records read" -> 2L,
+        "local blocks fetched" -> 2L,
+        "remote blocks fetched" -> 0L))),
       0L -> (("ObjectHashAggregate", Map("number of output rows" -> 1L))))
     )
 
@@ -167,6 +184,11 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df2 = testData2.groupBy('a).agg(collect_set('a))
     testSparkPlanMetrics(df2, 1, Map(
       2L -> (("ObjectHashAggregate", Map("number of output rows" -> 4L))),
+      1L -> (("Exchange", Map(
+        "shuffle records written" -> 4L,
+        "records read" -> 4L,
+        "local blocks fetched" -> 4L,
+        "remote blocks fetched" -> 0L))),
       0L -> (("ObjectHashAggregate", Map("number of output rows" -> 3L))))
     )
   }
@@ -191,7 +213,12 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of output rows" -> 4L))))
+          "number of output rows" -> 4L))),
+        2L -> (("Exchange", Map(
+          "records read" -> 4L,
+          "local blocks fetched" -> 2L,
+          "remote blocks fetched" -> 0L,
+          "shuffle records written" -> 2L))))
       )
     }
   }
@@ -208,7 +235,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("SortMergeJoin", Map(
-          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          // It's 8 because we read 6 rows in the left and 2 row in the right one
           "number of output rows" -> 8L))))
       )
 
@@ -216,7 +243,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df2, 1, Map(
         0L -> (("SortMergeJoin", Map(
-          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          // It's 8 because we read 6 rows in the left and 2 row in the right one
           "number of output rows" -> 8L))))
       )
     }
@@ -285,13 +312,25 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key", "value")
       // Assume the execution plan is
-      // ... -> ShuffledHashJoin(nodeId = 1) -> Project(nodeId = 0)
+      // Project(nodeId = 0)
+      // +- ShuffledHashJoin(nodeId = 1)
+      // :- Exchange(nodeId = 2)
+      // :  +- Project(nodeId = 3)
+      // :     +- LocalTableScan(nodeId = 4)
+      // +- Exchange(nodeId = 5)
+      // +- Project(nodeId = 6)
+      // +- LocalTableScan(nodeId = 7)
       val df = df1.join(df2, "key")
-      val metrics = getSparkPlanMetrics(df, 1, Set(1L))
       testSparkPlanMetrics(df, 1, Map(
         1L -> (("ShuffledHashJoin", Map(
           "number of output rows" -> 2L,
-          "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))))
+          "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))),
+        2L -> (("Exchange", Map(
+          "shuffle records written" -> 2L,
+          "records read" -> 2L))),
+        5L -> (("Exchange", Map(
+          "shuffle records written" -> 10L,
+          "records read" -> 10L))))
       )
     }
   }
@@ -556,16 +595,16 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
 
       df.queryExecution.executedPlan.foreach(_.resetMetrics())
       // For each partition, we get 2 rows. Then the Filter should produce 2 rows per-partition,
-      // and Range should produce 1000 rows (one batch) per-partition. Totally Filter produces
-      // 4 rows, and Range produces 2000 rows.
+      // and Range should produce 4 rows per-partition ([0, 1, 2, 3] and [15, 16, 17, 18]). Totally
+      // Filter produces 4 rows, and Range produces 8 rows.
       df.queryExecution.toRdd.mapPartitions(_.take(2)).collect()
-      checkFilterAndRangeMetrics(df, filterNumOutputs = 4, rangeNumOutputs = 2000)
+      checkFilterAndRangeMetrics(df, filterNumOutputs = 4, rangeNumOutputs = 8)
 
       // Top-most limit will call `CollectLimitExec.executeCollect`, which will only run the first
-      // task, so totally the Filter produces 2 rows, and Range produces 1000 rows (one batch).
+      // task, so totally the Filter produces 2 rows, and Range produces 4 rows ([0, 1, 2, 3]).
       val df2 = df.limit(2)
       df2.collect()
-      checkFilterAndRangeMetrics(df2, filterNumOutputs = 2, rangeNumOutputs = 1000)
+      checkFilterAndRangeMetrics(df2, filterNumOutputs = 2, rangeNumOutputs = 4)
     }
   }
 

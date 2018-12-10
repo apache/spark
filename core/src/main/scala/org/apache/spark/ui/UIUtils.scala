@@ -204,6 +204,8 @@ private[spark] object UIUtils extends Logging {
           href={prependBaseUri(request, "/static/dataTables.bootstrap.css")} type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.4.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
@@ -218,7 +220,6 @@ private[spark] object UIUtils extends Logging {
       title: String,
       content: => Seq[Node],
       activeTab: SparkUITab,
-      refreshInterval: Option[Int] = None,
       helpText: Option[String] = None,
       showVisualization: Boolean = false,
       useDataTables: Boolean = false): Seq[Node] = {

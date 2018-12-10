@@ -31,8 +31,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
-import org.apache.spark.sql.catalyst.json.JsonInferSchema.compatibleType
+import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -67,7 +66,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       val dummyOption = new JSONOptions(Map.empty[String, String], "GMT")
       val dummySchema = StructType(Seq.empty)
-      val parser = new JacksonParser(dummySchema, dummyOption)
+      val parser = new JacksonParser(dummySchema, dummyOption, allowArrayAsStructs = true)
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
         jsonParser.nextToken()
@@ -118,10 +117,10 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("Get compatible type") {
     def checkDataType(t1: DataType, t2: DataType, expected: DataType) {
-      var actual = compatibleType(t1, t2)
+      var actual = JsonInferSchema.compatibleType(t1, t2)
       assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")
-      actual = compatibleType(t2, t1)
+      actual = JsonInferSchema.compatibleType(t2, t1)
       assert(actual == expected,
         s"Expected $expected as the most general data type for $t1 and $t2, found $actual")
     }
@@ -249,7 +248,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     checkAnswer(
       sql("select nullstr, headers.Host from jsonTable"),
-      Seq(Row("", "1.abc.com"), Row("", null), Row("", null), Row(null, null))
+      Seq(Row("", "1.abc.com"), Row("", null), Row(null, null), Row(null, null))
     )
   }
 
@@ -1115,6 +1114,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Row(null, null, null),
         Row(null, null, null),
         Row(null, null, null),
+        Row(null, null, null),
         Row("str_a_4", "str_b_4", "str_c_4"),
         Row(null, null, null))
     )
@@ -1136,6 +1136,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkAnswer(
         jsonDF.select($"a", $"b", $"c", $"_unparsed"),
         Row(null, null, null, "{") ::
+          Row(null, null, null, "") ::
           Row(null, null, null, """{"a":1, b:2}""") ::
           Row(null, null, null, """{"a":{, b:3}""") ::
           Row("str_a_4", "str_b_4", "str_c_4", null) ::
@@ -1150,6 +1151,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkAnswer(
         jsonDF.filter($"_unparsed".isNotNull).select($"_unparsed"),
         Row("{") ::
+          Row("") ::
           Row("""{"a":1, b:2}""") ::
           Row("""{"a":{, b:3}""") ::
           Row("]") :: Nil
@@ -1171,6 +1173,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(
       jsonDF.selectExpr("a", "b", "c", "_malformed"),
       Row(null, null, null, "{") ::
+        Row(null, null, null, "") ::
         Row(null, null, null, """{"a":1, b:2}""") ::
         Row(null, null, null, """{"a":{, b:3}""") ::
         Row("str_a_4", "str_b_4", "str_c_4", null) ::
@@ -1369,9 +1372,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonInferSchema.infer on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = JsonInferSchema.infer(
+    val options = new JSONOptions(Map.empty[String, String], "GMT")
+    val emptySchema = new JsonInferSchema(options).infer(
       empty.rdd,
-      new JSONOptions(Map.empty[String, String], "GMT"),
       CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
   }
@@ -1396,9 +1399,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val emptySchema = JsonInferSchema.infer(
+    val options = new JSONOptions(Map.empty[String, String], "GMT")
+    val emptySchema = new JsonInferSchema(options).infer(
       emptyRecords.rdd,
-      new JSONOptions(Map.empty[String, String], "GMT"),
       CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
   }
@@ -1460,7 +1463,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
         DateType, TimestampType,
         ArrayType(IntegerType), MapType(StringType, LongType), struct,
-        new UDT.MyDenseVectorUDT())
+        new TestUDT.MyDenseVectorUDT())
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
       StructField(s"col$index", dataType, nullable = true)
     }
@@ -1484,7 +1487,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Seq(2, 3, 4),
         Map("a string" -> 2000L),
         Row(4.75.toFloat, Seq(false, true)),
-        new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))
+        new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25)))
     val data =
       Row.fromSeq(Seq("Spark " + spark.sparkContext.version) ++ constantValues) :: Nil
 
@@ -1813,6 +1816,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val path = dir.getCanonicalPath
       primitiveFieldAndType
         .toDF("value")
+        .repartition(1)
         .write
         .option("compression", "GzIp")
         .text(path)
@@ -2513,6 +2517,50 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
 
     checkCount(2)
-    countForMalformedJSON(0, Seq(""))
+    countForMalformedJSON(1, Seq(""))
+  }
+
+  test("SPARK-25040: empty strings should be disallowed") {
+    def failedOnEmptyString(dataType: DataType): Unit = {
+       val df = spark.read.schema(s"a ${dataType.catalogString}")
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      val errMessage = intercept[SparkException] {
+        df.collect()
+      }.getMessage
+      assert(errMessage.contains(
+        s"Failed to parse an empty string for data type ${dataType.catalogString}"))
+    }
+
+    def emptyString(dataType: DataType, expected: Any): Unit = {
+      val df = spark.read.schema(s"a ${dataType.catalogString}")
+        .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
+      checkAnswer(df, Row(expected) :: Nil)
+    }
+
+    failedOnEmptyString(BooleanType)
+    failedOnEmptyString(ByteType)
+    failedOnEmptyString(ShortType)
+    failedOnEmptyString(IntegerType)
+    failedOnEmptyString(LongType)
+    failedOnEmptyString(FloatType)
+    failedOnEmptyString(DoubleType)
+    failedOnEmptyString(DecimalType.SYSTEM_DEFAULT)
+    failedOnEmptyString(TimestampType)
+    failedOnEmptyString(DateType)
+    failedOnEmptyString(ArrayType(IntegerType))
+    failedOnEmptyString(MapType(StringType, IntegerType, true))
+    failedOnEmptyString(StructType(StructField("f1", IntegerType, true) :: Nil))
+
+    emptyString(StringType, "")
+    emptyString(BinaryType, "".getBytes(StandardCharsets.UTF_8))
+  }
+
+  test("do not produce empty files for empty partitions") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.emptyDataset[String].write.json(path)
+      val files = new File(path).listFiles()
+      assert(!files.exists(_.getName.endsWith("json")))
+    }
   }
 }

@@ -89,13 +89,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val msg1 = intercept[Exception] {
       df5.select(map_from_arrays($"k", $"v")).collect
     }.getMessage
-    assert(msg1.contains("Cannot use null as map key!"))
+    assert(msg1.contains("Cannot use null as map key"))
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
     val msg2 = intercept[Exception] {
       df6.select(map_from_arrays($"k", $"v")).collect
     }.getMessage
-    assert(msg2.contains("The given two arrays should have the same length"))
+    assert(msg2.contains("The key array and value array of MapData must have the same length"))
   }
 
   test("struct with column name") {
@@ -458,15 +458,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df8.selectExpr("arrays_zip(v1, v2)"), expectedValue8)
   }
 
-  test("SPARK-24633: arrays_zip splits input processing correctly") {
-    Seq("true", "false").foreach { wholestageCodegenEnabled =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholestageCodegenEnabled) {
-        val df = spark.range(1)
-        val exprs = (0 to 5).map(x => array($"id" + lit(x)))
-        checkAnswer(df.select(arrays_zip(exprs: _*)),
-          Row(Seq(Row(0, 1, 2, 3, 4, 5))))
-      }
-    }
+  testWithWholeStageCodegenOnAndOff("SPARK-24633: arrays_zip splits input " +
+    "processing correctly") { _ =>
+    val df = spark.range(1)
+    val exprs = (0 to 5).map(x => array($"id" + lit(x)))
+    checkAnswer(df.select(arrays_zip(exprs: _*)),
+      Row(Seq(Row(0, 1, 2, 3, 4, 5))))
   }
 
   def testSizeOfMap(sizeOfNull: Any): Unit = {
@@ -2591,7 +2588,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val ex3 = intercept[Exception] {
       dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
     }
-    assert(ex3.getMessage.contains("Cannot use null as map key!"))
+    assert(ex3.getMessage.contains("Cannot use null as map key"))
 
     val ex4 = intercept[AnalysisException] {
       dfExample2.selectExpr("transform_keys(j, (k, v) -> k + 1)")

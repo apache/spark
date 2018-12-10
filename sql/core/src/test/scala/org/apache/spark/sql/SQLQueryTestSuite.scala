@@ -22,11 +22,13 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeTableCommand}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -140,20 +142,35 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     val input = fileToString(new File(testCase.inputFile))
 
     val (comments, code) = input.split("\n").partition(_.startsWith("--"))
+
+    // Runs all the tests on both codegen-only and interpreter modes
+    val codegenConfigSets = Array(CODEGEN_ONLY, NO_CODEGEN).map {
+      case codegenFactoryMode =>
+        Array(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenFactoryMode.toString)
+    }
     val configSets = {
       val configLines = comments.filter(_.startsWith("--SET")).map(_.substring(5))
       val configs = configLines.map(_.split(",").map { confAndValue =>
         val (conf, value) = confAndValue.span(_ != '=')
         conf.trim -> value.substring(1).trim
       })
-      // When we are regenerating the golden files we don't need to run all the configs as they
+      // When we are regenerating the golden files, we don't need to set any config as they
       // all need to return the same result
-      if (regenerateGoldenFiles && configs.nonEmpty) {
-        configs.take(1)
+      if (regenerateGoldenFiles) {
+        Array.empty[Array[(String, String)]]
       } else {
-        configs
+        if (configs.nonEmpty) {
+          codegenConfigSets.flatMap { codegenConfig =>
+            configs.map { config =>
+              config ++ codegenConfig
+            }
+          }
+        } else {
+          codegenConfigSets
+        }
       }
     }
+
     // List of SQL queries to run
     // note: this is not a robust way to split queries using semicolon, but works for now.
     val queries = code.mkString("\n").split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
@@ -272,6 +289,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         .replaceAll("Created By.*", s"Created By $notIncludedMsg")
         .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
         .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
+        .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
         .replaceAll("\\*\\(\\d+\\) ", "*"))  // remove the WholeStageCodegen codegenStageIds
 
       // If the output is not pre-sorted, sort it.

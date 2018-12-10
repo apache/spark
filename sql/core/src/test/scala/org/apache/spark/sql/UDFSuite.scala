@@ -356,10 +356,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
           .withColumn("b", udf1($"a", lit(10)))
         df.cache()
         df.write.saveAsTable("t")
+        sparkContext.listenerBus.waitUntilEmpty(1000)
         assert(numTotalCachedHit == 1, "expected to be cached in saveAsTable")
         df.write.insertInto("t")
+        sparkContext.listenerBus.waitUntilEmpty(1000)
         assert(numTotalCachedHit == 2, "expected to be cached in insertInto")
         df.write.save(path.getCanonicalPath)
+        sparkContext.listenerBus.waitUntilEmpty(1000)
         assert(numTotalCachedHit == 3, "expected to be cached in save for native")
       }
     }
@@ -391,6 +394,30 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       val plan = spark.sessionState.executePlan(df.logicalPlan).analyzed
       comparePlans(df.logicalPlan, plan)
       checkAnswer(df, Seq(Row("12"), Row("24"), Row("3null"), Row(null)))
+    }
+  }
+
+  test("SPARK-25044 Verify null input handling for primitive types - with udf()") {
+    val udf1 = udf((x: Long, y: Any) => x * 2 + (if (y == null) 1 else 0))
+    val df = spark.range(0, 3).toDF("a")
+      .withColumn("b", udf1($"a", lit(null)))
+      .withColumn("c", udf1(lit(null), $"a"))
+
+    checkAnswer(
+      df,
+      Seq(
+        Row(0, 1, null),
+        Row(1, 3, null),
+        Row(2, 5, null)))
+  }
+
+  test("SPARK-25044 Verify null input handling for primitive types - with udf.register") {
+    withTable("t") {
+      Seq((null, Integer.valueOf(1), "x"), ("M", null, "y"), ("N", Integer.valueOf(3), null))
+        .toDF("a", "b", "c").write.format("json").saveAsTable("t")
+      spark.udf.register("f", (a: String, b: Int, c: Any) => a + b + c)
+      val df = spark.sql("SELECT f(a, b, c) FROM t")
+      checkAnswer(df, Seq(Row("null1x"), Row(null), Row("N3null")))
     }
   }
 }
