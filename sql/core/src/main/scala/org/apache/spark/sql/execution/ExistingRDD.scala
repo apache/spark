@@ -32,8 +32,9 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.StructType
 
 object RDDConversions {
-  def productToRowRdd[A <: Product : TypeTag](data: RDD[A],
-                                              outputSchema: StructType): RDD[InternalRow] = {
+  def productToRowRdd[A <: Product : TypeTag](
+      data: RDD[A],
+      outputSchema: StructType): RDD[InternalRow] = {
     val converters = ExpressionEncoder[A].resolveAndBind(outputSchema.toAttributes)
     data.mapPartitions { iterator =>
       iterator.map { r =>
