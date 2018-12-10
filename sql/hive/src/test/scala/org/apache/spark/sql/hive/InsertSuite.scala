@@ -775,20 +775,28 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  test("SPARK-25717: Insert overwrite a recreated external and partitioned table "
-    + "should remove the historical partition first") {
+  test("SPARK-25717: Insert overwrite a recreated external table should remove old-part first") {
     withTempDir { tmpDir =>
       withTable("test_table") {
-        (0 until 3).foreach { _ =>
-          sql("DROP TABLE IF EXISTS test_table")
-          sql(
-            s"""
-               |CREATE EXTERNAL TABLE test_table (key int)
-               |PARTITIONED BY (p int)
-               |LOCATION '${tmpDir.toURI.toString.stripSuffix("/")}/test_table'
-           """.stripMargin)
-          sql("INSERT OVERWRITE TABLE test_table PARTITION(p=1) SELECT 1")
-        }
+        // Prepare table data
+        sql(
+          s"""
+             |CREATE EXTERNAL TABLE test_table (key int)
+             |PARTITIONED BY (p int)
+             |LOCATION '${tmpDir.toURI}/test_table'
+         """.stripMargin)
+        sql("INSERT OVERWRITE TABLE test_table PARTITION(p=1) SELECT 1")
+        checkAnswer(sql("SELECT COUNT(*) FROM test_table"), Row(1))
+
+        // Drop the table and rerun it to check the record num is right.
+        sql("DROP TABLE IF EXISTS test_table")
+        sql(
+          s"""
+             |CREATE EXTERNAL TABLE test_table (key int)
+             |PARTITIONED BY (p int)
+             |LOCATION '${tmpDir.toURI}/test_table'
+         """.stripMargin)
+        sql("INSERT OVERWRITE TABLE test_table PARTITION(p=1) SELECT 1")
         checkAnswer(sql("SELECT COUNT(*) FROM test_table"), Row(1))
       }
     }
