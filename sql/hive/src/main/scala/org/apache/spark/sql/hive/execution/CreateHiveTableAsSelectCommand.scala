@@ -57,9 +57,11 @@ case class CreateHiveTableAsSelectCommand(
         return Seq.empty
       }
 
+      // For CTAS, there is no static partition values to insert.
+      val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
       InsertIntoHiveTable(
         tableDesc,
-        Map.empty,
+        partition,
         query,
         overwrite = false,
         ifPartitionNotExists = false,
@@ -69,8 +71,8 @@ case class CreateHiveTableAsSelectCommand(
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
       assert(tableDesc.schema.isEmpty)
-      val schema = DataWritingCommand.logicalPlanSchemaWithNames(query, outputColumnNames)
-      catalog.createTable(tableDesc.copy(schema = schema), ignoreIfExists = false)
+      catalog.createTable(
+        tableDesc.copy(schema = outputColumns.toStructType), ignoreIfExists = false)
 
       try {
         // Read back the metadata of the table which was created just now.
@@ -96,7 +98,7 @@ case class CreateHiveTableAsSelectCommand(
   }
 
   override def argString: String = {
-    s"[Database:${tableDesc.database}}, " +
+    s"[Database:${tableDesc.database}, " +
     s"TableName: ${tableDesc.identifier.table}, " +
     s"InsertIntoHiveTable]"
   }

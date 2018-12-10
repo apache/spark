@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.orc.{OrcFile, Reader, TypeDescription}
+import org.apache.orc.{OrcFile, Reader, TypeDescription, Writer}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
+import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
 
@@ -116,9 +119,37 @@ object OrcUtils extends Logging {
           }
         })
       } else {
-        val resolver = if (isCaseSensitive) caseSensitiveResolution else caseInsensitiveResolution
-        Some(requiredSchema.fieldNames.map { name => orcFieldNames.indexWhere(resolver(_, name)) })
+        if (isCaseSensitive) {
+          Some(requiredSchema.fieldNames.map { name =>
+            orcFieldNames.indexWhere(caseSensitiveResolution(_, name))
+          })
+        } else {
+          // Do case-insensitive resolution only if in case-insensitive mode
+          val caseInsensitiveOrcFieldMap =
+            orcFieldNames.zipWithIndex.groupBy(_._1.toLowerCase(Locale.ROOT))
+          Some(requiredSchema.fieldNames.map { requiredFieldName =>
+            caseInsensitiveOrcFieldMap
+              .get(requiredFieldName.toLowerCase(Locale.ROOT))
+              .map { matchedOrcFields =>
+                if (matchedOrcFields.size > 1) {
+                  // Need to fail if there is ambiguity, i.e. more than one field is matched.
+                  val matchedOrcFieldsString = matchedOrcFields.map(_._1).mkString("[", ", ", "]")
+                  throw new RuntimeException(s"""Found duplicate field(s) "$requiredFieldName": """
+                    + s"$matchedOrcFieldsString in case-insensitive mode")
+                } else {
+                  matchedOrcFields.head._2
+                }
+              }.getOrElse(-1)
+          })
+        }
       }
     }
+  }
+
+  /**
+   * Add a metadata specifying Spark version.
+   */
+  def addSparkVersionMetadata(writer: Writer): Unit = {
+    writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION_SHORT))
   }
 }

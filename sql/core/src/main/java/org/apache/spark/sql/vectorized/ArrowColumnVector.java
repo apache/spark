@@ -22,17 +22,16 @@ import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.execution.arrow.ArrowUtils;
 import org.apache.spark.sql.types.*;
-import org.apache.spark.unsafe.memory.OffHeapMemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * A column vector backed by Apache Arrow. Currently calendar interval type and map type are not
  * supported.
  */
-@InterfaceStability.Evolving
+@Evolving
 public final class ArrowColumnVector extends ColumnVector {
 
   private final ArrowVectorAccessor accessor;
@@ -378,10 +377,9 @@ public final class ArrowColumnVector extends ColumnVector {
       if (stringResult.isSet == 0) {
         return null;
       } else {
-        return new UTF8String(new OffHeapMemoryBlock(
+        return UTF8String.fromAddress(null,
           stringResult.buffer.memoryAddress() + stringResult.start,
-          stringResult.end - stringResult.start
-        ));
+          stringResult.end - stringResult.start);
       }
     }
   }

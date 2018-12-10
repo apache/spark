@@ -267,6 +267,7 @@ object FunctionRegistry {
     expression[Subtract]("-"),
     expression[Multiply]("*"),
     expression[Divide]("/"),
+    expression[IntegralDivide]("div"),
     expression[Remainder]("%"),
 
     // aggregate functions
@@ -299,15 +300,9 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expression[RegrCount]("regr_count"),
-    expression[RegrSXX]("regr_sxx"),
-    expression[RegrSYY]("regr_syy"),
-    expression[RegrAvgX]("regr_avgx"),
-    expression[RegrAvgY]("regr_avgy"),
-    expression[RegrSXY]("regr_sxy"),
-    expression[RegrSlope]("regr_slope"),
-    expression[RegrR2]("regr_r2"),
-    expression[RegrIntercept]("regr_intercept"),
+    expression[EveryAgg]("every"),
+    expression[AnyAgg]("any"),
+    expression[SomeAgg]("some"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -528,7 +523,12 @@ object FunctionRegistry {
     castAlias("date", DateType),
     castAlias("timestamp", TimestampType),
     castAlias("binary", BinaryType),
-    castAlias("string", StringType)
+    castAlias("string", StringType),
+
+    // csv
+    expression[CsvToStructs]("from_csv"),
+    expression[SchemaOfCsv]("schema_of_csv"),
+    expression[StructsToCsv]("to_csv")
   )
 
   val builtin: SimpleFunctionRegistry = {

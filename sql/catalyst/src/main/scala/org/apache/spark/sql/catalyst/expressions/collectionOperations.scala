@@ -159,9 +159,9 @@ case class MapKeys(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(2, 3, 4));
-        [[1, 2], [2, 3], [3, 4]]
+       [{"0":1,"1":2},{"0":2,"1":3},{"0":3,"1":4}]
       > SELECT _FUNC_(array(1, 2), array(2, 3), array(3, 4));
-        [[1, 2, 3], [2, 3, 4]]
+       [{"0":1,"1":2,"2":3},{"0":2,"1":3,"2":4}]
   """,
   since = "2.4.0")
 case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
@@ -348,9 +348,9 @@ case class MapValues(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
-       [(1,"a"),(2,"b")]
+       [{"key":1,"value":"a"},{"key":2,"value":"b"}]
   """,
-  since = "2.4.0")
+  since = "3.0.0")
 case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
@@ -516,18 +516,23 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
-       [[1 -> "a"], [2 -> "b"], [2 -> "c"], [3 -> "d"]]
+       {1:"a",2:"c",3:"d"}
   """, since = "2.4.0")
 case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    var funcName = s"function $prettyName"
+    val funcName = s"function $prettyName"
     if (children.exists(!_.dataType.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckFailure(
         s"input to $funcName should all be of type map, but it's " +
           children.map(_.dataType.catalogString).mkString("[", ", ", "]"))
     } else {
-      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), funcName)
+      val sameTypeCheck = TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), funcName)
+      if (sameTypeCheck.isFailure) {
+        sameTypeCheck
+      } else {
+        TypeUtils.checkForMapKeyType(dataType.keyType)
+      }
     }
   }
 
@@ -541,51 +546,25 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
 
   override def nullable: Boolean = children.exists(_.nullable)
 
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
+
   override def eval(input: InternalRow): Any = {
-    val maps = children.map(_.eval(input))
+    val maps = children.map(_.eval(input).asInstanceOf[MapData])
     if (maps.contains(null)) {
       return null
     }
-    val keyArrayDatas = maps.map(_.asInstanceOf[MapData].keyArray())
-    val valueArrayDatas = maps.map(_.asInstanceOf[MapData].valueArray())
 
-    val numElements = keyArrayDatas.foldLeft(0L)((sum, ad) => sum + ad.numElements())
-    if (numElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      throw new RuntimeException(s"Unsuccessful attempt to concat maps with $numElements " +
-        s"elements due to exceeding the map size limit " +
-        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+    for (map <- maps) {
+      mapBuilder.putAll(map.keyArray(), map.valueArray())
     }
-    val finalKeyArray = new Array[AnyRef](numElements.toInt)
-    val finalValueArray = new Array[AnyRef](numElements.toInt)
-    var position = 0
-    for (i <- keyArrayDatas.indices) {
-      val keyArray = keyArrayDatas(i).toObjectArray(dataType.keyType)
-      val valueArray = valueArrayDatas(i).toObjectArray(dataType.valueType)
-      Array.copy(keyArray, 0, finalKeyArray, position, keyArray.length)
-      Array.copy(valueArray, 0, finalValueArray, position, valueArray.length)
-      position += keyArray.length
-    }
-
-    new ArrayBasedMapData(new GenericArrayData(finalKeyArray),
-      new GenericArrayData(finalValueArray))
+    mapBuilder.build()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mapCodes = children.map(_.genCode(ctx))
-    val keyType = dataType.keyType
-    val valueType = dataType.valueType
     val argsName = ctx.freshName("args")
     val hasNullName = ctx.freshName("hasNull")
-    val mapDataClass = classOf[MapData].getName
-    val arrayBasedMapDataClass = classOf[ArrayBasedMapData].getName
-    val arrayDataClass = classOf[ArrayData].getName
-
-    val init =
-      s"""
-        |$mapDataClass[] $argsName = new $mapDataClass[${mapCodes.size}];
-        |boolean ${ev.isNull}, $hasNullName = false;
-        |$mapDataClass ${ev.value} = null;
-      """.stripMargin
+    val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
 
     val assignments = mapCodes.zip(children.map(_.nullable)).zipWithIndex.map {
       case ((m, true), i) =>
@@ -608,10 +587,10 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
          """.stripMargin
     }
 
-    val codes = ctx.splitExpressionsWithCurrentInputs(
+    val prepareMaps = ctx.splitExpressionsWithCurrentInputs(
       expressions = assignments,
       funcName = "getMapConcatInputs",
-      extraArguments = (s"$mapDataClass[]", argsName) :: ("boolean", hasNullName) :: Nil,
+      extraArguments = (s"MapData[]", argsName) :: ("boolean", hasNullName) :: Nil,
       returnType = "boolean",
       makeSplitFunction = body =>
         s"""
@@ -622,89 +601,25 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     )
 
     val idxName = ctx.freshName("idx")
-    val numElementsName = ctx.freshName("numElems")
-    val finKeysName = ctx.freshName("finalKeys")
-    val finValsName = ctx.freshName("finalValues")
-
-    val keyConcat = genCodeForArrays(ctx, keyType, false)
-
-    val valueConcat =
-      if (valueType.sameType(keyType) &&
-          !(CodeGenerator.isPrimitiveType(valueType) && dataType.valueContainsNull)) {
-        keyConcat
-      } else {
-        genCodeForArrays(ctx, valueType, dataType.valueContainsNull)
-      }
-
-    val keyArgsName = ctx.freshName("keyArgs")
-    val valArgsName = ctx.freshName("valArgs")
-
     val mapMerge =
       s"""
-        |${ev.isNull} = $hasNullName;
-        |if (!${ev.isNull}) {
-        |  $arrayDataClass[] $keyArgsName = new $arrayDataClass[${mapCodes.size}];
-        |  $arrayDataClass[] $valArgsName = new $arrayDataClass[${mapCodes.size}];
-        |  long $numElementsName = 0;
-        |  for (int $idxName = 0; $idxName < $argsName.length; $idxName++) {
-        |    $keyArgsName[$idxName] = $argsName[$idxName].keyArray();
-        |    $valArgsName[$idxName] = $argsName[$idxName].valueArray();
-        |    $numElementsName += $argsName[$idxName].numElements();
-        |  }
-        |  if ($numElementsName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-        |    throw new RuntimeException("Unsuccessful attempt to concat maps with " +
-        |       $numElementsName + " elements due to exceeding the map size limit " +
-        |       "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
-        |  }
-        |  $arrayDataClass $finKeysName = $keyConcat($keyArgsName,
-        |    (int) $numElementsName);
-        |  $arrayDataClass $finValsName = $valueConcat($valArgsName,
-        |    (int) $numElementsName);
-        |  ${ev.value} = new $arrayBasedMapDataClass($finKeysName, $finValsName);
+        |for (int $idxName = 0; $idxName < $argsName.length; $idxName++) {
+        |  $builderTerm.putAll($argsName[$idxName].keyArray(), $argsName[$idxName].valueArray());
         |}
+        |${ev.value} = $builderTerm.build();
       """.stripMargin
 
     ev.copy(
       code = code"""
-        |$init
-        |$codes
-        |$mapMerge
+        |MapData[] $argsName = new MapData[${mapCodes.size}];
+        |boolean $hasNullName = false;
+        |$prepareMaps
+        |boolean ${ev.isNull} = $hasNullName;
+        |MapData ${ev.value} = null;
+        |if (!$hasNullName) {
+        |  $mapMerge
+        |}
       """.stripMargin)
-  }
-
-  private def genCodeForArrays(
-      ctx: CodegenContext,
-      elementType: DataType,
-      checkForNull: Boolean): String = {
-    val counter = ctx.freshName("counter")
-    val arrayData = ctx.freshName("arrayData")
-    val argsName = ctx.freshName("args")
-    val numElemName = ctx.freshName("numElements")
-    val y = ctx.freshName("y")
-    val z = ctx.freshName("z")
-
-    val allocation = CodeGenerator.createArrayData(
-      arrayData, elementType, numElemName, s" $prettyName failed.")
-    val assignment = CodeGenerator.createArrayAssignment(
-      arrayData, elementType, s"$argsName[$y]", counter, z, checkForNull)
-
-    val concat = ctx.freshName("concat")
-    val concatDef =
-      s"""
-         |private ArrayData $concat(ArrayData[] $argsName, int $numElemName) {
-         |  $allocation
-         |  int $counter = 0;
-         |  for (int $y = 0; $y < ${children.length}; $y++) {
-         |    for (int $z = 0; $z < $argsName[$y].numElements(); $z++) {
-         |      $assignment
-         |      $counter++;
-         |    }
-         |  }
-         |  return $arrayData;
-         |}
-       """.stripMargin
-
-    ctx.addNewFunction(concat, concatDef)
   }
 
   override def prettyName: String = "map_concat"
@@ -740,174 +655,48 @@ case class MapFromEntries(child: Expression) extends UnaryExpression {
   @transient override lazy val dataType: MapType = dataTypeDetails.get._1
 
   override def checkInputDataTypes(): TypeCheckResult = dataTypeDetails match {
-    case Some(_) => TypeCheckResult.TypeCheckSuccess
+    case Some((mapType, _, _)) =>
+      TypeUtils.checkForMapKeyType(mapType.keyType)
     case None => TypeCheckResult.TypeCheckFailure(s"'${child.sql}' is of " +
       s"${child.dataType.catalogString} type. $prettyName accepts only arrays of pair structs.")
   }
 
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
+
   override protected def nullSafeEval(input: Any): Any = {
-    val arrayData = input.asInstanceOf[ArrayData]
-    val numEntries = arrayData.numElements()
+    val entries = input.asInstanceOf[ArrayData]
+    val numEntries = entries.numElements()
     var i = 0
-    if(nullEntries) {
+    if (nullEntries) {
       while (i < numEntries) {
-        if (arrayData.isNullAt(i)) return null
+        if (entries.isNullAt(i)) return null
         i += 1
       }
     }
-    val keyArray = new Array[AnyRef](numEntries)
-    val valueArray = new Array[AnyRef](numEntries)
+
     i = 0
     while (i < numEntries) {
-      val entry = arrayData.getStruct(i, 2)
-      val key = entry.get(0, dataType.keyType)
-      if (key == null) {
-        throw new RuntimeException("The first field from a struct (key) can't be null.")
-      }
-      keyArray.update(i, key)
-      val value = entry.get(1, dataType.valueType)
-      valueArray.update(i, value)
+      mapBuilder.put(entries.getStruct(i, 2))
       i += 1
     }
-    ArrayBasedMapData(keyArray, valueArray)
+    mapBuilder.build()
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
       val numEntries = ctx.freshName("numEntries")
-      val isKeyPrimitive = CodeGenerator.isPrimitiveType(dataType.keyType)
-      val isValuePrimitive = CodeGenerator.isPrimitiveType(dataType.valueType)
-      val code = if (isKeyPrimitive && isValuePrimitive) {
-        genCodeForPrimitiveElements(ctx, c, ev.value, numEntries)
-      } else {
-        genCodeForAnyElements(ctx, c, ev.value, numEntries)
-      }
+      val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
+      val i = ctx.freshName("idx")
       ctx.nullArrayElementsSaveExec(nullEntries, ev.isNull, c) {
         s"""
            |final int $numEntries = $c.numElements();
-           |$code
+           |for (int $i = 0; $i < $numEntries; $i++) {
+           |  $builderTerm.put($c.getStruct($i, 2));
+           |}
+           |${ev.value} = $builderTerm.build();
          """.stripMargin
       }
     })
-  }
-
-  private def genCodeForAssignmentLoop(
-      ctx: CodegenContext,
-      childVariable: String,
-      mapData: String,
-      numEntries: String,
-      keyAssignment: (String, String) => String,
-      valueAssignment: (String, String) => String): String = {
-    val entry = ctx.freshName("entry")
-    val i = ctx.freshName("idx")
-
-    val nullKeyCheck = if (dataTypeDetails.get._2) {
-      s"""
-         |if ($entry.isNullAt(0)) {
-         |  throw new RuntimeException("The first field from a struct (key) can't be null.");
-         |}
-       """.stripMargin
-    } else {
-      ""
-    }
-
-    s"""
-       |for (int $i = 0; $i < $numEntries; $i++) {
-       |  InternalRow $entry = $childVariable.getStruct($i, 2);
-       |  $nullKeyCheck
-       |  ${keyAssignment(CodeGenerator.getValue(entry, dataType.keyType, "0"), i)}
-       |  ${valueAssignment(entry, i)}
-       |}
-     """.stripMargin
-  }
-
-  private def genCodeForPrimitiveElements(
-      ctx: CodegenContext,
-      childVariable: String,
-      mapData: String,
-      numEntries: String): String = {
-    val byteArraySize = ctx.freshName("byteArraySize")
-    val keySectionSize = ctx.freshName("keySectionSize")
-    val valueSectionSize = ctx.freshName("valueSectionSize")
-    val data = ctx.freshName("byteArray")
-    val unsafeMapData = ctx.freshName("unsafeMapData")
-    val keyArrayData = ctx.freshName("keyArrayData")
-    val valueArrayData = ctx.freshName("valueArrayData")
-
-    val baseOffset = Platform.BYTE_ARRAY_OFFSET
-    val keySize = dataType.keyType.defaultSize
-    val valueSize = dataType.valueType.defaultSize
-    val kByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $keySize)"
-    val vByteSize = s"UnsafeArrayData.calculateSizeOfUnderlyingByteArray($numEntries, $valueSize)"
-
-    val keyAssignment = (key: String, idx: String) =>
-      CodeGenerator.setArrayElement(keyArrayData, dataType.keyType, idx, key)
-    val valueAssignment = (entry: String, idx: String) =>
-      CodeGenerator.createArrayAssignment(
-        valueArrayData, dataType.valueType, entry, idx, "1", dataType.valueContainsNull)
-    val assignmentLoop = genCodeForAssignmentLoop(
-      ctx,
-      childVariable,
-      mapData,
-      numEntries,
-      keyAssignment,
-      valueAssignment
-    )
-
-    s"""
-       |final long $keySectionSize = $kByteSize;
-       |final long $valueSectionSize = $vByteSize;
-       |final long $byteArraySize = 8 + $keySectionSize + $valueSectionSize;
-       |if ($byteArraySize > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-       |  ${genCodeForAnyElements(ctx, childVariable, mapData, numEntries)}
-       |} else {
-       |  final byte[] $data = new byte[(int)$byteArraySize];
-       |  UnsafeMapData $unsafeMapData = new UnsafeMapData();
-       |  Platform.putLong($data, $baseOffset, $keySectionSize);
-       |  Platform.putLong($data, ${baseOffset + 8}, $numEntries);
-       |  Platform.putLong($data, ${baseOffset + 8} + $keySectionSize, $numEntries);
-       |  $unsafeMapData.pointTo($data, $baseOffset, (int)$byteArraySize);
-       |  ArrayData $keyArrayData = $unsafeMapData.keyArray();
-       |  ArrayData $valueArrayData = $unsafeMapData.valueArray();
-       |  $assignmentLoop
-       |  $mapData = $unsafeMapData;
-       |}
-     """.stripMargin
-  }
-
-  private def genCodeForAnyElements(
-      ctx: CodegenContext,
-      childVariable: String,
-      mapData: String,
-      numEntries: String): String = {
-    val keys = ctx.freshName("keys")
-    val values = ctx.freshName("values")
-    val mapDataClass = classOf[ArrayBasedMapData].getName()
-
-    val isValuePrimitive = CodeGenerator.isPrimitiveType(dataType.valueType)
-    val valueAssignment = (entry: String, idx: String) => {
-      val value = CodeGenerator.getValue(entry, dataType.valueType, "1")
-      if (dataType.valueContainsNull && isValuePrimitive) {
-        s"$values[$idx] = $entry.isNullAt(1) ? null : (Object)$value;"
-      } else {
-        s"$values[$idx] = $value;"
-      }
-    }
-    val keyAssignment = (key: String, idx: String) => s"$keys[$idx] = $key;"
-    val assignmentLoop = genCodeForAssignmentLoop(
-      ctx,
-      childVariable,
-      mapData,
-      numEntries,
-      keyAssignment,
-      valueAssignment)
-
-    s"""
-       |final Object[] $keys = new Object[$numEntries];
-       |final Object[] $values = new Object[$numEntries];
-       |$assignmentLoop
-       |$mapData = $mapDataClass.apply($keys, $values);
-     """.stripMargin
   }
 
   override def prettyName: String = "map_from_entries"
@@ -1171,9 +960,9 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, 3, 5));
-       [3, 1, 5, 20]
+       [3,1,5,20]
       > SELECT _FUNC_(array(1, 20, null, 3));
-       [20, null, 3, 1]
+       [20,null,3,1]
   """,
   note = "The function is non-deterministic.",
   since = "2.4.0")
@@ -1256,7 +1045,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
       > SELECT _FUNC_('Spark SQL');
        LQS krapS
       > SELECT _FUNC_(array(2, 1, 4, 3));
-       [3, 4, 1, 2]
+       [3,4,1,2]
   """,
   since = "1.5.0",
   note = "Reverse logic for arrays is available since 2.4.0."
@@ -1268,11 +1057,15 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
 
   override def dataType: DataType = child.dataType
 
-  @transient private lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+  override def nullSafeEval(input: Any): Any = doReverse(input)
 
-  override def nullSafeEval(input: Any): Any = input match {
-    case a: ArrayData => new GenericArrayData(a.toObjectArray(elementType).reverse)
-    case s: UTF8String => s.reverse()
+  @transient private lazy val doReverse: Any => Any = dataType match {
+    case ArrayType(elementType, _) =>
+      input => {
+        val arrayData = input.asInstanceOf[ArrayData]
+        new GenericArrayData(arrayData.toObjectArray(elementType).reverse)
+      }
+    case StringType => _.asInstanceOf[UTF8String].reverse()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1294,6 +1087,7 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     val i = ctx.freshName("i")
     val j = ctx.freshName("j")
 
+    val elementType = dataType.asInstanceOf[ArrayType].elementType
     val initialization = CodeGenerator.createArrayData(
       arrayData, elementType, numElements, s" $prettyName failed.")
     val assignment = CodeGenerator.createArrayAssignment(
@@ -1331,23 +1125,27 @@ case class ArrayContains(left: Expression, right: Expression)
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
 
-  override def inputTypes: Seq[AbstractDataType] = right.dataType match {
-    case NullType => Seq.empty
-    case _ => left.dataType match {
-      case n @ ArrayType(element, _) => Seq(n, element)
+  override def inputTypes: Seq[AbstractDataType] = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) => Seq.empty
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
       case _ => Seq.empty
     }
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (right.dataType == NullType) {
-      TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
-    } else if (!left.dataType.isInstanceOf[ArrayType]
-      || !left.dataType.asInstanceOf[ArrayType].elementType.sameType(right.dataType)) {
-      TypeCheckResult.TypeCheckFailure(
-        "Arguments must be an array followed by a value of same type as the array members")
-    } else {
-      TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
+    (left.dataType, right.dataType) match {
+      case (_, NullType) =>
+        TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as arguments")
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
     }
   }
 
@@ -2062,18 +1860,23 @@ case class ArrayPosition(left: Expression, right: Expression)
   override def dataType: DataType = LongType
 
   override def inputTypes: Seq[AbstractDataType] = {
-    val elementType = left.dataType match {
-      case t: ArrayType => t.elementType
-      case _ => AnyDataType
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
     }
-    Seq(ArrayType, elementType)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
     }
   }
 
@@ -2123,7 +1926,7 @@ case class ArrayPosition(left: Expression, right: Expression)
       > SELECT _FUNC_(array(1, 2, 3), 2);
        2
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), 2);
-       "b"
+       b
   """,
   since = "2.4.0")
 case class ElementAt(left: Expression, right: Expression) extends GetMapValueUtil {
@@ -2140,29 +1943,44 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(ArrayType, MapType),
-      left.dataType match {
-        case _: ArrayType => IntegerType
-        case _: MapType => mapKeyType
-        case _ => AnyDataType // no match for a wrong 'left' expression type
-      }
-    )
+    (left.dataType, right.dataType) match {
+      case (arr: ArrayType, e2: IntegralType) if (e2 != LongType) =>
+        Seq(arr, IntegerType)
+      case (MapType(keyType, valueType, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(keyType, e2) match {
+          case Some(dt) => Seq(MapType(dt, valueType, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case (l, r) => Seq.empty
+
+    }
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess if left.dataType.isInstanceOf[MapType] =>
-        TypeUtils.checkForOrderingExpr(mapKeyType, s"function $prettyName")
-      case TypeCheckResult.TypeCheckSuccess => TypeCheckResult.TypeCheckSuccess
+    (left.dataType, right.dataType) match {
+      case (_: ArrayType, e2) if e2 != IntegerType =>
+        TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+          s"been ${ArrayType.simpleString} followed by a ${IntegerType.simpleString}, but it's " +
+          s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case (MapType(e1, _, _), e2) if (!e2.sameType(e1)) =>
+        TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+          s"been ${MapType.simpleString} followed by a value of same key type, but it's " +
+          s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+      case (e1, _) if (!e1.isInstanceOf[MapType] && !e1.isInstanceOf[ArrayType]) =>
+        TypeCheckResult.TypeCheckFailure(s"The first argument to function $prettyName should " +
+          s"have been ${ArrayType.simpleString} or ${MapType.simpleString} type, but its " +
+          s"${left.dataType.catalogString} type.")
+      case _ => TypeCheckResult.TypeCheckSuccess
     }
   }
 
   override def nullable: Boolean = true
 
-  override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    left.dataType match {
-      case _: ArrayType =>
+  override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
+
+  @transient private lazy val doElementAt: (Any, Any) => Any = left.dataType match {
+    case _: ArrayType =>
+      (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
@@ -2181,9 +1999,9 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
             array.get(idx, dataType)
           }
         }
-      case _: MapType =>
-        getValueEval(value, ordinal, mapKeyType, ordering)
-    }
+      }
+    case _: MapType =>
+      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2238,8 +2056,9 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
       > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
- |     [1,2,3,4,5,6]
-  """)
+       [1,2,3,4,5,6]
+  """,
+  note = "Concat logic for arrays is available since 2.4.0.")
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
@@ -2273,33 +2092,41 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def eval(input: InternalRow): Any = dataType match {
+  override def eval(input: InternalRow): Any = doConcat(input)
+
+  @transient private lazy val doConcat: InternalRow => Any = dataType match {
     case BinaryType =>
-      val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
-      ByteArray.concat(inputs: _*)
+      input => {
+        val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
+        ByteArray.concat(inputs: _*)
+      }
     case StringType =>
-      val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-      UTF8String.concat(inputs : _*)
+      input => {
+        val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+        UTF8String.concat(inputs: _*)
+      }
     case ArrayType(elementType, _) =>
-      val inputs = children.toStream.map(_.eval(input))
-      if (inputs.contains(null)) {
-        null
-      } else {
-        val arrayData = inputs.map(_.asInstanceOf[ArrayData])
-        val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
-        if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-          throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
-            " elements due to exceeding the array size limit " +
-            ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
+      input => {
+        val inputs = children.toStream.map(_.eval(input))
+        if (inputs.contains(null)) {
+          null
+        } else {
+          val arrayData = inputs.map(_.asInstanceOf[ArrayData])
+          val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
+          if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+            throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
+              " elements due to exceeding the array size limit " +
+              ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH + ".")
+          }
+          val finalData = new Array[AnyRef](numberOfElements.toInt)
+          var position = 0
+          for (ad <- arrayData) {
+            val arr = ad.toObjectArray(elementType)
+            Array.copy(arr, 0, finalData, position, arr.length)
+            position += arr.length
+          }
+          new GenericArrayData(finalData)
         }
-        val finalData = new Array[AnyRef](numberOfElements.toInt)
-        var position = 0
-        for(ad <- arrayData) {
-          val arr = ad.toObjectArray(elementType)
-          Array.copy(arr, 0, finalData, position, arr.length)
-          position += arr.length
-        }
-        new GenericArrayData(finalData)
       }
   }
 
@@ -2427,7 +2254,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   usage = "_FUNC_(arrayOfArrays) - Transforms an array of arrays into a single array.",
   examples = """
     Examples:
-      > SELECT _FUNC_(array(array(1, 2), array(3, 4));
+      > SELECT _FUNC_(array(array(1, 2), array(3, 4)));
        [1,2,3,4]
   """,
   since = "2.4.0")
@@ -2556,11 +2383,11 @@ case class Flatten(child: Expression) extends UnaryExpression {
   examples = """
     Examples:
       > SELECT _FUNC_(1, 5);
-       [1, 2, 3, 4, 5]
+       [1,2,3,4,5]
       > SELECT _FUNC_(5, 1);
-       [5, 4, 3, 2, 1]
+       [5,4,3,2,1]
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval 1 month);
-       [2018-01-01, 2018-02-01, 2018-03-01]
+       [2018-01-01,2018-02-01,2018-03-01]
   """,
   since = "2.4.0"
 )
@@ -2934,7 +2761,7 @@ object Sequence {
   examples = """
     Examples:
       > SELECT _FUNC_('123', 2);
-       ['123', '123']
+       ["123","123"]
   """,
   since = "2.4.0")
 case class ArrayRepeat(left: Expression, right: Expression)
@@ -3063,25 +2890,30 @@ case class ArrayRemove(left: Expression, right: Expression)
   override def dataType: DataType = left.dataType
 
   override def inputTypes: Seq[AbstractDataType] = {
-    val elementType = left.dataType match {
-      case t: ArrayType => t.elementType
-      case _ => AnyDataType
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
     }
-    Seq(ArrayType, elementType)
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+        TypeUtils.checkForOrderingExpr(e2, s"function $prettyName")
+      case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
+        s"been ${ArrayType.simpleString} followed by a value with same element type, but it's " +
+        s"[${left.dataType.catalogString}, ${right.dataType.catalogString}].")
+    }
   }
 
   private def elementType: DataType = left.dataType.asInstanceOf[ArrayType].elementType
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case f: TypeCheckResult.TypeCheckFailure => f
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(right.dataType, s"function $prettyName")
-    }
-  }
 
   override def nullSafeEval(arr: Any, value: Any): Any = {
     val newArray = new Array[Any](arr.asInstanceOf[ArrayData].numElements())
@@ -3421,7 +3253,7 @@ object ArrayBinaryLike {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(1, 2, 3, 5)
+       [1,2,3,5]
   """,
   since = "2.4.0")
 case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
@@ -3632,7 +3464,7 @@ object ArrayUnion {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(1, 3)
+       [1,3]
   """,
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
@@ -3873,7 +3705,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       array(2)
+       [2]
   """,
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike

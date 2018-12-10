@@ -22,7 +22,6 @@ import scala.util.Random
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -32,20 +31,10 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
   private var rand: Random = _
   private var seed: Long = 0
 
-  private val originalLimitFlatGlobalLimit = SQLConf.get.getConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT)
-
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     seed = System.currentTimeMillis()
     rand = new Random(seed)
-
-    // Disable the optimization to make Sort-Limit match `TakeOrderedAndProject` semantics.
-    SQLConf.get.setConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT, false)
-  }
-
-  protected override def afterAll() = {
-    SQLConf.get.setConf(SQLConf.LIMIT_FLAT_GLOBAL_LIMIT, originalLimitFlatGlobalLimit)
-    super.afterAll()
   }
 
   private def generateRandomInputData(): DataFrame = {

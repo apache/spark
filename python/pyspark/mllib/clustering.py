@@ -184,7 +184,7 @@ class KMeansModel(Saveable, Loader):
     >>> model.k
     2
     >>> model.computeCost(sc.parallelize(data))
-    2.0000000000000004
+    2.0
     >>> model = KMeans.train(sc.parallelize(data), 2)
     >>> sparse_data = [
     ...     SparseVector(3, {1: 1.0}),
@@ -647,7 +647,7 @@ class PowerIterationClustering(object):
     @classmethod
     @since('1.5.0')
     def train(cls, rdd, k, maxIterations=100, initMode="random"):
-        """
+        r"""
         :param rdd:
           An RDD of (i, j, s\ :sub:`ij`\) tuples representing the
           affinity matrix, which is the matrix A in the PIC paper.  The

@@ -30,6 +30,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
@@ -140,7 +141,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     override def executorHeartbeatReceived(
         execId: String,
         accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
-        blockManagerId: BlockManagerId): Boolean = true
+        blockManagerId: BlockManagerId,
+        executorUpdates: ExecutorMetrics): Boolean = true
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
@@ -443,17 +445,17 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // map stage1 completes successfully, with one task on each executor
     complete(taskSets(0), Seq(
       (Success,
-        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2), 1)),
+        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2))),
       (Success,
-        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2), 1)),
+        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2))),
       (Success, makeMapStatus("hostB", 1))
     ))
     // map stage2 completes successfully, with one task on each executor
     complete(taskSets(1), Seq(
       (Success,
-        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2), 1)),
+        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2))),
       (Success,
-        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2), 1)),
+        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2))),
       (Success, makeMapStatus("hostB", 1))
     ))
     // make sure our test setup is correct
@@ -660,7 +662,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       override def executorHeartbeatReceived(
           execId: String,
           accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
-          blockManagerId: BlockManagerId): Boolean = true
+          blockManagerId: BlockManagerId,
+          executorMetrics: ExecutorMetrics): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
       override def applicationAttemptId(): Option[String] = None
@@ -1877,28 +1880,71 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(sc.parallelize(1 to 10, 2).count() === 10)
   }
 
+  test("misbehaved accumulator should not impact other accumulators") {
+    val bad = new LongAccumulator {
+      override def merge(other: AccumulatorV2[java.lang.Long, java.lang.Long]): Unit = {
+        throw new DAGSchedulerSuiteDummyException
+      }
+    }
+    sc.register(bad, "bad")
+    val good = sc.longAccumulator("good")
+
+    sc.parallelize(1 to 10, 2).foreach { item =>
+      bad.add(1)
+      good.add(1)
+    }
+
+    // This is to ensure the `bad` accumulator did fail to update its value
+    assert(bad.value == 0L)
+    // Should be able to update the "good" accumulator
+    assert(good.value == 10L)
+  }
+
   /**
-   * The job will be failed on first task throwing a DAGSchedulerSuiteDummyException.
+   * The job will be failed on first task throwing an error.
    *  Any subsequent task WILL throw a legitimate java.lang.UnsupportedOperationException.
    *  If multiple tasks, there exists a race condition between the SparkDriverExecutionExceptions
    *  and their differing causes as to which will represent result for job...
    */
   test("misbehaved resultHandler should not crash DAGScheduler and SparkContext") {
-    val e = intercept[SparkDriverExecutionException] {
-      // Number of parallelized partitions implies number of tasks of job
-      val rdd = sc.parallelize(1 to 10, 2)
-      sc.runJob[Int, Int](
-        rdd,
-        (context: TaskContext, iter: Iterator[Int]) => iter.size,
-        // For a robust test assertion, limit number of job tasks to 1; that is,
-        // if multiple RDD partitions, use id of any one partition, say, first partition id=0
-        Seq(0),
-        (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
-    }
-    assert(e.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
+    failAfter(1.minute) { // If DAGScheduler crashes, the following test will hang forever
+      for (error <- Seq(
+        new DAGSchedulerSuiteDummyException,
+        new AssertionError, // E.g., assert(foo == bar) fails
+        new NotImplementedError // E.g., call a method with `???` implementation.
+      )) {
+        val e = intercept[SparkDriverExecutionException] {
+          // Number of parallelized partitions implies number of tasks of job
+          val rdd = sc.parallelize(1 to 10, 2)
+          sc.runJob[Int, Int](
+            rdd,
+            (context: TaskContext, iter: Iterator[Int]) => iter.size,
+            // For a robust test assertion, limit number of job tasks to 1; that is,
+            // if multiple RDD partitions, use id of any one partition, say, first partition id=0
+            Seq(0),
+            (part: Int, result: Int) => throw error)
+        }
+        assert(e.getCause eq error)
 
-    // Make sure we can still run commands on our SparkContext
-    assert(sc.parallelize(1 to 10, 2).count() === 10)
+        // Make sure we can still run commands on our SparkContext
+        assert(sc.parallelize(1 to 10, 2).count() === 10)
+      }
+    }
+  }
+
+  test(s"invalid ${SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL} should not crash DAGScheduler") {
+    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "invalid")
+    try {
+      intercept[SparkException] {
+        sc.parallelize(1 to 1, 1).foreach { _ =>
+          throw new DAGSchedulerSuiteDummyException
+        }
+      }
+      // Verify the above job didn't crash DAGScheduler by running a simple job
+      assert(sc.parallelize(1 to 10, 2).count() === 10)
+    } finally {
+      sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, null)
+    }
   }
 
   test("getPartitions exceptions should not crash DAGScheduler and SparkContext (SPARK-8606)") {
@@ -2785,18 +2831,22 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("SPARK-23207: reliable checkpoint can avoid rollback (checkpointed before)") {
-    sc.setCheckpointDir(Utils.createTempDir().getCanonicalPath)
-    val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
-    shuffleMapRdd.checkpoint()
-    shuffleMapRdd.doCheckpoint()
-    assertResultStageNotRollbacked(shuffleMapRdd)
+    withTempDir { dir =>
+      sc.setCheckpointDir(dir.getCanonicalPath)
+      val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
+      shuffleMapRdd.checkpoint()
+      shuffleMapRdd.doCheckpoint()
+      assertResultStageNotRollbacked(shuffleMapRdd)
+    }
   }
 
   test("SPARK-23207: reliable checkpoint fail to rollback (checkpointing now)") {
-    sc.setCheckpointDir(Utils.createTempDir().getCanonicalPath)
-    val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
-    shuffleMapRdd.checkpoint()
-    assertResultStageFailToRollback(shuffleMapRdd)
+    withTempDir { dir =>
+      sc.setCheckpointDir(dir.getCanonicalPath)
+      val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
+      shuffleMapRdd.checkpoint()
+      assertResultStageFailToRollback(shuffleMapRdd)
+    }
   }
 
   /**
@@ -2854,7 +2904,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
 object DAGSchedulerSuite {
   def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2): MapStatus =
-    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), 1)
+    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes))
 
   def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)

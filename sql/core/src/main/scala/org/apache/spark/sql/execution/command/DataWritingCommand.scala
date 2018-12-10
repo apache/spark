@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -74,19 +73,5 @@ object DataWritingCommand {
     outputAttributes.zip(names).map { case (attr, outputName) =>
       attr.withName(outputName)
     }
-  }
-
-  /**
-   * Returns schema of logical plan with provided names.
-   * The length of provided names should be the same of the length of [[LogicalPlan.schema]].
-   */
-  def logicalPlanSchemaWithNames(
-      query: LogicalPlan,
-      names: Seq[String]): StructType = {
-    assert(query.schema.length == names.length,
-      "The length of provided names doesn't match the length of query schema.")
-    StructType(query.schema.zip(names).map { case (structField, outputName) =>
-      structField.copy(name = outputName)
-    })
   }
 }

@@ -23,7 +23,6 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -729,13 +728,5 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(
         Row(Timestamp.valueOf("2015-07-24 07:00:00")),
         Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
-  }
-
-  test("SPARK-23715: to/from_utc_timestamp can retain the previous behavior") {
-    withSQLConf(SQLConf.REJECT_TIMEZONE_IN_STRING.key -> "false") {
-      checkAnswer(
-        sql("SELECT from_utc_timestamp('2000-10-10 00:00:00+00:00', 'GMT+1')"),
-        Row(Timestamp.valueOf("2000-10-09 18:00:00")))
-    }
   }
 }

@@ -740,10 +740,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("select key, count(*) c from src group by key having c").collect()
   }
 
-  test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
-    assert(sql("select key from src having key > 490").collect().size < 100)
-  }
-
   test("union/except/intersect") {
     assertResult(Array(Row(1), Row(1))) {
       sql("select 1 as a union all select 1 as a").collect()

@@ -137,42 +137,34 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         boundCondition, leftPlan, rightPlan)
       EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
     }
-
+    
     val configOptions = List(
       ("spark.sql.codegen.wholeStage", "true"),
       ("spark.sql.codegen.wholeStage", "false"))
 
     // Disabling these because the code would never follow this path in case of a inner range join
     if (!expectRangeJoin) {
-      configOptions.zipWithIndex.foreach { case ((config, confValue), counter) =>
-        test(s"$testName using BroadcastHashJoin (build=left) $counter") {
-          extractJoinParts().foreach { case (_, leftKeys, rightKeys, _,
-          boundCondition, _, _) =>
-            withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1", config -> confValue) {
-              checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
-                makeBroadcastHashJoin(
-                  leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildLeft),
-                expectedAnswer.map(Row.fromTuple),
-                sortAnswers = true)
-            }
-          }
+      testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastHashJoin (build=left)") { _ =>
+        extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+            checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
+              makeBroadcastHashJoin(
+                leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildLeft),
+              expectedAnswer.map(Row.fromTuple),
+              sortAnswers = true)
         }
       }
     }
-
+      
     if(!expectRangeJoin) {
-      configOptions.zipWithIndex.foreach { case ((config, confValue), counter) =>
-        test(s"$testName using BroadcastHashJoin (build=right) $counter") {
-          extractJoinParts().foreach { case (_, leftKeys, rightKeys, _,
-          boundCondition, _, _) =>
-            withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1", config -> confValue) {
-              checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
-                makeBroadcastHashJoin(
-                  leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildRight),
-                expectedAnswer.map(Row.fromTuple),
-                sortAnswers = true)
-            }
-          }
+      testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastHashJoin (build=right)") { _ =>
+        extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+            checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
+              makeBroadcastHashJoin(
+                leftKeys, rightKeys, boundCondition, leftPlan, rightPlan, joins.BuildRight),
+              expectedAnswer.map(Row.fromTuple),
+              sortAnswers = true)
         }
       }
     }
@@ -211,34 +203,13 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       }
     }
 
-    configOptions.zipWithIndex.foreach { case ((config, confValue), counter) =>
-      test(s"$testName using SortMergeJoin $counter") {
-        extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions,
-        boundCondition, _, _) =>
-          assert(!expectRangeJoin && rangeConditions.isEmpty ||
-            expectRangeJoin && rangeConditions.size == 2)
-          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1", config -> confValue) {
-            checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
-              makeSortMergeJoin(leftKeys, rightKeys, boundCondition, rangeConditions,
-                leftPlan, rightPlan),
-              expectedAnswer.map(Row.fromTuple),
-              sortAnswers = true)
-          }
-        }
-        if (expectRangeJoin) {
-          withSQLConf(SQLConf.USE_SMJ_INNER_RANGE_OPTIMIZATION.key -> "false") {
-            extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions,
-            boundCondition, _, _) =>
-              assert(rangeConditions.isEmpty)
-              withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1", config -> confValue) {
-                checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
-                  makeSortMergeJoin(leftKeys, rightKeys, boundCondition, rangeConditions,
-                    leftPlan, rightPlan),
-                  expectedAnswer.map(Row.fromTuple),
-                  sortAnswers = true)
-              }
-            }
-          }
+    testWithWholeStageCodegenOnAndOff(s"$testName using SortMergeJoin") { _ =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
+            makeSortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan),
+            expectedAnswer.map(Row.fromTuple),
+            sortAnswers = true)
         }
       }
     }

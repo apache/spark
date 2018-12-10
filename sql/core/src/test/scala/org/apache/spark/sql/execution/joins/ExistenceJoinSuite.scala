@@ -121,9 +121,8 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       }
     }
 
-    test(s"$testName using BroadcastHashJoin") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rngConds, boundCondition, _, _) =>
-        assert(rngConds.isEmpty)
+    testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastHashJoin") { _ =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(

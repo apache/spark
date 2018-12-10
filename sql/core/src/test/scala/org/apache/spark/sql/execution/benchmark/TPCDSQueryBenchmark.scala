@@ -18,13 +18,13 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.SparkConf
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark to measure TPCDS query performance.

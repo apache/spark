@@ -162,7 +162,8 @@ public class UnsafeShuffleWriterSuite {
       new SerializedShuffleHandle<>(0, 1, shuffleDep),
       0, // map id
       taskContext,
-      conf
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics()
     );
   }
 
@@ -186,14 +187,14 @@ public class UnsafeShuffleWriterSuite {
         if (conf.getBoolean("spark.shuffle.compress", true)) {
           in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
         }
-        DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in);
-        Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
-        while (records.hasNext()) {
-          Tuple2<Object, Object> record = records.next();
-          assertEquals(i, hashPartitioner.getPartition(record._1()));
-          recordsList.add(record);
+        try (DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in)) {
+          Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
+          while (records.hasNext()) {
+            Tuple2<Object, Object> record = records.next();
+            assertEquals(i, hashPartitioner.getPartition(record._1()));
+            recordsList.add(record);
+          }
         }
-        recordsStream.close();
         startOffset += partitionSize;
       }
     }
@@ -233,8 +234,8 @@ public class UnsafeShuffleWriterSuite {
     writer.write(Iterators.emptyIterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
-    assertEquals(0, mapStatus.get().numberOfOutput());
     assertTrue(mergedOutputFile.exists());
+    assertEquals(0, spillFilesCreated.size());
     assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
     assertEquals(0, taskMetrics.shuffleWriteMetrics().recordsWritten());
     assertEquals(0, taskMetrics.shuffleWriteMetrics().bytesWritten());
@@ -253,7 +254,6 @@ public class UnsafeShuffleWriterSuite {
     writer.write(dataToWrite.iterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
-    assertEquals(NUM_PARTITITONS, mapStatus.get().numberOfOutput());
     assertTrue(mergedOutputFile.exists());
 
     long sumOfPartitionSizes = 0;
@@ -523,7 +523,8 @@ public class UnsafeShuffleWriterSuite {
         new SerializedShuffleHandle<>(0, 1, shuffleDep),
         0, // map id
         taskContext,
-        conf);
+        conf,
+        taskContext.taskMetrics().shuffleWriteMetrics());
 
     // Peak memory should be monotonically increasing. More specifically, every time
     // we allocate a new page it should increase by exactly the size of the page.

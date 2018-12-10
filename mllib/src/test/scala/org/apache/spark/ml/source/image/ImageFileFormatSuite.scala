@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.source.image
 
+import java.net.URI
 import java.nio.file.Paths
 
 import org.apache.spark.SparkFunSuite
@@ -58,8 +59,14 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
       .load(filePath)
     assert(df2.count() === 1)
     val result = df2.head()
-    assert(result === invalidImageRow(
-      Paths.get(filePath).toAbsolutePath().normalize().toUri().toString))
+
+    val resultOrigin = result.getStruct(0).getString(0)
+    // covert `origin` to `java.net.URI` object and then compare.
+    // because `file:/path` and `file:///path` are both valid URI-ifications
+    assert(new URI(resultOrigin) === Paths.get(filePath).toAbsolutePath().normalize().toUri())
+
+    // Compare other columns in the row to be the same with the `invalidImageRow`
+    assert(result === invalidImageRow(resultOrigin))
   }
 
   test("image datasource partition test") {

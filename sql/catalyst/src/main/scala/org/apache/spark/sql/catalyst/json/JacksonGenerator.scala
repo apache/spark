@@ -70,7 +70,10 @@ private[sql] class JacksonGenerator(
       s"Initial type ${dataType.catalogString} must be a ${MapType.simpleString}")
   }
 
-  private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+  private val gen = {
+    val generator = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+    if (options.pretty) generator.useDefaultPrettyPrinter() else generator
+  }
 
   private val lineSeparator: String = options.lineSeparatorInWrite
 

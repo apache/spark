@@ -19,14 +19,17 @@ package org.apache.spark.ml.source.image
 
 /**
  * `image` package implements Spark SQL data source API for loading image data as `DataFrame`.
- * The loaded `DataFrame` has one `StructType` column: `image`.
+ * It can load compressed image (jpeg, png, etc.) into raw image representation via `ImageIO`
+ * in Java library.
+ * The loaded `DataFrame` has one `StructType` column: `image`, containing image data stored
+ * as image schema.
  * The schema of the `image` column is:
- *  - origin: String (represents the file path of the image)
- *  - height: Int (height of the image)
- *  - width: Int (width of the image)
- *  - nChannels: Int (number of the image channels)
- *  - mode: Int (OpenCV-compatible type)
- *  - data: BinaryType (Image bytes in OpenCV-compatible order: row-wise BGR in most cases)
+ *  - origin: `StringType` (represents the file path of the image)
+ *  - height: `IntegerType` (height of the image)
+ *  - width: `IntegerType` (width of the image)
+ *  - nChannels: `IntegerType` (number of image channels)
+ *  - mode: `IntegerType` (OpenCV-compatible type)
+ *  - data: `BinaryType` (Image bytes in OpenCV-compatible order: row-wise BGR in most cases)
  *
  * To use image data source, you need to set "image" as the format in `DataFrameReader` and
  * optionally specify the data source options, for example:

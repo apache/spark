@@ -23,7 +23,7 @@ from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel, \
-    RandomForestParams, TreeEnsembleModel, TreeEnsembleParams
+    GBTParams, HasVarianceImpurity, RandomForestParams, TreeEnsembleModel, TreeEnsembleParams
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.wrapper import JavaWrapper
@@ -773,8 +773,8 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         which is a Dataframe having two fields (FPR, TPR) with
         (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
 
-        .. seealso:: `Wikipedia reference \
-        <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
+        .. seealso:: `Wikipedia reference
+            <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
 
         .. note:: This ignores instance weights (setting all to 1.0) from
             `LogisticRegression.weightCol`. This will change in later Spark
@@ -893,15 +893,6 @@ class TreeClassifierParams(object):
         Gets the value of impurity or its default value.
         """
         return self.getOrDefault(self.impurity)
-
-
-class GBTParams(TreeEnsembleParams):
-    """
-    Private class to track supported GBT params.
-
-    .. versionadded:: 1.4.0
-    """
-    supportedLossTypes = ["logistic"]
 
 
 @inherit_doc
@@ -1174,9 +1165,31 @@ class RandomForestClassificationModel(TreeEnsembleModel, JavaClassificationModel
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
 
+class GBTClassifierParams(GBTParams, HasVarianceImpurity):
+    """
+    Private class to track supported GBTClassifier params.
+
+    .. versionadded:: 3.0.0
+    """
+
+    supportedLossTypes = ["logistic"]
+
+    lossType = Param(Params._dummy(), "lossType",
+                     "Loss function which GBT tries to minimize (case-insensitive). " +
+                     "Supported options: " + ", ".join(supportedLossTypes),
+                     typeConverter=TypeConverters.toString)
+
+    @since("1.4.0")
+    def getLossType(self):
+        """
+        Gets the value of lossType or its default value.
+        """
+        return self.getOrDefault(self.lossType)
+
+
 @inherit_doc
-class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
+class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                    GBTClassifierParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
                     JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
@@ -1242,32 +1255,28 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     [0.25..., 0.23..., 0.21..., 0.19..., 0.18...]
     >>> model.numClasses
     2
+    >>> gbt = gbt.setValidationIndicatorCol("validationIndicator")
+    >>> gbt.getValidationIndicatorCol()
+    'validationIndicator'
+    >>> gbt.getValidationTol()
+    0.01
 
     .. versionadded:: 1.4.0
     """
-
-    lossType = Param(Params._dummy(), "lossType",
-                     "Loss function which GBT tries to minimize (case-insensitive). " +
-                     "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
-                     typeConverter=TypeConverters.toString)
-
-    stepSize = Param(Params._dummy(), "stepSize",
-                     "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
-                     "the contribution of each estimator.",
-                     typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
-                 maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0,
-                 featureSubsetStrategy="all"):
+                 maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, impurity="variance",
+                 featureSubsetStrategy="all", validationTol=0.01, validationIndicatorCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
-                 featureSubsetStrategy="all")
+                 impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
+                 validationIndicatorCol=None)
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1275,7 +1284,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0,
-                         featureSubsetStrategy="all")
+                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1285,13 +1294,15 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0,
-                  featureSubsetStrategy="all"):
+                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
+                  validationIndicatorCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
-                  featureSubsetStrategy="all")
+                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
+                  validationIndicatorCol=None)
         Sets params for Gradient Boosted Tree Classification.
         """
         kwargs = self._input_kwargs
@@ -1307,19 +1318,19 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         """
         return self._set(lossType=value)
 
-    @since("1.4.0")
-    def getLossType(self):
-        """
-        Gets the value of lossType or its default value.
-        """
-        return self.getOrDefault(self.lossType)
-
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
         """
         return self._set(featureSubsetStrategy=value)
+
+    @since("3.0.0")
+    def setValidationIndicatorCol(self, value):
+        """
+        Sets the value of :py:attr:`validationIndicatorCol`.
+        """
+        return self._set(validationIndicatorCol=value)
 
 
 class GBTClassificationModel(TreeEnsembleModel, JavaClassificationModel, JavaMLWritable,

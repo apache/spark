@@ -42,7 +42,10 @@ public final class UnsafeSorterSpillWriter {
 
   private final SparkConf conf = new SparkConf();
 
-  /** The buffer size to use when writing the sorted records to an on-disk file */
+  /**
+   * The buffer size to use when writing the sorted records to an on-disk file, and
+   * this space used by prefix + len + recordLength must be greater than 4 + 8 bytes.
+   */
   private final int diskWriteBufferSize =
     (int) (long) conf.get(package$.MODULE$.SHUFFLE_DISK_WRITE_BUFFER_SIZE());
 

@@ -50,34 +50,34 @@ class PeriodicRDDCheckpointerSuite extends SparkFunSuite with SharedSparkContext
   }
 
   test("Checkpointing") {
-    val tempDir = Utils.createTempDir()
-    val path = tempDir.toURI.toString
-    val checkpointInterval = 2
-    var rddsToCheck = Seq.empty[RDDToCheck]
-    sc.setCheckpointDir(path)
-    val rdd1 = createRDD(sc)
-    val checkpointer = new PeriodicRDDCheckpointer[Double](checkpointInterval, rdd1.sparkContext)
-    checkpointer.update(rdd1)
-    rdd1.count()
-    rddsToCheck = rddsToCheck :+ RDDToCheck(rdd1, 1)
-    checkCheckpoint(rddsToCheck, 1, checkpointInterval)
+    withTempDir { tempDir =>
+      val path = tempDir.toURI.toString
+      val checkpointInterval = 2
+      var rddsToCheck = Seq.empty[RDDToCheck]
+      sc.setCheckpointDir(path)
+      val rdd1 = createRDD(sc)
+      val checkpointer =
+        new PeriodicRDDCheckpointer[Double](checkpointInterval, rdd1.sparkContext)
+      checkpointer.update(rdd1)
+      rdd1.count()
+      rddsToCheck = rddsToCheck :+ RDDToCheck(rdd1, 1)
+      checkCheckpoint(rddsToCheck, 1, checkpointInterval)
 
-    var iteration = 2
-    while (iteration < 9) {
-      val rdd = createRDD(sc)
-      checkpointer.update(rdd)
-      rdd.count()
-      rddsToCheck = rddsToCheck :+ RDDToCheck(rdd, iteration)
-      checkCheckpoint(rddsToCheck, iteration, checkpointInterval)
-      iteration += 1
+      var iteration = 2
+      while (iteration < 9) {
+        val rdd = createRDD(sc)
+        checkpointer.update(rdd)
+        rdd.count()
+        rddsToCheck = rddsToCheck :+ RDDToCheck(rdd, iteration)
+        checkCheckpoint(rddsToCheck, iteration, checkpointInterval)
+        iteration += 1
+      }
+
+      checkpointer.deleteAllCheckpoints()
+      rddsToCheck.foreach { rdd =>
+        confirmCheckpointRemoved(rdd.rdd)
+      }
     }
-
-    checkpointer.deleteAllCheckpoints()
-    rddsToCheck.foreach { rdd =>
-      confirmCheckpointRemoved(rdd.rdd)
-    }
-
-    Utils.deleteRecursively(tempDir)
   }
 }
 

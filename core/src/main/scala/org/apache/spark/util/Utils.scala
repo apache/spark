@@ -19,7 +19,6 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.InternalError
 import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
@@ -32,7 +31,6 @@ import java.security.SecureRandom
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.GZIPInputStream
 
 import scala.annotation.tailrec
@@ -93,53 +91,6 @@ private[spark] object Utils extends Logging {
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
-
-  /**
-   * The performance overhead of creating and logging strings for wide schemas can be large. To
-   * limit the impact, we bound the number of fields to include by default. This can be overridden
-   * by setting the 'spark.debug.maxToStringFields' conf in SparkEnv.
-   */
-  val DEFAULT_MAX_TO_STRING_FIELDS = 25
-
-  private[spark] def maxNumToStringFields = {
-    if (SparkEnv.get != null) {
-      SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
-    } else {
-      DEFAULT_MAX_TO_STRING_FIELDS
-    }
-  }
-
-  /** Whether we have warned about plan string truncation yet. */
-  private val truncationWarningPrinted = new AtomicBoolean(false)
-
-  /**
-   * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
-   * maxNumToStringFields will be dropped and replaced by a "... N more fields" placeholder.
-   *
-   * @return the trimmed and formatted string.
-   */
-  def truncatedString[T](
-      seq: Seq[T],
-      start: String,
-      sep: String,
-      end: String,
-      maxNumFields: Int = maxNumToStringFields): String = {
-    if (seq.length > maxNumFields) {
-      if (truncationWarningPrinted.compareAndSet(false, true)) {
-        logWarning(
-          "Truncated the string representation of a plan since it was too large. This " +
-          "behavior can be adjusted by setting 'spark.debug.maxToStringFields' in SparkEnv.conf.")
-      }
-      val numFields = math.max(0, maxNumFields - 1)
-      seq.take(numFields).mkString(
-        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
-    } else {
-      seq.mkString(start, sep, end)
-    }
-  }
-
-  /** Shorthand for calling truncatedString() without start or end strings. */
-  def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -238,6 +189,19 @@ private[spark] object Utils extends Logging {
   def classForName(className: String): Class[_] = {
     Class.forName(className, true, getContextOrSparkClassLoader)
     // scalastyle:on classforname
+  }
+
+  /**
+   * Run a segment of code using a different context class loader in the current thread
+   */
+  def withContextClassLoader[T](ctxClassLoader: ClassLoader)(fn: => T): T = {
+    val oldClassLoader = Thread.currentThread().getContextClassLoader()
+    try {
+      Thread.currentThread().setContextClassLoader(ctxClassLoader)
+      fn
+    } finally {
+      Thread.currentThread().setContextClassLoader(oldClassLoader)
+    }
   }
 
   /**
@@ -2052,6 +2016,30 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Implements the same logic as JDK `java.lang.String#trim` by removing leading and trailing
+   * non-printable characters less or equal to '\u0020' (SPACE) but preserves natural line
+   * delimiters according to [[java.util.Properties]] load method. The natural line delimiters are
+   * removed by JDK during load. Therefore any remaining ones have been specifically provided and
+   * escaped by the user, and must not be ignored
+   *
+   * @param str
+   * @return the trimmed value of str
+   */
+  private[util] def trimExceptCRLF(str: String): String = {
+    val nonSpaceOrNaturalLineDelimiter: Char => Boolean = { ch =>
+      ch > ' ' || ch == '\r' || ch == '\n'
+    }
+
+    val firstPos = str.indexWhere(nonSpaceOrNaturalLineDelimiter)
+    val lastPos = str.lastIndexWhere(nonSpaceOrNaturalLineDelimiter)
+    if (firstPos >= 0 && lastPos >= 0) {
+      str.substring(firstPos, lastPos + 1)
+    } else {
+      ""
+    }
+  }
+
   /** Load properties present in the given file. */
   def getPropertiesFromFile(filename: String): Map[String, String] = {
     val file = new File(filename)
@@ -2062,8 +2050,10 @@ private[spark] object Utils extends Logging {
     try {
       val properties = new Properties()
       properties.load(inReader)
-      properties.stringPropertyNames().asScala.map(
-        k => (k, properties.getProperty(k).trim)).toMap
+      properties.stringPropertyNames().asScala
+        .map { k => (k, trimExceptCRLF(properties.getProperty(k))) }
+        .toMap
+
     } catch {
       case e: IOException =>
         throw new SparkException(s"Failed when loading Spark properties from $filename", e)
@@ -2290,7 +2280,12 @@ private[spark] object Utils extends Logging {
    * configure a new log4j level
    */
   def setLogLevel(l: org.apache.log4j.Level) {
-    org.apache.log4j.Logger.getRootLogger().setLevel(l)
+    val rootLogger = org.apache.log4j.Logger.getRootLogger()
+    rootLogger.setLevel(l)
+    rootLogger.getAllAppenders().asScala.foreach {
+      case ca: org.apache.log4j.ConsoleAppender => ca.setThreshold(l)
+      case _ => // no-op
+    }
   }
 
   /**
@@ -2392,7 +2387,8 @@ private[spark] object Utils extends Logging {
       "org.apache.spark.security.ShellBasedGroupsMappingProvider")
     if (groupProviderClassName != "") {
       try {
-        val groupMappingServiceProvider = classForName(groupProviderClassName).newInstance.
+        val groupMappingServiceProvider = classForName(groupProviderClassName).
+          getConstructor().newInstance().
           asInstanceOf[org.apache.spark.security.GroupMappingServiceProvider]
         val currentUserGroups = groupMappingServiceProvider.getGroups(username)
         return currentUserGroups
@@ -2698,7 +2694,7 @@ private[spark] object Utils extends Logging {
     }
 
     val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
-    val resolvedURL = masterScheme.toLowerCase match {
+    val resolvedURL = masterScheme.toLowerCase(Locale.ROOT) match {
       case "https" =>
         masterWithoutK8sPrefix
       case "http" =>
@@ -2824,6 +2820,14 @@ private[spark] object Utils extends Logging {
    */
   def stringHalfWidth(str: String): Int = {
     if (str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
+  }
+
+  def sanitizeDirName(str: String): String = {
+    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
+  }
+
+  def isClientMode(conf: SparkConf): Boolean = {
+    "client".equals(conf.get(SparkLauncher.DEPLOY_MODE, "client"))
   }
 }
 

@@ -51,6 +51,9 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
   var taskScheduler: TestTaskScheduler = null
   var scheduler: DAGScheduler = null
   var backend: T = _
+  // Even though the tests aren't doing much, occassionally we see flakiness from pauses over
+  // a second (probably from GC?) so we leave a long timeout in here
+  val duration = Duration(10, SECONDS)
 
   override def beforeEach(): Unit = {
     if (taskScheduler != null) {
@@ -539,7 +542,6 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     }
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
-      val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
     }
     assert(results === (0 until 10).map { _ -> 42 }.toMap)
@@ -592,7 +594,6 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     }
     withBackend(runBackend _) {
       val jobFuture = submit(d, (0 until 30).toArray)
-      val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
     }
     assert(results === (0 until 30).map { idx => idx -> (4321 + idx) }.toMap)
@@ -634,7 +635,6 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     }
     withBackend(runBackend _) {
       val jobFuture = submit(shuffledRdd, (0 until 10).toArray)
-      val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
     }
     assertDataStructuresEmpty()
@@ -649,7 +649,6 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     }
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
-      val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
       assert(failure.getMessage.contains("test task failure"))
     }

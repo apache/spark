@@ -31,6 +31,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var originalInstantiatedSparkSession: Option[SparkSession] = _
 
   override protected def beforeAll(): Unit = {
+    super.beforeAll()
     originalActiveSparkSession = SparkSession.getActiveSession
     originalInstantiatedSparkSession = SparkSession.getDefaultSession
 
@@ -39,9 +40,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   override protected def afterAll(): Unit = {
-    // Set these states back.
-    originalActiveSparkSession.foreach(ctx => SparkSession.setActiveSession(ctx))
-    originalInstantiatedSparkSession.foreach(ctx => SparkSession.setDefaultSession(ctx))
+    try {
+      // Set these states back.
+      originalActiveSparkSession.foreach(ctx => SparkSession.setActiveSession(ctx))
+      originalInstantiatedSparkSession.foreach(ctx => SparkSession.setDefaultSession(ctx))
+    } finally {
+      super.afterAll()
+    }
   }
 
   private def checkEstimation(
@@ -50,7 +55,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       expectedPartitionStartIndices: Array[Int]): Unit = {
     val mapOutputStatistics = bytesByPartitionIdArray.zipWithIndex.map {
       case (bytesByPartitionId, index) =>
-        new MapOutputStatistics(index, bytesByPartitionId, Array[Long](1))
+        new MapOutputStatistics(index, bytesByPartitionId)
     }
     val estimatedPartitionStartIndices =
       coordinator.estimatePartitionStartIndices(mapOutputStatistics)
@@ -114,8 +119,8 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0, 0)
       val mapOutputStatistics =
         Array(
-          new MapOutputStatistics(0, bytesByPartitionId1, Array[Long](0)),
-          new MapOutputStatistics(1, bytesByPartitionId2, Array[Long](0)))
+          new MapOutputStatistics(0, bytesByPartitionId1),
+          new MapOutputStatistics(1, bytesByPartitionId2))
       intercept[AssertionError](coordinator.estimatePartitionStartIndices(mapOutputStatistics))
     }
 

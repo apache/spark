@@ -198,7 +198,6 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       fileSinkConf = fileSinkConf,
       outputLocation = tmpLocation.toString,
-      allColumns = outputColumns,
       partitionAttributes = partitionAttributes)
 
     if (partition.nonEmpty) {

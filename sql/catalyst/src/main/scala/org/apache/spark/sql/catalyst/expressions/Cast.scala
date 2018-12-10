@@ -183,7 +183,7 @@ object Cast {
     case _ => false
   }
 
-  private def resolvableNullability(from: Boolean, to: Boolean) = !from || to
+  def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
 }
 
 /**
