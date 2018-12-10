@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.{Pattern, PatternSyntaxException}
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.unsafe.types.UTF8String
+
 
 object StringUtils {
 
@@ -90,18 +91,65 @@ object StringUtils {
     funcNames.toSeq
   }
 
+  def split(sql: String): Array[String] = {
+    val dQuote: Char = '"'
+    val sQuote: Char = '\''
+    val semicolon: Char = ';'
+    val escape: Char = '\\'
+    val dot = '.'
+    val inlineComment = "--"
+
+    var cursor: Int = 0
+    var inStr: Char = dot // dot means that the cursor is not in a quoted string
+    val ret: mutable.ArrayBuffer[String] = mutable.ArrayBuffer()
+    var currentSQL: mutable.StringBuilder = mutable.StringBuilder.newBuilder
+
+    while (cursor < sql.length) {
+      val current: Char = sql(cursor)
+      sql.substring(cursor) match {
+        // if it is comment, move cursor at the end of this line
+        case remaining if inStr == dot && remaining.startsWith(inlineComment) =>
+          cursor += remaining.takeWhile(x => x != '\n').length
+        // end of the sql
+        case remaining if inStr == dot && current == semicolon =>
+          ret += currentSQL.toString.trim
+          currentSQL.clear()
+          cursor += 1
+        // start of single/double quote
+        case remaining if inStr == dot && (List(dQuote, sQuote) contains current) =>
+          inStr = current
+          currentSQL += current
+          cursor += 1
+        case remaining if remaining.length >= 2 && inStr != dot && current == escape =>
+          currentSQL.append(remaining.take(2))
+          cursor += 2
+        // end of single/double quote
+        case remaining if (inStr == dQuote || inStr == sQuote) && current == inStr =>
+          inStr = '.'
+          currentSQL += current
+          cursor += 1
+        case remaining =>
+          currentSQL += current
+          cursor += 1
+      }
+    }
+    ret += currentSQL.toString.trim
+    ret.filter(org.apache.commons.lang.StringUtils.isNotBlank).toArray
+  }
+
+
   /**
    * Concatenation of sequence of strings to final string with cheap append method
    * and one memory allocation for the final string.
    */
   class StringConcat {
-    private val strings = new ArrayBuffer[String]
+    private val strings = new mutable.ArrayBuffer[String]
     private var length: Int = 0
 
     /**
-     * Appends a string and accumulates its length to allocate a string buffer for all
-     * appended strings once in the toString method.
-     */
+      * Appends a string and accumulates its length to allocate a string buffer for all
+      * appended strings once in the toString method.
+      */
     def append(s: String): Unit = {
       if (s != null) {
         strings.append(s)
@@ -110,9 +158,9 @@ object StringUtils {
     }
 
     /**
-     * The method allocates memory for all appended strings, writes them to the memory and
-     * returns concatenated string.
-     */
+      * The method allocates memory for all appended strings, writes them to the memory and
+      * returns concatenated string.
+      */
     override def toString: String = {
       val result = new java.lang.StringBuilder(length)
       strings.foreach(result.append)

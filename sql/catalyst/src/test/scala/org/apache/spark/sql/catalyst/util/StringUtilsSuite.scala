@@ -44,6 +44,21 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(filterPattern(names, " d* ") === Nil)
   }
 
+  test("split a SQL") {
+    val statement = "select * from tmp.dada;"
+    assert(StringUtils.split(statement) === Array("select * from tmp.dada"))
+
+    val statements = "select * from tmp.dada;;select * from tmp.ada;"
+    assert(StringUtils.split(statements) ===
+      Array("select * from tmp.dada", "select * from tmp.ada"))
+
+    val semicolonInStr =
+      """
+        |select "^;^"
+      """.stripMargin.trim
+    assert(StringUtils.split(semicolonInStr) === Array(semicolonInStr))
+  }
+
   test("string concatenation") {
     def concat(seq: String*): String = {
       seq.foldLeft(new StringConcat())((acc, s) => {acc.append(s); acc}).toString

@@ -18,13 +18,13 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
-import java.util.{ArrayList => JArrayList, Locale}
+import java.util.{ArrayList, Locale}
 
 import scala.collection.JavaConverters._
 
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
-import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang.{StringUtils => ApacheStringUtils}
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
@@ -37,14 +37,16 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
+import sun.misc.{Signal, SignalHandler}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
-import org.apache.spark.util.ShutdownHookManager
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
@@ -143,8 +145,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       // See also: code in ExecDriver.java
       var loader = conf.getClassLoader
       val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
-      if (StringUtils.isNotBlank(auxJars)) {
-        loader = Utilities.addToClassPath(loader, StringUtils.split(auxJars, ","))
+      if (ApacheStringUtils.isNotBlank(auxJars)) {
+        loader = Utilities.addToClassPath(loader, ApacheStringUtils.split(auxJars, ","))
       }
       conf.setClassLoader(loader)
       Thread.currentThread().setContextClassLoader(loader)
@@ -309,12 +311,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val conf: Configuration =
     if (sessionState != null) sessionState.getConf else new Configuration()
 
-  // Force initializing SparkSQLEnv. This is put here but not object SparkSQLCliDriver
-  // because the Hive unit tests do not go through the main() code path.
   if (!isRemoteMode) {
-    SparkSQLEnv.init()
-    if (sessionState.getIsSilent) {
-      SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
+    if (!Utils.isTesting) {
+      SparkSQLEnv.init()
+      if (sessionState.getIsSilent) {
+        SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
+      }
     }
   } else {
     // Hive 1.2 + not supported in CLI
@@ -329,6 +331,64 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     val master = SparkSQLEnv.sparkContext.master
     val appId = SparkSQLEnv.sparkContext.applicationId
     console.printInfo(s"Spark master: $master, Application Id: $appId")
+  }
+
+  override def processLine(line: String, allowInterrupting: Boolean): Int = {
+    var oldSignal: SignalHandler = null
+    var interruptSignal: Signal = null
+
+    if (allowInterrupting) {
+      // Remember all threads that were running at the time we started line processing.
+      // Hook up the custom Ctrl+C handler while processing this line
+      interruptSignal = new Signal("INT")
+      oldSignal = Signal.handle(interruptSignal, new SignalHandler() {
+        private val cliThread = Thread.currentThread()
+        private var interruptRequested: Boolean = false
+
+        override def handle(signal: Signal) {
+          val initialRequest = !interruptRequested
+          interruptRequested = true
+
+          // Kill the VM on second ctrl+c
+          if (!initialRequest) {
+            console.printInfo("Exiting the JVM")
+            System.exit(127)
+          }
+
+          // Interrupt the CLI thread to stop the current statement and return
+          // to prompt
+          console.printInfo("Interrupting... Be patient, this might take some time.")
+          console.printInfo("Press Ctrl+C again to kill JVM")
+
+          // First, kill any running Spark jobs
+          // TODO
+        }
+      })
+    }
+
+    try {
+      var lastRet: Int = 0
+      var ret: Int = 0
+
+      for (command <- StringUtils.split(line)) {
+        ret = processCmd(command)
+        // wipe cli query state
+        sessionState.setCommandType(null)
+        lastRet = ret
+        val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
+        if (ret != 0 && !ignoreErrors) {
+          CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
+          return ret
+        }
+      }
+      CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf]);
+      lastRet
+    } finally {
+      // Once we are done processing the line, restore the old handler
+      if (oldSignal != null && interruptSignal != null) {
+        Signal.handle(interruptSignal, oldSignal)
+      }
+    }
   }
 
   override def processCmd(cmd: String): Int = {
@@ -384,7 +444,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             return ret
           }
 
-          val res = new JArrayList[String]()
+          val res = new ArrayList[String]()
 
           if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
             // Print the column names.
