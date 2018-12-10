@@ -397,7 +397,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
   }
 
-  test("Use executor-specific secret file configuration.") {
+  test("use executor-specific secret file configuration.") {
     val secretFileFromDriver = createTempSecretFile("driver-secret")
     val secretFileFromExecutor = createTempSecretFile("executor-secret")
     val conf = new SparkConf()
@@ -409,7 +409,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(encodeFileAsBase64(secretFileFromExecutor) === mgr.getSecretKey())
   }
 
-  test("Files must be loaded on both the driver and executor and not only one of the two.") {
+  test("secret file must be defined in both driver and executor") {
     val conf1 = new SparkConf()
       .set(AUTH_SECRET_FILE_DRIVER, Some("/tmp/driver-secret.txt"))
       .set(SecurityManager.SPARK_AUTH_CONF, "true")
