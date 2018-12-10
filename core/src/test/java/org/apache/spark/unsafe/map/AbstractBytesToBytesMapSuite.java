@@ -622,6 +622,17 @@ public abstract class AbstractBytesToBytesMapSuite {
     } catch (IllegalArgumentException e) {
       // expected exception
     }
+
+    try {
+      new BytesToBytesMap(
+        taskMemoryManager,
+        1,
+        TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES + 1);
+      Assert.fail("Expected IllegalArgumentException to be thrown");
+    } catch (IllegalArgumentException e) {
+      // expected exception
+    }
+
   }
 
   @Test
