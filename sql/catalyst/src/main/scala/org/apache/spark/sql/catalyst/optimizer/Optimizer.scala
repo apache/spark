@@ -131,11 +131,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
-    // run this once earlier. this might simplify the plan and reduce cost of optimizer.
-    // for example, a query such as Filter(LocalRelation) would go through all the heavy
+    // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
+    // For example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
-    // (e.g. InferFiltersFromConstraints). if we run this batch earlier, the query becomes just
-    // LocalRelation and does not trigger many rules
+    // (e.g. InferFiltersFromConstraints). If we run this batch earlier, the query becomes just
+    // LocalRelation and does not trigger many rules.
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
@@ -1370,10 +1370,10 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 }
 
 /**
- * Converts local operations (i.e. ones that don't require data exchange) on LocalRelation to
- * another LocalRelation.
+ * Converts local operations (i.e. ones that don't require data exchange) on [[LocalRelation]] to
+ * another [[LocalRelation]].
  *
- * This is relatively simple as it currently handles only 2 single case: Project and Limit.
+ * This rule currently handles 3 cases: [[Project]], [[Limit]] and [[Filter]].
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
