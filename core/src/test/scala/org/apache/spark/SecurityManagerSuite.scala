@@ -428,7 +428,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   Seq("yarn", "local", "local[*]", "local[1,2]", "mesos://localhost:8080").foreach { master =>
-    test(s"Master $master cannot use file mounted secrets") {
+    test(s"master $master cannot use file mounted secrets") {
       val conf = new SparkConf()
         .set(AUTH_SECRET_FILE, "/tmp/secret.txt")
         .set(SecurityManager.SPARK_AUTH_CONF, "true")
