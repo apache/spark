@@ -38,13 +38,11 @@ public class TestMemoryConsumer extends MemoryConsumer {
     return used;
   }
 
-  @VisibleForTesting
   public void use(long size) {
     long got = taskMemoryManager.acquireExecutionMemory(size, this);
     used += got;
   }
 
-  @VisibleForTesting
   public void free(long size) {
     used -= size;
     taskMemoryManager.releaseExecutionMemory(size, this);
