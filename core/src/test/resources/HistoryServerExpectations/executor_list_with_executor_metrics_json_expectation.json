@@ -37,7 +37,13 @@
     "DirectPoolMemory" : 397602,
     "MappedPoolMemory" : 0,
     "JVMHeapMemory" : 629553808,
-    "OffHeapStorageMemory" : 0
+    "OffHeapStorageMemory" : 0,
+    "ProcessTreeJVMVMemory": 0,
+    "ProcessTreeJVMRSSMemory": 0,
+    "ProcessTreePythonVMemory": 0,
+    "ProcessTreePythonRSSMemory": 0,
+    "ProcessTreeOtherVMemory": 0,
+    "ProcessTreeOtherRSSMemory": 0
   }
 }, {
   "id" : "7",
@@ -177,7 +183,13 @@
     "DirectPoolMemory" : 126261,
     "MappedPoolMemory" : 0,
     "JVMHeapMemory" : 518613056,
-    "OffHeapStorageMemory" : 0
+    "OffHeapStorageMemory" : 0,
+    "ProcessTreeJVMVMemory": 0,
+    "ProcessTreeJVMRSSMemory": 0,
+    "ProcessTreePythonVMemory": 0,
+    "ProcessTreePythonRSSMemory": 0,
+    "ProcessTreeOtherVMemory": 0,
+    "ProcessTreeOtherRSSMemory": 0
   }
 }, {
   "id" : "3",
@@ -221,7 +233,13 @@
     "DirectPoolMemory" : 87796,
     "MappedPoolMemory" : 0,
     "JVMHeapMemory" : 726805712,
-    "OffHeapStorageMemory" : 0
+    "OffHeapStorageMemory" : 0,
+    "ProcessTreeJVMVMemory": 0,
+    "ProcessTreeJVMRSSMemory": 0,
+    "ProcessTreePythonVMemory": 0,
+    "ProcessTreePythonRSSMemory": 0,
+    "ProcessTreeOtherVMemory": 0,
+    "ProcessTreeOtherRSSMemory": 0
   }
 }, {
   "id" : "2",
@@ -265,7 +283,13 @@
     "DirectPoolMemory" : 87796,
     "MappedPoolMemory" : 0,
     "JVMHeapMemory" : 595946552,
-    "OffHeapStorageMemory" : 0
+    "OffHeapStorageMemory" : 0,
+    "ProcessTreeJVMVMemory": 0,
+    "ProcessTreeJVMRSSMemory": 0,
+    "ProcessTreePythonVMemory": 0,
+    "ProcessTreePythonRSSMemory": 0,
+    "ProcessTreeOtherVMemory": 0,
+    "ProcessTreeOtherRSSMemory": 0
   }
 }, {
   "id" : "1",
@@ -309,6 +333,12 @@
     "DirectPoolMemory" : 98230,
     "MappedPoolMemory" : 0,
     "JVMHeapMemory" : 755008624,
-    "OffHeapStorageMemory" : 0
+    "OffHeapStorageMemory" : 0,
+    "ProcessTreeJVMVMemory": 0,
+    "ProcessTreeJVMRSSMemory": 0,
+    "ProcessTreePythonVMemory": 0,
+    "ProcessTreePythonRSSMemory": 0,
+    "ProcessTreeOtherVMemory": 0,
+    "ProcessTreeOtherRSSMemory": 0
   }
 } ]

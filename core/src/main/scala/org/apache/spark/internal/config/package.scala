@@ -93,6 +93,11 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_PROCESS_TREE_METRICS =
+    ConfigBuilder("spark.eventLog.logStageExecutorProcessTreeMetrics.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
 

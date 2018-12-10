@@ -282,53 +282,67 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       // receive 3 metric updates from each executor with just stage 0 running,
       // with different peak updates for each executor
       createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L))),
+        new ExecutorMetrics(Array(4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L, 7500L, 3500L,
+          6500L, 2500L, 5500L, 1500L))),
       createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L))),
-      // exec 1: new stage 0 peaks for metrics at indexes: 2, 4, 6
+        new ExecutorMetrics(Array(1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L, 8500L, 3500L,
+          7500L, 2500L, 6500L, 1500L))),
+      // exec 1: new stage 0 peaks for metrics at indexes:  2, 4, 6
       createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L))),
+        new ExecutorMetrics(Array(4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L, 8000L, 4000L,
+          7000L, 3000L, 6000L, 2000L))),
       // exec 2: new stage 0 peaks for metrics at indexes: 0, 4, 6
       createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L))),
+        new ExecutorMetrics(Array(2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L, 9000L, 4000L,
+          8000L, 3000L, 7000L, 2000L))),
       // exec 1: new stage 0 peaks for metrics at indexes: 5, 7
       createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L))),
+        new ExecutorMetrics(Array(2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L, 8000L, 3500L,
+          7000L, 2500L, 6000L, 1500L))),
       // exec 2: new stage 0 peaks for metrics at indexes: 0, 5, 6, 7, 8
       createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L))),
+        new ExecutorMetrics(Array(3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L, 8500L, 3500L,
+          7500L, 2500L, 6500L, 1500L))),
       // now start stage 1, one more metric update for each executor, and new
       // peaks for some stage 1 metrics (as listed), initialize stage 1 peaks
       createStageSubmittedEvent(1),
       // exec 1: new stage 0 peaks for metrics at indexes: 0, 3, 7; initialize stage 1 peaks
       createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L, 0L))),
-      // exec 2: new stage 0 peaks for metrics at indexes: 0, 1, 2, 3, 6, 7, 9;
+        new ExecutorMetrics(Array(5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L,
+          0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L))),
+      // exec 2: new stage 0 peaks for metrics at indexes: 0, 1, 3, 6, 7, 9;
       // initialize stage 1 peaks
       createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 0L, 10L, 50L, 30L, 10L, 40L))),
+        new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 0L, 10L, 50L, 30L, 10L,
+          40L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L))),
       // complete stage 0, and 3 more updates for each executor with just
       // stage 1 running
       createStageCompletedEvent(0),
       // exec 1: new stage 1 peaks for metrics at indexes: 0, 1, 3
       createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L))),
-      // enew ExecutorMetrics(xec 2: new stage 1 peaks for metrics at indexes: 3, 4, 7, 8
+        new ExecutorMetrics(Array(6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L, 5000L, 3000L,
+          4000L, 2000L, 3000L, 1000L))),
+      // exec 2: new stage 1 peaks for metrics at indexes: 3, 4, 7, 8
       createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L, 20L))),
+        new ExecutorMetrics(Array(5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L,
+          20L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 5000L, 2000L))),
       // exec 1: new stage 1 peaks for metrics at indexes: 0, 4, 5, 7
       createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L))),
+        new ExecutorMetrics(Array(7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L, 3000L, 2500L,
+          2000L, 1500L, 1000L, 500L))),
       // exec 2: new stage 1 peak for metrics at index: 7
       createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 20L))),
+        new ExecutorMetrics(Array(5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L,
+          20L, 7000L, 3000L, 6000L, 2000L, 5000L, 1000L))),
       // exec 1: no new stage 1 peaks
       createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L, 0L))),
+        new ExecutorMetrics(Array(5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L,
+          0L, 4000L, 2500L, 3000L, 1500L, 2000L, 500L))),
       createExecutorRemovedEvent(1),
       // exec 2: new stage 1 peak for metrics at index: 6
       createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L))),
+        new ExecutorMetrics(Array(4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L, 7000L,
+          4000L, 6000L, 3000L, 5000L, 2000L))),
       createStageCompletedEvent(1),
       SparkListenerApplicationEnd(1000L))
 
@@ -342,20 +356,23 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
     // expected StageExecutorMetrics, for the given stage id and executor id
     val expectedMetricsEvents: Map[(Int, String), SparkListenerStageExecutorMetrics] =
-      Map(
-        ((0, "1"),
-          new SparkListenerStageExecutorMetrics("1", 0, 0,
-            new ExecutorMetrics(Array(5000L, 50L, 50L, 20L, 50L, 10L, 100L, 30L, 70L, 20L)))),
-        ((0, "2"),
-          new SparkListenerStageExecutorMetrics("2", 0, 0,
-            new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L, 80L, 40L)))),
-        ((1, "1"),
-          new SparkListenerStageExecutorMetrics("1", 1, 0,
-            new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 80L, 55L, 50L, 0L)))),
-        ((1, "2"),
-          new SparkListenerStageExecutorMetrics("2", 1, 0,
-            new ExecutorMetrics(Array(7000L, 70L, 50L, 40L, 10L, 30L, 50L, 60L, 40L, 40L)))))
-
+    Map(
+      ((0, "1"),
+        new SparkListenerStageExecutorMetrics("1", 0, 0,
+          new ExecutorMetrics(Array(5000L, 50L, 50L, 20L, 50L, 10L, 100L, 30L,
+            70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L)))),
+      ((0, "2"),
+        new SparkListenerStageExecutorMetrics("2", 0, 0,
+          new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L,
+            80L, 40L, 9000L, 4000L, 8000L, 3000L, 7000L, 2000L)))),
+      ((1, "1"),
+        new SparkListenerStageExecutorMetrics("1", 1, 0,
+          new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 80L, 55L,
+            50L, 0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L)))),
+      ((1, "2"),
+        new SparkListenerStageExecutorMetrics("2", 1, 0,
+          new ExecutorMetrics(Array(7000L, 70L, 50L, 40L, 10L, 30L, 50L, 60L,
+            40L, 40L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L)))))
     // Verify the log file contains the expected events.
     // Posted events should be logged, except for ExecutorMetricsUpdate events -- these
     // are consolidated, and the peak values for each stage are logged at stage end.
@@ -456,9 +473,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
               assert(executorMetrics.execId === expectedMetrics.execId)
               assert(executorMetrics.stageId === expectedMetrics.stageId)
               assert(executorMetrics.stageAttemptId === expectedMetrics.stageAttemptId)
-              ExecutorMetricType.values.foreach { metricType =>
-                assert(executorMetrics.executorMetrics.getMetricValue(metricType) ===
-                  expectedMetrics.executorMetrics.getMetricValue(metricType))
+              ExecutorMetricType.metricToOffset.foreach { metric =>
+                assert(executorMetrics.executorMetrics.getMetricValue(metric._1) ===
+                  expectedMetrics.executorMetrics.getMetricValue(metric._1))
               }
             case None =>
               assert(false)
