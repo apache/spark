@@ -33,6 +33,7 @@ import org.mockito.MockitoAnnotations;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.memory.TestMemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
@@ -671,7 +672,8 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void avoidDeadlock() throws InterruptedException {
     memoryManager.limit(PAGE_SIZE_BYTES);
-    TestMemoryConsumer c1 = new TestMemoryConsumer(taskMemoryManager);
+    MemoryMode mode = useOffHeapMemoryAllocator() ? MemoryMode.OFF_HEAP: MemoryMode.ON_HEAP;
+    TestMemoryConsumer c1 = new TestMemoryConsumer(taskMemoryManager, mode);
     BytesToBytesMap map =
       new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 1, 0.5, 1024);
 
