@@ -21,6 +21,8 @@ import java.util.regex.{Pattern, PatternSyntaxException}
 
 import scala.collection.mutable
 
+import org.apache.commons.lang.StringUtils.isNotBlank
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -92,15 +94,15 @@ object StringUtils {
   }
 
   def split(sql: String): Array[String] = {
-    val dQuote: Char = '"'
-    val sQuote: Char = '\''
-    val semicolon: Char = ';'
-    val escape: Char = '\\'
-    val dot = '.'
-    val inlineComment = "--"
+    val D_QUOTE: Char = '"'
+    val S_QUOTE: Char = '\''
+    val SEMICOLON: Char = ';'
+    val ESCAPE: Char = '\\'
+    val DOT = '.'
+    val INLINE_COMMENT = "--"
 
     var cursor: Int = 0
-    var inStr: Char = dot // dot means that the cursor is not in a quoted string
+    var inStr: Char = DOT // dot means that the cursor is not in a quoted string
     val ret: mutable.ArrayBuffer[String] = mutable.ArrayBuffer()
     var currentSQL: mutable.StringBuilder = mutable.StringBuilder.newBuilder
 
@@ -108,24 +110,24 @@ object StringUtils {
       val current: Char = sql(cursor)
       sql.substring(cursor) match {
         // if it is comment, move cursor at the end of this line
-        case remaining if inStr == dot && remaining.startsWith(inlineComment) =>
+        case remaining if inStr == DOT && remaining.startsWith(INLINE_COMMENT) =>
           cursor += remaining.takeWhile(x => x != '\n').length
         // end of the sql
-        case remaining if inStr == dot && current == semicolon =>
+        case remaining if inStr == DOT && current == SEMICOLON =>
           ret += currentSQL.toString.trim
           currentSQL.clear()
           cursor += 1
         // start of single/double quote
-        case remaining if inStr == dot && (List(dQuote, sQuote) contains current) =>
+        case remaining if inStr == DOT && (List(D_QUOTE, S_QUOTE) contains current) =>
           inStr = current
           currentSQL += current
           cursor += 1
-        case remaining if remaining.length >= 2 && inStr != dot && current == escape =>
+        case remaining if remaining.length >= 2 && inStr != DOT && current == ESCAPE =>
           currentSQL.append(remaining.take(2))
           cursor += 2
         // end of single/double quote
-        case remaining if (inStr == dQuote || inStr == sQuote) && current == inStr =>
-          inStr = '.'
+        case remaining if (inStr == D_QUOTE || inStr == S_QUOTE) && current == inStr =>
+          inStr = DOT
           currentSQL += current
           cursor += 1
         case remaining =>
@@ -134,7 +136,7 @@ object StringUtils {
       }
     }
     ret += currentSQL.toString.trim
-    ret.filter(org.apache.commons.lang.StringUtils.isNotBlank).toArray
+    ret.filter(isNotBlank).toArray
   }
 
 
