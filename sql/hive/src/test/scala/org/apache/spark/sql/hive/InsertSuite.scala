@@ -752,7 +752,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  test("CTAS: INSERT a partitioned table using Hive serde") {
+  test("SPARK-26307: CTAS - INSERT a partitioned table using Hive serde") {
     withTable("tab1") {
       withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
         val df = Seq(("a", 100)).toDF("part", "id")
