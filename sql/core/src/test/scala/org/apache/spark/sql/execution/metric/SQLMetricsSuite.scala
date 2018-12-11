@@ -443,4 +443,19 @@ object InputOutputMetricsHelper {
     }
     listener.getResults()
   }
+
+  test("SPARK-26327: FileSourceScanExec metrics") {
+    withTable("testDataForScan") {
+      spark.range(10).selectExpr("id", "id % 3 as p")
+        .write.partitionBy("p").saveAsTable("testDataForScan")
+      // The execution plan only has 1 FileScan node.
+      val df = spark.sql(
+        "SELECT * FROM testDataForScan WHERE p = 1")
+      testSparkPlanMetrics(df, 1, Map(
+        0L -> (("Scan parquet default.testdataforscan", Map(
+          "number of output rows" -> 3L,
+          "number of files" -> 2L))))
+      )
+    }
+  }
 }
