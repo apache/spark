@@ -57,6 +57,18 @@ class StringUtilsSuite extends SparkFunSuite {
         |select "^;^"
       """.stripMargin.trim
     assert(StringUtils.split(semicolonInStr) === Array(semicolonInStr))
+
+    val inlineComments =
+      """
+        |select 1; --;;;;;;;;
+        |select "---";
+      """.stripMargin
+    val select1 = "select 1"
+    val selectComments =
+      """
+        |select "---"
+      """.stripMargin.trim
+    assert(StringUtils.split(inlineComments) === Array(select1, selectComments))
   }
 
   test("string concatenation") {
