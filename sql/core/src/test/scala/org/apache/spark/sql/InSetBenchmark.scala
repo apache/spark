@@ -40,110 +40,110 @@ object InSetBenchmark extends SqlBasedBenchmark {
 
   import spark.implicits._
 
-  def byteBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runByteBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems bytes"
     val values = (1 to numItems).map(v => s"CAST($v AS tinyint)")
     val df = spark.range(1, numRows).select($"id".cast(ByteType))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def shortBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runShortBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems shorts"
     val values = (1 to numItems).map(v => s"CAST($v AS smallint)")
     val df = spark.range(1, numRows).select($"id".cast(ShortType))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def intBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runIntBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems ints"
     val values = 1 to numItems
     val df = spark.range(1, numRows).select($"id".cast(IntegerType))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def longBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runLongBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems longs"
     val values = (1 to numItems).map(v => s"${v}L")
     val df = spark.range(1, numRows).toDF("id")
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def floatBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runFloatBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems floats"
     val values = (1 to numItems).map(v => s"CAST($v AS float)")
     val df = spark.range(1, numRows).select($"id".cast(FloatType))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def doubleBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runDoubleBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems doubles"
     val values = 1.0 to numItems by 1.0
     val df = spark.range(1, numRows).select($"id".cast(DoubleType))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def smallDecimalBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runSmallDecimalBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems small decimals"
     val values = (1 to numItems).map(v => s"CAST($v AS decimal(12, 1))")
     val df = spark.range(1, numRows).select($"id".cast(DecimalType(12, 1)))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def largeDecimalBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runLargeDecimalBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems large decimals"
     val values = (1 to numItems).map(v => s"9223372036854775812.10539$v")
     val df = spark.range(1, numRows).select($"id".cast(DecimalType(30, 7)))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def stringBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runStringBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems strings"
     val values = (1 to numItems).map(n => s"'$n'")
     val df = spark.range(1, numRows).select($"id".cast(StringType))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def timestampBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runTimestampBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems timestamps"
     val values = (1 to numItems).map(m => s"CAST('1970-01-01 01:00:$m' AS timestamp)")
     val df = spark.range(1, numRows).select($"id".cast(TimestampType))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def dateBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runDateBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems dates"
     val values = (1 to numItems).map(n => 1970 + n).map(y => s"CAST('$y-01-01' AS date)")
     val df = spark.range(1, numRows).select($"id".cast(TimestampType).cast(DateType))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def arrayBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runArrayBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems arrays"
     val values = (1 to numItems).map(i => s"array($i)")
     val df = spark.range(1, numRows).select(array($"id").as("id"))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def structBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Benchmark = {
+  private def runStructBenchmark(numItems: Int, numRows: Long, minNumIters: Int): Unit = {
     val name = s"$numItems structs"
     val values = (1 to numItems).map(i => s"struct($i)")
     val df = spark.range(1, numRows).select(struct($"id".as("col1")).as("id"))
-    benchmark(name, df, values, numRows, minNumIters)
+    runBenchmark(name, df, values, numRows, minNumIters)
   }
 
-  def benchmark(
+  private def runBenchmark(
       name: String,
       df: DataFrame,
       values: Seq[Any],
       numRows: Long,
-      minNumIters: Int): Benchmark = {
+      minNumIters: Int): Unit = {
 
     val benchmark = new Benchmark(name, numRows, minNumIters, output = output)
 
     df.createOrReplaceTempView("t")
 
     def testClosure(): Unit = {
-      val df = spark.sql(s"SELECT * FROM t WHERE id IN (${values mkString ","})")
+      val df = spark.sql(s"SELECT * FROM t WHERE id IN (${values.mkString(",")})")
       df.queryExecution.toRdd.foreach(_ => Unit)
     }
 
@@ -159,7 +159,7 @@ object InSetBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    benchmark
+    benchmark.run()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
@@ -168,46 +168,83 @@ object InSetBenchmark extends SqlBasedBenchmark {
     val minNumIters = 5
 
     runBenchmark("InSet Expression Benchmark") {
-      byteBenchmark(numItems = 10, largeNumRows, minNumIters).run()
-      byteBenchmark(numItems = 50, largeNumRows, minNumIters).run()
+      runByteBenchmark(numItems = 5, largeNumRows, minNumIters)
+      runByteBenchmark(numItems = 10, largeNumRows, minNumIters)
+      runByteBenchmark(numItems = 25, largeNumRows, minNumIters)
+      runByteBenchmark(numItems = 50, largeNumRows, minNumIters)
+      runByteBenchmark(numItems = 100, largeNumRows, minNumIters)
 
-      shortBenchmark(numItems = 10, largeNumRows, minNumIters).run()
-      shortBenchmark(numItems = 100, largeNumRows, minNumIters).run()
+      runShortBenchmark(numItems = 5, largeNumRows, minNumIters)
+      runShortBenchmark(numItems = 10, largeNumRows, minNumIters)
+      runShortBenchmark(numItems = 25, largeNumRows, minNumIters)
+      runShortBenchmark(numItems = 50, largeNumRows, minNumIters)
+      runShortBenchmark(numItems = 100, largeNumRows, minNumIters)
 
-      intBenchmark(numItems = 10, largeNumRows, minNumIters).run()
-      intBenchmark(numItems = 50, largeNumRows, minNumIters).run()
-      intBenchmark(numItems = 250, largeNumRows, minNumIters).run()
+      runIntBenchmark(numItems = 5, largeNumRows, minNumIters)
+      runIntBenchmark(numItems = 10, largeNumRows, minNumIters)
+      runIntBenchmark(numItems = 25, largeNumRows, minNumIters)
+      runIntBenchmark(numItems = 50, largeNumRows, minNumIters)
+      runIntBenchmark(numItems = 100, largeNumRows, minNumIters)
 
-      longBenchmark(numItems = 10, largeNumRows, minNumIters).run()
-      longBenchmark(numItems = 50, largeNumRows, minNumIters).run()
-      longBenchmark(numItems = 250, largeNumRows, minNumIters).run()
+      runLongBenchmark(numItems = 5, largeNumRows, minNumIters)
+      runLongBenchmark(numItems = 10, largeNumRows, minNumIters)
+      runLongBenchmark(numItems = 25, largeNumRows, minNumIters)
+      runLongBenchmark(numItems = 50, largeNumRows, minNumIters)
+      runLongBenchmark(numItems = 100, largeNumRows, minNumIters)
 
-      floatBenchmark(numItems = 10, largeNumRows, minNumIters).run()
-      floatBenchmark(numItems = 50, largeNumRows, minNumIters).run()
+      runFloatBenchmark(numItems = 5, largeNumRows, minNumIters)
+      runFloatBenchmark(numItems = 10, largeNumRows, minNumIters)
+      runFloatBenchmark(numItems = 25, largeNumRows, minNumIters)
+      runFloatBenchmark(numItems = 50, largeNumRows, minNumIters)
+      runFloatBenchmark(numItems = 100, largeNumRows, minNumIters)
 
-      doubleBenchmark(numItems = 10, largeNumRows, minNumIters).run()
-      doubleBenchmark(numItems = 50, largeNumRows, minNumIters).run()
+      runDoubleBenchmark(numItems = 5, largeNumRows, minNumIters)
+      runDoubleBenchmark(numItems = 10, largeNumRows, minNumIters)
+      runDoubleBenchmark(numItems = 25, largeNumRows, minNumIters)
+      runDoubleBenchmark(numItems = 50, largeNumRows, minNumIters)
+      runDoubleBenchmark(numItems = 100, largeNumRows, minNumIters)
 
-      smallDecimalBenchmark(numItems = 5, smallNumRows, minNumIters).run()
-      smallDecimalBenchmark(numItems = 15, smallNumRows, minNumIters).run()
+      runSmallDecimalBenchmark(numItems = 5, smallNumRows, minNumIters)
+      runSmallDecimalBenchmark(numItems = 10, smallNumRows, minNumIters)
+      runSmallDecimalBenchmark(numItems = 25, smallNumRows, minNumIters)
+      runSmallDecimalBenchmark(numItems = 50, smallNumRows, minNumIters)
+      runSmallDecimalBenchmark(numItems = 100, smallNumRows, minNumIters)
 
-      largeDecimalBenchmark(numItems = 5, smallNumRows, minNumIters).run()
-      largeDecimalBenchmark(numItems = 15, smallNumRows, minNumIters).run()
+      runLargeDecimalBenchmark(numItems = 5, smallNumRows, minNumIters)
+      runLargeDecimalBenchmark(numItems = 10, smallNumRows, minNumIters)
+      runLargeDecimalBenchmark(numItems = 25, smallNumRows, minNumIters)
+      runLargeDecimalBenchmark(numItems = 50, smallNumRows, minNumIters)
+      runLargeDecimalBenchmark(numItems = 100, smallNumRows, minNumIters)
 
-      stringBenchmark(numItems = 5, smallNumRows, minNumIters).run()
-      stringBenchmark(numItems = 15, smallNumRows, minNumIters).run()
+      runStringBenchmark(numItems = 5, smallNumRows, minNumIters)
+      runStringBenchmark(numItems = 10, smallNumRows, minNumIters)
+      runStringBenchmark(numItems = 25, smallNumRows, minNumIters)
+      runStringBenchmark(numItems = 50, smallNumRows, minNumIters)
+      runStringBenchmark(numItems = 100, smallNumRows, minNumIters)
 
-      timestampBenchmark(numItems = 10, largeNumRows, minNumIters).run()
-      timestampBenchmark(numItems = 25, largeNumRows, minNumIters).run()
+      runTimestampBenchmark(numItems = 5, largeNumRows, minNumIters)
+      runTimestampBenchmark(numItems = 10, largeNumRows, minNumIters)
+      runTimestampBenchmark(numItems = 25, largeNumRows, minNumIters)
+      runTimestampBenchmark(numItems = 50, largeNumRows, minNumIters)
+      runTimestampBenchmark(numItems = 100, largeNumRows, minNumIters)
 
-      dateBenchmark(numItems = 10, smallNumRows, minNumIters).run()
-      dateBenchmark(numItems = 25, smallNumRows, minNumIters).run()
+      runDateBenchmark(numItems = 5, smallNumRows, minNumIters)
+      runDateBenchmark(numItems = 10, smallNumRows, minNumIters)
+      runDateBenchmark(numItems = 25, smallNumRows, minNumIters)
+      runDateBenchmark(numItems = 50, smallNumRows, minNumIters)
+      runDateBenchmark(numItems = 100, smallNumRows, minNumIters)
 
-      arrayBenchmark(numItems = 5, smallNumRows, minNumIters).run()
-      arrayBenchmark(numItems = 15, smallNumRows, minNumIters).run()
+      runArrayBenchmark(numItems = 5, smallNumRows, minNumIters)
+      runArrayBenchmark(numItems = 10, smallNumRows, minNumIters)
+      runArrayBenchmark(numItems = 25, smallNumRows, minNumIters)
+      runArrayBenchmark(numItems = 50, smallNumRows, minNumIters)
+      runArrayBenchmark(numItems = 100, smallNumRows, minNumIters)
 
-      structBenchmark(numItems = 5, smallNumRows, minNumIters).run()
-      structBenchmark(numItems = 15, smallNumRows, minNumIters).run()
+      runStructBenchmark(numItems = 5, smallNumRows, minNumIters)
+      runStructBenchmark(numItems = 10, smallNumRows, minNumIters)
+      runStructBenchmark(numItems = 25, smallNumRows, minNumIters)
+      runStructBenchmark(numItems = 50, smallNumRows, minNumIters)
+      runStructBenchmark(numItems = 100, smallNumRows, minNumIters)
     }
   }
 }
