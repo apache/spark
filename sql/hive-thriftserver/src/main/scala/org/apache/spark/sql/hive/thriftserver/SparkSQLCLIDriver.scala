@@ -312,7 +312,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     if (sessionState != null) sessionState.getConf else new Configuration()
 
   if (!isRemoteMode) {
-    if (!Utils.isTesting) {
+    // Utils.isTesing consists of env[SPARK_TESTING] or props[spark.testing]
+    // env is multi-process-level, props is single-process-level
+    // CliSuite with env[SPARK_TESTING] requires SparkSQLEnv
+    // props[spark.testing] acts as a switcher for SparkSQLCLIDriverSuite
+    if (!sys.props.contains("spark.testing")) {
       SparkSQLEnv.init()
       if (sessionState.getIsSilent) {
         SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
