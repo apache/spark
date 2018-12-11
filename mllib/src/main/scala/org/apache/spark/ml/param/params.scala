@@ -527,7 +527,7 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
 
 /**
  * :: DeveloperApi ::
- * Specialized version of `Param[Boolean]` for Java.
+ * Specialized version of `Param[String]` for Java.
  */
 @DeveloperApi
 class StringParam(
@@ -540,6 +540,19 @@ class StringParam(
 
   def this(parent: Identifiable, name: String, doc: String) =
     this(parent.uid, name, doc, ParamValidators.alwaysTrue, StringParamNormalizer.identical)
+
+  def this(parent: Identifiable, name: String, doc: String, isValid: String => Boolean) =
+    this(parent.uid, name, doc, isValid, StringParamNormalizer.identical)
+
+  def this(parent: Identifiable, name: String, doc: String, isValid: String => Boolean,
+    normalize: String => String) = this(parent.uid, name, doc, isValid, normalize)
+
+  private[param] override def validate(value: String): Unit = {
+    if (!isValid(normalize(value))) {
+      throw new IllegalArgumentException(
+        s"$parent parameter $name given invalid value $value.")
+    }
+  }
 
   /** Creates a param pair with the given value (for Java). */
   override def w(value: String): ParamPair[String] = super.w(value)
@@ -562,13 +575,13 @@ class StringParam(
 object StringParamNormalizer {
 
   /** (private[param]) Default Normalizer always return the original value */
-  private[param] def identical: String => String = (s: String) => s
+  private[ml] def identical: String => String = (s: String) => s
 
   /** (private[param]) Default Normalizer always return the lower case */
-  private[param] def lower: String => String = (s: String) => s.toLowerCase(Locale.ROOT)
+  private[ml] def lower: String => String = (s: String) => s.toLowerCase(Locale.ROOT)
 
   /** (private[param]) Default Normalizer always return the upper case */
-  private[param] def upper: String => String = (s: String) => s.toUpperCase(Locale.ROOT)
+  private[ml] def upper: String => String = (s: String) => s.toUpperCase(Locale.ROOT)
 }
 
 /**
@@ -796,7 +809,13 @@ trait Params extends Identifiable with Serializable {
    */
   protected final def set(paramPair: ParamPair[_]): this.type = {
     shouldOwn(paramPair.param)
-    paramMap.put(paramPair)
+    paramPair match {
+      case ParamPair(param: StringParam, value: String) =>
+        paramMap.put(new ParamPair(param, param.normalize(value)))
+
+      case _ =>
+        paramMap.put(paramPair)
+    }
     this
   }
 

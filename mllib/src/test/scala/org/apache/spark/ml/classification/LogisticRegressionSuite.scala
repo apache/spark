@@ -251,7 +251,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
 
   test("check summary types for binary and multiclass") {
     val lr = new LogisticRegression()
-      .setFamily("binomial")
+      .setFamily("Binomial")
       .setMaxIter(1)
 
     val blorModel = lr.fit(smallBinaryDataset)
@@ -259,7 +259,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(blorModel.summary.asBinary.isInstanceOf[BinaryLogisticRegressionSummary])
     assert(blorModel.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
 
-    val mlorModel = lr.setFamily("multinomial").fit(smallMultinomialDataset)
+    val mlorModel = lr.setFamily("MULtinomial").fit(smallMultinomialDataset)
     assert(mlorModel.summary.isInstanceOf[LogisticRegressionTrainingSummary])
     withClue("cannot get binary summary for multiclass model") {
       intercept[RuntimeException] {
