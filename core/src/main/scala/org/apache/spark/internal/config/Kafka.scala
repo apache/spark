@@ -81,11 +81,11 @@ private[spark] object Kafka {
       .createOptional
 
   val TOKEN_SASL_MECHANISM =
-    ConfigBuilder("spark.kafka.token.sasl.mechanism")
+    ConfigBuilder("spark.kafka.sasl.token.mechanism")
       .doc("SASL mechanism used for client connections with delegation token. Because SCRAM " +
         "login module used for authentication a compatible mechanism has to be set here. " +
-        "For further details please see kafka documentation. Only used to authenticate against " +
-        "Kafka broker with delegation token.")
+        "For further details please see kafka documentation (sasl.mechanism). Only used to " +
+        "authenticate against Kafka broker with delegation token.")
       .stringConf
       .createWithDefault("SCRAM-SHA-512")
 }
