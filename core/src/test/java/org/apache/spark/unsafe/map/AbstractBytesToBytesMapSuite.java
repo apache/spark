@@ -530,7 +530,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void spillInIterator() throws IOException {
     BytesToBytesMap map = new BytesToBytesMap(
-      taskMemoryManager, blockManager, serializerManager, 1, 0.75, 1024, false);
+      taskMemoryManager, blockManager, serializerManager, 1, 0.75, 1024);
     try {
       int i;
       for (i = 0; i < 1024; i++) {
@@ -569,7 +569,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void multipleValuesForSameKey() {
     BytesToBytesMap map =
-      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 1, 0.5, 1024, false);
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 1, 0.5, 1024);
     try {
       int i;
       for (i = 0; i < 1024; i++) {
@@ -622,6 +622,17 @@ public abstract class AbstractBytesToBytesMapSuite {
     } catch (IllegalArgumentException e) {
       // expected exception
     }
+
+    try {
+      new BytesToBytesMap(
+        taskMemoryManager,
+        1,
+        TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES + 1);
+      Assert.fail("Expected IllegalArgumentException to be thrown");
+    } catch (IllegalArgumentException e) {
+      // expected exception
+    }
+
   }
 
   @Test
