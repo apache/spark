@@ -176,6 +176,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       SparkListenerApplicationEnd(2L)
       )
     logFile2.setReadable(false, false)
+    assume(!logFile2.canRead)
 
     updateAndCheck(provider) { list =>
       list.size should be (1)
