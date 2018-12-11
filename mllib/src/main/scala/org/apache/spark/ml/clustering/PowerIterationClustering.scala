@@ -97,8 +97,8 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
 /**
  * :: Experimental ::
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
- * <a href=http://www.icml2010.org/papers/387.pdf>Lin and Cohen</a>. From the abstract:
- * PIC finds a very low-dimensional embedding of a dataset using truncated power
+ * <a href=http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>Lin and Cohen</a>. From
+ * the abstract: PIC finds a very low-dimensional embedding of a dataset using truncated power
  * iteration on a normalized pair-wise similarity matrix of the data.
  *
  * This class is not yet an Estimator/Transformer, use `assignClusters` method to run the
