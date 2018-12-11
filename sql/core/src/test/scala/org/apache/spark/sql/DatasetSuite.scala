@@ -24,6 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
@@ -1655,6 +1656,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val df = spark.range(2).map(l => Row(l.toString, BigDecimal.valueOf(l + 0.1111)))
     checkAnswer(df.groupBy(col("a")).agg(first(col("b"))),
       Seq(Row("0", BigDecimal.valueOf(0.1111)), Row("1", BigDecimal.valueOf(1.1111))))
+  }
+
+  test("SPARK-26224: withColumn produces too many Projects") {
+    val N = 10
+    val resDF = (1 to N).foldLeft(Seq(1).toDF("a")) { case (df, i) =>
+      df.withColumn(s"col$i", lit(0))
+    }
+    assert(resDF.queryExecution.logical.collect {
+      case _: Project => true
+    }.size == 1)
+    val result = Row(1 :: List.fill(N)(0): _*)
+    checkAnswer(resDF, result)
   }
 }
 
