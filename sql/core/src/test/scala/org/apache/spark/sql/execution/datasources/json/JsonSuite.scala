@@ -248,7 +248,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     checkAnswer(
       sql("select nullstr, headers.Host from jsonTable"),
-      Seq(Row("", "1.abc.com"), Row("", null), Row(null, null), Row(null, null))
+      Seq(Row("", "1.abc.com"), Row("", null), Row("", null), Row(null, null))
     )
   }
 
@@ -2562,5 +2562,18 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val files = new File(path).listFiles()
       assert(!files.exists(_.getName.endsWith("json")))
     }
+  }
+
+  test("return partial result for bad records") {
+    val schema = "a double, b array<int>, c string, _corrupt_record string"
+    val badRecords = Seq(
+      """{"a":"-","b":[0, 1, 2],"c":"abc"}""",
+      """{"a":0.1,"b":{},"c":"def"}""").toDS()
+    val df = spark.read.schema(schema).json(badRecords)
+
+    checkAnswer(
+      df,
+      Row(null, Array(0, 1, 2), "abc", """{"a":"-","b":[0, 1, 2],"c":"abc"}""") ::
+      Row(0.1, null, "def", """{"a":0.1,"b":{},"c":"def"}""") :: Nil)
   }
 }
