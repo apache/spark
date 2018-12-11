@@ -1642,6 +1642,15 @@ object SQLConf {
         "a SparkConf entry.")
       .booleanConf
       .createWithDefault(true)
+
+  val MAX_REPEATED_ALIAS_SIZE =
+    buildConf("spark.sql.maxRepeatedAliasSize")
+      .internal()
+      .doc("The maximum size of alias expression that will be substituted multiple times " +
+        "(size defined by the number of nodes in the expression tree). " +
+        "Used by the CollapseProject optimizer, and PhysicalOperation.")
+      .intConf
+      .createWithDefault(100)
 }
 
 /**
@@ -2070,6 +2079,8 @@ class SQLConf extends Serializable with Logging {
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
+
+  def maxRepeatedAliasSize: Int = getConf(SQLConf.MAX_REPEATED_ALIAS_SIZE)
 
   /** ********************** SQLConf functionality methods ************ */
 
