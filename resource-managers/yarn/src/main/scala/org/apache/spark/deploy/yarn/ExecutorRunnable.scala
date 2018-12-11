@@ -272,13 +272,13 @@ private[yarn] class ExecutorRunnable(
 
 private[yarn] object ExecutorRunnable {
   def buildLogUrls(
-    logUrlPattern: String,
-    httpScheme: String,
-    nodeHttpAddress: String,
-    clusterId: Option[String],
-    containerId: String,
-    user: String,
-    envNameToFileNameMap: Map[String, String]): Map[String, String] = {
+      logUrlPattern: String,
+      httpScheme: String,
+      nodeHttpAddress: String,
+      clusterId: Option[String],
+      containerId: String,
+      user: String,
+      envNameToFileNameMap: Map[String, String]): Map[String, String] = {
     val optionalPathVariable: Map[String, Option[String]] = Map("{{ClusterId}}" -> clusterId)
     val pathVariables: Map[String, String] = Map("{{HttpScheme}}" -> httpScheme,
       "{{NodeHttpAddress}}" -> nodeHttpAddress,

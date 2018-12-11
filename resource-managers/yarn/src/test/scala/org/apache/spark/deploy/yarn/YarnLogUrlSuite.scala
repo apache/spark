@@ -67,7 +67,7 @@ class YarnLogUrlSuite extends SparkFunSuite {
   }
 
   test("Custom log URL - optional pattern is used in log URL but the value " +
-    "is not present") {
+      "is not present") {
     // here {{ClusterId}} is included in this pattern
     val logUrlPattern = "{{HttpScheme}}{{NodeHttpAddress}}/logs/clusters/{{ClusterId}}" +
       "/containers/{{ContainerId}}/users/{{User}}/files/{{FileName}}"
