@@ -642,7 +642,7 @@ This way the application can be configured via Spark parameters and may not need
 configuration (Spark can use Kafka's dynamic JAAS configuration feature). For further information
 about delegation tokens, see [Kafka delegation token docs](http://kafka.apache.org/documentation/#security_delegation_token).
 
-The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.bootstrap.servers` set,
+The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.bootstrap.servers` is set,
 Spark considers the following log in options, in order of preference:
 - **JAAS login configuration**, please see example below.
 - **Keytab file**, such as,
@@ -669,7 +669,8 @@ Kafka broker configuration):
 
 After obtaining delegation token successfully, Spark distributes it across nodes and renews it accordingly.
 Delegation token uses `SCRAM` login module for authentication and because of that the appropriate
-`spark.kafka.token.sasl.mechanism` (default: `SCRAM-SHA-512`) has to be configured (it must match with Kafka broker configuration).
+`spark.kafka.token.sasl.mechanism` (default: `SCRAM-SHA-512`) has to be configured. Also, this parameter
+must match with Kafka broker configuration.
 
 When delegation token is available on an executor it can be overridden with JAAS login configuration.
 
