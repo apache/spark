@@ -34,23 +34,12 @@ import org.apache.spark.sql.DataFrame
  */
 @Since("1.2.0")
 class RegressionMetrics @Since("2.0.0") (
-    throughOrigin: Boolean, predAndObsWithOptWeight: RDD[_])
+    predAndObsWithOptWeight: RDD[_ <: Product], throughOrigin: Boolean)
     extends Logging {
 
   @Since("1.2.0")
-  def this(predictionAndObservations: RDD[(Double, Double)]) =
-    this(false, predictionAndObservations)
-
-  /**
-   * Evaluator for regression.
-   *
-   * @param predictionAndObservations an RDD of (prediction, observation) pairs
-   * @param throughOrigin True if the regression is through the origin. For example, in linear
-   *                      regression, it will be true without fitting intercept.
-   */
-  @Since("2.0.0")
-  def this(predictionAndObservations: RDD[(Double, Double)], throughOrigin: Boolean) =
-  this(throughOrigin, predictionAndObservations)
+  def this(predictionAndObservations: RDD[_ <: Product]) =
+    this(predictionAndObservations, false)
 
   /**
    * An auxiliary constructor taking a DataFrame.
@@ -58,7 +47,7 @@ class RegressionMetrics @Since("2.0.0") (
    *                                  prediction and observation
    */
   private[mllib] def this(predictionAndObservations: DataFrame) =
-    this(false, predictionAndObservations.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(predictionAndObservations.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.

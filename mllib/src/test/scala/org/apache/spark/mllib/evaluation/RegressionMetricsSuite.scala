@@ -137,7 +137,7 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("regression metrics with same (1.0) weight samples") {
     val predictionAndObservationWithWeight = sc.parallelize(
       Seq((2.25, 3.0, 1.0), (-0.25, -0.5, 1.0), (1.75, 2.0, 1.0), (7.75, 7.0, 1.0)), 2)
-    val metrics = new RegressionMetrics(false, predictionAndObservationWithWeight)
+    val metrics = new RegressionMetrics(predictionAndObservationWithWeight, false)
     assert(metrics.explainedVariance ~== 8.79687 absTol eps,
       "explained variance regression score mismatch")
     assert(metrics.meanAbsoluteError ~== 0.5 absTol eps, "mean absolute error mismatch")
@@ -174,7 +174,7 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("regression metrics with weighted samples") {
     val predictionAndObservationWithWeight = sc.parallelize(
       Seq((2.25, 3.0, 0.1), (-0.25, -0.5, 0.2), (1.75, 2.0, 0.15), (7.75, 7.0, 0.05)), 2)
-    val metrics = new RegressionMetrics(false, predictionAndObservationWithWeight)
+    val metrics = new RegressionMetrics(predictionAndObservationWithWeight, false)
     assert(metrics.explainedVariance ~== 5.2425 absTol eps,
       "explained variance regression score mismatch")
     assert(metrics.meanAbsoluteError ~== 0.4 absTol eps, "mean absolute error mismatch")

@@ -71,7 +71,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   setDefault(metricName -> "rmse")
@@ -88,7 +88,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
       .rdd
       .map { case Row(prediction: Double, label: Double, weight: Double) =>
         (prediction, label, weight) }
-    val metrics = new RegressionMetrics(false, predictionAndLabelsWithWeights)
+    val metrics = new RegressionMetrics(predictionAndLabelsWithWeights)
     val metric = $(metricName) match {
       case "rmse" => metrics.rootMeanSquaredError
       case "mse" => metrics.meanSquaredError

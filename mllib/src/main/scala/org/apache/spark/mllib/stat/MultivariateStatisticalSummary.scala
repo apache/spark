@@ -47,7 +47,7 @@ trait MultivariateStatisticalSummary {
   /**
    * Sum of weights.
    */
-  @Since("2.2.0")
+  @Since("3.0.0")
   def weightSum: Double
 
   /**
