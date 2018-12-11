@@ -87,7 +87,7 @@ objectFile <- function(sc, path, minPartitions = NULL) {
 #' in the list are split into \code{numSlices} slices and distributed to nodes
 #' in the cluster.
 #'
-#' If size of serialized slices is larger than spark.r.maxAllocationLimit or (200MB), the function
+#' If size of serialized slices is larger than spark.r.maxAllocationLimit or (200MiB), the function
 #' will write it to disk and send the file name to JVM. Also to make sure each slice is not
 #' larger than that limit, number of slices may be increased.
 #'
