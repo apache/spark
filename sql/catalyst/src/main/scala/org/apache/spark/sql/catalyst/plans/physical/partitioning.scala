@@ -24,10 +24,9 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  * Specifies how tuples that share common expressions will be distributed when a query is executed
  * in parallel on many machines.
  *
- * Distribution here refers to inter-node partitioning of data:
- *   - The distribution describes how tuples are partitioned across physical machines in a cluster.
- *     Knowing this property allows some operators (e.g., Aggregate) to perform partition local
- *     operations instead of global ones.
+ * Distribution here refers to inter-node partitioning of data. That is, it describes how tuples
+ * are partitioned across physical machines in a cluster. Knowing this property allows some
+ * operators (e.g., Aggregate) to perform partition local operations instead of global ones.
  */
 sealed trait Distribution {
   /**
@@ -241,8 +240,8 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 /**
  * Represents a partitioning where rows are split across partitions based on some total ordering of
  * the expressions specified in `ordering`.  When data is partitioned in this manner, it guarantees:
- *   - Given any 2 adjacent partitions, all the rows of the second partition must be larger than
- *     any row in the first partition, according to the `ordering` expressions.
+ * Given any 2 adjacent partitions, all the rows of the second partition must be larger than any row
+ * in the first partition, according to the `ordering` expressions.
  *
  * This is a strictly stronger guarantee than what `OrderedDistribution(ordering)` requires, as
  * there is no overlap between partitions.
