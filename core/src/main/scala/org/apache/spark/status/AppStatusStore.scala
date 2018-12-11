@@ -56,6 +56,8 @@ private[spark] class AppStatusStore(
     store.read(classOf[JobDataWrapper], jobId).info
   }
 
+  // Returns job data and associated SQL execution ID of certain Job ID.
+  // If there is no related SQL execution, the SQL execution ID part will be None.
   def jobWithAssociatedSql(jobId: Int): (v1.JobData, Option[Long]) = {
     val data = store.read(classOf[JobDataWrapper], jobId)
     (data.info, data.sqlExecutionId)

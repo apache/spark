@@ -197,10 +197,6 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       return UIUtils.headerSparkPage(
         request, s"Details for Job $jobId", content, parent)
     }
-    val sqlDetailUrl = sqlExecutionId.map { id =>
-      val baseUri = UIUtils.prependBaseUri(request, parent.basePath)
-      s"$baseUri/SQL/execution/?id=$id"
-    }
 
     val isComplete = jobData.status != JobExecutionStatus.RUNNING
     val stages = jobData.stageIds.map { stageId =>
@@ -287,7 +283,10 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
             if (sqlExecutionId.isDefined) {
               <li>
                 <strong>Associated SQL Query: </strong>
-                {<a href={s"${sqlDetailUrl.get}"}>{sqlExecutionId.get}</a>}
+                {<a href={"%s/SQL/execution/?id=%s".format(
+                  UIUtils.prependBaseUri(request, parent.basePath),
+                  sqlExecutionId.get)
+                }>{sqlExecutionId.get}</a>}
               </li>
             }
           }
