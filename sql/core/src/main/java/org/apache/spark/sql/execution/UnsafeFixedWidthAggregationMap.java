@@ -98,7 +98,7 @@ public final class UnsafeFixedWidthAggregationMap {
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
     this.map = new BytesToBytesMap(
-      taskContext.taskMemoryManager(), initialCapacity, pageSizeBytes, true);
+      taskContext.taskMemoryManager(), initialCapacity, pageSizeBytes);
 
     // Initialize the buffer for aggregation value
     final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);

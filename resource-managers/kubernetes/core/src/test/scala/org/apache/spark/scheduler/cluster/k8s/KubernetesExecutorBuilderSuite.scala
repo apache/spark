@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.{Config => _, _}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.mockito.Mockito.{mock, never, verify}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features._
@@ -38,6 +38,8 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   private val HADOOP_SPARK_USER_STEP_TYPE = "hadoop-spark-user"
   private val KERBEROS_CONF_STEP_TYPE = "kerberos-step"
   private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
+
+  private val secMgr = new SecurityManager(new SparkConf(false))
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicExecutorFeatureStep])
@@ -57,7 +59,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
 
   private val builderUnderTest = new KubernetesExecutorBuilder(
-    _ => basicFeatureStep,
+    (_, _) => basicFeatureStep,
     _ => mountSecretsStep,
     _ => envSecretsStep,
     _ => localDirsStep,
@@ -69,7 +71,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   test("Basic steps are consistently applied.") {
     val conf = KubernetesTestConf.createExecutorConf()
     validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
+      builderUnderTest.buildFromFeatures(conf, secMgr), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
   }
 
   test("Apply secrets step if secrets are present.") {
@@ -77,7 +79,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
       secretEnvNamesToKeyRefs = Map("secret-name" -> "secret-key"),
       secretNamesToMountPaths = Map("secret" -> "secretMountPath"))
     validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
+      builderUnderTest.buildFromFeatures(conf, secMgr),
       BASIC_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
       SECRETS_STEP_TYPE,
@@ -94,7 +96,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     val conf = KubernetesTestConf.createExecutorConf(
       volumes = Seq(volumeSpec))
     validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
+      builderUnderTest.buildFromFeatures(conf, secMgr),
       BASIC_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
       MOUNT_VOLUMES_STEP_TYPE)
@@ -107,7 +109,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
         .set(HADOOP_CONFIG_MAP_NAME, "hadoop-conf-map-name")
         .set(KRB5_CONFIG_MAP_NAME, "krb5-conf-map-name"))
     validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
+      builderUnderTest.buildFromFeatures(conf, secMgr),
       BASIC_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
       HADOOP_CONF_STEP_TYPE,
@@ -123,7 +125,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
         .set(KERBEROS_DT_SECRET_NAME, "dt-secret")
         .set(KERBEROS_DT_SECRET_KEY, "dt-key" ))
     validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
+      builderUnderTest.buildFromFeatures(conf, secMgr),
       BASIC_STEP_TYPE,
       LOCAL_DIRS_STEP_TYPE,
       HADOOP_CONF_STEP_TYPE,
@@ -154,7 +156,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
           .endMetadata()
         .build()))
     val sparkPod = KubernetesExecutorBuilder(kubernetesClient, sparkConf)
-      .buildFromFeatures(kubernetesConf)
+      .buildFromFeatures(kubernetesConf, secMgr)
     PodBuilderSuiteUtils.verifyPodWithSupportedFeatures(sparkPod)
   }
 }
