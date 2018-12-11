@@ -677,21 +677,16 @@ public abstract class AbstractBytesToBytesMapSuite {
     BytesToBytesMap map =
       new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 1, 0.5, 1024);
 
-    Runnable memoryConsumer = new Runnable() {
-      @Override
-      public void run() {
-        int i = 0;
-        long used = 0;
-        while (i < 10) {
-          c1.use(10000000);
-          used += 10000000;
-          i++;
-        }
-        c1.free(used);
+    Thread thread = new Thread(() -> {
+      int i = 0;
+      long used = 0;
+      while (i < 10) {
+        c1.use(10000000);
+        used += 10000000;
+        i++;
       }
-    };
-
-    Thread thread = new Thread(memoryConsumer);
+      c1.free(used);
+    });
 
     try {
       int i;
