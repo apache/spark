@@ -267,11 +267,18 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
 
     private void advanceToNextPage() {
+      // SPARK-26265: We will first lock this `MapIterator` and then `TaskMemoryManager` when going
+      // to free a memory page by calling `freePage`. At the same time, it is possibly that another
+      // memory consumer first locks `TaskMemoryManager` and then this `MapIterator` when it
+      // acquires memory and causes spilling on this `MapIterator`. To avoid deadlock here, we keep
+      // reference to the page to free and free it after releasing the lock of `MapIterator`.
+      MemoryBlock pageToFree = null;
+
       synchronized (this) {
         int nextIdx = dataPages.indexOf(currentPage) + 1;
         if (destructive && currentPage != null) {
           dataPages.remove(currentPage);
-          freePage(currentPage);
+          pageToFree = currentPage;
           nextIdx --;
         }
         if (dataPages.size() > nextIdx) {
@@ -294,6 +301,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
             Platform.throwException(e);
           }
         }
+      }
+      if (pageToFree != null) {
+        freePage(pageToFree);
       }
     }
 
