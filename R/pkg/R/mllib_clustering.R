@@ -621,7 +621,7 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #'
 #' A scalable graph clustering algorithm. Users can call \code{spark.assignClusters} to
 #' return a cluster assignment for each input vertex.
-#  Run the PIC algorithm and returns a cluster assignment for each input vertex.
+#' Run the PIC algorithm and returns a cluster assignment for each input vertex.
 #' @param data a SparkDataFrame.
 #' @param k the number of clusters to create.
 #' @param initMode the initialization algorithm; "random" or "degree"
