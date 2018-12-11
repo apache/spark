@@ -66,6 +66,50 @@ Kubernetes admin to ensure that Spark authentication is secure.
 </tr>
 </table>
 
+Alternatively, one can mount authentication secrets using files and Kubernetes secrets that
+the user mounts into their pods.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.authenticate.secret.file</code></td>
+  <td>None</td>
+  <td>
+    Path pointing to the secret key to use for securing connections. Ensure that the
+    contents of the file have been securely generated. This file is loaded on both the driver
+    and the executors unless other settings override this (see below).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.secret.driver.file</code></td>
+  <td>The value of <code>spark.authenticate.secret.file</code></td>
+  <td>
+    When specified, overrides the location that the Spark driver reads to load the secret.
+    Useful when in client mode, when the location of the secret file may differ in the pod versus
+    the node the driver is running in. When this is specified,
+    <code>spark.authenticate.secret.executor.file</code> must be specified so that the driver
+    and the executors can both use files to load the secret key. Ensure that the contents of the file
+    on the driver is identical to the contents of the file on the executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.secret.executor.file</code></td>
+  <td>The value of <code>spark.authenticate.secret.file</code></td>
+  <td>
+    When specified, overrides the location that the Spark executors read to load the secret.
+    Useful in client mode, when the location of the secret file may differ in the pod versus
+    the node the driver is running in. When this is specified,
+    <code>spark.authenticate.secret.driver.file</code> must be specified so that the driver
+    and the executors can both use files to load the secret key. Ensure that the contents of the file
+    on the driver is identical to the contents of the file on the executors.
+  </td>
+</tr>
+</table>
+
+Note that when using files, Spark will not mount these files into the containers for you. It is up
+you to ensure that the secret files are deployed securely into your containers and that the driver's
+secret file agrees with the executors' secret file.
+
 ## Encryption
 
 Spark supports AES-based encryption for RPC connections. For encryption to be enabled, RPC
