@@ -24,6 +24,7 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
 
+import org.apache.hadoop.HadoopIllegalArgumentException
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.UserGroupInformation
@@ -56,6 +57,12 @@ private[yarn] class ExecutorRunnable(
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
+
+  val clusterId: Option[String] = try {
+    Some(YarnConfiguration.getClusterId(conf))
+  } catch {
+    case _: HadoopIllegalArgumentException => None
+  }
 
   def run(): Unit = {
     logDebug("Starting Executor Container")
@@ -247,23 +254,15 @@ private[yarn] class ExecutorRunnable(
         val containerId = ConverterUtils.toString(c.getId)
         val address = c.getNodeHttpAddress
 
-        sparkConf.get(config.CUSTOM_LOG_URL) match {
-          case Some(customUrl) =>
-            val pathVariables = ExecutorRunnable.buildPathVariables(httpScheme, address,
-              YarnConfiguration.getClusterId(conf), containerId, user)
-            val envNameToFileNameMap = Map("SPARK_LOG_URL_STDERR" -> "stderr",
-              "SPARK_LOG_URL_STDOUT" -> "stdout")
-            val logUrls = ExecutorRunnable.replaceLogUrls(customUrl, pathVariables,
-              envNameToFileNameMap)
+        val customLogUrl = sparkConf.get(config.CUSTOM_LOG_URL)
 
-            logUrls.foreach { case (envName, url) =>
-              env(envName) = url
-            }
-          case None =>
-            val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
-            env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
-            env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
-          }
+        val envNameToFileNameMap = Map("SPARK_LOG_URL_STDERR" -> "stderr",
+          "SPARK_LOG_URL_STDOUT" -> "stdout")
+        val logUrls = ExecutorRunnable.buildLogUrls(customLogUrl, httpScheme, address,
+          clusterId, containerId, user, envNameToFileNameMap)
+        logUrls.foreach { case (envName, url) =>
+          env(envName) = url
+        }
       }
     }
 
@@ -272,30 +271,39 @@ private[yarn] class ExecutorRunnable(
 }
 
 private[yarn] object ExecutorRunnable {
-  val LOG_URL_PATTERN_HTTP_SCHEME = "{{HttpScheme}}"
-  val LOG_URL_PATTERN_NODE_HTTP_ADDRESS = "{{NodeHttpAddress}}"
-  val LOG_URL_PATTERN_CLUSTER_ID = "{{ClusterId}}"
-  val LOG_URL_PATTERN_CONTAINER_ID = "{{ContainerId}}"
-  val LOG_URL_PATTERN_USER = "{{User}}"
-  val LOG_URL_PATTERN_FILE_NAME = "{{FileName}}"
+  def buildLogUrls(
+    logUrlPattern: String,
+    httpScheme: String,
+    nodeHttpAddress: String,
+    clusterId: Option[String],
+    containerId: String,
+    user: String,
+    envNameToFileNameMap: Map[String, String]): Map[String, String] = {
+    val optionalPathVariable: Map[String, Option[String]] = Map("{{ClusterId}}" -> clusterId)
+    val pathVariables: Map[String, String] = Map("{{HttpScheme}}" -> httpScheme,
+      "{{NodeHttpAddress}}" -> nodeHttpAddress,
+      "{{ContainerId}}" -> containerId,
+      "{{User}}" -> user)
 
-  def buildPathVariables(httpScheme: String, nodeHttpAddress: String, clusterId: String,
-                         containerId: String, user: String): Map[String, String] = {
-    Map(LOG_URL_PATTERN_HTTP_SCHEME -> httpScheme,
-      LOG_URL_PATTERN_NODE_HTTP_ADDRESS -> nodeHttpAddress,
-      LOG_URL_PATTERN_CLUSTER_ID -> clusterId,
-      LOG_URL_PATTERN_CONTAINER_ID -> containerId,
-      LOG_URL_PATTERN_USER -> user)
-  }
-
-  def replaceLogUrls(logUrlPattern: String, pathVariables: Map[String, String],
-                     envNameToFileNameMap: Map[String, String]): Map[String, String] = {
     var replacingUrl = logUrlPattern
+
+    optionalPathVariable.foreach {
+      case (pattern, Some(value)) if replacingUrl.contains(pattern) =>
+        replacingUrl = replacingUrl.replace(pattern, value)
+
+      case (pattern, None) if replacingUrl.contains(pattern) =>
+        throw new IllegalArgumentException(s"Pattern $pattern is specified in " +
+          s"log URL, but Spark can't retrieve the value. Please check relevant YARN config.")
+
+      case _ =>
+    }
+
     pathVariables.foreach { case (pattern, value) =>
       replacingUrl = replacingUrl.replace(pattern, value)
     }
+
     envNameToFileNameMap.map { case (envName, fileName) =>
-      envName -> replacingUrl.replace(LOG_URL_PATTERN_FILE_NAME, fileName)
+      envName -> replacingUrl.replace("{{FileName}}", fileName)
     }
   }
 }

@@ -432,13 +432,13 @@ To use a custom metrics.properties for the application master and executors, upd
 </tr>
 <tr>
   <td><code>spark.yarn.custom.log.url</code></td>
-  <td>(none)</td>
+  <td>{{HttpScheme}}{{NodeHttpAddress}}/node/containerlogs/{{ContainerId}}/{{User}}/{{FileName}}?start=-4096</td>
   <td>
   Specifies custom spark log url for supporting external log service rather than NodeManager webapp address.
   Spark will support some path variables via patterns. Supported patterns and allocated values are below: <p/>
   <p/>
-  * `{{HttpScheme}}`: `http`/`https` according to YARN HTTP policy. (Configured via `yarn.http.policy`)<p/>
-  * `{{NodeHttpAddress}}`: HTTP URI of the node on Container.<p/> 
+  * `{{HttpScheme}}`: `http://`/`https://` according to YARN HTTP policy. (Configured via `yarn.http.policy`)<p/>
+  * `{{NodeHttpAddress}}`: The "host:port" of node where container was run.<p/> 
   * `{{ClusterId}}`: The cluster ID of Resource Manager. (Configured via `yarn.resourcemanager.cluster-id`)<p/>
   * `{{ContainerId}}`: The ID of container.<p/>
   * `{{User}}`: `SPARK_USER` on system environment.<p/>

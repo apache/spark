@@ -263,9 +263,11 @@ package object config {
     .doc("Specifies custom spark log url for external log service other than node http address. " +
       "Spark will support some path variables via patterns. " +
       "Supported patterns are 1. `{{HttpScheme}}` 2. `{{NodeHttpAddress}}` 3. `{{ClusterId}}` " +
-      "4. `{{ContainerId}}` 5. `{{User}}` 6. `{{FileName}}`.")
+      "4. `{{ContainerId}}` 5. `{{User}}` 6. `{{FileName}}`. The default value is pointing to " +
+      "NodeManager's container log URL.")
     .stringConf
-    .createOptional
+    .createWithDefault("{{HttpScheme}}{{NodeHttpAddress}}/node/containerlogs/" +
+      "{{ContainerId}}/{{User}}/{{FileName}}?start=-4096")
 
   /* Rolled log aggregation configuration. */
 
