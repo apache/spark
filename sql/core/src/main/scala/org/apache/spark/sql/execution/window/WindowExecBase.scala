@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
-private[sql] abstract class WindowExecBase(
+private[execution] abstract class WindowExecBase(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
@@ -95,7 +95,7 @@ private[sql] abstract class WindowExecBase(
           case (DateType, IntegerType) => DateAdd(expr, boundOffset)
           case (TimestampType, CalendarIntervalType) =>
             TimeAdd(expr, boundOffset, Some(timeZone))
-          case (a, b) if a== b => Add(expr, boundOffset)
+          case (a, b) if a == b => Add(expr, boundOffset)
         }
         val bound = newMutableProjection(boundExpr :: Nil, child.output)
 
@@ -155,7 +155,7 @@ private[sql] abstract class WindowExecBase(
         val functions = functionSeq.toArray
 
         // Construct an aggregate processor if we need one.
-        def processor = if (functions.exists{ f => f.isInstanceOf[PythonUDF]}) {
+        def processor = if (functions.exists{f => f.isInstanceOf[PythonUDF]}) {
           null
         } else {
           AggregateProcessor(

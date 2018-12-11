@@ -39,12 +39,12 @@ import org.apache.spark.util.Utils
  *
  * This is similar to [[WindowExec]]. The main difference is that this node doesn't not compute
  * any window aggregation values. Instead, it computes the lower and upper bound for each window
- * (i.e. window bounds) and pass the data and indices to python work to do the actual window
+ * (i.e. window bounds) and pass the data and indices to Python worker to do the actual window
  * aggregation.
  *
  * It currently materializes all data associated with the same partition key and passes them to
  * Python worker. This is not strictly necessary for sliding windows and can be improved (by
- * possibly slicing data into overlapping chunks and stitch them together).
+ * possibly slicing data into overlapping chunks and stitching them together).
  *
  * This class groups window expressions by their window boundaries so that window expressions
  * with the same window boundaries can share the same window bounds. The window bounds are
@@ -63,13 +63,16 @@ import org.apache.spark.util.Utils
  *       w2 is specifiedwindowframe(RowFrame, UnboundedPreceding, UnboundedFollowing)
  *       w3 is specifiedwindowframe(RowFrame, -3, 3)
  *
- * Note that w2 doesn't have bound indices in the python input because its unbounded window
+ * Note that w2 doesn't have bound indices in the python input because it's unbounded window
  * so it's bound indices will always be the same.
  *
- * Unbounded window also have a different eval type, because:
- * (1) It doesn't have bound indices as input
- * (2) The udf only needs to be evaluated once the in python worker (because the udf is
- *     deterministic and window bounds are the same for all windows)
+ * Bounded window and Unbounded window are evaluated differently in Python worker:
+ * (1) Bounded window takes the window bound indices in addition to the input columns.
+ *     Unbounded window takes only input columns.
+ * (2) Bounded window evaluates the udf once per input row.
+ *     Unbounded window evaluates the udf once per window partition. (Because the udf
+ *     is deterministic and window bounds are the same for all input rows)
+ * This is controlled by Python runner conf "pandas_window_bound_types"
  *
  * The logic to compute window bounds is delegated to [[WindowFunctionFrame]] and shared with
  * [[WindowExec]]
@@ -114,16 +117,16 @@ case class WindowInPandasExec(
    * (3) Function from frame index to its upper bound column index in the python input row
    * (4) Seq from frame index to its window bound type
    */
-  private type WindowBoundHelpers = (Int, Int => Int, Int => Int, Seq[WindowType])
+  private type WindowBoundHelpers = (Int, Int => Int, Int => Int, Seq[WindowBoundType])
 
   /**
    * Enum for window bound types. Used only inside this class.
    */
-  private sealed case class WindowType(value: String)
-  private object UnboundedWindow extends WindowType("unbounded")
-  private object BoundedWindow extends WindowType("bounded")
+  private sealed case class WindowBoundType(value: String)
+  private object UnboundedWindow extends WindowBoundType("unbounded")
+  private object BoundedWindow extends WindowBoundType("bounded")
 
-  private val window_bound_type_conf = "pandas_window_bound_types"
+  private val WindowBoundTypeConf = "pandas_window_bound_types"
 
   private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
     udf.children match {
@@ -143,7 +146,7 @@ case class WindowInPandasExec(
   private def computeWindowBoundHelpers(
       factories: Seq[InternalRow => WindowFunctionFrame]
   ): WindowBoundHelpers = {
-    val dummyRow = new SpecificInternalRow()
+    val dummyRow = EmptyRow
     val functionFrames = factories.map(_(dummyRow))
 
     val windowBoundTypes = functionFrames.map {
@@ -212,7 +215,7 @@ case class WindowInPandasExec(
     val udfWindowBoundTypes = pyFuncs.indices.map(i =>
       frameWindowBoundTypes(expressionIndexToFrameIndex(i)))
     val pythonRunnerConf: Map[String, String] = (ArrowUtils.getPythonRunnerConfMap(conf)
-      + (window_bound_type_conf -> udfWindowBoundTypes.map(_.value).mkString(",")))
+      + (WindowBoundTypeConf -> udfWindowBoundTypes.map(_.value).mkString(",")))
 
     // Filter child output attributes down to only those that are UDF inputs.
     // Also eliminate duplicate UDF inputs.

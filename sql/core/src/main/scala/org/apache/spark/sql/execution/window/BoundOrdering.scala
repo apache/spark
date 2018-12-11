@@ -24,14 +24,14 @@ import org.apache.spark.sql.catalyst.expressions.Projection
 /**
  * Function for comparing boundary values.
  */
-private[sql] abstract class BoundOrdering {
+private[window] abstract class BoundOrdering {
   def compare(inputRow: InternalRow, inputIndex: Int, outputRow: InternalRow, outputIndex: Int): Int
 }
 
 /**
  * Compare the input index to the bound of the output index.
  */
-private[sql] final case class RowBoundOrdering(offset: Int) extends BoundOrdering {
+private[window] final case class RowBoundOrdering(offset: Int) extends BoundOrdering {
   override def compare(
       inputRow: InternalRow,
       inputIndex: Int,
@@ -43,7 +43,7 @@ private[sql] final case class RowBoundOrdering(offset: Int) extends BoundOrderin
 /**
  * Compare the value of the input index to the value bound of the output index.
  */
-private[sql] final case class RangeBoundOrdering(
+private[window] final case class RangeBoundOrdering(
     ordering: Ordering[InternalRow],
     current: Projection,
     bound: Projection)
