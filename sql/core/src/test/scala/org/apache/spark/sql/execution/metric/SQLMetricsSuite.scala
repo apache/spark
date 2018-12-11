@@ -261,50 +261,6 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     )
   }
 
-  test("BroadcastHashJoin metrics: track avg probe") {
-    // The executed plan looks like:
-    // Project [a#210, b#211, b#221]
-    // +- BroadcastHashJoin [a#210], [a#220], Inner, BuildRight
-    //    :- Project [_1#207 AS a#210, _2#208 AS b#211]
-    //    :  +- Filter isnotnull(_1#207)
-    //    :     +- LocalTableScan [_1#207, _2#208]
-    //    +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, binary, true]))
-    //       +- Project [_1#217 AS a#220, _2#218 AS b#221]
-    //          +- Filter isnotnull(_1#217)
-    //             +- LocalTableScan [_1#217, _2#218]
-    //
-    // Assume the execution plan with node id is
-    // WholeStageCodegen disabled:
-    // Project(nodeId = 0)
-    //   BroadcastHashJoin(nodeId = 1)
-    //     ...(ignored)
-    //
-    // WholeStageCodegen enabled:
-    // WholeStageCodegen(nodeId = 0)
-    //   Project(nodeId = 1)
-    //     BroadcastHashJoin(nodeId = 2)
-    //       Project(nodeId = 3)
-    //         Filter(nodeId = 4)
-    //           ...(ignored)
-    Seq(true, false).foreach { enableWholeStage =>
-      val df1 = generateRandomBytesDF()
-      val df2 = generateRandomBytesDF()
-      val df = df1.join(broadcast(df2), "a")
-      val nodeIds = if (enableWholeStage) {
-        Set(2L)
-      } else {
-        Set(1L)
-      }
-      val metrics = getSparkPlanMetrics(df, 2, nodeIds, enableWholeStage).get
-      nodeIds.foreach { nodeId =>
-        val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
-        probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-          assert(probe.toDouble > 1.0)
-        }
-      }
-    }
-  }
-
   test("ShuffledHashJoin metrics") {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "40",
         "spark.sql.shuffle.partitions" -> "2",
@@ -323,8 +279,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       val df = df1.join(df2, "key")
       testSparkPlanMetrics(df, 1, Map(
         1L -> (("ShuffledHashJoin", Map(
-          "number of output rows" -> 2L,
-          "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))),
+          "number of output rows" -> 2L))),
         2L -> (("Exchange", Map(
           "shuffle records written" -> 2L,
           "records read" -> 2L))),
@@ -332,53 +287,6 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
           "shuffle records written" -> 10L,
           "records read" -> 10L))))
       )
-    }
-  }
-
-  test("ShuffledHashJoin metrics: track avg probe") {
-    // The executed plan looks like:
-    // Project [a#308, b#309, b#319]
-    // +- ShuffledHashJoin [a#308], [a#318], Inner, BuildRight
-    //    :- Exchange hashpartitioning(a#308, 2)
-    //    :  +- Project [_1#305 AS a#308, _2#306 AS b#309]
-    //    :     +- Filter isnotnull(_1#305)
-    //    :        +- LocalTableScan [_1#305, _2#306]
-    //    +- Exchange hashpartitioning(a#318, 2)
-    //       +- Project [_1#315 AS a#318, _2#316 AS b#319]
-    //          +- Filter isnotnull(_1#315)
-    //             +- LocalTableScan [_1#315, _2#316]
-    //
-    // Assume the execution plan with node id is
-    // WholeStageCodegen disabled:
-    // Project(nodeId = 0)
-    //   ShuffledHashJoin(nodeId = 1)
-    //     ...(ignored)
-    //
-    // WholeStageCodegen enabled:
-    // WholeStageCodegen(nodeId = 0)
-    //   Project(nodeId = 1)
-    //     ShuffledHashJoin(nodeId = 2)
-    //       ...(ignored)
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "5000000",
-        "spark.sql.shuffle.partitions" -> "2",
-        "spark.sql.join.preferSortMergeJoin" -> "false") {
-      Seq(true, false).foreach { enableWholeStage =>
-        val df1 = generateRandomBytesDF(65535 * 5)
-        val df2 = generateRandomBytesDF(65535)
-        val df = df1.join(df2, "a")
-        val nodeIds = if (enableWholeStage) {
-          Set(2L)
-        } else {
-          Set(1L)
-        }
-        val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
-        nodeIds.foreach { nodeId =>
-          val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
-          probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-            assert(probe.toDouble > 1.0)
-          }
-        }
-      }
     }
   }
 
@@ -634,6 +542,21 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       assert(filters.length == 1, "The query plan should have one and only one Filter")
       // The final Filter should produce 1 rows, because the input is just one row.
       assert(filters.head.metrics("numOutputRows").value == 1)
+    }
+  }
+
+  test("SPARK-26327: FileSourceScanExec metrics") {
+    withTable("testDataForScan") {
+      spark.range(10).selectExpr("id", "id % 3 as p")
+        .write.partitionBy("p").saveAsTable("testDataForScan")
+      // The execution plan only has 1 FileScan node.
+      val df = spark.sql(
+        "SELECT * FROM testDataForScan WHERE p = 1")
+      testSparkPlanMetrics(df, 1, Map(
+        0L -> (("Scan parquet default.testdataforscan", Map(
+          "number of output rows" -> 3L,
+          "number of files" -> 2L))))
+      )
     }
   }
 }
