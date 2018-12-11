@@ -47,5 +47,5 @@
   cat("    /_/", "\n")
   cat("\n")
 
-  cat("\n SparkSession available as 'spark'.\n")
+  cat("\nSparkSession available as 'spark'.\n")
 }
