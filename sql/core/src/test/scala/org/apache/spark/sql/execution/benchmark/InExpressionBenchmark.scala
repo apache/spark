@@ -15,28 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.catalyst.expressions.In
-import org.apache.spark.sql.catalyst.expressions.InSet
-import org.apache.spark.sql.execution.benchmark.SqlBasedBenchmark
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{array, struct}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{ByteType, DateType, DecimalType, DoubleType, FloatType, IntegerType, ShortType, StringType, TimestampType}
 
 /**
- * A benchmark that compares the performance of [[In]] and [[InSet]] expressions.
+ * A benchmark that compares the performance of different ways to evaluate SQL IN expressions.
  *
  * To run this benchmark:
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
- *      Results will be written to "benchmarks/InSetBenchmark-results.txt".
+ *      Results will be written to "benchmarks/InExpressionBenchmark-results.txt".
  * }}}
  */
-object InSetBenchmark extends SqlBasedBenchmark {
+object InExpressionBenchmark extends SqlBasedBenchmark {
 
   import spark.implicits._
 
@@ -167,7 +165,7 @@ object InSetBenchmark extends SqlBasedBenchmark {
     val smallNumRows = 1000000
     val minNumIters = 5
 
-    runBenchmark("InSet Expression Benchmark") {
+    runBenchmark("In Expression Benchmark") {
       runByteBenchmark(numItems = 5, largeNumRows, minNumIters)
       runByteBenchmark(numItems = 10, largeNumRows, minNumIters)
       runByteBenchmark(numItems = 25, largeNumRows, minNumIters)
@@ -179,72 +177,84 @@ object InSetBenchmark extends SqlBasedBenchmark {
       runShortBenchmark(numItems = 25, largeNumRows, minNumIters)
       runShortBenchmark(numItems = 50, largeNumRows, minNumIters)
       runShortBenchmark(numItems = 100, largeNumRows, minNumIters)
+      runShortBenchmark(numItems = 200, largeNumRows, minNumIters)
 
       runIntBenchmark(numItems = 5, largeNumRows, minNumIters)
       runIntBenchmark(numItems = 10, largeNumRows, minNumIters)
       runIntBenchmark(numItems = 25, largeNumRows, minNumIters)
       runIntBenchmark(numItems = 50, largeNumRows, minNumIters)
       runIntBenchmark(numItems = 100, largeNumRows, minNumIters)
+      runIntBenchmark(numItems = 200, largeNumRows, minNumIters)
 
       runLongBenchmark(numItems = 5, largeNumRows, minNumIters)
       runLongBenchmark(numItems = 10, largeNumRows, minNumIters)
       runLongBenchmark(numItems = 25, largeNumRows, minNumIters)
       runLongBenchmark(numItems = 50, largeNumRows, minNumIters)
       runLongBenchmark(numItems = 100, largeNumRows, minNumIters)
+      runLongBenchmark(numItems = 200, largeNumRows, minNumIters)
 
       runFloatBenchmark(numItems = 5, largeNumRows, minNumIters)
       runFloatBenchmark(numItems = 10, largeNumRows, minNumIters)
       runFloatBenchmark(numItems = 25, largeNumRows, minNumIters)
       runFloatBenchmark(numItems = 50, largeNumRows, minNumIters)
       runFloatBenchmark(numItems = 100, largeNumRows, minNumIters)
+      runFloatBenchmark(numItems = 200, largeNumRows, minNumIters)
 
       runDoubleBenchmark(numItems = 5, largeNumRows, minNumIters)
       runDoubleBenchmark(numItems = 10, largeNumRows, minNumIters)
       runDoubleBenchmark(numItems = 25, largeNumRows, minNumIters)
       runDoubleBenchmark(numItems = 50, largeNumRows, minNumIters)
       runDoubleBenchmark(numItems = 100, largeNumRows, minNumIters)
+      runDoubleBenchmark(numItems = 200, largeNumRows, minNumIters)
 
       runSmallDecimalBenchmark(numItems = 5, smallNumRows, minNumIters)
       runSmallDecimalBenchmark(numItems = 10, smallNumRows, minNumIters)
       runSmallDecimalBenchmark(numItems = 25, smallNumRows, minNumIters)
       runSmallDecimalBenchmark(numItems = 50, smallNumRows, minNumIters)
       runSmallDecimalBenchmark(numItems = 100, smallNumRows, minNumIters)
+      runSmallDecimalBenchmark(numItems = 200, smallNumRows, minNumIters)
 
       runLargeDecimalBenchmark(numItems = 5, smallNumRows, minNumIters)
       runLargeDecimalBenchmark(numItems = 10, smallNumRows, minNumIters)
       runLargeDecimalBenchmark(numItems = 25, smallNumRows, minNumIters)
       runLargeDecimalBenchmark(numItems = 50, smallNumRows, minNumIters)
       runLargeDecimalBenchmark(numItems = 100, smallNumRows, minNumIters)
+      runLargeDecimalBenchmark(numItems = 200, smallNumRows, minNumIters)
 
       runStringBenchmark(numItems = 5, smallNumRows, minNumIters)
       runStringBenchmark(numItems = 10, smallNumRows, minNumIters)
       runStringBenchmark(numItems = 25, smallNumRows, minNumIters)
       runStringBenchmark(numItems = 50, smallNumRows, minNumIters)
       runStringBenchmark(numItems = 100, smallNumRows, minNumIters)
+      runStringBenchmark(numItems = 200, smallNumRows, minNumIters)
 
       runTimestampBenchmark(numItems = 5, largeNumRows, minNumIters)
       runTimestampBenchmark(numItems = 10, largeNumRows, minNumIters)
       runTimestampBenchmark(numItems = 25, largeNumRows, minNumIters)
       runTimestampBenchmark(numItems = 50, largeNumRows, minNumIters)
       runTimestampBenchmark(numItems = 100, largeNumRows, minNumIters)
+      runTimestampBenchmark(numItems = 200, largeNumRows, minNumIters)
 
       runDateBenchmark(numItems = 5, smallNumRows, minNumIters)
       runDateBenchmark(numItems = 10, smallNumRows, minNumIters)
       runDateBenchmark(numItems = 25, smallNumRows, minNumIters)
       runDateBenchmark(numItems = 50, smallNumRows, minNumIters)
       runDateBenchmark(numItems = 100, smallNumRows, minNumIters)
+      runDateBenchmark(numItems = 200, smallNumRows, minNumIters)
 
       runArrayBenchmark(numItems = 5, smallNumRows, minNumIters)
       runArrayBenchmark(numItems = 10, smallNumRows, minNumIters)
       runArrayBenchmark(numItems = 25, smallNumRows, minNumIters)
       runArrayBenchmark(numItems = 50, smallNumRows, minNumIters)
       runArrayBenchmark(numItems = 100, smallNumRows, minNumIters)
+      runArrayBenchmark(numItems = 200, smallNumRows, minNumIters)
 
       runStructBenchmark(numItems = 5, smallNumRows, minNumIters)
       runStructBenchmark(numItems = 10, smallNumRows, minNumIters)
       runStructBenchmark(numItems = 25, smallNumRows, minNumIters)
       runStructBenchmark(numItems = 50, smallNumRows, minNumIters)
       runStructBenchmark(numItems = 100, smallNumRows, minNumIters)
+      runStructBenchmark(numItems = 200, smallNumRows, minNumIters)
     }
   }
 }
