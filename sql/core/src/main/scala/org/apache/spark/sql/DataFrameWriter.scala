@@ -22,7 +22,7 @@ import java.util.{Locale, Properties, UUID}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan}
@@ -674,8 +674,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
-    // call `QueryExecution.toRDD` to trigger the execution of commands.
-    SQLExecution.withNewExecutionId(session, qe, Some(name))(qe.toRdd)
+    // Use tracker in original DataSet to keep tracking write process.
+    QueryPlanningTracker.withTracker(ds.queryExecution.tracker) {
+      // call `QueryExecution.toRDD` to trigger the execution of commands.
+      SQLExecution.withNewExecutionId(session, qe, Some(name))(qe.toRdd)
+    }
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

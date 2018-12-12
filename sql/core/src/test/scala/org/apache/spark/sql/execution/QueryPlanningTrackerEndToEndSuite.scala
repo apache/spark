@@ -82,4 +82,12 @@ class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
     }
   }
 
+  test("file listing time - dataframe writer") {
+    withTable("tbl") {
+      val df = spark.range(10).selectExpr("id")
+      df.write.saveAsTable("tbl")
+      checkTrackerWithPhaseKeySet(df, Set("analysis", "fileListing"))
+    }
+  }
+
 }
