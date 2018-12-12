@@ -21,7 +21,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
   import DecommissionSuite._
   import KubernetesSuite.k8sTestTag
 
-  test("Run SparkPi with env and mount secrets.", k8sTestTag) {
+  test("Test basic decommissioning", k8sTestTag) {
     sparkAppConf
       .set("spark.worker.decommission.enabled", "true")
       .set("spark.kubernetes.pyspark.pythonVersion", "2")
