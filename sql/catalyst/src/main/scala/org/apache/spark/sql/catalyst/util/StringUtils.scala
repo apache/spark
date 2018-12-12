@@ -93,7 +93,16 @@ object StringUtils {
     funcNames.toSeq
   }
 
-  def split(sql: String): Array[String] = {
+  /**
+   * Split the text into one or more SQL
+   *
+   * Highlighted Corner Cases: semicolon in double quotes, single quotes or inline comments.
+   * Expected Behavior: The blanks will be trimed and a blank line will be omitted.
+   *
+   * @param text One or more SQL separated by semicolons
+   * @return the trimmed SQL array (Array is for Java introp)
+   */
+  def split(text: String): Array[String] = {
     val D_QUOTE: Char = '"'
     val S_QUOTE: Char = '\''
     val SEMICOLON: Char = ';'
@@ -101,40 +110,51 @@ object StringUtils {
     val DOT = '.'
     val INLINE_COMMENT = "--"
 
+    // quoteFlag acts as an enum of D_QUOTE, S_QUOTE, DOT
+    // * D_QUOTE: the cursor stands on a doulbe quoted string
+    // * S_QUOTE: the cursor stands on a single quoted string
+    // * DOT: default value for other cases
+    var quoteFlag: Char = DOT
     var cursor: Int = 0
-    var inStr: Char = DOT // dot means that the cursor is not in a quoted string
     val ret: mutable.ArrayBuffer[String] = mutable.ArrayBuffer()
     var currentSQL: mutable.StringBuilder = mutable.StringBuilder.newBuilder
 
-    while (cursor < sql.length) {
-      val current: Char = sql(cursor)
-      sql.substring(cursor) match {
-        // if it is comment, move cursor at the end of this line
-        case remaining if inStr == DOT && remaining.startsWith(INLINE_COMMENT) =>
+    while (cursor < text.length) {
+      val current: Char = text(cursor)
+
+      text.substring(cursor) match {
+        // if it stands on the openning of inline comment, move cursor at the end of this line
+        case remaining if quoteFlag == DOT && remaining.startsWith(INLINE_COMMENT) =>
           cursor += remaining.takeWhile(x => x != '\n').length
-        // end of the sql
-        case remaining if inStr == DOT && current == SEMICOLON =>
+
+        // if it stands on a normal semicolon, stage the current sql and move the cursor on
+        case remaining if quoteFlag == DOT && current == SEMICOLON =>
           ret += currentSQL.toString.trim
           currentSQL.clear()
           cursor += 1
-        // start of single/double quote
-        case remaining if inStr == DOT && (List(D_QUOTE, S_QUOTE) contains current) =>
-          inStr = current
+
+        // if it stands on the openning of quotes, mark the flag and move on
+        case remaining if quoteFlag == DOT && (List(D_QUOTE, S_QUOTE) contains current) =>
+          quoteFlag = current
           currentSQL += current
           cursor += 1
-        case remaining if remaining.length >= 2 && inStr != DOT && current == ESCAPE =>
+        // if it stands on '\' in the quotes, consume 2 characters to avoid the ESCAPE of " or '
+        case remaining if remaining.length >= 2 && quoteFlag != DOT && current == ESCAPE =>
           currentSQL.append(remaining.take(2))
           cursor += 2
-        // end of single/double quote
-        case remaining if (inStr == D_QUOTE || inStr == S_QUOTE) && current == inStr =>
-          inStr = DOT
+        // if it stands on the ending of quotes, clear the flag and move on
+        case remaining if (quoteFlag == D_QUOTE || quoteFlag == S_QUOTE) && current == quoteFlag =>
+          quoteFlag = DOT
           currentSQL += current
           cursor += 1
-        case remaining =>
+
+        // move on and push the char to the currentSQL
+        case _ =>
           currentSQL += current
           cursor += 1
       }
     }
+
     ret += currentSQL.toString.trim
     ret.filter(isNotBlank).toArray
   }

@@ -48,15 +48,32 @@ class StringUtilsSuite extends SparkFunSuite {
     val statement = "select * from tmp.dada;"
     assert(StringUtils.split(statement) === Array("select * from tmp.dada"))
 
-    val statements = "select * from tmp.dada;;select * from tmp.ada;"
+    // blanks will be omitted
+    val statements = " select * from tmp.dada;;select * from tmp.ada;"
     assert(StringUtils.split(statements) ===
       Array("select * from tmp.dada", "select * from tmp.ada"))
 
-    val semicolonInStr =
+    val escapedSingleQuote =
+      raw"""
+           |select "\';"
+         """.stripMargin.trim
+    val escapedDoubleQuote =
+      raw"""
+           |select "\";"
+         """.stripMargin.trim
+    assert(StringUtils.split(escapedSingleQuote) === Array(escapedSingleQuote))
+    assert(StringUtils.split(escapedDoubleQuote) === Array(escapedDoubleQuote))
+
+    val semicolonInDoubleQuotes =
       """
         |select "^;^"
       """.stripMargin.trim
-    assert(StringUtils.split(semicolonInStr) === Array(semicolonInStr))
+    val semicolonInSingleQuotes =
+      """
+        |select '^;^'
+      """.stripMargin.trim
+    assert(StringUtils.split(semicolonInDoubleQuotes) === Array(semicolonInDoubleQuotes))
+    assert(StringUtils.split(semicolonInSingleQuotes) === Array(semicolonInSingleQuotes))
 
     val inlineComments =
       """
