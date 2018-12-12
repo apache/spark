@@ -190,9 +190,10 @@ setMethod("write.ml", signature(object = "FPGrowthModel", path = "character"),
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
-#'                       list(list(list(1L), list(3L, 2L), list(1L, 2L))),
-#'                       list(list(list(1L, 2L), list(5L))),
-#'                       list(list(list(6L)))), schema = c("sequence"))
+#'                            list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+#'                            list(list(list(1L, 2L), list(5L))),
+#'                            list(list(list(6L)))),
+#'                       schema = c("sequence"))
 #' frequency <- spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L,
 #'                                                   maxLocalProjDBSize = 32000000L)
 #' showDF(frequency)
