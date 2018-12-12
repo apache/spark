@@ -92,7 +92,7 @@ private[spark] class ShuffleMapTask(
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
 
-    dep.shuffleWriterProcessor.writeProcess(rdd, dep, partitionId, context, partition)
+    dep.shuffleWriterProcessor.write(rdd, dep, partitionId, context, partition)
   }
 
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
