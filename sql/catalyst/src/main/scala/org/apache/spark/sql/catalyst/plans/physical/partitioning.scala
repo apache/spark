@@ -261,14 +261,21 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
       required match {
         case OrderedDistribution(requiredOrdering) =>
           // If `ordering` is a prefix of `requiredOrdering`:
-          //   - Let's say `ordering` is [a, b] and `requiredOrdering` is [a, b, c]. If a row is
-          //     larger than another row w.r.t. [a, b], it's also larger w.r.t. [a, b, c]. So
-          //     `RangePartitioning(a, b)` satisfies `OrderedDistribution(a, b, c)`.
+          //   Let's say `ordering` is [a, b] and `requiredOrdering` is [a, b, c]. According to the
+          //   RangePartitioning definition, any [a, b] in a previous partition must be smaller
+          //   than any [a, b] in the following partition. This also means any [a, b, c] in a
+          //   previous partition must be smaller than any [a, b, c] in the following partition.
+          //   Thus `RangePartitioning(a, b)` satisfies `OrderedDistribution(a, b, c)`.
           //
           // If `requiredOrdering` is a prefix of `ordering`:
-          //   - Let's say `ordering` is [a, b, c] and `requiredOrdering` is [a, b]. If a row is
-          //     larger than another row w.r.t. [a, b, c], this row will not be smaller w.r.t.
-          //     [a. b].  So `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
+          //   Let's say `ordering` is [a, b, c] and `requiredOrdering` is [a, b]. According to the
+          //   RangePartitioning definition, any [a, b, c] in a previous partition must be smaller
+          //   than any [a, b, c] in the following partition. If there is a [a1, b1] from a previous
+          //   partition which is larger than a [a2, b2] from the following partition, then there
+          //   must be a [a1, b1 c1] larger than [a2, b2, c2], which violates RangePartitioning
+          //   definition. So it's guaranteed that, any [a, b] in a previous partition must not be
+          //   greater(i.e. smaller or equal to) than any [a, b] in the following partition. Thus
+          //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
         case ClusteredDistribution(requiredClustering, _) =>
