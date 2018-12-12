@@ -82,6 +82,10 @@ object QueryPlanningTracker {
   /** Returns the current tracker in scope, based on the thread local variable. */
   def get: QueryPlanningTracker = Option(localTracker.get()).getOrElse(NoopTracker)
 
+  /** Returns the current tracker in scope or create a new one. */
+  def getOrCreate: QueryPlanningTracker =
+    Option(localTracker.get()).getOrElse(new QueryPlanningTracker)
+
   /** Sets the current tracker for the execution of function f. We assume f is single-threaded. */
   def withTracker[T](tracker: QueryPlanningTracker)(f: => T): T = {
     val originalTracker = localTracker.get()

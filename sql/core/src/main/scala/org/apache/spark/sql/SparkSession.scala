@@ -438,7 +438,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    Dataset.ofRows(self, LogicalRelation(baseRelation))
+    Dataset.ofRows(self, LogicalRelation(baseRelation), QueryPlanningTracker.getOrCreate)
   }
 
   /* ------------------------------- *

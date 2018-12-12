@@ -28,6 +28,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
@@ -193,6 +194,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
+    val tracker = new QueryPlanningTracker
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     if (classOf[TableProvider].isAssignableFrom(cls)) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
@@ -211,25 +213,26 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table match {
         case s: SupportsBatchRead =>
           Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
-            provider, s, finalOptions, userSpecifiedSchema = userSpecifiedSchema))
+            provider, s, finalOptions, userSpecifiedSchema = userSpecifiedSchema), tracker)
 
-        case _ => loadV1Source(paths: _*)
+        case _ => loadV1Source(tracker, paths: _*)
       }
     } else {
-      loadV1Source(paths: _*)
+      loadV1Source(tracker, paths: _*)
     }
   }
 
-  private def loadV1Source(paths: String*) = {
-    // Code path for data source v1.
-    sparkSession.baseRelationToDataFrame(
-      DataSource.apply(
-        sparkSession,
-        paths = paths,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = extraOptions.toMap).resolveRelation())
-  }
+  private def loadV1Source(tracker: QueryPlanningTracker, paths: String*) =
+    QueryPlanningTracker.withTracker(tracker) {
+      // Code path for data source v1.
+      sparkSession.baseRelationToDataFrame(
+        DataSource.apply(
+          sparkSession,
+          paths = paths,
+          userSpecifiedSchema = userSpecifiedSchema,
+          className = source,
+          options = extraOptions.toMap).resolveRelation())
+    }
 
   /**
    * Construct a `DataFrame` representing the database table accessible via JDBC URL

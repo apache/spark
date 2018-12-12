@@ -82,11 +82,24 @@ class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
     }
   }
 
-  test("file listing time - dataframe writer") {
+  test("file listing time - DataFrameWriter") {
     withTable("tbl") {
       val df = spark.range(10).selectExpr("id")
+      // File listing will be triggered by DataSource.resolveRelation
       df.write.saveAsTable("tbl")
       checkTrackerWithPhaseKeySet(df, Set("analysis", "fileListing"))
+    }
+  }
+
+  test("file listing time - DataFrameReader") {
+    withTempPath { path =>
+      val pathStr = path.getAbsolutePath
+      spark.range(0, 10).write.parquet(pathStr)
+      // File listing will be triggered by DataSource.resolveRelation
+      val df = spark.read.parquet(pathStr)
+      checkTrackerWithPhaseKeySet(
+        df,
+        Set("analysis", "fileListing"))
     }
   }
 
