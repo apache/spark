@@ -20,86 +20,36 @@ import java.io.File
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.SecurityManager
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features._
 
-private[spark] class KubernetesExecutorBuilder(
-    provideBasicStep: (KubernetesExecutorConf, SecurityManager) => BasicExecutorFeatureStep =
-      new BasicExecutorFeatureStep(_, _),
-    provideSecretsStep: (KubernetesConf => MountSecretsFeatureStep) =
-      new MountSecretsFeatureStep(_),
-    provideEnvSecretsStep: (KubernetesConf => EnvSecretsFeatureStep) =
-      new EnvSecretsFeatureStep(_),
-    provideLocalDirsStep: (KubernetesConf => LocalDirsFeatureStep) =
-      new LocalDirsFeatureStep(_),
-    provideVolumesStep: (KubernetesConf => MountVolumesFeatureStep) =
-      new MountVolumesFeatureStep(_),
-    provideHadoopConfStep: (KubernetesExecutorConf => HadoopConfExecutorFeatureStep) =
-      new HadoopConfExecutorFeatureStep(_),
-    provideKerberosConfStep: (KubernetesExecutorConf => KerberosConfExecutorFeatureStep) =
-      new KerberosConfExecutorFeatureStep(_),
-    provideHadoopSparkUserStep: (KubernetesExecutorConf => HadoopSparkUserExecutorFeatureStep) =
-      new HadoopSparkUserExecutorFeatureStep(_),
-    provideInitialPod: () => SparkPod = () => SparkPod.initialPod()) {
+private[spark] class KubernetesExecutorBuilder {
 
   def buildFromFeatures(
-      kubernetesConf: KubernetesExecutorConf,
-      secMgr: SecurityManager): SparkPod = {
-    val sparkConf = kubernetesConf.sparkConf
-    val maybeHadoopConfigMap = sparkConf.getOption(HADOOP_CONFIG_MAP_NAME)
-    val maybeDTSecretName = sparkConf.getOption(KERBEROS_DT_SECRET_NAME)
-    val maybeDTDataItem = sparkConf.getOption(KERBEROS_DT_SECRET_KEY)
+      conf: KubernetesExecutorConf,
+      secMgr: SecurityManager,
+      client: KubernetesClient): SparkPod = {
+    val initialPod = conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+      .map { file =>
+        KubernetesUtils.loadPodFromTemplate(
+          client,
+          new File(file),
+          conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
+      }
+      .getOrElse(SparkPod.initialPod())
 
-    val baseFeatures = Seq(provideBasicStep(kubernetesConf, secMgr),
-      provideLocalDirsStep(kubernetesConf))
-    val secretFeature = if (kubernetesConf.secretNamesToMountPaths.nonEmpty) {
-      Seq(provideSecretsStep(kubernetesConf))
-    } else Nil
-    val secretEnvFeature = if (kubernetesConf.secretEnvNamesToKeyRefs.nonEmpty) {
-      Seq(provideEnvSecretsStep(kubernetesConf))
-    } else Nil
-    val volumesFeature = if (kubernetesConf.volumes.nonEmpty) {
-      Seq(provideVolumesStep(kubernetesConf))
-    } else Nil
+    val features = Seq(
+      new BasicExecutorFeatureStep(conf, secMgr),
+      new MountSecretsFeatureStep(conf),
+      new EnvSecretsFeatureStep(conf),
+      new LocalDirsFeatureStep(conf),
+      new MountVolumesFeatureStep(conf),
+      new HadoopConfExecutorFeatureStep(conf),
+      new KerberosConfExecutorFeatureStep(conf),
+      new HadoopSparkUserExecutorFeatureStep(conf))
 
-    val maybeHadoopConfFeatureSteps = maybeHadoopConfigMap.map { _ =>
-      val maybeKerberosStep =
-        if (maybeDTSecretName.isDefined && maybeDTDataItem.isDefined) {
-          provideKerberosConfStep(kubernetesConf)
-        } else {
-          provideHadoopSparkUserStep(kubernetesConf)
-        }
-      Seq(provideHadoopConfStep(kubernetesConf)) :+
-        maybeKerberosStep
-    }.getOrElse(Seq.empty[KubernetesFeatureConfigStep])
-
-    val allFeatures: Seq[KubernetesFeatureConfigStep] =
-      baseFeatures ++
-      secretFeature ++
-      secretEnvFeature ++
-      volumesFeature ++
-      maybeHadoopConfFeatureSteps
-
-    var executorPod = provideInitialPod()
-    for (feature <- allFeatures) {
-      executorPod = feature.configurePod(executorPod)
-    }
-    executorPod
+    features.foldLeft(initialPod) { case (pod, feature) => feature.configurePod(pod) }
   }
-}
 
-private[spark] object KubernetesExecutorBuilder {
-  def apply(kubernetesClient: KubernetesClient, conf: SparkConf): KubernetesExecutorBuilder = {
-    conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
-      .map(new File(_))
-      .map(file => new KubernetesExecutorBuilder(provideInitialPod = () =>
-          KubernetesUtils.loadPodFromTemplate(
-            kubernetesClient,
-            file,
-            conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
-      ))
-      .getOrElse(new KubernetesExecutorBuilder())
-  }
 }
