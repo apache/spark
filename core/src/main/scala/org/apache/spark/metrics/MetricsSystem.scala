@@ -97,7 +97,7 @@ private[spark] class MetricsSystem private (
   def start(registerStaticSources: Boolean = true) {
     require(!running, "Attempting to start a MetricsSystem that is already running")
     running = true
-    if(registerStaticSources) {
+    if (registerStaticSources) {
       StaticSources.allSources.foreach(registerSource)
       registerSources()
     }
