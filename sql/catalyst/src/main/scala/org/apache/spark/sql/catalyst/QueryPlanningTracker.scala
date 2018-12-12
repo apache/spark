@@ -28,7 +28,7 @@ import org.apache.spark.util.BoundedPriorityQueue
  * There are two separate concepts we track:
  *
  * 1. Phases: These are broad scope phases in query planning, as listed below, i.e. analysis,
- * optimizationm and physical planning (just planning).
+ * optimization and physical planning (just planning).
  *
  * 2. Rules: These are the individual Catalyst rules that we track. In addition to time, we also
  * track the number of invocations and effective invocations.
@@ -40,6 +40,7 @@ object QueryPlanningTracker {
   val ANALYSIS = "analysis"
   val OPTIMIZATION = "optimization"
   val PLANNING = "planning"
+  val FILE_LISTING = "fileListing"
 
   /**
    * Summary for a rule.
@@ -79,7 +80,7 @@ object QueryPlanningTracker {
   }
 
   /** Returns the current tracker in scope, based on the thread local variable. */
-  def get: Option[QueryPlanningTracker] = Option(localTracker.get())
+  def get: QueryPlanningTracker = Option(localTracker.get()).getOrElse(NoopTracker)
 
   /** Sets the current tracker for the execution of function f. We assume f is single-threaded. */
   def withTracker[T](tracker: QueryPlanningTracker)(f: => T): T = {
@@ -160,4 +161,9 @@ class QueryPlanningTracker {
     }
   }
 
+}
+
+object NoopTracker extends QueryPlanningTracker {
+  override def measurePhase[T](phase: String)(f: => T): T = f
+  override def recordRuleInvocation(rule: String, timeNs: Long, effective: Boolean): Unit = {}
 }

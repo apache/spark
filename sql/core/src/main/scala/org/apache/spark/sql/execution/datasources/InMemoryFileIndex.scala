@@ -29,6 +29,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.execution.streaming.FileStreamSink
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -87,13 +88,14 @@ class InMemoryFileIndex(
     refresh0()
   }
 
-  private def refresh0(): Unit = {
-    val files = listLeafFiles(rootPaths)
-    cachedLeafFiles =
-      new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
-    cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
-    cachedPartitionSpec = null
-  }
+  private def refresh0(): Unit =
+    QueryPlanningTracker.get.measurePhase(QueryPlanningTracker.FILE_LISTING) {
+      val files = listLeafFiles(rootPaths)
+      cachedLeafFiles =
+        new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
+      cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
+      cachedPartitionSpec = null
+    }
 
   override def equals(other: Any): Boolean = other match {
     case hdfs: InMemoryFileIndex => rootPaths.toSet == hdfs.rootPaths.toSet

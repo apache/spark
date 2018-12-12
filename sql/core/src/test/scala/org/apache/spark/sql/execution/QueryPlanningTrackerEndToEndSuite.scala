@@ -17,25 +17,69 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
 
+  private def checkTrackerWithPhaseKeySet(df: DataFrame, keySet: Set[String]) = {
+    val tracker = df.queryExecution.tracker
+    assert(tracker.phases.keySet == keySet)
+    assert(tracker.rules.nonEmpty)
+  }
+
   test("programmatic API") {
     val df = spark.range(1000).selectExpr("count(*)")
     df.collect()
-    val tracker = df.queryExecution.tracker
-    assert(tracker.phases.keySet == Set("analysis", "optimization", "planning"))
-    assert(tracker.rules.nonEmpty)
+    checkTrackerWithPhaseKeySet(df, Set("analysis", "optimization", "planning"))
   }
 
   test("sql") {
     val df = spark.sql("select * from range(1)")
     df.collect()
+    checkTrackerWithPhaseKeySet(df, Set("parsing", "analysis", "optimization", "planning"))
+  }
 
-    val tracker = df.queryExecution.tracker
-    assert(tracker.phases.keySet == Set("parsing", "analysis", "optimization", "planning"))
-    assert(tracker.rules.nonEmpty)
+  test("file listing time - analysis rules") {
+    withTable("src") {
+      sql("CREATE TABLE src (key INT, value STRING) using parquet")
+      // File listing will be triggered in FindDataSourceTable rule.
+      val df = sql("SELECT * FROM src")
+      val tracker = df.queryExecution.tracker
+      assert(tracker.phases.keySet ==
+        Set("parsing", "fileListing", "analysis"))
+      assert(tracker.rules.nonEmpty)
+    }
+  }
+
+  test("file listing time - optimization rules") {
+    withTable("tbl") {
+      spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
+      // File listing will be triggered in PruneFileSourcePartitions rule.
+      val df = sql("SELECT * FROM tbl WHERE p = 1")
+      df.collect()
+      checkTrackerWithPhaseKeySet(
+        df,
+        Set("parsing", "analysis", "optimization", "planning", "fileListing"))
+
+      // File listing will be triggered in OptimizeMetadataOnlyQuery rule.
+      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
+        val df = sql("SELECT p FROM tbl GROUP BY p")
+        df.collect()
+        checkTrackerWithPhaseKeySet(
+          df,
+          Set("parsing", "analysis", "optimization", "planning", "fileListing"))
+      }
+
+      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "false") {
+        val df = sql("SELECT p FROM tbl GROUP BY p")
+        df.collect()
+        checkTrackerWithPhaseKeySet(
+          df,
+          Set("parsing", "analysis", "optimization", "planning"))
+      }
+    }
   }
 
 }
