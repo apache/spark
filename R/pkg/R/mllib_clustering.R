@@ -621,11 +621,10 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #'
 #' A scalable graph clustering algorithm. Users can call \code{spark.assignClusters} to
 #' return a cluster assignment for each input vertex.
-#'
-#  Run the PIC algorithm and returns a cluster assignment for each input vertex.
+#' Run the PIC algorithm and returns a cluster assignment for each input vertex.
 #' @param data a SparkDataFrame.
 #' @param k the number of clusters to create.
-#' @param initMode the initialization algorithm.
+#' @param initMode the initialization algorithm; "random" or "degree"
 #' @param maxIter the maximum number of iterations.
 #' @param sourceCol the name of the input column for source vertex IDs.
 #' @param destinationCol the name of the input column for destination vertex IDs
@@ -633,18 +632,16 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #'                  we treat all instance weights as 1.0.
 #' @param ... additional argument(s) passed to the method.
 #' @return A dataset that contains columns of vertex id and the corresponding cluster for the id.
-#'         The schema of it will be:
-#'         \code{id: Long}
-#'         \code{cluster: Int}
+#'         The schema of it will be: \code{id: integer}, \code{cluster: integer}
 #' @rdname spark.powerIterationClustering
-#' @aliases assignClusters,PowerIterationClustering-method,SparkDataFrame-method
+#' @aliases spark.assignClusters,SparkDataFrame-method
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
 #'                            list(1L, 2L, 1.0), list(3L, 4L, 1.0),
 #'                            list(4L, 0L, 0.1)),
 #'                       schema = c("src", "dst", "weight"))
-#' clusters <- spark.assignClusters(df, initMode="degree", weightCol="weight")
+#' clusters <- spark.assignClusters(df, initMode = "degree", weightCol = "weight")
 #' showDF(clusters)
 #' }
 #' @note spark.assignClusters(SparkDataFrame) since 3.0.0
@@ -652,7 +649,7 @@ setMethod("spark.assignClusters",
           signature(data = "SparkDataFrame"),
           function(data, k = 2L, initMode = c("random", "degree"), maxIter = 20L,
             sourceCol = "src", destinationCol = "dst", weightCol = NULL) {
-            if (!is.numeric(k) || k < 1) {
+            if (!is.integer(k) || k < 1) {
               stop("k should be a number with value >= 1.")
             }
             if (!is.integer(maxIter) || maxIter <= 0) {
