@@ -1212,7 +1212,6 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("not supported"))
     }
 
-    testUnsupportedConfig("kafka.group.id")
     testUnsupportedConfig("kafka.auto.offset.reset")
     testUnsupportedConfig("kafka.enable.auto.commit")
     testUnsupportedConfig("kafka.interceptor.classes")
