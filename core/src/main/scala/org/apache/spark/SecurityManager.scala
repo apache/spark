@@ -17,8 +17,11 @@
 
 package org.apache.spark
 
+import java.io.File
 import java.net.{Authenticator, PasswordAuthentication}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
+import java.util.Base64
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -43,7 +46,8 @@ import org.apache.spark.util.Utils
  */
 private[spark] class SecurityManager(
     sparkConf: SparkConf,
-    val ioEncryptionKey: Option[Array[Byte]] = None)
+    val ioEncryptionKey: Option[Array[Byte]] = None,
+    authSecretFileConf: ConfigEntry[Option[String]] = AUTH_SECRET_FILE)
   extends Logging with SecretKeyHolder {
 
   import SecurityManager._
@@ -328,6 +332,7 @@ private[spark] class SecurityManager(
         .orElse(Option(secretKey))
         .orElse(Option(sparkConf.getenv(ENV_AUTH_SECRET)))
         .orElse(sparkConf.getOption(SPARK_AUTH_SECRET_CONF))
+        .orElse(secretKeyFromFile())
         .getOrElse {
           throw new IllegalArgumentException(
             s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config")
@@ -348,7 +353,6 @@ private[spark] class SecurityManager(
    */
   def initializeAuth(): Unit = {
     import SparkMasterRegex._
-    val k8sRegex = "k8s.*".r
 
     if (!sparkConf.get(NETWORK_AUTH_ENABLED)) {
       return
@@ -371,12 +375,35 @@ private[spark] class SecurityManager(
         return
     }
 
-    secretKey = Utils.createSecret(sparkConf)
+    if (sparkConf.get(AUTH_SECRET_FILE_DRIVER).isDefined !=
+        sparkConf.get(AUTH_SECRET_FILE_EXECUTOR).isDefined) {
+      throw new IllegalArgumentException(
+        "Invalid secret configuration: Secret files must be specified for both the driver and the" +
+          " executors, not only one or the other.")
+    }
+
+    secretKey = secretKeyFromFile().getOrElse(Utils.createSecret(sparkConf))
 
     if (storeInUgi) {
       val creds = new Credentials()
       creds.addSecretKey(SECRET_LOOKUP_KEY, secretKey.getBytes(UTF_8))
       UserGroupInformation.getCurrentUser().addCredentials(creds)
+    }
+  }
+
+  private def secretKeyFromFile(): Option[String] = {
+    sparkConf.get(authSecretFileConf).flatMap { secretFilePath =>
+      sparkConf.getOption(SparkLauncher.SPARK_MASTER).map {
+        case k8sRegex() =>
+          val secretFile = new File(secretFilePath)
+          require(secretFile.isFile, s"No file found containing the secret key at $secretFilePath.")
+          val base64Key = Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
+          require(!base64Key.isEmpty, s"Secret key from file located at $secretFilePath is empty.")
+          base64Key
+        case _ =>
+          throw new IllegalArgumentException(
+            "Secret keys provided via files is only allowed in Kubernetes mode.")
+      }
     }
   }
 
@@ -387,6 +414,7 @@ private[spark] class SecurityManager(
 
 private[spark] object SecurityManager {
 
+  val k8sRegex = "k8s.*".r
   val SPARK_AUTH_CONF = NETWORK_AUTH_ENABLED.key
   val SPARK_AUTH_SECRET_CONF = "spark.authenticate.secret"
   // This is used to set auth secret to an executor's env variable. It should have the same

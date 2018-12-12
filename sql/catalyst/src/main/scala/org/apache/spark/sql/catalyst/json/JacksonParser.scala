@@ -22,6 +22,7 @@ import java.nio.charset.MalformedInputException
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core._
 
@@ -29,7 +30,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -347,17 +347,28 @@ class JacksonParser(
       schema: StructType,
       fieldConverters: Array[ValueConverter]): InternalRow = {
     val row = new GenericInternalRow(schema.length)
+    var badRecordException: Option[Throwable] = None
+
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
-          row.update(index, fieldConverters(index).apply(parser))
-
+          try {
+            row.update(index, fieldConverters(index).apply(parser))
+          } catch {
+            case NonFatal(e) =>
+              badRecordException = badRecordException.orElse(Some(e))
+              parser.skipChildren()
+          }
         case None =>
           parser.skipChildren()
       }
     }
 
-    row
+    if (badRecordException.isEmpty) {
+      row
+    } else {
+      throw PartialResultException(row, badRecordException.get)
+    }
   }
 
   /**
@@ -428,6 +439,11 @@ class JacksonParser(
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
         throw BadRecordException(() => recordLiteral(record), () => None, wrappedCharException)
+      case PartialResultException(row, cause) =>
+        throw BadRecordException(
+          record = () => recordLiteral(record),
+          partialResult = () => Some(row),
+          cause)
     }
   }
 }
