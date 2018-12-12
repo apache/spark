@@ -195,12 +195,6 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     Seq(true, false).foreach { convertMetastore =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
         withTempDir { dir =>
-          val dataDir = new File(s"${dir.getCanonicalPath}/l3/l2/l1/").toURI
-          val parentDir = s"${dir.getCanonicalPath}/l3/l2/"
-          val l3Dir = s"${dir.getCanonicalPath}/l3/"
-          val wildcardParentDir = new File(s"${dir}/l3/l2/*").toURI
-          val wildcardL3Dir = new File(s"${dir}/l3/*").toURI
-
           try {
             hiveClient.runSqlHive("USE default")
             hiveClient.runSqlHive(
@@ -212,75 +206,133 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                 |STORED AS orc""".stripMargin)
             // Hive throws an exception if I assign the location in the create table statement.
             hiveClient.runSqlHive(
-              s"ALTER TABLE hive_orc SET LOCATION '$dataDir'")
+              s"ALTER TABLE hive_orc SET LOCATION " +
+                s"'${new File(s"${dir.getCanonicalPath}/l1/").toURI}'")
             hiveClient.runSqlHive(
               """
                 |INSERT INTO TABLE hive_orc
                 |VALUES (1, 1, 'orc1'), (2, 2, 'orc2')""".stripMargin)
 
-            withTable("tbl1", "tbl2", "tbl3", "tbl4") {
-              val parentDirStatement =
+            hiveClient.runSqlHive(
+              s"ALTER TABLE hive_orc SET LOCATION " +
+                s"'${new File(s"${dir.getCanonicalPath}/l1/l2/").toURI}'")
+            hiveClient.runSqlHive(
+              """
+                |INSERT INTO TABLE hive_orc
+                |VALUES (3, 3, 'orc3'), (4, 4, 'orc4')""".stripMargin)
+
+            hiveClient.runSqlHive(
+              s"ALTER TABLE hive_orc SET LOCATION " +
+                s"'${new File(s"${dir.getCanonicalPath}/l1/l2/l3/").toURI}'")
+            hiveClient.runSqlHive(
+              """
+                |INSERT INTO TABLE hive_orc
+                |VALUES (5, 5, 'orc5'), (6, 6, 'orc6')""".stripMargin)
+
+            withTable("tbl1", "tbl2", "tbl3", "tbl4", "tbl5", "tbl6") {
+              val topDirStatement =
                 s"""
                    |CREATE EXTERNAL TABLE tbl1(
                    |  c1 int,
                    |  c2 int,
                    |  c3 string)
                    |STORED AS orc
-                   |LOCATION '${parentDir}'""".stripMargin
-              sql(parentDirStatement)
-              val parentDirSqlStatement = s"select * from tbl1"
+                   |LOCATION '${s"${dir.getCanonicalPath}"}'""".stripMargin
+              sql(topDirStatement)
+              val topDirSqlStatement = s"select * from tbl1"
               if (convertMetastore) {
-                checkAnswer(sql(parentDirSqlStatement), Nil)
+                checkAnswer(sql(topDirSqlStatement), Nil)
               } else {
-                checkAnswer(sql(parentDirSqlStatement),
-                  (1 to 2).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(topDirSqlStatement),
+                  (1 to 6).map(i => Row(i, i, s"orc$i")))
               }
 
-              val l3DirStatement =
+              val l1DirStatement =
                 s"""
                    |CREATE EXTERNAL TABLE tbl2(
                    |  c1 int,
                    |  c2 int,
                    |  c3 string)
                    |STORED AS orc
-                   |LOCATION '${l3Dir}'""".stripMargin
-              sql(l3DirStatement)
-              val l3DirSqlStatement = s"select * from tbl2"
+                   |LOCATION '${s"${dir.getCanonicalPath}/l1/"}'""".stripMargin
+              sql(l1DirStatement)
+              val l1DirSqlStatement = s"select * from tbl2"
               if (convertMetastore) {
-                checkAnswer(sql(l3DirSqlStatement), Nil)
-              } else {
-                checkAnswer(sql(l3DirSqlStatement),
+                checkAnswer(sql(l1DirSqlStatement),
                   (1 to 2).map(i => Row(i, i, s"orc$i")))
+              } else {
+                checkAnswer(sql(l1DirSqlStatement),
+                  (1 to 6).map(i => Row(i, i, s"orc$i")))
               }
 
-              val wildcardStatement =
+              val l2DirStatement =
                 s"""
                    |CREATE EXTERNAL TABLE tbl3(
                    |  c1 int,
                    |  c2 int,
                    |  c3 string)
                    |STORED AS orc
-                   |LOCATION '$wildcardParentDir'""".stripMargin
-              sql(wildcardStatement)
-              val wildcardSqlStatement = s"select * from tbl3"
+                   |LOCATION '${s"${dir.getCanonicalPath}/l1/l2/"}'""".stripMargin
+              sql(l2DirStatement)
+              val l2DirSqlStatement = s"select * from tbl3"
               if (convertMetastore) {
-                checkAnswer(sql(wildcardSqlStatement),
-                  (1 to 2).map(i => Row(i, i, s"orc$i")))
+                checkAnswer(sql(l2DirSqlStatement),
+                  (3 to 4).map(i => Row(i, i, s"orc$i")))
               } else {
-                checkAnswer(sql(wildcardSqlStatement), Nil)
+                checkAnswer(sql(l2DirSqlStatement),
+                  (3 to 6).map(i => Row(i, i, s"orc$i")))
               }
 
-              val wildcardL3Statement =
+              val wildcardTopDirStatement =
                 s"""
                    |CREATE EXTERNAL TABLE tbl4(
                    |  c1 int,
                    |  c2 int,
                    |  c3 string)
                    |STORED AS orc
-                   |LOCATION '$wildcardL3Dir'""".stripMargin
-              sql(wildcardL3Statement)
-              val wildcardL3SqlStatement = s"select * from tbl4"
-              checkAnswer(sql(wildcardL3SqlStatement), Nil)
+                   |LOCATION '${new File(s"${dir}/*").toURI}'""".stripMargin
+              sql(wildcardTopDirStatement)
+              val wildcardTopDirSqlStatement = s"select * from tbl4"
+              if (convertMetastore) {
+                checkAnswer(sql(wildcardTopDirSqlStatement),
+                  (1 to 2).map(i => Row(i, i, s"orc$i")))
+              } else {
+                checkAnswer(sql(wildcardTopDirSqlStatement), Nil)
+              }
+
+              val wildcardL1DirStatement =
+                s"""
+                   |CREATE EXTERNAL TABLE tbl5(
+                   |  c1 int,
+                   |  c2 int,
+                   |  c3 string)
+                   |STORED AS orc
+                   |LOCATION '${new File(s"${dir}/l1/*").toURI}'""".stripMargin
+              sql(wildcardL1DirStatement)
+              val wildcardL1DirSqlStatement = s"select * from tbl5"
+              if (convertMetastore) {
+                checkAnswer(sql(wildcardL1DirSqlStatement),
+                  (1 to 4).map(i => Row(i, i, s"orc$i")))
+              } else {
+                checkAnswer(sql(wildcardL1DirSqlStatement), Nil)
+              }
+
+              val wildcardL2Statement =
+                s"""
+                   |CREATE EXTERNAL TABLE tbl6(
+                   |  c1 int,
+                   |  c2 int,
+                   |  c3 string)
+                   |STORED AS orc
+                   |LOCATION '${new File(s"${dir}/l1/l2/*").toURI}'""".stripMargin
+              sql(wildcardL2Statement)
+              val wildcardL2SqlStatement = s"select * from tbl6"
+              if (convertMetastore) {
+                checkAnswer(sql(wildcardL2SqlStatement),
+                  (3 to 6).map(i => Row(i, i, s"orc$i")))
+              } else {
+                checkAnswer(sql(wildcardL2SqlStatement), Nil)
+              }
             }
           } finally {
             hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
