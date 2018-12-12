@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.io.Writer
 import java.util.Locale
-import java.util.function.Supplier
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -557,9 +556,7 @@ object WholeStageCodegenId {
   // is created, e.g. for special fallback handling when an existing WholeStageCodegenExec
   // failed to generate/compile code.
 
-  private val codegenStageCounter = ThreadLocal.withInitial(new Supplier[Integer] {
-    override def get() = 1  // TODO: change to Scala lambda syntax when upgraded to Scala 2.12+
-  })
+  private val codegenStageCounter = ThreadLocal.withInitial[Int](() => 1)
 
   def resetPerQuery(): Unit = codegenStageCounter.set(1)
 
