@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 import scala.language.existentials
 import scala.util.Random
@@ -2748,9 +2750,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     Seq(("AuTo", smallBinaryDataset), ("biNoMial", smallBinaryDataset),
       ("mulTinomIAl", smallMultinomialDataset)).foreach { case (family, data) =>
       lr.setFamily(family)
-      assert(lr.getFamily === family)
+      assert(lr.getFamily === family.toLowerCase(Locale.ROOT))
       val model = lr.fit(data)
-      assert(model.getFamily === family)
+      assert(model.getFamily === family.toLowerCase(Locale.ROOT))
     }
   }
 
