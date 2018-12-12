@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType, TestUDT}
 import org.apache.spark.util.Utils
 
 case class AllDataTypesWithNonPrimitiveType(
@@ -103,7 +103,7 @@ abstract class OrcQueryTest extends OrcTest {
 
   test("Read/write UserDefinedType") {
     withTempPath { path =>
-      val data = Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
+      val data = Seq((1, new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
       val udtDF = data.toDF("id", "vectors")
       udtDF.write.orc(path.getAbsolutePath)
       val readBack = spark.read.schema(udtDF.schema).orc(path.getAbsolutePath)
@@ -445,16 +445,7 @@ abstract class OrcQueryTest extends OrcTest {
   test("Support for pushing down filters for decimal types") {
     withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val data = (0 until 10).map(i => Tuple1(BigDecimal.valueOf(i)))
-      withTempPath { file =>
-        // It needs to repartition data so that we can have several ORC files
-        // in order to skip stripes in ORC.
-        spark.createDataFrame(data).toDF("a").repartition(10)
-          .write.orc(file.getCanonicalPath)
-        val df = spark.read.orc(file.getCanonicalPath).where("a == 2")
-        val actual = stripSparkFilter(df).count()
-
-        assert(actual < 10)
-      }
+      checkPredicatePushDown(spark.createDataFrame(data).toDF("a"), 10, "a == 2")
     }
   }
 
@@ -465,16 +456,7 @@ abstract class OrcQueryTest extends OrcTest {
         val milliseconds = Timestamp.valueOf(timeString).getTime + i * 3600
         Tuple1(new Timestamp(milliseconds))
       }
-      withTempPath { file =>
-        // It needs to repartition data so that we can have several ORC files
-        // in order to skip stripes in ORC.
-        spark.createDataFrame(data).toDF("a").repartition(10)
-          .write.orc(file.getCanonicalPath)
-        val df = spark.read.orc(file.getCanonicalPath).where(s"a == '$timeString'")
-        val actual = stripSparkFilter(df).count()
-
-        assert(actual < 10)
-      }
+      checkPredicatePushDown(spark.createDataFrame(data).toDF("a"), 10, s"a == '$timeString'")
     }
   }
 
@@ -562,20 +544,57 @@ abstract class OrcQueryTest extends OrcTest {
       }
     }
 
+    def testAllCorruptFiles(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.json(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.json(new Path(basePath, "second").toString)
+        val df = spark.read.orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString)
+        assert(df.count() == 0)
+      }
+    }
+
+    def testAllCorruptFilesWithoutSchemaInfer(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.json(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.json(new Path(basePath, "second").toString)
+        val df = spark.read.schema("a long").orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString)
+        assert(df.count() == 0)
+      }
+    }
+
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
       testIgnoreCorruptFiles()
       testIgnoreCorruptFilesWithoutSchemaInfer()
+      val m1 = intercept[AnalysisException] {
+        testAllCorruptFiles()
+      }.getMessage
+      assert(m1.contains("Unable to infer schema for ORC"))
+      testAllCorruptFilesWithoutSchemaInfer()
     }
 
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
       val m1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
       }.getMessage
-      assert(m1.contains("Could not read footer for file"))
+      assert(m1.contains("Malformed ORC file"))
       val m2 = intercept[SparkException] {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }.getMessage
       assert(m2.contains("Malformed ORC file"))
+      val m3 = intercept[SparkException] {
+        testAllCorruptFiles()
+      }.getMessage
+      assert(m3.contains("Could not read footer for file"))
+      val m4 = intercept[SparkException] {
+        testAllCorruptFilesWithoutSchemaInfer()
+      }.getMessage
+      assert(m4.contains("Malformed ORC file"))
     }
   }
 }
@@ -634,6 +653,12 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
       val path = new File(dir, "orc").getCanonicalPath
       Seq(Some(1), None).toDF("col.dots").write.orc(path)
       assert(spark.read.orc(path).collect().length == 2)
+    }
+  }
+
+  test("SPARK-25579 ORC PPD should support column names with dot") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      checkPredicatePushDown(spark.range(10).toDF("col.dot"), 10, "`col.dot` == 2")
     }
   }
 

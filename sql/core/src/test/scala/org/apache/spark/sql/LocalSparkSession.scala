@@ -36,19 +36,14 @@ trait LocalSparkSession extends BeforeAndAfterEach with BeforeAndAfterAll { self
 
   override def afterEach() {
     try {
-      resetSparkContext()
+      LocalSparkSession.stop(spark)
       SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
+      spark = null
     } finally {
       super.afterEach()
     }
   }
-
-  def resetSparkContext(): Unit = {
-    LocalSparkSession.stop(spark)
-    spark = null
-  }
-
 }
 
 object LocalSparkSession {

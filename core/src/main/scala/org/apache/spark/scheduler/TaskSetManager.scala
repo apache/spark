@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.scheduler.SchedulingMode._
-import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
+import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
 /**
@@ -84,10 +84,10 @@ private[spark] class TaskSetManager(
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
 
-  // Set the coresponding index of Boolean var when the task killed by other attempt tasks,
-  // this happened while we set the `spark.speculation` to true. The task killed by others
+  // Add the tid of task into this HashSet when the task is killed by other attempt tasks.
+  // This happened while we set the `spark.speculation` to true. The task killed by others
   // should not resubmit while executor lost.
-  private val killedByOtherAttempt: Array[Boolean] = new Array[Boolean](numTasks)
+  private val killedByOtherAttempt = new HashSet[Long]
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   private[scheduler] var tasksSuccessful = 0
@@ -122,6 +122,10 @@ private[spark] class TaskSetManager(
   // state in order to continue to track and account for the running tasks.
   // TODO: We should kill any running task attempts when the task set manager becomes a zombie.
   private[scheduler] var isZombie = false
+
+  // Whether the taskSet run tasks from a barrier stage. Spark must launch all the tasks at the
+  // same time for a barrier stage.
+  private[scheduler] def isBarrier = taskSet.tasks.nonEmpty && taskSet.tasks(0).isBarrier
 
   // Set of pending tasks for each executor. These collections are actually
   // treated as stacks, in which new tasks are added to the end of the
@@ -512,6 +516,7 @@ private[spark] class TaskSetManager(
           execId,
           taskName,
           index,
+          task.partitionId,
           addedFiles,
           addedJars,
           task.localProperties,
@@ -618,8 +623,8 @@ private[spark] class TaskSetManager(
    *
    * It is possible that this taskset has become impossible to schedule *anywhere* due to the
    * blacklist.  The most common scenario would be if there are fewer executors than
-   * spark.task.maxFailures. We need to detect this so we can fail the task set, otherwise the job
-   * will hang.
+   * spark.task.maxFailures. We need to detect this so we can avoid the job from being hung.
+   * We try to acquire new executor/s by killing an existing idle blacklisted executor.
    *
    * There's a tradeoff here: we could make sure all tasks in the task set are schedulable, but that
    * would add extra time to each iteration of the scheduling loop. Here, we take the approach of
@@ -630,9 +635,9 @@ private[spark] class TaskSetManager(
    * failures (this is because the method picks one unscheduled task, and then iterates through each
    * executor until it finds one that the task isn't blacklisted on).
    */
-  private[scheduler] def abortIfCompletelyBlacklisted(
-      hostToExecutors: HashMap[String, HashSet[String]]): Unit = {
-    taskSetBlacklistHelperOpt.foreach { taskSetBlacklist =>
+  private[scheduler] def getCompletelyBlacklistedTaskIfAny(
+      hostToExecutors: HashMap[String, HashSet[String]]): Option[Int] = {
+    taskSetBlacklistHelperOpt.flatMap { taskSetBlacklist =>
       val appBlacklist = blacklistTracker.get
       // Only look for unschedulable tasks when at least one executor has registered. Otherwise,
       // task sets will be (unnecessarily) aborted in cases when no executors have registered yet.
@@ -653,11 +658,11 @@ private[spark] class TaskSetManager(
           }
         }
 
-        pendingTask.foreach { indexInTaskSet =>
+        pendingTask.find { indexInTaskSet =>
           // try to find some executor this task can run on.  Its possible that some *other*
           // task isn't schedulable anywhere, but we will discover that in some later call,
           // when that unschedulable task is the last task remaining.
-          val blacklistedEverywhere = hostToExecutors.forall { case (host, execsOnHost) =>
+          hostToExecutors.forall { case (host, execsOnHost) =>
             // Check if the task can run on the node
             val nodeBlacklisted =
               appBlacklist.isNodeBlacklisted(host) ||
@@ -674,19 +679,24 @@ private[spark] class TaskSetManager(
               }
             }
           }
-          if (blacklistedEverywhere) {
-            val partition = tasks(indexInTaskSet).partitionId
-            abort(s"""
-              |Aborting $taskSet because task $indexInTaskSet (partition $partition)
-              |cannot run anywhere due to node and executor blacklist.
-              |Most recent failure:
-              |${taskSetBlacklist.getLatestFailureReason}
-              |
-              |Blacklisting behavior can be configured via spark.blacklist.*.
-              |""".stripMargin)
-          }
         }
+      } else {
+        None
       }
+    }
+  }
+
+  private[scheduler] def abortSinceCompletelyBlacklisted(indexInTaskSet: Int): Unit = {
+    taskSetBlacklistHelperOpt.foreach { taskSetBlacklist =>
+      val partition = tasks(indexInTaskSet).partitionId
+      abort(s"""
+         |Aborting $taskSet because task $indexInTaskSet (partition $partition)
+         |cannot run anywhere due to node and executor blacklist.
+         |Most recent failure:
+         |${taskSetBlacklist.getLatestFailureReason}
+         |
+         |Blacklisting behavior can be configured via spark.blacklist.*.
+         |""".stripMargin)
     }
   }
 
@@ -723,6 +733,23 @@ private[spark] class TaskSetManager(
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
     val index = info.index
+    // Check if any other attempt succeeded before this and this attempt has not been handled
+    if (successful(index) && killedByOtherAttempt.contains(tid)) {
+      // Undo the effect on calculatedTasks and totalResultSize made earlier when
+      // checking if can fetch more results
+      calculatedTasks -= 1
+      val resultSizeAcc = result.accumUpdates.find(a =>
+        a.name == Some(InternalAccumulator.RESULT_SIZE))
+      if (resultSizeAcc.isDefined) {
+        totalResultSize -= resultSizeAcc.get.asInstanceOf[LongAccumulator].value
+      }
+
+      // Handle this task as a killed task
+      handleFailedTask(tid, TaskState.KILLED,
+        TaskKilled("Finish but did not commit due to another attempt succeeded"))
+      return
+    }
+
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
     if (speculationEnabled) {
       successfulTaskDurations.insert(info.duration)
@@ -735,7 +762,7 @@ private[spark] class TaskSetManager(
       logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
         s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
         s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
-      killedByOtherAttempt(index) = true
+      killedByOtherAttempt += attemptInfo.taskId
       sched.backend.killTask(
         attemptInfo.taskId,
         attemptInfo.executorId,
@@ -758,7 +785,7 @@ private[spark] class TaskSetManager(
     }
     // There may be multiple tasksets for this stage -- we let all of them know that the partition
     // was completed.  This may result in some of the tasksets getting completed.
-    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId)
+    sched.markPartitionCompletedInAllTaskSets(stageId, tasks(index).partitionId, info)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -769,9 +796,12 @@ private[spark] class TaskSetManager(
     maybeFinishTaskSet()
   }
 
-  private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
+  private[scheduler] def markPartitionCompleted(partitionId: Int, taskInfo: TaskInfo): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
       if (!successful(index)) {
+        if (speculationEnabled && !isZombie) {
+          successfulTaskDurations.insert(taskInfo.duration)
+        }
         tasksSuccessful += 1
         successful(index) = true
         if (tasksSuccessful == numTasks) {
@@ -868,6 +898,10 @@ private[spark] class TaskSetManager(
         None
     }
 
+    if (tasks(index).isBarrier) {
+      isZombie = true
+    }
+
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
     if (!isZombie && reason.countTowardsTaskFailures) {
@@ -944,7 +978,7 @@ private[spark] class TaskSetManager(
         && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
-        if (successful(index) && !killedByOtherAttempt(index)) {
+        if (successful(index) && !killedByOtherAttempt.contains(tid)) {
           successful(index) = false
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
@@ -976,8 +1010,8 @@ private[spark] class TaskSetManager(
    */
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
-    // zombie.
-    if (isZombie || numTasks == 1) {
+    // zombie or is from a barrier stage.
+    if (isZombie || isBarrier || numTasks == 1) {
       return false
     }
     var foundTasks = false

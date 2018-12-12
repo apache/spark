@@ -17,23 +17,57 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
+import org.apache.spark.annotation.Experimental
+
 package object avro {
+
   /**
-   * Adds a method, `avro`, to DataFrameWriter that allows you to write avro files using
-   * the DataFileWriter
+   * Converts a binary column of avro format into its corresponding catalyst value. The specified
+   * schema must match the read data, otherwise the behavior is undefined: it may fail or return
+   * arbitrary result.
+   *
+   * @param data the binary column.
+   * @param jsonFormatSchema the avro schema in JSON string format.
+   *
+   * @since 2.4.0
    */
-  implicit class AvroDataFrameWriter[T](writer: DataFrameWriter[T]) {
-    def avro: String => Unit = writer.format("avro").save
+  @Experimental
+  def from_avro(
+      data: Column,
+      jsonFormatSchema: String): Column = {
+    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, Map.empty))
   }
 
   /**
-   * Adds a method, `avro`, to DataFrameReader that allows you to read avro files using
-   * the DataFileReader
+   * Converts a binary column of avro format into its corresponding catalyst value. The specified
+   * schema must match the read data, otherwise the behavior is undefined: it may fail or return
+   * arbitrary result.
+   *
+   * @param data the binary column.
+   * @param jsonFormatSchema the avro schema in JSON string format.
+   * @param options options to control how the Avro record is parsed.
+   *
+   * @since 3.0.0
    */
-  implicit class AvroDataFrameReader(reader: DataFrameReader) {
-    def avro: String => DataFrame = reader.format("avro").load
+  @Experimental
+  def from_avro(
+      data: Column,
+      jsonFormatSchema: String,
+      options: java.util.Map[String, String]): Column = {
+    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, options.asScala.toMap))
+  }
 
-    @scala.annotation.varargs
-    def avro(sources: String*): DataFrame = reader.format("avro").load(sources: _*)
+  /**
+   * Converts a column into binary of avro format.
+   *
+   * @param data the data column.
+   *
+   * @since 2.4.0
+   */
+  @Experimental
+  def to_avro(data: Column): Column = {
+    new Column(CatalystDataToAvro(data.expr))
   }
 }

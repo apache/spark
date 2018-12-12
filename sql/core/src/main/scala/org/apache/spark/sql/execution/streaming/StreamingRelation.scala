@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceV2}
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceV2}
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
@@ -83,7 +83,7 @@ case class StreamingExecutionRelation(
 
 // We have to pack in the V1 data source as a shim, for the case when a source implements
 // continuous processing (which is always V2) but only has V1 microbatch support. We don't
-// know at read time whether the query is conntinuous or not, so we need to be able to
+// know at read time whether the query is continuous or not, so we need to be able to
 // swap a V1 relation back in.
 /**
  * Used to link a [[DataSourceV2]] into a streaming
@@ -113,7 +113,7 @@ case class StreamingRelationV2(
  * Used to link a [[DataSourceV2]] into a continuous processing execution.
  */
 case class ContinuousExecutionRelation(
-    source: ContinuousReadSupport,
+    source: ContinuousReadSupportProvider,
     extraOptions: Map[String, String],
     output: Seq[Attribute])(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {

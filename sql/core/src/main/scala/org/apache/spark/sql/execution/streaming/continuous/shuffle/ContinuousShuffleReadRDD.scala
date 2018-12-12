@@ -40,7 +40,7 @@ case class ContinuousShuffleReadPartition(
       queueSize, numShuffleWriters, epochIntervalMs, env)
     val endpoint = env.setupEndpoint(endpointName, receiver)
 
-    TaskContext.get().addTaskCompletionListener { ctx =>
+    TaskContext.get().addTaskCompletionListener[Unit] { ctx =>
       env.stop(endpoint)
     }
     (receiver, endpoint)

@@ -47,10 +47,10 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     if (predicate.dataType != BooleanType) {
       TypeCheckResult.TypeCheckFailure(
         "type of predicate expression in If should be boolean, " +
-          s"not ${predicate.dataType.simpleString}")
+          s"not ${predicate.dataType.catalogString}")
     } else if (!TypeCoercion.haveSameType(inputTypesForMerging)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
-        s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")
+        s"(${trueValue.dataType.catalogString} and ${falseValue.dataType.catalogString}).")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

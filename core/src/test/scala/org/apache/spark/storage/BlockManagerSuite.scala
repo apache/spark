@@ -43,7 +43,7 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, TempFileManager}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
@@ -574,7 +574,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       "list1",
       StorageLevel.MEMORY_ONLY,
       ClassTag.Any,
-      () => throw new AssertionError("attempted to compute locally")).isLeft)
+      () => fail("attempted to compute locally")).isLeft)
   }
 
   test("in-memory LRU storage") {
@@ -1377,8 +1377,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val (server, shufflePort) = Utils.startServiceOnPort(candidatePort,
       newShuffleServer, conf, "ShuffleServer")
 
-    conf.set("spark.shuffle.service.enabled", "true")
-    conf.set("spark.shuffle.service.port", shufflePort.toString)
+    conf.set(SHUFFLE_SERVICE_ENABLED.key, "true")
+    conf.set(SHUFFLE_SERVICE_PORT.key, shufflePort.toString)
     conf.set(SHUFFLE_REGISTRATION_TIMEOUT.key, "40")
     conf.set(SHUFFLE_REGISTRATION_MAX_ATTEMPTS.key, "1")
     var e = intercept[SparkException] {
@@ -1437,7 +1437,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
     var numCalls = 0
-    var tempFileManager: TempFileManager = null
+    var tempFileManager: DownloadFileManager = null
 
     override def init(blockDataManager: BlockDataManager): Unit = {}
 
@@ -1447,7 +1447,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         execId: String,
         blockIds: Array[String],
         listener: BlockFetchingListener,
-        tempFileManager: TempFileManager): Unit = {
+        tempFileManager: DownloadFileManager): Unit = {
       listener.onBlockFetchSuccess("mockBlockId", new NioManagedBuffer(ByteBuffer.allocate(1)))
     }
 
@@ -1474,7 +1474,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         port: Int,
         execId: String,
         blockId: String,
-        tempFileManager: TempFileManager): ManagedBuffer = {
+        tempFileManager: DownloadFileManager): ManagedBuffer = {
       numCalls += 1
       this.tempFileManager = tempFileManager
       if (numCalls <= maxFailures) {

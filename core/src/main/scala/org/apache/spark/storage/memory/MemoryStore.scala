@@ -34,6 +34,7 @@ import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
 import org.apache.spark.storage._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
@@ -333,11 +334,11 @@ private[spark] class MemoryStore(
 
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
-    val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
+    val chunkSize = if (initialMemoryThreshold > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
         s"is too large to be set as chunk size. Chunk size has been capped to " +
-        s"${Utils.bytesToString(Int.MaxValue)}")
-      Int.MaxValue
+        s"${Utils.bytesToString(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)}")
+      ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
     } else {
       initialMemoryThreshold.toInt
     }
@@ -827,7 +828,7 @@ private[storage] class PartiallySerializedBlock[T](
   // completion listener here in order to ensure that `unrolled.dispose()` is called at least once.
   // The dispose() method is idempotent, so it's safe to call it unconditionally.
   Option(TaskContext.get()).foreach { taskContext =>
-    taskContext.addTaskCompletionListener { _ =>
+    taskContext.addTaskCompletionListener[Unit] { _ =>
       // When a task completes, its unroll memory will automatically be freed. Thus we do not call
       // releaseUnrollMemoryForThisTask() here because we want to avoid double-freeing.
       unrolledBuffer.dispose()

@@ -434,6 +434,18 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
+  /** Unregister all map output information of the given shuffle. */
+  def unregisterAllMapOutput(shuffleId: Int) {
+    shuffleStatuses.get(shuffleId) match {
+      case Some(shuffleStatus) =>
+        shuffleStatus.removeOutputsByFilter(x => true)
+        incrementEpoch()
+      case None =>
+        throw new SparkException(
+          s"unregisterAllMapOutput called for nonexistent shuffle ID $shuffleId.")
+    }
+  }
+
   /** Unregister shuffle data */
   def unregisterShuffle(shuffleId: Int) {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>

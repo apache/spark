@@ -19,12 +19,15 @@ package org.apache.spark.sql.execution.metric
 
 import java.io.File
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -91,8 +94,14 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
       Map("number of output rows" -> 1L,
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
+    val shuffleExpected1 = Map(
+      "records read" -> 2L,
+      "local blocks read" -> 2L,
+      "remote blocks read" -> 0L,
+      "shuffle records written" -> 2L)
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("HashAggregate", expected1(0))),
+      1L -> (("Exchange", shuffleExpected1)),
       0L -> (("HashAggregate", expected1(1))))
     )
 
@@ -103,8 +112,14 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
       Map("number of output rows" -> 3L,
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
+    val shuffleExpected2 = Map(
+      "records read" -> 4L,
+      "local blocks read" -> 4L,
+      "remote blocks read" -> 0L,
+      "shuffle records written" -> 4L)
     testSparkPlanMetrics(df2, 1, Map(
       2L -> (("HashAggregate", expected2(0))),
+      1L -> (("Exchange", shuffleExpected2)),
       0L -> (("HashAggregate", expected2(1))))
     )
   }
@@ -157,6 +172,11 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df = testData2.groupBy().agg(collect_set('a)) // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("ObjectHashAggregate", Map("number of output rows" -> 2L))),
+      1L -> (("Exchange", Map(
+        "shuffle records written" -> 2L,
+        "records read" -> 2L,
+        "local blocks read" -> 2L,
+        "remote blocks read" -> 0L))),
       0L -> (("ObjectHashAggregate", Map("number of output rows" -> 1L))))
     )
 
@@ -164,6 +184,11 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df2 = testData2.groupBy('a).agg(collect_set('a))
     testSparkPlanMetrics(df2, 1, Map(
       2L -> (("ObjectHashAggregate", Map("number of output rows" -> 4L))),
+      1L -> (("Exchange", Map(
+        "shuffle records written" -> 4L,
+        "records read" -> 4L,
+        "local blocks read" -> 4L,
+        "remote blocks read" -> 0L))),
       0L -> (("ObjectHashAggregate", Map("number of output rows" -> 3L))))
     )
   }
@@ -188,7 +213,12 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of output rows" -> 4L))))
+          "number of output rows" -> 4L))),
+        2L -> (("Exchange", Map(
+          "records read" -> 4L,
+          "local blocks read" -> 2L,
+          "remote blocks read" -> 0L,
+          "shuffle records written" -> 2L))))
       )
     }
   }
@@ -205,7 +235,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("SortMergeJoin", Map(
-          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          // It's 8 because we read 6 rows in the left and 2 row in the right one
           "number of output rows" -> 8L))))
       )
 
@@ -213,7 +243,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df2, 1, Map(
         0L -> (("SortMergeJoin", Map(
-          // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
+          // It's 8 because we read 6 rows in the left and 2 row in the right one
           "number of output rows" -> 8L))))
       )
     }
@@ -231,50 +261,6 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     )
   }
 
-  test("BroadcastHashJoin metrics: track avg probe") {
-    // The executed plan looks like:
-    // Project [a#210, b#211, b#221]
-    // +- BroadcastHashJoin [a#210], [a#220], Inner, BuildRight
-    //    :- Project [_1#207 AS a#210, _2#208 AS b#211]
-    //    :  +- Filter isnotnull(_1#207)
-    //    :     +- LocalTableScan [_1#207, _2#208]
-    //    +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, binary, true]))
-    //       +- Project [_1#217 AS a#220, _2#218 AS b#221]
-    //          +- Filter isnotnull(_1#217)
-    //             +- LocalTableScan [_1#217, _2#218]
-    //
-    // Assume the execution plan with node id is
-    // WholeStageCodegen disabled:
-    // Project(nodeId = 0)
-    //   BroadcastHashJoin(nodeId = 1)
-    //     ...(ignored)
-    //
-    // WholeStageCodegen enabled:
-    // WholeStageCodegen(nodeId = 0)
-    //   Project(nodeId = 1)
-    //     BroadcastHashJoin(nodeId = 2)
-    //       Project(nodeId = 3)
-    //         Filter(nodeId = 4)
-    //           ...(ignored)
-    Seq(true, false).foreach { enableWholeStage =>
-      val df1 = generateRandomBytesDF()
-      val df2 = generateRandomBytesDF()
-      val df = df1.join(broadcast(df2), "a")
-      val nodeIds = if (enableWholeStage) {
-        Set(2L)
-      } else {
-        Set(1L)
-      }
-      val metrics = getSparkPlanMetrics(df, 2, nodeIds, enableWholeStage).get
-      nodeIds.foreach { nodeId =>
-        val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
-        probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-          assert(probe.toDouble > 1.0)
-        }
-      }
-    }
-  }
-
   test("ShuffledHashJoin metrics") {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "40",
         "spark.sql.shuffle.partitions" -> "2",
@@ -282,61 +268,25 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key", "value")
       // Assume the execution plan is
-      // ... -> ShuffledHashJoin(nodeId = 1) -> Project(nodeId = 0)
+      // Project(nodeId = 0)
+      // +- ShuffledHashJoin(nodeId = 1)
+      // :- Exchange(nodeId = 2)
+      // :  +- Project(nodeId = 3)
+      // :     +- LocalTableScan(nodeId = 4)
+      // +- Exchange(nodeId = 5)
+      // +- Project(nodeId = 6)
+      // +- LocalTableScan(nodeId = 7)
       val df = df1.join(df2, "key")
-      val metrics = getSparkPlanMetrics(df, 1, Set(1L))
       testSparkPlanMetrics(df, 1, Map(
         1L -> (("ShuffledHashJoin", Map(
-          "number of output rows" -> 2L,
-          "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))))
+          "number of output rows" -> 2L))),
+        2L -> (("Exchange", Map(
+          "shuffle records written" -> 2L,
+          "records read" -> 2L))),
+        5L -> (("Exchange", Map(
+          "shuffle records written" -> 10L,
+          "records read" -> 10L))))
       )
-    }
-  }
-
-  test("ShuffledHashJoin metrics: track avg probe") {
-    // The executed plan looks like:
-    // Project [a#308, b#309, b#319]
-    // +- ShuffledHashJoin [a#308], [a#318], Inner, BuildRight
-    //    :- Exchange hashpartitioning(a#308, 2)
-    //    :  +- Project [_1#305 AS a#308, _2#306 AS b#309]
-    //    :     +- Filter isnotnull(_1#305)
-    //    :        +- LocalTableScan [_1#305, _2#306]
-    //    +- Exchange hashpartitioning(a#318, 2)
-    //       +- Project [_1#315 AS a#318, _2#316 AS b#319]
-    //          +- Filter isnotnull(_1#315)
-    //             +- LocalTableScan [_1#315, _2#316]
-    //
-    // Assume the execution plan with node id is
-    // WholeStageCodegen disabled:
-    // Project(nodeId = 0)
-    //   ShuffledHashJoin(nodeId = 1)
-    //     ...(ignored)
-    //
-    // WholeStageCodegen enabled:
-    // WholeStageCodegen(nodeId = 0)
-    //   Project(nodeId = 1)
-    //     ShuffledHashJoin(nodeId = 2)
-    //       ...(ignored)
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "5000000",
-        "spark.sql.shuffle.partitions" -> "2",
-        "spark.sql.join.preferSortMergeJoin" -> "false") {
-      Seq(true, false).foreach { enableWholeStage =>
-        val df1 = generateRandomBytesDF(65535 * 5)
-        val df2 = generateRandomBytesDF(65535)
-        val df = df1.join(df2, "a")
-        val nodeIds = if (enableWholeStage) {
-          Set(2L)
-        } else {
-          Set(1L)
-        }
-        val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
-        nodeIds.foreach { nodeId =>
-          val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
-          probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-            assert(probe.toDouble > 1.0)
-          }
-        }
-      }
     }
   }
 
@@ -497,6 +447,19 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     }
   }
 
+  test("SPARK-25278: output metrics are wrong for plans repeated in the query") {
+    val name = "demo_view"
+    withView(name) {
+      sql(s"CREATE OR REPLACE VIEW $name AS VALUES 1,2")
+      val view = spark.table(name)
+      val union = view.union(view)
+      testSparkPlanMetrics(union, 1, Map(
+        0L -> ("Union" -> Map()),
+        1L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
+        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
+    }
+  }
+
   test("writing data out metrics: parquet") {
     testMetricsNonDynamicPartition("parquet", "t1")
   }
@@ -505,37 +468,95 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     testMetricsDynamicPartition("parquet", "parquet", "t1")
   }
 
-  test("writing metrics from single thread") {
-    val nAdds = 10
-    val acc = new SQLMetric("test", -10)
-    assert(acc.isZero())
-    acc.set(0)
-    for (i <- 1 to nAdds) acc.add(1)
-    assert(!acc.isZero())
-    assert(nAdds === acc.value)
-    acc.reset()
-    assert(acc.isZero())
+  private def collectNodeWithinWholeStage[T <: SparkPlan : ClassTag](plan: SparkPlan): Seq[T] = {
+    val stages = plan.collect {
+      case w: WholeStageCodegenExec => w
+    }
+    assert(stages.length == 1, "The query plan should have one and only one whole-stage.")
+
+    val cls = classTag[T].runtimeClass
+    stages.head.collect {
+      case n if n.getClass == cls => n.asInstanceOf[T]
+    }
   }
 
-  test("writing metrics from multiple threads") {
-    implicit val ec: ExecutionContextExecutor = ExecutionContext.global
-    val nFutures = 1000
-    val nAdds = 100
-    val acc = new SQLMetric("test", -10)
-    assert(acc.isZero() === true)
-    acc.set(0)
-    val l = for ( i <- 1 to nFutures ) yield {
-      Future {
-        for (j <- 1 to nAdds) acc.add(1)
-        i
-      }
+  test("SPARK-25602: SparkPlan.getByteArrayRdd should not consume the input when not necessary") {
+    def checkFilterAndRangeMetrics(
+        df: DataFrame,
+        filterNumOutputs: Int,
+        rangeNumOutputs: Int): Unit = {
+      val plan = df.queryExecution.executedPlan
+
+      val filters = collectNodeWithinWholeStage[FilterExec](plan)
+      assert(filters.length == 1, "The query plan should have one and only one Filter")
+      assert(filters.head.metrics("numOutputRows").value == filterNumOutputs)
+
+      val ranges = collectNodeWithinWholeStage[RangeExec](plan)
+      assert(ranges.length == 1, "The query plan should have one and only one Range")
+      assert(ranges.head.metrics("numOutputRows").value == rangeNumOutputs)
     }
-    for (futures <- Future.sequence(l)) {
-      assert(nFutures === futures.length)
-      assert(!acc.isZero())
-      assert(nFutures * nAdds === acc.value)
-      acc.reset()
-      assert(acc.isZero())
+
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      val df = spark.range(0, 3000, 1, 2).toDF().filter('id % 3 === 0)
+      df.collect()
+      checkFilterAndRangeMetrics(df, filterNumOutputs = 1000, rangeNumOutputs = 3000)
+
+      df.queryExecution.executedPlan.foreach(_.resetMetrics())
+      // For each partition, we get 2 rows. Then the Filter should produce 2 rows per-partition,
+      // and Range should produce 4 rows per-partition ([0, 1, 2, 3] and [15, 16, 17, 18]). Totally
+      // Filter produces 4 rows, and Range produces 8 rows.
+      df.queryExecution.toRdd.mapPartitions(_.take(2)).collect()
+      checkFilterAndRangeMetrics(df, filterNumOutputs = 4, rangeNumOutputs = 8)
+
+      // Top-most limit will call `CollectLimitExec.executeCollect`, which will only run the first
+      // task, so totally the Filter produces 2 rows, and Range produces 4 rows ([0, 1, 2, 3]).
+      val df2 = df.limit(2)
+      df2.collect()
+      checkFilterAndRangeMetrics(df2, filterNumOutputs = 2, rangeNumOutputs = 4)
+    }
+  }
+
+  test("SPARK-25497: LIMIT within whole stage codegen should not consume all the inputs") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      // A special query that only has one partition, so there is no shuffle and the entire query
+      // can be whole-stage-codegened.
+      val df = spark.range(0, 1500, 1, 1).limit(10).groupBy('id).count().limit(1).filter('id >= 0)
+      df.collect()
+      val plan = df.queryExecution.executedPlan
+
+      val ranges = collectNodeWithinWholeStage[RangeExec](plan)
+      assert(ranges.length == 1, "The query plan should have one and only one Range")
+      // The Range should only produce the first batch, i.e. 1000 rows.
+      assert(ranges.head.metrics("numOutputRows").value == 1000)
+
+      val aggs = collectNodeWithinWholeStage[HashAggregateExec](plan)
+      assert(aggs.length == 2, "The query plan should have two and only two Aggregate")
+      val partialAgg = aggs.filter(_.aggregateExpressions.head.mode == Partial).head
+      // The partial aggregate should output 10 rows, because its input is 10 rows.
+      assert(partialAgg.metrics("numOutputRows").value == 10)
+      val finalAgg = aggs.filter(_.aggregateExpressions.head.mode == Final).head
+      // The final aggregate should only produce 1 row, because the upstream limit only needs 1 row.
+      assert(finalAgg.metrics("numOutputRows").value == 1)
+
+      val filters = collectNodeWithinWholeStage[FilterExec](plan)
+      assert(filters.length == 1, "The query plan should have one and only one Filter")
+      // The final Filter should produce 1 rows, because the input is just one row.
+      assert(filters.head.metrics("numOutputRows").value == 1)
+    }
+  }
+
+  test("SPARK-26327: FileSourceScanExec metrics") {
+    withTable("testDataForScan") {
+      spark.range(10).selectExpr("id", "id % 3 as p")
+        .write.partitionBy("p").saveAsTable("testDataForScan")
+      // The execution plan only has 1 FileScan node.
+      val df = spark.sql(
+        "SELECT * FROM testDataForScan WHERE p = 1")
+      testSparkPlanMetrics(df, 1, Map(
+        0L -> (("Scan parquet default.testdataforscan", Map(
+          "number of output rows" -> 3L,
+          "number of files" -> 2L))))
+      )
     }
   }
 }

@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.Writer
 import java.util.Collections
 
 import scala.collection.JavaConverters._
+
+import org.apache.commons.io.output.StringBuilderWriter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -29,6 +32,8 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
+import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
 /**
@@ -40,6 +45,16 @@ import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
  *   sql("SELECT 1").debug()
  *   sql("SELECT 1").debugCodegen()
  * }}}
+ *
+ * or for streaming case (structured streaming):
+ * {{{
+ *   import org.apache.spark.sql.execution.debug._
+ *   val query = df.writeStream.<...>.start()
+ *   query.debugCodegen()
+ * }}}
+ *
+ * Note that debug in structured streaming is not supported, because it doesn't make sense for
+ * streaming to execute batch once while main query is running concurrently.
  */
 package object debug {
 
@@ -57,15 +72,25 @@ package object debug {
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(plan: SparkPlan): String = {
-    val codegenSeq = codegenStringSeq(plan)
-    var output = s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n"
-    for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
-      output += s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n"
-      output += subtree
-      output += "\nGenerated code:\n"
-      output += s"${code}\n"
+    val writer = new StringBuilderWriter()
+
+    try {
+      writeCodegen(writer, plan)
+      writer.toString
+    } finally {
+      writer.close()
     }
-    output
+  }
+
+  def writeCodegen(writer: Writer, plan: SparkPlan): Unit = {
+    val codegenSeq = codegenStringSeq(plan)
+    writer.write(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
+    for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
+      writer.write(s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n")
+      writer.write(subtree)
+      writer.write("\nGenerated code:\n")
+      writer.write(s"${code}\n")
+    }
   }
 
   /**
@@ -89,13 +114,49 @@ package object debug {
   }
 
   /**
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan into one String
+   *
+   * @param query the streaming query for codegen
+   * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
+   */
+  def codegenString(query: StreamingQuery): String = {
+    val w = asStreamExecution(query)
+    if (w.lastExecution != null) {
+      codegenString(w.lastExecution.executedPlan)
+    } else {
+      "No physical plan. Waiting for data."
+    }
+  }
+
+  /**
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan
+   *
+   * @param query the streaming query for codegen
+   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+   */
+  def codegenStringSeq(query: StreamingQuery): Seq[(String, String)] = {
+    val w = asStreamExecution(query)
+    if (w.lastExecution != null) {
+      codegenStringSeq(w.lastExecution.executedPlan)
+    } else {
+      Seq.empty
+    }
+  }
+
+  private def asStreamExecution(query: StreamingQuery): StreamExecution = query match {
+    case wrapper: StreamingQueryWrapper => wrapper.streamingQuery
+    case q: StreamExecution => q
+    case _ => throw new IllegalArgumentException("Parameter should be an instance of " +
+      "StreamExecution!")
+  }
+
+  /**
    * Augments [[Dataset]]s with debug methods.
    */
   implicit class DebugQuery(query: Dataset[_]) extends Logging {
     def debug(): Unit = {
-      val plan = query.queryExecution.executedPlan
       val visited = new collection.mutable.HashSet[TreeNodeRef]()
-      val debugPlan = plan transform {
+      val debugPlan = query.queryExecution.executedPlan transform {
         case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
           visited += new TreeNodeRef(s)
           DebugExec(s)
@@ -113,6 +174,12 @@ package object debug {
      */
     def debugCodegen(): Unit = {
       debugPrint(codegenString(query.queryExecution.executedPlan))
+    }
+  }
+
+  implicit class DebugStreamQuery(query: StreamingQuery) extends Logging {
+    def debugCodegen(): Unit = {
+      debugPrint(codegenString(query))
     }
   }
 

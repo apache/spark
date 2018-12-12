@@ -29,6 +29,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
   Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
@@ -335,7 +336,7 @@ class GaussianMixture @Since("2.0.0") (
   private val numSamples = 5
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): GaussianMixtureModel = {
+  override def fit(dataset: Dataset[_]): GaussianMixtureModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
     val sc = dataset.sparkSession.sparkContext
@@ -352,8 +353,9 @@ class GaussianMixture @Since("2.0.0") (
       s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
       s" matrix is quadratic in the number of features.")
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
     instr.logNumFeatures(numFeatures)
 
     val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(
@@ -383,6 +385,11 @@ class GaussianMixture @Since("2.0.0") (
 
       bcWeights.destroy(blocking = false)
       bcGaussians.destroy(blocking = false)
+
+      if (iter == 0) {
+        val numSamples = sums.count
+        instr.logNumExamples(numSamples)
+      }
 
       /*
          Create new distributions based on the partial assignments
@@ -425,11 +432,9 @@ class GaussianMixture @Since("2.0.0") (
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists)).setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood, iter)
-    model.setSummary(Some(summary))
     instr.logNamedValue("logLikelihood", logLikelihood)
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    instr.logSuccess(model)
-    model
+    model.setSummary(Some(summary))
   }
 
   @Since("2.0.0")

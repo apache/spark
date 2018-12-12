@@ -232,8 +232,8 @@ object SparkEnv extends Logging {
     if (isDriver) {
       assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
     }
-
-    val securityManager = new SecurityManager(conf, ioEncryptionKey)
+    val authSecretFileConf = if (isDriver) AUTH_SECRET_FILE_DRIVER else AUTH_SECRET_FILE_EXECUTOR
+    val securityManager = new SecurityManager(conf, ioEncryptionKey, authSecretFileConf)
     if (isDriver) {
       securityManager.initializeAuth()
     }
@@ -261,7 +261,7 @@ object SparkEnv extends Logging {
       // SparkConf, then one taking no arguments
       try {
         cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)
-          .newInstance(conf, new java.lang.Boolean(isDriver))
+          .newInstance(conf, java.lang.Boolean.valueOf(isDriver))
           .asInstanceOf[T]
       } catch {
         case _: NoSuchMethodException =>

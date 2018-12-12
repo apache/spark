@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier}
-import java.net.{Socket, URI, URL}
+import java.net.{URI, URL}
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
@@ -28,6 +28,7 @@ import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.{StringUtils => ComStrUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
@@ -41,9 +42,10 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.AMCredentialRenewer
+import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -73,6 +75,7 @@ private[spark] class ApplicationMaster(
 
   private val securityMgr = new SecurityManager(sparkConf)
 
+  private var metricsSystem: Option[MetricsSystem] = None
 
   private val userClassLoader = {
     val classpath = Client.getUserClasspath(sparkConf)
@@ -91,20 +94,18 @@ private[spark] class ApplicationMaster(
     }
   }
 
-  private val credentialRenewer: Option[AMCredentialRenewer] = sparkConf.get(KEYTAB).map { _ =>
-    new AMCredentialRenewer(sparkConf, yarnConf)
+  private val tokenManager: Option[YARNHadoopDelegationTokenManager] = {
+    sparkConf.get(KEYTAB).map { _ =>
+      new YARNHadoopDelegationTokenManager(sparkConf, yarnConf)
+    }
   }
 
-  private val ugi = credentialRenewer match {
-    case Some(cr) =>
+  private val ugi = tokenManager match {
+    case Some(tm) =>
       // Set the context class loader so that the token renewer has access to jars distributed
       // by the user.
-      val currentLoader = Thread.currentThread().getContextClassLoader()
-      Thread.currentThread().setContextClassLoader(userClassLoader)
-      try {
-        cr.start()
-      } finally {
-        Thread.currentThread().setContextClassLoader(currentLoader)
+      Utils.withContextClassLoader(userClassLoader) {
+        tm.start()
       }
 
     case _ =>
@@ -305,6 +306,16 @@ private[spark] class ApplicationMaster(
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
           "Uncaught exception: " + StringUtils.stringifyException(e))
+    } finally {
+      try {
+        metricsSystem.foreach { ms =>
+          ms.report()
+          ms.stop()
+        }
+      } catch {
+        case e: Exception =>
+          logWarning("Exception during stopping of the metric system: ", e)
+      }
     }
   }
 
@@ -351,7 +362,7 @@ private[spark] class ApplicationMaster(
         }
         logInfo(s"Final app status: $finalStatus, exitCode: $exitCode" +
           Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
-        finalMsg = msg
+        finalMsg = ComStrUtils.abbreviate(msg, sparkConf.get(AM_FINAL_MSG_LIMIT).toInt)
         finished = true
         if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
           logDebug("shutting down reporter thread")
@@ -362,7 +373,7 @@ private[spark] class ApplicationMaster(
           userClassThread.interrupt()
         }
         if (!inShutdown) {
-          credentialRenewer.foreach(_.stop())
+          tokenManager.foreach(_.stop())
         }
       }
     }
@@ -423,7 +434,7 @@ private[spark] class ApplicationMaster(
       securityMgr,
       localResources)
 
-    credentialRenewer.foreach(_.setDriverRef(driverRef))
+    tokenManager.foreach(_.setDriverRef(driverRef))
 
     // Initialize the AM endpoint *after* the allocator has been initialized. This ensures
     // that when the driver sends an initial executor request (e.g. after an AM restart),
@@ -431,6 +442,11 @@ private[spark] class ApplicationMaster(
     rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
 
     allocator.allocateResources()
+    val ms = MetricsSystem.createMetricsSystem("applicationMaster", sparkConf, securityMgr)
+    val prefix = _sparkConf.get(YARN_METRICS_NAMESPACE).getOrElse(appId)
+    ms.registerSource(new ApplicationMasterSource(prefix, allocator))
+    ms.start()
+    metricsSystem = Some(ms)
     reporterThread = launchReporterThread()
   }
 

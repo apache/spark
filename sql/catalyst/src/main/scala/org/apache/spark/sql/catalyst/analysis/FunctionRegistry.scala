@@ -267,6 +267,7 @@ object FunctionRegistry {
     expression[Subtract]("-"),
     expression[Multiply]("*"),
     expression[Divide]("/"),
+    expression[IntegralDivide]("div"),
     expression[Remainder]("%"),
 
     // aggregate functions
@@ -299,15 +300,9 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expression[RegrCount]("regr_count"),
-    expression[RegrSXX]("regr_sxx"),
-    expression[RegrSYY]("regr_syy"),
-    expression[RegrAvgX]("regr_avgx"),
-    expression[RegrAvgY]("regr_avgy"),
-    expression[RegrSXY]("regr_sxy"),
-    expression[RegrSlope]("regr_slope"),
-    expression[RegrR2]("regr_r2"),
-    expression[RegrIntercept]("regr_intercept"),
+    expression[EveryAgg]("every"),
+    expression[AnyAgg]("any"),
+    expression[SomeAgg]("some"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -411,9 +406,11 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
     expression[ArraysOverlap]("arrays_overlap"),
+    expression[ArrayIntersect]("array_intersect"),
     expression[ArrayJoin]("array_join"),
     expression[ArrayPosition]("array_position"),
     expression[ArraySort]("array_sort"),
+    expression[ArrayExcept]("array_except"),
     expression[ArrayUnion]("array_union"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
@@ -429,6 +426,7 @@ object FunctionRegistry {
     expression[Size]("cardinality"),
     expression[ArraysZip]("arrays_zip"),
     expression[SortArray]("sort_array"),
+    expression[Shuffle]("shuffle"),
     expression[ArrayMin]("array_min"),
     expression[ArrayMax]("array_max"),
     expression[Reverse]("reverse"),
@@ -438,15 +436,17 @@ object FunctionRegistry {
     expression[ArrayRepeat]("array_repeat"),
     expression[ArrayRemove]("array_remove"),
     expression[ArrayDistinct]("array_distinct"),
-    CreateStruct.registryEntry,
+    expression[ArrayTransform]("transform"),
+    expression[MapFilter]("map_filter"),
+    expression[ArrayFilter]("filter"),
+    expression[ArrayExists]("exists"),
+    expression[ArrayAggregate]("aggregate"),
+    expression[TransformValues]("transform_values"),
+    expression[TransformKeys]("transform_keys"),
+    expression[MapZipWith]("map_zip_with"),
+    expression[ZipWith]("zip_with"),
 
-    // mask functions
-    expression[Mask]("mask"),
-    expression[MaskFirstN]("mask_first_n"),
-    expression[MaskLastN]("mask_last_n"),
-    expression[MaskShowFirstN]("mask_show_first_n"),
-    expression[MaskShowLastN]("mask_show_last_n"),
-    expression[MaskHash]("mask_hash"),
+    CreateStruct.registryEntry,
 
     // misc functions
     expression[AssertTrue]("assert_true"),
@@ -523,7 +523,12 @@ object FunctionRegistry {
     castAlias("date", DateType),
     castAlias("timestamp", TimestampType),
     castAlias("binary", BinaryType),
-    castAlias("string", StringType)
+    castAlias("string", StringType),
+
+    // csv
+    expression[CsvToStructs]("from_csv"),
+    expression[SchemaOfCsv]("schema_of_csv"),
+    expression[StructsToCsv]("to_csv")
   )
 
   val builtin: SimpleFunctionRegistry = {

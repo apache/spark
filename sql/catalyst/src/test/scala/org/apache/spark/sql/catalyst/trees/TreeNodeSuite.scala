@@ -564,7 +564,7 @@ class TreeNodeSuite extends SparkFunSuite {
   }
 
   test("toJSON should not throws java.lang.StackOverflowError") {
-    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr))
+    val udf = ScalaUDF(SelfReferenceUDF(), BooleanType, Seq("col1".attr), true :: Nil)
     // Should not throw java.lang.StackOverflowError
     udf.toJSON
   }

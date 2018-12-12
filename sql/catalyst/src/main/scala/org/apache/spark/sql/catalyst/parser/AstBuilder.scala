@@ -394,6 +394,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       Filter(expression(ctx), plan)
     }
 
+    def withHaving(ctx: BooleanExpressionContext, plan: LogicalPlan): LogicalPlan = {
+      // Note that we add a cast to non-predicate expressions. If the expression itself is
+      // already boolean, the optimizer will get rid of the unnecessary cast.
+      val predicate = expression(ctx) match {
+        case p: Predicate => p
+        case e => Cast(e, BooleanType)
+      }
+      Filter(predicate, plan)
+    }
+
+
     // Expressions.
     val expressions = Option(namedExpressionSeq).toSeq
       .flatMap(_.namedExpression.asScala)
@@ -446,30 +457,34 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case e: NamedExpression => e
           case e: Expression => UnresolvedAlias(e)
         }
-        val withProject = if (aggregation != null) {
-          withAggregation(aggregation, namedExpressions, withFilter)
-        } else if (namedExpressions.nonEmpty) {
+
+        def createProject() = if (namedExpressions.nonEmpty) {
           Project(namedExpressions, withFilter)
         } else {
           withFilter
         }
 
-        // Having
-        val withHaving = withProject.optional(having) {
-          // Note that we add a cast to non-predicate expressions. If the expression itself is
-          // already boolean, the optimizer will get rid of the unnecessary cast.
-          val predicate = expression(having) match {
-            case p: Predicate => p
-            case e => Cast(e, BooleanType)
+        val withProject = if (aggregation == null && having != null) {
+          if (conf.getConf(SQLConf.LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE)) {
+            // If the legacy conf is set, treat HAVING without GROUP BY as WHERE.
+            withHaving(having, createProject())
+          } else {
+            // According to SQL standard, HAVING without GROUP BY means global aggregate.
+            withHaving(having, Aggregate(Nil, namedExpressions, withFilter))
           }
-          Filter(predicate, withProject)
+        } else if (aggregation != null) {
+          val aggregate = withAggregation(aggregation, namedExpressions, withFilter)
+          aggregate.optionalMap(having)(withHaving)
+        } else {
+          // When hitting this branch, `having` must be null.
+          createProject()
         }
 
         // Distinct
         val withDistinct = if (setQuantifier() != null && setQuantifier().DISTINCT() != null) {
-          Distinct(withHaving)
+          Distinct(withProject)
         } else {
-          withHaving
+          withProject
         }
 
         // Window
@@ -517,11 +532,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Connect two queries by a Set operator.
    *
    * Supported Set operators are:
-   * - UNION [DISTINCT]
-   * - UNION ALL
-   * - EXCEPT [DISTINCT]
-   * - MINUS [DISTINCT]
-   * - INTERSECT [DISTINCT]
+   * - UNION [ DISTINCT | ALL ]
+   * - EXCEPT [ DISTINCT | ALL ]
+   * - MINUS [ DISTINCT | ALL ]
+   * - INTERSECT [DISTINCT | ALL]
    */
   override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
     val left = plan(ctx.left)
@@ -533,17 +547,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.UNION =>
         Distinct(Union(left, right))
       case SqlBaseParser.INTERSECT if all =>
-        throw new ParseException("INTERSECT ALL is not supported.", ctx)
+        Intersect(left, right, isAll = true)
       case SqlBaseParser.INTERSECT =>
-        Intersect(left, right)
+        Intersect(left, right, isAll = false)
       case SqlBaseParser.EXCEPT if all =>
-        throw new ParseException("EXCEPT ALL is not supported.", ctx)
+        Except(left, right, isAll = true)
       case SqlBaseParser.EXCEPT =>
-        Except(left, right)
+        Except(left, right, isAll = false)
       case SqlBaseParser.SETMINUS if all =>
-        throw new ParseException("MINUS ALL is not supported.", ctx)
+        Except(left, right, isAll = true)
       case SqlBaseParser.SETMINUS =>
-        Except(left, right)
+        Except(left, right, isAll = false)
     }
   }
 
@@ -630,9 +644,27 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val aggregates = Option(ctx.aggregates).toSeq
       .flatMap(_.namedExpression.asScala)
       .map(typedVisit[Expression])
-    val pivotColumn = UnresolvedAttribute.quoted(ctx.pivotColumn.getText)
-    val pivotValues = ctx.pivotValues.asScala.map(typedVisit[Expression]).map(Literal.apply)
+    val pivotColumn = if (ctx.pivotColumn.identifiers.size == 1) {
+      UnresolvedAttribute.quoted(ctx.pivotColumn.identifier.getText)
+    } else {
+      CreateStruct(
+        ctx.pivotColumn.identifiers.asScala.map(
+          identifier => UnresolvedAttribute.quoted(identifier.getText)))
+    }
+    val pivotValues = ctx.pivotValues.asScala.map(visitPivotValue)
     Pivot(None, pivotColumn, pivotValues, aggregates, query)
+  }
+
+  /**
+   * Create a Pivot column value with or without an alias.
+   */
+  override def visitPivotValue(ctx: PivotValueContext): Expression = withOrigin(ctx) {
+    val e = expression(ctx.expression)
+    if (ctx.identifier != null) {
+      Alias(e, ctx.identifier.getText)()
+    } else {
+      e
+    }
   }
 
   /**
@@ -646,7 +678,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions),
       unrequiredChildIndex = Nil,
       outer = ctx.OUTER != null,
+      // scalastyle:off caselocale
       Some(ctx.tblName.getText.toLowerCase),
+      // scalastyle:on caselocale
       ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply),
       query)
   }
@@ -682,7 +716,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         // Resolve the join type and join condition
         val (joinType, condition) = Option(join.joinCriteria) match {
           case Some(c) if c.USING != null =>
-            (UsingJoin(baseJoinType, c.identifier.asScala.map(_.getText)), None)
+            (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
           case None if join.NATURAL != null =>
@@ -1086,6 +1120,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case not => Not(e)
     }
 
+    def getValueExpressions(e: Expression): Seq[Expression] = e match {
+      case c: CreateNamedStruct => c.valExprs
+      case other => Seq(other)
+    }
+
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
@@ -1094,7 +1133,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           GreaterThanOrEqual(e, expression(ctx.lower)),
           LessThanOrEqual(e, expression(ctx.upper))))
       case SqlBaseParser.IN if ctx.query != null =>
-        invertIfNotDefined(In(e, Seq(ListQuery(plan(ctx.query)))))
+        invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
@@ -1135,7 +1174,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case SqlBaseParser.PERCENT =>
         Remainder(left, right)
       case SqlBaseParser.DIV =>
-        Cast(Divide(left, right), LongType)
+        IntegralDivide(left, right)
       case SqlBaseParser.PLUS =>
         Add(left, right)
       case SqlBaseParser.MINUS =>
@@ -1292,6 +1331,16 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case Seq(fn) => FunctionIdentifier(fn, None)
       case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
+  }
+
+  /**
+   * Create an [[LambdaFunction]].
+   */
+  override def visitLambda(ctx: LambdaContext): Expression = withOrigin(ctx) {
+    val arguments = ctx.IDENTIFIER().asScala.map { name =>
+      UnresolvedAttribute.quoted(name.getText)
+    }
+    LambdaFunction(expression(ctx.expression), arguments)
   }
 
   /**

@@ -140,6 +140,30 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
+  test("Column pruning for ScriptTransformation") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val query =
+      ScriptTransformation(
+        Seq('a, 'b),
+        "func",
+        Seq.empty,
+        input,
+        null).analyze
+    val optimized = Optimize.execute(query)
+
+    val expected =
+      ScriptTransformation(
+        Seq('a, 'b),
+        "func",
+        Seq.empty,
+        Project(
+          Seq('a, 'b),
+          input),
+        null).analyze
+
+    comparePlans(optimized, expected)
+  }
+
   test("Column pruning on Filter") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
     val plan1 = Filter('a > 1, input).analyze
@@ -156,10 +180,10 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on except/intersect/distinct") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
-    val query = Project('a :: Nil, Except(input, input)).analyze
+    val query = Project('a :: Nil, Except(input, input, isAll = false)).analyze
     comparePlans(Optimize.execute(query), query)
 
-    val query2 = Project('a :: Nil, Intersect(input, input)).analyze
+    val query2 = Project('a :: Nil, Intersect(input, input, isAll = false)).analyze
     comparePlans(Optimize.execute(query2), query2)
     val query3 = Project('a :: Nil, Distinct(input)).analyze
     comparePlans(Optimize.execute(query3), query3)

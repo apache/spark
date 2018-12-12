@@ -598,6 +598,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     object ExtractableLiteral {
       def unapply(expr: Expression): Option[String] = expr match {
+        case Literal(null, _) => None // `null`s can be cast as other types; we want to avoid NPEs.
         case Literal(value, _: IntegralType) => Some(value.toString)
         case Literal(value, _: StringType) => Some(quoteStringLiteral(value.toString))
         case _ => None
@@ -606,7 +607,23 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     object ExtractableLiterals {
       def unapply(exprs: Seq[Expression]): Option[Seq[String]] = {
-        val extractables = exprs.map(ExtractableLiteral.unapply)
+        // SPARK-24879: The Hive metastore filter parser does not support "null", but we still want
+        // to push down as many predicates as we can while still maintaining correctness.
+        // In SQL, the `IN` expression evaluates as follows:
+        //  > `1 in (2, NULL)` -> NULL
+        //  > `1 in (1, NULL)` -> true
+        //  > `1 in (2)` -> false
+        // Since Hive metastore filters are NULL-intolerant binary operations joined only by
+        // `AND` and `OR`, we can treat `NULL` as `false` and thus rewrite `1 in (2, NULL)` as
+        // `1 in (2)`.
+        // If the Hive metastore begins supporting NULL-tolerant predicates and Spark starts
+        // pushing down these predicates, then this optimization will become incorrect and need
+        // to be changed.
+        val extractables = exprs
+            .filter {
+              case Literal(null, _) => false
+              case _ => true
+            }.map(ExtractableLiteral.unapply)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {
@@ -970,7 +987,7 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       part: JList[String],
       deleteData: Boolean,
       purge: Boolean): Unit = {
-    val dropOptions = dropOptionsClass.newInstance().asInstanceOf[Object]
+    val dropOptions = dropOptionsClass.getConstructor().newInstance().asInstanceOf[Object]
     dropOptionsDeleteData.setBoolean(dropOptions, deleteData)
     dropOptionsPurge.setBoolean(dropOptions, purge)
     dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)

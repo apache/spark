@@ -23,6 +23,7 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -191,7 +192,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     appContext.getQueue should be ("staging-queue")
     appContext.getAMContainerSpec should be (containerLaunchContext)
     appContext.getApplicationType should be ("SPARK")
-    appContext.getClass.getMethods.filter(_.getName.equals("getApplicationTags")).foreach{ method =>
+    appContext.getClass.getMethods.filter(_.getName == "getApplicationTags").foreach { method =>
       val tags = method.invoke(appContext).asInstanceOf[java.util.Set[String]]
       tags should contain allOf ("tag1", "dup", "tag2", "multi word")
       tags.asScala.count(_.nonEmpty) should be (4)
@@ -357,6 +358,35 @@ class ClientSuite extends SparkFunSuite with Matchers {
     sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
 
+  Seq(
+    "client" -> YARN_AM_RESOURCE_TYPES_PREFIX,
+    "cluster" -> YARN_DRIVER_RESOURCE_TYPES_PREFIX
+  ).foreach { case (deployMode, prefix) =>
+    test(s"custom resource request ($deployMode mode)") {
+      assume(ResourceRequestHelper.isYarnResourceTypesAvailable())
+      val resources = Map("fpga" -> 2, "gpu" -> 3)
+      ResourceRequestTestHelper.initializeResourceTypes(resources.keys.toSeq)
+
+      val conf = new SparkConf().set("spark.submit.deployMode", deployMode)
+      resources.foreach { case (name, v) =>
+        conf.set(prefix + name, v.toString)
+      }
+
+      val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+      val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+      val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+      val client = new Client(new ClientArguments(Array()), conf)
+      client.createApplicationSubmissionContext(
+        new YarnClientApplication(getNewApplicationResponse, appContext),
+        containerLaunchContext)
+
+      resources.foreach { case (name, value) =>
+        ResourceRequestTestHelper.getRequestedValue(appContext.getResource, name) should be (value)
+      }
+    }
+  }
+
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),
     ("files URI match test2", "file:///c:file1", "file://c:file2"),
@@ -432,5 +462,4 @@ class ClientSuite extends SparkFunSuite with Matchers {
     populateClasspath(null, new Configuration(), client.sparkConf, env)
     classpath(env)
   }
-
 }

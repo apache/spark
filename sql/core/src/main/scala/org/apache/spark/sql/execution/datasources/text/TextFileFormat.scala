@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
+import java.io.OutputStream
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -120,7 +122,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       } else {
         new HadoopFileWholeTextReader(file, confValue)
       }
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => reader.close()))
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => reader.close()))
       if (requiredSchema.isEmpty) {
         val emptyUnsafeRow = new UnsafeRow(0)
         reader.map(_ => emptyUnsafeRow)
@@ -148,17 +150,23 @@ class TextOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  private val writer = CodecStreams.createOutputStream(context, new Path(path))
+  private var outputStream: Option[OutputStream] = None
 
   override def write(row: InternalRow): Unit = {
+    val os = outputStream.getOrElse{
+      val newStream = CodecStreams.createOutputStream(context, new Path(path))
+      outputStream = Some(newStream)
+      newStream
+    }
+
     if (!row.isNullAt(0)) {
       val utf8string = row.getUTF8String(0)
-      utf8string.writeTo(writer)
+      utf8string.writeTo(os)
     }
-    writer.write(lineSeparator)
+    os.write(lineSeparator)
   }
 
   override def close(): Unit = {
-    writer.close()
+    outputStream.map(_.close())
   }
 }

@@ -219,10 +219,8 @@ private[ml] object TreeEnsembleModel {
         importances.changeValue(feature, scaledGain, _ + scaledGain)
         computeFeatureImportance(n.leftChild, importances)
         computeFeatureImportance(n.rightChild, importances)
-      case _: LeafNode =>
+      case n: LeafNode =>
       // do nothing
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown node type: ${node.getClass.toString}")
     }
   }
 
@@ -319,8 +317,6 @@ private[ml] object DecisionTreeModelReadWrite {
         (Seq(NodeData(id, node.prediction, node.impurity, node.impurityStats.stats,
           -1.0, -1, -1, SplitData(-1, Array.empty[Double], -1))),
           id)
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown node type: ${node.getClass.toString}")
     }
   }
 
@@ -331,7 +327,7 @@ private[ml] object DecisionTreeModelReadWrite {
   def loadTreeNodes(
       path: String,
       metadata: DefaultParamsReader.Metadata,
-      sparkSession: SparkSession, isClassification: Boolean): Node = {
+      sparkSession: SparkSession): Node = {
     import sparkSession.implicits._
     implicit val format = DefaultFormats
 
@@ -343,7 +339,7 @@ private[ml] object DecisionTreeModelReadWrite {
 
     val dataPath = new Path(path, "data").toString
     val data = sparkSession.read.parquet(dataPath).as[NodeData]
-    buildTreeFromNodes(data.collect(), impurityType, isClassification)
+    buildTreeFromNodes(data.collect(), impurityType)
   }
 
   /**
@@ -352,8 +348,7 @@ private[ml] object DecisionTreeModelReadWrite {
    * @param impurityType  Impurity type for this tree
    * @return Root node of reconstructed tree
    */
-  def buildTreeFromNodes(data: Array[NodeData], impurityType: String,
-      isClassification: Boolean): Node = {
+  def buildTreeFromNodes(data: Array[NodeData], impurityType: String): Node = {
     // Load all nodes, sorted by ID.
     val nodes = data.sortBy(_.id)
     // Sanity checks; could remove
@@ -369,21 +364,10 @@ private[ml] object DecisionTreeModelReadWrite {
       val node = if (n.leftChild != -1) {
         val leftChild = finalNodes(n.leftChild)
         val rightChild = finalNodes(n.rightChild)
-        if (isClassification) {
-          new ClassificationInternalNode(n.prediction, n.impurity, n.gain,
-            leftChild.asInstanceOf[ClassificationNode], rightChild.asInstanceOf[ClassificationNode],
-            n.split.getSplit, impurityStats)
-        } else {
-          new RegressionInternalNode(n.prediction, n.impurity, n.gain,
-            leftChild.asInstanceOf[RegressionNode], rightChild.asInstanceOf[RegressionNode],
-            n.split.getSplit, impurityStats)
-        }
+        new InternalNode(n.prediction, n.impurity, n.gain, leftChild, rightChild,
+          n.split.getSplit, impurityStats)
       } else {
-        if (isClassification) {
-          new ClassificationLeafNode(n.prediction, n.impurity, impurityStats)
-        } else {
-          new RegressionLeafNode(n.prediction, n.impurity, impurityStats)
-        }
+        new LeafNode(n.prediction, n.impurity, impurityStats)
       }
       finalNodes(n.id) = node
     }
@@ -437,8 +421,7 @@ private[ml] object EnsembleModelReadWrite {
       path: String,
       sql: SparkSession,
       className: String,
-      treeClassName: String,
-      isClassification: Boolean): (Metadata, Array[(Metadata, Node)], Array[Double]) = {
+      treeClassName: String): (Metadata, Array[(Metadata, Node)], Array[Double]) = {
     import sql.implicits._
     implicit val format = DefaultFormats
     val metadata = DefaultParamsReader.loadMetadata(path, sql.sparkContext, className)
@@ -466,8 +449,7 @@ private[ml] object EnsembleModelReadWrite {
     val rootNodesRDD: RDD[(Int, Node)] =
       nodeData.rdd.map(d => (d.treeID, d.nodeData)).groupByKey().map {
         case (treeID: Int, nodeData: Iterable[NodeData]) =>
-          treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(
-            nodeData.toArray, impurityType, isClassification)
+          treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray, impurityType)
       }
     val rootNodes: Array[Node] = rootNodesRDD.sortByKey().values.collect()
     (metadata, treesMetadata.zip(rootNodes), treesWeights)

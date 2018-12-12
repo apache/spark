@@ -19,16 +19,14 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.atomic.{AtomicBoolean}
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -270,7 +268,6 @@ private[spark] abstract class YarnSchedulerBackend(
       case u @ UpdateDelegationTokens(tokens) =>
         // Add the tokens to the current user and send a message to the scheduler so that it
         // notifies all registered executors of the new tokens.
-        SparkHadoopUtil.get.addDelegationTokens(tokens, sc.conf)
         driverEndpoint.send(u)
     }
 

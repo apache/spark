@@ -119,9 +119,9 @@ class JDBCOptions(
   // the column used to partition
   val partitionColumn = parameters.get(JDBC_PARTITION_COLUMN)
   // the lower bound of partition column
-  val lowerBound = parameters.get(JDBC_LOWER_BOUND).map(_.toLong)
+  val lowerBound = parameters.get(JDBC_LOWER_BOUND)
   // the upper bound of the partition column
-  val upperBound = parameters.get(JDBC_UPPER_BOUND).map(_.toLong)
+  val upperBound = parameters.get(JDBC_UPPER_BOUND)
   // numPartitions is also used for data source writing
   require((partitionColumn.isEmpty && lowerBound.isEmpty && upperBound.isEmpty) ||
     (partitionColumn.isDefined && lowerBound.isDefined && upperBound.isDefined &&
@@ -137,9 +137,13 @@ class JDBCOptions(
        |the partition columns using the supplied subquery alias to resolve any ambiguity.
        |Example :
        |spark.read.format("jdbc")
-       |        .option("dbtable", "(select c1, c2 from t1) as subq")
-       |        .option("partitionColumn", "subq.c1"
-       |        .load()
+       |  .option("url", jdbcUrl)
+       |  .option("dbtable", "(select c1, c2 from t1) as subq")
+       |  .option("partitionColumn", "c1")
+       |  .option("lowerBound", "1")
+       |  .option("upperBound", "100")
+       |  .option("numPartitions", "3")
+       |  .load()
      """.stripMargin
   )
 
@@ -157,6 +161,8 @@ class JDBCOptions(
   // ------------------------------------------------------------
   // if to truncate the table from the JDBC database
   val isTruncate = parameters.getOrElse(JDBC_TRUNCATE, "false").toBoolean
+
+  val isCascadeTruncate: Option[Boolean] = parameters.get(JDBC_CASCADE_TRUNCATE).map(_.toBoolean)
   // the create table option , which can be table_options or partition_options.
   // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
   // TODO: to reuse the existing partition parameters for those partition specific options
@@ -181,6 +187,9 @@ class JDBCOptions(
     }
   // An option to execute custom SQL before fetching data from the remote DB
   val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
+
+  // An option to allow/disallow pushing down predicate into JDBC data source
+  val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
 }
 
 class JdbcOptionsInWrite(
@@ -225,10 +234,12 @@ object JDBCOptions {
   val JDBC_QUERY_TIMEOUT = newOption("queryTimeout")
   val JDBC_BATCH_FETCH_SIZE = newOption("fetchsize")
   val JDBC_TRUNCATE = newOption("truncate")
+  val JDBC_CASCADE_TRUNCATE = newOption("cascadeTruncate")
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
   val JDBC_CREATE_TABLE_COLUMN_TYPES = newOption("createTableColumnTypes")
   val JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES = newOption("customSchema")
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
+  val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
 }

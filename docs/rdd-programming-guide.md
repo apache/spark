@@ -106,7 +106,7 @@ You can also use `bin/pyspark` to launch an interactive Python shell.
 
 If you wish to access HDFS data, you need to use a build of PySpark linking
 to your version of HDFS.
-[Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
+[Prebuilt packages](https://spark.apache.org/downloads.html) are also available on the Spark homepage
 for common HDFS versions.
 
 Finally, you need to import some Spark classes into your program. Add the following line:
@@ -332,7 +332,7 @@ One important parameter for parallel collections is the number of *partitions* t
 
 Spark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
-Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
+Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes a URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
 {% highlight scala %}
 scala> val distFile = sc.textFile("data.txt")
@@ -365,7 +365,7 @@ Apart from text files, Spark's Scala API also supports several other data format
 
 Spark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
-Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
+Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes a URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
 {% highlight java %}
 JavaRDD<String> distFile = sc.textFile("data.txt");
@@ -397,7 +397,7 @@ Apart from text files, Spark's Java API also supports several other data formats
 
 PySpark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
-Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
+Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes a URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
 {% highlight python %}
 >>> distFile = sc.textFile("data.txt")
@@ -859,7 +859,7 @@ We could also use `counts.sortByKey()`, for example, to sort the pairs alphabeti
 **Note:** when using custom objects as the key in key-value pair operations, you must be sure that a
 custom `equals()` method is accompanied with a matching `hashCode()` method.  For full details, see
 the contract outlined in the [Object.hashCode()
-documentation](http://docs.oracle.com/javase/7/docs/api/java/lang/Object.html#hashCode()).
+documentation](https://docs.oracle.com/javase/8/docs/api/java/lang/Object.html#hashCode--).
 
 </div>
 
@@ -896,7 +896,7 @@ We could also use `counts.sortByKey()`, for example, to sort the pairs alphabeti
 **Note:** when using custom objects as the key in key-value pair operations, you must be sure that a
 custom `equals()` method is accompanied with a matching `hashCode()` method.  For full details, see
 the contract outlined in the [Object.hashCode()
-documentation](http://docs.oracle.com/javase/7/docs/api/java/lang/Object.html#hashCode()).
+documentation](https://docs.oracle.com/javase/8/docs/api/java/lang/Object.html#hashCode--).
 
 </div>
 
@@ -1122,7 +1122,7 @@ costly operation.
 
 #### Background
 
-To understand what happens during the shuffle we can consider the example of the
+To understand what happens during the shuffle, we can consider the example of the
 [`reduceByKey`](#ReduceByLink) operation. The `reduceByKey` operation generates a new RDD where all
 values for a single key are combined into a tuple - the key and the result of executing a reduce
 function against all values associated with that key. The challenge is that not all values for a
@@ -1465,6 +1465,10 @@ jsc.sc().register(myVectorAcc, "MyVectorAcc1");
 
 Note that, when programmers define their own type of AccumulatorV2, the resulting type can be different than that of the elements added.
 
+*Warning*: When a Spark task finishes, Spark will try to merge the accumulated updates in this task to an accumulator.
+If it fails, Spark will ignore the failure and still mark the task successful and continue to run other tasks. Hence,
+a buggy accumulator will not impact a Spark job, but it may not get updated correctly although a Spark job is successful.
+
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -1569,7 +1573,7 @@ as Spark does not support two contexts running concurrently in the same program.
 
 # Where to Go from Here
 
-You can see some [example Spark programs](http://spark.apache.org/examples.html) on the Spark website.
+You can see some [example Spark programs](https://spark.apache.org/examples.html) on the Spark website.
 In addition, Spark includes several samples in the `examples` directory
 ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),

@@ -33,6 +33,7 @@ import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
@@ -162,7 +163,7 @@ class LinearSVC @Since("2.2.0") (
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
-  override protected def train(dataset: Dataset[_]): LinearSVCModel = {
+  override protected def train(dataset: Dataset[_]): LinearSVCModel = instrumented { instr =>
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
@@ -170,9 +171,10 @@ class LinearSVC @Since("2.2.0") (
           Instance(label, weight, features)
       }
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(regParam, maxIter, fitIntercept, tol, standardization, threshold,
-      aggregationDepth)
+    instr.logPipelineStage(this)
+    instr.logDataset(dataset)
+    instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
+      regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth)
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
@@ -187,7 +189,7 @@ class LinearSVC @Since("2.2.0") (
         (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
-    instr.logNamedValue(Instrumentation.loggerTags.numExamples, summarizer.count)
+    instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
 
@@ -276,9 +278,7 @@ class LinearSVC @Since("2.2.0") (
       (Vectors.dense(coefficientArray), intercept, scaledObjectiveHistory.result())
     }
 
-    val model = copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
-    instr.logSuccess(model)
-    model
+    copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
   }
 }
 

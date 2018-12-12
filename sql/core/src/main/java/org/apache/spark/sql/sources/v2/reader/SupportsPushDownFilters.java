@@ -17,19 +17,15 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.Filter;
 
 /**
- * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
- * interface to push down filters to the data source and reduce the size of the data to be read.
- *
- * Note that, if data source readers implement both this interface and
- * {@link SupportsPushDownCatalystFilters}, Spark will ignore this interface and only process
- * {@link SupportsPushDownCatalystFilters}.
+ * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
+ * push down filters to the data source and reduce the size of the data to be read.
  */
-@InterfaceStability.Evolving
-public interface SupportsPushDownFilters extends DataSourceReader {
+@Evolving
+public interface SupportsPushDownFilters extends ScanBuilder {
 
   /**
    * Pushes down filters, and returns filters that need to be evaluated after scanning.

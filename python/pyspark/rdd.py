@@ -39,7 +39,7 @@ if sys.version > '3':
 else:
     from itertools import imap as map, ifilter as filter
 
-from pyspark.java_gateway import do_server_auth
+from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
     PickleSerializer, pack_long, AutoBatchedSerializer, write_with_length, \
@@ -53,7 +53,7 @@ from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.util import fail_on_stopiteration
+from pyspark.util import fail_on_stopiteration, _exception_message
 
 
 __all__ = ["RDD"]
@@ -127,7 +127,7 @@ class BoundedFloat(float):
 def _parse_memory(s):
     """
     Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MB
+    return the value in MiB
 
     >>> _parse_memory("256m")
     256
@@ -141,30 +141,10 @@ def _parse_memory(s):
 
 
 def _load_from_socket(sock_info, serializer):
-    port, auth_secret = sock_info
-    sock = None
-    # Support for both IPv4 and IPv6.
-    # On most of IPv6-ready systems, IPv6 will take precedence.
-    for res in socket.getaddrinfo("localhost", port, socket.AF_UNSPEC, socket.SOCK_STREAM):
-        af, socktype, proto, canonname, sa = res
-        sock = socket.socket(af, socktype, proto)
-        try:
-            sock.settimeout(15)
-            sock.connect(sa)
-        except socket.error:
-            sock.close()
-            sock = None
-            continue
-        break
-    if not sock:
-        raise Exception("could not open socket")
+    (sockfile, sock) = local_connect_and_auth(*sock_info)
     # The RDD materialization time is unpredicable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
-
-    sockfile = sock.makefile("rwb", 65536)
-    do_server_auth(sockfile, auth_secret)
-
     # The socket will be automatically closed when garbage-collected.
     return serializer.load_stream(sockfile)
 
@@ -1360,7 +1340,7 @@ class RDD(object):
                 if len(items) == 0:
                     numPartsToTry = partsScanned * 4
                 else:
-                    # the first paramter of max is >=1 whenever partsScanned >= 2
+                    # the first parameter of max is >=1 whenever partsScanned >= 2
                     numPartsToTry = int(1.5 * num * partsScanned / len(items)) - partsScanned
                     numPartsToTry = min(max(numPartsToTry, 1), partsScanned * 4)
 
@@ -2374,7 +2354,7 @@ class RDD(object):
         The algorithm used is based on streamlib's implementation of
         `"HyperLogLog in Practice: Algorithmic Engineering of a State
         of The Art Cardinality Estimation Algorithm", available here
-        <http://dx.doi.org/10.1145/2452376.2452456>`_.
+        <https://doi.org/10.1145/2452376.2452456>`_.
 
         :param relativeSD: Relative accuracy. Smaller values create
                            counters that require more space.
@@ -2406,6 +2386,33 @@ class RDD(object):
             sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
         return _load_from_socket(sock_info, self._jrdd_deserializer)
 
+    def barrier(self):
+        """
+        .. note:: Experimental
+
+        Marks the current stage as a barrier stage, where Spark must launch all tasks together.
+        In case of a task failure, instead of only restarting the failed task, Spark will abort the
+        entire stage and relaunch all tasks for this stage.
+        The barrier execution mode feature is experimental and it only handles limited scenarios.
+        Please read the linked SPIP and design docs to understand the limitations and future plans.
+
+        :return: an :class:`RDDBarrier` instance that provides actions within a barrier stage.
+
+        .. seealso:: :class:`BarrierTaskContext`
+        .. seealso:: `SPIP: Barrier Execution Mode
+            <http://jira.apache.org/jira/browse/SPARK-24374>`_
+        .. seealso:: `Design Doc <https://jira.apache.org/jira/browse/SPARK-24582>`_
+
+        .. versionadded:: 2.4.0
+        """
+        return RDDBarrier(self)
+
+    def _is_barrier(self):
+        """
+        Whether this RDD is in a barrier stage.
+        """
+        return self._jrdd.rdd().isBarrier()
+
 
 def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
@@ -2429,6 +2436,36 @@ def _wrap_function(sc, func, deserializer, serializer, profiler=None):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
+class RDDBarrier(object):
+
+    """
+    .. note:: Experimental
+
+    Wraps an RDD in a barrier stage, which forces Spark to launch tasks of this stage together.
+    :class:`RDDBarrier` instances are created by :func:`RDD.barrier`.
+
+    .. versionadded:: 2.4.0
+    """
+
+    def __init__(self, rdd):
+        self.rdd = rdd
+
+    def mapPartitions(self, f, preservesPartitioning=False):
+        """
+        .. note:: Experimental
+
+        Returns a new RDD by applying a function to each partition of the wrapped RDD,
+        where tasks are launched together in a barrier stage.
+        The interface is the same as :func:`RDD.mapPartitions`.
+        Please see the API doc there.
+
+        .. versionadded:: 2.4.0
+        """
+        def func(s, iterator):
+            return f(iterator)
+        return PipelinedRDD(self.rdd, func, preservesPartitioning, isFromBarrier=True)
+
+
 class PipelinedRDD(RDD):
 
     """
@@ -2448,7 +2485,7 @@ class PipelinedRDD(RDD):
     20
     """
 
-    def __init__(self, prev, func, preservesPartitioning=False):
+    def __init__(self, prev, func, preservesPartitioning=False, isFromBarrier=False):
         if not isinstance(prev, PipelinedRDD) or not prev._is_pipelinable():
             # This transformation is the first in its stage:
             self.func = func
@@ -2474,6 +2511,7 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self.partitioner = prev.partitioner if self.preservesPartitioning else None
+        self.is_barrier = prev._is_barrier() or isFromBarrier
 
     def getNumPartitions(self):
         return self._prev_jrdd.partitions().size()
@@ -2493,7 +2531,7 @@ class PipelinedRDD(RDD):
         wrapped_func = _wrap_function(self.ctx, self.func, self._prev_jrdd_deserializer,
                                       self._jrdd_deserializer, profiler)
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(), wrapped_func,
-                                             self.preservesPartitioning)
+                                             self.preservesPartitioning, self.is_barrier)
         self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:
@@ -2508,6 +2546,9 @@ class PipelinedRDD(RDD):
 
     def _is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
+
+    def _is_barrier(self):
+        return self.is_barrier
 
 
 def _test():

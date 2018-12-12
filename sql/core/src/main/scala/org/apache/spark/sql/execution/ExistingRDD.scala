@@ -18,54 +18,14 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Encoder, Row, SparkSession}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.{Encoder, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.Utils
-
-object RDDConversions {
-  def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
-    data.mapPartitions { iterator =>
-      val numColumns = outputTypes.length
-      val mutableRow = new GenericInternalRow(numColumns)
-      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
-      iterator.map { r =>
-        var i = 0
-        while (i < numColumns) {
-          mutableRow(i) = converters(i)(r.productElement(i))
-          i += 1
-        }
-
-        mutableRow
-      }
-    }
-  }
-
-  /**
-   * Convert the objects inside Row into the types Catalyst expected.
-   */
-  def rowToRowRdd(data: RDD[Row], outputTypes: Seq[DataType]): RDD[InternalRow] = {
-    data.mapPartitions { iterator =>
-      val numColumns = outputTypes.length
-      val mutableRow = new GenericInternalRow(numColumns)
-      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
-      iterator.map { r =>
-        var i = 0
-        while (i < numColumns) {
-          mutableRow(i) = converters(i)(r(i))
-          i += 1
-        }
-
-        mutableRow
-      }
-    }
-  }
-}
 
 object ExternalRDD {
 
@@ -103,6 +63,10 @@ case class ExternalRDDScanExec[T](
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
+  private def rddName: String = Option(rdd.name).map(n => s" $n").getOrElse("")
+
+  override val nodeName: String = s"Scan$rddName"
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val outputDataType = outputObjAttr.dataType
@@ -116,7 +80,7 @@ case class ExternalRDDScanExec[T](
   }
 
   override def simpleString: String = {
-    s"Scan $nodeName${output.mkString("[", ",", "]")}"
+    s"$nodeName${output.mkString("[", ",", "]")}"
   }
 }
 
@@ -169,9 +133,13 @@ case class LogicalRDD(
 case class RDDScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    override val nodeName: String,
+    name: String,
     override val outputPartitioning: Partitioning = UnknownPartitioning(0),
-    override val outputOrdering: Seq[SortOrder] = Nil) extends LeafExecNode {
+    override val outputOrdering: Seq[SortOrder] = Nil) extends LeafExecNode with InputRDDCodegen {
+
+  private def rddName: String = Option(rdd.name).map(n => s" $n").getOrElse("")
+
+  override val nodeName: String = s"Scan $name$rddName"
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -189,6 +157,11 @@ case class RDDScanExec(
   }
 
   override def simpleString: String = {
-    s"Scan $nodeName${Utils.truncatedString(output, "[", ",", "]")}"
+    s"$nodeName${truncatedString(output, "[", ",", "]")}"
   }
+
+  // Input can be InternalRow, has to be turned into UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = true
+
+  override def inputRDD: RDD[InternalRow] = rdd
 }

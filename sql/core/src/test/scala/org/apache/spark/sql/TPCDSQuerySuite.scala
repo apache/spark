@@ -147,7 +147,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
         |`s_company_id` INT, `s_company_name` STRING, `s_street_number` STRING,
         |`s_street_name` STRING, `s_street_type` STRING, `s_suite_number` STRING, `s_city` STRING,
         |`s_county` STRING, `s_state` STRING, `s_zip` STRING, `s_country` STRING,
-        |`s_gmt_offset` DECIMAL(5,2), `s_tax_precentage` DECIMAL(5,2))
+        |`s_gmt_offset` DECIMAL(5,2), `s_tax_percentage` DECIMAL(5,2))
         |USING parquet
       """.stripMargin)
 

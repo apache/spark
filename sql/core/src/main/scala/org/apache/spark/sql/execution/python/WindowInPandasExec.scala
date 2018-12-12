@@ -44,7 +44,7 @@ case class WindowInPandasExec(
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (partitionSpec.isEmpty) {
-      // Only show warning when the number of bytes is larger than 100 MB?
+      // Only show warning when the number of bytes is larger than 100 MiB?
       logWarning("No Partition Defined for Window operation! Moving all data to a single "
         + "partition, this can cause serious performance degradation.")
       AllTuples :: Nil
@@ -95,8 +95,6 @@ case class WindowInPandasExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
-    val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
 
@@ -142,7 +140,7 @@ case class WindowInPandasExec(
       // combine input with output from Python.
       val queue = HybridRowQueue(context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
-      context.addTaskCompletionListener { _ =>
+      context.addTaskCompletionListener[Unit] { _ =>
         queue.close()
       }
 
@@ -156,8 +154,6 @@ case class WindowInPandasExec(
 
       val windowFunctionResult = new ArrowPythonRunner(
         pyFuncs,
-        bufferSize,
-        reuseWorker,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         argOffsets,
         windowInputSchema,

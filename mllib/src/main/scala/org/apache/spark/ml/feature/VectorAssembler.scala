@@ -162,7 +162,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       schema(name).dataType match {
         case _: NumericType | BooleanType => None
         case t if t.isInstanceOf[VectorUDT] => None
-        case other => Some(s"Data type $other of column $name is not supported.")
+        case other => Some(s"Data type ${other.catalogString} of column $name is not supported.")
       }
     }
     if (incorrectColumns.nonEmpty) {

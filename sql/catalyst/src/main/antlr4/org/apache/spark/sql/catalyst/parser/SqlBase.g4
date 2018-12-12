@@ -18,6 +18,12 @@ grammar SqlBase;
 
 @members {
   /**
+   * When false, INTERSECT is given the greater precedence over the other set
+   * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
+   */
+  public boolean legacy_setops_precedence_enbled = false;
+
+  /**
    * Verify whether current token is a valid decimal token (which contains dot).
    * Returns true if the character that follows the token is not a digit or letter or underscore.
    *
@@ -93,7 +99,7 @@ statement
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq)?                      #analyze
+        (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ALTER TABLE tableIdentifier
         ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -156,7 +162,8 @@ statement
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
-    | CACHE LAZY? TABLE tableIdentifier (AS? query)?                   #cacheTable
+    | CACHE LAZY? TABLE tableIdentifier
+        (OPTIONS options=tablePropertyList)? (AS? query)?              #cacheTable
     | UNCACHE TABLE (IF EXISTS)? tableIdentifier                       #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
@@ -352,8 +359,13 @@ multiInsertQueryBody
     ;
 
 queryTerm
-    : queryPrimary                                                                         #queryTermDefault
-    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
+    : queryPrimary                                                                       #queryTermDefault
+    | left=queryTerm {legacy_setops_precedence_enbled}?
+        operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
+    | left=queryTerm {!legacy_setops_precedence_enbled}?
+        operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
+    | left=queryTerm {!legacy_setops_precedence_enbled}?
+        operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
 queryPrimary
@@ -406,6 +418,7 @@ aggregation
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
+    | GROUP BY kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
     ;
 
 groupingSet
@@ -414,7 +427,16 @@ groupingSet
     ;
 
 pivotClause
-    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn=identifier IN '(' pivotValues+=constant (',' pivotValues+=constant)* ')' ')'
+    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn IN '(' pivotValues+=pivotValue (',' pivotValues+=pivotValue)* ')' ')'
+    ;
+
+pivotColumn
+    : identifiers+=identifier
+    | '(' identifiers+=identifier (',' identifiers+=identifier)* ')'
+    ;
+
+pivotValue
+    : expression (AS? identifier)?
     ;
 
 lateralView
@@ -447,7 +469,7 @@ joinType
 
 joinCriteria
     : ON booleanExpression
-    | USING '(' identifier (',' identifier)* ')'
+    | USING identifierList
     ;
 
 sample
@@ -581,6 +603,8 @@ primaryExpression
        (OVER windowSpec)?                                                                      #functionCall
     | qualifiedName '(' trimOption=(BOTH | LEADING | TRAILING) argument+=expression
       FROM argument+=expression ')'                                                            #functionCall
+    | IDENTIFIER '->' expression                                                               #lambda
+    | '(' IDENTIFIER (',' IDENTIFIER)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -667,6 +691,7 @@ namedWindow
 
 windowSpec
     : name=identifier  #windowRef
+    | '('name=identifier')'  #windowRef
     | '('
       ( CLUSTER BY partition+=expression (',' partition+=expression)*
       | ((PARTITION | DISTRIBUTE) BY partition+=expression (',' partition+=expression)*)?

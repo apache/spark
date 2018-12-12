@@ -140,16 +140,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c = Calendar.getInstance()
     c.set(2015, 2, 18, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    assert(stringToDate(UTF8String.fromString("2015-03-18")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18 ")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18 123142")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18T123123")).get ===
-      millisToDays(c.getTimeInMillis))
-    assert(stringToDate(UTF8String.fromString("2015-03-18T")).get ===
-      millisToDays(c.getTimeInMillis))
+    Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18 123142",
+      "2015-03-18T123123", "2015-03-18T").foreach { s =>
+      assert(stringToDate(UTF8String.fromString(s)).get === millisToDays(c.getTimeInMillis))
+    }
 
     assert(stringToDate(UTF8String.fromString("2015-03-18X")).isEmpty)
     assert(stringToDate(UTF8String.fromString("2015/03/18")).isEmpty)
@@ -214,9 +208,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("2015-03-18", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18 ", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18T", Option(c.getTimeInMillis * 1000))
+
+      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
+        checkStringToTimestamp(s, Option(c.getTimeInMillis * 1000))
+      }
 
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)
@@ -662,18 +657,18 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(daysToMillis(16800, TimeZoneGMT) === c.getTimeInMillis)
 
     // There are some days are skipped entirely in some timezone, skip them here.
-    val skipped_days = Map[String, Int](
-      "Kwajalein" -> 8632,
-      "Pacific/Apia" -> 15338,
-      "Pacific/Enderbury" -> 9131,
-      "Pacific/Fakaofo" -> 15338,
-      "Pacific/Kiritimati" -> 9131,
-      "Pacific/Kwajalein" -> 8632,
-      "MIT" -> 15338)
+    val skipped_days = Map[String, Set[Int]](
+      "Kwajalein" -> Set(8632),
+      "Pacific/Apia" -> Set(15338),
+      "Pacific/Enderbury" -> Set(9130, 9131),
+      "Pacific/Fakaofo" -> Set(15338),
+      "Pacific/Kiritimati" -> Set(9130, 9131),
+      "Pacific/Kwajalein" -> Set(8632),
+      "MIT" -> Set(15338))
     for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
-      val skipped = skipped_days.getOrElse(tz.getID, Int.MinValue)
+      val skipped = skipped_days.getOrElse(tz.getID, Set.empty)
       (-20000 to 20000).foreach { d =>
-        if (d != skipped) {
+        if (!skipped.contains(d)) {
           assert(millisToDays(daysToMillis(d, tz), tz) === d,
             s"Round trip of ${d} did not work in tz ${tz}")
         }

@@ -42,7 +42,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val table1 = LocalRelation('a.int, 'b.int)
     val table2 = LocalRelation('c.int, 'd.int)
 
-    val query = Intersect(table1, table2)
+    val query = Intersect(table1, table2, isAll = false)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
@@ -60,7 +60,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val table2 = Filter(attributeB === 2, Filter(attributeA === 1, table1))
     val table3 = Filter(attributeB < 1, Filter(attributeA >= 2, table1))
 
-    val query = Except(table2, table3)
+    val query = Except(table2, table3, isAll = false)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
@@ -79,7 +79,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
     val table2 = Filter(attributeB < 1, Filter(attributeA >= 2, table1))
 
-    val query = Except(table1, table2)
+    val query = Except(table1, table2, isAll = false)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
@@ -99,7 +99,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val table3 = Project(Seq(attributeA, attributeB),
       Filter(attributeB < 1, Filter(attributeA >= 2, table1)))
 
-    val query = Except(table2, table3)
+    val query = Except(table2, table3, isAll = false)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
@@ -120,7 +120,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val table3 = Project(Seq(attributeA, attributeB),
       Filter(attributeB < 1, Filter(attributeA >= 2, table1)))
 
-    val query = Except(table2, table3)
+    val query = Except(table2, table3, isAll = false)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
@@ -141,7 +141,7 @@ class ReplaceOperatorSuite extends PlanTest {
       Filter(attributeB < 1, Filter(attributeA >= 2, table1)))
     val table3 = Filter(attributeB === 2, Filter(attributeA === 1, table1))
 
-    val query = Except(table2, table3)
+    val query = Except(table2, table3, isAll = false)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
@@ -158,7 +158,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val table1 = LocalRelation('a.int, 'b.int)
     val table2 = LocalRelation('c.int, 'd.int)
 
-    val query = Except(table1, table2)
+    val query = Except(table1, table2, isAll = false)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
@@ -173,7 +173,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val left = table.where('b < 1).select('a).as("left")
     val right = table.where('b < 3).select('a).as("right")
 
-    val query = Except(left, right)
+    val query = Except(left, right, isAll = false)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =

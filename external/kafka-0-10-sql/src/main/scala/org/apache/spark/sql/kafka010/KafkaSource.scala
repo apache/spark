@@ -215,7 +215,7 @@ private[kafka010] class KafkaSource(
     }
     if (start.isDefined && start.get == end) {
       return sqlContext.internalCreateDataFrame(
-        sqlContext.sparkContext.emptyRDD, schema, isStreaming = true)
+        sqlContext.sparkContext.emptyRDD[InternalRow].setName("empty"), schema, isStreaming = true)
     }
     val fromPartitionOffsets = start match {
       case Some(prevBatchEndOffset) =>
@@ -299,7 +299,7 @@ private[kafka010] class KafkaSource(
     logInfo("GetBatch generating RDD of offset range: " +
       offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
 
-    sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
+    sqlContext.internalCreateDataFrame(rdd.setName("kafka"), schema, isStreaming = true)
   }
 
   /** Stop this source and free any resources it has allocated. */

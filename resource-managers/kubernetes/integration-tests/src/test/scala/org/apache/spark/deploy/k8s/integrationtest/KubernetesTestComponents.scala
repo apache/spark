@@ -25,15 +25,16 @@ import scala.collection.mutable
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import org.scalatest.concurrent.Eventually
 
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesClient) {
 
-  val namespaceOption = Option(System.getProperty("spark.kubernetes.test.namespace"))
+  val namespaceOption = Option(System.getProperty(CONFIG_KEY_KUBE_NAMESPACE))
   val hasUserSpecifiedNamespace = namespaceOption.isDefined
   val namespace = namespaceOption.getOrElse(UUID.randomUUID().toString.replaceAll("-", ""))
-  private val serviceAccountName =
-    Option(System.getProperty("spark.kubernetes.test.serviceAccountName"))
+  val serviceAccountName =
+    Option(System.getProperty(CONFIG_KEY_KUBE_SVC_ACCOUNT))
       .getOrElse("default")
   val kubernetesClient = defaultClient.inNamespace(namespace)
   val clientConfig = kubernetesClient.getConfiguration
@@ -62,7 +63,6 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
     new SparkAppConf()
       .set("spark.master", s"k8s://${kubernetesClient.getMasterUrl}")
       .set("spark.kubernetes.namespace", namespace)
-      .set("spark.executor.memory", "500m")
       .set("spark.executor.cores", "1")
       .set("spark.executors.instances", "1")
       .set("spark.app.name", "spark-test-app")

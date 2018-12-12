@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.r
 
-import java.io.{DataInputStream, DataOutputStream, File, FileOutputStream, IOException}
+import java.io.{DataOutputStream, File, FileOutputStream, IOException}
 import java.net.{InetAddress, InetSocketAddress, ServerSocket, Socket}
 import java.util.concurrent.TimeUnit
 
@@ -32,8 +32,6 @@ import io.netty.handler.timeout.ReadTimeoutHandler
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.util.Utils
 
 /**
  * Netty-based backend server that is used to communicate between R and Java.
@@ -96,11 +94,11 @@ private[spark] class RBackend {
       channelFuture.channel().close().awaitUninterruptibly(10, TimeUnit.SECONDS)
       channelFuture = null
     }
-    if (bootstrap != null && bootstrap.group() != null) {
-      bootstrap.group().shutdownGracefully()
+    if (bootstrap != null && bootstrap.config().group() != null) {
+      bootstrap.config().group().shutdownGracefully()
     }
-    if (bootstrap != null && bootstrap.childGroup() != null) {
-      bootstrap.childGroup().shutdownGracefully()
+    if (bootstrap != null && bootstrap.config().childGroup() != null) {
+      bootstrap.config().childGroup().shutdownGracefully()
     }
     bootstrap = null
     jvmObjectTracker.clear()
@@ -147,7 +145,7 @@ private[spark] object RBackend extends Logging {
       new Thread("wait for socket to close") {
         setDaemon(true)
         override def run(): Unit = {
-          // any un-catched exception will also shutdown JVM
+          // any uncaught exception will also shutdown JVM
           val buf = new Array[Byte](1024)
           // shutdown JVM if R does not connect back in 10 seconds
           serverSocket.setSoTimeout(10000)

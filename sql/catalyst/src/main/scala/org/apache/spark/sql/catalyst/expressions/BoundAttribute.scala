@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 
@@ -34,15 +34,11 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
-  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {
-    if (nullable && input.isNullAt(ordinal)) {
-      null
-    } else {
-      accessor(input, ordinal)
-    }
+    accessor(input, ordinal)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -53,7 +49,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
       ev.copy(code = oev.code)
     } else {
       assert(ctx.INPUT_ROW != null, "INPUT_ROW and currentVars cannot both be null.")
-      val javaType = CodeGenerator.javaType(dataType)
+      val javaType = JavaCode.javaType(dataType)
       val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
       if (nullable) {
         ev.copy(code =

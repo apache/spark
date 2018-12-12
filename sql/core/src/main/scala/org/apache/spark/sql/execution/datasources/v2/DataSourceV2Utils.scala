@@ -21,6 +21,7 @@ import java.util.regex.Pattern
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.{DataSourceV2, SessionConfigSupport}
 
 private[sql] object DataSourceV2Utils extends Logging {
@@ -54,5 +55,13 @@ private[sql] object DataSourceV2Utils extends Logging {
       }
 
     case _ => Map.empty
+  }
+
+  def failForUserSpecifiedSchema[T](ds: DataSourceV2): T = {
+    val name = ds match {
+      case register: DataSourceRegister => register.shortName()
+      case _ => ds.getClass.getName
+    }
+    throw new UnsupportedOperationException(name + " source does not support user-specified schema")
   }
 }

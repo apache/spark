@@ -206,7 +206,9 @@ class TungstenAggregationIterator(
           buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
           if (buffer == null) {
             // failed to allocate the first page
+            // scalastyle:off throwerror
             throw new SparkOutOfMemoryError("No enough memory for aggregation")
+            // scalastyle:on throwerror
           }
         }
         processRow(buffer, newInput)
@@ -372,7 +374,7 @@ class TungstenAggregationIterator(
     }
   }
 
-  TaskContext.get().addTaskCompletionListener(_ => {
+  TaskContext.get().addTaskCompletionListener[Unit](_ => {
     // At the end of the task, update the task's peak memory usage. Since we destroy
     // the map to create the sorter, their memory usages should not overlap, so it is safe
     // to just use the max of the two.

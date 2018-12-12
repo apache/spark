@@ -196,7 +196,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
 
     // outer -> left
-    val outerJoin2Left = df.join(df2, $"a.int" === $"b.int", "outer").where($"a.int" === 3)
+    val outerJoin2Left = df.join(df2, $"a.int" === $"b.int", "outer").where($"a.int" >= 3)
     assert(outerJoin2Left.queryExecution.optimizedPlan.collect {
       case j @ Join(_, _, LeftOuter, _) => j }.size === 1)
     checkAnswer(
@@ -204,7 +204,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(3, 4, "3", null, null, null) :: Nil)
 
     // outer -> right
-    val outerJoin2Right = df.join(df2, $"a.int" === $"b.int", "outer").where($"b.int" === 5)
+    val outerJoin2Right = df.join(df2, $"a.int" === $"b.int", "outer").where($"b.int" >= 3)
     assert(outerJoin2Right.queryExecution.optimizedPlan.collect {
       case j @ Join(_, _, RightOuter, _) => j }.size === 1)
     checkAnswer(
@@ -221,7 +221,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(1, 2, "1", 1, 3, "1") :: Nil)
 
     // right -> inner
-    val rightJoin2Inner = df.join(df2, $"a.int" === $"b.int", "right").where($"a.int" === 1)
+    val rightJoin2Inner = df.join(df2, $"a.int" === $"b.int", "right").where($"a.int" > 0)
     assert(rightJoin2Inner.queryExecution.optimizedPlan.collect {
       case j @ Join(_, _, Inner, _) => j }.size === 1)
     checkAnswer(
@@ -229,7 +229,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(1, 2, "1", 1, 3, "1") :: Nil)
 
     // left -> inner
-    val leftJoin2Inner = df.join(df2, $"a.int" === $"b.int", "left").where($"b.int2" === 3)
+    val leftJoin2Inner = df.join(df2, $"a.int" === $"b.int", "left").where($"b.int2" > 0)
     assert(leftJoin2Inner.queryExecution.optimizedPlan.collect {
       case j @ Join(_, _, Inner, _) => j }.size === 1)
     checkAnswer(
@@ -294,5 +294,17 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       // this throws an exception before the fix
       df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
     }
+  }
+
+  test("NaN and -0.0 in join keys") {
+    val df1 = Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d")
+    val df2 = Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d")
+    val joined = df1.join(df2, Seq("f", "d"))
+    checkAnswer(joined, Seq(
+      Row(Float.NaN, Double.NaN),
+      Row(0.0f, 0.0),
+      Row(0.0f, 0.0),
+      Row(0.0f, 0.0),
+      Row(0.0f, 0.0)))
   }
 }

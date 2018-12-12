@@ -83,4 +83,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-rdds','aggregated-rdds');
   collapseTablePageLoad('collapse-aggregated-activeBatches','aggregated-activeBatches');
   collapseTablePageLoad('collapse-aggregated-completedBatches','aggregated-completedBatches');
+  collapseTablePageLoad('collapse-aggregated-runningExecutions','aggregated-runningExecutions');
+  collapseTablePageLoad('collapse-aggregated-completedExecutions','aggregated-completedExecutions');
+  collapseTablePageLoad('collapse-aggregated-failedExecutions','aggregated-failedExecutions');
 });

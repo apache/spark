@@ -152,8 +152,9 @@ of the most common options to set are:
   <td><code>spark.driver.memory</code></td>
   <td>1g</td>
   <td>
-    Amount of memory to use for the driver process, i.e. where SparkContext is initialized, in MiB 
-    unless otherwise specified (e.g. <code>1g</code>, <code>2g</code>).
+    Amount of memory to use for the driver process, i.e. where SparkContext is initialized, in the
+    same format as JVM memory strings with a size unit suffix ("k", "m", "g" or "t")
+    (e.g. <code>512m</code>, <code>2g</code>).
     <br />
     <em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
@@ -175,8 +176,22 @@ of the most common options to set are:
   <td><code>spark.executor.memory</code></td>
   <td>1g</td>
   <td>
-    Amount of memory to use per executor process, in MiB unless otherwise specified.
-    (e.g. <code>2g</code>, <code>8g</code>).
+    Amount of memory to use per executor process, in the same format as JVM memory strings with
+    a size unit suffix ("k", "m", "g" or "t") (e.g. <code>512m</code>, <code>2g</code>).
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.pyspark.memory</code></td>
+  <td>Not set</td>
+  <td>
+    The amount of memory to be allocated to PySpark in each executor, in MiB
+    unless otherwise specified.  If set, PySpark memory for an executor will be
+    limited to this amount. If not set, Spark will not limit Python's memory use
+    and it is up to the application to avoid exceeding the overhead memory space
+    shared with other non-JVM processes. When PySpark is run in YARN or Kubernetes, this memory
+    is added to executor resource requests.
+
+    NOTE: Python memory usage may not be limited on platforms that do not support resource limiting, such as Windows.
   </td>
 </tr>
 <tr>
@@ -251,6 +266,39 @@ of the most common options to set are:
   <td>
     If true, restarts the driver automatically if it fails with a non-zero exit status.
     Only has effect in Spark standalone mode or Mesos cluster deploy mode.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.log.dfsDir</code></td>
+  <td>(none)</td>
+  <td>
+    Base directory in which Spark driver logs are synced, if <code>spark.driver.log.persistToDfs.enabled</code>
+    is true. Within this base directory, each application logs the driver logs to an application specific file.
+    Users may want to set this to a unified location like an HDFS directory so driver log files can be persisted
+    for later usage. This directory should allow any Spark user to read/write files and the Spark History Server
+    user to delete files. Additionally, older logs from this directory are cleaned by the
+    <a href="monitoring.html#spark-history-server-configuration-options">Spark History Server</a> if
+    <code>spark.history.fs.driverlog.cleaner.enabled</code> is true and, if they are older than max age configured
+    by setting <code>spark.history.fs.driverlog.cleaner.maxAge</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.log.persistToDfs.enabled</code></td>
+  <td>false</td>
+  <td>
+    If true, spark application running in client mode will write driver logs to a persistent storage, configured
+    in <code>spark.driver.log.dfsDir</code>. If <code>spark.driver.log.dfsDir</code> is not configured, driver logs
+    will not be persisted. Additionally, enable the cleaner by setting <code>spark.history.fs.driverlog.cleaner.enabled</code>
+    to true in <a href="monitoring.html#spark-history-server-configuration-options">Spark History Server</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.log.layout</code></td>
+  <td>%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n</td>
+  <td>
+    The layout for the driver logs that are synced to <code>spark.driver.log.dfsDir</code>. If this is not configured,
+    it uses the layout for the first appender defined in log4j.properties. If that is also not configured, driver logs
+    use the default layout.
   </td>
 </tr>
 </table>
@@ -432,7 +480,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The directory which is used to dump the profile result before driver exiting.
     The results will be dumped as separated file for each RDD. They can be loaded
-    by ptats.Stats(). If this is specified, the profile result will not be displayed
+    by <code>pstats.Stats()</code>. If this is specified, the profile result will not be displayed
     automatically.
   </td>
 </tr>
@@ -452,7 +500,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Reuse Python worker or not. If yes, it will use a fixed number of Python workers,
     does not need to fork() a Python process for every task. It will be very useful
-    if there is large broadcast, then the broadcast will not be needed to transferred
+    if there is a large broadcast, then the broadcast will not need to be transferred
     from JVM to Python worker for every task.
   </td>
 </tr>
@@ -580,13 +628,15 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
-  <td>Long.MaxValue</td>
+  <td>Int.MaxValue - 512</td>
   <td>
     The remote block will be fetched to disk when size of the block is above this threshold in bytes.
-    This is to avoid a giant request takes too much memory. We can enable this config by setting
-    a specific value(e.g. 200m). Note this configuration will affect both shuffle fetch
+    This is to avoid a giant request that takes too much memory.  By default, this is only enabled
+    for blocks > 2GB, as those cannot be fetched directly into memory, no matter what resources are
+    available.  But it can be turned down to a much lower value (eg. 200m) to avoid using too much
+    memory on smaller blocks as well. Note this configuration will affect both shuffle fetch
     and block manager remote block fetch. For users who enabled external shuffle service,
-    this feature can only be worked when external shuffle service is newer than Spark 2.2.
+    this feature can only be used when external shuffle service is newer than Spark 2.2.
   </td>
 </tr>
 <tr>
@@ -732,11 +782,29 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.eventLog.longForm.enabled</code></td>
+  <td>false</td>
+  <td>
+    If true, use the long form of call sites in the event log. Otherwise use the short form.
+  </td>
+</tr>
+<tr>
   <td><code>spark.eventLog.compress</code></td>
   <td>false</td>
   <td>
     Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
     Compression will use <code>spark.io.compression.codec</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.allowErasureCoding</code></td>
+  <td>false</td>
+  <td>
+    Whether to allow event logs to use erasure coding, or turn erasure coding off, regardless of
+    filesystem defaults.  On HDFS, erasure coded files will not update as quickly as regular
+    replicated files, so the application updates will take longer to appear in the History Server.
+    Note that even if this is true, Spark will still not force the file to use erasure coding, it
+    will simply use filesystem defaults.
   </td>
 </tr>
 <tr>
@@ -772,6 +840,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.dagGraph.retainedRootRDDs</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    How many DAG graph nodes the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.enabled</code></td>
   <td>true</td>
   <td>
@@ -783,6 +858,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>true</td>
   <td>
     Allows jobs and stages to be killed from the web UI.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.liveUpdate.period</code></td>
+  <td>100ms</td>
+  <td>
+    How often to update live entities. -1 means "never update" when replaying applications,
+    meaning only the last write will happen. For live applications, this avoids a few
+    operations that we can live without when rapidly processing incoming task events.
   </td>
 </tr>
 <tr>
@@ -891,6 +975,14 @@ Apart from these, the following properties are also available, and may be useful
     <br /><code>spark.com.test.filter1.param.name2=bar</code>
   </td>
 </tr>
+<tr>
+  <td><code>spark.ui.requestHeaderSize</code></td>
+  <td>8k</td>
+  <td>
+    The maximum allowed size for a HTTP request header, in bytes unless otherwise specified.
+    This setting applies for the Spark History Server too.
+  <td>
+</tr>
 </table>
 
 ### Compression and Serialization
@@ -916,7 +1008,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
     <code>org.apache.spark.io.SnappyCompressionCodec</code>,
-    and <code>org.apache.spark.io.ZstdCompressionCodec</code>.
+    and <code>org.apache.spark.io.ZStdCompressionCodec</code>.
   </td>
 </tr>
 <tr>
@@ -1216,6 +1308,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.broadcast.checksum</code></td>
+  <td>true</td>
+  <td>
+    Whether to enable checksum for broadcast. If enabled, broadcasts will include a checksum, which can
+    help detect corrupted blocks, at the cost of computing and sending a little more data. It's possible
+    to disable it if the network has other mechanisms to guarantee data won't be corrupted during broadcast.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.cores</code></td>
   <td>
     1 in YARN mode, all the available cores on the worker in
@@ -1283,14 +1384,14 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.files.maxPartitionBytes</code></td>
-  <td>134217728 (128 MB)</td>
+  <td>134217728 (128 MiB)</td>
   <td>
     The maximum number of bytes to pack into a single partition when reading files.
   </td>
 </tr>
 <tr>
   <td><code>spark.files.openCostInBytes</code></td>
-  <td>4194304 (4 MB)</td>
+  <td>4194304 (4 MiB)</td>
   <td>
     The estimated cost to open a file, measured by the number of bytes could be scanned at the same
     time. This is used when putting multiple files into a partition. It is better to overestimate,
@@ -1344,7 +1445,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rpc.message.maxSize</code></td>
   <td>128</td>
   <td>
-    Maximum message size (in MB) to allow in "control plane" communication; generally only applies to map
+    Maximum message size (in MiB) to allow in "control plane" communication; generally only applies to map
     output size information sent between executors and the driver. Increase this if you are running
     jobs with many thousands of map and reduce tasks and see messages about the RPC message size.
   </td>
@@ -1550,6 +1651,14 @@ Apart from these, the following properties are also available, and may be useful
     Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
     value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
     driver using more memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.blacklist.unschedulableTaskSetTimeout</code></td>
+  <td>120s</td>
+  <td>
+    The timeout in seconds to wait to acquire a new executor and schedule a task before aborting a
+    TaskSet which is unschedulable because of being completely blacklisted.
   </td>
 </tr>
 <tr>
@@ -1816,7 +1925,7 @@ Apart from these, the following properties are also available, and may be useful
     executors w.r.t. full parallelism.
     Defaults to 1.0 to give maximum parallelism.
     0.5 will divide the target number of executors by 2
-    The target number of executors computed by the dynamicAllocation can still be overriden
+    The target number of executors computed by the dynamicAllocation can still be overridden
     by the <code>spark.dynamicAllocation.minExecutors</code> and
     <code>spark.dynamicAllocation.maxExecutors</code> settings
   </td>
@@ -1970,19 +2079,17 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td>
     Maximum rate (number of records per second) at which data will be read from each Kafka
     partition when using the new Kafka direct stream API. See the
-    <a href="streaming-kafka-integration.html">Kafka Integration guide</a>
+    <a href="streaming-kafka-0-10-integration.html">Kafka Integration guide</a>
     for more details.
   </td>
 </tr>
 <tr>
-  <td><code>spark.streaming.kafka.maxRetries</code></td>
-  <td>1</td>
-  <td>
-    Maximum number of consecutive retries the driver will make in order to find
-    the latest offsets on the leader of each partition (a default value of 1
-    means that the driver will make a maximum of 2 attempts). Only applies to
-    the new Kafka direct stream API.
-  </td>
+    <td><code>spark.streaming.kafka.minRatePerPartition</code></td>
+    <td>1</td>
+    <td>
+      Minimum rate (number of records per second) at which data will be read from each Kafka
+      partition when using the new Kafka direct stream API.
+    </td>
 </tr>
 <tr>
   <td><code>spark.streaming.ui.retainedBatches</code></td>
@@ -2202,7 +2309,7 @@ Spark's classpath for each application. In a Spark cluster running on YARN, thes
 files are set cluster-wide, and cannot safely be changed by the application.
 
 The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
-They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-default.conf`
+They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defaults.conf`
 
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
 instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.

@@ -13,6 +13,11 @@ The advantages of deploying Spark with Mesos include:
   [frameworks](https://mesos.apache.org/documentation/latest/frameworks/)
 - scalable partitioning between multiple instances of Spark
 
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
+
 # How it Works
 
 In a standalone cluster deployment, the cluster manager in the below diagram is a Spark master
@@ -174,6 +179,8 @@ can find the results of the driver from the Mesos Web UI.
 
 To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
 passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
+Note that the `MesosClusterDispatcher` does not support authentication.  You should ensure that all network access to it is
+protected (port 7077 by default).
 
 By setting the Mesos proxy config property (requires mesos version >= 1.4), `--conf spark.mesos.proxy.baseURL=http://localhost:5050` when launching the dispatcher, the mesos sandbox URI for each driver is added to the mesos dispatcher UI.
 
@@ -430,7 +437,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.executor.memoryOverhead</code></td>
   <td>executor memory * 0.10, with minimum of 384</td>
   <td>
-    The amount of additional memory, specified in MB, to be allocated per executor. By default,
+    The amount of additional memory, specified in MiB, to be allocated per executor. By default,
     the overhead will be larger of either 384 or 10% of <code>spark.executor.memory</code>. If set,
     the final overhead will be this value.
   </td>
@@ -670,7 +677,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.dispatcher.historyServer.url</code></td>
   <td><code>(none)</code></td>
   <td>
-    Set the URL of the <a href="http://spark.apache.org/docs/latest/monitoring.html#viewing-after-the-fact">history
+    Set the URL of the <a href="monitoring.html#viewing-after-the-fact">history
     server</a>.  The dispatcher will then link each driver to its entry
     in the history server.
   </td>
@@ -680,7 +687,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0</code></td>
   <td>
     Set the maximum number GPU resources to acquire for this job. Note that executors will still launch when no GPU resources are found
-    since this configuration is just a upper limit and not a guaranteed amount.
+    since this configuration is just an upper limit and not a guaranteed amount.
   </td>
   </tr>
 <tr>

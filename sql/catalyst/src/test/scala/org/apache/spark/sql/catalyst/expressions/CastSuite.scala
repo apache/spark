@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 import java.util.{Calendar, Locale, TimeZone}
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -110,7 +112,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
-    for (tz <- ALL_TIMEZONES) {
+    ALL_TIMEZONES.par.foreach { tz =>
       def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
         checkEvaluation(cast(Literal(str), TimestampType, Option(tz.getID)), expected)
       }
@@ -399,20 +401,34 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("casting to fixed-precision decimals") {
-    // Overflow and rounding for casting to fixed-precision decimals:
-    // - Values should round with HALF_UP mode by default when you lower scale
-    // - Values that would overflow the target precision should turn into null
-    // - Because of this, casts to fixed-precision decimals should be nullable
-
-    assert(cast(123, DecimalType.USER_DEFAULT).nullable === true)
+    assert(cast(123, DecimalType.USER_DEFAULT).nullable === false)
     assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable === true)
     assert(cast(10.03, DecimalType.SYSTEM_DEFAULT).nullable === true)
-    assert(cast(Decimal(10.03), DecimalType.SYSTEM_DEFAULT).nullable === true)
+    assert(cast(Decimal(10.03), DecimalType.SYSTEM_DEFAULT).nullable === false)
 
     assert(cast(123, DecimalType(2, 1)).nullable === true)
     assert(cast(10.03f, DecimalType(2, 1)).nullable === true)
     assert(cast(10.03, DecimalType(2, 1)).nullable === true)
     assert(cast(Decimal(10.03), DecimalType(2, 1)).nullable === true)
+
+    assert(cast(123, DecimalType.IntDecimal).nullable === false)
+    assert(cast(10.03f, DecimalType.FloatDecimal).nullable === true)
+    assert(cast(10.03, DecimalType.DoubleDecimal).nullable === true)
+    assert(cast(Decimal(10.03), DecimalType(4, 2)).nullable === false)
+    assert(cast(Decimal(10.03), DecimalType(5, 3)).nullable === false)
+
+    assert(cast(Decimal(10.03), DecimalType(3, 1)).nullable === true)
+    assert(cast(Decimal(10.03), DecimalType(4, 1)).nullable === false)
+    assert(cast(Decimal(9.95), DecimalType(2, 1)).nullable === true)
+    assert(cast(Decimal(9.95), DecimalType(3, 1)).nullable === false)
+
+    assert(cast(Decimal("1003"), DecimalType(3, -1)).nullable === true)
+    assert(cast(Decimal("1003"), DecimalType(4, -1)).nullable === false)
+    assert(cast(Decimal("995"), DecimalType(2, -1)).nullable === true)
+    assert(cast(Decimal("995"), DecimalType(3, -1)).nullable === false)
+
+    assert(cast(true, DecimalType.SYSTEM_DEFAULT).nullable === false)
+    assert(cast(true, DecimalType(1, 1)).nullable === true)
 
 
     checkEvaluation(cast(10.03, DecimalType.SYSTEM_DEFAULT), Decimal(10.03))
@@ -451,6 +467,20 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Decimal(-9.95), DecimalType(3, 1)), Decimal(-10.0))
     checkEvaluation(cast(Decimal(-9.95), DecimalType(1, 0)), null)
 
+    checkEvaluation(cast(Decimal("1003"), DecimalType.SYSTEM_DEFAULT), Decimal(1003))
+    checkEvaluation(cast(Decimal("1003"), DecimalType(4, 0)), Decimal(1003))
+    checkEvaluation(cast(Decimal("1003"), DecimalType(3, -1)), Decimal(1000))
+    checkEvaluation(cast(Decimal("1003"), DecimalType(2, -2)), Decimal(1000))
+    checkEvaluation(cast(Decimal("1003"), DecimalType(1, -2)), null)
+    checkEvaluation(cast(Decimal("1003"), DecimalType(2, -1)), null)
+    checkEvaluation(cast(Decimal("1003"), DecimalType(3, 0)), null)
+
+    checkEvaluation(cast(Decimal("995"), DecimalType(3, 0)), Decimal(995))
+    checkEvaluation(cast(Decimal("995"), DecimalType(3, -1)), Decimal(1000))
+    checkEvaluation(cast(Decimal("995"), DecimalType(2, -2)), Decimal(1000))
+    checkEvaluation(cast(Decimal("995"), DecimalType(2, -1)), null)
+    checkEvaluation(cast(Decimal("995"), DecimalType(1, -2)), null)
+
     checkEvaluation(cast(Double.NaN, DecimalType.SYSTEM_DEFAULT), null)
     checkEvaluation(cast(1.0 / 0.0, DecimalType.SYSTEM_DEFAULT), null)
     checkEvaluation(cast(Float.NaN, DecimalType.SYSTEM_DEFAULT), null)
@@ -460,6 +490,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(1.0 / 0.0, DecimalType(2, 1)), null)
     checkEvaluation(cast(Float.NaN, DecimalType(2, 1)), null)
     checkEvaluation(cast(1.0f / 0.0f, DecimalType(2, 1)), null)
+
+    checkEvaluation(cast(true, DecimalType(2, 1)), Decimal(1))
+    checkEvaluation(cast(true, DecimalType(1, 1)), null)
   }
 
   test("cast from date") {

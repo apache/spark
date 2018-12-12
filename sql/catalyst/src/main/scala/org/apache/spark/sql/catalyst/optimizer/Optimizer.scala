@@ -46,7 +46,14 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
-  def batches: Seq[Batch] = {
+  /**
+   * Defines the default rule batches in the Optimizer.
+   *
+   * Implementations of this class should override this method, and [[nonExcludableRules]] if
+   * necessary, instead of [[batches]]. The rule batches that eventually run in the Optimizer,
+   * i.e., returned by [[batches]], will be (defaultBatches - (excludedRules - nonExcludableRules)).
+   */
+  def defaultBatches: Seq[Batch] = {
     val operatorOptimizationRuleSet =
       Seq(
         // Operator push down
@@ -77,6 +84,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         SimplifyConditionals,
         RemoveDispensableExpressions,
         SimplifyBinaryComparison,
+        ReplaceNullWithFalseInPredicate,
         PruneFilters,
         EliminateSorts,
         SimplifyCasts,
@@ -123,11 +131,21 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
+    // run this once earlier. this might simplify the plan and reduce cost of optimizer.
+    // for example, a query such as Filter(LocalRelation) would go through all the heavy
+    // optimizer rules that are triggered when there is a filter
+    // (e.g. InferFiltersFromConstraints). if we run this batch earlier, the query becomes just
+    // LocalRelation and does not trigger many rules
+    Batch("LocalRelation early", fixedPoint,
+      ConvertToLocalRelation,
+      PropagateEmptyRelation) ::
     Batch("Pullup Correlated Expressions", Once,
       PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
+      RewriteExceptAll,
+      RewriteIntersectAll,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
@@ -148,7 +166,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) :+
-    // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
+    Batch("Extract PythonUDF From JoinCondition", Once,
+      PullOutPythonUDFInJoinCondition) :+
+    // The following batch should be executed after batch "Join Reorder" "LocalRelation" and
+    // "Extract PythonUDF From JoinCondition".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
     Batch("RewriteSubquery", Once,
@@ -161,13 +182,51 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   }
 
   /**
+   * Defines rules that cannot be excluded from the Optimizer even if they are specified in
+   * SQL config "excludedRules".
+   *
+   * Implementations of this class can override this method if necessary. The rule batches
+   * that eventually run in the Optimizer, i.e., returned by [[batches]], will be
+   * (defaultBatches - (excludedRules - nonExcludableRules)).
+   */
+  def nonExcludableRules: Seq[String] =
+    EliminateDistinct.ruleName ::
+      EliminateSubqueryAliases.ruleName ::
+      EliminateView.ruleName ::
+      ReplaceExpressions.ruleName ::
+      ComputeCurrentTime.ruleName ::
+      GetCurrentDatabase(sessionCatalog).ruleName ::
+      RewriteDistinctAggregates.ruleName ::
+      ReplaceDeduplicateWithAggregate.ruleName ::
+      ReplaceIntersectWithSemiJoin.ruleName ::
+      ReplaceExceptWithFilter.ruleName ::
+      ReplaceExceptWithAntiJoin.ruleName ::
+      RewriteExceptAll.ruleName ::
+      RewriteIntersectAll.ruleName ::
+      ReplaceDistinctWithAggregate.ruleName ::
+      PullupCorrelatedPredicates.ruleName ::
+      RewriteCorrelatedScalarSubquery.ruleName ::
+      RewritePredicateSubquery.ruleName ::
+      PullOutPythonUDFInJoinCondition.ruleName :: Nil
+
+  /**
    * Optimize all the subqueries inside expression.
    */
   object OptimizeSubqueries extends Rule[LogicalPlan] {
+    private def removeTopLevelSort(plan: LogicalPlan): LogicalPlan = {
+      plan match {
+        case Sort(_, _, child) => child
+        case Project(fields, child) => Project(fields, removeTopLevelSort(child))
+        case other => other
+      }
+    }
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s: SubqueryExpression =>
         val Subquery(newPlan) = Optimizer.this.execute(Subquery(s.plan))
-        s.withNewPlan(newPlan)
+        // At this point we have an optimized subquery plan that we are going to attach
+        // to this subquery expression. Here we can safely remove any top level sort
+        // in the plan as tuples produced by a subquery are un-ordered.
+        s.withNewPlan(removeTopLevelSort(newPlan))
     }
   }
 
@@ -175,6 +234,48 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
    * Override to provide additional rules for the operator optimization batch.
    */
   def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
+   * Returns (defaultBatches - (excludedRules - nonExcludableRules)), the rule batches that
+   * eventually run in the Optimizer.
+   *
+   * Implementations of this class should override [[defaultBatches]], and [[nonExcludableRules]]
+   * if necessary, instead of this method.
+   */
+  final override def batches: Seq[Batch] = {
+    val excludedRulesConf =
+      SQLConf.get.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
+    val excludedRules = excludedRulesConf.filter { ruleName =>
+      val nonExcludable = nonExcludableRules.contains(ruleName)
+      if (nonExcludable) {
+        logWarning(s"Optimization rule '${ruleName}' was not excluded from the optimizer " +
+          s"because this rule is a non-excludable rule.")
+      }
+      !nonExcludable
+    }
+    if (excludedRules.isEmpty) {
+      defaultBatches
+    } else {
+      defaultBatches.flatMap { batch =>
+        val filteredRules = batch.rules.filter { rule =>
+          val exclude = excludedRules.contains(rule.ruleName)
+          if (exclude) {
+            logInfo(s"Optimization rule '${rule.ruleName}' is excluded from the optimizer.")
+          }
+          !exclude
+        }
+        if (batch.rules == filteredRules) {
+          Some(batch)
+        } else if (filteredRules.nonEmpty) {
+          Some(Batch(batch.name, batch.strategy, filteredRules: _*))
+        } else {
+          logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
+            s"as all enclosed rules have been excluded.")
+          None
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -390,6 +491,10 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
   private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
       case a: Attribute => rewrites(a)
+    } match {
+      // Make sure exprId is unique in each child of Union.
+      case Alias(child, alias) => Alias(child, alias)()
+      case other => other
     }
 
     // We must promise the compiler that we did not discard the names in the case of project
@@ -426,18 +531,15 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
  * p2 is usually inserted by this rule and useless, p1 could prune the columns anyway.
  */
 object ColumnPruning extends Rule[LogicalPlan] {
-  private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
-    output1.size == output2.size &&
-      output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
 
   def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
-    case p @ Project(_, p2: Project) if (p2.outputSet -- p.references).nonEmpty =>
+    case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
-    case p @ Project(_, a: Aggregate) if (a.outputSet -- p.references).nonEmpty =>
+    case p @ Project(_, a: Aggregate) if !a.outputSet.subsetOf(p.references) =>
       p.copy(
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
-    case a @ Project(_, e @ Expand(_, _, grandChild)) if (e.outputSet -- a.references).nonEmpty =>
+    case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
         proj.zip(e.output).filter { case (_, a) =>
@@ -447,16 +549,19 @@ object ColumnPruning extends Rule[LogicalPlan] {
       a.copy(child = Expand(newProjects, newOutput, grandChild))
 
     // Prunes the unused columns from child of `DeserializeToObject`
-    case d @ DeserializeToObject(_, _, child) if (child.outputSet -- d.references).nonEmpty =>
+    case d @ DeserializeToObject(_, _, child) if !child.outputSet.subsetOf(d.references) =>
       d.copy(child = prunedChild(child, d.references))
 
-    // Prunes the unused columns from child of Aggregate/Expand/Generate
-    case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
+    // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
+    case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
       a.copy(child = prunedChild(child, a.references))
-    case f @ FlatMapGroupsInPandas(_, _, _, child) if (child.outputSet -- f.references).nonEmpty =>
+    case f @ FlatMapGroupsInPandas(_, _, _, child) if !child.outputSet.subsetOf(f.references) =>
       f.copy(child = prunedChild(child, f.references))
-    case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
+    case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
+    case s @ ScriptTransformation(_, _, _, child, _)
+        if !child.outputSet.subsetOf(s.references) =>
+      s.copy(child = prunedChild(child, s.references))
 
     // prune unrequired references
     case p @ Project(_, g: Generate) if p.references != g.outputSet =>
@@ -476,7 +581,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, _: Distinct) => p
     // Eliminate unneeded attributes from children of Union.
     case p @ Project(_, u: Union) =>
-      if ((u.outputSet -- p.references).nonEmpty) {
+      if (!u.outputSet.subsetOf(p.references)) {
         val firstChild = u.children.head
         val newOutput = prunedChild(firstChild, p.references).output
         // pruning the columns of all children based on the pruned first child.
@@ -492,7 +597,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       }
 
     // Prune unnecessary window expressions
-    case p @ Project(_, w: Window) if (w.windowOutputSet -- p.references).nonEmpty =>
+    case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
       p.copy(child = w.copy(
         windowExpressions = w.windowExpressions.filter(p.references.contains)))
 
@@ -500,7 +605,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case w: Window if w.windowExpressions.isEmpty => w.child
 
     // Eliminate no-op Projects
-    case p @ Project(_, child) if sameOutput(child.output, p.output) => child
+    case p @ Project(_, child) if child.sameOutput(p) => child
 
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
@@ -508,7 +613,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
       val required = child.references ++ p.references
-      if ((child.inputSet -- required).nonEmpty) {
+      if (!child.inputSet.subsetOf(required)) {
         val newChildren = child.children.map(c => prunedChild(c, required))
         p.copy(child = child.withNewChildren(newChildren))
       } else {
@@ -518,7 +623,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
   /** Applies a projection only when the child is producing unnecessary attributes */
   private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
-    if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
+    if (!c.outputSet.subsetOf(allReferences)) {
       Project(c.output.filter(allReferences.contains), c)
     } else {
       c
@@ -632,6 +737,28 @@ object CollapseWindow extends Rule[LogicalPlan] {
           // by ExtractWindowFunctions.
           WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+  }
+}
+
+/**
+ * Transpose Adjacent Window Expressions.
+ * - If the partition spec of the parent Window expression is compatible with the partition spec
+ *   of the child window expression, transpose them.
+ */
+object TransposeWindow extends Rule[LogicalPlan] {
+  private def compatibleParititions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
+    ps1.length < ps2.length && ps2.take(ps1.length).permutations.exists(ps1.zip(_).forall {
+      case (l, r) => l.semanticEquals(r)
+    })
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
+        if w1.references.intersect(w2.windowOutputSet).isEmpty &&
+           w1.expressions.forall(_.deterministic) &&
+           w2.expressions.forall(_.deterministic) &&
+           compatibleParititions(ps1, ps2) =>
+      Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
   }
 }
 
@@ -1258,6 +1385,12 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming)) =>
       LocalRelation(output, data.take(limit), isStreaming)
+
+    case Filter(condition, LocalRelation(output, data, isStreaming))
+        if !hasUnevaluableExpr(condition) =>
+      val predicate = InterpretedPredicate.create(condition, output)
+      predicate.initialize(0)
+      LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming)
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {
@@ -1315,7 +1448,7 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
  */
 object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Intersect(left, right) =>
+    case Intersect(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
       Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
@@ -1336,10 +1469,146 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
  */
 object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Except(left, right) =>
+    case Except(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
       Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And)))
+  }
+}
+
+/**
+ * Replaces logical [[Except]] operator using a combination of Union, Aggregate
+ * and Generate operator.
+ *
+ * Input Query :
+ * {{{
+ *    SELECT c1 FROM ut1 EXCEPT ALL SELECT c1 FROM ut2
+ * }}}
+ *
+ * Rewritten Query:
+ * {{{
+ *   SELECT c1
+ *   FROM (
+ *     SELECT replicate_rows(sum_val, c1)
+ *       FROM (
+ *         SELECT c1, sum_val
+ *           FROM (
+ *             SELECT c1, sum(vcol) AS sum_val
+ *               FROM (
+ *                 SELECT 1L as vcol, c1 FROM ut1
+ *                 UNION ALL
+ *                 SELECT -1L as vcol, c1 FROM ut2
+ *              ) AS union_all
+ *            GROUP BY union_all.c1
+ *          )
+ *        WHERE sum_val > 0
+ *       )
+ *   )
+ * }}}
+ */
+
+object RewriteExceptAll extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Except(left, right, true) =>
+      assert(left.output.size == right.output.size)
+
+      val newColumnLeft = Alias(Literal(1L), "vcol")()
+      val newColumnRight = Alias(Literal(-1L), "vcol")()
+      val modifiedLeftPlan = Project(Seq(newColumnLeft) ++ left.output, left)
+      val modifiedRightPlan = Project(Seq(newColumnRight) ++ right.output, right)
+      val unionPlan = Union(modifiedLeftPlan, modifiedRightPlan)
+      val aggSumCol =
+        Alias(AggregateExpression(Sum(unionPlan.output.head.toAttribute), Complete, false), "sum")()
+      val aggOutputColumns = left.output ++ Seq(aggSumCol)
+      val aggregatePlan = Aggregate(left.output, aggOutputColumns, unionPlan)
+      val filteredAggPlan = Filter(GreaterThan(aggSumCol.toAttribute, Literal(0L)), aggregatePlan)
+      val genRowPlan = Generate(
+        ReplicateRows(Seq(aggSumCol.toAttribute) ++ left.output),
+        unrequiredChildIndex = Nil,
+        outer = false,
+        qualifier = None,
+        left.output,
+        filteredAggPlan
+      )
+      Project(left.output, genRowPlan)
+  }
+}
+
+/**
+ * Replaces logical [[Intersect]] operator using a combination of Union, Aggregate
+ * and Generate operator.
+ *
+ * Input Query :
+ * {{{
+ *    SELECT c1 FROM ut1 INTERSECT ALL SELECT c1 FROM ut2
+ * }}}
+ *
+ * Rewritten Query:
+ * {{{
+ *   SELECT c1
+ *   FROM (
+ *        SELECT replicate_row(min_count, c1)
+ *        FROM (
+ *             SELECT c1, If (vcol1_cnt > vcol2_cnt, vcol2_cnt, vcol1_cnt) AS min_count
+ *             FROM (
+ *                  SELECT   c1, count(vcol1) as vcol1_cnt, count(vcol2) as vcol2_cnt
+ *                  FROM (
+ *                       SELECT true as vcol1, null as , c1 FROM ut1
+ *                       UNION ALL
+ *                       SELECT null as vcol1, true as vcol2, c1 FROM ut2
+ *                       ) AS union_all
+ *                  GROUP BY c1
+ *                  HAVING vcol1_cnt >= 1 AND vcol2_cnt >= 1
+ *                  )
+ *             )
+ *         )
+ * }}}
+ */
+object RewriteIntersectAll extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Intersect(left, right, true) =>
+      assert(left.output.size == right.output.size)
+
+      val trueVcol1 = Alias(Literal(true), "vcol1")()
+      val nullVcol1 = Alias(Literal(null, BooleanType), "vcol1")()
+
+      val trueVcol2 = Alias(Literal(true), "vcol2")()
+      val nullVcol2 = Alias(Literal(null, BooleanType), "vcol2")()
+
+      // Add a projection on the top of left and right plans to project out
+      // the additional virtual columns.
+      val leftPlanWithAddedVirtualCols = Project(Seq(trueVcol1, nullVcol2) ++ left.output, left)
+      val rightPlanWithAddedVirtualCols = Project(Seq(nullVcol1, trueVcol2) ++ right.output, right)
+
+      val unionPlan = Union(leftPlanWithAddedVirtualCols, rightPlanWithAddedVirtualCols)
+
+      // Expressions to compute count and minimum of both the counts.
+      val vCol1AggrExpr =
+        Alias(AggregateExpression(Count(unionPlan.output(0)), Complete, false), "vcol1_count")()
+      val vCol2AggrExpr =
+        Alias(AggregateExpression(Count(unionPlan.output(1)), Complete, false), "vcol2_count")()
+      val ifExpression = Alias(If(
+        GreaterThan(vCol1AggrExpr.toAttribute, vCol2AggrExpr.toAttribute),
+        vCol2AggrExpr.toAttribute,
+        vCol1AggrExpr.toAttribute
+      ), "min_count")()
+
+      val aggregatePlan = Aggregate(left.output,
+        Seq(vCol1AggrExpr, vCol2AggrExpr) ++ left.output, unionPlan)
+      val filterPlan = Filter(And(GreaterThanOrEqual(vCol1AggrExpr.toAttribute, Literal(1L)),
+        GreaterThanOrEqual(vCol2AggrExpr.toAttribute, Literal(1L))), aggregatePlan)
+      val projectMinPlan = Project(left.output ++ Seq(ifExpression), filterPlan)
+
+      // Apply the replicator to replicate rows based on min_count
+      val genRowPlan = Generate(
+        ReplicateRows(Seq(ifExpression.toAttribute) ++ left.output),
+        unrequiredChildIndex = Nil,
+        outer = false,
+        qualifier = None,
+        left.output,
+        projectMinPlan
+      )
+      Project(left.output, genRowPlan)
   }
 }
 

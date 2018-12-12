@@ -18,6 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 
@@ -59,12 +60,14 @@ private[spark] object Config extends Logging {
       .doc("Comma separated list of the Kubernetes secrets used " +
         "to access private image registries.")
       .stringConf
-      .createOptional
+      .toSequence
+      .createWithDefault(Nil)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver.mounted"
+  val KUBERNETES_AUTH_CLIENT_MODE_PREFIX = "spark.kubernetes.authenticate"
   val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
   val OAUTH_TOKEN_FILE_CONF_SUFFIX = "oauthTokenFile"
   val CLIENT_KEY_FILE_CONF_SUFFIX = "clientKeyFile"
@@ -90,7 +93,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.submitInDriver")
     .internal()
     .booleanConf
-    .createOptional
+    .createWithDefault(false)
 
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
@@ -110,34 +113,19 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  // For testing only.
+  val KUBERNETES_DRIVER_POD_NAME_PREFIX =
+    ConfigBuilder("spark.kubernetes.driver.resourceNamePrefix")
+      .internal()
+      .stringConf
+      .createOptional
+
   val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names.")
       .internal()
       .stringConf
-      .createWithDefault("spark")
-
-  val KUBERNETES_PYSPARK_PY_FILES =
-    ConfigBuilder("spark.kubernetes.python.pyFiles")
-      .doc("The PyFiles that are distributed via client arguments")
-      .internal()
-      .stringConf
       .createOptional
-
-  val KUBERNETES_PYSPARK_MAIN_APP_RESOURCE =
-    ConfigBuilder("spark.kubernetes.python.mainAppResource")
-      .doc("The main app resource for pyspark jobs")
-      .internal()
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_PYSPARK_APP_ARGS =
-    ConfigBuilder("spark.kubernetes.python.appArgs")
-      .doc("The app arguments for PySpark Jobs")
-      .internal()
-      .stringConf
-      .createOptional
-
 
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
@@ -204,17 +192,102 @@ private[spark] object Config extends Logging {
       .createWithDefault(0.1)
 
   val PYSPARK_MAJOR_PYTHON_VERSION =
-    ConfigBuilder("spark.kubernetes.pyspark.pythonversion")
+    ConfigBuilder("spark.kubernetes.pyspark.pythonVersion")
       .doc("This sets the major Python version. Either 2 or 3. (Python2 or Python3)")
       .stringConf
       .checkValue(pv => List("2", "3").contains(pv),
         "Ensure that major Python version is either Python2 or Python3")
-      .createWithDefault("2")
+      .createWithDefault("3")
+
+  val KUBERNETES_KERBEROS_KRB5_FILE =
+    ConfigBuilder("spark.kubernetes.kerberos.krb5.path")
+      .doc("Specify the local location of the krb5.conf file to be mounted on the driver " +
+        "and executors for Kerberos. Note: The KDC defined needs to be " +
+        "visible from inside the containers ")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_KRB5_CONFIG_MAP =
+    ConfigBuilder("spark.kubernetes.kerberos.krb5.configMapName")
+      .doc("Specify the name of the ConfigMap, containing the krb5.conf file, to be mounted " +
+        "on the driver and executors for Kerberos. Note: The KDC defined" +
+        "needs to be visible from inside the containers ")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_HADOOP_CONF_CONFIG_MAP =
+    ConfigBuilder("spark.kubernetes.hadoop.configMapName")
+      .doc("Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, " +
+        "to be mounted on the driver and executors for custom Hadoop configuration.")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_DT_SECRET_NAME =
+    ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.name")
+      .doc("Specify the name of the secret where your existing delegation tokens are stored. " +
+        "This removes the need for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_KERBEROS_DT_SECRET_ITEM_KEY =
+    ConfigBuilder("spark.kubernetes.kerberos.tokenSecret.itemKey")
+      .doc("Specify the item key of the data where your existing delegation tokens are stored. " +
+        "This removes the need for the job user to provide any keytab for launching a job")
+      .stringConf
+      .createOptional
+
+  val APP_RESOURCE_TYPE =
+    ConfigBuilder("spark.kubernetes.resource.type")
+      .doc("This sets the resource type internally")
+      .internal()
+      .stringConf
+      .checkValues(Set(APP_RESOURCE_TYPE_JAVA, APP_RESOURCE_TYPE_PYTHON, APP_RESOURCE_TYPE_R))
+      .createOptional
+
+  val KUBERNETES_LOCAL_DIRS_TMPFS =
+    ConfigBuilder("spark.kubernetes.local.dirs.tmpfs")
+      .doc("If set to true then emptyDir volumes created to back SPARK_LOCAL_DIRS will have " +
+        "their medium set to Memory so that they will be created as tmpfs (i.e. RAM) backed " +
+        "volumes. This may improve performance but scratch space usage will count towards " +
+        "your pods memory limit so you may wish to request more memory.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.driver.podTemplateFile")
+      .doc("File containing a template pod spec for the driver")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_PODTEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.executor.podTemplateFile")
+      .doc("File containing a template pod spec for executors")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.driver.podTemplateContainerName")
+      .doc("container name to be used as a basis for the driver in the given pod template")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME =
+    ConfigBuilder("spark.kubernetes.executor.podTemplateContainerName")
+      .doc("container name to be used as a basis for executors in the given pod template")
+      .stringConf
+      .createOptional
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 
   val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
+
+  val KUBERNETES_DELETE_EXECUTORS =
+    ConfigBuilder("spark.kubernetes.executor.deleteOnTermination")
+      .doc("If set to false then executor pods will not be deleted in case " +
+        "of failure or normal termination.")
+      .booleanConf
+      .createWithDefault(true)
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
@@ -232,6 +305,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_PVC_TYPE = "persistentVolumeClaim"
   val KUBERNETES_VOLUMES_EMPTYDIR_TYPE = "emptyDir"
   val KUBERNETES_VOLUMES_MOUNT_PATH_KEY = "mount.path"
+  val KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY = "mount.subPath"
   val KUBERNETES_VOLUMES_MOUNT_READONLY_KEY = "mount.readOnly"
   val KUBERNETES_VOLUMES_OPTIONS_PATH_KEY = "options.path"
   val KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY = "options.claimName"

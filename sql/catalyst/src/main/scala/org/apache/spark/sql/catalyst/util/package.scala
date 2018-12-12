@@ -19,13 +19,16 @@ package org.apache.spark.sql.catalyst
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-package object util {
+package object util extends Logging {
 
   /** Silences output to stderr or stdout for the duration of f */
   def quietly[A](f: => A): A = {
@@ -154,6 +157,50 @@ package object util {
   }
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
+
+
+  def escapeSingleQuotedString(str: String): String = {
+    val builder = StringBuilder.newBuilder
+
+    str.foreach {
+      case '\'' => builder ++= s"\\\'"
+      case ch => builder += ch
+    }
+
+    builder.toString()
+  }
+
+  /** Whether we have warned about plan string truncation yet. */
+  private val truncationWarningPrinted = new AtomicBoolean(false)
+
+  /**
+   * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
+   * maxNumToStringFields will be dropped and replaced by a "... N more fields" placeholder.
+   *
+   * @return the trimmed and formatted string.
+   */
+  def truncatedString[T](
+      seq: Seq[T],
+      start: String,
+      sep: String,
+      end: String,
+      maxNumFields: Int = SQLConf.get.maxToStringFields): String = {
+    if (seq.length > maxNumFields) {
+      if (truncationWarningPrinted.compareAndSet(false, true)) {
+        logWarning(
+          "Truncated the string representation of a plan since it was too large. This " +
+            s"behavior can be adjusted by setting '${SQLConf.MAX_TO_STRING_FIELDS.key}'.")
+      }
+      val numFields = math.max(0, maxNumFields - 1)
+      seq.take(numFields).mkString(
+        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
+    } else {
+      seq.mkString(start, sep, end)
+    }
+  }
+
+  /** Shorthand for calling truncatedString() without start or end strings. */
+  def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
 
   /* FIX ME
   implicit class debugLogging(a: Any) {
