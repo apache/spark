@@ -142,6 +142,7 @@
     <codahale.metrics.version>3.1.5</codahale.metrics.version>
     <avro.version>1.8.2</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+    <kafka.version>0.10.2.2</kafka.version>
     <aws.kinesis.client.version>1.8.10</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.351</aws.java.sdk.version>
