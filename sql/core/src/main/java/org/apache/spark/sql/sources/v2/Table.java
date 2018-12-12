@@ -35,14 +35,14 @@ import org.apache.spark.sql.types.StructType;
 public interface Table {
 
   /**
-   * Returns the schema of this table. If the table is not readable and doesn't have a schema, an
-   * empty schema can be returned here.
-   */
-  StructType schema();
-
-  /**
    * A name to identify this table. Implementations should provide a meaningful name, like the
    * database and table name from catalog, or the location of files for this table.
    */
   String name();
+
+  /**
+   * Returns the schema of this table. If the table is not readable and doesn't have a schema, an
+   * empty schema can be returned here.
+   */
+  StructType schema();
 }
