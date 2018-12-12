@@ -18,6 +18,7 @@
 package org.apache.spark.ml.stat
 
 import java.io._
+import java.nio.ByteBuffer
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
@@ -28,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputT
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, TypedImperativeAggregate}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream}
 
 /**
  * A builder object that provides summary statistics about a given column.
@@ -609,16 +611,17 @@ private[ml] object SummaryBuilderImpl extends Logging {
       = new SummarizerBuffer(requestedMetrics, requestedComputeMetrics)
 
     override def serialize(state: SummarizerBuffer): Array[Byte] = {
-      // TODO: Use ByteBuffer to optimize
-      val bos = new ByteArrayOutputStream()
+      // Use ByteBuffer
+      val bos = new ByteBufferOutputStream()
       val oos = new ObjectOutputStream(bos)
       oos.writeObject(state)
-      bos.toByteArray
+      oos.close()
+      bos.toByteBuffer.array()
     }
 
     override def deserialize(bytes: Array[Byte]): SummarizerBuffer = {
-      // TODO: Use ByteBuffer to optimize
-      val bis = new ByteArrayInputStream(bytes)
+      // Use ByteBuffer
+      val bis = new ByteBufferInputStream(ByteBuffer.wrap(bytes))
       val ois = new ObjectInputStream(bis)
       ois.readObject().asInstanceOf[SummarizerBuffer]
     }
