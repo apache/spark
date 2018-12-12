@@ -59,7 +59,7 @@ class JacksonParser(
     options.timestampFormat,
     options.timeZone,
     options.locale)
-  private val dateFormatter = DateFormatter(options.dateFormat, options.timeZone, options.locale)
+  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
 
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`

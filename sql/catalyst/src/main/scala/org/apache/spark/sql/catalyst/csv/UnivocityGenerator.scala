@@ -45,7 +45,7 @@ class UnivocityGenerator(
     options.timestampFormat,
     options.timeZone,
     options.locale)
-  private val dateFormatter = DateFormatter(options.dateFormat, options.timeZone, options.locale)
+  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
 
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case DateType =>
