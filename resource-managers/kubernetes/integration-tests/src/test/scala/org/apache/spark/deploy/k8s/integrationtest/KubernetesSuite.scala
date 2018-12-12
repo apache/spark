@@ -103,8 +103,16 @@ class KubernetesSuite extends SparkFunSuite
       System.clearProperty(key)
     }
 
-    val sparkDirProp = System.getProperty(CONFIG_KEY_UNPACK_DIR)
-    require(sparkDirProp != null, "Spark home directory must be provided in system properties.")
+    val possible_spark_dirs = List(
+      // If someone specified the tgz for the tests look at the extraction dir
+      System.getProperty(CONFIG_KEY_UNPACK_DIR),
+      // If otherwise use my working dir + 3 up
+      new File(Paths.get(System.getProperty("user.dir")).toFile, ("../" * 3)).getAbsolutePath()
+    )
+    val sparkDirProp = possible_spark_dirs.filter(x =>
+      new File(Paths.get(x).toFile, "bin/spark-submit").exists).headOption.getOrElse(null)
+    require(sparkDirProp != null,
+      s"Spark home directory must be provided in system properties tested $possible_spark_dirs")
     sparkHomeDir = Paths.get(sparkDirProp)
     require(sparkHomeDir.toFile.isDirectory,
       s"No directory found for spark home specified at $sparkHomeDir.")
