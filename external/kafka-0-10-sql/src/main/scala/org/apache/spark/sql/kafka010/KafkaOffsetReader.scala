@@ -45,7 +45,7 @@ import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
  */
 private[kafka010] class KafkaOffsetReader(
     consumerStrategy: ConsumerStrategy,
-    driverKafkaParams: ju.Map[String, Object],
+    val driverKafkaParams: ju.Map[String, Object],
     readerOptions: Map[String, String],
     driverGroupIdPrefix: String) extends Logging {
   /**
@@ -81,7 +81,9 @@ private[kafka010] class KafkaOffsetReader(
     assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
     if (_consumer == null) {
       val newKafkaParams = new ju.HashMap[String, Object](driverKafkaParams)
-      newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
+      if (driverKafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG) == null) {
+        newKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, nextGroupId())
+      }
       _consumer = consumerStrategy.createConsumer(newKafkaParams)
     }
     _consumer

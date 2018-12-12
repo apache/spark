@@ -340,9 +340,19 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // Validate user-specified Kafka options
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
-      throw new IllegalArgumentException(
-        s"Kafka option '${ConsumerConfig.GROUP_ID_CONFIG}' is not supported as " +
-          s"user-specified consumer groups are not used to track offsets.")
+      logWarning(
+        s"It is not recommended to set Kafka option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}'. " +
+        "This option is unsafe to use since multiple concurrent queries or sources using the " +
+        "same group id will interfere with each other as they are part of the same consumer " +
+        "group. Restarted queries may also suffer interference from the previous run having the " +
+        "same group id. The user should have only one query per group id, and/or set " +
+        "'kafka.session.timeout.ms' to be very small so that the Kafka consumers from the " +
+        "previous query are marked dead by the Kafka group coordinator before the restarted " +
+       "query starts running.")
+      if (caseInsensitiveParams.contains(GROUP_ID_PREFIX)) {
+        logWarning("Option 'groupIdPrefix' will be ignored as " +
+          s"option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}' has been set.")
+      }
     }
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG}")) {
@@ -445,6 +455,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
   private val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
+  private val GROUP_ID_PREFIX = "groupidprefix"
 
   val TOPIC_OPTION_KEY = "topic"
 
@@ -515,7 +526,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
 
       // So that consumers in executors do not mess with any existing group id
-      .set(ConsumerConfig.GROUP_ID_CONFIG, s"$uniqueGroupId-executor")
+      .setIfUnset(ConsumerConfig.GROUP_ID_CONFIG, s"$uniqueGroupId-executor")
 
       // So that consumers in executors does not commit offsets unnecessarily
       .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
@@ -534,7 +545,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       parameters: Map[String, String],
       metadataPath: String): String = {
     val groupIdPrefix = parameters
-      .getOrElse("groupIdPrefix", "spark-kafka-source")
+      .getOrElse(GROUP_ID_PREFIX, "spark-kafka-source")
     s"${groupIdPrefix}-${UUID.randomUUID}-${metadataPath.hashCode}"
   }
 

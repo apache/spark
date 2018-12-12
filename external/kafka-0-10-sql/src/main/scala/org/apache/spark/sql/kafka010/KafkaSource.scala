@@ -22,6 +22,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 
 import org.apache.commons.io.IOUtils
+import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
@@ -241,7 +242,20 @@ private[kafka010] class KafkaSource(
 
     val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
     if (deletedPartitions.nonEmpty) {
-      reportDataLoss(s"$deletedPartitions are gone. Some data may have been missed")
+      val message = if (kafkaReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+        s"$deletedPartitions are gone. Kafka option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}' " +
+        "has been set on this query, it is  not recommended to set this option. This option is " +
+        "unsafe to use since multiple concurrent queries or sources using the same group id " +
+        "will interfere with each other as they are part of the same consumer group. Restarted " +
+        "queries may also suffer interference from the previous run having the same group id. " +
+        "The user should have only one query per group id, and/or set " +
+        "'kafka.session.timeout.ms' to be very small so that the Kafka consumers from the " +
+        "previous query are marked dead by the Kafka group coordinator before the restarted " +
+        "query starts running."
+      } else {
+        s"$deletedPartitions are gone. Some data may have been missed"
+      }
+      reportDataLoss(message)
     }
 
     // Use the until partitions to calculate offset ranges to ignore partitions that have
