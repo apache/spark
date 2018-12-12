@@ -24,7 +24,8 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
   test("Test basic decommissioning", k8sTestTag) {
     sparkAppConf
       .set("spark.worker.decommission.enabled", "true")
-      .set("spark.kubernetes.pyspark.pythonVersion", "2")
+      .set("spark.kubernetes.pyspark.pythonVersion", "3")
+      .set("spark.kubernetes.container.image", pyImage)
 
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_DECOMISSIONING,
