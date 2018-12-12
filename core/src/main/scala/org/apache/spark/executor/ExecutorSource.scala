@@ -100,8 +100,8 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
   })
 
   // Expose executor task metrics using the Dropwizard metrics system.
-  // The list is taken from TaskMetrics.scala
-  val SUCCESSFUL_TASKS = metricRegistry.counter(MetricRegistry.name("successfulTasks"))
+  // The list of available Task metrics is available in TaskMetrics.scala
+  val FINISHED_TASKS = metricRegistry.counter(MetricRegistry.name("finishedTasks"))
   val METRIC_CPU_TIME = metricRegistry.counter(MetricRegistry.name("cpuTime"))
   val METRIC_RUN_TIME = metricRegistry.counter(MetricRegistry.name("runTime"))
   val METRIC_JVM_GC_TIME = metricRegistry.counter(MetricRegistry.name("jvmGCTime"))

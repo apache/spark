@@ -488,7 +488,6 @@ private[spark] class Executor(
 
         // Expose task metrics using the Dropwizard metrics system.
         // Update task metrics counters
-        executorSource.SUCCESSFUL_TASKS.inc(1L)
         executorSource.METRIC_CPU_TIME.inc(task.metrics.executorCpuTime)
         executorSource.METRIC_RUN_TIME.inc(task.metrics.executorRunTime)
         executorSource.METRIC_JVM_GC_TIME.inc(task.metrics.jvmGCTime)
@@ -557,6 +556,8 @@ private[spark] class Executor(
           }
         }
 
+        // update metric counting the number of tasks finished
+        executorSource.FINISHED_TASKS.inc(1L)
         setTaskFinishedAndClearInterruptStatus()
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
