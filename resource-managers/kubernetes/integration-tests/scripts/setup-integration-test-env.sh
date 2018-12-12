@@ -58,14 +58,14 @@ while (( "$#" )); do
   shift
 done
 
-if [[ $SPARK_TGZ == "N/A" ]];
-then
-  echo "Must specify a Spark tarball to build Docker images against with --spark-tgz." && exit 1;
-fi
-
 rm -rf $UNPACKED_SPARK_TGZ
-mkdir -p $UNPACKED_SPARK_TGZ
-tar -xzvf $SPARK_TGZ --strip-components=1 -C $UNPACKED_SPARK_TGZ;
+if [[ $SPARK_TGZ == "N/A" && $IMAGE_TAG == "N/A" ]];
+then
+  echo "Must specify a Spark tarball to build Docker images against with --spark-tgz OR image with --image-tag." && exit 1;
+else
+  mkdir -p $UNPACKED_SPARK_TGZ
+  tar -xzvf $SPARK_TGZ --strip-components=1 -C $UNPACKED_SPARK_TGZ;
+fi
 
 if [[ $IMAGE_TAG == "N/A" ]];
 then
