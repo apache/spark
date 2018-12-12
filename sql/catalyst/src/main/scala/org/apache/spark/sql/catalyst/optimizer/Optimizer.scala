@@ -1370,10 +1370,8 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 }
 
 /**
- * Converts local operations (i.e. ones that don't require data exchange) on [[LocalRelation]] to
- * another [[LocalRelation]].
- *
- * This rule currently handles 3 cases: [[Project]], [[Limit]] and [[Filter]].
+ * Converts local operations (i.e. ones that don't require data exchange) on `LocalRelation` to
+ * another `LocalRelation`.
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
