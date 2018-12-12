@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
  * Before use a frame must be prepared by passing it all the rows in the current partition. After
  * preparation the update method can be called to fill the output rows.
  */
-private[execution] abstract class WindowFunctionFrame {
+abstract class WindowFunctionFrame {
   /**
    * Prepare the frame for calculating the results for a partition.
    *
@@ -76,7 +76,7 @@ object WindowFunctionFrame {
  * @param newMutableProjection function used to create the projection.
  * @param offset by which rows get moved within a partition.
  */
-private[execution] final class OffsetWindowFunctionFrame(
+final class OffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowFunction],
@@ -166,7 +166,7 @@ private[execution] final class OffsetWindowFunctionFrame(
  * @param lbound comparator used to identify the lower bound of an output row.
  * @param ubound comparator used to identify the upper bound of an output row.
  */
-private[execution] final class SlidingWindowFunctionFrame(
+final class SlidingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering,
@@ -261,7 +261,7 @@ private[execution] final class SlidingWindowFunctionFrame(
  * @param target to write results to.
  * @param processor to calculate the row values with.
  */
-private[execution] final class UnboundedWindowFunctionFrame(
+final class UnboundedWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor)
   extends WindowFunctionFrame {
@@ -310,7 +310,7 @@ private[execution] final class UnboundedWindowFunctionFrame(
  * @param processor to calculate the row values with.
  * @param ubound comparator used to identify the upper bound of an output row.
  */
-private[execution] final class UnboundedPrecedingWindowFunctionFrame(
+final class UnboundedPrecedingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     ubound: BoundOrdering)
@@ -389,7 +389,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
  * @param processor to calculate the row values with.
  * @param lbound comparator used to identify the lower bound of an output row.
  */
-private[execution] final class UnboundedFollowingWindowFunctionFrame(
+final class UnboundedFollowingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering)
