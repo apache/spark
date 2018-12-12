@@ -42,5 +42,5 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
 private[spark] object DecommissionSuite {
   val TEST_LOCAL_PYSPARK: String = "local:///opt/spark/tests/"
-  val PYSPARK_DECOMISSIONING: String = TEST_LOCAL_PYSPARK + "decomissioning_waiter.py"
+  val PYSPARK_DECOMISSIONING: String = TEST_LOCAL_PYSPARK + "decommissioning.py"
 }
