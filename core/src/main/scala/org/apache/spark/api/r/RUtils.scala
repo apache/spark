@@ -97,10 +97,12 @@ private[spark] object RUtils {
     }
   }
 
-  /** Finds the rLibDir with SparkR installed on it. */
-  def sparkRInstallLocation(rLibDir: Seq[String], scriptPath: String): String = {
-    rLibDir.find(dir => new File(dir + scriptPath).exists)
-      .getOrElse(throw new SparkException("SparkR package not installed on executor.")) + scriptPath
+  /** Finds a script in a sequence of possible SparkR installation directories. */
+  def getSparkRScript(rLibDir: Seq[String], scriptPath: String): String = {
+    rLibDir.find(dir => new File(dir + scriptPath).exists).getOrElse(
+      throw new SparkException(
+        s"Script $scriptPath not found in any SparkR installation directory.")
+    ) + scriptPath
   }
 
   /** Check if R is installed before running tests that use R commands. */
