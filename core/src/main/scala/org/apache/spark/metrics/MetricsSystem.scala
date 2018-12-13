@@ -94,11 +94,13 @@ private[spark] class MetricsSystem private (
 
   metricsConfig.initialize()
 
-  def start() {
+  def start(registerStaticSources: Boolean = true) {
     require(!running, "Attempting to start a MetricsSystem that is already running")
     running = true
-    StaticSources.allSources.foreach(registerSource)
-    registerSources()
+    if (registerStaticSources) {
+      StaticSources.allSources.foreach(registerSource)
+      registerSources()
+    }
     registerSinks()
     sinks.foreach(_.start)
   }
