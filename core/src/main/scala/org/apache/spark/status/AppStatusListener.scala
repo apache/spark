@@ -70,6 +70,8 @@ private[spark] class AppStatusListener(
   private val liveTasks = new HashMap[Long, LiveTask]()
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
+
+  private val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   // Keep the active executor count as a separate variable to avoid having to do synchronization
   // around liveExecutors.
   @volatile private var activeExecutorCount = 0
@@ -318,6 +320,8 @@ private[spark] class AppStatusListener(
     val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
     val jobGroup = Option(event.properties)
       .flatMap { p => Option(p.getProperty(SparkContext.SPARK_JOB_GROUP_ID)) }
+    val sqlExecutionId = Option(event.properties)
+      .flatMap(p => Option(p.getProperty(SQL_EXECUTION_ID_KEY)).map(_.toLong))
 
     val job = new LiveJob(
       event.jobId,
@@ -325,7 +329,8 @@ private[spark] class AppStatusListener(
       if (event.time > 0) Some(new Date(event.time)) else None,
       event.stageIds,
       jobGroup,
-      numTasks)
+      numTasks,
+      sqlExecutionId)
     liveJobs.put(event.jobId, job)
     liveUpdate(job, now)
 
