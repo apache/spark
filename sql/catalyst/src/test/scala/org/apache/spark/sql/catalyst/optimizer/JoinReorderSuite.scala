@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
 import org.apache.spark.sql.internal.SQLConf.{CBO_ENABLED, JOIN_REORDER_ENABLED}
@@ -261,6 +261,28 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       .join(t5, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t5.v-1-5")))
 
     assertEqualPlans(originalPlan, bestPlan)
+  }
+
+  test("SPARK-26352: join reordering should not change the order of columns") {
+    // This test case does not rely on CBO
+
+    val tab1 = LocalRelation('x.int, 'y.int)
+    val tab2 = LocalRelation('i.int, 'j.int)
+    val tab3 = LocalRelation('a.int, 'b.int)
+    val original =
+      tab1.join(tab2, Cross)
+          .join(tab3, Inner, Some('a === 'x && 'b === 'i))
+          .analyze
+    val optimized = Optimize.execute(original)
+    val expected =
+      tab1.join(tab3, Inner, Some('a === 'x))
+          .join(tab2, Cross, Some('b === 'i))
+          .select('x, 'y, 'i, 'j, 'a, 'b)
+          .analyze
+
+    // the plan after join reordering should retain the same output attributes
+    assert(original.sameOutput(optimized))
+    assertEqualPlans(original, expected)
   }
 
   private def assertEqualPlans(
