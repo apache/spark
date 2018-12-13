@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, Not}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Coalesce, If, Literal, Not}
 import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.BooleanType
 
 class ReplaceOperatorSuite extends PlanTest {
 
@@ -228,5 +229,18 @@ class ReplaceOperatorSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     comparePlans(optimized, query)
+  }
+
+  test("SPARK-26366: ReplaceExceptWithFilter should handle properly NULL") {
+    val basePlan = LocalRelation(Seq('a.int, 'b.int))
+    val otherPlan = basePlan.where('a.in(1, 2) || 'b.in())
+    val except = Except(basePlan, otherPlan, false)
+    val result = OptimizeIn(Optimize.execute(except.analyze))
+    val correctAnswer = Aggregate(basePlan.output, basePlan.output,
+      Filter(!Coalesce(Seq(
+        'a.in(1, 2) || If('b.isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
+        Literal.FalseLiteral)),
+        basePlan)).analyze
+    comparePlans(result, correctAnswer)
   }
 }

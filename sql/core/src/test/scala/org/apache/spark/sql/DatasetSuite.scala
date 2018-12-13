@@ -1656,6 +1656,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.groupBy(col("a")).agg(first(col("b"))),
       Seq(Row("0", BigDecimal.valueOf(0.1111)), Row("1", BigDecimal.valueOf(1.1111))))
   }
+
+  test("SPARK-26366: return nulls which are not filtered in except") {
+    val inputDF = sqlContext.createDataFrame(
+      sparkContext.parallelize(Seq(Row("0", "a"), Row("1", null))),
+      StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true))))
+
+    val exceptDF = inputDF.filter(
+      col("a").isin(Seq("0"): _*) or col("b").isin())
+
+    checkAnswer(inputDF.except(exceptDF), Seq(Row("1", null)))
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)

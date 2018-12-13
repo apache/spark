@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
-
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -49,7 +49,9 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
       case e @ Except(left, right, false) if isEligible(left, right) =>
         val newCondition = transformCondition(left, skipProject(right))
         newCondition.map { c =>
-          Distinct(Filter(Not(c), left))
+          // We need to consider as False when the condition is Null, otherwise we do not return
+          // those rows containing NULL which are instead filtered in the Except right plan
+          Distinct(Filter(Not(Coalesce(Seq(c, Literal.FalseLiteral))), left))
         }.getOrElse {
           e
         }
