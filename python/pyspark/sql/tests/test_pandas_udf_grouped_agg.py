@@ -17,6 +17,9 @@
 
 import unittest
 
+from pyspark.rdd import PythonEvalType
+from pyspark.sql.functions import array, explode, col, lit, mean, sum, \
+    udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import *
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
@@ -31,7 +34,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def data(self):
-        from pyspark.sql.functions import array, explode, col, lit
         return self.spark.range(10).toDF('id') \
             .withColumn("vs", array([lit(i * 1.0) + col('id') for i in range(20, 30)])) \
             .withColumn("v", explode(col('vs'))) \
@@ -40,8 +42,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def python_plus_one(self):
-        from pyspark.sql.functions import udf
-
         @udf('double')
         def plus_one(v):
             assert isinstance(v, (int, float))
@@ -51,8 +51,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
     @property
     def pandas_scalar_plus_two(self):
         import pandas as pd
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         @pandas_udf('double', PandasUDFType.SCALAR)
         def plus_two(v):
             assert isinstance(v, pd.Series)
@@ -61,8 +59,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def pandas_agg_mean_udf(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def avg(v):
             return v.mean()
@@ -70,8 +66,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def pandas_agg_sum_udf(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def sum(v):
             return v.sum()
@@ -80,16 +74,12 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
     @property
     def pandas_agg_weighted_mean_udf(self):
         import numpy as np
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def weighted_mean(v, w):
             return np.average(v, weights=w)
         return weighted_mean
 
     def test_manual(self):
-        from pyspark.sql.functions import pandas_udf, array
-
         df = self.data
         sum_udf = self.pandas_agg_sum_udf
         mean_udf = self.pandas_agg_mean_udf
@@ -118,8 +108,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
     def test_basic(self):
-        from pyspark.sql.functions import col, lit, mean
-
         df = self.data
         weighted_mean_udf = self.pandas_agg_weighted_mean_udf
 
@@ -150,9 +138,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
 
     def test_unsupported_types(self):
-        from pyspark.sql.types import DoubleType, MapType
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
                 pandas_udf(
@@ -173,8 +158,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                     return {v.mean(): v.std()}
 
     def test_alias(self):
-        from pyspark.sql.functions import mean
-
         df = self.data
         mean_udf = self.pandas_agg_mean_udf
 
@@ -187,8 +170,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         """
         Test mixing group aggregate pandas UDF with sql expression.
         """
-        from pyspark.sql.functions import sum
-
         df = self.data
         sum_udf = self.pandas_agg_sum_udf
 
@@ -225,8 +206,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         """
         Test mixing group aggregate pandas UDF with python UDF and scalar pandas UDF.
         """
-        from pyspark.sql.functions import sum
-
         df = self.data
         plus_one = self.python_plus_one
         plus_two = self.pandas_scalar_plus_two
@@ -292,8 +271,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         """
         Test multiple group aggregate pandas UDFs in one agg function.
         """
-        from pyspark.sql.functions import sum, mean
-
         df = self.data
         mean_udf = self.pandas_agg_mean_udf
         sum_udf = self.pandas_agg_sum_udf
@@ -315,8 +292,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected1, result1)
 
     def test_complex_groupby(self):
-        from pyspark.sql.functions import sum
-
         df = self.data
         sum_udf = self.pandas_agg_sum_udf
         plus_one = self.python_plus_one
@@ -359,8 +334,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected7.toPandas(), result7.toPandas())
 
     def test_complex_expressions(self):
-        from pyspark.sql.functions import col, sum
-
         df = self.data
         plus_one = self.python_plus_one
         plus_two = self.pandas_scalar_plus_two
@@ -434,7 +407,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected3, result3)
 
     def test_retain_group_columns(self):
-        from pyspark.sql.functions import sum
         with self.sql_conf({"spark.sql.retainGroupColumns": False}):
             df = self.data
             sum_udf = self.pandas_agg_sum_udf
@@ -444,8 +416,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
             self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
     def test_array_type(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         df = self.data
 
         array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
@@ -453,8 +423,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(result1.first()['v2'], [1.0, 2.0])
 
     def test_invalid_args(self):
-        from pyspark.sql.functions import mean
-
         df = self.data
         plus_one = self.python_plus_one
         mean_udf = self.pandas_agg_mean_udf
@@ -478,9 +446,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
 
     def test_register_vectorized_udf_basic(self):
-        from pyspark.sql.functions import pandas_udf
-        from pyspark.rdd import PythonEvalType
-
         sum_pandas_udf = pandas_udf(
             lambda v: v.sum(), "integer", PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
 
