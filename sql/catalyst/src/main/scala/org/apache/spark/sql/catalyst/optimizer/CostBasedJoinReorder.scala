@@ -48,8 +48,18 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
           if projectList.forall(_.isInstanceOf[Attribute]) =>
           reorder(p, p.output)
       }
-      // After reordering is finished, convert OrderedJoin back to Join
+
+      // Cleanups
       result transformDown {
+        // if a Project was created to keep output attribute order after join reordering, but
+        // it's actually in the middle of a tree of joins, then this Project is redundant and
+        // can be removed.
+        case j @ Join(left, right, _, _) =>
+          j.copy(
+            left = removeRedundantProject(left),
+            right = removeRedundantProject(right))
+
+        // After reordering is finished, convert OrderedJoin back to Join
         case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond)
       }
     }
@@ -96,6 +106,16 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
       OrderedJoin(replacedLeft, replacedRight, jt, Some(cond))
     case p @ Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond))) =>
       p.copy(child = replaceWithOrderedJoin(j))
+    case _ =>
+      plan
+  }
+
+  // Only call this function on a child of an output-attribute-order-insensitive operator,
+  // e.g. a Join
+  private def removeRedundantProject(plan: LogicalPlan): LogicalPlan = plan match {
+    case Project(projectList, j: OrderedJoin)
+      if projectList.forall(_.isInstanceOf[Attribute]) =>
+      j
     case _ =>
       plan
   }
@@ -175,6 +195,8 @@ object JoinReorderDP extends PredicateHelper with Logging {
         assert(topOutputSet == p.outputSet)
         // Keep the same order of final output attributes.
         p.copy(projectList = output)
+      case finalPlan if finalPlan.output != output =>
+        Project(output, finalPlan)
       case finalPlan =>
         finalPlan
     }
