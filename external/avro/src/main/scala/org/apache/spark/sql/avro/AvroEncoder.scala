@@ -181,6 +181,8 @@ private object AvroTypeInference {
           .getOrElse(ObjectType(classOf[GenericData.Record]))
       case SchemaType(MapType(_, _, _), _) =>
         ObjectType(classOf[java.util.Map[Object, Object]])
+      case other =>
+        throw new IncompatibleSchemaException(s"Unsupported type $other")
     }
   }
 
