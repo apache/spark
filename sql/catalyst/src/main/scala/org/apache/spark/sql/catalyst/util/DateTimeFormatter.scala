@@ -34,8 +34,10 @@ sealed trait DateTimeFormatter {
 }
 
 trait FormatterUtils {
-  def zoneId: ZoneId
-  def buildFormatter(pattern: String, locale: Locale): java.time.format.DateTimeFormatter = {
+  protected def zoneId: ZoneId
+  protected def buildFormatter(
+      pattern: String,
+      locale: Locale): java.time.format.DateTimeFormatter = {
     new DateTimeFormatterBuilder()
       .appendPattern(pattern)
       .parseDefaulting(ChronoField.YEAR_OF_ERA, 1970)
@@ -46,7 +48,7 @@ trait FormatterUtils {
       .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
       .toFormatter(locale)
   }
-  def toInstant(temporalAccessor: TemporalAccessor): java.time.Instant = {
+  protected def toInstant(temporalAccessor: TemporalAccessor): java.time.Instant = {
     val localDateTime = LocalDateTime.from(temporalAccessor)
     val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
     Instant.from(zonedDateTime)
