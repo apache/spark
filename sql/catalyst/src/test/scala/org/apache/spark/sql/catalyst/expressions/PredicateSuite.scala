@@ -24,6 +24,7 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
@@ -231,22 +232,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       testWithRandomDataGeneration(structType, nullable)
     }
 
-    // Map types: not supported
-    for (
-        keyType <- atomicTypes;
-        valueType <- atomicTypes;
-        nullable <- Seq(true, false)) {
-      val mapType = MapType(keyType, valueType)
-      val e = intercept[Exception] {
-        testWithRandomDataGeneration(mapType, nullable)
-      }
-      if (e.getMessage.contains("Code generation of")) {
-        // If the `value` expression is null, `eval` will be short-circuited.
-        // Codegen version evaluation will be run then.
-        assert(e.getMessage.contains("cannot generate equality code for un-comparable type"))
-      } else {
-        assert(e.getMessage.contains("Exception evaluating"))
-      }
+    // In doesn't support map type and will fail the analyzer.
+    val map = Literal.create(create_map(1 -> 1), MapType(IntegerType, IntegerType))
+    In(map, Seq(map)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("function in does not support ordering on type map"))
+      case _ => fail("In should not work on map type")
     }
   }
 
