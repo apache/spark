@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -50,14 +50,15 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       joinType: JoinType,
       condition: Option[Expression]): Join = {
     // Deduplicate conflicting attributes if any.
-    val dedupSubplan = dedupSubqueryOnSelfJoin(outerPlan, subplan)
+    val dedupSubplan = dedupSubqueryOnSelfJoin(outerPlan, subplan, None, condition)
     Join(outerPlan, dedupSubplan, joinType, condition)
   }
 
   private def dedupSubqueryOnSelfJoin(
       outerPlan: LogicalPlan,
       subplan: LogicalPlan,
-      valuesOpt: Option[Seq[Expression]] = None): LogicalPlan = {
+      valuesOpt: Option[Seq[Expression]],
+      condition: Option[Expression] = None): LogicalPlan = {
     // SPARK-21835: It is possibly that the two sides of the join have conflicting attributes,
     // the produced join then becomes unresolved and break structural integrity. We should
     // de-duplicate conflicting attributes.
@@ -71,6 +72,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     val outerRefs = outerPlan.outputSet ++ outerReferences
     val duplicates = outerRefs.intersect(subplan.outputSet)
     if (duplicates.nonEmpty) {
+      condition.foreach {
+        case e if e.references.intersect(duplicates).nonEmpty =>
+          throw new AnalysisException(s"Found conflicting attributes ${duplicates.mkString(",")} " +
+            s"in nodes:\n $outerPlan\n $subplan")
+        case _ =>
+      }
       val rewrites = AttributeMap(duplicates.map { dup =>
         dup -> Alias(dup, dup.toString)()
       }.toSeq)
