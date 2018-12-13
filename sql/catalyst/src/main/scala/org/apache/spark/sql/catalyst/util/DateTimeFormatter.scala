@@ -131,7 +131,7 @@ class Iso8601DateFormatter(
     pattern: String,
     locale: Locale) extends DateFormatter with FormatterUtils {
 
-  val zoneId = ZoneId.of("GMT")
+  val zoneId = ZoneId.of("UTC")
 
   val formatter = buildFormatter(pattern, locale)
 
