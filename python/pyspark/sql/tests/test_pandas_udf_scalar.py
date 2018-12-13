@@ -29,7 +29,7 @@ from distutils.version import LooseVersion
 
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
-from pyspark.sql.functions import array, col, expr, sum, udf, pandas_udf
+from pyspark.sql.functions import array, col, expr, lit, sum, udf, pandas_udf
 from pyspark.sql.types import Row
 from pyspark.sql.types import *
 from pyspark.sql.utils import AnalysisException
