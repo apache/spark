@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.ScalaUDF
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{AbstractDataType, DataType}
 
 /**
  * A user-defined function. To create one, use the `udf` functions in `functions`.
@@ -88,7 +88,7 @@ sealed trait UserDefinedFunction {
 private[sql] case class SparkUserDefinedFunction(
     f: AnyRef,
     dataType: DataType,
-    inputTypes: Option[Seq[DataType]],
+    inputTypes: Option[Seq[AbstractDataType]],
     nullableTypes: Option[Seq[Boolean]],
     name: Option[String] = None,
     nullable: Boolean = true,

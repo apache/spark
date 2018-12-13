@@ -164,7 +164,7 @@ object Literal {
   }
 
   def create[T : TypeTag](v: T): Literal = Try {
-    val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
+    val dataType = ScalaReflection.schemaFor[T].dataType.defaultConcreteType
     val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
     Literal(convert(v), dataType)
   }.getOrElse {

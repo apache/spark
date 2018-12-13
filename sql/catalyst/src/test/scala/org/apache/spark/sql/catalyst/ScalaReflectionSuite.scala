@@ -197,7 +197,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("shortField", ShortType, nullable = true),
         StructField("byteField", ByteType, nullable = true),
         StructField("booleanField", BooleanType, nullable = true),
-        StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true))),
+        StructField(
+          "structField", schemaFor[PrimitiveData].dataType.defaultConcreteType, nullable = true))),
       nullable = true))
   }
 
@@ -270,7 +271,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
-    val dataType = schemaFor[PrimitiveData].dataType
+    val dataType = schemaFor[PrimitiveData].dataType.defaultConcreteType
     assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
@@ -278,7 +279,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
       Some(primitiveData))
-    val dataType = schemaFor[OptionalData].dataType
+    val dataType = schemaFor[OptionalData].dataType.defaultConcreteType
     val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
       InternalRow(1, 1, 1, 1, 1, 1, true))
     assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)

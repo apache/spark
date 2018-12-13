@@ -167,7 +167,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private def toCatalyst[T: TypeTag](value: T): Any = {
     val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
-    CatalystTypeConverters.createToCatalystConverter(dataType)(value)
+    CatalystTypeConverters.createToCatalystConverter(dataType.defaultConcreteType)(value)
   }
 
   test("array") {

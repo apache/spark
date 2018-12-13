@@ -160,10 +160,11 @@ object ScalaReflection extends ScalaReflection {
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
     val Schema(dataType, nullable) = schemaFor(tpe)
+    val concreteDataType = dataType.defaultConcreteType
 
     // Assumes we are deserializing the first column of a row.
     val input = upCastToExpectedType(
-      GetColumnByOrdinal(0, dataType), dataType, walkedTypePath)
+      GetColumnByOrdinal(0, concreteDataType), concreteDataType, walkedTypePath)
 
     val expr = deserializerFor(tpe, input, walkedTypePath)
     if (nullable) {
@@ -287,7 +288,7 @@ object ScalaReflection extends ScalaReflection {
 
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
-          val casted = upCastToExpectedType(element, dataType, newTypePath)
+          val casted = upCastToExpectedType(element, dataType.defaultConcreteType, newTypePath)
           val converter = deserializerFor(elementType, casted, newTypePath)
           if (elementNullable) {
             converter
@@ -327,7 +328,7 @@ object ScalaReflection extends ScalaReflection {
 
         val mapFunction: Expression => Expression = element => {
           // upcast the array element to the data type the encoder expected.
-          val casted = upCastToExpectedType(element, dataType, newTypePath)
+          val casted = upCastToExpectedType(element, dataType.defaultConcreteType, newTypePath)
           val converter = deserializerFor(elementType, casted, newTypePath)
           if (elementNullable) {
             converter
@@ -387,12 +388,12 @@ object ScalaReflection extends ScalaReflection {
           val constructor = if (cls.getName startsWith "scala.Tuple") {
             deserializerFor(
               fieldType,
-              addToPathOrdinal(i, dataType, newTypePath),
+              addToPathOrdinal(i, dataType.defaultConcreteType, newTypePath),
               newTypePath)
           } else {
             deserializerFor(
               fieldType,
-              addToPath(fieldName, dataType, newTypePath),
+              addToPath(fieldName, dataType.defaultConcreteType, newTypePath),
               newTypePath)
           }
 
@@ -702,7 +703,7 @@ object ScalaReflection extends ScalaReflection {
    */
   def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.dealias.typeSymbol.asClass)
 
-  case class Schema(dataType: DataType, nullable: Boolean)
+  case class Schema(dataType: AbstractDataType, nullable: Boolean)
 
   /** Returns a Sequence of attributes for the given case class type. */
   def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
@@ -736,31 +737,31 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
-        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
+        Schema(ArrayType(dataType.defaultConcreteType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
-        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
+        Schema(ArrayType(dataType.defaultConcreteType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[Map[_, _]] =>
         val TypeRef(_, _, Seq(keyType, valueType)) = t
         val Schema(valueDataType, valueNullable) = schemaFor(valueType)
-        Schema(MapType(schemaFor(keyType).dataType,
-          valueDataType, valueContainsNull = valueNullable), nullable = true)
+        Schema(MapType(schemaFor(keyType).dataType.defaultConcreteType,
+          valueDataType.defaultConcreteType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< localTypeOf[Set[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
-        Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
+        Schema(ArrayType(dataType.defaultConcreteType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Date] => Schema(DateType, nullable = true)
-      case t if t <:< localTypeOf[BigDecimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+      case t if t <:< localTypeOf[BigDecimal] => Schema(DecimalType, nullable = true)
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
-        Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+        Schema(DecimalType, nullable = true)
       case t if t <:< localTypeOf[java.math.BigInteger] =>
         Schema(DecimalType.BigIntDecimal, nullable = true)
       case t if t <:< localTypeOf[scala.math.BigInt] =>
         Schema(DecimalType.BigIntDecimal, nullable = true)
-      case t if t <:< localTypeOf[Decimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+      case t if t <:< localTypeOf[Decimal] => Schema(DecimalType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Long] => Schema(LongType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Double] => Schema(DoubleType, nullable = true)
@@ -780,7 +781,7 @@ object ScalaReflection extends ScalaReflection {
         Schema(StructType(
           params.map { case (fieldName, fieldType) =>
             val Schema(dataType, nullable) = schemaFor(fieldType)
-            StructField(fieldName, dataType, nullable)
+            StructField(fieldName, dataType.defaultConcreteType, nullable)
           }), nullable = true)
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
