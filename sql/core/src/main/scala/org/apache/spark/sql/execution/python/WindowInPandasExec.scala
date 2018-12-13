@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
 /**
  * This class calculates and outputs windowed aggregates over the rows in a single partition.
  *
- * This is similar to [[WindowExec]]. The main difference is that this node doesn't not compute
+ * This is similar to [[WindowExec]]. The main difference is that this node does not compute
  * any window aggregation values. Instead, it computes the lower and upper bound for each window
  * (i.e. window bounds) and pass the data and indices to Python worker to do the actual window
  * aggregation.

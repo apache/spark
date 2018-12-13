@@ -147,7 +147,7 @@ def wrap_grouped_agg_pandas_udf(f, return_type):
 
 def wrap_window_agg_pandas_udf(f, return_type, runner_conf, udf_index):
     window_bound_types_str = runner_conf.get('pandas_window_bound_types')
-    window_bound_type = [t.strip() for t in window_bound_types_str.split(',')][udf_index]
+    window_bound_type = [t.strip().lower() for t in window_bound_types_str.split(',')][udf_index]
     if window_bound_type == 'bounded':
         return wrap_bounded_window_agg_pandas_udf(f, return_type)
     elif window_bound_type == 'unbounded':

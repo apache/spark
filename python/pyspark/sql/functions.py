@@ -3007,9 +3007,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        +---+----+------+
 
        .. note:: For performance reasons, the input series to window functions are not copied.
-            Therefore, changing the value of the input series is not allowed and will
-            result incorrect results. For the same reason, users should also not rely
-            on the index of the input series.
+            Therefore, mutating the input series is not allowed and will cause incorrect results.
+            For the same reason, users should also not rely on the index of the input series.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
 
