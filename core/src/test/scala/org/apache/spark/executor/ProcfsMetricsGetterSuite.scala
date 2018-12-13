@@ -25,7 +25,7 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
   val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
 
   test("testGetProcessInfo") {
-    var r = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+    var r = ProcfsMetrics(0, 0, 0, 0, 0, 0, 0)
     r = p.addProcfsMetricsFromOneProcess(r, 26109)
     assert(r.jvmVmemTotal == 4769947648L)
     assert(r.jvmRSSTotal == 262610944)

@@ -37,7 +37,9 @@ private[spark] case class ProcfsMetrics(
     pythonVmemTotal: Long,
     pythonRSSTotal: Long,
     otherVmemTotal: Long,
-    otherRSSTotal: Long)
+    otherRSSTotal: Long,
+    timeStamp: Long)
+
 
 // Some of the ideas here are taken from the ProcfsBasedProcessTree class in hadoop
 // project.
@@ -47,6 +49,14 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
   private val pageSize = computePageSize()
   private var isAvailable: Boolean = isProcfsAvailable
   private val pid = computePid()
+  var cachedAllMetric = ProcfsMetrics(0, 0, 0, 0, 0, 0, 0)
+  private val HEARTBEAT_INTERVAL_MS = if (testing) {
+    0
+  } else {
+    SparkEnv.get.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL)
+  }
+
+
 
   private lazy val isProcfsAvailable: Boolean = {
     if (testing) {
@@ -64,19 +74,11 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
         SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
       val shouldAddProcessTreeMetricsToMetricsSet =
         SparkEnv.get.conf.get(config.METRICS_PROCESS_TREE_METRICS)
-      val pickEitherUIOrMetricsSet = shouldLogStageExecutorProcessTreeMetrics ^
+      val pickAnyOfUIOrMetricsSet = shouldLogStageExecutorProcessTreeMetrics ||
         shouldAddProcessTreeMetricsToMetricsSet
-      val areBothUIMetricsEnabled = shouldLogStageExecutorProcessTreeMetrics &&
-        shouldAddProcessTreeMetricsToMetricsSet
-      if (areBothUIMetricsEnabled) {
-        logWarning("You have enabled " +
-          "both spark.eventLog.logStageExecutorProcessTreeMetrics.enabled" +
-          " and spark.metrics.logStageExecutorProcessTreeMetrics.enabled. This isn't " +
-          "allowed. As a result Procfs metrics won't be reported to UI or Metricsset")
-      }
-      (procDirExists.get && shouldLogStageExecutorMetrics && pickEitherUIOrMetricsSet) ||
-        (procDirExists.get && !shouldLogStageExecutorMetrics &&
-          pickEitherUIOrMetricsSet && shouldAddProcessTreeMetricsToMetricsSet)
+
+      (procDirExists.get && shouldLogStageExecutorMetrics && pickAnyOfUIOrMetricsSet) ||
+        (procDirExists.get && shouldAddProcessTreeMetricsToMetricsSet)
     }
   }
 
@@ -195,19 +197,22 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
         if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
           allMetrics.copy(
             jvmVmemTotal = allMetrics.jvmVmemTotal + vmem,
-            jvmRSSTotal = allMetrics.jvmRSSTotal + (rssMem)
+            jvmRSSTotal = allMetrics.jvmRSSTotal + (rssMem),
+            timeStamp = System.currentTimeMillis
           )
         }
         else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
           allMetrics.copy(
             pythonVmemTotal = allMetrics.pythonVmemTotal + vmem,
-            pythonRSSTotal = allMetrics.pythonRSSTotal + (rssMem)
+            pythonRSSTotal = allMetrics.pythonRSSTotal + (rssMem),
+            timeStamp = System.currentTimeMillis
           )
         }
         else {
           allMetrics.copy(
             otherVmemTotal = allMetrics.otherVmemTotal + vmem,
-            otherRSSTotal = allMetrics.otherRSSTotal + (rssMem)
+            otherRSSTotal = allMetrics.otherRSSTotal + (rssMem),
+            timeStamp = System.currentTimeMillis
           )
         }
       }
@@ -215,25 +220,33 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       case f: IOException =>
         logWarning("There was a problem with reading" +
           " the stat file of the process. ", f)
-        ProcfsMetrics(0, 0, 0, 0, 0, 0)
+        ProcfsMetrics(0, 0, 0, 0, 0, 0, System.currentTimeMillis)
     }
   }
 
   private[spark] def computeAllMetrics(): ProcfsMetrics = {
     if (!isAvailable) {
-      return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+      return ProcfsMetrics(0, 0, 0, 0, 0, 0, System.currentTimeMillis)
     }
-    val pids = computeProcessTree
-    var allMetrics = ProcfsMetrics(0, 0, 0, 0, 0, 0)
-    for (p <- pids) {
-      allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
-      // if we had an error getting any of the metrics, we don't want to report partial metrics, as
-      // that would be misleading.
-      if (!isAvailable) {
-        return ProcfsMetrics(0, 0, 0, 0, 0, 0)
+    val lastMetricComputation = System.currentTimeMillis() - cachedAllMetric.timeStamp
+    // Check whether we have computed the metrics in the past 1s
+    // ToDo: Should we make this configurable?
+    if(lastMetricComputation > Math.min(1000, HEARTBEAT_INTERVAL_MS)) {
+      val pids = computeProcessTree
+      var allMetrics = ProcfsMetrics(0, 0, 0, 0, 0, 0, System.currentTimeMillis)
+      for (p <- pids) {
+        allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
+        // if we had an error getting any of the metrics, we don't
+        // want to report partial metrics, as that would be misleading.
+        if (!isAvailable) {
+          return ProcfsMetrics(0, 0, 0, 0, 0, 0, System.currentTimeMillis)
+        }
       }
+      allMetrics
     }
-    allMetrics
+    else {
+      cachedAllMetric
+    }
   }
 }
 

@@ -19,14 +19,15 @@ package org.apache.spark.executor
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.SparkEnv
 
 private[executor] class ProcfsMetricsSource extends Source {
   override val sourceName = "procfs"
-  override val metricRegistry = new MetricRegistry()
+  // We use numMetrics for tracking to only call computAllMetrics once per set of metrics
   var numMetrics: Int = 0
+  override val metricRegistry = new MetricRegistry()
   var metrics: Map[String, Long] = Map.empty
   val shouldAddProcessTreeMetricsToMetricsSet =
     SparkEnv.get.conf.get(config.METRICS_PROCESS_TREE_METRICS)
@@ -35,30 +36,33 @@ private[executor] class ProcfsMetricsSource extends Source {
     if (numMetrics == 0) {
       metrics = Map.empty
       val p = ProcfsMetricsGetter.pTreeInfo.computeAllMetrics()
-      metrics = Map("ProcessTreeJVMVMemory" -> p.jvmVmemTotal,
-        "ProcessTreeJVMRSSMemory" -> p.jvmRSSTotal,
-        "ProcessTreePythonVMemory" -> p.pythonVmemTotal,
-        "ProcessTreePythonRSSMemory" -> p.pythonRSSTotal,
-        "ProcessTreeOtherVMemory" -> p.otherVmemTotal,
-        "ProcessTreeOtherRSSMemory" -> p.otherRSSTotal)
+      metrics = Map(
+        "JVMVMemory" -> p.jvmVmemTotal,
+        "JVMRSSMemory" -> p.jvmRSSTotal,
+        "PythonVMemory" -> p.pythonVmemTotal,
+        "PythonRSSMemory" -> p.pythonRSSTotal,
+        "OtherVMemory" -> p.otherVmemTotal,
+        "OtherRSSMemory" -> p.otherRSSTotal)
     }
     numMetrics = numMetrics + 1
     if (numMetrics == 6) {
-      numMetrics = 0}
+      numMetrics = 0
+    }
     metrics
   }
-  private def registerProcfsMetrics[Long]( name: String) = {
+
+  private def registerProcfsMetrics[Long](name: String) = {
     metricRegistry.register(MetricRegistry.name("processTree", name), new Gauge[Long] {
       override def getValue: Long = getProcfsMetrics(name).asInstanceOf[Long]
     })
   }
 
   if (shouldAddProcessTreeMetricsToMetricsSet) {
-    registerProcfsMetrics("ProcessTreeJVMVMemory")
-    registerProcfsMetrics("ProcessTreeJVMRSSMemory")
-    registerProcfsMetrics("ProcessTreePythonVMemory")
-    registerProcfsMetrics("ProcessTreePythonRSSMemory")
-    registerProcfsMetrics("ProcessTreeOtherVMemory")
-    registerProcfsMetrics("ProcessTreeOtherRSSMemory")
+    registerProcfsMetrics("JVMVMemory")
+    registerProcfsMetrics("JVMRSSMemory")
+    registerProcfsMetrics("PythonVMemory")
+    registerProcfsMetrics("PythonRSSMemory")
+    registerProcfsMetrics("OtherVMemory")
+    registerProcfsMetrics("OtherRSSMemory")
   }
 }

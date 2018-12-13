@@ -21,10 +21,10 @@ import javax.management.ObjectName
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.executor.ProcfsMetricsGetter
 import org.apache.spark.internal.config
 import org.apache.spark.memory.MemoryManager
-import org.apache.spark.SparkEnv
 
 
 /**
