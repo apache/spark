@@ -1028,6 +1028,58 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkShowString(ds, expected)
   }
 
+  test("SPARK-26335 Add a property for Dataset#show not to care about wide characters " +
+    "when padding them") {
+    withSQLConf(SQLConf.DATASET_SHOW_HANDLE_FULL_WIDTH_CHARACTERS.key -> "false") {
+      // scalastyle:off nonascii
+      val df = Seq(
+        (0, null, 1),
+        (0, "", 1),
+        (0, "ab c", 1),
+        (0, "1098", 1),
+        (0, "mø", 1),
+        (0, "γύρ", 1),
+        (0, "pê", 1),
+        (0, "ー", 1),
+        (0, "测", 1),
+        (0, "か", 1),
+        (0, "걸", 1),
+        (0, "à", 1),
+        (0, "焼", 1),
+        (0, "羍む", 1),
+        (0, "뺭ᾘ", 1),
+        (0, "\u0967\u0968\u0969", 1)
+      ).toDF("b", "a", "c")
+      // scalastyle:on nonascii
+      val ds = df.as[ClassData]
+      val expected =
+      // scalastyle:off nonascii
+        """+---+----+---+
+          ||  b|   a|  c|
+          |+---+----+---+
+          ||  0|null|  1|
+          ||  0|    |  1|
+          ||  0|ab c|  1|
+          ||  0|1098|  1|
+          ||  0|  mø|  1|
+          ||  0| γύρ|  1|
+          ||  0|  pê|  1|
+          ||  0|   ー|  1|
+          ||  0|   测|  1|
+          ||  0|   か|  1|
+          ||  0|   걸|  1|
+          ||  0|   à|  1|
+          ||  0|   焼|  1|
+          ||  0|  羍む|  1|
+          ||  0|  뺭ᾘ|  1|
+          ||  0| १२३|  1|
+          |+---+----+---+
+          |""".stripMargin
+      // scalastyle:on nonascii
+      checkShowString(ds, expected)
+    }
+  }
+
   test(
     "SPARK-15112: EmbedDeserializerInFilter should not optimize plan fragment that changes schema"
   ) {

@@ -1193,6 +1193,44 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     // scalastyle:on nonascii
   }
 
+   test("stringWidth") {
+    // scalastyle:off nonascii
+    assert(Utils.stringWidth(null, false) == 0)
+    assert(Utils.stringWidth(null, true) == 0)
+    assert(Utils.stringWidth("", false) == 0)
+    assert(Utils.stringWidth("", true) == 0)
+    assert(Utils.stringWidth("ab c", false) == 4)
+    assert(Utils.stringWidth("ab c", true) == 4)
+    assert(Utils.stringWidth("1098", false) == 4)
+    assert(Utils.stringWidth("1098", true) == 4)
+    assert(Utils.stringWidth("mø", false) == 2)
+    assert(Utils.stringWidth("mø", true) == 2)
+    assert(Utils.stringWidth("γύρ", false) == 3)
+    assert(Utils.stringWidth("γύρ", true) == 3)
+    assert(Utils.stringWidth("pê", false) == 2)
+    assert(Utils.stringWidth("pê", true) == 2)
+    assert(Utils.stringWidth("ー", false) == 1)
+    assert(Utils.stringWidth("ー", true) == 2)
+    assert(Utils.stringWidth("测", false) == 1)
+    assert(Utils.stringWidth("测", true) == 2)
+    assert(Utils.stringWidth("か", false) == 1)
+    assert(Utils.stringWidth("か", true) == 2)
+    assert(Utils.stringWidth("걸", false) == 1)
+    assert(Utils.stringWidth("걸", true) == 2)
+    assert(Utils.stringWidth("à", false) == 1)
+    assert(Utils.stringWidth("à", true) == 1)
+    assert(Utils.stringWidth("焼", false) == 1)
+    assert(Utils.stringWidth("焼", true) == 2)
+    assert(Utils.stringWidth("羍む", false) == 2)
+    assert(Utils.stringWidth("羍む", true) == 4)
+    assert(Utils.stringWidth("뺭ᾘ", false) == 2)
+    assert(Utils.stringWidth("뺭ᾘ", true) == 3)
+    assert(Utils.stringWidth("\u0967\u0968\u0969", false) == 3)
+    assert(Utils.stringWidth("\u0967\u0968\u0969", true) == 3)
+    // scalastyle:on nonascii
+  }
+
+
   test("trimExceptCRLF standalone") {
     val crlfSet = Set("\r", "\n")
     val nonPrintableButCRLF = (0 to 32).map(_.toChar.toString).toSet -- crlfSet

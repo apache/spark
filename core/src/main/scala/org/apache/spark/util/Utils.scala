@@ -2822,6 +2822,19 @@ private[spark] object Utils extends Logging {
     if (str == null) 0 else str.length + fullWidthRegex.findAllIn(str).size
   }
 
+  /**
+   * Return a width of a given string.
+   *
+   * @param str a string
+   * @param halfWidth If it is set to true, the number of half widths of a given string will be
+   *                  returned.
+   *                  Otherwise, the number of characters of a given string will be returned.
+   * @return a width of a given string
+   */
+  def stringWidth(str: String, halfWidth: Boolean): Int = {
+    if (str == null) 0 else if (halfWidth) stringHalfWidth(str) else str.length
+  }
+
   def sanitizeDirName(str: String): String = {
     str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }

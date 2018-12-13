@@ -306,6 +306,8 @@ class Dataset[T] private[sql](
     // We set a minimum column width at '3'
     val minimumColWidth = 3
 
+    val handleFullWidthChars = sparkSession.sessionState.conf.datasetShowHandleFullWidthCharacters
+
     if (!vertical) {
       // Initialise the width of each column to a minimum value
       val colWidths = Array.fill(numCols)(minimumColWidth)
@@ -313,16 +315,21 @@ class Dataset[T] private[sql](
       // Compute the width of each column
       for (row <- rows) {
         for ((cell, i) <- row.zipWithIndex) {
-          colWidths(i) = math.max(colWidths(i), Utils.stringHalfWidth(cell))
+          colWidths(i) = math.max(colWidths(i), Utils.stringWidth(cell, handleFullWidthChars))
         }
       }
 
       val paddedRows = rows.map { row =>
         row.zipWithIndex.map { case (cell, i) =>
-          if (truncate > 0) {
-            StringUtils.leftPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
+          val colWidth = if (handleFullWidthChars) {
+            colWidths(i) - Utils.stringHalfWidth(cell) + cell.length
           } else {
-            StringUtils.rightPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
+            colWidths(i)
+          }
+          if (truncate > 0) {
+            StringUtils.leftPad(cell, colWidth)
+          } else {
+            StringUtils.rightPad(cell, colWidth)
           }
         }
       }
@@ -344,10 +351,10 @@ class Dataset[T] private[sql](
 
       // Compute the width of field name and data columns
       val fieldNameColWidth = fieldNames.foldLeft(minimumColWidth) { case (curMax, fieldName) =>
-        math.max(curMax, Utils.stringHalfWidth(fieldName))
+        math.max(curMax, Utils.stringWidth(fieldName, handleFullWidthChars))
       }
       val dataColWidth = dataRows.foldLeft(minimumColWidth) { case (curMax, row) =>
-        math.max(curMax, row.map(cell => Utils.stringHalfWidth(cell)).max)
+        math.max(curMax, row.map(cell => Utils.stringWidth(cell, handleFullWidthChars)).max)
       }
 
       dataRows.zipWithIndex.foreach { case (row, i) =>
@@ -357,9 +364,17 @@ class Dataset[T] private[sql](
         sb.append(rowHeader).append("\n")
         row.zipWithIndex.map { case (cell, j) =>
           val fieldName = StringUtils.rightPad(fieldNames(j),
-            fieldNameColWidth - Utils.stringHalfWidth(fieldNames(j)) + fieldNames(j).length)
+            if (handleFullWidthChars) {
+              fieldNameColWidth - Utils.stringHalfWidth(fieldNames(j)) + fieldNames(j).length
+            } else {
+              fieldNameColWidth
+            })
           val data = StringUtils.rightPad(cell,
-            dataColWidth - Utils.stringHalfWidth(cell) + cell.length)
+            if (handleFullWidthChars) {
+              dataColWidth - Utils.stringHalfWidth(cell) + cell.length
+            } else {
+              dataColWidth
+            })
           s" $fieldName | $data "
         }.addString(sb, "", "\n", "\n")
       }

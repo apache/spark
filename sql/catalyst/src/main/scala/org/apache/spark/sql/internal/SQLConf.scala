@@ -1635,6 +1635,18 @@ object SQLConf {
       "java.time.* packages are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
+
+  val DATASET_SHOW_HANDLE_FULL_WIDTH_CHARACTERS =
+    buildConf("spark.sql.dataset.show.handleFullWidthCharacters")
+      .doc("If it is set to true, a width of a full width character will be calculated as two " +
+        "half widths. That makes it easy for humans to view a result of " +
+        "`org.apache.spark.sql.Dataset#show`. On the other hand, that makes it impossible for " +
+        "programs to parse a result of `org.apache.spark.sql.Dataset#show` because each cell of " +
+        "a column has a different width depending on how many full width characters it has. " +
+        "So, it should be set to false if programs need to parse a result of " +
+        "`org.apache.spark.sql.Dataset#show`.")
+      .booleanConf
+      .createWithDefault(true)
 }
 
 /**
@@ -2061,6 +2073,9 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
   def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
+
+  def datasetShowHandleFullWidthCharacters: Boolean =
+    getConf(SQLConf.DATASET_SHOW_HANDLE_FULL_WIDTH_CHARACTERS)
 
   /** ********************** SQLConf functionality methods ************ */
 
