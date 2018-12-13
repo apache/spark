@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.reader.Scan;
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 
 /**
- * An empty mix-in interface for {@link Table}, to indicate this table supports batch scan.
- * <p>
- * If a {@link Table} implements this interface, the
- * {@link SupportsRead#newScanBuilder(DataSourceOptions)} must return a {@link ScanBuilder} that
- * builds {@link Scan} with {@link Scan#toBatch()} implemented.
- * </p>
+ * An internal base interface of mix-in interfaces for readable {@link Table}. This adds
+ * {@link #newScanBuilder(DataSourceOptions)} that is used to create a scan for batch, micro-batch,
+ * or continuous processing.
  */
-@Evolving
-public interface SupportsBatchRead extends SupportsRead { }
+interface SupportsRead extends Table {
+
+  /**
+   * Returns a {@link ScanBuilder} which can be used to build a {@link Scan}. Spark will call this
+   * method to configure each scan.
+   */
+  ScanBuilder newScanBuilder(DataSourceOptions options);
+}
