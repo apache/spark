@@ -67,7 +67,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         generator.flush()
       }
 
-      val dummyOption = new JSONOptions(options, "GMT")
+      val dummyOption = new JSONOptions(options, SQLConf.get.sessionLocalTimeZone)
       val dummySchema = StructType(Seq.empty)
       val parser = new JacksonParser(dummySchema, dummyOption, allowArrayAsStructs = true)
 
@@ -100,8 +100,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         enforceCorrectType(intNumber.toLong, TimestampType))
     val strTime = "2014-09-30 12:34:56"
     checkTypePromotion(
-      expected = 1412080496000000L,
-      enforceCorrectType(strTime, TimestampType, Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss")))
+      expected = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(strTime)),
+      enforceCorrectType(strTime, TimestampType,
+        Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss")))
 
     val strDate = "2014-10-15"
     checkTypePromotion(
