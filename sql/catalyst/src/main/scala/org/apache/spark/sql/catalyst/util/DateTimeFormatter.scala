@@ -48,7 +48,7 @@ trait FormatterUtils {
       .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
       .toFormatter(locale)
   }
-  protected def toInstant(temporalAccessor: TemporalAccessor): java.time.Instant = {
+  protected def toInstantWithZoneId(temporalAccessor: TemporalAccessor): java.time.Instant = {
     val localDateTime = LocalDateTime.from(temporalAccessor)
     val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
     Instant.from(zonedDateTime)
@@ -65,7 +65,7 @@ class Iso8601DateTimeFormatter(
   def toInstant(s: String): Instant = {
     val temporalAccessor = formatter.parse(s)
     if (temporalAccessor.query(TemporalQueries.offset()) == null) {
-      toInstant(temporalAccessor)
+      toInstantWithZoneId(temporalAccessor)
     } else {
       Instant.from(temporalAccessor)
     }
@@ -137,7 +137,7 @@ class Iso8601DateFormatter(
 
   def toInstant(s: String): Instant = {
     val temporalAccessor = formatter.parse(s)
-    toInstant(temporalAccessor)
+    toInstantWithZoneId(temporalAccessor)
   }
 
   override def parse(s: String): Int = {
