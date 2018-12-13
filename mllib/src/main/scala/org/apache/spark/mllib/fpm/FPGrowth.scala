@@ -116,7 +116,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
       val classSymbol = runtimeMirror(getClass.getClassLoader).staticClass(className)
       val tpe = classSymbol.selfType
 
-      val itemType = ScalaReflection.schemaFor(tpe).dataType
+      val itemType = ScalaReflection.concreteDataTypeFor(tpe)
       val fields = Array(StructField("items", ArrayType(itemType)),
         StructField("freq", LongType))
       val schema = StructType(fields)
