@@ -21,7 +21,7 @@ import java.util.{Locale, TimeZone}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeFormatter, DateTimeTestUtils}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 
 class DateTimeFormatterSuite extends SparkFunSuite with SQLHelper {
@@ -47,7 +47,7 @@ class DateTimeFormatterSuite extends SparkFunSuite with SQLHelper {
       "Asia/Hong_Kong" -> 1543716672001234L,
       "Europe/Amsterdam" -> 1543741872001234L)
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      val formatter = DateTimeFormatter(
+      val formatter = TimestampFormatter(
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
         TimeZone.getTimeZone(timeZone),
         Locale.US)
@@ -78,7 +78,7 @@ class DateTimeFormatterSuite extends SparkFunSuite with SQLHelper {
       "Asia/Hong_Kong" -> "2018-12-02T18:11:12.001234",
       "Europe/Amsterdam" -> "2018-12-02T11:11:12.001234")
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      val formatter = DateTimeFormatter(
+      val formatter = TimestampFormatter(
         "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
         TimeZone.getTimeZone(timeZone),
         Locale.US)
@@ -90,7 +90,7 @@ class DateTimeFormatterSuite extends SparkFunSuite with SQLHelper {
   test("roundtrip parsing timestamps using timezones") {
     DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
       val timestamp = "2018-12-02T11:22:33.123456"
-      val formatter = DateTimeFormatter("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", timeZone, Locale.US)
+      val formatter = TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", timeZone, Locale.US)
       val micros = formatter.parse(timestamp)
       val formatted = formatter.format(micros)
       assert(timestamp === formatted)

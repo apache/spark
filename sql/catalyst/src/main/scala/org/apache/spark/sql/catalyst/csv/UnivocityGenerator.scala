@@ -22,7 +22,7 @@ import java.io.Writer
 import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
 import org.apache.spark.sql.types._
 
 class UnivocityGenerator(
@@ -41,7 +41,7 @@ class UnivocityGenerator(
   private val valueConverters: Array[ValueConverter] =
     schema.map(_.dataType).map(makeConverter).toArray
 
-  private val timeFormatter = DateTimeFormatter(
+  private val timeFormatter = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)

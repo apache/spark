@@ -28,7 +28,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.internal.SQLConf
 
-sealed trait DateTimeFormatter {
+sealed trait TimestampFormatter {
   def parse(s: String): Long // returns microseconds since epoch
   def format(us: Long): String
 }
@@ -55,10 +55,10 @@ trait FormatterUtils {
   }
 }
 
-class Iso8601DateTimeFormatter(
+class Iso8601TimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
-    locale: Locale) extends DateTimeFormatter with FormatterUtils {
+    locale: Locale) extends TimestampFormatter with FormatterUtils {
   val zoneId = timeZone.toZoneId
   val formatter = buildFormatter(pattern, locale)
 
@@ -88,10 +88,10 @@ class Iso8601DateTimeFormatter(
   }
 }
 
-class LegacyDateTimeFormatter(
+class LegacyTimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
-    locale: Locale) extends DateTimeFormatter {
+    locale: Locale) extends TimestampFormatter {
   val format = FastDateFormat.getInstance(pattern, timeZone, locale)
 
   protected def toMillis(s: String): Long = format.parse(s).getTime
@@ -103,21 +103,21 @@ class LegacyDateTimeFormatter(
   }
 }
 
-class LegacyFallbackDateTimeFormatter(
+class LegacyFallbackTimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
-    locale: Locale) extends LegacyDateTimeFormatter(pattern, timeZone, locale) {
+    locale: Locale) extends LegacyTimestampFormatter(pattern, timeZone, locale) {
   override def toMillis(s: String): Long = {
     Try {super.toMillis(s)}.getOrElse(DateTimeUtils.stringToTime(s).getTime)
   }
 }
 
-object DateTimeFormatter {
-  def apply(format: String, timeZone: TimeZone, locale: Locale): DateTimeFormatter = {
+object TimestampFormatter {
+  def apply(format: String, timeZone: TimeZone, locale: Locale): TimestampFormatter = {
     if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyFallbackDateTimeFormatter(format, timeZone, locale)
+      new LegacyFallbackTimestampFormatter(format, timeZone, locale)
     } else {
-      new Iso8601DateTimeFormatter(format, timeZone, locale)
+      new Iso8601TimestampFormatter(format, timeZone, locale)
     }
   }
 }

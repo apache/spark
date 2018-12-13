@@ -74,7 +74,7 @@ class UnivocityParser(
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
-  private val timeFormatter = DateTimeFormatter(
+  private val timeFormatter = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)

@@ -55,7 +55,7 @@ class JacksonParser(
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
-  private val timeFormatter = DateTimeFormatter(
+  private val timeFormatter = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)

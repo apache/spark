@@ -77,7 +77,7 @@ private[sql] class JacksonGenerator(
 
   private val lineSeparator: String = options.lineSeparatorInWrite
 
-  private val timeFormatter = DateTimeFormatter(
+  private val timeFormatter = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)
