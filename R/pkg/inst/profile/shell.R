@@ -42,7 +42,7 @@
   if (nchar(sparkVer) == 0) {
     cat("\n")
   } else {
-    cat("   version ", sparkVer, "\n")
+    cat("   version", sparkVer, "\n")
   }
   cat("      /_/", "\n")
   cat("\n")
