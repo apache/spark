@@ -642,9 +642,9 @@ This way the application can be configured via Spark parameters and may not need
 configuration (Spark can use Kafka's dynamic JAAS configuration feature). For further information
 about delegation tokens, see [Kafka delegation token docs](http://kafka.apache.org/documentation/#security_delegation_token).
 
-The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.bootstrap.servers`,
+The process is initiated by Spark's Kafka delegation token provider. When `spark.kafka.bootstrap.servers` is set,
 Spark considers the following log in options, in order of preference:
-- **JAAS login configuration**
+- **JAAS login configuration**, please see example below.
 - **Keytab file**, such as,
 
       ./bin/spark-submit \
@@ -669,144 +669,8 @@ Kafka broker configuration):
 
 After obtaining delegation token successfully, Spark distributes it across nodes and renews it accordingly.
 Delegation token uses `SCRAM` login module for authentication and because of that the appropriate
-`sasl.mechanism` has to be configured on source/sink (it must match with Kafka broker configuration):
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-{% highlight scala %}
-
-// Setting on Kafka Source for Streaming Queries
-val df = spark
-  .readStream
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512")
-  .option("subscribe", "topic1")
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-  .as[(String, String)]
-
-// Setting on Kafka Source for Batch Queries
-val df = spark
-  .read
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512")
-  .option("subscribe", "topic1")
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-  .as[(String, String)]
-
-// Setting on Kafka Sink for Streaming Queries
-val ds = df
-  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-  .writeStream
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512")
-  .option("topic", "topic1")
-  .start()
-
-// Setting on Kafka Sink for Batch Queries
-val ds = df
-  .selectExpr("topic1", "CAST(key AS STRING)", "CAST(value AS STRING)")
-  .write
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512")
-  .save()
-
-{% endhighlight %}
-</div>
-<div data-lang="java" markdown="1">
-{% highlight java %}
-
-// Setting on Kafka Source for Streaming Queries
-Dataset<Row> df = spark
-  .readStream()
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512")
-  .option("subscribe", "topic1")
-  .load();
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
-
-// Setting on Kafka Source for Batch Queries
-Dataset<Row> df = spark
-  .read()
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512")
-  .option("subscribe", "topic1")
-  .load();
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
-
-// Setting on Kafka Sink for Streaming Queries
-StreamingQuery ds = df
-  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-  .writeStream()
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512")
-  .option("topic", "topic1")
-  .start();
-
-// Setting on Kafka Sink for Batch Queries
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-  .write()
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512")
-  .option("topic", "topic1")
-  .save();
-
-{% endhighlight %}
-</div>
-<div data-lang="python" markdown="1">
-{% highlight python %}
-
-// Setting on Kafka Source for Streaming Queries
-df = spark \
-  .readStream \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512") \
-  .option("subscribe", "topic1") \
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-
-// Setting on Kafka Source for Batch Queries
-df = spark \
-  .read \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512") \
-  .option("subscribe", "topic1") \
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-
-// Setting on Kafka Sink for Streaming Queries
-ds = df \
-  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
-  .writeStream \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512") \
-  .option("topic", "topic1") \
-  .start()
-
-// Setting on Kafka Sink for Batch Queries
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
-  .write \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("kafka.sasl.mechanism", "SCRAM-SHA-512") \
-  .option("topic", "topic1") \
-  .save()
-
-{% endhighlight %}
-</div>
-</div>
+`spark.kafka.sasl.token.mechanism` (default: `SCRAM-SHA-512`) has to be configured. Also, this parameter
+must match with Kafka broker configuration.
 
 When delegation token is available on an executor it can be overridden with JAAS login configuration.
 
