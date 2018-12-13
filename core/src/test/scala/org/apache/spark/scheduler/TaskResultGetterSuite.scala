@@ -34,8 +34,8 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
-import org.apache.spark.storage.TaskResultBlockId
 import org.apache.spark.TestUtils.JavaSourceFromString
+import org.apache.spark.storage.TaskResultBlockId
 import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, Utils}
 
 
@@ -194,7 +194,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
       // jar.
       sc = new SparkContext("local", "test", conf)
       val rdd = sc.parallelize(Seq(1), 1).map { _ =>
-        val exc = excClass.newInstance().asInstanceOf[Exception]
+        val exc = excClass.getConstructor().newInstance().asInstanceOf[Exception]
         throw exc
       }
 
@@ -265,7 +265,9 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
 
 private class UndeserializableException extends Exception {
   private def readObject(in: ObjectInputStream): Unit = {
+    // scalastyle:off throwerror
     throw new NoClassDefFoundError()
+    // scalastyle:on throwerror
   }
 }
 

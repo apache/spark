@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.util.Try
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -109,79 +110,23 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
     maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setMaxDepth(value: Int): this.type = set(maxDepth, value)
-
   /** @group getParam */
   final def getMaxDepth: Int = $(maxDepth)
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setMaxBins(value: Int): this.type = set(maxBins, value)
 
   /** @group getParam */
   final def getMaxBins: Int = $(maxBins)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
-
   /** @group getParam */
   final def getMinInstancesPerNode: Int = $(minInstancesPerNode)
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
   /** @group getParam */
   final def getMinInfoGain: Double = $(minInfoGain)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setSeed(value: Long): this.type = set(seed, value)
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group expertSetParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
-
   /** @group expertGetParam */
   final def getMaxMemoryInMB: Int = $(maxMemoryInMB)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group expertSetParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
-
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(
@@ -225,13 +170,6 @@ private[ml] trait TreeClassifierParams extends Params {
 
   setDefault(impurity -> "gini")
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setImpurity(value: String): this.type = set(impurity, value)
-
   /** @group getParam */
   final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
 
@@ -257,11 +195,7 @@ private[ml] object TreeClassifierParams {
 private[ml] trait DecisionTreeClassifierParams
   extends DecisionTreeParams with TreeClassifierParams
 
-/**
- * Parameters for Decision Tree-based regression algorithms.
- */
-private[ml] trait TreeRegressorParams extends Params {
-
+private[ml] trait HasVarianceImpurity extends Params {
   /**
    * Criterion used for information gain calculation (case-insensitive).
    * Supported: "variance".
@@ -270,18 +204,11 @@ private[ml] trait TreeRegressorParams extends Params {
    */
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
-    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
+    s" ${HasVarianceImpurity.supportedImpurities.mkString(", ")}",
     (value: String) =>
-      TreeRegressorParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
+      HasVarianceImpurity.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(impurity -> "variance")
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
   final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
@@ -298,11 +225,16 @@ private[ml] trait TreeRegressorParams extends Params {
   }
 }
 
-private[ml] object TreeRegressorParams {
+private[ml] object HasVarianceImpurity {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] =
     Array("variance").map(_.toLowerCase(Locale.ROOT))
 }
+
+/**
+ * Parameters for Decision Tree-based regression algorithms.
+ */
+private[ml] trait TreeRegressorParams extends HasVarianceImpurity
 
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
   with TreeRegressorParams with HasVarianceCol {
@@ -318,6 +250,12 @@ private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
       newSchema
     }
   }
+}
+
+private[spark] object TreeEnsembleParams {
+  // These options should be lowercase.
+  final val supportedFeatureSubsetStrategies: Array[String] =
+    Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase(Locale.ROOT))
 }
 
 /**
@@ -338,13 +276,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
   setDefault(subsamplingRate -> 1.0)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
-
   /** @group getParam */
   final def getSubsamplingRate: Double = $(subsamplingRate)
 
@@ -359,38 +290,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
       oldImpurity: OldImpurity): OldStrategy = {
     super.getOldStrategy(categoricalFeatures, numClasses, oldAlgo, oldImpurity, getSubsamplingRate)
   }
-}
-
-/**
- * Parameters for Random Forest algorithms.
- */
-private[ml] trait RandomForestParams extends TreeEnsembleParams {
-
-  /**
-   * Number of trees to train (>= 1).
-   * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
-   * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
-   * (default = 20)
-   *
-   * Note: The reason that we cannot add this to both GBT and RF (i.e. in TreeEnsembleParams)
-   * is the param `maxIter` controls how many trees a GBT has. The semantics in the algorithms
-   * are a bit different.
-   * @group param
-   */
-  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
-    ParamValidators.gtEq(1))
-
-  setDefault(numTrees -> 20)
-
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setNumTrees(value: Int): this.type = set(numTrees, value)
-
-  /** @group getParam */
-  final def getNumTrees: Int = $(numTrees)
 
   /**
    * The number of features to consider for splits at each tree node.
@@ -420,31 +319,45 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
    */
   final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
     "The number of features to consider for splits at each tree node." +
-      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
+      s" Supported options: ${TreeEnsembleParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
       s", (0.0-1.0], [1-n].",
     (value: String) =>
-      RandomForestParams.supportedFeatureSubsetStrategies.contains(
+      TreeEnsembleParams.supportedFeatureSubsetStrategies.contains(
         value.toLowerCase(Locale.ROOT))
       || Try(value.toInt).filter(_ > 0).isSuccess
       || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
 
   setDefault(featureSubsetStrategy -> "auto")
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
-
   /** @group getParam */
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
 }
 
-private[spark] object RandomForestParams {
-  // These options should be lowercase.
-  final val supportedFeatureSubsetStrategies: Array[String] =
-    Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase(Locale.ROOT))
+
+
+/**
+ * Parameters for Random Forest algorithms.
+ */
+private[ml] trait RandomForestParams extends TreeEnsembleParams {
+
+  /**
+   * Number of trees to train (>= 1).
+   * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
+   * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
+   * (default = 20)
+   *
+   * Note: The reason that we cannot add this to both GBT and RF (i.e. in TreeEnsembleParams)
+   * is the param `maxIter` controls how many trees a GBT has. The semantics in the algorithms
+   * are a bit different.
+   * @group param
+   */
+  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
+    ParamValidators.gtEq(1))
+
+  setDefault(numTrees -> 20)
+
+  /** @group getParam */
+  final def getNumTrees: Int = $(numTrees)
 }
 
 private[ml] trait RandomForestClassifierParams
@@ -458,25 +371,34 @@ private[ml] trait RandomForestRegressorParams
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
-
-  /* TODO: Add this doc when we add this param.  SPARK-7132
-   * Threshold for stopping early when runWithValidation is used.
-   * If the error rate on the validation input changes by less than the validationTol,
-   * then learning will stop early (before [[numIterations]]).
-   * This parameter is ignored when run is used.
-   * (default = 1e-5)
-   * @group param
-   */
-  // final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
-  // validationTol -> 1e-5
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize
+  with HasValidationIndicatorCol {
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
+   * Threshold for stopping early when fit with validation is used.
+   * (This parameter is ignored when fit without validation is used.)
+   * The decision to stop early is decided based on this logic:
+   * If the current loss on the validation set is greater than 0.01, the diff
+   * of validation error is compared to relative tolerance which is
+   * validationTol * (current loss on the validation set).
+   * If the current loss on the validation set is less than or equal to 0.01,
+   * the diff of validation error is compared to absolute tolerance which is
+   * validationTol * 0.01.
+   * @group param
+   * @see validationIndicatorCol
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setMaxIter(value: Int): this.type = set(maxIter, value)
+  @Since("2.4.0")
+  final val validationTol: DoubleParam = new DoubleParam(this, "validationTol",
+    "Threshold for stopping early when fit with validation is used." +
+    "If the error rate on the validation input changes by less than the validationTol," +
+    "then learning will stop early (before `maxIter`)." +
+    "This parameter is ignored when fit without validation is used.",
+    ParamValidators.gtEq(0.0)
+  )
+
+  /** @group getParam */
+  @Since("2.4.0")
+  final def getValidationTol: Double = $(validationTol)
 
   /**
    * Param for Step size (a.k.a. learning rate) in interval (0, 1] for shrinking
@@ -484,21 +406,13 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
    * (default = 0.1)
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size " +
+  final override val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size " +
     "(a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator.",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
-  /** @group getParam */
-  final def getStepSize: Double = $(stepSize)
+  setDefault(maxIter -> 20, stepSize -> 0.1, validationTol -> 0.01)
 
-  /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
-   * @group setParam
-   */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
-  def setStepSize(value: Double): this.type = set(stepSize, value)
-
-  setDefault(maxIter -> 20, stepSize -> 0.1)
+  setDefault(featureSubsetStrategy -> "all")
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(
@@ -506,7 +420,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
       oldAlgo: OldAlgo.Algo): OldBoostingStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2, oldAlgo, OldVariance)
     // NOTE: The old API does not support "seed" so we ignore it.
-    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize)
+    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize, getValidationTol)
   }
 
   /** Get old Gradient Boosting Loss type */
@@ -520,7 +434,7 @@ private[ml] object GBTClassifierParams {
     Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
+private[ml] trait GBTClassifierParams extends GBTParams with HasVarianceImpurity {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
@@ -578,7 +492,11 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
-    getLossType match {
+    convertToOldLossType(getLossType)
+  }
+
+  private[ml] def convertToOldLossType(loss: String): OldLoss = {
+    loss match {
       case "squared" => OldSquaredError
       case "absolute" => OldAbsoluteError
       case _ =>

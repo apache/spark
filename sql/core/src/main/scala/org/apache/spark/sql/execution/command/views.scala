@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.util.SchemaUtils
 
 
 /**
@@ -159,7 +160,9 @@ case class CreateViewCommand(
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
+        // Nothing we need to retain from the old view, so just drop and create a new one
+        catalog.dropTable(viewIdent, ignoreIfNotExists = false, purge = false)
+        catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
@@ -239,6 +242,7 @@ case class CreateViewCommand(
       storage = CatalogStorageFormat.empty,
       schema = aliasPlan(session, analyzedPlan).schema,
       properties = newProperties,
+      viewOriginalText = originalText,
       viewText = originalText,
       comment = comment
     )
@@ -296,6 +300,7 @@ case class AlterViewAsCommand(
     val updatedViewMeta = viewMeta.copy(
       schema = analyzedPlan.schema,
       properties = newProperties,
+      viewOriginalText = Some(originalText),
       viewText = Some(originalText))
 
     session.sessionState.catalog.alterTable(updatedViewMeta)
@@ -353,15 +358,15 @@ object ViewHelper {
       properties: Map[String, String],
       session: SparkSession,
       analyzedPlan: LogicalPlan): Map[String, String] = {
+    val queryOutput = analyzedPlan.schema.fieldNames
+
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
-    val queryOutput = analyzedPlan.schema.fieldNames
-    assert(queryOutput.distinct.size == queryOutput.size,
-      s"The view output ${queryOutput.mkString("(", ",", ")")} contains duplicate column name.")
+    SchemaUtils.checkColumnNameDuplication(
+      queryOutput, "in the view definition", session.sessionState.conf.resolver)
 
     // Generate the view default database name.
     val viewDefaultDatabase = session.sessionState.catalog.getCurrentDatabase
-
     removeQueryColumnNames(properties) ++
       generateViewDefaultDatabase(viewDefaultDatabase) ++
       generateQueryColumnNames(queryOutput)

@@ -80,7 +80,7 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
   /**
    * Instrumentation logging for tuning params including the inner estimator and evaluator info.
    */
-  protected def logTuningParams(instrumentation: Instrumentation[_]): Unit = {
+  protected def logTuningParams(instrumentation: Instrumentation): Unit = {
     instrumentation.logNamedValue("estimator", $(estimator).getClass.getCanonicalName)
     instrumentation.logNamedValue("evaluator", $(evaluator).getClass.getCanonicalName)
     instrumentation.logNamedValue("estimatorParamMapsLength", $(estimatorParamMaps).length)
@@ -126,28 +126,38 @@ private[ml] object ValidatorParams {
       extraMetadata: Option[JObject] = None): Unit = {
     import org.json4s.JsonDSL._
 
+    var numParamsNotJson = 0
     val estimatorParamMapsJson = compact(render(
       instance.getEstimatorParamMaps.map { case paramMap =>
         paramMap.toSeq.map { case ParamPair(p, v) =>
-          Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v))
+          v match {
+            case writeableObj: DefaultParamsWritable =>
+              val relativePath = "epm_" + p.name + numParamsNotJson
+              val paramPath = new Path(path, relativePath).toString
+              numParamsNotJson += 1
+              writeableObj.save(paramPath)
+              Map("parent" -> p.parent, "name" -> p.name,
+                "value" -> compact(render(JString(relativePath))),
+                "isJson" -> compact(render(JBool(false))))
+            case _: MLWritable =>
+              throw new UnsupportedOperationException("ValidatorParams.saveImpl does not handle" +
+                " parameters of type: MLWritable that are not DefaultParamsWritable")
+            case _ =>
+              Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v),
+                "isJson" -> compact(render(JBool(true))))
+          }
         }
       }.toSeq
     ))
 
-    val validatorSpecificParams = instance match {
-      case cv: CrossValidatorParams =>
-        List("numFolds" -> parse(cv.numFolds.jsonEncode(cv.getNumFolds)))
-      case tvs: TrainValidationSplitParams =>
-        List("trainRatio" -> parse(tvs.trainRatio.jsonEncode(tvs.getTrainRatio)))
-      case _ =>
-        // This should not happen.
-        throw new NotImplementedError("ValidatorParams.saveImpl does not handle type: " +
-          instance.getClass.getCanonicalName)
-    }
-
-    val jsonParams = validatorSpecificParams ++ List(
-      "estimatorParamMaps" -> parse(estimatorParamMapsJson),
-      "seed" -> parse(instance.seed.jsonEncode(instance.getSeed)))
+    val params = instance.extractParamMap().toSeq
+    val skipParams = List("estimator", "evaluator", "estimatorParamMaps")
+    val jsonParams = render(params
+      .filter { case ParamPair(p, v) => !skipParams.contains(p.name)}
+      .map { case ParamPair(p, v) =>
+        p.name -> parse(p.jsonEncode(v))
+      }.toList ++ List("estimatorParamMaps" -> parse(estimatorParamMapsJson))
+    )
 
     DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
 
@@ -183,8 +193,17 @@ private[ml] object ValidatorParams {
           val paramPairs = pMap.map { case pInfo: Map[String, String] =>
             val est = uidToParams(pInfo("parent"))
             val param = est.getParam(pInfo("name"))
-            val value = param.jsonDecode(pInfo("value"))
-            param -> value
+            // [Spark-21221] introduced the isJson field
+            if (!pInfo.contains("isJson") ||
+                (pInfo.contains("isJson") && pInfo("isJson").toBoolean.booleanValue())) {
+              val value = param.jsonDecode(pInfo("value"))
+              param -> value
+            } else {
+              val relativePath = param.jsonDecode(pInfo("value")).toString
+              val value = DefaultParamsReader
+                .loadParamsInstance[MLWritable](new Path(path, relativePath).toString, sc)
+              param -> value
+            }
           }
           ParamMap(paramPairs: _*)
       }.toArray

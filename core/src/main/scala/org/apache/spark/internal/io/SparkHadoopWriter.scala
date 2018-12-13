@@ -17,143 +17,378 @@
 
 package org.apache.spark.internal.io
 
-import java.io.IOException
-import java.text.{NumberFormat, SimpleDateFormat}
+import java.text.NumberFormat
 import java.util.{Date, Locale}
 
+import scala.reflect.ClassTag
+
+import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
-import org.apache.hadoop.mapreduce.TaskType
+import org.apache.hadoop.mapreduce.{JobContext => NewJobContext,
+OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
+TaskAttemptContext => NewTaskAttemptContext, TaskAttemptID => NewTaskAttemptID, TaskType}
+import org.apache.hadoop.mapreduce.task.{TaskAttemptContextImpl => NewTaskAttemptContextImpl}
 
-import org.apache.spark.SerializableWritable
+import org.apache.spark.{SerializableWritable, SparkConf, SparkException, TaskContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.rdd.HadoopRDD
-import org.apache.spark.util.SerializableJobConf
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.rdd.{HadoopRDD, RDD}
+import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
 
 /**
- * Internal helper class that saves an RDD using a Hadoop OutputFormat.
- *
- * Saves the RDD using a JobConf, which should contain an output key class, an output value class,
- * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
+ * A helper object that saves an RDD using a Hadoop OutputFormat.
  */
 private[spark]
-class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
+object SparkHadoopWriter extends Logging {
+  import SparkHadoopWriterUtils._
 
-  private val now = new Date()
-  private val conf = new SerializableJobConf(jobConf)
+  /**
+   * Basic work flow of this command is:
+   * 1. Driver side setup, prepare the data source and hadoop configuration for the write job to
+   *    be issued.
+   * 2. Issues a write job consists of one or more executor side tasks, each of which writes all
+   *    rows within an RDD partition.
+   * 3. If no exception is thrown in a task, commits that task, otherwise aborts that task;  If any
+   *    exception is thrown during task commitment, also aborts that task.
+   * 4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
+   *    thrown during job commitment, also aborts the job.
+   */
+  def write[K, V: ClassTag](
+      rdd: RDD[(K, V)],
+      config: HadoopWriteConfigUtil[K, V]): Unit = {
+    // Extract context and configuration from RDD.
+    val sparkContext = rdd.context
+    val commitJobId = rdd.id
 
-  private var jobID = 0
-  private var splitID = 0
-  private var attemptID = 0
-  private var jID: SerializableWritable[JobID] = null
-  private var taID: SerializableWritable[TaskAttemptID] = null
+    // Set up a job.
+    val jobTrackerId = createJobTrackerID(new Date())
+    val jobContext = config.createJobContext(jobTrackerId, commitJobId)
+    config.initOutputFormat(jobContext)
 
-  @transient private var writer: RecordWriter[AnyRef, AnyRef] = null
-  @transient private var format: OutputFormat[AnyRef, AnyRef] = null
-  @transient private var committer: OutputCommitter = null
-  @transient private var jobContext: JobContext = null
-  @transient private var taskContext: TaskAttemptContext = null
+    // Assert the output format/key/value class is set in JobConf.
+    config.assertConf(jobContext, rdd.conf)
 
-  def preSetup() {
-    setIDs(0, 0, 0)
-    HadoopRDD.addLocalConfiguration("", 0, 0, 0, conf.value)
+    val committer = config.createCommitter(commitJobId)
+    committer.setupJob(jobContext)
 
-    val jCtxt = getJobContext()
-    getOutputCommitter().setupJob(jCtxt)
+    // Try to write all RDD partitions as a Hadoop OutputFormat.
+    try {
+      val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
+        // SPARK-24552: Generate a unique "attempt ID" based on the stage and task attempt numbers.
+        // Assumes that there won't be more than Short.MaxValue attempts, at least not concurrently.
+        val attemptId = (context.stageAttemptNumber << 16) | context.attemptNumber
+
+        executeTask(
+          context = context,
+          config = config,
+          jobTrackerId = jobTrackerId,
+          commitJobId = commitJobId,
+          sparkPartitionId = context.partitionId,
+          sparkAttemptNumber = attemptId,
+          committer = committer,
+          iterator = iter)
+      })
+
+      committer.commitJob(jobContext, ret)
+      logInfo(s"Job ${jobContext.getJobID} committed.")
+    } catch {
+      case cause: Throwable =>
+        logError(s"Aborting job ${jobContext.getJobID}.", cause)
+        committer.abortJob(jobContext)
+        throw new SparkException("Job aborted.", cause)
+    }
   }
 
+  /** Write a RDD partition out in a single Spark task. */
+  private def executeTask[K, V: ClassTag](
+      context: TaskContext,
+      config: HadoopWriteConfigUtil[K, V],
+      jobTrackerId: String,
+      commitJobId: Int,
+      sparkPartitionId: Int,
+      sparkAttemptNumber: Int,
+      committer: FileCommitProtocol,
+      iterator: Iterator[(K, V)]): TaskCommitMessage = {
+    // Set up a task.
+    val taskContext = config.createTaskAttemptContext(
+      jobTrackerId, commitJobId, sparkPartitionId, sparkAttemptNumber)
+    committer.setupTask(taskContext)
 
-  def setup(jobid: Int, splitid: Int, attemptid: Int) {
-    setIDs(jobid, splitid, attemptid)
-    HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(now),
-      jobid, splitID, attemptID, conf.value)
+    val (outputMetrics, callback) = initHadoopOutputMetrics(context)
+
+    // Initiate the writer.
+    config.initWriter(taskContext, sparkPartitionId)
+    var recordsWritten = 0L
+
+    // Write all rows in RDD partition.
+    try {
+      val ret = Utils.tryWithSafeFinallyAndFailureCallbacks {
+        while (iterator.hasNext) {
+          val pair = iterator.next()
+          config.write(pair)
+
+          // Update bytes written metric every few records
+          maybeUpdateOutputMetrics(outputMetrics, callback, recordsWritten)
+          recordsWritten += 1
+        }
+
+        config.closeWriter(taskContext)
+        committer.commitTask(taskContext)
+      }(catchBlock = {
+        // If there is an error, release resource and then abort the task.
+        try {
+          config.closeWriter(taskContext)
+        } finally {
+          committer.abortTask(taskContext)
+          logError(s"Task ${taskContext.getTaskAttemptID} aborted.")
+        }
+      })
+
+      outputMetrics.setBytesWritten(callback())
+      outputMetrics.setRecordsWritten(recordsWritten)
+
+      ret
+    } catch {
+      case t: Throwable =>
+        throw new SparkException("Task failed while writing rows", t)
+    }
+  }
+}
+
+/**
+ * A helper class that reads JobConf from older mapred API, creates output Format/Committer/Writer.
+ */
+private[spark]
+class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
+  extends HadoopWriteConfigUtil[K, V] with Logging {
+
+  private var outputFormat: Class[_ <: OutputFormat[K, V]] = null
+  private var writer: RecordWriter[K, V] = null
+
+  private def getConf: JobConf = conf.value
+
+  // --------------------------------------------------------------------------
+  // Create JobContext/TaskAttemptContext
+  // --------------------------------------------------------------------------
+
+  override def createJobContext(jobTrackerId: String, jobId: Int): NewJobContext = {
+    val jobAttemptId = new SerializableWritable(new JobID(jobTrackerId, jobId))
+    new JobContextImpl(getConf, jobAttemptId.value)
   }
 
-  def open() {
+  override def createTaskAttemptContext(
+      jobTrackerId: String,
+      jobId: Int,
+      splitId: Int,
+      taskAttemptId: Int): NewTaskAttemptContext = {
+    // Update JobConf.
+    HadoopRDD.addLocalConfiguration(jobTrackerId, jobId, splitId, taskAttemptId, conf.value)
+    // Create taskContext.
+    val attemptId = new TaskAttemptID(jobTrackerId, jobId, TaskType.MAP, splitId, taskAttemptId)
+    new TaskAttemptContextImpl(getConf, attemptId)
+  }
+
+  // --------------------------------------------------------------------------
+  // Create committer
+  // --------------------------------------------------------------------------
+
+  override def createCommitter(jobId: Int): HadoopMapReduceCommitProtocol = {
+    // Update JobConf.
+    HadoopRDD.addLocalConfiguration("", 0, 0, 0, getConf)
+    // Create commit protocol.
+    FileCommitProtocol.instantiate(
+      className = classOf[HadoopMapRedCommitProtocol].getName,
+      jobId = jobId.toString,
+      outputPath = getConf.get("mapred.output.dir")
+    ).asInstanceOf[HadoopMapReduceCommitProtocol]
+  }
+
+  // --------------------------------------------------------------------------
+  // Create writer
+  // --------------------------------------------------------------------------
+
+  override def initWriter(taskContext: NewTaskAttemptContext, splitId: Int): Unit = {
     val numfmt = NumberFormat.getInstance(Locale.US)
     numfmt.setMinimumIntegerDigits(5)
     numfmt.setGroupingUsed(false)
 
-    val outputName = "part-"  + numfmt.format(splitID)
-    val path = FileOutputFormat.getOutputPath(conf.value)
+    val outputName = "part-" + numfmt.format(splitId)
+    val path = FileOutputFormat.getOutputPath(getConf)
     val fs: FileSystem = {
       if (path != null) {
-        path.getFileSystem(conf.value)
+        path.getFileSystem(getConf)
       } else {
-        FileSystem.get(conf.value)
+        FileSystem.get(getConf)
       }
     }
 
-    getOutputCommitter().setupTask(getTaskContext())
-    writer = getOutputFormat().getRecordWriter(fs, conf.value, outputName, Reporter.NULL)
+    writer = getConf.getOutputFormat
+      .getRecordWriter(fs, getConf, outputName, Reporter.NULL)
+      .asInstanceOf[RecordWriter[K, V]]
+
+    require(writer != null, "Unable to obtain RecordWriter")
   }
 
-  def write(key: AnyRef, value: AnyRef) {
+  override def write(pair: (K, V)): Unit = {
+    require(writer != null, "Must call createWriter before write.")
+    writer.write(pair._1, pair._2)
+  }
+
+  override def closeWriter(taskContext: NewTaskAttemptContext): Unit = {
     if (writer != null) {
-      writer.write(key, value)
+      writer.close(Reporter.NULL)
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Create OutputFormat
+  // --------------------------------------------------------------------------
+
+  override def initOutputFormat(jobContext: NewJobContext): Unit = {
+    if (outputFormat == null) {
+      outputFormat = getConf.getOutputFormat.getClass
+        .asInstanceOf[Class[_ <: OutputFormat[K, V]]]
+    }
+  }
+
+  private def getOutputFormat(): OutputFormat[K, V] = {
+    require(outputFormat != null, "Must call initOutputFormat first.")
+
+    outputFormat.getConstructor().newInstance()
+  }
+
+  // --------------------------------------------------------------------------
+  // Verify hadoop config
+  // --------------------------------------------------------------------------
+
+  override def assertConf(jobContext: NewJobContext, conf: SparkConf): Unit = {
+    val outputFormatInstance = getOutputFormat()
+    val keyClass = getConf.getOutputKeyClass
+    val valueClass = getConf.getOutputValueClass
+    if (outputFormatInstance == null) {
+      throw new SparkException("Output format class not set")
+    }
+    if (keyClass == null) {
+      throw new SparkException("Output key class not set")
+    }
+    if (valueClass == null) {
+      throw new SparkException("Output value class not set")
+    }
+    SparkHadoopUtil.get.addCredentials(getConf)
+
+    logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
+      valueClass.getSimpleName + ")")
+
+    if (SparkHadoopWriterUtils.isOutputSpecValidationEnabled(conf)) {
+      // FileOutputFormat ignores the filesystem parameter
+      val ignoredFs = FileSystem.get(getConf)
+      getOutputFormat().checkOutputSpecs(ignoredFs, getConf)
+    }
+  }
+}
+
+/**
+ * A helper class that reads Configuration from newer mapreduce API, creates output
+ * Format/Committer/Writer.
+ */
+private[spark]
+class HadoopMapReduceWriteConfigUtil[K, V: ClassTag](conf: SerializableConfiguration)
+  extends HadoopWriteConfigUtil[K, V] with Logging {
+
+  private var outputFormat: Class[_ <: NewOutputFormat[K, V]] = null
+  private var writer: NewRecordWriter[K, V] = null
+
+  private def getConf: Configuration = conf.value
+
+  // --------------------------------------------------------------------------
+  // Create JobContext/TaskAttemptContext
+  // --------------------------------------------------------------------------
+
+  override def createJobContext(jobTrackerId: String, jobId: Int): NewJobContext = {
+    val jobAttemptId = new NewTaskAttemptID(jobTrackerId, jobId, TaskType.MAP, 0, 0)
+    new NewTaskAttemptContextImpl(getConf, jobAttemptId)
+  }
+
+  override def createTaskAttemptContext(
+      jobTrackerId: String,
+      jobId: Int,
+      splitId: Int,
+      taskAttemptId: Int): NewTaskAttemptContext = {
+    val attemptId = new NewTaskAttemptID(
+      jobTrackerId, jobId, TaskType.REDUCE, splitId, taskAttemptId)
+    new NewTaskAttemptContextImpl(getConf, attemptId)
+  }
+
+  // --------------------------------------------------------------------------
+  // Create committer
+  // --------------------------------------------------------------------------
+
+  override def createCommitter(jobId: Int): HadoopMapReduceCommitProtocol = {
+    FileCommitProtocol.instantiate(
+      className = classOf[HadoopMapReduceCommitProtocol].getName,
+      jobId = jobId.toString,
+      outputPath = getConf.get("mapreduce.output.fileoutputformat.outputdir")
+    ).asInstanceOf[HadoopMapReduceCommitProtocol]
+  }
+
+  // --------------------------------------------------------------------------
+  // Create writer
+  // --------------------------------------------------------------------------
+
+  override def initWriter(taskContext: NewTaskAttemptContext, splitId: Int): Unit = {
+    val taskFormat = getOutputFormat()
+    // If OutputFormat is Configurable, we should set conf to it.
+    taskFormat match {
+      case c: Configurable => c.setConf(getConf)
+      case _ => ()
+    }
+
+    writer = taskFormat.getRecordWriter(taskContext)
+      .asInstanceOf[NewRecordWriter[K, V]]
+
+    require(writer != null, "Unable to obtain RecordWriter")
+  }
+
+  override def write(pair: (K, V)): Unit = {
+    require(writer != null, "Must call createWriter before write.")
+    writer.write(pair._1, pair._2)
+  }
+
+  override def closeWriter(taskContext: NewTaskAttemptContext): Unit = {
+    if (writer != null) {
+      writer.close(taskContext)
+      writer = null
     } else {
-      throw new IOException("Writer is null, open() has not been called")
+      logWarning("Writer has been closed.")
     }
   }
 
-  def close() {
-    writer.close(Reporter.NULL)
-  }
+  // --------------------------------------------------------------------------
+  // Create OutputFormat
+  // --------------------------------------------------------------------------
 
-  def commit() {
-    SparkHadoopMapRedUtil.commitTask(getOutputCommitter(), getTaskContext(), jobID, splitID)
-  }
-
-  def commitJob() {
-    val cmtr = getOutputCommitter()
-    cmtr.commitJob(getJobContext())
-  }
-
-  // ********* Private Functions *********
-
-  private def getOutputFormat(): OutputFormat[AnyRef, AnyRef] = {
-    if (format == null) {
-      format = conf.value.getOutputFormat()
-        .asInstanceOf[OutputFormat[AnyRef, AnyRef]]
+  override def initOutputFormat(jobContext: NewJobContext): Unit = {
+    if (outputFormat == null) {
+      outputFormat = jobContext.getOutputFormatClass
+        .asInstanceOf[Class[_ <: NewOutputFormat[K, V]]]
     }
-    format
   }
 
-  private def getOutputCommitter(): OutputCommitter = {
-    if (committer == null) {
-      committer = conf.value.getOutputCommitter
+  private def getOutputFormat(): NewOutputFormat[K, V] = {
+    require(outputFormat != null, "Must call initOutputFormat first.")
+
+    outputFormat.getConstructor().newInstance()
+  }
+
+  // --------------------------------------------------------------------------
+  // Verify hadoop config
+  // --------------------------------------------------------------------------
+
+  override def assertConf(jobContext: NewJobContext, conf: SparkConf): Unit = {
+    if (SparkHadoopWriterUtils.isOutputSpecValidationEnabled(conf)) {
+      getOutputFormat().checkOutputSpecs(jobContext)
     }
-    committer
-  }
-
-  private def getJobContext(): JobContext = {
-    if (jobContext == null) {
-      jobContext = new JobContextImpl(conf.value, jID.value)
-    }
-    jobContext
-  }
-
-  private def getTaskContext(): TaskAttemptContext = {
-    if (taskContext == null) {
-      taskContext = newTaskAttemptContext(conf.value, taID.value)
-    }
-    taskContext
-  }
-
-  protected def newTaskAttemptContext(
-      conf: JobConf,
-      attemptId: TaskAttemptID): TaskAttemptContext = {
-    new TaskAttemptContextImpl(conf, attemptId)
-  }
-
-  private def setIDs(jobid: Int, splitid: Int, attemptid: Int) {
-    jobID = jobid
-    splitID = splitid
-    attemptID = attemptid
-
-    jID = new SerializableWritable[JobID](SparkHadoopWriterUtils.createJobID(now, jobid))
-    taID = new SerializableWritable[TaskAttemptID](
-        new TaskAttemptID(new TaskID(jID.value, TaskType.MAP, splitID), attemptID))
   }
 }

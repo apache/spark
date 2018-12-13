@@ -36,7 +36,7 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.streaming.scheduler._
@@ -139,6 +139,8 @@ abstract class CommonWriteAheadLogTests(
         assert(getLogFilesInDirectory(testDir).size < logFiles.size)
       }
     }
+    writeAheadLog.close()
+    // Make sure it is idempotent.
     writeAheadLog.close()
   }
 
@@ -482,7 +484,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   // we make the write requests in separate threads so that we don't block the test thread
   private def writeAsync(wal: WriteAheadLog, event: String, time: Long): Promise[Unit] = {
     val p = Promise[Unit]()
-    p.completeWith(Future {
+    p.completeWith(Future[Unit] {
       val v = wal.write(event, time)
       assert(v === walHandle)
     }(walBatchingExecutionContext))

@@ -17,9 +17,8 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
 import scala.collection.mutable.ArrayBuffer
-
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM, SparseVector => BSV, Vector => BV}
 
 import org.apache.spark.{Partitioner, SparkException}
 import org.apache.spark.annotation.Since
@@ -27,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+
 
 /**
  * A grid partitioner, which uses a regular grid to partition coordinates.
@@ -273,24 +273,37 @@ class BlockMatrix @Since("1.3.0") (
     require(cols < Int.MaxValue, s"The number of columns should be less than Int.MaxValue ($cols).")
 
     val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
-      mat.rowIter.zipWithIndex.map {
+      mat.rowIter.zipWithIndex.filter(_._1.size > 0).map {
         case (vector, rowIdx) =>
-          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector.asBreeze)
+          blockRowIdx * rowsPerBlock + rowIdx -> ((blockColIdx, vector))
       }
     }.groupByKey().map { case (rowIdx, vectors) =>
-      val numberNonZeroPerRow = vectors.map(_._2.activeSize).sum.toDouble / cols.toDouble
+      val numberNonZero = vectors.map(_._2.numActives).sum
+      val numberNonZeroPerRow = numberNonZero.toDouble / cols.toDouble
 
-      val wholeVector = if (numberNonZeroPerRow <= 0.1) { // Sparse at 1/10th nnz
-        BSV.zeros[Double](cols)
-      } else {
-        BDV.zeros[Double](cols)
-      }
+      val wholeVector =
+        if (numberNonZeroPerRow <= 0.1) { // Sparse at 1/10th nnz
+          val arrBufferIndices = new ArrayBuffer[Int](numberNonZero)
+          val arrBufferValues = new ArrayBuffer[Double](numberNonZero)
 
-      vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
-        val offset = colsPerBlock * blockColIdx
-        wholeVector(offset until Math.min(cols, offset + colsPerBlock)) := vec
-      }
-      new IndexedRow(rowIdx, Vectors.fromBreeze(wholeVector))
+          vectors.foreach { case (blockColIdx: Int, vec: Vector) =>
+              val offset = colsPerBlock * blockColIdx
+              vec.foreachActive { case (colIdx: Int, value: Double) =>
+                arrBufferIndices += offset + colIdx
+                arrBufferValues  += value
+              }
+          }
+          Vectors.sparse(cols, arrBufferIndices.toArray, arrBufferValues.toArray)
+        } else {
+          val wholeVectorBuf = BDV.zeros[Double](cols)
+          vectors.foreach { case (blockColIdx: Int, vec: Vector) =>
+            val offset = colsPerBlock * blockColIdx
+            wholeVectorBuf(offset until Math.min(cols, offset + colsPerBlock)) := vec.asBreeze
+          }
+          Vectors.fromBreeze(wholeVectorBuf)
+        }
+
+      IndexedRow(rowIdx, wholeVector)
     }
     new IndexedRowMatrix(rows)
   }
@@ -309,7 +322,7 @@ class BlockMatrix @Since("1.3.0") (
     val m = numRows().toInt
     val n = numCols().toInt
     val mem = m * n / 125000
-    if (mem > 500) logWarning(s"Storing this matrix will require $mem MB of memory!")
+    if (mem > 500) logWarning(s"Storing this matrix will require $mem MiB of memory!")
     val localBlocks = blocks.collect()
     val values = new Array[Double](m * n)
     localBlocks.foreach { case ((blockRowIndex, blockColIndex), submat) =>

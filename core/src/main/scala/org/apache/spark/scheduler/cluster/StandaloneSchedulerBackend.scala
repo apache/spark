@@ -45,6 +45,7 @@ private[spark] class StandaloneSchedulerBackend(
   private var client: StandaloneAppClient = null
   private val stopping = new AtomicBoolean(false)
   private val launcherBackend = new LauncherBackend() {
+    override protected def conf: SparkConf = sc.conf
     override protected def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
   }
 
@@ -58,7 +59,13 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def start() {
     super.start()
-    launcherBackend.connect()
+
+    // SPARK-21159. The scheduler backend should only try to connect to the launcher when in client
+    // mode. In cluster mode, the code that submits the application to the Master needs to connect
+    // to the launcher instead.
+    if (sc.deployMode == "client") {
+      launcherBackend.connect()
+    }
 
     // The endpoint for executors to talk to us
     val driverUrl = RpcEndpointAddress(
@@ -147,7 +154,7 @@ private[spark] class StandaloneSchedulerBackend(
 
   override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int,
     memory: Int) {
-    logInfo("Granted executor ID %s on hostPort %s with %d cores, %s RAM".format(
+    logInfo("Granted executor ID %s on hostPort %s with %d core(s), %s RAM".format(
       fullId, hostPort, cores, Utils.megabytesToString(memory)))
   }
 
@@ -159,6 +166,11 @@ private[spark] class StandaloneSchedulerBackend(
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
     removeExecutor(fullId.split("/")(1), reason)
+  }
+
+  override def workerRemoved(workerId: String, host: String, message: String): Unit = {
+    logInfo("Worker %s removed: %s".format(workerId, message))
+    removeWorker(workerId, host, message)
   }
 
   override def sufficientResourcesRegistered(): Boolean = {

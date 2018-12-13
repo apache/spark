@@ -17,16 +17,13 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
-class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
-  with DefaultReadWriteTest {
+class StandardScalerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -60,12 +57,10 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
     )
   }
 
-  def assertResult(df: DataFrame): Unit = {
-    df.select("standardized_features", "expected").collect().foreach {
-      case Row(vector1: Vector, vector2: Vector) =>
-        assert(vector1 ~== vector2 absTol 1E-5,
-          "The vector value is not correct after standardization.")
-    }
+  def assertResult: Row => Unit = {
+    case Row(vector1: Vector, vector2: Vector) =>
+      assert(vector1 ~== vector2 absTol 1E-5,
+        "The vector value is not correct after standardization.")
   }
 
   test("params") {
@@ -83,7 +78,8 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
     val standardScaler0 = standardScalerEst0.fit(df0)
     MLTestingUtils.checkCopyAndUids(standardScalerEst0, standardScaler0)
 
-    assertResult(standardScaler0.transform(df0))
+    testTransformer[(Vector, Vector)](df0, standardScaler0, "standardized_features", "expected")(
+      assertResult)
   }
 
   test("Standardization with setter") {
@@ -112,9 +108,12 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setWithStd(false)
       .fit(df3)
 
-    assertResult(standardScaler1.transform(df1))
-    assertResult(standardScaler2.transform(df2))
-    assertResult(standardScaler3.transform(df3))
+    testTransformer[(Vector, Vector)](df1, standardScaler1, "standardized_features", "expected")(
+      assertResult)
+    testTransformer[(Vector, Vector)](df2, standardScaler2, "standardized_features", "expected")(
+      assertResult)
+    testTransformer[(Vector, Vector)](df3, standardScaler3, "standardized_features", "expected")(
+      assertResult)
   }
 
   test("sparse data and withMean") {
@@ -130,7 +129,8 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setWithMean(true)
       .setWithStd(false)
       .fit(df)
-    assertResult(standardScaler.transform(df))
+    testTransformer[(Vector, Vector)](df, standardScaler, "standardized_features", "expected")(
+      assertResult)
   }
 
   test("StandardScaler read/write") {
@@ -149,4 +149,5 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(newInstance.std === instance.std)
     assert(newInstance.mean === instance.mean)
   }
+
 }

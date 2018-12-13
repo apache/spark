@@ -17,60 +17,54 @@
 
 package org.apache.spark.deploy.history
 
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import java.util.zip.ZipOutputStream
 
 import scala.xml.Node
 
 import org.apache.spark.SparkException
+import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.ui.SparkUI
 
-private[spark] case class ApplicationAttemptInfo(
-    attemptId: Option[String],
-    startTime: Long,
-    endTime: Long,
-    lastUpdated: Long,
-    sparkUser: String,
-    completed: Boolean = false)
-
-private[spark] case class ApplicationHistoryInfo(
-    id: String,
-    name: String,
-    attempts: List[ApplicationAttemptInfo]) {
-
-  /**
-   * Has this application completed?
-   * @return true if the most recent attempt has completed
-   */
-  def completed: Boolean = {
-    attempts.nonEmpty && attempts.head.completed
-  }
-}
-
 /**
- *  A probe which can be invoked to see if a loaded Web UI has been updated.
- *  The probe is expected to be relative purely to that of the UI returned
- *  in the same [[LoadedAppUI]] instance. That is, whenever a new UI is loaded,
- *  the probe returned with it is the one that must be used to check for it
- *  being out of date; previous probes must be discarded.
- */
-private[history] abstract class HistoryUpdateProbe {
-  /**
-   * Return true if the history provider has a later version of the application
-   * attempt than the one against this probe was constructed.
-   * @return
-   */
-  def isUpdated(): Boolean
-}
-
-/**
- * All the information returned from a call to `getAppUI()`: the new UI
- * and any required update state.
+ * A loaded UI for a Spark application.
+ *
+ * Loaded UIs are valid once created, and can be invalidated once the history provider detects
+ * changes in the underlying app data (e.g. an updated event log). Invalidating a UI does not
+ * unload it; it just signals the [[ApplicationCache]] that the UI should not be used to serve
+ * new requests.
+ *
+ * Reloading of the UI with new data requires collaboration between the cache and the provider;
+ * the provider invalidates the UI when it detects updated information, and the cache invalidates
+ * the cache entry when it detects the UI has been invalidated. That will trigger a callback
+ * on the provider to finally clean up any UI state. The cache should hold read locks when
+ * using the UI, and the provider should grab the UI's write lock before making destructive
+ * operations.
+ *
+ * Note that all this means that an invalidated UI will still stay in-memory, and any resources it
+ * references will remain open, until the cache either sees that it's invalidated, or evicts it to
+ * make room for another UI.
+ *
  * @param ui Spark UI
- * @param updateProbe probe to call to check on the update state of this application attempt
  */
-private[history] case class LoadedAppUI(
-    ui: SparkUI,
-    updateProbe: () => Boolean)
+private[history] case class LoadedAppUI(ui: SparkUI) {
+
+  val lock = new ReentrantReadWriteLock()
+
+  @volatile private var _valid = true
+
+  def valid: Boolean = _valid
+
+  def invalidate(): Unit = {
+    lock.writeLock().lock()
+    try {
+      _valid = false
+    } finally {
+      lock.writeLock().unlock()
+    }
+  }
+
+}
 
 private[history] abstract class ApplicationHistoryProvider {
 
@@ -86,7 +80,7 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return Count of application event logs that are currently under process
    */
   def getEventLogsUnderProcess(): Int = {
-    return 0;
+    0
   }
 
   /**
@@ -95,7 +89,7 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return 0 if this is undefined or unsupported, otherwise the last updated time in millis
    */
   def getLastUpdatedTime(): Long = {
-    return 0;
+    0
   }
 
   /**
@@ -103,7 +97,7 @@ private[history] abstract class ApplicationHistoryProvider {
    *
    * @return List of all know applications.
    */
-  def getListing(): Iterator[ApplicationHistoryInfo]
+  def getListing(): Iterator[ApplicationInfo]
 
   /**
    * Returns the Spark UI for a specific application.
@@ -136,12 +130,18 @@ private[history] abstract class ApplicationHistoryProvider {
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
   /**
-   * @return the [[ApplicationHistoryInfo]] for the appId if it exists.
+   * @return the [[ApplicationInfo]] for the appId if it exists.
    */
-  def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo]
+  def getApplicationInfo(appId: String): Option[ApplicationInfo]
 
   /**
    * @return html text to display when the application list is empty
    */
   def getEmptyListingHtml(): Seq[Node] = Seq.empty
+
+  /**
+   * Called when an application UI is unloaded from the history server.
+   */
+  def onUIDetached(appId: String, attemptId: Option[String], ui: SparkUI): Unit = { }
+
 }

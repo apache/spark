@@ -31,7 +31,7 @@ class TableAlreadyExistsException(db: String, table: String)
   extends AnalysisException(s"Table or view '$table' already exists in database '$db'")
 
 class TempTableAlreadyExistsException(table: String)
-  extends AnalysisException(s"Temporary table '$table' already exists")
+  extends AnalysisException(s"Temporary view '$table' already exists")
 
 class PartitionAlreadyExistsException(db: String, table: String, spec: TablePartitionSpec)
   extends AnalysisException(

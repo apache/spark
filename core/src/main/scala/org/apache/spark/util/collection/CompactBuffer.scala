@@ -19,6 +19,8 @@ package org.apache.spark.util.collection
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.unsafe.array.ByteArrayMethods
+
 /**
  * An append-only buffer similar to ArrayBuffer, but more memory-efficient for small buffers.
  * ArrayBuffer always allocates an Object array to store the data, with 16 entries by default,
@@ -126,22 +128,22 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
 
   /** Increase our size to newSize and grow the backing array if needed. */
   private def growToSize(newSize: Int): Unit = {
-    if (newSize < 0) {
-      throw new UnsupportedOperationException("Can't grow buffer past Int.MaxValue elements")
+    // since two fields are hold in element0 and element1, an array holds newSize - 2 elements
+    val newArraySize = newSize - 2
+    val arrayMax = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+    if (newSize < 0 || newArraySize > arrayMax) {
+      throw new UnsupportedOperationException(s"Can't grow buffer past $arrayMax elements")
     }
-    val capacity = if (otherElements != null) otherElements.length + 2 else 2
-    if (newSize > capacity) {
-      var newArrayLen = 8
-      while (newSize - 2 > newArrayLen) {
+    val capacity = if (otherElements != null) otherElements.length else 0
+    if (newArraySize > capacity) {
+      var newArrayLen = 8L
+      while (newArraySize > newArrayLen) {
         newArrayLen *= 2
-        if (newArrayLen == Int.MinValue) {
-          // Prevent overflow if we double from 2^30 to 2^31, which will become Int.MinValue.
-          // Note that we set the new array length to Int.MaxValue - 2 so that our capacity
-          // calculation above still gives a positive integer.
-          newArrayLen = Int.MaxValue - 2
-        }
       }
-      val newArray = new Array[T](newArrayLen)
+      if (newArrayLen > arrayMax) {
+        newArrayLen = arrayMax
+      }
+      val newArray = new Array[T](newArrayLen.toInt)
       if (otherElements != null) {
         System.arraycopy(otherElements, 0, newArray, 0, otherElements.length)
       }

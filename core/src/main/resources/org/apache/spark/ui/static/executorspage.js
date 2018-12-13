@@ -25,13 +25,18 @@ function getThreadDumpEnabled() {
     return threadDumpEnabled;
 }
 
-function formatStatus(status, type) {
-    if (type !== 'display') return status;
-    if (status) {
-        return "Active"
-    } else {
-        return "Dead"
+function formatStatus(status, type, row) {
+    if (row.isBlacklisted) {
+        return "Blacklisted";
     }
+
+    if (status) {
+        if (row.blacklistedInStages.length == 0) {
+            return "Active"
+        }
+        return "Active (Blacklisted in Stages: [" + row.blacklistedInStages.join(", ") + "])";
+    }
+    return "Dead"
 }
 
 jQuery.extend(jQuery.fn.dataTableExt.oSort, {
@@ -53,78 +58,6 @@ $(document).ajaxStop($.unblockUI);
 $(document).ajaxStart(function () {
     $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
 });
-
-function createTemplateURI(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/executorspage-template.html';
-        return baseURI;
-    }
-    ind = words.indexOf("history");
-    if(ind > 0) {
-        var baseURI = words.slice(0, ind).join('/') + '/static/executorspage-template.html';
-        return baseURI;
-    }
-    return location.origin + "/static/executorspage-template.html";
-}
-
-function getStandAloneppId(cb) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        cb(appId);
-        return;
-    }
-    ind = words.indexOf("history");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        cb(appId);
-        return;
-    }
-    //Looks like Web UI is running in standalone mode
-    //Let's get application-id using REST End Point
-    $.getJSON(location.origin + "/api/v1/applications", function(response, status, jqXHR) {
-        if (response && response.length > 0) {
-            var appId = response[0].id
-            cb(appId);
-            return;
-        }
-    });
-}
-
-function createRESTEndPoint(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        var newBaseURI = words.slice(0, ind + 2).join('/');
-        return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors"
-    }
-    ind = words.indexOf("history");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        var attemptId = words[ind + 2];
-        var newBaseURI = words.slice(0, ind).join('/');
-        if (isNaN(attemptId)) {
-            return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors";
-        } else {
-            return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/allexecutors";
-        }
-    }
-    return location.origin + "/api/v1/applications/" + appId + "/allexecutors";
-}
-
-function formatLogsCells(execLogs, type) {
-    if (type !== 'display') return Object.keys(execLogs);
-    if (!execLogs) return;
-    var result = '';
-    $.each(execLogs, function (logName, logUrl) {
-        result += '<div><a href=' + logUrl + '>' + logName + '</a></div>'
-    });
-    return result;
-}
 
 function logsExist(execs) {
     return execs.some(function(exec) {
@@ -173,17 +106,13 @@ function totalDurationColor(totalGCTime, totalDuration) {
 }
 
 $(document).ready(function () {
-    $.extend($.fn.dataTable.defaults, {
-        stateSave: true,
-        lengthMenu: [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
-        pageLength: 20
-    });
+    setDataTableDefaults();
 
     executorsSummary = $("#active-executors");
 
-    getStandAloneppId(function (appId) {
+    getStandAloneAppId(function (appId) {
 
-        var endPoint = createRESTEndPoint(appId);
+        var endPoint = createRESTEndPointForExecutorsPage(appId);
         $.getJSON(endPoint, function (response, status, jqXHR) {
             var summary = [];
             var allExecCnt = 0;
@@ -253,10 +182,14 @@ $(document).ready(function () {
             var deadTotalBlacklisted = 0;
 
             response.forEach(function (exec) {
-                exec.onHeapMemoryUsed = exec.hasOwnProperty('onHeapMemoryUsed') ? exec.onHeapMemoryUsed : 0;
-                exec.maxOnHeapMemory = exec.hasOwnProperty('maxOnHeapMemory') ? exec.maxOnHeapMemory : 0;
-                exec.offHeapMemoryUsed = exec.hasOwnProperty('offHeapMemoryUsed') ? exec.offHeapMemoryUsed : 0;
-                exec.maxOffHeapMemory = exec.hasOwnProperty('maxOffHeapMemory') ? exec.maxOffHeapMemory : 0;
+                var memoryMetrics = {
+                    usedOnHeapStorageMemory: 0,
+                    usedOffHeapStorageMemory: 0,
+                    totalOnHeapStorageMemory: 0,
+                    totalOffHeapStorageMemory: 0
+                };
+
+                exec.memoryMetrics = exec.hasOwnProperty('memoryMetrics') ? exec.memoryMetrics : memoryMetrics;
             });
 
             response.forEach(function (exec) {
@@ -264,10 +197,10 @@ $(document).ready(function () {
                 allRDDBlocks += exec.rddBlocks;
                 allMemoryUsed += exec.memoryUsed;
                 allMaxMemory += exec.maxMemory;
-                allOnHeapMemoryUsed += exec.onHeapMemoryUsed;
-                allOnHeapMaxMemory += exec.maxOnHeapMemory;
-                allOffHeapMemoryUsed += exec.offHeapMemoryUsed;
-                allOffHeapMaxMemory += exec.maxOffHeapMemory;
+                allOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                allOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                allOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                allOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                 allDiskUsed += exec.diskUsed;
                 allTotalCores += exec.totalCores;
                 allMaxTasks += exec.maxTasks;
@@ -286,10 +219,10 @@ $(document).ready(function () {
                     activeRDDBlocks += exec.rddBlocks;
                     activeMemoryUsed += exec.memoryUsed;
                     activeMaxMemory += exec.maxMemory;
-                    activeOnHeapMemoryUsed += exec.onHeapMemoryUsed;
-                    activeOnHeapMaxMemory += exec.maxOnHeapMemory;
-                    activeOffHeapMemoryUsed += exec.offHeapMemoryUsed;
-                    activeOffHeapMaxMemory += exec.maxOffHeapMemory;
+                    activeOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                    activeOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                    activeOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                    activeOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                     activeDiskUsed += exec.diskUsed;
                     activeTotalCores += exec.totalCores;
                     activeMaxTasks += exec.maxTasks;
@@ -308,10 +241,10 @@ $(document).ready(function () {
                     deadRDDBlocks += exec.rddBlocks;
                     deadMemoryUsed += exec.memoryUsed;
                     deadMaxMemory += exec.maxMemory;
-                    deadOnHeapMemoryUsed += exec.onHeapMemoryUsed;
-                    deadOnHeapMaxMemory += exec.maxOnHeapMemory;
-                    deadOffHeapMemoryUsed += exec.offHeapMemoryUsed;
-                    deadOffHeapMaxMemory += exec.maxOffHeapMemory;
+                    deadOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                    deadOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                    deadOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                    deadOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                     deadDiskUsed += exec.diskUsed;
                     deadTotalCores += exec.totalCores;
                     deadMaxTasks += exec.maxTasks;
@@ -399,7 +332,7 @@ $(document).ready(function () {
             };
 
             var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
-            $.get(createTemplateURI(appId), function (template) {
+            $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
                 executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
                 var selector = "#active-executors-table";
@@ -412,10 +345,10 @@ $(document).ready(function () {
                             }
                         },
                         {data: 'hostPort'},
-                        {data: 'isActive', render: function (data, type, row) {
-                            if (type !== 'display') return data;
-                            if (row.isBlacklisted) return "Blacklisted";
-                            else return formatStatus (data, type);
+                        {
+                            data: 'isActive',
+                            render: function (data, type, row) {
+                                return formatStatus (data, type, row);
                             }
                         },
                         {data: 'rddBlocks'},
@@ -431,10 +364,10 @@ $(document).ready(function () {
                         {
                             data: function (row, type) {
                                 if (type !== 'display')
-                                    return row.onHeapMemoryUsed;
+                                    return row.memoryMetrics.usedOnHeapStorageMemory;
                                 else
-                                    return (formatBytes(row.onHeapMemoryUsed, type) + ' / ' +
-                                        formatBytes(row.maxOnHeapMemory, type));
+                                    return (formatBytes(row.memoryMetrics.usedOnHeapStorageMemory, type) + ' / ' +
+                                        formatBytes(row.memoryMetrics.totalOnHeapStorageMemory, type));
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 $(nTd).addClass('on_heap_memory')
@@ -443,10 +376,10 @@ $(document).ready(function () {
                         {
                             data: function (row, type) {
                                 if (type !== 'display')
-                                    return row.offHeapMemoryUsed;
+                                    return row.memoryMetrics.usedOffHeapStorageMemory;
                                 else
-                                    return (formatBytes(row.offHeapMemoryUsed, type) + ' / ' +
-                                        formatBytes(row.maxOffHeapMemory, type));
+                                    return (formatBytes(row.memoryMetrics.usedOffHeapStorageMemory, type) + ' / ' +
+                                        formatBytes(row.memoryMetrics.totalOffHeapStorageMemory, type));
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 $(nTd).addClass('off_heap_memory')
@@ -488,24 +421,20 @@ $(document).ready(function () {
                         {data: 'totalInputBytes', render: formatBytes},
                         {data: 'totalShuffleRead', render: formatBytes},
                         {data: 'totalShuffleWrite', render: formatBytes},
-                        {data: 'executorLogs', render: formatLogsCells},
+                        {name: 'executorLogsCol', data: 'executorLogs', render: formatLogsCells},
                         {
+                            name: 'threadDumpCol',
                             data: 'id', render: function (data, type) {
                                 return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
                             }
-                        }
-                    ],
-                    "columnDefs": [
-                        {
-                            "targets": [ 16 ],
-                            "visible": getThreadDumpEnabled()
                         }
                     ],
                     "order": [[0, "asc"]]
                 };
     
                 var dt = $(selector).DataTable(conf);
-                dt.column(15).visible(logsExist(response));
+                dt.column('executorLogsCol:name').visible(logsExist(response));
+                dt.column('threadDumpCol:name').visible(getThreadDumpEnabled());
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";

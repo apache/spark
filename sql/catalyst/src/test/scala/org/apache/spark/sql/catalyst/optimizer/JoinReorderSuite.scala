@@ -24,46 +24,53 @@ import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, CBO_ENABLED, JOIN_REORDER_ENABLED}
+import org.apache.spark.sql.internal.SQLConf.{CBO_ENABLED, JOIN_REORDER_ENABLED}
 
 
 class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
-
-  override val conf = new SQLConf().copy(
-    CASE_SENSITIVE -> true, CBO_ENABLED -> true, JOIN_REORDER_ENABLED -> true)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
         PushDownPredicate,
-        ReorderJoin(conf),
+        ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::
       Batch("Join Reorder", Once,
-        CostBasedJoinReorder(conf)) :: Nil
+        CostBasedJoinReorder) :: Nil
   }
 
-  /** Set up tables and columns for testing */
+  var originalConfCBOEnabled = false
+  var originalConfJoinReorderEnabled = false
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalConfCBOEnabled = conf.cboEnabled
+    originalConfJoinReorderEnabled = conf.joinReorderEnabled
+    conf.setConf(CBO_ENABLED, true)
+    conf.setConf(JOIN_REORDER_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      conf.setConf(CBO_ENABLED, originalConfCBOEnabled)
+      conf.setConf(JOIN_REORDER_ENABLED, originalConfJoinReorderEnabled)
+    } finally {
+      super.afterAll()
+    }
+  }
+
   private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
-    attr("t1.k-1-2") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("t1.v-1-10") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("t2.k-1-5") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("t3.v-1-100") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("t4.k-1-2") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("t4.v-1-10") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("t5.k-1-5") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("t5.v-1-5") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4)
+    attr("t1.k-1-2") -> rangeColumnStat(2, 0),
+    attr("t1.v-1-10") -> rangeColumnStat(10, 0),
+    attr("t2.k-1-5") -> rangeColumnStat(5, 0),
+    attr("t3.v-1-100") -> rangeColumnStat(100, 0),
+    attr("t4.k-1-2") -> rangeColumnStat(2, 0),
+    attr("t4.v-1-10") -> rangeColumnStat(10, 0),
+    attr("t5.k-1-5") -> rangeColumnStat(5, 0),
+    attr("t5.v-1-5") -> rangeColumnStat(5, 0)
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
@@ -210,6 +217,50 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       // The plan should not change after optimization
       assertEqualPlans(expectedPlan, expectedPlan)
     }
+  }
+
+  test("reorder recursively") {
+    // Original order:
+    //          Join
+    //          / \
+    //      Union  t5
+    //       / \
+    //     Join t4
+    //     / \
+    //   Join t3
+    //   / \
+    //  t1  t2
+    val bottomJoins =
+      t1.join(t2).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
+        (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .select(nameToAttr("t1.v-1-10"))
+
+    val originalPlan = bottomJoins
+      .union(t4.select(nameToAttr("t4.v-1-10")))
+      .join(t5, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t5.v-1-5")))
+
+    // Should be able to reorder the bottom part.
+    // Best order:
+    //          Join
+    //          / \
+    //      Union  t5
+    //       / \
+    //     Join t4
+    //     / \
+    //   Join t2
+    //   / \
+    //  t1  t3
+    val bestBottomPlan =
+      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(nameToAttr("t1.v-1-10"))
+
+    val bestPlan = bestBottomPlan
+      .union(t4.select(nameToAttr("t4.v-1-10")))
+      .join(t5, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t5.v-1-5")))
+
+    assertEqualPlans(originalPlan, bestPlan)
   }
 
   private def assertEqualPlans(

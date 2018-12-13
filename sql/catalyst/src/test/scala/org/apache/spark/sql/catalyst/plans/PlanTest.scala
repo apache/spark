@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.scalactic.source
+import org.scalatest.Suite
+import org.scalatest.Tag
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
@@ -27,9 +33,33 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Provides helper methods for comparing plans.
  */
-abstract class PlanTest extends SparkFunSuite with PredicateHelper {
+trait PlanTest extends SparkFunSuite with PlanTestBase
 
-  protected val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)
+trait CodegenInterpretedPlanTest extends PlanTest {
+
+  override protected def test(
+      testName: String,
+      testTags: Tag*)(testFun: => Any)(implicit pos: source.Position): Unit = {
+    val codegenMode = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
+    val interpretedMode = CodegenObjectFactoryMode.NO_CODEGEN.toString
+
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+      super.test(testName + " (codegen path)", testTags: _*)(testFun)(pos)
+    }
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) {
+      super.test(testName + " (interpreted path)", testTags: _*)(testFun)(pos)
+    }
+  }
+}
+
+/**
+ * Provides helper methods for comparing plans, but without the overhead of
+ * mandating a FunSuite.
+ */
+trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
+
+  // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
+  protected def conf = SQLConf.get
 
   /**
    * Since attribute references are given globally unique ids during analysis,
@@ -49,6 +79,8 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
         Alias(a.child, a.name)(exprId = ExprId(0))
       case ae: AggregateExpression =>
         ae.copy(resultId = ExprId(0))
+      case lv: NamedLambdaVariable =>
+        lv.copy(exprId = ExprId(0), value = null)
     }
   }
 
@@ -62,14 +94,14 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
    */
   protected def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan transform {
-      case filter @ Filter(condition: Expression, child: LogicalPlan) =>
-        Filter(splitConjunctivePredicates(condition).map(rewriteEqual(_)).sortBy(_.hashCode())
+      case Filter(condition: Expression, child: LogicalPlan) =>
+        Filter(splitConjunctivePredicates(condition).map(rewriteEqual).sortBy(_.hashCode())
           .reduce(And), child)
       case sample: Sample =>
-        sample.copy(seed = 0L)(true)
-      case join @ Join(left, right, joinType, condition) if condition.isDefined =>
+        sample.copy(seed = 0L)
+      case Join(left, right, joinType, condition) if condition.isDefined =>
         val newCondition =
-          splitConjunctivePredicates(condition.get).map(rewriteEqual(_)).sortBy(_.hashCode())
+          splitConjunctivePredicates(condition.get).map(rewriteEqual).sortBy(_.hashCode())
             .reduce(And)
         Join(left, right, joinType, Some(newCondition))
     }
@@ -90,7 +122,16 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
   }
 
   /** Fails the test if the two plans do not match */
-  protected def comparePlans(plan1: LogicalPlan, plan2: LogicalPlan) {
+  protected def comparePlans(
+      plan1: LogicalPlan,
+      plan2: LogicalPlan,
+      checkAnalysis: Boolean = true): Unit = {
+    if (checkAnalysis) {
+      // Make sure both plan pass checkAnalysis.
+      SimpleAnalyzer.checkAnalysis(plan1)
+      SimpleAnalyzer.checkAnalysis(plan2)
+    }
+
     val normalized1 = normalizePlan(normalizeExprIds(plan1))
     val normalized2 = normalizePlan(normalizeExprIds(plan2))
     if (normalized1 != normalized2) {
@@ -104,7 +145,7 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
 
   /** Fails the test if the two expressions do not match */
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
-    comparePlans(Filter(e1, OneRowRelation), Filter(e2, OneRowRelation))
+    comparePlans(Filter(e1, OneRowRelation()), Filter(e2, OneRowRelation()), checkAnalysis = false)
   }
 
   /** Fails the test if the join order in the two plans do not match */

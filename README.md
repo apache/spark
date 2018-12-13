@@ -81,6 +81,8 @@ can be run using:
 Please see the guidance on how to
 [run tests for a module, or individual tests](http://spark.apache.org/developer-tools.html#individual-tests).
 
+There is also a Kubernetes integration test, see resource-managers/kubernetes/integration-tests/README.md
+
 ## A Note About Hadoop Versions
 
 Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
@@ -88,7 +90,7 @@ storage systems. Because the protocols have changed in different versions of
 Hadoop, you must build Spark against the same version that your cluster runs.
 
 Please refer to the build documentation at
-["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version)
+["Specifying the Hadoop Version and Enabling YARN"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version-and-enabling-yarn)
 for detailed guidance on building for a particular distribution of Hadoop, including
 building for particular Hive and Hive Thriftserver distributions.
 

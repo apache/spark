@@ -28,6 +28,7 @@ import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.protobuf.ByteString
 
 import org.apache.spark.{SparkContext, SparkException, TaskState}
+import org.apache.spark.deploy.mesos.config
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -106,7 +107,13 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
     }
     val environment = Environment.newBuilder()
-    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
+    sc.conf.getOption("spark.executor.extraClassPath").foreach { cp =>
+      environment.addVariables(
+        Environment.Variable.newBuilder().setName("SPARK_EXECUTOR_CLASSPATH").setValue(cp).build())
+    }
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").map {
+      Utils.substituteAppNExecIds(_, appId, execId)
+    }.getOrElse("")
 
     val prefixEnv = sc.conf.getOption("spark.executor.extraLibraryPath").map { p =>
       Utils.libraryPathEnvPrefix(Seq(p))
@@ -155,7 +162,8 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       .setCommand(command)
       .setData(ByteString.copyFrom(createExecArg()))
 
-    executorInfo.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
+    executorInfo.setContainer(
+      MesosSchedulerBackendUtil.buildContainerInfo(sc.conf))
     (executorInfo.build(), resourcesAfterMem.asJava)
   }
 
@@ -445,4 +453,8 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       super.applicationId
     }
 
+  override def maxNumConcurrentTasks(): Int = {
+    // TODO SPARK-25074 support this method for MesosFineGrainedSchedulerBackend
+    0
+  }
 }

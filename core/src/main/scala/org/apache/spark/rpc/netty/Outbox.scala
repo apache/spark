@@ -45,7 +45,7 @@ private[netty] case class OneWayOutboxMessage(content: ByteBuffer) extends Outbo
 
   override def onFailure(e: Throwable): Unit = {
     e match {
-      case e1: RpcEnvStoppedException => logWarning(e1.getMessage)
+      case e1: RpcEnvStoppedException => logDebug(e1.getMessage)
       case e1: Throwable => logWarning(s"Failed to send one-way RPC.", e1)
     }
   }

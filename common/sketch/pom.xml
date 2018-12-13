@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.2.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-sketch_2.11</artifactId>
+  <artifactId>spark-sketch_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Sketch</name>
   <url>http://spark.apache.org/</url>
@@ -56,31 +56,17 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>net.alchim31.maven</groupId>
-          <artifactId>scala-maven-plugin</artifactId>
-          <version>3.2.2</version>
-          <configuration>
-            <javacArgs combine.children="append">
-              <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
-              <javacArg>-XDignore.symbol.file</javacArg>
-            </javacArgs>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.6.1</version>
-          <configuration>
-            <compilerArgs combine.children="append">
-              <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
-              <arg>-XDignore.symbol.file</arg>
-            </compilerArgs>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
+    <plugins>
+      <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <configuration>
+          <javacArgs combine.children="append">
+            <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
+            <javacArg>-XDignore.symbol.file</javacArg>
+          </javacArgs>
+        </configuration>
+      </plugin>
+    </plugins>
   </build>
 </project>

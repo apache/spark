@@ -18,22 +18,18 @@ package org.apache.spark.sql.execution
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.Utils
 
 /**
  * Suite that tests the redaction of DataSourceScanExec
  */
 class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
 
-  import Utils._
-
-  override def beforeAll(): Unit = {
-    sparkConf.set("spark.redaction.string.regex",
-      "file:/[\\w_]+")
-    super.beforeAll()
-  }
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.redaction.string.regex", "file:/[\\w_]+")
 
   test("treeString is redacted") {
     withTempDir { dir =>
@@ -43,7 +39,7 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
 
       val rootPath = df.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
         .asInstanceOf[FileSourceScanExec].relation.location.rootPaths.head
-      assert(rootPath.toString.contains(basePath.toString))
+      assert(rootPath.toString.contains(dir.toURI.getPath.stripSuffix("/")))
 
       assert(!df.queryExecution.sparkPlan.treeString(verbose = true).contains(rootPath.getName))
       assert(!df.queryExecution.executedPlan.treeString(verbose = true).contains(rootPath.getName))
@@ -57,4 +53,50 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
       assert(df.queryExecution.simpleString.contains(replacement))
     }
   }
+
+  private def isIncluded(queryExecution: QueryExecution, msg: String): Boolean = {
+    queryExecution.toString.contains(msg) ||
+    queryExecution.simpleString.contains(msg) ||
+    queryExecution.stringWithStats.contains(msg)
+  }
+
+  test("explain is redacted using SQLConf") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(0, 10).toDF("a").write.parquet(new Path(basePath, "foo=1").toString)
+      val df = spark.read.parquet(basePath)
+      val replacement = "*********"
+
+      // Respect SparkConf and replace file:/
+      assert(isIncluded(df.queryExecution, replacement))
+
+      assert(isIncluded(df.queryExecution, "FileScan"))
+      assert(!isIncluded(df.queryExecution, "file:/"))
+
+      withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> "(?i)FileScan") {
+        // Respect SQLConf and replace FileScan
+        assert(isIncluded(df.queryExecution, replacement))
+
+        assert(!isIncluded(df.queryExecution, "FileScan"))
+        assert(isIncluded(df.queryExecution, "file:/"))
+      }
+    }
+  }
+
+  test("FileSourceScanExec metadata") {
+    withTempPath { path =>
+      val dir = path.getCanonicalPath
+      spark.range(0, 10).write.parquet(dir)
+      val df = spark.read.parquet(dir)
+
+      assert(isIncluded(df.queryExecution, "Format"))
+      assert(isIncluded(df.queryExecution, "ReadSchema"))
+      assert(isIncluded(df.queryExecution, "Batched"))
+      assert(isIncluded(df.queryExecution, "PartitionFilters"))
+      assert(isIncluded(df.queryExecution, "PushedFilters"))
+      assert(isIncluded(df.queryExecution, "DataFilters"))
+      assert(isIncluded(df.queryExecution, "Location"))
+    }
+  }
+
 }

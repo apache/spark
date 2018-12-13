@@ -30,7 +30,8 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource, UIRoot}
+import org.apache.spark.internal.config.History.HISTORY_SERVER_UI_PORT
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
@@ -86,7 +87,7 @@ class HistoryServer(
       if (!loadAppUi(appId, None) && (!attemptId.isDefined || !loadAppUi(appId, attemptId))) {
         val msg = <div class="row-fluid">Application {appId} not found.</div>
         res.setStatus(HttpServletResponse.SC_NOT_FOUND)
-        UIUtils.basicSparkPage(msg, "Not Found").foreach { n =>
+        UIUtils.basicSparkPage(req, msg, "Not Found").foreach { n =>
           res.getWriter().write(n.toString)
         }
         return
@@ -106,8 +107,8 @@ class HistoryServer(
     }
   }
 
-  def getSparkUI(appKey: String): Option[SparkUI] = {
-    appCache.getSparkUI(appKey)
+  override def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T = {
+    appCache.withSparkUI(appId, attemptId)(fn)
   }
 
   initialize()
@@ -123,7 +124,7 @@ class HistoryServer(
 
     attachHandler(ApiRootResource.getServletHandler(this))
 
-    attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
+    addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
 
     val contextHandler = new ServletContextHandler
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
@@ -140,7 +141,6 @@ class HistoryServer(
   override def stop() {
     super.stop()
     provider.stop()
-    appCache.stop()
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
@@ -150,14 +150,18 @@ class HistoryServer(
       ui: SparkUI,
       completed: Boolean) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
-    ui.getHandlers.foreach(attachHandler)
-    addFilters(ui.getHandlers, conf)
+    handlers.synchronized {
+      ui.getHandlers.foreach(attachHandler)
+    }
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
   override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
-    ui.getHandlers.foreach(detachHandler)
+    handlers.synchronized {
+      ui.getHandlers.foreach(detachHandler)
+    }
+    provider.onUIDetached(appId, attemptId, ui)
   }
 
   /**
@@ -175,7 +179,7 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList(): Iterator[ApplicationHistoryInfo] = {
+  def getApplicationList(): Iterator[ApplicationInfo] = {
     provider.getListing()
   }
 
@@ -188,11 +192,11 @@ class HistoryServer(
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    getApplicationList().map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+    getApplicationList()
   }
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
-    provider.getApplicationInfo(appId).map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+    provider.getApplicationInfo(appId)
   }
 
   override def writeEventLogs(
@@ -224,15 +228,13 @@ class HistoryServer(
    */
   private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
     try {
-      appCache.get(appId, attemptId)
+      appCache.withSparkUI(appId, attemptId) { _ =>
+        // Do nothing, just force the UI to load.
+      }
       true
     } catch {
-      case NonFatal(e) => e.getCause() match {
-        case nsee: NoSuchElementException =>
-          false
-
-        case cause: Exception => throw cause
-      }
+      case NonFatal(e: NoSuchElementException) =>
+        false
     }
   }
 
@@ -278,7 +280,7 @@ object HistoryServer extends Logging {
       .newInstance(conf)
       .asInstanceOf[ApplicationHistoryProvider]
 
-    val port = conf.getInt("spark.history.ui.port", 18080)
+    val port = conf.get(HISTORY_SERVER_UI_PORT)
 
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
@@ -301,6 +303,14 @@ object HistoryServer extends Logging {
       logDebug(s"Clearing ${SecurityManager.SPARK_AUTH_CONF}")
       config.set(SecurityManager.SPARK_AUTH_CONF, "false")
     }
+
+    if (config.getBoolean("spark.acls.enable", config.getBoolean("spark.ui.acls.enable", false))) {
+      logInfo("Either spark.acls.enable or spark.ui.acls.enable is configured, clearing it and " +
+        "only using spark.history.ui.acl.enable")
+      config.set("spark.acls.enable", "false")
+      config.set("spark.ui.acls.enable", "false")
+    }
+
     new SecurityManager(config)
   }
 

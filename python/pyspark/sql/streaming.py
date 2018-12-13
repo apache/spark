@@ -19,19 +19,16 @@ import sys
 import json
 
 if sys.version >= '3':
-    intlike = int
-    basestring = unicode = str
-else:
-    intlike = (int, long)
+    basestring = str
 
-from abc import ABCMeta, abstractmethod
+from py4j.java_gateway import java_import
 
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
-from pyspark.sql.utils import StreamingQueryException
+from pyspark.sql.utils import ForeachBatchFunction, StreamingQueryException
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
@@ -41,7 +38,7 @@ class StreamingQuery(object):
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
 
-    .. note:: Experimental
+    .. note:: Evolving
 
     .. versionadded:: 2.0
     """
@@ -197,7 +194,7 @@ class StreamingQuery(object):
 class StreamingQueryManager(object):
     """A class to manage all the :class:`StreamingQuery` StreamingQueries active.
 
-    .. note:: Experimental
+    .. note:: Evolving
 
     .. versionadded:: 2.0
     """
@@ -283,7 +280,7 @@ class DataStreamReader(OptionUtils):
     (e.g. file systems, key-value stores, etc). Use :func:`spark.readStream`
     to access this.
 
-    .. note:: Experimental.
+    .. note:: Evolving.
 
     .. versionadded:: 2.0
     """
@@ -300,7 +297,7 @@ class DataStreamReader(OptionUtils):
     def format(self, source):
         """Specifies the input data source format.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param source: string, name of the data source, e.g. 'json', 'parquet'.
 
@@ -317,18 +314,23 @@ class DataStreamReader(OptionUtils):
         By specifying the schema here, the underlying data source can skip the schema
         inference step, and thus speed up data loading.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
-        :param schema: a :class:`pyspark.sql.types.StructType` object
+        :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
+                       (For example ``col0 INT, col1 DOUBLE``).
 
         >>> s = spark.readStream.schema(sdf_schema)
+        >>> s = spark.readStream.schema("col0 INT, col1 DOUBLE")
         """
         from pyspark.sql import SparkSession
-        if not isinstance(schema, StructType):
-            raise TypeError("schema should be StructType")
         spark = SparkSession.builder.getOrCreate()
-        jschema = spark._jsparkSession.parseDataType(schema.json())
-        self._jreader = self._jreader.schema(jschema)
+        if isinstance(schema, StructType):
+            jschema = spark._jsparkSession.parseDataType(schema.json())
+            self._jreader = self._jreader.schema(jschema)
+        elif isinstance(schema, basestring):
+            self._jreader = self._jreader.schema(schema)
+        else:
+            raise TypeError("schema should be StructType or string")
         return self
 
     @since(2.0)
@@ -340,7 +342,7 @@ class DataStreamReader(OptionUtils):
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         >>> s = spark.readStream.option("x", 1)
         """
@@ -356,7 +358,7 @@ class DataStreamReader(OptionUtils):
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         >>> s = spark.readStream.options(x="1", y=2)
         """
@@ -368,11 +370,12 @@ class DataStreamReader(OptionUtils):
     def load(self, path=None, format=None, schema=None, **options):
         """Loads a data stream from a data source and returns it as a :class`DataFrame`.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param path: optional string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
-        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param options: all other string options
 
         >>> json_sdf = spark.readStream.format("json") \\
@@ -401,21 +404,23 @@ class DataStreamReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             wholeFile=None):
+             multiLine=None,  allowUnquotedControlChars=None, lineSep=None, locale=None,
+             dropFieldIfAllNull=None, encoding=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
         `JSON Lines <http://jsonlines.org/>`_ (newline-delimited JSON) is supported by default.
-        For JSON (one record per file), set the ``wholeFile`` parameter to ``true``.
+        For JSON (one record per file), set the ``multiLine`` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
+        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
@@ -435,13 +440,13 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                 record, and puts the malformed string into a field configured by \
-                 ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
-                 a string type field named ``columnNameOfCorruptRecord`` in an user-defined \
-                 schema. If a schema does not have the field, it drops corrupt records during \
-                 parsing. When inferring a schema, it implicitly adds a \
-                 ``columnNameOfCorruptRecord`` field in an output schema.
+                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
+                  fields to ``null``. To keep corrupt records, an user can set a string type \
+                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+                  schema does not have the field, it drops corrupt records during parsing. \
+                  When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
+                  field in an output schema.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -458,8 +463,23 @@ class DataStreamReader(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
-        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
+        :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
+        :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
+                                          characters (ASCII characters with value less than 32,
+                                          including tab and line feed characters) or not.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
+                       it uses the default value, ``en-US``. For instance, ``locale`` is used while
+                       parsing dates and timestamps.
+        :param dropFieldIfAllNull: whether to ignore column of all null values or empty
+                                   array/struct during schema inference. If None is set, it
+                                   uses the default value, ``false``.
+        :param encoding: allows to forcibly set one of standard basic or extended encoding for
+                         the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
+                         the encoding of input JSON will be detected automatically
+                         when the multiLine option is set to ``true``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -473,9 +493,28 @@ class DataStreamReader(OptionUtils):
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
-            timestampFormat=timestampFormat, wholeFile=wholeFile)
+            timestampFormat=timestampFormat, multiLine=multiLine,
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
+            dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
+        else:
+            raise TypeError("path can be only a single string")
+
+    @since(2.3)
+    def orc(self, path):
+        """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
+
+        .. note:: Evolving.
+
+        >>> orc_sdf = spark.readStream.schema(sdf_schema).orc(tempfile.mkdtemp())
+        >>> orc_sdf.isStreaming
+        True
+        >>> orc_sdf.schema == sdf_schema
+        True
+        """
+        if isinstance(path, basestring):
+            return self._df(self._jreader.orc(path))
         else:
             raise TypeError("path can be only a single string")
 
@@ -488,7 +527,7 @@ class DataStreamReader(OptionUtils):
                 Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``. \
                 The default value is specified in ``spark.sql.parquet.mergeSchema``.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         >>> parquet_sdf = spark.readStream.schema(sdf_schema).parquet(tempfile.mkdtemp())
         >>> parquet_sdf.isStreaming
@@ -503,17 +542,20 @@ class DataStreamReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def text(self, path):
+    def text(self, path, wholetext=False, lineSep=None):
         """
         Loads a text file stream and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
 
-        Each line in the text file is a new row in the resulting DataFrame.
+        By default, each line in the text file is a new row in the resulting DataFrame.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param paths: string, or list of strings, for input path(s).
+        :param wholetext: if true, read each file from input path(s) as a single row.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
@@ -521,6 +563,7 @@ class DataStreamReader(OptionUtils):
         >>> "value" in str(text_sdf.schema)
         True
         """
+        self._set_opts(wholetext=wholetext, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.text(path))
         else:
@@ -532,33 +575,45 @@ class DataStreamReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, wholeFile=None):
-        """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
+            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
+            enforceSchema=None, emptyValue=None, locale=None, lineSep=None):
+        r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param path: string, or list of strings, for input path(s).
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
-        :param sep: sets the single character as a separator for each field and value.
+        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
+                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+        :param sep: sets a single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
                          it uses the default value, ``UTF-8``.
-        :param quote: sets the single character used for escaping quoted values where the
+        :param quote: sets a single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
                       value, ``"``. If you would like to turn off quotations, you need to set an
                       empty string.
-        :param escape: sets the single character used for escaping quotes inside an already
+        :param escape: sets a single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
-        :param comment: sets the single character used for skipping lines beginning with this
+        :param comment: sets a single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
+        :param enforceSchema: If it is set to ``true``, the specified or inferred schema will be
+                              forcibly applied to datasource files, and headers in CSV files will be
+                              ignored. If the option is set to ``false``, the schema will be
+                              validated against all headers in CSV files or the first header in RDD
+                              if the ``header`` option is set to ``true``. Field names in the schema
+                              and column names in CSV headers are checked by their positions
+                              taking into account ``spark.sql.caseSensitive``. If None is set,
+                              ``true`` is used by default. Though the default value is ``true``,
+                              it is recommended to disable the ``enforceSchema`` option
+                              to avoid incorrect results.
         :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
                                         values being read should be skipped. If None is set, it
                                         uses the default value, ``false``.
@@ -592,13 +647,15 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                  record, and puts the malformed string into a field configured by \
-                  ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
-                  a string type field named ``columnNameOfCorruptRecord`` in an \
-                  user-defined schema. If a schema does not have the field, it drops corrupt \
-                  records during parsing. When a length of parsed CSV tokens is shorter than \
-                  an expected length of a schema, it sets `null` for extra fields.
+                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
+                  fields to ``null``. To keep corrupt records, an user can set a string type \
+                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+                  schema does not have the field, it drops corrupt records during parsing. \
+                  A record with less/more tokens than schema is not a corrupted record to CSV. \
+                  When it meets a record having fewer tokens than the length of the schema, \
+                  sets ``null`` to extra fields. When the record has more tokens than the \
+                  length of the schema, it drops extra tokens.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -607,8 +664,20 @@ class DataStreamReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
-        :param wholeFile: parse one record, which may span multiple lines. If None is
+        :param multiLine: parse one record, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
+        :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
+                                          the quote character. If None is set, the default value is
+                                          escape character when escape and quote characters are
+                                          different, ``\0`` otherwise..
+        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
+                           the default value, empty string.
+        :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
+                       it uses the default value, ``en-US``. For instance, ``locale`` is used while
+                       parsing dates and timestamps.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+                        Maximum length is 1 character.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -624,7 +693,9 @@ class DataStreamReader(OptionUtils):
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile)
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
+            emptyValue=emptyValue, locale=locale, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
@@ -637,7 +708,7 @@ class DataStreamWriter(object):
     (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.writeStream`
     to access this.
 
-    .. note:: Experimental.
+    .. note:: Evolving.
 
     .. versionadded:: 2.0
     """
@@ -665,7 +736,7 @@ class DataStreamWriter(object):
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
 
-       .. note:: Experimental.
+       .. note:: Evolving.
 
         >>> writer = sdf.writeStream.outputMode('append')
         """
@@ -678,7 +749,7 @@ class DataStreamWriter(object):
     def format(self, source):
         """Specifies the underlying output data source.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param source: string, name of the data source, which for now can be 'parquet'.
 
@@ -696,7 +767,7 @@ class DataStreamWriter(object):
                 timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
@@ -710,7 +781,7 @@ class DataStreamWriter(object):
                 timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
 
-       .. note:: Experimental.
+       .. note:: Evolving.
         """
         for k in options:
             self._jwrite = self._jwrite.option(k, to_str(options[k]))
@@ -723,7 +794,7 @@ class DataStreamWriter(object):
         If specified, the output is laid out on the file system similar
         to Hive's partitioning scheme.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param cols: name of columns
 
@@ -739,7 +810,7 @@ class DataStreamWriter(object):
         :func:`start`. This name must be unique among all the currently active queries
         in the associated SparkSession.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param queryName: unique name for the query
 
@@ -752,36 +823,246 @@ class DataStreamWriter(object):
 
     @keyword_only
     @since(2.0)
-    def trigger(self, processingTime=None, once=None):
+    def trigger(self, processingTime=None, once=None, continuous=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
+                               Set a trigger that runs a query periodically based on the processing
+                               time. Only one trigger can be set.
+        :param once: if set to True, set a trigger that processes only one batch of data in a
+                     streaming query then terminates the query. Only one trigger can be set.
 
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
         >>> # trigger the query for just once batch of data
         >>> writer = sdf.writeStream.trigger(once=True)
+        >>> # trigger the query for execution every 5 seconds
+        >>> writer = sdf.writeStream.trigger(continuous='5 seconds')
         """
+        params = [processingTime, once, continuous]
+
+        if params.count(None) == 3:
+            raise ValueError('No trigger provided')
+        elif params.count(None) < 2:
+            raise ValueError('Multiple triggers not allowed.')
+
         jTrigger = None
         if processingTime is not None:
-            if once is not None:
-                raise ValueError('Multiple triggers not allowed.')
             if type(processingTime) != str or len(processingTime.strip()) == 0:
                 raise ValueError('Value for processingTime must be a non empty string. Got: %s' %
                                  processingTime)
             interval = processingTime.strip()
             jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(
                 interval)
+
         elif once is not None:
             if once is not True:
                 raise ValueError('Value for once must be True. Got: %s' % once)
             jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()
+
         else:
-            raise ValueError('No trigger provided')
+            if type(continuous) != str or len(continuous.strip()) == 0:
+                raise ValueError('Value for continuous must be a non empty string. Got: %s' %
+                                 continuous)
+            interval = continuous.strip()
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Continuous(
+                interval)
+
         self._jwrite = self._jwrite.trigger(jTrigger)
+        return self
+
+    @since(2.4)
+    def foreach(self, f):
+        """
+        Sets the output of the streaming query to be processed using the provided writer ``f``.
+        This is often used to write the output of a streaming query to arbitrary storage systems.
+        The processing logic can be specified in two ways.
+
+        #. A **function** that takes a row as input.
+            This is a simple way to express your processing logic. Note that this does
+            not allow you to deduplicate generated data when failures cause reprocessing of
+            some input data. That would require you to specify the processing logic in the next
+            way.
+
+        #. An **object** with a ``process`` method and optional ``open`` and ``close`` methods.
+            The object can have the following methods.
+
+            * ``open(partition_id, epoch_id)``: *Optional* method that initializes the processing
+                (for example, open a connection, start a transaction, etc). Additionally, you can
+                use the `partition_id` and `epoch_id` to deduplicate regenerated data
+                (discussed later).
+
+            * ``process(row)``: *Non-optional* method that processes each :class:`Row`.
+
+            * ``close(error)``: *Optional* method that finalizes and cleans up (for example,
+                close connection, commit transaction, etc.) after all rows have been processed.
+
+            The object will be used by Spark in the following way.
+
+            * A single copy of this object is responsible of all the data generated by a
+                single task in a query. In other words, one instance is responsible for
+                processing one partition of the data generated in a distributed manner.
+
+            * This object must be serializable because each task will get a fresh
+                serialized-deserialized copy of the provided object. Hence, it is strongly
+                recommended that any initialization for writing data (e.g. opening a
+                connection or starting a transaction) is done after the `open(...)`
+                method has been called, which signifies that the task is ready to generate data.
+
+            * The lifecycle of the methods are as follows.
+
+                For each partition with ``partition_id``:
+
+                ... For each batch/epoch of streaming data with ``epoch_id``:
+
+                ....... Method ``open(partitionId, epochId)`` is called.
+
+                ....... If ``open(...)`` returns true, for each row in the partition and
+                        batch/epoch, method ``process(row)`` is called.
+
+                ....... Method ``close(errorOrNull)`` is called with error (if any) seen while
+                        processing rows.
+
+            Important points to note:
+
+            * The `partitionId` and `epochId` can be used to deduplicate generated data when
+                failures cause reprocessing of some input data. This depends on the execution
+                mode of the query. If the streaming query is being executed in the micro-batch
+                mode, then every partition represented by a unique tuple (partition_id, epoch_id)
+                is guaranteed to have the same data. Hence, (partition_id, epoch_id) can be used
+                to deduplicate and/or transactionally commit data and achieve exactly-once
+                guarantees. However, if the streaming query is being executed in the continuous
+                mode, then this guarantee does not hold and therefore should not be used for
+                deduplication.
+
+            * The ``close()`` method (if exists) will be called if `open()` method exists and
+                returns successfully (irrespective of the return value), except if the Python
+                crashes in the middle.
+
+        .. note:: Evolving.
+
+        >>> # Print every row using a function
+        >>> def print_row(row):
+        ...     print(row)
+        ...
+        >>> writer = sdf.writeStream.foreach(print_row)
+        >>> # Print every row using a object with process() method
+        >>> class RowPrinter:
+        ...     def open(self, partition_id, epoch_id):
+        ...         print("Opened %d, %d" % (partition_id, epoch_id))
+        ...         return True
+        ...     def process(self, row):
+        ...         print(row)
+        ...     def close(self, error):
+        ...         print("Closed with error: %s" % str(error))
+        ...
+        >>> writer = sdf.writeStream.foreach(RowPrinter())
+        """
+
+        from pyspark.rdd import _wrap_function
+        from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+        from pyspark.taskcontext import TaskContext
+
+        if callable(f):
+            # The provided object is a callable function that is supposed to be called on each row.
+            # Construct a function that takes an iterator and calls the provided function on each
+            # row.
+            def func_without_process(_, iterator):
+                for x in iterator:
+                    f(x)
+                return iter([])
+
+            func = func_without_process
+
+        else:
+            # The provided object is not a callable function. Then it is expected to have a
+            # 'process(row)' method, and optional 'open(partition_id, epoch_id)' and
+            # 'close(error)' methods.
+
+            if not hasattr(f, 'process'):
+                raise Exception("Provided object does not have a 'process' method")
+
+            if not callable(getattr(f, 'process')):
+                raise Exception("Attribute 'process' in provided object is not callable")
+
+            def doesMethodExist(method_name):
+                exists = hasattr(f, method_name)
+                if exists and not callable(getattr(f, method_name)):
+                    raise Exception(
+                        "Attribute '%s' in provided object is not callable" % method_name)
+                return exists
+
+            open_exists = doesMethodExist('open')
+            close_exists = doesMethodExist('close')
+
+            def func_with_open_process_close(partition_id, iterator):
+                epoch_id = TaskContext.get().getLocalProperty('streaming.sql.batchId')
+                if epoch_id:
+                    epoch_id = int(epoch_id)
+                else:
+                    raise Exception("Could not get batch id from TaskContext")
+
+                # Check if the data should be processed
+                should_process = True
+                if open_exists:
+                    should_process = f.open(partition_id, epoch_id)
+
+                error = None
+
+                try:
+                    if should_process:
+                        for x in iterator:
+                            f.process(x)
+                except Exception as ex:
+                    error = ex
+                finally:
+                    if close_exists:
+                        f.close(error)
+                    if error:
+                        raise error
+
+                return iter([])
+
+            func = func_with_open_process_close
+
+        serializer = AutoBatchedSerializer(PickleSerializer())
+        wrapped_func = _wrap_function(self._spark._sc, func, serializer, serializer)
+        jForeachWriter = \
+            self._spark._sc._jvm.org.apache.spark.sql.execution.python.PythonForeachWriter(
+                wrapped_func, self._df._jdf.schema())
+        self._jwrite.foreach(jForeachWriter)
+        return self
+
+    @since(2.4)
+    def foreachBatch(self, func):
+        """
+        Sets the output of the streaming query to be processed using the provided
+        function. This is supported only the in the micro-batch execution modes (that is, when the
+        trigger is not continuous). In every micro-batch, the provided function will be called in
+        every micro-batch with (i) the output rows as a DataFrame and (ii) the batch identifier.
+        The batchId can be used deduplicate and transactionally write the output
+        (that is, the provided Dataset) to external systems. The output DataFrame is guaranteed
+        to exactly same for the same batchId (assuming all operations are deterministic in the
+        query).
+
+        .. note:: Evolving.
+
+        >>> def func(batch_df, batch_id):
+        ...     batch_df.collect()
+        ...
+        >>> writer = sdf.writeStream.foreach(func)
+        """
+
+        from pyspark.java_gateway import ensure_callback_server_started
+        gw = self._spark._sc._gateway
+        java_import(gw.jvm, "org.apache.spark.sql.execution.streaming.sources.*")
+
+        wrapped_func = ForeachBatchFunction(self._spark, func)
+        gw.jvm.PythonForeachBatchHelper.callForeachBatch(self._jwrite, wrapped_func)
+        ensure_callback_server_started(gw)
         return self
 
     @ignore_unicode_prefix
@@ -794,7 +1075,7 @@ class DataStreamWriter(object):
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save
@@ -875,7 +1156,7 @@ def _test():
     globs['spark'].stop()
 
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

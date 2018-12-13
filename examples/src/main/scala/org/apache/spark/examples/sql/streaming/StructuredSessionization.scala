@@ -34,14 +34,14 @@ import org.apache.spark.sql.streaming._
  * To run this on your local machine, you need to first run a Netcat server
  * `$ nc -lk 9999`
  * and then run the example
- * `$ bin/run-example sql.streaming.StructuredNetworkWordCount
+ * `$ bin/run-example sql.streaming.StructuredSessionization
  * localhost 9999`
  */
 object StructuredSessionization {
 
   def main(args: Array[String]): Unit = {
     if (args.length < 2) {
-      System.err.println("Usage: StructuredNetworkWordCount <hostname> <port>")
+      System.err.println("Usage: StructuredSessionization <hostname> <port>")
       System.exit(1)
     }
 

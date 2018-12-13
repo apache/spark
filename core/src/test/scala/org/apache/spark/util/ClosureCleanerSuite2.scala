@@ -117,9 +117,13 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
       findTransitively: Boolean): Map[Class[_], Set[String]] = {
     val fields = new mutable.HashMap[Class[_], mutable.Set[String]]
     outerClasses.foreach { c => fields(c) = new mutable.HashSet[String] }
-    ClosureCleaner.getClassReader(closure.getClass)
-      .accept(new FieldAccessFinder(fields, findTransitively), 0)
-    fields.mapValues(_.toSet).toMap
+    val cr = ClosureCleaner.getClassReader(closure.getClass)
+    if (cr == null) {
+      Map.empty
+    } else {
+      cr.accept(new FieldAccessFinder(fields, findTransitively), 0)
+      fields.mapValues(_.toSet).toMap
+    }
   }
 
   // Accessors for private methods
@@ -141,6 +145,7 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
   }
 
   test("get inner closure classes") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val closure1 = () => 1
     val closure2 = () => { () => 1 }
     val closure3 = (i: Int) => {
@@ -167,6 +172,7 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
   }
 
   test("get outer classes and objects") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val localValue = someSerializableValue
     val closure1 = () => 1
     val closure2 = () => localValue
@@ -203,6 +209,7 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
   }
 
   test("get outer classes and objects with nesting") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val localValue = someSerializableValue
 
     val test1 = () => {
@@ -254,6 +261,7 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
   }
 
   test("find accessed fields") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val localValue = someSerializableValue
     val closure1 = () => 1
     val closure2 = () => localValue
@@ -292,6 +300,7 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
   }
 
   test("find accessed fields with nesting") {
+    assume(!ClosureCleanerSuite2.supportsLMFs)
     val localValue = someSerializableValue
 
     val test1 = () => {
@@ -534,17 +543,22 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
       // As before, this closure is neither serializable nor cleanable
       verifyCleaning(inner1, serializableBefore = false, serializableAfter = false)
 
-      // This closure is no longer serializable because it now has a pointer to the outer closure,
-      // which is itself not serializable because it has a pointer to the ClosureCleanerSuite2.
-      // If we do not clean transitively, we will not null out this indirect reference.
-      verifyCleaning(
-        inner2, serializableBefore = false, serializableAfter = false, transitive = false)
+      if (ClosureCleanerSuite2.supportsLMFs) {
+        verifyCleaning(
+          inner2, serializableBefore = true, serializableAfter = true)
+      } else {
+        // This closure is no longer serializable because it now has a pointer to the outer closure,
+        // which is itself not serializable because it has a pointer to the ClosureCleanerSuite2.
+        // If we do not clean transitively, we will not null out this indirect reference.
+        verifyCleaning(
+          inner2, serializableBefore = false, serializableAfter = false, transitive = false)
 
-      // If we clean transitively, we will find that method `a` does not actually reference the
-      // outer closure's parent (i.e. the ClosureCleanerSuite), so we can additionally null out
-      // the outer closure's parent pointer. This will make `inner2` serializable.
-      verifyCleaning(
-        inner2, serializableBefore = false, serializableAfter = true, transitive = true)
+        // If we clean transitively, we will find that method `a` does not actually reference the
+        // outer closure's parent (i.e. the ClosureCleanerSuite), so we can additionally null out
+        // the outer closure's parent pointer. This will make `inner2` serializable.
+        verifyCleaning(
+          inner2, serializableBefore = false, serializableAfter = true, transitive = true)
+      }
     }
 
     // Same as above, but with more levels of nesting
@@ -561,4 +575,25 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     test6()()()
   }
 
+  test("verify nested non-LMF closures") {
+    assume(ClosureCleanerSuite2.supportsLMFs)
+    class A1(val f: Int => Int)
+    class A2(val f: Int => Int => Int)
+    class B extends A1(x => x*x)
+    class C extends A2(x => new B().f )
+    val closure1 = new B().f
+    val closure2 = new C().f
+    // serializable already
+    verifyCleaning(closure1, serializableBefore = true, serializableAfter = true)
+    // brings in deps that can't be cleaned
+    verifyCleaning(closure2, serializableBefore = false, serializableAfter = false)
+  }
+}
+
+object ClosureCleanerSuite2 {
+  // Scala 2.12 allows better interop with Java 8 via lambda syntax. This is supported
+  // by implementing FunctionN classes in Scala’s standard library as Single Abstract
+  // Method (SAM) types. Lambdas are implemented via the invokedynamic instruction and
+  // the use of the LambdaMwtaFactory (LMF) machanism.
+  val supportsLMFs = scala.util.Properties.versionString.contains("2.12")
 }

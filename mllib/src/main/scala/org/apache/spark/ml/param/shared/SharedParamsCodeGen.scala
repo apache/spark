@@ -20,6 +20,7 @@ package org.apache.spark.ml.param.shared
 import java.io.PrintWriter
 
 import scala.reflect.ClassTag
+import scala.xml.Utility
 
 /**
  * Code generator for shared params (sharedParams.scala). Run under the Spark folder with
@@ -46,8 +47,8 @@ private[shared] object SharedParamsCodeGen {
         Some("\"probability\"")),
       ParamDesc[String]("varianceCol", "Column name for the biased sample variance of prediction"),
       ParamDesc[Double]("threshold",
-        "threshold in binary classification prediction, in range [0, 1]", Some("0.5"),
-        isValid = "ParamValidators.inRange(0, 1)", finalMethods = false),
+        "threshold in binary classification prediction, in range [0, 1]",
+        isValid = "ParamValidators.inRange(0, 1)", finalMethods = false, finalFields = false),
       ParamDesc[Array[Double]]("thresholds", "Thresholds in multi-class classification" +
         " to adjust the probability of predicting each class." +
         " Array must have length equal to the number of classes, with values > 0" +
@@ -59,14 +60,17 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
+      ParamDesc[Array[String]]("outputCols", "output column names"),
       ParamDesc[Int]("checkpointInterval", "set checkpoint interval (>= 1) or " +
         "disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed " +
-        "every 10 iterations", isValid = "(interval: Int) => interval == -1 || interval >= 1"),
+        "every 10 iterations. Note: this setting will be ignored if the checkpoint directory " +
+        "is not set in the SparkContext",
+        isValid = "(interval: Int) => interval == -1 || interval >= 1"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
       ParamDesc[String]("handleInvalid", "how to handle invalid entries. Options are skip (which " +
         "will filter out rows with bad values), or error (which will throw an error). More " +
         "options may be added later",
-        isValid = "ParamValidators.inArray(Array(\"skip\", \"error\"))"),
+        isValid = "ParamValidators.inArray(Array(\"skip\", \"error\"))", finalFields = false),
       ParamDesc[Boolean]("standardization", "whether to standardize the training features" +
         " before fitting the model", Some("true")),
       ParamDesc[Long]("seed", "random seed", Some("this.getClass.getName.hashCode.toLong")),
@@ -76,13 +80,26 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
       ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization (>" +
-        " 0)", isValid = "ParamValidators.gt(0)"),
+        " 0)", isValid = "ParamValidators.gt(0)", finalFields = false),
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
         "all instance weights as 1.0"),
-      ParamDesc[String]("solver", "the solver algorithm for optimization. If this is not set or " +
-        "empty, default value is 'auto'", Some("\"auto\"")),
+      ParamDesc[String]("solver", "the solver algorithm for optimization", finalFields = false),
       ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
-        isValid = "ParamValidators.gtEq(2)", isExpertParam = true))
+        isValid = "ParamValidators.gtEq(2)", isExpertParam = true),
+      ParamDesc[Boolean]("collectSubModels", "whether to collect a list of sub-models trained " +
+        "during tuning. If set to false, then only the single best sub-model will be available " +
+        "after fitting. If set to true, then all sub-models will be available. Warning: For " +
+        "large models, collecting all sub-models can cause OOMs on the Spark driver",
+        Some("false"), isExpertParam = true),
+      ParamDesc[String]("loss", "the loss function to be optimized", finalFields = false),
+      ParamDesc[String]("distanceMeasure", "The distance measure. Supported options: 'euclidean'" +
+        " and 'cosine'", Some("org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN"),
+        isValid = "(value: String) => " +
+        "org.apache.spark.mllib.clustering.DistanceMeasure.validateDistanceMeasure(value)"),
+      ParamDesc[String]("validationIndicatorCol", "name of the column that indicates whether " +
+        "each row is for training or for validation. False indicates training; true indicates " +
+        "validation.")
+    )
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
@@ -98,6 +115,7 @@ private[shared] object SharedParamsCodeGen {
       defaultValueStr: Option[String] = None,
       isValid: String = "",
       finalMethods: Boolean = true,
+      finalFields: Boolean = true,
       isExpertParam: Boolean = false) {
 
     require(name.matches("[a-z][a-zA-Z0-9]*"), s"Param name $name is invalid.")
@@ -166,18 +184,27 @@ private[shared] object SharedParamsCodeGen {
     } else {
       "def"
     }
+    val fieldStr = if (param.finalFields) {
+      "final val"
+    } else {
+      "val"
+    }
+
+    val htmlCompliantDoc = Utility.escape(doc)
 
     s"""
       |/**
-      | * Trait for shared param $name$defaultValueDoc.
+      | * Trait for shared param $name$defaultValueDoc. This trait may be changed or
+      | * removed between minor versions.
       | */
-      |private[ml] trait Has$Name extends Params {
+      |@DeveloperApi
+      |trait Has$Name extends Params {
       |
       |  /**
-      |   * Param for $doc.
+      |   * Param for $htmlCompliantDoc.
       |   * @group ${groupStr(0)}
       |   */
-      |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
+      |  $fieldStr $name: $Param = new $Param(this, "$name", "$doc"$isValid)
       |$setDefault
       |  /** @group ${groupStr(1)} */
       |  $methodStr get$Name: $T = $$($name)
@@ -207,6 +234,7 @@ private[shared] object SharedParamsCodeGen {
         |
         |package org.apache.spark.ml.param.shared
         |
+        |import org.apache.spark.annotation.DeveloperApi
         |import org.apache.spark.ml.param._
         |
         |// DO NOT MODIFY THIS FILE! It was generated by SharedParamsCodeGen.

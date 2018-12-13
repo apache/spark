@@ -26,7 +26,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.StageInfo
-import org.apache.spark.storage.{RDDInfo, StorageLevel}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * A representation of a generic cluster graph used for storing information on RDD operations.
@@ -35,20 +35,20 @@ import org.apache.spark.storage.{RDDInfo, StorageLevel}
  * nodes and children clusters. Additionally, a graph may also have edges that enter or exit
  * the graph from nodes that belong to adjacent graphs.
  */
-private[ui] case class RDDOperationGraph(
+private[spark] case class RDDOperationGraph(
     edges: Seq[RDDOperationEdge],
     outgoingEdges: Seq[RDDOperationEdge],
     incomingEdges: Seq[RDDOperationEdge],
     rootCluster: RDDOperationCluster)
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
-private[ui] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: String)
+private[spark] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: String)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
  * This represents an RDD dependency.
  */
-private[ui] case class RDDOperationEdge(fromId: Int, toId: Int)
+private[spark] case class RDDOperationEdge(fromId: Int, toId: Int)
 
 /**
  * A cluster that groups nodes together in an RDDOperationGraph.
@@ -56,7 +56,7 @@ private[ui] case class RDDOperationEdge(fromId: Int, toId: Int)
  * This represents any grouping of RDDs, including operation scopes (e.g. textFile, flatMap),
  * stages, jobs, or any higher level construct. A cluster may be nested inside of other clusters.
  */
-private[ui] class RDDOperationCluster(val id: String, private var _name: String) {
+private[spark] class RDDOperationCluster(val id: String, private var _name: String) {
   private val _childNodes = new ListBuffer[RDDOperationNode]
   private val _childClusters = new ListBuffer[RDDOperationCluster]
 
@@ -92,7 +92,7 @@ private[ui] class RDDOperationCluster(val id: String, private var _name: String)
   }
 }
 
-private[ui] object RDDOperationGraph extends Logging {
+private[spark] object RDDOperationGraph extends Logging {
 
   val STAGE_CLUSTER_PREFIX = "stage_"
 
@@ -116,7 +116,7 @@ private[ui] object RDDOperationGraph extends Logging {
     // Use a special prefix here to differentiate this cluster from other operation clusters
     val stageClusterId = STAGE_CLUSTER_PREFIX + stage.stageId
     val stageClusterName = s"Stage ${stage.stageId}" +
-      { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
+      { if (stage.attemptNumber == 0) "" else s" (attempt ${stage.attemptNumber})" }
     val rootCluster = new RDDOperationCluster(stageClusterId, stageClusterName)
 
     var rootNodeCount = 0

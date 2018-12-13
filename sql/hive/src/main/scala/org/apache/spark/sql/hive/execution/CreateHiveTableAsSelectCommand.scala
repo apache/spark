@@ -20,31 +20,32 @@ package org.apache.spark.sql.hive.execution
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.command.DataWritingCommand
 
 
 /**
  * Create table and insert the query result into it.
  *
- * @param tableDesc the Table Describe, which may contains serde, storage handler etc.
+ * @param tableDesc the Table Describe, which may contain serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
  * @param mode SaveMode
  */
 case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
+    outputColumnNames: Seq[String],
     mode: SaveMode)
-  extends RunnableCommand {
+  extends DataWritingCommand {
 
   private val tableIdentifier = tableDesc.identifier
 
-  override def innerChildren: Seq[LogicalPlan] = Seq(query)
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    if (sparkSession.sessionState.catalog.tableExists(tableIdentifier)) {
+  override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    if (catalog.tableExists(tableIdentifier)) {
       assert(mode != SaveMode.Overwrite,
         s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
 
@@ -56,34 +57,39 @@ case class CreateHiveTableAsSelectCommand(
         return Seq.empty
       }
 
-      sparkSession.sessionState.executePlan(
-        InsertIntoTable(
-          UnresolvedRelation(tableIdentifier),
-          Map(),
-          query,
-          overwrite = false,
-          ifNotExists = false)).toRdd
+      // For CTAS, there is no static partition values to insert.
+      val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
+      InsertIntoHiveTable(
+        tableDesc,
+        partition,
+        query,
+        overwrite = false,
+        ifPartitionNotExists = false,
+        outputColumnNames = outputColumnNames).run(sparkSession, child)
     } else {
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
       assert(tableDesc.schema.isEmpty)
-      sparkSession.sessionState.catalog.createTable(
-        tableDesc.copy(schema = query.schema), ignoreIfExists = false)
+      catalog.createTable(
+        tableDesc.copy(schema = outputColumns.toStructType), ignoreIfExists = false)
 
       try {
-        sparkSession.sessionState.executePlan(
-          InsertIntoTable(
-            UnresolvedRelation(tableIdentifier),
-            Map(),
-            query,
-            overwrite = true,
-            ifNotExists = false)).toRdd
+        // Read back the metadata of the table which was created just now.
+        val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
+        // For CTAS, there is no static partition values to insert.
+        val partition = createdTableMeta.partitionColumnNames.map(_ -> None).toMap
+        InsertIntoHiveTable(
+          createdTableMeta,
+          partition,
+          query,
+          overwrite = true,
+          ifPartitionNotExists = false,
+          outputColumnNames = outputColumnNames).run(sparkSession, child)
       } catch {
         case NonFatal(e) =>
           // drop the created table.
-          sparkSession.sessionState.catalog.dropTable(tableIdentifier, ignoreIfNotExists = true,
-            purge = false)
+          catalog.dropTable(tableIdentifier, ignoreIfNotExists = true, purge = false)
           throw e
       }
     }
@@ -92,7 +98,7 @@ case class CreateHiveTableAsSelectCommand(
   }
 
   override def argString: String = {
-    s"[Database:${tableDesc.database}}, " +
+    s"[Database:${tableDesc.database}, " +
     s"TableName: ${tableDesc.identifier.table}, " +
     s"InsertIntoHiveTable]"
   }

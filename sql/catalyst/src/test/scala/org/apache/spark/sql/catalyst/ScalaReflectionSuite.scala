@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.net.URLClassLoader
 import java.sql.{Date, Timestamp}
 
-import scala.reflect.runtime.universe.typeOf
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
+import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
 
 case class PrimitiveData(
     intField: Int,
@@ -83,6 +81,8 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
+case class SpecialCharAsFieldData(`field.1`: String, `field 2`: String)
+
 object TestingUDT {
   @SQLUserDefinedType(udt = classOf[NestedStructUDT])
   class NestedStruct(val a: Integer, val b: Long, val c: Double)
@@ -109,9 +109,41 @@ object TestingUDT {
   }
 }
 
+/** An example derived from Twitter/Scrooge codegen for thrift  */
+object ScroogeLikeExample {
+  def apply(x: Int): ScroogeLikeExample = new Immutable(x)
+
+  def unapply(_item: ScroogeLikeExample): Option[Int] = Some(_item.x)
+
+  class Immutable(val x: Int) extends ScroogeLikeExample
+}
+
+trait ScroogeLikeExample extends Product1[Int] with Serializable {
+  import ScroogeLikeExample._
+
+  def x: Int
+
+  def _1: Int = x
+
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
+
+  override def equals(other: Any): Boolean =
+    canEqual(other) &&
+      this.x ==  other.asInstanceOf[ScroogeLikeExample].x
+
+  override def hashCode: Int = x
+}
 
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
+
+  // A helper method used to test `ScalaReflection.serializerForType`.
+  private def serializerFor[T: TypeTag]: Expression =
+    serializerForType(ScalaReflection.localTypeOf[T])
+
+  // A helper method used to test `ScalaReflection.deserializerForType`.
+  private def deserializerFor[T: TypeTag]: Expression =
+    deserializerForType(ScalaReflection.localTypeOf[T])
 
   test("SQLUserDefinedType annotation on Scala structure") {
     val schema = schemaFor[TestingUDT.NestedStruct]
@@ -262,32 +294,11 @@ class ScalaReflectionSuite extends SparkFunSuite {
     }
   }
 
-  test("get parameter type from a function object") {
-    val primitiveFunc = (i: Int, j: Long) => "x"
-    val primitiveTypes = getParameterTypes(primitiveFunc)
-    assert(primitiveTypes.forall(_.isPrimitive))
-    assert(primitiveTypes === Seq(classOf[Int], classOf[Long]))
-
-    val boxedFunc = (i: java.lang.Integer, j: java.lang.Long) => "x"
-    val boxedTypes = getParameterTypes(boxedFunc)
-    assert(boxedTypes.forall(!_.isPrimitive))
-    assert(boxedTypes === Seq(classOf[java.lang.Integer], classOf[java.lang.Long]))
-
-    val anyFunc = (i: Any, j: AnyRef) => "x"
-    val anyTypes = getParameterTypes(anyFunc)
-    assert(anyTypes.forall(!_.isPrimitive))
-    assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
-  }
-
   test("SPARK-15062: Get correct serializer for List[_]") {
     val list = List(1, 2, 3)
-    val serializer = serializerFor[List[Int]](BoundReference(
-      0, ObjectType(list.getClass), nullable = false))
-    assert(serializer.children.size == 2)
-    assert(serializer.children.head.isInstanceOf[Literal])
-    assert(serializer.children.head.asInstanceOf[Literal].value === UTF8String.fromString("value"))
-    assert(serializer.children.last.isInstanceOf[NewInstance])
-    assert(serializer.children.last.asInstanceOf[NewInstance]
+    val serializer = serializerFor[List[Int]]
+    assert(serializer.isInstanceOf[NewInstance])
+    assert(serializer.asInstanceOf[NewInstance]
       .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
   }
 
@@ -298,55 +309,88 @@ class ScalaReflectionSuite extends SparkFunSuite {
 
   test("serialize and deserialize arbitrary sequence types") {
     import scala.collection.immutable.Queue
-    val queueSerializer = serializerFor[Queue[Int]](BoundReference(
-      0, ObjectType(classOf[Queue[Int]]), nullable = false))
-    assert(queueSerializer.dataType.head.dataType ==
+    val queueSerializer = serializerFor[Queue[Int]]
+    assert(queueSerializer.dataType ==
       ArrayType(IntegerType, containsNull = false))
     val queueDeserializer = deserializerFor[Queue[Int]]
     assert(queueDeserializer.dataType == ObjectType(classOf[Queue[_]]))
 
     import scala.collection.mutable.ArrayBuffer
-    val arrayBufferSerializer = serializerFor[ArrayBuffer[Int]](BoundReference(
-      0, ObjectType(classOf[ArrayBuffer[Int]]), nullable = false))
-    assert(arrayBufferSerializer.dataType.head.dataType ==
+    val arrayBufferSerializer = serializerFor[ArrayBuffer[Int]]
+    assert(arrayBufferSerializer.dataType ==
       ArrayType(IntegerType, containsNull = false))
     val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]]
     assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
   }
 
-  private val dataTypeForComplexData = dataTypeFor[ComplexData]
-  private val typeOfComplexData = typeOf[ComplexData]
+  test("serialize and deserialize arbitrary map types") {
+    val mapSerializer = serializerFor[Map[Int, Int]]
+    assert(mapSerializer.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val mapDeserializer = deserializerFor[Map[Int, Int]]
+    assert(mapDeserializer.dataType == ObjectType(classOf[Map[_, _]]))
 
-  Seq(
-    ("mirror", () => mirror),
-    ("dataTypeFor", () => dataTypeFor[ComplexData]),
-    ("constructorFor", () => deserializerFor[ComplexData]),
-    ("extractorsFor", {
-      val inputObject = BoundReference(0, dataTypeForComplexData, nullable = false)
-      () => serializerFor[ComplexData](inputObject)
-    }),
-    ("getConstructorParameters(cls)", () => getConstructorParameters(classOf[ComplexData])),
-    ("getConstructorParameterNames", () => getConstructorParameterNames(classOf[ComplexData])),
-    ("getClassFromType", () => getClassFromType(typeOfComplexData)),
-    ("schemaFor", () => schemaFor[ComplexData]),
-    ("localTypeOf", () => localTypeOf[ComplexData]),
-    ("getClassNameFromType", () => getClassNameFromType(typeOfComplexData)),
-    ("getParameterTypes", () => getParameterTypes(() => ())),
-    ("getConstructorParameters(tpe)", () => getClassNameFromType(typeOfComplexData))).foreach {
-      case (name, exec) =>
-        test(s"SPARK-13640: thread safety of ${name}") {
-          (0 until 100).foreach { _ =>
-            val loader = new URLClassLoader(Array.empty, Utils.getContextOrSparkClassLoader)
-            (0 until 10).par.foreach { _ =>
-              val cl = Thread.currentThread.getContextClassLoader
-              try {
-                Thread.currentThread.setContextClassLoader(loader)
-                exec()
-              } finally {
-                Thread.currentThread.setContextClassLoader(cl)
-              }
-            }
-          }
-        }
+    import scala.collection.immutable.HashMap
+    val hashMapSerializer = serializerFor[HashMap[Int, Int]]
+    assert(hashMapSerializer.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val hashMapDeserializer = deserializerFor[HashMap[Int, Int]]
+    assert(hashMapDeserializer.dataType == ObjectType(classOf[HashMap[_, _]]))
+
+    import scala.collection.mutable.{LinkedHashMap => LHMap}
+    val linkedHashMapSerializer = serializerFor[LHMap[Long, String]]
+    assert(linkedHashMapSerializer.dataType ==
+      MapType(LongType, StringType, valueContainsNull = true))
+    val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]]
+    assert(linkedHashMapDeserializer.dataType == ObjectType(classOf[LHMap[_, _]]))
+  }
+
+  test("SPARK-22442: Generate correct field names for special characters") {
+    val serializer = serializerFor[SpecialCharAsFieldData]
+      .collect {
+        case If(_, _, s: CreateNamedStruct) => s
+      }.head
+    val deserializer = deserializerFor[SpecialCharAsFieldData]
+    assert(serializer.dataType(0).name == "field.1")
+    assert(serializer.dataType(1).name == "field 2")
+
+    val newInstance = deserializer.collect { case n: NewInstance => n }.head
+
+    val argumentsFields = newInstance.arguments.flatMap { _.collect {
+      case UpCast(u: UnresolvedExtractValue, _, _) => u.extraction.toString
+    }}
+    assert(argumentsFields(0) == "field.1")
+    assert(argumentsFields(1) == "field 2")
+  }
+
+  test("SPARK-22472: add null check for top-level primitive values") {
+    assert(deserializerFor[Int].isInstanceOf[AssertNotNull])
+    assert(!deserializerFor[String].isInstanceOf[AssertNotNull])
+  }
+
+  test("SPARK-23025: schemaFor should support Null type") {
+    val schema = schemaFor[(Int, Null)]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("_1", IntegerType, nullable = false),
+        StructField("_2", NullType, nullable = true))),
+      nullable = true))
+  }
+
+  test("SPARK-23835: add null check to non-nullable types in Tuples") {
+    def numberOfCheckedArguments(deserializer: Expression): Int = {
+      val newInstance = deserializer.collect { case n: NewInstance => n}.head
+      newInstance.arguments.count(_.isInstanceOf[AssertNotNull])
     }
+    assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
+    assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
+  }
+
+  test("SPARK-8288: schemaFor works for a class with only a companion object constructor") {
+    val schema = schemaFor[ScroogeLikeExample]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("x", IntegerType, nullable = false))), nullable = true))
+  }
 }

@@ -21,7 +21,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -93,6 +94,8 @@ case class ExpandExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
+  override def needCopyResult: Boolean = true
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     /*
      * When the projections list looks like:
@@ -131,9 +134,6 @@ case class ExpandExec(
      * size explosion.
      */
 
-    // Set input variables
-    ctx.currentVars = input
-
     // Tracks whether a column has the same output for all rows.
     // Size of sameOutput array should equal N.
     // If sameOutput(i) is true, then the i-th column has the same value for all output rows given
@@ -153,11 +153,15 @@ case class ExpandExec(
       } else {
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
-        val code = s"""
+        val code = code"""
           |boolean $isNull = true;
-          |${ctx.javaType(firstExpr.dataType)} $value = ${ctx.defaultValue(firstExpr.dataType)};
+          |${CodeGenerator.javaType(firstExpr.dataType)} $value =
+          |  ${CodeGenerator.defaultValue(firstExpr.dataType)};
          """.stripMargin
-        ExprCode(code, isNull, value)
+        ExprCode(
+          code,
+          JavaCode.isNullVariable(isNull),
+          JavaCode.variable(value, firstExpr.dataType))
       }
     }
 
@@ -187,7 +191,6 @@ case class ExpandExec(
     val i = ctx.freshName("i")
     // these column have to declared before the loop.
     val evaluate = evaluateVariables(outputColumns)
-    ctx.copyResult = true
     s"""
        |$evaluate
        |for (int $i = 0; $i < ${projections.length}; $i ++) {

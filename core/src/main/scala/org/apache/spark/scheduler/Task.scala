@@ -49,6 +49,8 @@ import org.apache.spark.util._
  * @param jobId id of the job this task belongs to
  * @param appId id of the app this task belongs to
  * @param appAttemptId attempt id of the app this task belongs to
+ * @param isBarrier whether this task belongs to a barrier stage. Spark must launch all the tasks
+ *                  at the same time for a barrier stage.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
@@ -60,7 +62,8 @@ private[spark] abstract class Task[T](
       SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array(),
     val jobId: Option[Int] = None,
     val appId: Option[String] = None,
-    val appAttemptId: Option[String] = None) extends Serializable {
+    val appAttemptId: Option[String] = None,
+    val isBarrier: Boolean = false) extends Serializable {
 
   @transient lazy val metrics: TaskMetrics =
     SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(serializedTaskMetrics))
@@ -77,8 +80,11 @@ private[spark] abstract class Task[T](
       attemptNumber: Int,
       metricsSystem: MetricsSystem): T = {
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
-    context = new TaskContextImpl(
+    // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
+    // the stage is barrier.
+    val taskContext = new TaskContextImpl(
       stageId,
+      stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
       partitionId,
       taskAttemptId,
       attemptNumber,
@@ -86,6 +92,13 @@ private[spark] abstract class Task[T](
       localProperties,
       metricsSystem,
       metrics)
+
+    context = if (isBarrier) {
+      new BarrierTaskContext(taskContext)
+    } else {
+      taskContext
+    }
+
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
@@ -115,26 +128,33 @@ private[spark] abstract class Task[T](
           case t: Throwable =>
             e.addSuppressed(t)
         }
+        context.markTaskCompleted(Some(e))
         throw e
     } finally {
-      // Call the task completion callbacks.
-      context.markTaskCompleted()
       try {
-        Utils.tryLogNonFatalError {
-          // Release memory used by this thread for unrolling blocks
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
-          // Notify any tasks waiting for execution memory to be freed to wake up and try to
-          // acquire memory again. This makes impossible the scenario where a task sleeps forever
-          // because there are no other tasks left to notify it. Since this is safe to do but may
-          // not be strictly necessary, we should revisit whether we can remove this in the future.
-          val memoryManager = SparkEnv.get.memoryManager
-          memoryManager.synchronized { memoryManager.notifyAll() }
-        }
+        // Call the task completion callbacks. If "markTaskCompleted" is called twice, the second
+        // one is no-op.
+        context.markTaskCompleted(None)
       } finally {
-        // Though we unset the ThreadLocal here, the context member variable itself is still queried
-        // directly in the TaskRunner to check for FetchFailedExceptions.
-        TaskContext.unset()
+        try {
+          Utils.tryLogNonFatalError {
+            // Release memory used by this thread for unrolling blocks
+            SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+            SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(
+              MemoryMode.OFF_HEAP)
+            // Notify any tasks waiting for execution memory to be freed to wake up and try to
+            // acquire memory again. This makes impossible the scenario where a task sleeps forever
+            // because there are no other tasks left to notify it. Since this is safe to do but may
+            // not be strictly necessary, we should revisit whether we can remove this in the
+            // future.
+            val memoryManager = SparkEnv.get.memoryManager
+            memoryManager.synchronized { memoryManager.notifyAll() }
+          }
+        } finally {
+          // Though we unset the ThreadLocal here, the context member variable itself is still
+          // queried directly in the TaskRunner to check for FetchFailedExceptions.
+          TaskContext.unset()
+        }
       }
     }
   }
@@ -153,7 +173,7 @@ private[spark] abstract class Task[T](
   var epoch: Long = -1
 
   // Task context, to be initialized in run().
-  @transient var context: TaskContextImpl = _
+  @transient var context: TaskContext = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _
@@ -182,14 +202,11 @@ private[spark] abstract class Task[T](
    */
   def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
     if (context != null) {
-      context.taskMetrics.internalAccums.filter { a =>
-        // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
-        // value will be updated at driver side.
-        // Note: internal accumulators representing task metrics always count failed values
-        !a.isZero || a.name == Some(InternalAccumulator.RESULT_SIZE)
-      // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not filter
-      // them out.
-      } ++ context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
+      // Note: internal accumulators representing task metrics always count failed values
+      context.taskMetrics.nonZeroInternalAccums() ++
+        // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not
+        // filter them out.
+        context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
     } else {
       Seq.empty
     }

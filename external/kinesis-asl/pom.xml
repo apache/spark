@@ -19,13 +19,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.2.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <!-- Kinesis integration is not included by default due to ASL-licensed code. -->
-  <artifactId>spark-streaming-kinesis-asl_2.11</artifactId>
+  <artifactId>spark-streaming-kinesis-asl_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Kinesis Integration</name>
 
@@ -68,6 +68,13 @@
       <artifactId>amazon-kinesis-producer</artifactId>
       <version>${aws.kinesis.producer.version}</version>
       <scope>test</scope>
+    </dependency>
+    <!-- manage this up explicitly to match Spark; com.amazonaws:aws-java-sdk-pom specifies
+      2.6.7 but says we can manage it up -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-cbor</artifactId>
+      <version>${fasterxml.jackson.version}</version>
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>

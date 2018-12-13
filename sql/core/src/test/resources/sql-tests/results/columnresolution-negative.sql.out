@@ -72,7 +72,7 @@ SELECT i1 FROM t1, mydb1.t1
 struct<>
 -- !query 8 output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 'i1' is ambiguous, could be: mydb1.t1.i1, mydb1.t1.i1.; line 1 pos 7
 
 
 -- !query 9
@@ -81,7 +81,7 @@ SELECT t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query 9 output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 't1.i1' is ambiguous, could be: mydb1.t1.i1, mydb1.t1.i1.; line 1 pos 7
 
 
 -- !query 10
@@ -90,7 +90,7 @@ SELECT mydb1.t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query 10 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`mydb1.t1.i1`' given input columns: [i1, i1]; line 1 pos 7
+Reference 'mydb1.t1.i1' is ambiguous, could be: mydb1.t1.i1, mydb1.t1.i1.; line 1 pos 7
 
 
 -- !query 11
@@ -99,7 +99,7 @@ SELECT i1 FROM t1, mydb2.t1
 struct<>
 -- !query 11 output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 'i1' is ambiguous, could be: mydb1.t1.i1, mydb2.t1.i1.; line 1 pos 7
 
 
 -- !query 12
@@ -108,7 +108,7 @@ SELECT t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query 12 output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 't1.i1' is ambiguous, could be: mydb1.t1.i1, mydb2.t1.i1.; line 1 pos 7
 
 
 -- !query 13
@@ -125,7 +125,7 @@ SELECT i1 FROM t1, mydb1.t1
 struct<>
 -- !query 14 output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 'i1' is ambiguous, could be: mydb2.t1.i1, mydb1.t1.i1.; line 1 pos 7
 
 
 -- !query 15
@@ -134,7 +134,7 @@ SELECT t1.i1 FROM t1, mydb1.t1
 struct<>
 -- !query 15 output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 't1.i1' is ambiguous, could be: mydb2.t1.i1, mydb1.t1.i1.; line 1 pos 7
 
 
 -- !query 16
@@ -143,7 +143,7 @@ SELECT i1 FROM t1, mydb2.t1
 struct<>
 -- !query 16 output
 org.apache.spark.sql.AnalysisException
-Reference 'i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 'i1' is ambiguous, could be: mydb2.t1.i1, mydb2.t1.i1.; line 1 pos 7
 
 
 -- !query 17
@@ -152,7 +152,7 @@ SELECT t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query 17 output
 org.apache.spark.sql.AnalysisException
-Reference 't1.i1' is ambiguous, could be: i1#x, i1#x.; line 1 pos 7
+Reference 't1.i1' is ambiguous, could be: mydb2.t1.i1, mydb2.t1.i1.; line 1 pos 7
 
 
 -- !query 18
@@ -161,7 +161,7 @@ SELECT db1.t1.i1 FROM t1, mydb2.t1
 struct<>
 -- !query 18 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`db1.t1.i1`' given input columns: [i1, i1]; line 1 pos 7
+cannot resolve '`db1.t1.i1`' given input columns: [mydb2.t1.i1, mydb2.t1.i1]; line 1 pos 7
 
 
 -- !query 19
@@ -186,7 +186,7 @@ SELECT mydb1.t1 FROM t1
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`mydb1.t1`' given input columns: [i1]; line 1 pos 7
+cannot resolve '`mydb1.t1`' given input columns: [mydb1.t1.i1]; line 1 pos 7
 
 
 -- !query 22
@@ -195,7 +195,7 @@ SELECT t1.x.y.* FROM t1
 struct<>
 -- !query 22 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't1.x.y.*' give input columns 'i1';
+cannot resolve 't1.x.y.*' given input columns 'i1';
 
 
 -- !query 23
@@ -204,7 +204,7 @@ SELECT t1 FROM mydb1.t1
 struct<>
 -- !query 23 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`t1`' given input columns: [i1]; line 1 pos 7
+cannot resolve '`t1`' given input columns: [mydb1.t1.i1]; line 1 pos 7
 
 
 -- !query 24
@@ -221,7 +221,7 @@ SELECT mydb1.t1.i1 FROM t1
 struct<>
 -- !query 25 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`mydb1.t1.i1`' given input columns: [i1]; line 1 pos 7
+cannot resolve '`mydb1.t1.i1`' given input columns: [mydb2.t1.i1]; line 1 pos 7
 
 
 -- !query 26

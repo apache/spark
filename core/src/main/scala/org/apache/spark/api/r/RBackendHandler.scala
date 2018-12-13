@@ -26,9 +26,9 @@ import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.handler.timeout.ReadTimeoutException
 
+import org.apache.spark.SparkConf
 import org.apache.spark.api.r.SerDe._
 import org.apache.spark.internal.Logging
-import org.apache.spark.SparkConf
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**

@@ -23,9 +23,11 @@ ERRORS=$(echo -e "q\n" \
     | build/sbt \
         -Pkinesis-asl \
         -Pmesos \
+        -Pkubernetes \
         -Pyarn \
         -Phive \
         -Phive-thriftserver \
+        -Pspark-ganglia-lgpl \
         scalastyle test:scalastyle \
     | awk '{if($1~/error/)print}' \
 )

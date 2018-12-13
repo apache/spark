@@ -322,10 +322,10 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
 
   @Override
   public byte[] toByteArray() throws IOException {
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
-    writeTo(out);
-    out.close();
-    return out.toByteArray();
+    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+      writeTo(out);
+      return out.toByteArray();
+    }
   }
 
   public static CountMinSketchImpl readFrom(InputStream in) throws IOException {
@@ -365,7 +365,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     this.writeTo(out);
   }
 
-  private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+  private void readObject(ObjectInputStream in) throws IOException {
     this.readFrom0(in);
   }
 }

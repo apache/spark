@@ -50,7 +50,7 @@ private[hive] object HiveShim {
   val HIVE_GENERIC_UDF_MACRO_CLS = "org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro"
 
   /*
-   * This function in hive-0.13 become private, but we have to do this to walkaround hive bug
+   * This function in hive-0.13 become private, but we have to do this to work around hive bug
    */
   private def appendReadColumnNames(conf: Configuration, cols: Seq[String]) {
     val old: String = conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, "")
@@ -217,7 +217,7 @@ private[hive] object HiveShim {
         instance.asInstanceOf[UDFType]
       } else {
         val func = Utils.getContextOrSparkClassLoader
-          .loadClass(functionClassName).newInstance.asInstanceOf[UDFType]
+          .loadClass(functionClassName).getConstructor().newInstance().asInstanceOf[UDFType]
         if (!func.isInstanceOf[UDF]) {
           // We cache the function if it's no the Simple UDF,
           // as we always have to create new instance for Simple UDF

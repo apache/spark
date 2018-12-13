@@ -43,8 +43,6 @@ private[ml] object TreeTests extends SparkFunSuite {
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
     val spark = SparkSession.builder()
-      .master("local[2]")
-      .appName("TreeTests")
       .sparkContext(data.sparkContext)
       .getOrCreate()
     import spark.implicits._
@@ -114,7 +112,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       checkEqual(a.rootNode, b.rootNode)
     } catch {
       case ex: Exception =>
-        throw new AssertionError("checkEqual failed since the two trees were not identical.\n" +
+        fail("checkEqual failed since the two trees were not identical.\n" +
           "TREE A:\n" + a.toDebugString + "\n" +
           "TREE B:\n" + b.toDebugString + "\n", ex)
     }
@@ -135,7 +133,7 @@ private[ml] object TreeTests extends SparkFunSuite {
         checkEqual(aye.rightChild, bee.rightChild)
       case (aye: LeafNode, bee: LeafNode) => // do nothing
       case _ =>
-        throw new AssertionError("Found mismatched nodes")
+        fail("Found mismatched nodes")
     }
   }
 
@@ -150,7 +148,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       }
       assert(a.treeWeights === b.treeWeights)
     } catch {
-      case ex: Exception => throw new AssertionError(
+      case ex: Exception => fail(
         "checkEqual failed since the two tree ensembles were not identical")
     }
   }

@@ -19,27 +19,19 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import scala.collection.immutable.HashSet
 import scala.collection.mutable
-import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, Statistics}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.types._
 
-case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging {
+case class FilterEstimation(plan: Filter) extends Logging {
 
-  private val childStats = plan.child.stats(catalystConf)
+  private val childStats = plan.child.stats
 
-  /**
-   * We will update the corresponding ColumnStats for a column after we apply a predicate condition.
-   * For example, column c has [min, max] value as [0, 100].  In a range condition such as
-   * (c > 40 AND c <= 50), we need to set the column's [min, max] value to [40, 100] after we
-   * evaluate the first condition c > 40.  We need to set the column's [min, max] value to [40, 50]
-   * after we evaluate the second condition c <= 50.
-   */
-  private val colStatsMap = new ColumnStatsMap
+  private val colStatsMap = ColumnStatsMap(childStats.attributeStats)
 
   /**
    * Returns an option of Statistics for a Filter logical plan node.
@@ -53,24 +45,19 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
   def estimate: Option[Statistics] = {
     if (childStats.rowCount.isEmpty) return None
 
-    // Save a mutable copy of colStats so that we can later change it recursively.
-    colStatsMap.setInitValues(childStats.attributeStats)
-
     // Estimate selectivity of this filter predicate, and update column stats if needed.
     // For not-supported condition, set filter selectivity to a conservative estimate 100%
-    val filterSelectivity: Double = calculateFilterSelectivity(plan.condition).getOrElse(1.0)
+    val filterSelectivity = calculateFilterSelectivity(plan.condition).getOrElse(1.0)
 
-    val newColStats = if (filterSelectivity == 0) {
+    val filteredRowCount: BigInt = ceil(BigDecimal(childStats.rowCount.get) * filterSelectivity)
+    val newColStats = if (filteredRowCount == 0) {
       // The output is empty, we don't need to keep column stats.
       AttributeMap[ColumnStat](Nil)
     } else {
-      colStatsMap.toColumnStats
+      colStatsMap.outputColumnStats(rowsBeforeFilter = childStats.rowCount.get,
+        rowsAfterFilter = filteredRowCount)
     }
-
-    val filteredRowCount: BigInt =
-      EstimationUtils.ceil(BigDecimal(childStats.rowCount.get) * filterSelectivity)
-    val filteredSizeInBytes: BigInt =
-      EstimationUtils.getOutputSize(plan.output, filteredRowCount, newColStats)
+    val filteredSizeInBytes: BigInt = getOutputSize(plan.output, filteredRowCount, newColStats)
 
     Some(childStats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCount),
       attributeStats = newColStats))
@@ -238,25 +225,25 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
       attr: Attribute,
       isNull: Boolean,
       update: Boolean): Option[Double] = {
-    if (!colStatsMap.contains(attr)) {
+    if (!colStatsMap.contains(attr) || !colStatsMap(attr).hasCountStats) {
       logDebug("[CBO] No statistics for " + attr)
       return None
     }
     val colStat = colStatsMap(attr)
     val rowCountValue = childStats.rowCount.get
-    val nullPercent: BigDecimal = if (rowCountValue == 0) {
+    val nullPercent: Double = if (rowCountValue == 0) {
       0
     } else {
-      BigDecimal(colStat.nullCount) / BigDecimal(rowCountValue)
+      (BigDecimal(colStat.nullCount.get) / BigDecimal(rowCountValue)).toDouble
     }
 
     if (update) {
       val newStats = if (isNull) {
-        colStat.copy(distinctCount = 0, min = None, max = None)
+        colStat.copy(distinctCount = Some(0), min = None, max = None)
       } else {
-        colStat.copy(nullCount = 0)
+        colStat.copy(nullCount = Some(0))
       }
-      colStatsMap(attr) = newStats
+      colStatsMap.update(attr, newStats)
     }
 
     val percent = if (isNull) {
@@ -265,7 +252,7 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
       1.0 - nullPercent
     }
 
-    Some(percent.toDouble)
+    Some(percent)
   }
 
   /**
@@ -277,7 +264,7 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
    * @return an optional double value to show the percentage of rows meeting a given condition
-    *         It returns None if no statistics exists for a given column or wrong value.
+   *         It returns None if no statistics exists for a given column or wrong value.
    */
   def evaluateBinary(
       op: BinaryComparison,
@@ -323,32 +310,40 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
       return None
     }
     val colStat = colStatsMap(attr)
-    val ndv = colStat.distinctCount
 
     // decide if the value is in [min, max] of the column.
     // We currently don't store min/max for binary/string type.
     // Hence, we assume it is in boundary for binary/string type.
-    val statsRange = Range(colStat.min, colStat.max, attr.dataType)
-    if (statsRange.contains(literal)) {
+    val statsInterval = ValueInterval(colStat.min, colStat.max, attr.dataType)
+    if (statsInterval.contains(literal)) {
       if (update) {
         // We update ColumnStat structure after apply this equality predicate:
         // Set distinctCount to 1, nullCount to 0, and min/max values (if exist) to the literal
         // value.
         val newStats = attr.dataType match {
           case StringType | BinaryType =>
-            colStat.copy(distinctCount = 1, nullCount = 0)
+            colStat.copy(distinctCount = Some(1), nullCount = Some(0))
           case _ =>
-            colStat.copy(distinctCount = 1, min = Some(literal.value),
-              max = Some(literal.value), nullCount = 0)
+            colStat.copy(distinctCount = Some(1), min = Some(literal.value),
+              max = Some(literal.value), nullCount = Some(0))
         }
-        colStatsMap(attr) = newStats
+        colStatsMap.update(attr, newStats)
       }
 
-      Some((1.0 / BigDecimal(ndv)).toDouble)
-    } else {
+      if (colStat.histogram.isEmpty) {
+        if (!colStat.distinctCount.isEmpty) {
+          // returns 1/ndv if there is no histogram
+          Some(1.0 / colStat.distinctCount.get.toDouble)
+        } else {
+          None
+        }
+      } else {
+        Some(computeEqualityPossibilityByHistogram(literal, colStat))
+      }
+
+    } else {  // not in interval
       Some(0.0)
     }
-
   }
 
   /**
@@ -387,51 +382,60 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
       attr: Attribute,
       hSet: Set[Any],
       update: Boolean): Option[Double] = {
-    if (!colStatsMap.contains(attr)) {
+    if (!colStatsMap.hasDistinctCount(attr)) {
       logDebug("[CBO] No statistics for " + attr)
       return None
     }
 
     val colStat = colStatsMap(attr)
-    val ndv = colStat.distinctCount
+    val ndv = colStat.distinctCount.get
     val dataType = attr.dataType
     var newNdv = ndv
 
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>
-        val statsRange = Range(colStat.min, colStat.max, dataType).asInstanceOf[NumericRange]
+        if (ndv.toDouble == 0 || colStat.min.isEmpty || colStat.max.isEmpty)  {
+          return Some(0.0)
+        }
+
+        val statsInterval =
+          ValueInterval(colStat.min, colStat.max, dataType).asInstanceOf[NumericValueInterval]
         val validQuerySet = hSet.filter { v =>
-          v != null && statsRange.contains(Literal(v, dataType))
+          v != null && statsInterval.contains(Literal(v, dataType))
         }
 
         if (validQuerySet.isEmpty) {
           return Some(0.0)
         }
 
-        val newMax = validQuerySet.maxBy(EstimationUtils.toDecimal(_, dataType))
-        val newMin = validQuerySet.minBy(EstimationUtils.toDecimal(_, dataType))
+        val newMax = validQuerySet.maxBy(EstimationUtils.toDouble(_, dataType))
+        val newMin = validQuerySet.minBy(EstimationUtils.toDouble(_, dataType))
         // newNdv should not be greater than the old ndv.  For example, column has only 2 values
         // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
         newNdv = ndv.min(BigInt(validQuerySet.size))
         if (update) {
-          val newStats = colStat.copy(distinctCount = newNdv, min = Some(newMin),
-            max = Some(newMax), nullCount = 0)
-          colStatsMap(attr) = newStats
+          val newStats = colStat.copy(distinctCount = Some(newNdv), min = Some(newMin),
+            max = Some(newMax), nullCount = Some(0))
+          colStatsMap.update(attr, newStats)
         }
 
       // We assume the whole set since there is no min/max information for String/Binary type
       case StringType | BinaryType =>
+        if (ndv.toDouble == 0)  {
+          return Some(0.0)
+        }
+
         newNdv = ndv.min(BigInt(hSet.size))
         if (update) {
-          val newStats = colStat.copy(distinctCount = newNdv, nullCount = 0)
-          colStatsMap(attr) = newStats
+          val newStats = colStat.copy(distinctCount = Some(newNdv), nullCount = Some(0))
+          colStatsMap.update(attr, newStats)
         }
     }
 
     // return the filter selectivity.  Without advanced statistics such as histograms,
     // we have to assume uniform distribution.
-    Some(math.min(1.0, (BigDecimal(newNdv) / BigDecimal(ndv)).toDouble))
+    Some(math.min(newNdv.toDouble / ndv.toDouble, 1.0))
   }
 
   /**
@@ -451,18 +455,20 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
       literal: Literal,
       update: Boolean): Option[Double] = {
 
-    val colStat = colStatsMap(attr)
-    val statsRange = Range(colStat.min, colStat.max, attr.dataType).asInstanceOf[NumericRange]
-    val max = statsRange.max.toBigDecimal
-    val min = statsRange.min.toBigDecimal
-    val ndv = BigDecimal(colStat.distinctCount)
-
-    // determine the overlapping degree between predicate range and column's range
-    val numericLiteral = if (literal.dataType == BooleanType) {
-      if (literal.value.asInstanceOf[Boolean]) BigDecimal(1) else BigDecimal(0)
-    } else {
-      BigDecimal(literal.value.toString)
+    if (!colStatsMap.hasMinMaxStats(attr) || !colStatsMap.hasDistinctCount(attr)) {
+      logDebug("[CBO] No statistics for " + attr)
+      return None
     }
+
+    val colStat = colStatsMap(attr)
+    val statsInterval =
+      ValueInterval(colStat.min, colStat.max, attr.dataType).asInstanceOf[NumericValueInterval]
+    val max = statsInterval.max
+    val min = statsInterval.min
+    val ndv = colStat.distinctCount.get.toDouble
+
+    // determine the overlapping degree between predicate interval and column's interval
+    val numericLiteral = EstimationUtils.toDouble(literal.value, literal.dataType)
     val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
       case _: LessThan =>
         (numericLiteral <= min, numericLiteral > max)
@@ -474,69 +480,158 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
         (numericLiteral > max, numericLiteral <= min)
     }
 
-    var percent = BigDecimal(1.0)
+    var percent = 1.0
     if (noOverlap) {
       percent = 0.0
     } else if (completeOverlap) {
       percent = 1.0
     } else {
       // This is the partial overlap case:
-      // Without advanced statistics like histogram, we assume uniform data distribution.
-      // We just prorate the adjusted range over the initial range to compute filter selectivity.
-      assert(max > min)
-      percent = op match {
-        case _: LessThan =>
-          if (numericLiteral == max) {
-            // If the literal value is right on the boundary, we can minus the part of the
-            // boundary value (1/ndv).
-            1.0 - 1.0 / ndv
-          } else {
-            (numericLiteral - min) / (max - min)
-          }
-        case _: LessThanOrEqual =>
-          if (numericLiteral == min) {
-            // The boundary value is the only satisfying value.
-            1.0 / ndv
-          } else {
-            (numericLiteral - min) / (max - min)
-          }
-        case _: GreaterThan =>
-          if (numericLiteral == min) {
-            1.0 - 1.0 / ndv
-          } else {
-            (max - numericLiteral) / (max - min)
-          }
-        case _: GreaterThanOrEqual =>
-          if (numericLiteral == max) {
-            1.0 / ndv
-          } else {
-            (max - numericLiteral) / (max - min)
-          }
+
+      if (colStat.histogram.isEmpty) {
+        // Without advanced statistics like histogram, we assume uniform data distribution.
+        // We just prorate the adjusted range over the initial range to compute filter selectivity.
+        assert(max > min)
+        percent = op match {
+          case _: LessThan =>
+            if (numericLiteral == max) {
+              // If the literal value is right on the boundary, we can minus the part of the
+              // boundary value (1/ndv).
+              1.0 - 1.0 / ndv
+            } else {
+              (numericLiteral - min) / (max - min)
+            }
+          case _: LessThanOrEqual =>
+            if (numericLiteral == min) {
+              // The boundary value is the only satisfying value.
+              1.0 / ndv
+            } else {
+              (numericLiteral - min) / (max - min)
+            }
+          case _: GreaterThan =>
+            if (numericLiteral == min) {
+              1.0 - 1.0 / ndv
+            } else {
+              (max - numericLiteral) / (max - min)
+            }
+          case _: GreaterThanOrEqual =>
+            if (numericLiteral == max) {
+              1.0 / ndv
+            } else {
+              (max - numericLiteral) / (max - min)
+            }
+        }
+      } else {
+        percent = computeComparisonPossibilityByHistogram(op, literal, colStat)
       }
 
       if (update) {
         val newValue = Some(literal.value)
         var newMax = colStat.max
         var newMin = colStat.min
-        var newNdv = (ndv * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
-        if (newNdv < 1) newNdv = 1
 
         op match {
           case _: GreaterThan | _: GreaterThanOrEqual =>
-            // If new ndv is 1, then new max must be equal to new min.
-            newMin = if (newNdv == 1) newMax else newValue
+            newMin = newValue
           case _: LessThan | _: LessThanOrEqual =>
-            newMax = if (newNdv == 1) newMin else newValue
+            newMax = newValue
         }
 
-        val newStats =
-          colStat.copy(distinctCount = newNdv, min = newMin, max = newMax, nullCount = 0)
+        val newStats = colStat.copy(distinctCount = Some(ceil(ndv * percent)),
+          min = newMin, max = newMax, nullCount = Some(0))
 
-        colStatsMap(attr) = newStats
+        colStatsMap.update(attr, newStats)
       }
     }
 
-    Some(percent.toDouble)
+    Some(percent)
+  }
+
+  /**
+   * Computes the possibility of an equality predicate using histogram.
+   */
+  private def computeEqualityPossibilityByHistogram(
+      literal: Literal, colStat: ColumnStat): Double = {
+    val datum = EstimationUtils.toDouble(literal.value, literal.dataType)
+    val histogram = colStat.histogram.get
+
+    // find bins where column's current min and max locate.  Note that a column's [min, max]
+    // range may change due to another condition applied earlier.
+    val min = EstimationUtils.toDouble(colStat.min.get, literal.dataType)
+    val max = EstimationUtils.toDouble(colStat.max.get, literal.dataType)
+
+    // compute how many bins the column's current valid range [min, max] occupies.
+    val numBinsHoldingEntireRange = EstimationUtils.numBinsHoldingRange(
+      upperBound = max,
+      upperBoundInclusive = true,
+      lowerBound = min,
+      lowerBoundInclusive = true,
+      histogram.bins)
+
+    val numBinsHoldingDatum = EstimationUtils.numBinsHoldingRange(
+      upperBound = datum,
+      upperBoundInclusive = true,
+      lowerBound = datum,
+      lowerBoundInclusive = true,
+      histogram.bins)
+
+    numBinsHoldingDatum / numBinsHoldingEntireRange
+  }
+
+  /**
+   * Computes the possibility of a comparison predicate using histogram.
+   */
+  private def computeComparisonPossibilityByHistogram(
+      op: BinaryComparison, literal: Literal, colStat: ColumnStat): Double = {
+    val datum = EstimationUtils.toDouble(literal.value, literal.dataType)
+    val histogram = colStat.histogram.get
+
+    // find bins where column's current min and max locate.  Note that a column's [min, max]
+    // range may change due to another condition applied earlier.
+    val min = EstimationUtils.toDouble(colStat.min.get, literal.dataType)
+    val max = EstimationUtils.toDouble(colStat.max.get, literal.dataType)
+
+    // compute how many bins the column's current valid range [min, max] occupies.
+    val numBinsHoldingEntireRange = EstimationUtils.numBinsHoldingRange(
+      max, upperBoundInclusive = true, min, lowerBoundInclusive = true, histogram.bins)
+
+    val numBinsHoldingRange = op match {
+      // LessThan and LessThanOrEqual share the same logic, the only difference is whether to
+      // include the upperBound in the range.
+      case _: LessThan =>
+        EstimationUtils.numBinsHoldingRange(
+          upperBound = datum,
+          upperBoundInclusive = false,
+          lowerBound = min,
+          lowerBoundInclusive = true,
+          histogram.bins)
+      case _: LessThanOrEqual =>
+        EstimationUtils.numBinsHoldingRange(
+          upperBound = datum,
+          upperBoundInclusive = true,
+          lowerBound = min,
+          lowerBoundInclusive = true,
+          histogram.bins)
+
+      // GreaterThan and GreaterThanOrEqual share the same logic, the only difference is whether to
+      // include the lowerBound in the range.
+      case _: GreaterThan =>
+        EstimationUtils.numBinsHoldingRange(
+          upperBound = max,
+          upperBoundInclusive = true,
+          lowerBound = datum,
+          lowerBoundInclusive = false,
+          histogram.bins)
+      case _: GreaterThanOrEqual =>
+        EstimationUtils.numBinsHoldingRange(
+          upperBound = max,
+          upperBoundInclusive = true,
+          lowerBound = datum,
+          lowerBoundInclusive = true,
+          histogram.bins)
+    }
+
+    numBinsHoldingRange / numBinsHoldingEntireRange
   }
 
   /**
@@ -559,11 +654,11 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
       attrRight: Attribute,
       update: Boolean): Option[Double] = {
 
-    if (!colStatsMap.contains(attrLeft)) {
+    if (!colStatsMap.hasCountStats(attrLeft)) {
       logDebug("[CBO] No statistics for " + attrLeft)
       return None
     }
-    if (!colStatsMap.contains(attrRight)) {
+    if (!colStatsMap.hasCountStats(attrRight)) {
       logDebug("[CBO] No statistics for " + attrRight)
       return None
     }
@@ -575,22 +670,30 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
         logDebug("[CBO] No range comparison statistics for String/Binary type " + attrLeft)
         return None
       case _ =>
+        if (!colStatsMap.hasMinMaxStats(attrLeft)) {
+          logDebug("[CBO] No min/max statistics for " + attrLeft)
+          return None
+        }
+        if (!colStatsMap.hasMinMaxStats(attrRight)) {
+          logDebug("[CBO] No min/max statistics for " + attrRight)
+          return None
+        }
     }
 
     val colStatLeft = colStatsMap(attrLeft)
-    val statsRangeLeft = Range(colStatLeft.min, colStatLeft.max, attrLeft.dataType)
-      .asInstanceOf[NumericRange]
-    val maxLeft = statsRangeLeft.max
-    val minLeft = statsRangeLeft.min
+    val statsIntervalLeft = ValueInterval(colStatLeft.min, colStatLeft.max, attrLeft.dataType)
+      .asInstanceOf[NumericValueInterval]
+    val maxLeft = statsIntervalLeft.max
+    val minLeft = statsIntervalLeft.min
 
     val colStatRight = colStatsMap(attrRight)
-    val statsRangeRight = Range(colStatRight.min, colStatRight.max, attrRight.dataType)
-      .asInstanceOf[NumericRange]
-    val maxRight = statsRangeRight.max
-    val minRight = statsRangeRight.min
+    val statsIntervalRight = ValueInterval(colStatRight.min, colStatRight.max, attrRight.dataType)
+      .asInstanceOf[NumericValueInterval]
+    val maxRight = statsIntervalRight.max
+    val minRight = statsIntervalRight.min
 
-    // determine the overlapping degree between predicate range and column's range
-    val allNotNull = (colStatLeft.nullCount == 0) && (colStatRight.nullCount == 0)
+    // determine the overlapping degree between predicate interval and column's interval
+    val allNotNull = (colStatLeft.nullCount.get == 0) && (colStatRight.nullCount.get == 0)
     val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
       // Left < Right or Left <= Right
       // - no overlap:
@@ -629,18 +732,18 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
       case _: EqualTo =>
         ((maxLeft < minRight) || (maxRight < minLeft),
           (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
-          && (colStatLeft.distinctCount == colStatRight.distinctCount)
+          && (colStatLeft.distinctCount.get == colStatRight.distinctCount.get)
         )
       case _: EqualNullSafe =>
         // For null-safe equality, we use a very restrictive condition to evaluate its overlap.
         // If null values exists, we set it to partial overlap.
         (((maxLeft < minRight) || (maxRight < minLeft)) && allNotNull,
           (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
-            && (colStatLeft.distinctCount == colStatRight.distinctCount)
+            && (colStatLeft.distinctCount.get == colStatRight.distinctCount.get)
         )
     }
 
-    var percent = BigDecimal(1.0)
+    var percent = 1.0
     if (noOverlap) {
       percent = 0.0
     } else if (completeOverlap) {
@@ -653,12 +756,10 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
       if (update) {
         // Need to adjust new min/max after the filter condition is applied
 
-        val ndvLeft = BigDecimal(colStatLeft.distinctCount)
-        var newNdvLeft = (ndvLeft * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
-        if (newNdvLeft < 1) newNdvLeft = 1
-        val ndvRight = BigDecimal(colStatRight.distinctCount)
-        var newNdvRight = (ndvRight * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
-        if (newNdvRight < 1) newNdvRight = 1
+        val ndvLeft = BigDecimal(colStatLeft.distinctCount.get)
+        val newNdvLeft = ceil(ndvLeft * percent)
+        val ndvRight = BigDecimal(colStatRight.distinctCount.get)
+        val newNdvRight = ceil(ndvRight * percent)
 
         var newMaxLeft = colStatLeft.max
         var newMinLeft = colStatLeft.min
@@ -741,33 +842,92 @@ case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging
           }
         }
 
-        val newStatsLeft = colStatLeft.copy(distinctCount = newNdvLeft, min = newMinLeft,
+        val newStatsLeft = colStatLeft.copy(distinctCount = Some(newNdvLeft), min = newMinLeft,
           max = newMaxLeft)
         colStatsMap(attrLeft) = newStatsLeft
-        val newStatsRight = colStatRight.copy(distinctCount = newNdvRight, min = newMinRight,
+        val newStatsRight = colStatRight.copy(distinctCount = Some(newNdvRight), min = newMinRight,
           max = newMaxRight)
         colStatsMap(attrRight) = newStatsRight
       }
     }
 
-    Some(percent.toDouble)
+    Some(percent)
   }
 
 }
 
-class ColumnStatsMap {
-  private val baseMap: mutable.Map[ExprId, (Attribute, ColumnStat)] = mutable.HashMap.empty
+/**
+ * This class contains the original column stats from child, and maintains the updated column stats.
+ * We will update the corresponding ColumnStats for a column after we apply a predicate condition.
+ * For example, column c has [min, max] value as [0, 100].  In a range condition such as
+ * (c > 40 AND c <= 50), we need to set the column's [min, max] value to [40, 100] after we
+ * evaluate the first condition c > 40. We also need to set the column's [min, max] value to
+ * [40, 50] after we evaluate the second condition c <= 50.
+ *
+ * @param originalMap Original column stats from child.
+ */
+case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
 
-  def setInitValues(colStats: AttributeMap[ColumnStat]): Unit = {
-    baseMap.clear()
-    baseMap ++= colStats.baseMap
+  /** This map maintains the latest column stats. */
+  private val updatedMap: mutable.Map[ExprId, (Attribute, ColumnStat)] = mutable.HashMap.empty
+
+  def contains(a: Attribute): Boolean = updatedMap.contains(a.exprId) || originalMap.contains(a)
+
+  /**
+   * Gets an Option of column stat for the given attribute.
+   * Prefer the column stat in updatedMap than that in originalMap,
+   * because updatedMap has the latest (updated) column stats.
+   */
+  def get(a: Attribute): Option[ColumnStat] = {
+    if (updatedMap.contains(a.exprId)) {
+      updatedMap.get(a.exprId).map(_._2)
+    } else {
+      originalMap.get(a)
+    }
   }
 
-  def contains(a: Attribute): Boolean = baseMap.contains(a.exprId)
+  def hasCountStats(a: Attribute): Boolean =
+    get(a).exists(_.hasCountStats)
 
-  def apply(a: Attribute): ColumnStat = baseMap(a.exprId)._2
+  def hasDistinctCount(a: Attribute): Boolean =
+    get(a).exists(_.distinctCount.isDefined)
 
-  def update(a: Attribute, stats: ColumnStat): Unit = baseMap.update(a.exprId, a -> stats)
+  def hasMinMaxStats(a: Attribute): Boolean =
+    get(a).exists(_.hasMinMaxStats)
 
-  def toColumnStats: AttributeMap[ColumnStat] = AttributeMap(baseMap.values.toSeq)
+  /**
+   * Gets column stat for the given attribute. Prefer the column stat in updatedMap than that in
+   * originalMap, because updatedMap has the latest (updated) column stats.
+   */
+  def apply(a: Attribute): ColumnStat = {
+    get(a).get
+  }
+
+  /** Updates column stats in updatedMap. */
+  def update(a: Attribute, stats: ColumnStat): Unit = updatedMap.update(a.exprId, a -> stats)
+
+  /**
+   * Collects updated column stats, and scales down ndv for other column stats if the number of rows
+   * decreases after this Filter operator.
+   */
+  def outputColumnStats(rowsBeforeFilter: BigInt, rowsAfterFilter: BigInt)
+    : AttributeMap[ColumnStat] = {
+    val newColumnStats = originalMap.map { case (attr, oriColStat) =>
+      val colStat = updatedMap.get(attr.exprId).map(_._2).getOrElse(oriColStat)
+      val newNdv = if (colStat.distinctCount.isEmpty) {
+        // No NDV in the original stats.
+        None
+      } else if (colStat.distinctCount.get > 1) {
+        // Update ndv based on the overall filter selectivity: scale down ndv if the number of rows
+        // decreases; otherwise keep it unchanged.
+        Some(EstimationUtils.updateNdv(oldNumRows = rowsBeforeFilter,
+          newNumRows = rowsAfterFilter, oldNdv = oriColStat.distinctCount.get))
+      } else {
+        // no need to scale down since it is already down to 1 (for skewed distribution case)
+        colStat.distinctCount
+      }
+      attr -> colStat.copy(distinctCount = newNdv)
+    }
+    AttributeMap(newColumnStats.toSeq)
+  }
 }

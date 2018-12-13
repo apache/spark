@@ -49,7 +49,15 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
   def this(seqOrArray: Any) = this(GenericArrayData.anyToSeq(seqOrArray))
 
-  override def copy(): ArrayData = new GenericArrayData(array.clone())
+  override def copy(): ArrayData = {
+    val newValues = new Array[Any](array.length)
+    var i = 0
+    while (i < array.length) {
+      newValues(i) = InternalRow.copyValue(array(i))
+      i += 1
+    }
+    new GenericArrayData(newValues)
+  }
 
   override def numElements(): Int = array.length
 
@@ -114,7 +122,7 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
             if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
               return false
             }
-          case _ => if (o1 != o2) {
+          case _ => if (!o1.equals(o2)) {
             return false
           }
         }

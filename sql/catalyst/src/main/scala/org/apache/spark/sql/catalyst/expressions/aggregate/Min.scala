@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -45,12 +46,12 @@ case class Min(child: Expression) extends DeclarativeAggregate {
   )
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
-    /* min = */ Least(Seq(min, child))
+    /* min = */ least(min, child)
   )
 
   override lazy val mergeExpressions: Seq[Expression] = {
     Seq(
-      /* min = */ Least(Seq(min.left, min.right))
+      /* min = */ least(min.left, min.right)
     )
   }
 

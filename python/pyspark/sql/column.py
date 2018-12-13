@@ -16,7 +16,6 @@
 #
 
 import sys
-import warnings
 import json
 
 if sys.version >= '3':
@@ -44,8 +43,14 @@ def _create_column_from_name(name):
 def _to_java_column(col):
     if isinstance(col, Column):
         jcol = col._jc
-    else:
+    elif isinstance(col, basestring):
         jcol = _create_column_from_name(col)
+    else:
+        raise TypeError(
+            "Invalid argument, not a string or column: "
+            "{0} of type {1}. "
+            "For column literals, use 'lit', 'array', 'struct' or 'create_map' "
+            "function.".format(col, type(col)))
     return jcol
 
 
@@ -171,6 +176,61 @@ class Column(object):
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
 
+    _eqNullSafe_doc = """
+    Equality test that is safe for null values.
+
+    :param other: a value or :class:`Column`
+
+    >>> from pyspark.sql import Row
+    >>> df1 = spark.createDataFrame([
+    ...     Row(id=1, value='foo'),
+    ...     Row(id=2, value=None)
+    ... ])
+    >>> df1.select(
+    ...     df1['value'] == 'foo',
+    ...     df1['value'].eqNullSafe('foo'),
+    ...     df1['value'].eqNullSafe(None)
+    ... ).show()
+    +-------------+---------------+----------------+
+    |(value = foo)|(value <=> foo)|(value <=> NULL)|
+    +-------------+---------------+----------------+
+    |         true|           true|           false|
+    |         null|          false|            true|
+    +-------------+---------------+----------------+
+    >>> df2 = spark.createDataFrame([
+    ...     Row(value = 'bar'),
+    ...     Row(value = None)
+    ... ])
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()
+    0
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
+    1
+    >>> df2 = spark.createDataFrame([
+    ...     Row(id=1, value=float('NaN')),
+    ...     Row(id=2, value=42.0),
+    ...     Row(id=3, value=None)
+    ... ])
+    >>> df2.select(
+    ...     df2['value'].eqNullSafe(None),
+    ...     df2['value'].eqNullSafe(float('NaN')),
+    ...     df2['value'].eqNullSafe(42.0)
+    ... ).show()
+    +----------------+---------------+----------------+
+    |(value <=> NULL)|(value <=> NaN)|(value <=> 42.0)|
+    +----------------+---------------+----------------+
+    |           false|           true|           false|
+    |           false|          false|            true|
+    |            true|          false|           false|
+    +----------------+---------------+----------------+
+
+    .. note:: Unlike Pandas, PySpark doesn't consider NaN values to be NULL.
+       See the `NaN Semantics`_ for details.
+    .. _NaN Semantics:
+       https://spark.apache.org/docs/latest/sql-programming-guide.html#nan-semantics
+    .. versionadded:: 2.3.0
+    """
+    eqNullSafe = _bin_op("eqNullSafe", _eqNullSafe_doc)
+
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
     __and__ = _bin_op('and')
@@ -185,9 +245,43 @@ class Column(object):
                          "in a string column or 'array_contains' function for an array column.")
 
     # bitwise operators
-    bitwiseOR = _bin_op("bitwiseOR")
-    bitwiseAND = _bin_op("bitwiseAND")
-    bitwiseXOR = _bin_op("bitwiseXOR")
+    _bitwiseOR_doc = """
+    Compute bitwise OR of this expression with another expression.
+
+    :param other: a value or :class:`Column` to calculate bitwise or(|) against
+                  this :class:`Column`.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(a=170, b=75)])
+    >>> df.select(df.a.bitwiseOR(df.b)).collect()
+    [Row((a | b)=235)]
+    """
+    _bitwiseAND_doc = """
+    Compute bitwise AND of this expression with another expression.
+
+    :param other: a value or :class:`Column` to calculate bitwise and(&) against
+                  this :class:`Column`.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(a=170, b=75)])
+    >>> df.select(df.a.bitwiseAND(df.b)).collect()
+    [Row((a & b)=10)]
+    """
+    _bitwiseXOR_doc = """
+    Compute bitwise XOR of this expression with another expression.
+
+    :param other: a value or :class:`Column` to calculate bitwise xor(^) against
+                  this :class:`Column`.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(a=170, b=75)])
+    >>> df.select(df.a.bitwiseXOR(df.b)).collect()
+    [Row((a ^ b)=225)]
+    """
+
+    bitwiseOR = _bin_op("bitwiseOR", _bitwiseOR_doc)
+    bitwiseAND = _bin_op("bitwiseAND", _bitwiseAND_doc)
+    bitwiseXOR = _bin_op("bitwiseXOR", _bitwiseXOR_doc)
 
     @since(1.3)
     def getItem(self, key):
@@ -195,7 +289,7 @@ class Column(object):
         An expression that gets an item at position ``ordinal`` out of a list,
         or gets an item by key out of a dict.
 
-        >>> df = sc.parallelize([([1, 2], {"key": "value"})]).toDF(["l", "d"])
+        >>> df = spark.createDataFrame([([1, 2], {"key": "value"})], ["l", "d"])
         >>> df.select(df.l.getItem(0), df.d.getItem("key")).show()
         +----+------+
         |l[0]|d[key]|
@@ -217,7 +311,7 @@ class Column(object):
         An expression that gets a field by name in a StructField.
 
         >>> from pyspark.sql import Row
-        >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
+        >>> df = spark.createDataFrame([Row(r=Row(a=1, b="b"))])
         >>> df.select(df.r.getField("b")).show()
         +---+
         |r.b|
@@ -250,11 +344,59 @@ class Column(object):
         raise TypeError("Column is not iterable")
 
     # string methods
-    contains = _bin_op("contains")
-    rlike = _bin_op("rlike")
-    like = _bin_op("like")
-    startswith = _bin_op("startsWith")
-    endswith = _bin_op("endsWith")
+    _contains_doc = """
+    Contains the other element. Returns a boolean :class:`Column` based on a string match.
+
+    :param other: string in line
+
+    >>> df.filter(df.name.contains('o')).collect()
+    [Row(age=5, name=u'Bob')]
+    """
+    _rlike_doc = """
+    SQL RLIKE expression (LIKE with Regex). Returns a boolean :class:`Column` based on a regex
+    match.
+
+    :param other: an extended regex expression
+
+    >>> df.filter(df.name.rlike('ice$')).collect()
+    [Row(age=2, name=u'Alice')]
+    """
+    _like_doc = """
+    SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
+
+    :param other: a SQL LIKE pattern
+
+    See :func:`rlike` for a regex version
+
+    >>> df.filter(df.name.like('Al%')).collect()
+    [Row(age=2, name=u'Alice')]
+    """
+    _startswith_doc = """
+    String starts with. Returns a boolean :class:`Column` based on a string match.
+
+    :param other: string at start of line (do not use a regex `^`)
+
+    >>> df.filter(df.name.startswith('Al')).collect()
+    [Row(age=2, name=u'Alice')]
+    >>> df.filter(df.name.startswith('^Al')).collect()
+    []
+    """
+    _endswith_doc = """
+    String ends with. Returns a boolean :class:`Column` based on a string match.
+
+    :param other: string at end of line (do not use a regex `$`)
+
+    >>> df.filter(df.name.endswith('ice')).collect()
+    [Row(age=2, name=u'Alice')]
+    >>> df.filter(df.name.endswith('ice$')).collect()
+    []
+    """
+
+    contains = ignore_unicode_prefix(_bin_op("contains", _contains_doc))
+    rlike = ignore_unicode_prefix(_bin_op("rlike", _rlike_doc))
+    like = ignore_unicode_prefix(_bin_op("like", _like_doc))
+    startswith = ignore_unicode_prefix(_bin_op("startsWith", _startswith_doc))
+    endswith = ignore_unicode_prefix(_bin_op("endsWith", _endswith_doc))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -269,8 +411,14 @@ class Column(object):
         [Row(col=u'Ali'), Row(col=u'Bob')]
         """
         if type(startPos) != type(length):
-            raise TypeError("Can not mix the type")
-        if isinstance(startPos, (int, long)):
+            raise TypeError(
+                "startPos and length must be the same type. "
+                "Got {startPos_t} and {length_t}, respectively."
+                .format(
+                    startPos_t=type(startPos),
+                    length_t=type(length),
+                ))
+        if isinstance(startPos, int):
             jc = self._jc.substr(startPos, length)
         elif isinstance(startPos, Column):
             jc = self._jc.substr(startPos._jc, length._jc)
@@ -298,13 +446,93 @@ class Column(object):
         return Column(jc)
 
     # order
-    asc = _unary_op("asc", "Returns a sort expression based on the"
-                           " ascending order of the given column name.")
-    desc = _unary_op("desc", "Returns a sort expression based on the"
-                             " descending order of the given column name.")
+    _asc_doc = """
+    Returns a sort expression based on ascending order of the column.
 
-    isNull = _unary_op("isNull", "True if the current expression is null.")
-    isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.asc()).collect()
+    [Row(name=u'Alice'), Row(name=u'Tom')]
+    """
+    _asc_nulls_first_doc = """
+    Returns a sort expression based on ascending order of the column, and null values
+    return before non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.asc_nulls_first()).collect()
+    [Row(name=None), Row(name=u'Alice'), Row(name=u'Tom')]
+
+    .. versionadded:: 2.4
+    """
+    _asc_nulls_last_doc = """
+    Returns a sort expression based on ascending order of the column, and null values
+    appear after non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.asc_nulls_last()).collect()
+    [Row(name=u'Alice'), Row(name=u'Tom'), Row(name=None)]
+
+    .. versionadded:: 2.4
+    """
+    _desc_doc = """
+    Returns a sort expression based on the descending order of the column.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.desc()).collect()
+    [Row(name=u'Tom'), Row(name=u'Alice')]
+    """
+    _desc_nulls_first_doc = """
+    Returns a sort expression based on the descending order of the column, and null values
+    appear before non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.desc_nulls_first()).collect()
+    [Row(name=None), Row(name=u'Tom'), Row(name=u'Alice')]
+
+    .. versionadded:: 2.4
+    """
+    _desc_nulls_last_doc = """
+    Returns a sort expression based on the descending order of the column, and null values
+    appear after non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
+    >>> df.select(df.name).orderBy(df.name.desc_nulls_last()).collect()
+    [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)]
+
+    .. versionadded:: 2.4
+    """
+
+    asc = ignore_unicode_prefix(_unary_op("asc", _asc_doc))
+    asc_nulls_first = ignore_unicode_prefix(_unary_op("asc_nulls_first", _asc_nulls_first_doc))
+    asc_nulls_last = ignore_unicode_prefix(_unary_op("asc_nulls_last", _asc_nulls_last_doc))
+    desc = ignore_unicode_prefix(_unary_op("desc", _desc_doc))
+    desc_nulls_first = ignore_unicode_prefix(_unary_op("desc_nulls_first", _desc_nulls_first_doc))
+    desc_nulls_last = ignore_unicode_prefix(_unary_op("desc_nulls_last", _desc_nulls_last_doc))
+
+    _isNull_doc = """
+    True if the current expression is null.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df.filter(df.height.isNull()).collect()
+    [Row(height=None, name=u'Alice')]
+    """
+    _isNotNull_doc = """
+    True if the current expression is NOT null.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)])
+    >>> df.filter(df.height.isNotNull()).collect()
+    [Row(height=80, name=u'Tom')]
+    """
+
+    isNull = ignore_unicode_prefix(_unary_op("isNull", _isNull_doc))
+    isNotNull = ignore_unicode_prefix(_unary_op("isNotNull", _isNotNull_doc))
 
     @since(1.3)
     def alias(self, *alias, **kwargs):
@@ -469,7 +697,7 @@ def _test():
         .appName("sql.column tests")\
         .getOrCreate()
     sc = spark.sparkContext
-    globs['sc'] = sc
+    globs['spark'] = spark
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
@@ -479,7 +707,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

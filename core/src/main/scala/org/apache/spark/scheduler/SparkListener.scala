@@ -26,7 +26,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo
 
 import org.apache.spark.{SparkConf, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 import org.apache.spark.ui.SparkUI
@@ -51,6 +51,9 @@ case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: T
 
 @DeveloperApi
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerSpeculativeTaskSubmitted(stageId: Int) extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerTaskEnd(
@@ -118,6 +121,24 @@ case class SparkListenerExecutorBlacklisted(
   extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerExecutorBlacklistedForStage(
+    time: Long,
+    executorId: String,
+    taskFailures: Int,
+    stageId: Int,
+    stageAttemptId: Int)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerNodeBlacklistedForStage(
+    time: Long,
+    hostId: String,
+    executorFailures: Int,
+    stageId: Int,
+    stageAttemptId: Int)
+  extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerExecutorUnblacklisted(time: Long, executorId: String)
   extends SparkListenerEvent
 
@@ -139,11 +160,29 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
  * Periodic updates from executors.
  * @param execId executor id
  * @param accumUpdates sequence of (taskId, stageId, stageAttemptId, accumUpdates)
+ * @param executorUpdates executor level metrics updates
  */
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
-    accumUpdates: Seq[(Long, Int, Int, Seq[AccumulableInfo])])
+    accumUpdates: Seq[(Long, Int, Int, Seq[AccumulableInfo])],
+    executorUpdates: Option[ExecutorMetrics] = None)
+  extends SparkListenerEvent
+
+/**
+ * Peak metric values for the executor for the stage, written to the history log at stage
+ * completion.
+ * @param execId executor id
+ * @param stageId stage id
+ * @param stageAttemptId stage attempt
+ * @param executorMetrics executor level metrics, indexed by ExecutorMetricType.values
+ */
+@DeveloperApi
+case class SparkListenerStageExecutorMetrics(
+    execId: String,
+    stageId: Int,
+    stageAttemptId: Int,
+    executorMetrics: ExecutorMetrics)
   extends SparkListenerEvent
 
 @DeveloperApi
@@ -160,21 +199,9 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
 /**
  * An internal class that describes the metadata of an event log.
- * This event is not meant to be posted to listeners downstream.
  */
-private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
-
-/**
- * Interface for creating history listeners defined in other modules like SQL, which are used to
- * rebuild the history UI.
- */
-private[spark] trait SparkHistoryListenerFactory {
-  /**
-   * Create listeners used to rebuild the history UI.
-   */
-  def createListeners(conf: SparkConf, sparkUI: SparkUI): Seq[SparkListener]
-}
-
+@DeveloperApi
+case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 /**
  * Interface for listening to events from the Spark scheduler. Most applications should probably
@@ -256,6 +283,13 @@ private[spark] trait SparkListenerInterface {
   def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit
 
   /**
+   * Called with the peak memory metrics for a given (executor, stage) combination. Note that this
+   * is only present when reading from the event log (as in the history server), and is never
+   * called in a live application.
+   */
+  def onStageExecutorMetrics(executorMetrics: SparkListenerStageExecutorMetrics): Unit
+
+  /**
    * Called when the driver registers a new executor.
    */
   def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit
@@ -269,6 +303,17 @@ private[spark] trait SparkListenerInterface {
    * Called when the driver blacklists an executor for a Spark application.
    */
   def onExecutorBlacklisted(executorBlacklisted: SparkListenerExecutorBlacklisted): Unit
+
+  /**
+   * Called when the driver blacklists an executor for a stage.
+   */
+  def onExecutorBlacklistedForStage(
+      executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage): Unit
+
+  /**
+   * Called when the driver blacklists a node for a stage.
+   */
+  def onNodeBlacklistedForStage(nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage): Unit
 
   /**
    * Called when the driver re-enables a previously blacklisted executor.
@@ -289,6 +334,11 @@ private[spark] trait SparkListenerInterface {
    * Called when the driver receives a block update info.
    */
   def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit
+
+  /**
+   * Called when a speculative task is submitted
+   */
+  def onSpeculativeTaskSubmitted(speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit
 
   /**
    * Called when other events like SQL-specific events are posted.
@@ -336,12 +386,21 @@ abstract class SparkListener extends SparkListenerInterface {
   override def onExecutorMetricsUpdate(
       executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = { }
 
+  override def onStageExecutorMetrics(
+      executorMetrics: SparkListenerStageExecutorMetrics): Unit = { }
+
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = { }
 
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = { }
 
   override def onExecutorBlacklisted(
       executorBlacklisted: SparkListenerExecutorBlacklisted): Unit = { }
+
+  def onExecutorBlacklistedForStage(
+      executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage): Unit = { }
+
+  def onNodeBlacklistedForStage(
+      nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage): Unit = { }
 
   override def onExecutorUnblacklisted(
       executorUnblacklisted: SparkListenerExecutorUnblacklisted): Unit = { }
@@ -353,6 +412,9 @@ abstract class SparkListener extends SparkListenerInterface {
       nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit = { }
 
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = { }
+
+  override def onSpeculativeTaskSubmitted(
+      speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit = { }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = { }
 }

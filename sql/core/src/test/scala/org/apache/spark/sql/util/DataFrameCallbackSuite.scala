@@ -24,7 +24,8 @@ import org.apache.spark.sql.{functions, AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoTable, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.datasources.{CreateTable, SaveIntoDataSourceCommand}
+import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
@@ -47,6 +48,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     df.select("i").collect()
     df.filter($"i" > 0).count()
 
+    sparkContext.listenerBus.waitUntilEmpty(1000)
     assert(metrics.length == 2)
 
     assert(metrics(0)._1 == "collect")
@@ -77,6 +79,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     val e = intercept[SparkException](df.select(errorUdf($"i")).collect())
 
+    sparkContext.listenerBus.waitUntilEmpty(1000)
     assert(metrics.length == 1)
     assert(metrics(0)._1 == "collect")
     assert(metrics(0)._2.analyzed.isInstanceOf[Project])
@@ -102,10 +105,16 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     spark.listenerManager.register(listener)
 
     val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
+
     df.collect()
+    // Wait for the first `collect` to be caught by our listener. Otherwise the next `collect` will
+    // reset the plan metrics.
+    sparkContext.listenerBus.waitUntilEmpty(1000)
     df.collect()
+
     Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
 
+    sparkContext.listenerBus.waitUntilEmpty(1000)
     assert(metrics.length == 3)
     assert(metrics(0) === 1)
     assert(metrics(1) === 1)
@@ -141,7 +150,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     def getPeakExecutionMemory(stageId: Int): Long = {
       val peakMemoryAccumulator = sparkListener.getCompletedStageInfos(stageId).accumulables
-        .filter(_._2.name == InternalAccumulator.PEAK_EXECUTION_MEMORY)
+        .filter(_._2.name == Some(InternalAccumulator.PEAK_EXECUTION_MEMORY))
 
       assert(peakMemoryAccumulator.size == 1)
       peakMemoryAccumulator.head._2.value.get.asInstanceOf[Long]
@@ -153,6 +162,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     // For this simple case, the peakExecutionMemory of a stage should be the data size of the
     // aggregate operator, as we only have one memory consuming operator per stage.
+    sparkContext.listenerBus.waitUntilEmpty(1000)
     assert(metrics.length == 2)
     assert(metrics(0) == topAggDataSize)
     assert(metrics(1) == bottomAggDataSize)
@@ -176,28 +186,33 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     withTempPath { path =>
       spark.range(10).write.format("json").save(path.getCanonicalPath)
+      sparkContext.listenerBus.waitUntilEmpty(1000)
       assert(commands.length == 1)
       assert(commands.head._1 == "save")
-      assert(commands.head._2.isInstanceOf[SaveIntoDataSourceCommand])
-      assert(commands.head._2.asInstanceOf[SaveIntoDataSourceCommand].provider == "json")
+      assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
+      assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+        .fileFormat.isInstanceOf[JsonFileFormat])
     }
 
     withTable("tab") {
-      sql("CREATE TABLE tab(i long) using parquet")
+      sql("CREATE TABLE tab(i long) using parquet") // adds commands(1) via onSuccess
       spark.range(10).write.insertInto("tab")
-      assert(commands.length == 2)
-      assert(commands(1)._1 == "insertInto")
-      assert(commands(1)._2.isInstanceOf[InsertIntoTable])
-      assert(commands(1)._2.asInstanceOf[InsertIntoTable].table
+      sparkContext.listenerBus.waitUntilEmpty(1000)
+      assert(commands.length == 3)
+      assert(commands(2)._1 == "insertInto")
+      assert(commands(2)._2.isInstanceOf[InsertIntoTable])
+      assert(commands(2)._2.asInstanceOf[InsertIntoTable].table
         .asInstanceOf[UnresolvedRelation].tableIdentifier.table == "tab")
     }
+    // exiting withTable adds commands(3) via onSuccess (drops tab)
 
     withTable("tab") {
       spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
-      assert(commands.length == 3)
-      assert(commands(2)._1 == "saveAsTable")
-      assert(commands(2)._2.isInstanceOf[CreateTable])
-      assert(commands(2)._2.asInstanceOf[CreateTable].tableDesc.partitionColumnNames == Seq("p"))
+      sparkContext.listenerBus.waitUntilEmpty(1000)
+      assert(commands.length == 5)
+      assert(commands(4)._1 == "saveAsTable")
+      assert(commands(4)._2.isInstanceOf[CreateTable])
+      assert(commands(4)._2.asInstanceOf[CreateTable].tableDesc.partitionColumnNames == Seq("p"))
     }
 
     withTable("tab") {
@@ -205,6 +220,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       val e = intercept[AnalysisException] {
         spark.range(10).select($"id", $"id").write.insertInto("tab")
       }
+      sparkContext.listenerBus.waitUntilEmpty(1000)
       assert(exceptions.length == 1)
       assert(exceptions.head._1 == "insertInto")
       assert(exceptions.head._2 == e)

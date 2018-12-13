@@ -20,13 +20,16 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.net.URI
 
+import scala.util.Random
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.exchange.ShuffleExchange
+import org.apache.spark.sql.execution.datasources.BucketingUtils
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -46,11 +49,18 @@ class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedS
 abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
-  private lazy val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+  private val maxI = 5
+  private val maxJ = 13
+  private lazy val df = (0 until 50).map(i => (i % maxI, i % maxJ, i.toString)).toDF("i", "j", "k")
   private lazy val nullDF = (for {
     i <- 0 to 50
     s <- Seq(null, "a", "b", "c", "d", "e", "f", null, "g")
-  } yield (i % 5, s, i % 13)).toDF("i", "j", "k")
+  } yield (i % maxI, s, i % maxJ)).toDF("i", "j", "k")
+
+  // number of buckets that doesn't yield empty buckets when bucketing on column j on df/nullDF
+  // empty buckets before filtering might hide bugs in pruning logic
+  private val NumBucketsForPruningDF = 7
+  private val NumBucketsForPruningNullDf = 5
 
   test("read bucketed data") {
     withTable("bucketed_table") {
@@ -60,23 +70,22 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(8, "j", "k")
         .saveAsTable("bucketed_table")
 
-      for (i <- 0 until 5) {
-        val table = spark.table("bucketed_table").filter($"i" === i)
-        val query = table.queryExecution
-        val output = query.analyzed.output
-        val rdd = query.toRdd
+      val bucketValue = Random.nextInt(maxI)
+      val table = spark.table("bucketed_table").filter($"i" === bucketValue)
+      val query = table.queryExecution
+      val output = query.analyzed.output
+      val rdd = query.toRdd
 
-        assert(rdd.partitions.length == 8)
+      assert(rdd.partitions.length == 8)
 
-        val attrs = table.select("j", "k").queryExecution.analyzed.output
-        val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
-          val getBucketId = UnsafeProjection.create(
-            HashPartitioning(attrs, 8).partitionIdExpression :: Nil,
-            output)
-          rows.map(row => getBucketId(row).getInt(0) -> index)
-        })
-        checkBucketId.collect().foreach(r => assert(r._1 == r._2))
-      }
+      val attrs = table.select("j", "k").queryExecution.analyzed.output
+      val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
+        val getBucketId = UnsafeProjection.create(
+          HashPartitioning(attrs, 8).partitionIdExpression :: Nil,
+          output)
+        rows.map(row => getBucketId(row).getInt(0) -> index)
+      })
+      checkBucketId.collect().foreach(r => assert(r._1 == r._2))
     }
   }
 
@@ -96,25 +105,31 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       assert(bucketColumnNames.length == 1)
       val bucketColumnIndex = bucketedDataFrame.schema.fieldIndex(bucketColumnNames.head)
       val bucketColumn = bucketedDataFrame.schema.toAttributes(bucketColumnIndex)
-      val matchedBuckets = new BitSet(numBuckets)
-      bucketValues.foreach { value =>
-        matchedBuckets.set(DataSourceStrategy.getBucketId(bucketColumn, numBuckets, value))
-      }
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
       val plan = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan
       val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
       assert(rdd.isDefined, plan)
 
-      val checkedResult = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
-        if (matchedBuckets.get(index % numBuckets) && iter.nonEmpty) Iterator(index) else Iterator()
+      // if nothing should be pruned, skip the pruning test
+      if (bucketValues.nonEmpty) {
+        val matchedBuckets = new BitSet(numBuckets)
+        bucketValues.foreach { value =>
+          matchedBuckets.set(BucketingUtils.getBucketIdFromValue(bucketColumn, numBuckets, value))
+        }
+        val invalidBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+          // return indexes of partitions that should have been pruned and are not empty
+          if (!matchedBuckets.get(index % numBuckets) && iter.nonEmpty) {
+            Iterator(index)
+          } else {
+            Iterator()
+          }
+        }.collect()
+
+        if (invalidBuckets.nonEmpty) {
+          fail(s"Buckets ${invalidBuckets.mkString(",")} should have been pruned from:\n$plan")
+        }
       }
-      // TODO: These tests are not testing the right columns.
-//      // checking if all the pruned buckets are empty
-//      val invalidBuckets = checkedResult.collect().toList
-//      if (invalidBuckets.nonEmpty) {
-//        fail(s"Buckets $invalidBuckets should have been pruned from:\n$plan")
-//      }
 
       checkAnswer(
         bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k"),
@@ -124,7 +139,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
   test("read partitioning bucketed tables with bucket pruning filters") {
     withTable("bucketed_table") {
-      val numBuckets = 8
+      val numBuckets = NumBucketsForPruningDF
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       df.write
@@ -133,34 +148,42 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(numBuckets, "j")
         .saveAsTable("bucketed_table")
 
-      for (j <- 0 until 13) {
-        // Case 1: EqualTo
-        checkPrunedAnswers(
-          bucketSpec,
-          bucketValues = j :: Nil,
-          filterCondition = $"j" === j,
-          df)
+      val bucketValue = Random.nextInt(maxJ)
+      // Case 1: EqualTo
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = bucketValue :: Nil,
+        filterCondition = $"j" === bucketValue,
+        df)
 
-        // Case 2: EqualNullSafe
-        checkPrunedAnswers(
-          bucketSpec,
-          bucketValues = j :: Nil,
-          filterCondition = $"j" <=> j,
-          df)
+      // Case 2: EqualNullSafe
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = bucketValue :: Nil,
+        filterCondition = $"j" <=> bucketValue,
+        df)
 
-        // Case 3: In
-        checkPrunedAnswers(
-          bucketSpec,
-          bucketValues = Seq(j, j + 1, j + 2, j + 3),
-          filterCondition = $"j".isin(j, j + 1, j + 2, j + 3),
-          df)
-      }
+      // Case 3: In
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = Seq(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
+        filterCondition = $"j".isin(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
+        df)
+
+      // Case 4: InSet
+      val inSetExpr = expressions.InSet($"j".expr,
+        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3).map(lit(_).expr))
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = Seq(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
+        filterCondition = Column(inSetExpr),
+        df)
     }
   }
 
   test("read non-partitioning bucketed tables with bucket pruning filters") {
     withTable("bucketed_table") {
-      val numBuckets = 8
+      val numBuckets = NumBucketsForPruningDF
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       df.write
@@ -168,19 +191,18 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(numBuckets, "j")
         .saveAsTable("bucketed_table")
 
-      for (j <- 0 until 13) {
-        checkPrunedAnswers(
-          bucketSpec,
-          bucketValues = j :: Nil,
-          filterCondition = $"j" === j,
-          df)
-      }
+      val bucketValue = Random.nextInt(maxJ)
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = bucketValue :: Nil,
+        filterCondition = $"j" === bucketValue,
+        df)
     }
   }
 
   test("read partitioning bucketed tables having null in bucketing key") {
     withTable("bucketed_table") {
-      val numBuckets = 8
+      val numBuckets = NumBucketsForPruningNullDf
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       nullDF.write
@@ -207,7 +229,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
   test("read partitioning bucketed tables having composite filters") {
     withTable("bucketed_table") {
-      val numBuckets = 8
+      val numBuckets = NumBucketsForPruningDF
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       df.write
@@ -216,19 +238,73 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(numBuckets, "j")
         .saveAsTable("bucketed_table")
 
-      for (j <- 0 until 13) {
-        checkPrunedAnswers(
-          bucketSpec,
-          bucketValues = j :: Nil,
-          filterCondition = $"j" === j && $"k" > $"j",
-          df)
+      val bucketValue = Random.nextInt(maxJ)
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = bucketValue :: Nil,
+        filterCondition = $"j" === bucketValue && $"k" > $"j",
+        df)
 
-        checkPrunedAnswers(
-          bucketSpec,
-          bucketValues = j :: Nil,
-          filterCondition = $"j" === j && $"i" > j % 5,
-          df)
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = bucketValue :: Nil,
+        filterCondition = $"j" === bucketValue && $"i" > bucketValue % 5,
+        df)
+
+      // check multiple bucket values OR condition
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = Seq(bucketValue, bucketValue + 1),
+        filterCondition = $"j" === bucketValue || $"j" === (bucketValue + 1),
+        df)
+
+      // check bucket value and none bucket value OR condition
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = Nil,
+        filterCondition = $"j" === bucketValue || $"i" === 0,
+        df)
+
+      // check AND condition in complex expression
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = Seq(bucketValue),
+        filterCondition = ($"i" === 0 || $"k" > $"j") && $"j" === bucketValue,
+        df)
+    }
+  }
+
+  test("read bucketed table without filters") {
+    withTable("bucketed_table") {
+      val numBuckets = NumBucketsForPruningDF
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
+      // json does not support predicate push-down, and thus json is used here
+      df.write
+        .format("json")
+        .bucketBy(numBuckets, "j")
+        .saveAsTable("bucketed_table")
+
+      val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
+      val plan = bucketedDataFrame.queryExecution.executedPlan
+      val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
+      assert(rdd.isDefined, plan)
+
+      val emptyBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+        // return indexes of empty partitions
+        if (iter.isEmpty) {
+          Iterator(index)
+        } else {
+          Iterator()
+        }
+      }.collect()
+
+      if (emptyBuckets.nonEmpty) {
+        fail(s"Buckets ${emptyBuckets.mkString(",")} should not have been pruned from:\n$plan")
       }
+
+      checkAnswer(
+        bucketedDataFrame.orderBy("i", "j", "k"),
+        df.orderBy("i", "j", "k"))
     }
   }
 
@@ -301,10 +377,10 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
         // check existence of shuffle
         assert(
-          joinOperator.left.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleLeft,
+          joinOperator.left.find(_.isInstanceOf[ShuffleExchangeExec]).isDefined == shuffleLeft,
           s"expected shuffle in plan to be $shuffleLeft but found\n${joinOperator.left}")
         assert(
-          joinOperator.right.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleRight,
+          joinOperator.right.find(_.isInstanceOf[ShuffleExchangeExec]).isDefined == shuffleRight,
           s"expected shuffle in plan to be $shuffleRight but found\n${joinOperator.right}")
 
         // check existence of sort
@@ -505,7 +581,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         agged.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchange]).isEmpty)
+      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
   }
 
@@ -519,7 +595,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         agged.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchange]).isEmpty)
+      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
   }
 
@@ -540,6 +616,96 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         joinPredicates && filterLeft && filterRight
       }
     )
+  }
+
+  test("SPARK-19122 Re-order join predicates if they match with the child's output partitioning") {
+    val bucketedTableTestSpec = BucketedTableTestSpec(
+      Some(BucketSpec(8, Seq("i", "j", "k"), Seq("i", "j", "k"))),
+      numPartitions = 1,
+      expectedShuffle = false,
+      expectedSort = false)
+
+    // If the set of join columns is equal to the set of bucketed + sort columns, then
+    // the order of join keys in the query should not matter and there should not be any shuffle
+    // and sort added in the query plan
+    Seq(
+      Seq("i", "j", "k"),
+      Seq("i", "k", "j"),
+      Seq("j", "k", "i"),
+      Seq("j", "i", "k"),
+      Seq("k", "j", "i"),
+      Seq("k", "i", "j")
+    ).foreach(joinKeys => {
+      testBucketing(
+        bucketedTableTestSpecLeft = bucketedTableTestSpec,
+        bucketedTableTestSpecRight = bucketedTableTestSpec,
+        joinCondition = joinCondition(joinKeys)
+      )
+    })
+  }
+
+  test("SPARK-19122 No re-ordering should happen if set of join columns != set of child's " +
+    "partitioning columns") {
+
+    // join predicates is a super set of child's partitioning columns
+    val bucketedTableTestSpec1 =
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), numPartitions = 1)
+    testBucketing(
+      bucketedTableTestSpecLeft = bucketedTableTestSpec1,
+      bucketedTableTestSpecRight = bucketedTableTestSpec1,
+      joinCondition = joinCondition(Seq("i", "j", "k"))
+    )
+
+    // child's partitioning columns is a super set of join predicates
+    val bucketedTableTestSpec2 =
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j", "k"), Seq("i", "j", "k"))),
+        numPartitions = 1)
+    testBucketing(
+      bucketedTableTestSpecLeft = bucketedTableTestSpec2,
+      bucketedTableTestSpecRight = bucketedTableTestSpec2,
+      joinCondition = joinCondition(Seq("i", "j"))
+    )
+
+    // set of child's partitioning columns != set join predicates (despite the lengths of the
+    // sets are same)
+    val bucketedTableTestSpec3 =
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), numPartitions = 1)
+    testBucketing(
+      bucketedTableTestSpecLeft = bucketedTableTestSpec3,
+      bucketedTableTestSpecRight = bucketedTableTestSpec3,
+      joinCondition = joinCondition(Seq("j", "k"))
+    )
+  }
+
+  test("SPARK-22042 ReorderJoinPredicates can break when child's partitioning is not decided") {
+    withTable("bucketed_table", "table1", "table2") {
+      df.write.format("parquet").saveAsTable("table1")
+      df.write.format("parquet").saveAsTable("table2")
+      df.write.format("parquet").bucketBy(8, "j", "k").saveAsTable("bucketed_table")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        checkAnswer(
+          sql("""
+                |SELECT ab.i, ab.j, ab.k, c.i, c.j, c.k
+                |FROM (
+                |  SELECT a.i, a.j, a.k
+                |  FROM bucketed_table a
+                |  JOIN table1 b
+                |  ON a.i = b.i
+                |) ab
+                |JOIN table2 c
+                |ON ab.i = c.i
+              """.stripMargin),
+          sql("""
+                |SELECT a.i, a.j, a.k, c.i, c.j, c.k
+                |FROM bucketed_table a
+                |JOIN table1 b
+                |ON a.i = b.i
+                |JOIN table2 c
+                |ON a.i = c.i
+              """.stripMargin))
+      }
+    }
   }
 
   test("error if there exists any malformed bucket files") {

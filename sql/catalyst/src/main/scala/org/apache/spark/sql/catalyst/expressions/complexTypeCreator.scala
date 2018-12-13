@@ -18,13 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -32,7 +31,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1, 2, 3);
        [1,2,3]
@@ -41,12 +40,14 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
+  }
 
   override def dataType: ArrayType = {
     ArrayType(
-      children.headOption.map(_.dataType).getOrElse(NullType),
+      TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(children.map(_.dataType))
+        .getOrElse(StringType),
       containsNull = children.exists(_.nullable))
   }
 
@@ -58,13 +59,12 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val et = dataType.elementType
-    val evals = children.map(e => e.genCode(ctx))
-    val (preprocess, assigns, postprocess, arrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false)
+    val (allocation, assigns, arrayData) =
+      GenArrayData.genCodeToCreateArrayData(ctx, et, children, "createArray")
     ev.copy(
-      code = preprocess + ctx.splitExpressions(ctx.INPUT_ROW, assigns) + postprocess,
-      value = arrayData,
-      isNull = "false")
+      code = code"${allocation}${assigns}",
+      value = JavaCode.variable(arrayData, dataType),
+      isNull = FalseLiteral)
   }
 
   override def prettyName: String = "array"
@@ -72,81 +72,52 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
 private [sql] object GenArrayData {
   /**
-   * Return Java code pieces based on DataType and isPrimitive to allocate ArrayData class
+   * Return Java code pieces based on DataType and array size to allocate ArrayData class
    *
    * @param ctx a [[CodegenContext]]
    * @param elementType data type of underlying array elements
-   * @param elementsCode a set of [[ExprCode]] for each element of an underlying array
-   * @param isMapKey if true, throw an exception when the element is null
-   * @return (code pre-assignments, assignments to each array elements, code post-assignments,
-   *           arrayData name)
+   * @param elementsExpr concatenated set of [[Expression]] for each element of an underlying array
+   * @param functionName string to include in the error message
+   * @return (array allocation, concatenated assignments to each array elements, arrayData name)
    */
   def genCodeToCreateArrayData(
       ctx: CodegenContext,
       elementType: DataType,
-      elementsCode: Seq[ExprCode],
-      isMapKey: Boolean): (String, Seq[String], String, String) = {
-    val arrayName = ctx.freshName("array")
+      elementsExpr: Seq[Expression],
+      functionName: String): (String, String, String) = {
     val arrayDataName = ctx.freshName("arrayData")
-    val numElements = elementsCode.length
+    val numElements = s"${elementsExpr.length}L"
 
-    if (!ctx.isPrimitiveType(elementType)) {
-      val genericArrayClass = classOf[GenericArrayData].getName
-      ctx.addMutableState("Object[]", arrayName,
-        s"this.$arrayName = new Object[${numElements}];")
+    val initialization = CodeGenerator.createArrayData(
+      arrayDataName, elementType, numElements, s" $functionName failed.")
 
-      val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
-        val isNullAssignment = if (!isMapKey) {
-          s"$arrayName[$i] = null;"
-        } else {
-          "throw new RuntimeException(\"Cannot use null as map key!\");"
-        }
-        eval.code + s"""
-         if (${eval.isNull}) {
-           $isNullAssignment
-         } else {
-           $arrayName[$i] = ${eval.value};
-         }
-       """
+    val assignments = elementsExpr.zipWithIndex.map { case (expr, i) =>
+      val eval = expr.genCode(ctx)
+      val setArrayElement = CodeGenerator.setArrayElement(
+        arrayDataName, elementType, i.toString, eval.value)
+
+      val assignment = if (!expr.nullable) {
+        setArrayElement
+      } else {
+        s"""
+           |if (${eval.isNull}) {
+           |  $arrayDataName.setNullAt($i);
+           |} else {
+           |  $setArrayElement
+           |}
+         """.stripMargin
       }
-
-      ("",
-       assignments,
-       s"final ArrayData $arrayDataName = new $genericArrayClass($arrayName);",
-       arrayDataName)
-    } else {
-      val unsafeArraySizeInBytes =
-        UnsafeArrayData.calculateHeaderPortionInBytes(numElements) +
-        ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
-      val baseOffset = Platform.BYTE_ARRAY_OFFSET
-      ctx.addMutableState("UnsafeArrayData", arrayDataName, "");
-
-      val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
-      val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
-        val isNullAssignment = if (!isMapKey) {
-          s"$arrayDataName.setNullAt($i);"
-        } else {
-          "throw new RuntimeException(\"Cannot use null as map key!\");"
-        }
-        eval.code + s"""
-         if (${eval.isNull}) {
-           $isNullAssignment
-         } else {
-           $arrayDataName.set$primitiveValueTypeName($i, ${eval.value});
-         }
-       """
-      }
-
-      (s"""
-        byte[] $arrayName = new byte[$unsafeArraySizeInBytes];
-        $arrayDataName = new UnsafeArrayData();
-        Platform.putLong($arrayName, $baseOffset, $numElements);
-        $arrayDataName.pointTo($arrayName, $baseOffset, $unsafeArraySizeInBytes);
-      """,
-       assignments,
-       "",
-       arrayDataName)
+      s"""
+         |${eval.code}
+         |$assignment
+       """.stripMargin
     }
+    val assignmentString = ctx.splitExpressionsWithCurrentInputs(
+      expressions = assignments,
+      funcName = "apply",
+      extraArguments = ("ArrayData", arrayDataName) :: Nil)
+
+    (initialization, assignmentString, arrayDataName)
   }
 }
 
@@ -156,7 +127,7 @@ private [sql] object GenArrayData {
  */
 @ExpressionDescription(
   usage = "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
        {1.0:"2",3.0:"4"}
@@ -169,60 +140,114 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects a positive even number of arguments.")
-    } else if (keys.map(_.dataType).distinct.length > 1) {
-      TypeCheckResult.TypeCheckFailure("The given keys of function map should all be the same " +
-        "type, but they are " + keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
-    } else if (values.map(_.dataType).distinct.length > 1) {
-      TypeCheckResult.TypeCheckFailure("The given values of function map should all be the same " +
-        "type, but they are " + values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName expects a positive even number of arguments.")
+    } else if (!TypeCoercion.haveSameType(keys.map(_.dataType))) {
+      TypeCheckResult.TypeCheckFailure(
+        "The given keys of function map should all be the same type, but they are " +
+          keys.map(_.dataType.catalogString).mkString("[", ", ", "]"))
+    } else if (!TypeCoercion.haveSameType(values.map(_.dataType))) {
+      TypeCheckResult.TypeCheckFailure(
+        "The given values of function map should all be the same type, but they are " +
+          values.map(_.dataType.catalogString).mkString("[", ", ", "]"))
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      TypeUtils.checkForMapKeyType(dataType.keyType)
     }
   }
 
-  override def dataType: DataType = {
+  override lazy val dataType: MapType = {
     MapType(
-      keyType = keys.headOption.map(_.dataType).getOrElse(NullType),
-      valueType = values.headOption.map(_.dataType).getOrElse(NullType),
+      keyType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(keys.map(_.dataType))
+        .getOrElse(StringType),
+      valueType = TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(values.map(_.dataType))
+        .getOrElse(StringType),
       valueContainsNull = values.exists(_.nullable))
   }
 
   override def nullable: Boolean = false
 
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
+
   override def eval(input: InternalRow): Any = {
-    val keyArray = keys.map(_.eval(input)).toArray
-    if (keyArray.contains(null)) {
-      throw new RuntimeException("Cannot use null as map key!")
+    var i = 0
+    while (i < keys.length) {
+      mapBuilder.put(keys(i).eval(input), values(i).eval(input))
+      i += 1
     }
-    val valueArray = values.map(_.eval(input)).toArray
-    new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
+    mapBuilder.build()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val mapClass = classOf[ArrayBasedMapData].getName
     val MapType(keyDt, valueDt, _) = dataType
-    val evalKeys = keys.map(e => e.genCode(ctx))
-    val evalValues = values.map(e => e.genCode(ctx))
-    val (preprocessKeyData, assignKeys, postprocessKeyData, keyArrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, evalKeys, true)
-    val (preprocessValueData, assignValues, postprocessValueData, valueArrayData) =
-      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, evalValues, false)
+    val (allocationKeyData, assignKeys, keyArrayData) =
+      GenArrayData.genCodeToCreateArrayData(ctx, keyDt, keys, "createMap")
+    val (allocationValueData, assignValues, valueArrayData) =
+      GenArrayData.genCodeToCreateArrayData(ctx, valueDt, values, "createMap")
+    val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
     val code =
-      s"""
-       final boolean ${ev.isNull} = false;
-       $preprocessKeyData
-       ${ctx.splitExpressions(ctx.INPUT_ROW, assignKeys)}
-       $postprocessKeyData
-       $preprocessValueData
-       ${ctx.splitExpressions(ctx.INPUT_ROW, assignValues)}
-       $postprocessValueData
-       final MapData ${ev.value} = new $mapClass($keyArrayData, $valueArrayData);
+      code"""
+       $allocationKeyData
+       $assignKeys
+       $allocationValueData
+       $assignValues
+       final MapData ${ev.value} = $builderTerm.from($keyArrayData, $valueArrayData);
       """
-    ev.copy(code = code)
+    ev.copy(code = code, isNull = FalseLiteral)
   }
 
   override def prettyName: String = "map"
+}
+
+/**
+ * Returns a catalyst Map containing the two arrays in children expressions as keys and values.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(keys, values) - Creates a map with a pair of the given key/value arrays. All elements
+      in keys should not be null""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1.0, 3.0), array('2', '4'));
+       {1.0:"2",3.0:"4"}
+  """, since = "2.4.0")
+case class MapFromArrays(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      val keyType = left.dataType.asInstanceOf[ArrayType].elementType
+      TypeUtils.checkForMapKeyType(keyType)
+    }
+  }
+
+  override def dataType: MapType = {
+    MapType(
+      keyType = left.dataType.asInstanceOf[ArrayType].elementType,
+      valueType = right.dataType.asInstanceOf[ArrayType].elementType,
+      valueContainsNull = right.dataType.asInstanceOf[ArrayType].containsNull)
+  }
+
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(dataType.keyType, dataType.valueType)
+
+  override def nullSafeEval(keyArray: Any, valueArray: Any): Any = {
+    val keyArrayData = keyArray.asInstanceOf[ArrayData]
+    val valueArrayData = valueArray.asInstanceOf[ArrayData]
+    mapBuilder.from(keyArrayData.copy(), valueArrayData.copy())
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (keyArrayData, valueArrayData) => {
+      val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
+      s"${ev.value} = $builderTerm.from($keyArrayData.copy(), $valueArrayData.copy());"
+    })
+  }
+
+  override def prettyName: String = "map_from_arrays"
 }
 
 /**
@@ -260,6 +285,9 @@ object CreateStruct extends FunctionBuilder {
       null,
       "struct",
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
+      "",
+      "",
+      "",
       "")
     ("struct", (info, this))
   }
@@ -298,8 +326,8 @@ trait CreateNamedStructLike extends Expression {
       val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
       if (invalidNames.nonEmpty) {
         TypeCheckResult.TypeCheckFailure(
-          "Only foldable StringType expressions are allowed to appear at odd position, got:" +
-          s" ${invalidNames.mkString(",")}")
+          s"Only foldable ${StringType.catalogString} expressions are allowed to appear at odd" +
+            s" position, got: ${invalidNames.mkString(",")}")
       } else if (!names.contains(null)) {
         TypeCheckResult.TypeCheckSuccess
       } else {
@@ -329,7 +357,7 @@ trait CreateNamedStructLike extends Expression {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
        {"a":1,"b":2,"c":3}
@@ -340,25 +368,29 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
-
-    ev.copy(code = s"""
-      $values = new Object[${valExprs.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        valExprs.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
-          eval.code + s"""
-          if (${eval.isNull}) {
-            $values[$i] = null;
-          } else {
-            $values[$i] = ${eval.value};
-          }"""
-        }) +
+    val valCodes = valExprs.zipWithIndex.map { case (e, i) =>
+      val eval = e.genCode(ctx)
       s"""
-        final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
-      """, isNull = "false")
+         |${eval.code}
+         |if (${eval.isNull}) {
+         |  $values[$i] = null;
+         |} else {
+         |  $values[$i] = ${eval.value};
+         |}
+       """.stripMargin
+    }
+    val valuesCode = ctx.splitExpressionsWithCurrentInputs(
+      expressions = valCodes,
+      funcName = "createNamedStruct",
+      extraArguments = "Object[]" -> values :: Nil)
+
+    ev.copy(code =
+      code"""
+         |Object[] $values = new Object[${valExprs.size}];
+         |$valuesCode
+         |final InternalRow ${ev.value} = new $rowClass($values);
+         |$values = null;
+       """.stripMargin, isNull = FalseLiteral)
   }
 
   override def prettyName: String = "named_struct"
@@ -374,7 +406,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
 case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateNamedStructLike {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
-    ExprCode(code = eval.code, isNull = "false", value = eval.value)
+    ExprCode(code = eval.code, isNull = FalseLiteral, value = eval.value)
   }
 
   override def prettyName: String = "named_struct_unsafe"
@@ -386,7 +418,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateName
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
        map("a":"1","b":"2","c":"3")
@@ -419,28 +451,25 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     }
   }
 
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(StringType, StringType)
+
   override def nullSafeEval(
       inputString: Any,
       stringDelimiter: Any,
       keyValueDelimiter: Any): Any = {
     val keyValues =
       inputString.asInstanceOf[UTF8String].split(stringDelimiter.asInstanceOf[UTF8String], -1)
+    val keyValueDelimiterUTF8String = keyValueDelimiter.asInstanceOf[UTF8String]
 
-    val iterator = new Iterator[(UTF8String, UTF8String)] {
-      var index = 0
-      val keyValueDelimiterUTF8String = keyValueDelimiter.asInstanceOf[UTF8String]
-
-      override def hasNext: Boolean = {
-        keyValues.length > index
-      }
-
-      override def next(): (UTF8String, UTF8String) = {
-        val keyValueArray = keyValues(index).split(keyValueDelimiterUTF8String, 2)
-        index += 1
-        (keyValueArray(0), if (keyValueArray.length < 2) null else keyValueArray(1))
-      }
+    var i = 0
+    while (i < keyValues.length) {
+      val keyValueArray = keyValues(i).split(keyValueDelimiterUTF8String, 2)
+      val key = keyValueArray(0)
+      val value = if (keyValueArray.length < 2) null else keyValueArray(1)
+      mapBuilder.put(key, value)
+      i += 1
     }
-    ArrayBasedMapData(iterator, keyValues.size, identity, identity)
+    mapBuilder.build()
   }
 
   override def prettyName: String = "str_to_map"

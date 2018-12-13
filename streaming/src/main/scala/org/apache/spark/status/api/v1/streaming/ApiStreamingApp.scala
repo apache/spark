@@ -19,24 +19,39 @@ package org.apache.spark.status.api.v1.streaming
 
 import javax.ws.rs.{Path, PathParam}
 
-import org.apache.spark.status.api.v1.ApiRequestContext
+import org.apache.spark.status.api.v1._
+import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Path("/v1")
 private[v1] class ApiStreamingApp extends ApiRequestContext {
 
   @Path("applications/{appId}/streaming")
-  def getStreamingRoot(@PathParam("appId") appId: String): ApiStreamingRootResource = {
-    withSparkUI(appId, None) { ui =>
-      new ApiStreamingRootResource(ui)
-    }
+  def getStreamingRoot(@PathParam("appId") appId: String): Class[ApiStreamingRootResource] = {
+    classOf[ApiStreamingRootResource]
   }
 
   @Path("applications/{appId}/{attemptId}/streaming")
   def getStreamingRoot(
       @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): ApiStreamingRootResource = {
-    withSparkUI(appId, Some(attemptId)) { ui =>
-      new ApiStreamingRootResource(ui)
+      @PathParam("attemptId") attemptId: String): Class[ApiStreamingRootResource] = {
+    classOf[ApiStreamingRootResource]
+  }
+}
+
+/**
+ * Base class for streaming API handlers, provides easy access to the streaming listener that
+ * holds the app's information.
+ */
+private[v1] trait BaseStreamingAppResource extends BaseAppResource {
+
+  protected def withListener[T](fn: StreamingJobProgressListener => T): T = withUI { ui =>
+    val listener = ui.getStreamingJobProgressListener match {
+      case Some(listener) => listener.asInstanceOf[StreamingJobProgressListener]
+      case None => throw new NotFoundException("no streaming listener attached to " + ui.getAppName)
+    }
+    listener.synchronized {
+      fn(listener)
     }
   }
+
 }

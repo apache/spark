@@ -28,7 +28,6 @@ import scala.util.control.NonFatal
 import org.scalatest.Matchers
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.AccumulatorParam.StringAccumulatorParam
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
@@ -44,21 +43,6 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       super.afterEach()
     }
   }
-
-  implicit def setAccum[A]: AccumulableParam[mutable.Set[A], A] =
-    new AccumulableParam[mutable.Set[A], A] {
-      def addInPlace(t1: mutable.Set[A], t2: mutable.Set[A]) : mutable.Set[A] = {
-        t1 ++= t2
-        t1
-      }
-      def addAccumulator(t1: mutable.Set[A], t2: A) : mutable.Set[A] = {
-        t1 += t2
-        t1
-      }
-      def zero(t: mutable.Set[A]) : mutable.Set[A] = {
-        new mutable.HashSet[A]()
-      }
-    }
 
   test("accumulator serialization") {
     val ser = new JavaSerializer(new SparkConf).newInstance()
@@ -81,122 +65,6 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(acc3.isAtDriverSide)
   }
 
-  test ("basic accumulation") {
-    sc = new SparkContext("local", "test")
-    val acc: Accumulator[Int] = sc.accumulator(0)
-
-    val d = sc.parallelize(1 to 20)
-    d.foreach{x => acc += x}
-    acc.value should be (210)
-
-    val longAcc = sc.accumulator(0L)
-    val maxInt = Integer.MAX_VALUE.toLong
-    d.foreach{x => longAcc += maxInt + x}
-    longAcc.value should be (210L + maxInt * 20)
-  }
-
-  test("value not assignable from tasks") {
-    sc = new SparkContext("local", "test")
-    val acc: Accumulator[Int] = sc.accumulator(0)
-
-    val d = sc.parallelize(1 to 20)
-    intercept[SparkException] {
-      d.foreach(x => acc.value = x)
-    }
-  }
-
-  test ("add value to collection accumulators") {
-    val maxI = 1000
-    for (nThreads <- List(1, 10)) { // test single & multi-threaded
-      sc = new SparkContext("local[" + nThreads + "]", "test")
-      val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
-      val d = sc.parallelize(1 to maxI)
-      d.foreach {
-        x => acc += x
-      }
-      val v = acc.value.asInstanceOf[mutable.Set[Int]]
-      for (i <- 1 to maxI) {
-        v should contain(i)
-      }
-      resetSparkContext()
-    }
-  }
-
-  test("value not readable in tasks") {
-    val maxI = 1000
-    for (nThreads <- List(1, 10)) { // test single & multi-threaded
-      sc = new SparkContext("local[" + nThreads + "]", "test")
-      val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
-      val d = sc.parallelize(1 to maxI)
-      an [SparkException] should be thrownBy {
-        d.foreach {
-          x => acc.value += x
-        }
-      }
-      resetSparkContext()
-    }
-  }
-
-  test ("collection accumulators") {
-    val maxI = 1000
-    for (nThreads <- List(1, 10)) {
-      // test single & multi-threaded
-      sc = new SparkContext("local[" + nThreads + "]", "test")
-      val setAcc = sc.accumulableCollection(mutable.HashSet[Int]())
-      val bufferAcc = sc.accumulableCollection(mutable.ArrayBuffer[Int]())
-      val mapAcc = sc.accumulableCollection(mutable.HashMap[Int, String]())
-      val d = sc.parallelize((1 to maxI) ++ (1 to maxI))
-      d.foreach {
-        x => {setAcc += x; bufferAcc += x; mapAcc += (x -> x.toString)}
-      }
-
-      // Note that this is typed correctly -- no casts necessary
-      setAcc.value.size should be (maxI)
-      bufferAcc.value.size should be (2 * maxI)
-      mapAcc.value.size should be (maxI)
-      for (i <- 1 to maxI) {
-        setAcc.value should contain(i)
-        bufferAcc.value should contain(i)
-        mapAcc.value should contain (i -> i.toString)
-      }
-      resetSparkContext()
-    }
-  }
-
-  test ("localValue readable in tasks") {
-    val maxI = 1000
-    for (nThreads <- List(1, 10)) { // test single & multi-threaded
-      sc = new SparkContext("local[" + nThreads + "]", "test")
-      val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
-      val groupedInts = (1 to (maxI/20)).map {x => (20 * (x - 1) to 20 * x).toSet}
-      val d = sc.parallelize(groupedInts)
-      d.foreach {
-        x => acc.localValue ++= x
-      }
-      acc.value should be ((0 to maxI).toSet)
-      resetSparkContext()
-    }
-  }
-
-  test ("garbage collection") {
-    // Create an accumulator and let it go out of scope to test that it's properly garbage collected
-    sc = new SparkContext("local", "test")
-    var acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
-    val accId = acc.id
-    val ref = WeakReference(acc)
-
-    // Ensure the accumulator is present
-    assert(ref.get.isDefined)
-
-    // Remove the explicit reference to it and allow weak reference to get garbage collected
-    acc = null
-    System.gc()
-    assert(ref.get.isEmpty)
-
-    AccumulatorContext.remove(accId)
-    assert(!AccumulatorContext.get(accId).isDefined)
-  }
-
   test("get accum") {
     // Don't register with SparkContext for cleanup
     var acc = createLongAccum("a")
@@ -209,10 +77,8 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     System.gc()
     assert(ref.get.isEmpty)
 
-    // Getting a garbage collected accum should throw error
-    intercept[IllegalAccessError] {
-      AccumulatorContext.get(accId)
-    }
+    // Getting a garbage collected accum should return None.
+    assert(AccumulatorContext.get(accId).isEmpty)
 
     // Getting a normal accumulator. Note: this has to be separate because referencing an
     // accumulator above in an `assert` would keep it from being garbage collected.
@@ -223,20 +89,6 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(AccumulatorContext.get(100000).isEmpty)
   }
 
-  test("string accumulator param") {
-    val acc = new Accumulator("", StringAccumulatorParam, Some("darkness"))
-    assert(acc.value === "")
-    acc.setValue("feeds")
-    assert(acc.value === "feeds")
-    acc.add("your")
-    assert(acc.value === "your") // value is overwritten, not concatenated
-    acc += "soul"
-    assert(acc.value === "soul")
-    acc ++= "with"
-    assert(acc.value === "with")
-    acc.merge("kindness")
-    assert(acc.value === "kindness")
-  }
 }
 
 private[spark] object AccumulatorSuite {
@@ -258,7 +110,7 @@ private[spark] object AccumulatorSuite {
   }
 
   /**
-   * Make an `AccumulableInfo` out of an [[Accumulable]] with the intent to use the
+   * Make an `AccumulableInfo` out of an `AccumulatorV2` with the intent to use the
    * info as an accumulator update.
    */
   def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfo(Some(a.value), None)

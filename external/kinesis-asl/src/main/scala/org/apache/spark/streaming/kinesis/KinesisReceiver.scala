@@ -24,12 +24,13 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer, IRecordProcessorFactory}
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration, Worker}
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{KinesisClientLibConfiguration, Worker}
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
+import org.apache.spark.streaming.kinesis.KinesisInitialPositions.AtTimestamp
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
 import org.apache.spark.util.Utils
 
@@ -56,12 +57,13 @@ import org.apache.spark.util.Utils
  * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
  * @param regionName  Region name used by the Kinesis Client Library for
  *                    DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
- * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
- *                                 worker's initial starting position in the stream.
- *                                 The values are either the beginning of the stream
- *                                 per Kinesis' limit of 24 hours
- *                                 (InitialPositionInStream.TRIM_HORIZON) or
- *                                 the tip of the stream (InitialPositionInStream.LATEST).
+ * @param initialPosition  Instance of [[KinesisInitialPosition]]
+ *                         In the absence of Kinesis checkpoint info, this is the
+ *                         worker's initial starting position in the stream.
+ *                         The values are either the beginning of the stream
+ *                         per Kinesis' limit of 24 hours
+ *                         ([[KinesisInitialPositions.TrimHorizon]]) or
+ *                         the tip of the stream ([[KinesisInitialPositions.Latest]]).
  * @param checkpointAppName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
  *                 by the Kinesis Client Library.  If you change the App name or Stream name,
  *                 the KCL will throw errors.  This usually requires deleting the backing
@@ -83,7 +85,7 @@ private[kinesis] class KinesisReceiver[T](
     val streamName: String,
     endpointUrl: String,
     regionName: String,
-    initialPositionInStream: InitialPositionInStream,
+    initialPosition: KinesisInitialPosition,
     checkpointAppName: String,
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
@@ -148,17 +150,28 @@ private[kinesis] class KinesisReceiver[T](
 
     kinesisCheckpointer = new KinesisCheckpointer(receiver, checkpointInterval, workerId)
     val kinesisProvider = kinesisCreds.provider
-    val kinesisClientLibConfiguration = new KinesisClientLibConfiguration(
-          checkpointAppName,
-          streamName,
-          kinesisProvider,
-          dynamoDBCreds.map(_.provider).getOrElse(kinesisProvider),
-          cloudWatchCreds.map(_.provider).getOrElse(kinesisProvider),
-          workerId)
+
+    val kinesisClientLibConfiguration = {
+      val baseClientLibConfiguration = new KinesisClientLibConfiguration(
+        checkpointAppName,
+        streamName,
+        kinesisProvider,
+        dynamoDBCreds.map(_.provider).getOrElse(kinesisProvider),
+        cloudWatchCreds.map(_.provider).getOrElse(kinesisProvider),
+        workerId)
         .withKinesisEndpoint(endpointUrl)
-        .withInitialPositionInStream(initialPositionInStream)
         .withTaskBackoffTimeMillis(500)
         .withRegionName(regionName)
+
+      // Update the Kinesis client lib config with timestamp
+      // if InitialPositionInStream.AT_TIMESTAMP is passed
+      initialPosition match {
+        case ts: AtTimestamp =>
+          baseClientLibConfiguration.withTimestampAtInitialPositionInStream(ts.getTimestamp)
+        case _ =>
+          baseClientLibConfiguration.withInitialPositionInStream(initialPosition.getPosition)
+      }
+    }
 
    /*
     *  RecordProcessorFactory creates impls of IRecordProcessor.

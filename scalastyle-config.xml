@@ -86,14 +86,14 @@ This file is divided into 3 sections:
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.ObjectNamesChecker" enabled="true">
-    <parameters><parameter name="regex"><![CDATA[[A-Z][A-Za-z]*]]></parameter></parameters>
+    <parameters><parameter name="regex"><![CDATA[(config|[A-Z][A-Za-z]*)]]></parameter></parameters>
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.PackageObjectNamesChecker" enabled="true">
     <parameters><parameter name="regex"><![CDATA[^[a-z][A-Za-z]*$]]></parameter></parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="true">
+  <check customId="argcount" level="error" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="true">
     <parameters><parameter name="maxParameters"><![CDATA[10]]></parameter></parameters>
   </check>
 
@@ -150,6 +150,19 @@ This file is divided into 3 sections:
       // scalastyle:on println]]></customMessage>
   </check>
 
+  <check customId="hadoopconfiguration" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">spark(.sqlContext)?.sparkContext.hadoopConfiguration</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use sparkContext.hadoopConfiguration? In most cases, you should use
+      spark.sessionState.newHadoopConf() instead, so that the hadoop configurations specified in Spark session
+      configuration will come into effect.
+      If you must use sparkContext.hadoopConfiguration, wrap the code block with
+      // scalastyle:off hadoopconfiguration
+      spark.sparkContext.hadoopConfiguration...
+      // scalastyle:on hadoopconfiguration
+    ]]></customMessage>
+  </check>
+
   <check customId="visiblefortesting" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">@VisibleForTesting</parameter></parameters>
     <customMessage><![CDATA[
@@ -203,6 +216,41 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
+  <check customId="awaitready" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Await\.ready</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use Await.ready? In most cases, you should use ThreadUtils.awaitReady instead.
+      If you must use Await.ready, wrap the code block with
+      // scalastyle:off awaitready
+      Await.ready(...)
+      // scalastyle:on awaitready
+    ]]></customMessage>
+  </check>
+
+  <check customId="caselocale" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">(\.toUpperCase|\.toLowerCase)(?!(\(|\(Locale.ROOT\)))</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use toUpperCase or toLowerCase without the root locale? In most cases, you
+      should use toUpperCase(Locale.ROOT) or toLowerCase(Locale.ROOT) instead.
+      If you must use toUpperCase or toLowerCase without the root locale, wrap the code block with
+      // scalastyle:off caselocale
+      .toUpperCase
+      .toLowerCase
+      // scalastyle:on caselocale
+    ]]></customMessage>
+  </check>
+
+  <check customId="throwerror" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">throw new \w+Error\(</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to throw Error? In most cases, you should use appropriate Exception instead.
+      If you must throw Error, wrap the code block with
+      // scalastyle:off throwerror
+      throw new XXXError(...)
+      // scalastyle:on throwerror
+    ]]></customMessage>
+  </check>
+
   <!-- As of SPARK-9613 JavaConversions should be replaced with JavaConverters -->
   <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">JavaConversions</parameter></parameters>
@@ -218,7 +266,7 @@ This file is divided into 3 sections:
 
   <check customId="extractopt" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">extractOpt</parameter></parameters>
-    <customMessage>Use Utils.jsonOption(x).map(.extract[T]) instead of .extractOpt[T], as the latter
+    <customMessage>Use jsonOption(x).map(.extract[T]) instead of .extractOpt[T], as the latter
     is slower.  </customMessage>
   </check>
 
@@ -257,10 +305,7 @@ This file is divided into 3 sections:
   </check>
 
   <!-- SPARK-16877: Avoid Java annotations -->
-  <check customId="OverrideJavaCase" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
-    <parameters><parameter name="regex">^Override$</parameter></parameters>
-    <customMessage>override modifier should be used instead of @java.lang.Override.</customMessage>
-  </check>
+  <check level="error" class="org.scalastyle.scalariform.OverrideJavaChecker" enabled="true"></check>
 
   <check level="error" class="org.scalastyle.scalariform.DeprecatedJavaChecker" enabled="true"></check>
 

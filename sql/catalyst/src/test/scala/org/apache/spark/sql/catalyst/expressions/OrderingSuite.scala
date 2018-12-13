@@ -24,7 +24,7 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateOrdering, LazilyGeneratedOrdering}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering, LazilyGeneratedOrdering}
 import org.apache.spark.sql.types._
 
 class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -128,7 +128,7 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KB") {
+  test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KiB") {
     val sortOrder = Literal("abc").asc
 
     // this is passing prior to SPARK-16845, and it should also be passing after SPARK-16845
@@ -136,5 +136,33 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // verify that we can support up to 5000 ordering comparisons, which should be sufficient
     GenerateOrdering.generate(Array.fill(5000)(sortOrder))
+  }
+
+  test("SPARK-21344: BinaryType comparison does signed byte array comparison") {
+    val data = Seq(
+      (Array[Byte](1), Array[Byte](-1)),
+      (Array[Byte](1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, -1)),
+      (Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, -1))
+      )
+    data.foreach { case (b1, b2) =>
+      val rowOrdering = InterpretedOrdering.forSchema(Seq(BinaryType))
+      val genOrdering = GenerateOrdering.generate(
+        BoundReference(0, BinaryType, nullable = true).asc :: Nil)
+      val rowType = StructType(StructField("b", BinaryType, nullable = true) :: Nil)
+      val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
+      val rowB1 = toCatalyst(Row(b1)).asInstanceOf[InternalRow]
+      val rowB2 = toCatalyst(Row(b2)).asInstanceOf[InternalRow]
+      assert(rowOrdering.compare(rowB1, rowB2) < 0)
+      assert(genOrdering.compare(rowB1, rowB2) < 0)
+    }
+  }
+
+  test("SPARK-22591: GenerateOrdering shouldn't change ctx.INPUT_ROW") {
+    val ctx = new CodegenContext()
+    ctx.INPUT_ROW = null
+
+    val schema = new StructType().add("field", FloatType, nullable = true)
+    GenerateOrdering.genComparisons(ctx, schema)
+    assert(ctx.INPUT_ROW == null)
   }
 }

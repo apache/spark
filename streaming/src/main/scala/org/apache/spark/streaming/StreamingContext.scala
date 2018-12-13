@@ -458,7 +458,7 @@ class StreamingContext private[streaming] (
       queue: Queue[RDD[T]],
       oneAtATime: Boolean = true
     ): InputDStream[T] = {
-    queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
+    queueStream(queue, oneAtATime, sc.makeRDD(Seq.empty[T], 1))
   }
 
   /**
@@ -537,7 +537,7 @@ class StreamingContext private[streaming] (
         ExecutorAllocationManager.isDynamicAllocationEnabled(conf)) {
       logWarning("Dynamic Allocation is enabled for this application. " +
         "Enabling Dynamic allocation for Spark Streaming applications can cause data loss if " +
-        "Write Ahead Log is not enabled for non-replayable sources like Flume. " +
+        "Write Ahead Log is not enabled for non-replayable sources. " +
         "See the programming guide for details on how to enable the Write Ahead Log.")
     }
   }
@@ -596,7 +596,7 @@ class StreamingContext private[streaming] (
         }
         logDebug("Adding shutdown hook") // force eager creation of logger
         shutdownHookRef = ShutdownHookManager.addShutdownHook(
-          StreamingContext.SHUTDOWN_HOOK_PRIORITY)(stopOnShutdown)
+          StreamingContext.SHUTDOWN_HOOK_PRIORITY)(() => stopOnShutdown())
         // Registering Streaming Metrics at the start of the StreamingContext
         assert(env.metricsSystem != null)
         env.metricsSystem.registerSource(streamingSource)
@@ -659,8 +659,7 @@ class StreamingContext private[streaming] (
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = {
     var shutdownHookRefToRemove: AnyRef = null
     if (LiveListenerBus.withinListenerThread.value) {
-      throw new SparkException(
-        s"Cannot stop StreamingContext within listener thread of ${LiveListenerBus.name}")
+      throw new SparkException(s"Cannot stop StreamingContext within listener bus thread.")
     }
     synchronized {
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet

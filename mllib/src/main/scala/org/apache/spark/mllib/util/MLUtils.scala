@@ -28,8 +28,10 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
 
@@ -100,6 +102,25 @@ object MLUtils extends Logging {
       .map(_.trim)
       .filter(line => !(line.isEmpty || line.startsWith("#")))
       .map(parseLibSVMRecord)
+  }
+
+  private[spark] def parseLibSVMFile(
+      sparkSession: SparkSession, paths: Seq[String]): RDD[(Double, Array[Int], Array[Double])] = {
+    val lines = sparkSession.baseRelationToDataFrame(
+      DataSource.apply(
+        sparkSession,
+        paths = paths,
+        className = classOf[TextFileFormat].getName
+      ).resolveRelation(checkFilesExist = false))
+      .select("value")
+
+    import lines.sqlContext.implicits._
+
+    lines.select(trim($"value").as("line"))
+      .filter(not((length($"line") === 0).or($"line".startsWith("#"))))
+      .as[String]
+      .rdd
+      .map(MLUtils.parseLibSVMRecord)
   }
 
   private[spark] def parseLibSVMRecord(line: String): (Double, Array[Int], Array[Double]) = {
@@ -485,8 +506,6 @@ object MLUtils extends Logging {
     val n = v1.size
     require(v2.size == n)
     require(norm1 >= 0.0 && norm2 >= 0.0)
-    val sumSquaredNorm = norm1 * norm1 + norm2 * norm2
-    val normDiff = norm1 - norm2
     var sqDist = 0.0
     /*
      * The relative error is
@@ -500,19 +519,23 @@ object MLUtils extends Logging {
      * The bound doesn't need the inner product, so we can use it as a sufficient condition to
      * check quickly whether the inner product approach is accurate.
      */
-    val precisionBound1 = 2.0 * EPSILON * sumSquaredNorm / (normDiff * normDiff + EPSILON)
-    if (precisionBound1 < precision) {
-      sqDist = sumSquaredNorm - 2.0 * dot(v1, v2)
-    } else if (v1.isInstanceOf[SparseVector] || v2.isInstanceOf[SparseVector]) {
-      val dotValue = dot(v1, v2)
-      sqDist = math.max(sumSquaredNorm - 2.0 * dotValue, 0.0)
-      val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dotValue)) /
-        (sqDist + EPSILON)
-      if (precisionBound2 > precision) {
-        sqDist = Vectors.sqdist(v1, v2)
-      }
-    } else {
+    if (v1.isInstanceOf[DenseVector] && v2.isInstanceOf[DenseVector]) {
       sqDist = Vectors.sqdist(v1, v2)
+    } else {
+      val sumSquaredNorm = norm1 * norm1 + norm2 * norm2
+      val normDiff = norm1 - norm2
+      val precisionBound1 = 2.0 * EPSILON * sumSquaredNorm / (normDiff * normDiff + EPSILON)
+      if (precisionBound1 < precision) {
+        sqDist = sumSquaredNorm - 2.0 * dot(v1, v2)
+      } else {
+        val dotValue = dot(v1, v2)
+        sqDist = math.max(sumSquaredNorm - 2.0 * dotValue, 0.0)
+        val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dotValue)) /
+          (sqDist + EPSILON)
+        if (precisionBound2 > precision) {
+          sqDist = Vectors.sqdist(v1, v2)
+        }
+      }
     }
     sqDist
   }

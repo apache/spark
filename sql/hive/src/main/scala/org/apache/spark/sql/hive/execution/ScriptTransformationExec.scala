@@ -123,7 +123,7 @@ case class ScriptTransformationExec(
 
         var scriptOutputWritable: Writable = null
         val reusedWritableObject: Writable = if (null != outputSerde) {
-          outputSerde.getSerializedClass().newInstance
+          outputSerde.getSerializedClass().getConstructor().newInstance()
         } else {
           null
         }
@@ -404,7 +404,8 @@ case class HiveScriptIOSchema (
       columnTypes: Seq[DataType],
       serdeProps: Seq[(String, String)]): AbstractSerDe = {
 
-    val serde = Utils.classForName(serdeClassName).newInstance.asInstanceOf[AbstractSerDe]
+    val serde = Utils.classForName(serdeClassName).getConstructor().
+      newInstance().asInstanceOf[AbstractSerDe]
 
     val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
 
@@ -412,7 +413,9 @@ case class HiveScriptIOSchema (
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
     val properties = new Properties()
-    properties.putAll(propsMap.asJava)
+    // Can not use properties.putAll(propsMap.asJava) in scala-2.12
+    // See https://github.com/scala/bug/issues/10418
+    propsMap.foreach { case (k, v) => properties.put(k, v) }
     serde.initialize(null, properties)
 
     serde
@@ -422,9 +425,12 @@ case class HiveScriptIOSchema (
       inputStream: InputStream,
       conf: Configuration): Option[RecordReader] = {
     recordReaderClass.map { klass =>
-      val instance = Utils.classForName(klass).newInstance().asInstanceOf[RecordReader]
+      val instance = Utils.classForName(klass).getConstructor().
+        newInstance().asInstanceOf[RecordReader]
       val props = new Properties()
-      props.putAll(outputSerdeProps.toMap.asJava)
+      // Can not use props.putAll(outputSerdeProps.toMap.asJava) in scala-2.12
+      // See https://github.com/scala/bug/issues/10418
+      outputSerdeProps.toMap.foreach { case (k, v) => props.put(k, v) }
       instance.initialize(inputStream, conf, props)
       instance
     }
@@ -432,7 +438,8 @@ case class HiveScriptIOSchema (
 
   def recordWriter(outputStream: OutputStream, conf: Configuration): Option[RecordWriter] = {
     recordWriterClass.map { klass =>
-      val instance = Utils.classForName(klass).newInstance().asInstanceOf[RecordWriter]
+      val instance = Utils.classForName(klass).getConstructor().
+        newInstance().asInstanceOf[RecordWriter]
       instance.initialize(outputStream, conf)
       instance
     }

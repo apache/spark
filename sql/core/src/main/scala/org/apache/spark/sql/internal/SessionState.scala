@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
@@ -42,14 +42,17 @@ import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListen
  * @param experimentalMethods Interface to add custom planning strategies and optimizers.
  * @param functionRegistry Internal catalog for managing functions registered by the user.
  * @param udfRegistration Interface exposed to the user for registering user-defined functions.
- * @param catalog Internal catalog for managing table and database states.
+ * @param catalogBuilder a function to create an internal catalog for managing table and database
+ *                       states.
  * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
- * @param analyzer Logical query plan analyzer for resolving unresolved attributes and relations.
- * @param optimizer Logical query plan optimizer.
+ * @param analyzerBuilder A function to create the logical query plan analyzer for resolving
+ *                        unresolved attributes and relations.
+ * @param optimizerBuilder a function to create the logical query plan optimizer.
  * @param planner Planner that converts optimized logical plans to physical plans.
  * @param streamingQueryManager Interface to start and stop streaming queries.
  * @param listenerManager Interface to register custom [[QueryExecutionListener]]s.
- * @param resourceLoader Session shared resource loader to load JARs, files, etc.
+ * @param resourceLoaderBuilder a function to create a session shared resource loader to load JARs,
+ *                              files, etc.
  * @param createQueryExecution Function used to create QueryExecution objects.
  * @param createClone Function used to create clones of the session state.
  */
@@ -59,16 +62,25 @@ private[sql] class SessionState(
     val experimentalMethods: ExperimentalMethods,
     val functionRegistry: FunctionRegistry,
     val udfRegistration: UDFRegistration,
-    val catalog: SessionCatalog,
+    catalogBuilder: () => SessionCatalog,
     val sqlParser: ParserInterface,
-    val analyzer: Analyzer,
-    val optimizer: Optimizer,
+    analyzerBuilder: () => Analyzer,
+    optimizerBuilder: () => Optimizer,
     val planner: SparkPlanner,
     val streamingQueryManager: StreamingQueryManager,
     val listenerManager: ExecutionListenerManager,
-    val resourceLoader: SessionResourceLoader,
+    resourceLoaderBuilder: () => SessionResourceLoader,
     createQueryExecution: LogicalPlan => QueryExecution,
     createClone: (SparkSession, SessionState) => SessionState) {
+
+  // The following fields are lazy to avoid creating the Hive client when creating SessionState.
+  lazy val catalog: SessionCatalog = catalogBuilder()
+
+  lazy val analyzer: Analyzer = analyzerBuilder()
+
+  lazy val optimizer: Optimizer = optimizerBuilder()
+
+  lazy val resourceLoader: SessionResourceLoader = resourceLoaderBuilder()
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
     sharedState.sparkContext.hadoopConfiguration,
@@ -109,10 +121,10 @@ private[sql] object SessionState {
 }
 
 /**
- * Concrete implementation of a [[SessionStateBuilder]].
+ * Concrete implementation of a [[BaseSessionStateBuilder]].
  */
 @Experimental
-@InterfaceStability.Unstable
+@Unstable
 class SessionStateBuilder(
     session: SparkSession,
     parentState: Option[SessionState] = None)
@@ -123,7 +135,7 @@ class SessionStateBuilder(
 /**
  * Session shared [[FunctionResourceLoader]].
  */
-@InterfaceStability.Unstable
+@Unstable
 class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoader {
   override def loadResource(resource: FunctionResource): Unit = {
     resource.resourceType match {

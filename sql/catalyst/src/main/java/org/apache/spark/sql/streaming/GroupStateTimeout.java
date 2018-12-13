@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.streaming;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.annotation.Experimental;
-import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.plans.logical.*;
 
 /**
@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.*;
  * @since 2.2.0
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 public class GroupStateTimeout {
 
   /**
@@ -37,7 +37,9 @@ public class GroupStateTimeout {
    * `map/flatMapGroupsWithState` by calling `GroupState.setTimeoutDuration()`. See documentation
    * on `GroupState` for more details.
    */
-  public static GroupStateTimeout ProcessingTimeTimeout() { return ProcessingTimeTimeout$.MODULE$; }
+  public static GroupStateTimeout ProcessingTimeTimeout() {
+    return ProcessingTimeTimeout$.MODULE$;
+  }
 
   /**
    * Timeout based on event-time. The event-time timestamp for timeout can be set for each
@@ -51,4 +53,5 @@ public class GroupStateTimeout {
 
   /** No timeout. */
   public static GroupStateTimeout NoTimeout() { return NoTimeout$.MODULE$; }
+
 }

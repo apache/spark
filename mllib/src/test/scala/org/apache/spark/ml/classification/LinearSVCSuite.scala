@@ -21,19 +21,18 @@ import scala.util.Random
 
 import breeze.linalg.{DenseVector => BDV}
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.optim.aggregator.HingeAggregator
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.udf
 
 
-class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -127,6 +126,40 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     MLTestingUtils.checkCopyAndUids(lsvc, model)
   }
 
+  test("LinearSVC threshold acts on rawPrediction") {
+    val lsvc =
+      new LinearSVCModel(uid = "myLSVCM", coefficients = Vectors.dense(1.0), intercept = 0.0)
+    val df = spark.createDataFrame(Seq(
+      (1, Vectors.dense(1e-7)),
+      (0, Vectors.dense(0.0)),
+      (-1, Vectors.dense(-1e-7)))).toDF("id", "features")
+
+    def checkOneResult(
+        model: LinearSVCModel,
+        threshold: Double,
+        expected: Set[(Int, Double)]): Unit = {
+      model.setThreshold(threshold)
+      testTransformerByGlobalCheckFunc[(Int, Vector)](df, model, "id", "prediction") {
+        rows: Seq[Row] =>
+          val results = rows.map(r => (r.getInt(0), r.getDouble(1))).toSet
+          assert(results === expected, s"Failed for threshold = $threshold")
+      }
+    }
+
+    def checkResults(threshold: Double, expected: Set[(Int, Double)]): Unit = {
+      // Check via code path using Classifier.raw2prediction
+      lsvc.setRawPredictionCol("rawPrediction")
+      checkOneResult(lsvc, threshold, expected)
+      // Check via code path using Classifier.predict
+      lsvc.setRawPredictionCol("")
+      checkOneResult(lsvc, threshold, expected)
+    }
+
+    checkResults(0.0, Set((1, 1.0), (0, 0.0), (-1, 0.0)))
+    checkResults(Double.PositiveInfinity, Set((1, 0.0), (0, 0.0), (-1, 0.0)))
+    checkResults(Double.NegativeInfinity, Set((1, 1.0), (0, 1.0), (-1, 1.0)))
+  }
+
   test("linear svc doesn't fit intercept when fitIntercept is off") {
     val lsvc = new LinearSVC().setFitIntercept(false).setMaxIter(5)
     val model = lsvc.fit(smallBinaryDataset)
@@ -137,10 +170,10 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(model2.intercept !== 0.0)
   }
 
-  test("sparse coefficients in SVCAggregator") {
+  test("sparse coefficients in HingeAggregator") {
     val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val agg = new LinearSVCAggregator(bcCoefficients, bcFeaturesStd, true)
+    val agg = new HingeAggregator(bcFeaturesStd, true)(bcCoefficients)
     val thrown = withClue("LinearSVCAggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
@@ -166,6 +199,12 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       dataset.as[LabeledPoint], estimator, 2, modelEquals, outlierRatio = 3)
     MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
       dataset.as[LabeledPoint], estimator, modelEquals, 42L)
+  }
+
+  test("prediction on single instance") {
+    val trainer = new LinearSVC()
+    val model = trainer.fit(smallBinaryDataset)
+    testPredictionModelSinglePrediction(model, smallBinaryDataset)
   }
 
   test("linearSVC comparison with R e1071 and scikit-learn") {

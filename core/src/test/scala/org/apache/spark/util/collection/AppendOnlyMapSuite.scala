@@ -181,9 +181,9 @@ class AppendOnlyMapSuite extends SparkFunSuite {
     // Should be sorted by key
     assert(it.hasNext)
     var previous = it.next()
-    assert(previous == (null, "happy new year!"))
+    assert(previous == ((null, "happy new year!")))
     previous = it.next()
-    assert(previous == ("1", "2014"))
+    assert(previous == (("1", "2014")))
     while (it.hasNext) {
       val kv = it.next()
       assert(kv._1.toInt > previous._1.toInt)

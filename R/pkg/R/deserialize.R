@@ -43,7 +43,7 @@ readObject <- function(con) {
 }
 
 readTypedObject <- function(con, type) {
-  switch (type,
+  switch(type,
     "i" = readInt(con),
     "c" = readString(con),
     "b" = readBoolean(con),
@@ -60,12 +60,16 @@ readTypedObject <- function(con, type) {
     stop(paste("Unsupported type for deserialization", type)))
 }
 
-readString <- function(con) {
-  stringLen <- readInt(con)
-  raw <- readBin(con, raw(), stringLen, endian = "big")
+readStringData <- function(con, len) {
+  raw <- readBin(con, raw(), len, endian = "big")
   string <- rawToChar(raw)
   Encoding(string) <- "UTF-8"
   string
+}
+
+readString <- function(con) {
+  stringLen <- readInt(con)
+  readStringData(con, stringLen)
 }
 
 readInt <- function(con) {

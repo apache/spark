@@ -52,10 +52,13 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   test("basic file appender") {
     val testString = (1 to 1000).mkString(", ")
     val inputStream = new ByteArrayInputStream(testString.getBytes(StandardCharsets.UTF_8))
+    // The `header` should not be covered
+    val header = "Add header"
+    Files.write(header, testFile, StandardCharsets.UTF_8)
     val appender = new FileAppender(inputStream, testFile)
     inputStream.close()
     appender.awaitTermination()
-    assert(Files.toString(testFile, StandardCharsets.UTF_8) === testString)
+    assert(Files.toString(testFile, StandardCharsets.UTF_8) === header + testString)
   }
 
   test("rolling file appender - time-based rolling") {
@@ -353,7 +356,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     generatedFiles
   }
 
-  /** Delete all the generated rolledover files */
+  /** Delete all the generated rolled over files */
   def cleanup() {
     testFile.getParentFile.listFiles.filter { file =>
       file.getName.startsWith(testFile.getName)

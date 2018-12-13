@@ -20,6 +20,11 @@ package org.apache.spark.sql.execution.streaming
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.RuntimeConfig
+import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StreamingAggregationStateManager}
+import org.apache.spark.sql.internal.SQLConf.{FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, _}
+
 /**
  * An ordered collection of offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
@@ -28,14 +33,16 @@ import org.json4s.jackson.Serialization
 case class OffsetSeq(offsets: Seq[Option[Offset]], metadata: Option[OffsetSeqMetadata] = None) {
 
   /**
-   * Unpacks an offset into [[StreamProgress]] by associating each offset with the order list of
+   * Unpacks an offset into [[StreamProgress]] by associating each offset with the ordered list of
    * sources.
    *
    * This method is typically used to associate a serialized offset with actual sources (which
    * cannot be serialized).
    */
-  def toStreamProgress(sources: Seq[Source]): StreamProgress = {
-    assert(sources.size == offsets.size)
+  def toStreamProgress(sources: Seq[BaseStreamingSource]): StreamProgress = {
+    assert(sources.size == offsets.size, s"There are [${offsets.size}] sources in the " +
+      s"checkpoint offsets and now there are [${sources.size}] sources requested by the query. " +
+      s"Cannot continue.")
     new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
   }
 
@@ -78,7 +85,74 @@ case class OffsetSeqMetadata(
   def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 }
 
-object OffsetSeqMetadata {
+object OffsetSeqMetadata extends Logging {
   private implicit val format = Serialization.formats(NoTypeHints)
+  private val relevantSQLConfs = Seq(
+    SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
+    FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+
+  /**
+   * Default values of relevant configurations that are used for backward compatibility.
+   * As new configurations are added to the metadata, existing checkpoints may not have those
+   * confs. The values in this list ensures that the confs without recovered values are
+   * set to a default value that ensure the same behavior of the streaming query as it was before
+   * the restart.
+   *
+   * Note, that this is optional; set values here if you *have* to override existing session conf
+   * with a specific default value for ensuring same behavior of the query as before.
+   */
+  private val relevantSQLConfDefaultValues = Map[String, String](
+    STREAMING_MULTIPLE_WATERMARK_POLICY.key -> MultipleWatermarkPolicy.DEFAULT_POLICY_NAME,
+    FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key ->
+      FlatMapGroupsWithStateExecHelper.legacyVersion.toString,
+    STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key ->
+      StreamingAggregationStateManager.legacyVersion.toString
+  )
+
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
+
+  def apply(
+      batchWatermarkMs: Long,
+      batchTimestampMs: Long,
+      sessionConf: RuntimeConfig): OffsetSeqMetadata = {
+    val confs = relevantSQLConfs.map { conf => conf.key -> sessionConf.get(conf.key) }.toMap
+    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs)
+  }
+
+  /** Set the SparkSession configuration with the values in the metadata */
+  def setSessionConf(metadata: OffsetSeqMetadata, sessionConf: RuntimeConfig): Unit = {
+    OffsetSeqMetadata.relevantSQLConfs.map(_.key).foreach { confKey =>
+
+      metadata.conf.get(confKey) match {
+
+        case Some(valueInMetadata) =>
+          // Config value exists in the metadata, update the session config with this value
+          val optionalValueInSession = sessionConf.getOption(confKey)
+          if (optionalValueInSession.isDefined && optionalValueInSession.get != valueInMetadata) {
+            logWarning(s"Updating the value of conf '$confKey' in current session from " +
+              s"'${optionalValueInSession.get}' to '$valueInMetadata'.")
+          }
+          sessionConf.set(confKey, valueInMetadata)
+
+        case None =>
+          // For backward compatibility, if a config was not recorded in the offset log,
+          // then either inject a default value (if specified in `relevantSQLConfDefaultValues`) or
+          // let the existing conf value in SparkSession prevail.
+          relevantSQLConfDefaultValues.get(confKey) match {
+
+            case Some(defaultValue) =>
+              sessionConf.set(confKey, defaultValue)
+              logWarning(s"Conf '$confKey' was not found in the offset log, " +
+                s"using default value '$defaultValue'")
+
+            case None =>
+              val valueStr = sessionConf.getOption(confKey).map { v =>
+                s" Using existing session conf value '$v'."
+              }.getOrElse { " No value set in session conf." }
+              logWarning(s"Conf '$confKey' was not found in the offset log. $valueStr")
+
+          }
+      }
+    }
+  }
 }

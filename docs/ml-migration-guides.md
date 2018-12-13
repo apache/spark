@@ -7,6 +7,58 @@ description: MLlib migration guides from before Spark SPARK_VERSION_SHORT
 
 The migration guide for the current Spark version is kept on the [MLlib Guide main page](ml-guide.html#migration-guide).
 
+## From 2.1 to 2.2
+
+### Breaking changes
+
+There are no breaking changes.
+
+### Deprecations and changes of behavior
+
+**Deprecations**
+
+There are no deprecations.
+
+**Changes of behavior**
+
+* [SPARK-19787](https://issues.apache.org/jira/browse/SPARK-19787):
+ Default value of `regParam` changed from `1.0` to `0.1` for `ALS.train` method (marked `DeveloperApi`).
+ **Note** this does _not affect_ the `ALS` Estimator or Model, nor MLlib's `ALS` class.
+* [SPARK-14772](https://issues.apache.org/jira/browse/SPARK-14772):
+ Fixed inconsistency between Python and Scala APIs for `Param.copy` method.
+* [SPARK-11569](https://issues.apache.org/jira/browse/SPARK-11569):
+ `StringIndexer` now handles `NULL` values in the same way as unseen values. Previously an exception
+ would always be thrown regardless of the setting of the `handleInvalid` parameter.
+ 
+## From 2.0 to 2.1
+
+### Breaking changes
+ 
+**Deprecated methods removed**
+
+* `setLabelCol` in `feature.ChiSqSelectorModel`
+* `numTrees` in `classification.RandomForestClassificationModel` (This now refers to the Param called `numTrees`)
+* `numTrees` in `regression.RandomForestRegressionModel` (This now refers to the Param called `numTrees`)
+* `model` in `regression.LinearRegressionSummary`
+* `validateParams` in `PipelineStage`
+* `validateParams` in `Evaluator`
+
+### Deprecations and changes of behavior
+
+**Deprecations**
+
+* [SPARK-18592](https://issues.apache.org/jira/browse/SPARK-18592):
+  Deprecate all Param setter methods except for input/output column Params for `DecisionTreeClassificationModel`, `GBTClassificationModel`, `RandomForestClassificationModel`, `DecisionTreeRegressionModel`, `GBTRegressionModel` and `RandomForestRegressionModel`
+
+**Changes of behavior**
+
+* [SPARK-17870](https://issues.apache.org/jira/browse/SPARK-17870):
+ Fix a bug of `ChiSqSelector` which will likely change its result. Now `ChiSquareSelector` use pValue rather than raw statistic to select a fixed number of top features.
+* [SPARK-3261](https://issues.apache.org/jira/browse/SPARK-3261):
+ `KMeans` returns potentially fewer than k cluster centers in cases where k distinct centroids aren't available or aren't selected.
+* [SPARK-17389](https://issues.apache.org/jira/browse/SPARK-17389):
+ `KMeans` reduces the default number of steps from 5 to 2 for the k-means|| initialization mode.
+
 ## From 1.6 to 2.0
 
 ### Breaking changes
@@ -237,7 +289,7 @@ In the `spark.mllib` package, there were several breaking changes.  The first ch
 
 In the `spark.ml` package, the main API changes are from Spark SQL.  We list the most important changes here:
 
-* The old [SchemaRDD](http://spark.apache.org/docs/1.2.1/api/scala/index.html#org.apache.spark.sql.SchemaRDD) has been replaced with [DataFrame](api/scala/index.html#org.apache.spark.sql.DataFrame) with a somewhat modified API.  All algorithms in `spark.ml` which used to use SchemaRDD now use DataFrame.
+* The old [SchemaRDD](https://spark.apache.org/docs/1.2.1/api/scala/index.html#org.apache.spark.sql.SchemaRDD) has been replaced with [DataFrame](api/scala/index.html#org.apache.spark.sql.DataFrame) with a somewhat modified API.  All algorithms in `spark.ml` which used to use SchemaRDD now use DataFrame.
 * In Spark 1.2, we used implicit conversions from `RDD`s of `LabeledPoint` into `SchemaRDD`s by calling `import sqlContext._` where `sqlContext` was an instance of `SQLContext`.  These implicits have been moved, so we now call `import sqlContext.implicits._`.
 * Java APIs for SQL have also changed accordingly.  Please see the examples above and the [Spark SQL Programming Guide](sql-programming-guide.html) for details.
 
@@ -295,7 +347,7 @@ rather than using the old parameter class `Strategy`.  These new training method
 separate classification and regression, and they replace specialized parameter types with
 simple `String` types.
 
-Examples of the new, recommended `trainClassifier` and `trainRegressor` are given in the
+Examples of the new recommended `trainClassifier` and `trainRegressor` are given in the
 [Decision Trees Guide](mllib-decision-tree.html#examples).
 
 ## From 0.9 to 1.0

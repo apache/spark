@@ -21,7 +21,7 @@
 
 FIND_SPARK_HOME_PYTHON_SCRIPT="$(cd "$(dirname "$0")"; pwd)/find_spark_home.py"
 
-# Short cirtuit if the user already has this set.
+# Short circuit if the user already has this set.
 if [ ! -z "${SPARK_HOME}" ]; then
    exit 0
 elif [ ! -f "$FIND_SPARK_HOME_PYTHON_SCRIPT" ]; then

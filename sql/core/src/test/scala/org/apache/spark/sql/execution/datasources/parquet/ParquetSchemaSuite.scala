@@ -20,10 +20,14 @@ package org.apache.spark.sql.execution.datasources.parquet
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -52,14 +56,10 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       sqlSchema: StructType,
       parquetSchema: String,
       binaryAsString: Boolean,
-      int96AsTimestamp: Boolean,
-      writeLegacyParquetFormat: Boolean,
-      int64AsTimestampMillis: Boolean = false): Unit = {
-    val converter = new ParquetSchemaConverter(
+      int96AsTimestamp: Boolean): Unit = {
+    val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
-      assumeInt96IsTimestamp = int96AsTimestamp,
-      writeLegacyParquetFormat = writeLegacyParquetFormat,
-      writeTimestampInMillis = int64AsTimestampMillis)
+      assumeInt96IsTimestamp = int96AsTimestamp)
 
     test(s"sql <= parquet: $testName") {
       val actual = converter.convert(MessageTypeParser.parseMessageType(parquetSchema))
@@ -77,15 +77,12 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       testName: String,
       sqlSchema: StructType,
       parquetSchema: String,
-      binaryAsString: Boolean,
-      int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean,
-      int64AsTimestampMillis: Boolean = false): Unit = {
-    val converter = new ParquetSchemaConverter(
-      assumeBinaryIsString = binaryAsString,
-      assumeInt96IsTimestamp = int96AsTimestamp,
+      outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
+        SQLConf.ParquetOutputTimestampType.INT96): Unit = {
+    val converter = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = writeLegacyParquetFormat,
-      writeTimestampInMillis = int64AsTimestampMillis)
+      outputTimestampType = outputTimestampType)
 
     test(s"sql => parquet: $testName") {
       val actual = converter.convert(sqlSchema)
@@ -102,25 +99,22 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean,
-      int64AsTimestampMillis: Boolean = false): Unit = {
+      outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
+        SQLConf.ParquetOutputTimestampType.INT96): Unit = {
 
     testCatalystToParquet(
       testName,
       sqlSchema,
       parquetSchema,
-      binaryAsString,
-      int96AsTimestamp,
       writeLegacyParquetFormat,
-      int64AsTimestampMillis)
+      outputTimestampType)
 
     testParquetToCatalyst(
       testName,
       sqlSchema,
       parquetSchema,
       binaryAsString,
-      int96AsTimestamp,
-      writeLegacyParquetFormat,
-      int64AsTimestampMillis)
+      int96AsTimestamp)
   }
 }
 
@@ -391,6 +385,58 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     }
   }
 
+  // =======================================
+  // Tests for parquet schema mismatch error
+  // =======================================
+  def testSchemaMismatch(path: String, vectorizedReaderEnabled: Boolean): SparkException = {
+    import testImplicits._
+
+    var e: SparkException = null
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
+      // Create two parquet files with different schemas in the same folder
+      Seq(("bcd", 2)).toDF("a", "b").coalesce(1).write.mode("overwrite").parquet(s"$path/parquet")
+      Seq((1, "abc")).toDF("a", "b").coalesce(1).write.mode("append").parquet(s"$path/parquet")
+
+      e = intercept[SparkException] {
+        spark.read.parquet(s"$path/parquet").collect()
+      }
+    }
+    e
+  }
+
+  test("schema mismatch failure error message for parquet reader") {
+    withTempPath { dir =>
+      val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = false)
+      val expectedMessage = "Encounter error while reading parquet files. " +
+        "One possible cause: Parquet column cannot be converted in the corresponding " +
+        "files. Details:"
+      assert(e.getCause.isInstanceOf[QueryExecutionException])
+      assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
+      assert(e.getCause.getMessage.startsWith(expectedMessage))
+    }
+  }
+
+  test("schema mismatch failure error message for parquet vectorized reader") {
+    withTempPath { dir =>
+      val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = true)
+      assert(e.getCause.isInstanceOf[QueryExecutionException])
+      assert(e.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+
+      // Check if the physical type is reporting correctly
+      val errMsg = e.getCause.getMessage
+      assert(errMsg.startsWith("Parquet column cannot be converted in file"))
+      val file = errMsg.substring("Parquet column cannot be converted in file ".length,
+        errMsg.indexOf(". "))
+      val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
+      assert(col.length == 1)
+      if (col(0).dataType == StringType) {
+        assert(errMsg.contains("Column: [a], Expected: int, Found: BINARY"))
+      } else {
+        assert(errMsg.endsWith("Column: [a], Expected: string, Found: INT32"))
+      }
+    }
+  }
+
   // =======================================================
   // Tests for converting Parquet LIST to Catalyst ArrayType
   // =======================================================
@@ -411,8 +457,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with nullable element type - 2",
@@ -430,8 +475,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 1 - standard",
@@ -446,8 +490,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 2",
@@ -462,8 +505,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 3",
@@ -476,8 +518,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 4",
@@ -500,8 +541,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 5 - parquet-avro style",
@@ -522,8 +562,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type - 6 - parquet-thrift style",
@@ -544,8 +583,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type 7 - " +
@@ -557,8 +595,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: LIST with non-nullable element type 8 - " +
@@ -580,8 +617,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   // =======================================================
   // Tests for converting Catalyst ArrayType to Parquet LIST
@@ -602,8 +638,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
@@ -621,8 +655,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
   testCatalystToParquet(
@@ -640,8 +672,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
@@ -657,8 +687,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
   // ====================================================
@@ -682,8 +710,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with non-nullable value type - 2",
@@ -702,8 +729,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with non-nullable value type - 3 - prior to 1.4.x",
@@ -722,8 +748,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 1 - standard",
@@ -742,8 +767,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 2",
@@ -762,8 +786,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   testParquetToCatalyst(
     "Backwards-compatibility: MAP with nullable value type - 3 - parquet-avro style",
@@ -782,8 +805,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |}
     """.stripMargin,
     binaryAsString = true,
-    int96AsTimestamp = true,
-    writeLegacyParquetFormat = true)
+    int96AsTimestamp = true)
 
   // ====================================================
   // Tests for converting Catalyst MapType to Parquet Map
@@ -805,8 +827,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
@@ -825,8 +845,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
   testCatalystToParquet(
@@ -845,8 +863,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = false)
 
   testCatalystToParquet(
@@ -865,8 +881,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       |  }
       |}
     """.stripMargin,
-    binaryAsString = true,
-    int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
   // =================================
@@ -982,25 +996,39 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = false,
     writeLegacyParquetFormat = true,
-    int64AsTimestampMillis = true)
+    outputTimestampType = SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS)
+
+  testSchema(
+    "Timestamp written and read as INT64 with TIMESTAMP_MICROS",
+    StructType(Seq(StructField("f1", TimestampType))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP_MICROS);
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = false,
+    writeLegacyParquetFormat = true,
+    outputTimestampType = SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
 
   private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,
-      expectedSchema: String): Unit = {
+      expectedSchema: String,
+      caseSensitive: Boolean = true): Unit = {
     testSchemaClipping(testName, parquetSchema, catalystSchema,
-      MessageTypeParser.parseMessageType(expectedSchema))
+      MessageTypeParser.parseMessageType(expectedSchema), caseSensitive)
   }
 
   private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,
-      expectedSchema: MessageType): Unit = {
+      expectedSchema: MessageType,
+      caseSensitive: Boolean): Unit = {
     test(s"Clipping - $testName") {
       val actual = ParquetReadSupport.clipParquetSchema(
-        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema)
+        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive)
 
       try {
         expectedSchema.checkContains(actual)
@@ -1361,7 +1389,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = new StructType(),
 
-    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE)
+    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE,
+    caseSensitive = true)
 
   testSchemaClipping(
     "disjoint field sets",
@@ -1518,4 +1547,52 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |  }
         |}
       """.stripMargin)
+
+  testSchemaClipping(
+    "case-insensitive resolution: no ambiguity",
+    parquetSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin,
+    catalystSchema = {
+      val nestedType = new StructType().add("b", IntegerType, nullable = true)
+      new StructType()
+        .add("a", nestedType, nullable = true)
+        .add("c", IntegerType, nullable = true)
+    },
+    expectedSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin,
+    caseSensitive = false)
+
+    test("Clipping - case-insensitive resolution: more than one field is matched") {
+      val parquetSchema =
+        """message root {
+          |  required group A {
+          |    optional int32 B;
+          |  }
+          |  optional int32 c;
+          |  optional int32 a;
+          |}
+        """.stripMargin
+      val catalystSchema = {
+        val nestedType = new StructType().add("b", IntegerType, nullable = true)
+        new StructType()
+          .add("a", nestedType, nullable = true)
+          .add("c", IntegerType, nullable = true)
+      }
+      assertThrows[RuntimeException] {
+        ParquetReadSupport.clipParquetSchema(
+          MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive = false)
+      }
+    }
 }

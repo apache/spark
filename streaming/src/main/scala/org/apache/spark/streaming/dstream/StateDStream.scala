@@ -76,7 +76,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
             // Re-apply the update function to the old state RDD
             val updateFuncLocal = updateFunc
             val finalFunc = (iterator: Iterator[(K, S)]) => {
-              val i = iterator.map(t => (t._1, Seq[V](), Option(t._2)))
+              val i = iterator.map(t => (t._1, Seq.empty[V], Option(t._2)))
               updateFuncLocal(validTime, i)
             }
             val stateRDD = prevStateRDD.mapPartitions(finalFunc, preservePartitioning)

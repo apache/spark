@@ -94,7 +94,6 @@ if sys.version < '3':
 else:
     import socketserver as SocketServer
 import threading
-from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import read_int, PickleSerializer
 
 
@@ -110,10 +109,14 @@ _accumulatorRegistry = {}
 
 def _deserialize_accumulator(aid, zero_value, accum_param):
     from pyspark.accumulators import _accumulatorRegistry
-    accum = Accumulator(aid, zero_value, accum_param)
-    accum._deserialized = True
-    _accumulatorRegistry[aid] = accum
-    return accum
+    # If this certain accumulator was deserialized, don't overwrite it.
+    if aid in _accumulatorRegistry:
+        return _accumulatorRegistry[aid]
+    else:
+        accum = Accumulator(aid, zero_value, accum_param)
+        accum._deserialized = True
+        _accumulatorRegistry[aid] = accum
+        return accum
 
 
 class Accumulator(object):
@@ -228,19 +231,48 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
 
     def handle(self):
         from pyspark.accumulators import _accumulatorRegistry
-        while not self.server.server_shutdown:
-            # Poll every 1 second for new data -- don't block in case of shutdown.
-            r, _, _ = select.select([self.rfile], [], [], 1)
-            if self.rfile in r:
-                num_updates = read_int(self.rfile)
-                for _ in range(num_updates):
-                    (aid, update) = pickleSer._read_with_length(self.rfile)
-                    _accumulatorRegistry[aid] += update
-                # Write a byte in acknowledgement
-                self.wfile.write(struct.pack("!b", 1))
+        auth_token = self.server.auth_token
+
+        def poll(func):
+            while not self.server.server_shutdown:
+                # Poll every 1 second for new data -- don't block in case of shutdown.
+                r, _, _ = select.select([self.rfile], [], [], 1)
+                if self.rfile in r:
+                    if func():
+                        break
+
+        def accum_updates():
+            num_updates = read_int(self.rfile)
+            for _ in range(num_updates):
+                (aid, update) = pickleSer._read_with_length(self.rfile)
+                _accumulatorRegistry[aid] += update
+            # Write a byte in acknowledgement
+            self.wfile.write(struct.pack("!b", 1))
+            return False
+
+        def authenticate_and_accum_updates():
+            received_token = self.rfile.read(len(auth_token))
+            if isinstance(received_token, bytes):
+                received_token = received_token.decode("utf-8")
+            if (received_token == auth_token):
+                accum_updates()
+                # we've authenticated, we can break out of the first loop now
+                return True
+            else:
+                raise Exception(
+                    "The value of the provided token to the AccumulatorServer is not correct.")
+
+        # first we keep polling till we've received the authentication token
+        poll(authenticate_and_accum_updates)
+        # now we've authenticated, don't need to check for the token anymore
+        poll(accum_updates)
 
 
 class AccumulatorServer(SocketServer.TCPServer):
+
+    def __init__(self, server_address, RequestHandlerClass, auth_token):
+        SocketServer.TCPServer.__init__(self, server_address, RequestHandlerClass)
+        self.auth_token = auth_token
 
     """
     A simple TCP server that intercepts shutdown() in order to interrupt
@@ -254,9 +286,9 @@ class AccumulatorServer(SocketServer.TCPServer):
         self.server_close()
 
 
-def _start_update_server():
+def _start_update_server(auth_token):
     """Start a TCP server to receive accumulator updates in a daemon thread, and returns it"""
-    server = AccumulatorServer(("localhost", 0), _UpdateRequestHandler)
+    server = AccumulatorServer(("localhost", 0), _UpdateRequestHandler, auth_token)
     thread = threading.Thread(target=server.serve_forever)
     thread.daemon = True
     thread.start()
@@ -266,4 +298,4 @@ if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

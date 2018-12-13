@@ -327,6 +327,13 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq((t1, d1, s1), (t2, d2, s2)).toDF("t", "d", "s")
     checkAnswer(df.select(months_between(col("t"), col("d"))), Seq(Row(-10.0), Row(7.0)))
     checkAnswer(df.selectExpr("months_between(t, s)"), Seq(Row(0.5), Row(-0.5)))
+    checkAnswer(df.selectExpr("months_between(t, s, true)"), Seq(Row(0.5), Row(-0.5)))
+    Seq(true, false).foreach { roundOff =>
+      checkAnswer(df.select(months_between(col("t"), col("d"), roundOff)),
+        Seq(Row(-10.0), Row(7.0)))
+      checkAnswer(df.withColumn("r", lit(false)).selectExpr("months_between(t, s, r)"),
+        Seq(Row(0.5), Row(-0.5)))
+    }
   }
 
   test("function last_day") {
@@ -387,7 +394,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("to_date(s)"),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
-      // Now with format
+    // now with format
     checkAnswer(
       df.select(to_date(col("t"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
@@ -400,7 +407,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(to_date(col("s"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
-    //  now switch format
+    // now switch format
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-dd-MM")),
       Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
@@ -433,6 +440,52 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("trunc(t, 'Month')"),
       Seq(Row(Date.valueOf("2015-07-01")), Row(Date.valueOf("2014-12-01"))))
+  }
+
+  test("function date_trunc") {
+    val df = Seq(
+      (1, Timestamp.valueOf("2015-07-22 10:01:40.523")),
+      (2, Timestamp.valueOf("2014-12-31 05:29:06.876"))).toDF("i", "t")
+
+    checkAnswer(
+      df.select(date_trunc("YY", col("t"))),
+      Seq(Row(Timestamp.valueOf("2015-01-01 00:00:00")),
+        Row(Timestamp.valueOf("2014-01-01 00:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('MONTH', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-01 00:00:00")),
+        Row(Timestamp.valueOf("2014-12-01 00:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('DAY', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-22 00:00:00")),
+        Row(Timestamp.valueOf("2014-12-31 00:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('HOUR', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-22 10:00:00")),
+        Row(Timestamp.valueOf("2014-12-31 05:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('MINUTE', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-22 10:01:00")),
+        Row(Timestamp.valueOf("2014-12-31 05:29:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('SECOND', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-22 10:01:40")),
+        Row(Timestamp.valueOf("2014-12-31 05:29:06"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('WEEK', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-20 00:00:00")),
+        Row(Timestamp.valueOf("2014-12-29 00:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('QUARTER', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-01 00:00:00")),
+        Row(Timestamp.valueOf("2014-10-01 00:00:00"))))
   }
 
   test("from_unixtime") {
@@ -609,7 +662,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.selectExpr("datediff(a, d)"), Seq(Row(1), Row(1)))
   }
 
-  test("from_utc_timestamp") {
+  test("from_utc_timestamp with literal zone") {
     val df = Seq(
       (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
       (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
@@ -626,7 +679,24 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
   }
 
-  test("to_utc_timestamp") {
+  test("from_utc_timestamp with column zone") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "CET"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "PST")
+    ).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(from_utc_timestamp(col("a"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+    checkAnswer(
+      df.select(from_utc_timestamp(col("b"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 02:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 17:00:00"))))
+  }
+
+  test("to_utc_timestamp with literal zone") {
     val df = Seq(
       (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00"),
       (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00")
@@ -643,4 +713,20 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(Timestamp.valueOf("2015-07-25 07:00:00"))))
   }
 
+  test("to_utc_timestamp with column zone") {
+    val df = Seq(
+      (Timestamp.valueOf("2015-07-24 00:00:00"), "2015-07-24 00:00:00", "PST"),
+      (Timestamp.valueOf("2015-07-25 00:00:00"), "2015-07-25 00:00:00", "CET")
+    ).toDF("a", "b", "c")
+    checkAnswer(
+      df.select(to_utc_timestamp(col("a"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+    checkAnswer(
+      df.select(to_utc_timestamp(col("b"), col("c"))),
+      Seq(
+        Row(Timestamp.valueOf("2015-07-24 07:00:00")),
+        Row(Timestamp.valueOf("2015-07-24 22:00:00"))))
+  }
 }
