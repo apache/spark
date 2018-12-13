@@ -72,11 +72,13 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     val outerRefs = outerPlan.outputSet ++ outerReferences
     val duplicates = outerRefs.intersect(subplan.outputSet)
     if (duplicates.nonEmpty) {
-      condition.foreach {
-        case e if e.references.intersect(duplicates).nonEmpty =>
-          throw new AnalysisException(s"Found conflicting attributes ${duplicates.mkString(",")} " +
-            s"in nodes:\n $outerPlan\n $subplan")
-        case _ =>
+      condition.foreach { e =>
+          val conflictingAttrs = e.references.intersect(duplicates)
+          if (conflictingAttrs.nonEmpty) {
+            throw new AnalysisException("Found conflicting attributes " +
+              s"${conflictingAttrs.mkString(",")} in the condition joining outer plan:\n  " +
+              s"$outerPlan\nand subplan:\n  $subplan")
+          }
       }
       val rewrites = AttributeMap(duplicates.map { dup =>
         dup -> Alias(dup, dup.toString)()
