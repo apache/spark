@@ -35,16 +35,16 @@
   sparkVer <- SparkR:::callJMethod(sc, "version")
   cat("\nWelcome to")
   cat("\n")
-  cat("    ____              __", "\n")
-  cat("   / __/__  ___ _____/ /__", "\n")
-  cat("  _\\ \\/ _ \\/ _ `/ __/  '_/", "\n")
-  cat(" /___/ .__/\\_,_/_/ /_/\\_\\")
+  cat("      ____              __", "\n")
+  cat("     / __/__  ___ _____/ /__", "\n")
+  cat("    _\\ \\/ _ \\/ _ `/ __/  '_/", "\n")
+  cat("   /___/ .__/\\_,_/_/ /_/\\_\\")
   if (nchar(sparkVer) == 0) {
     cat("\n")
   } else {
     cat("   version ", sparkVer, "\n")
   }
-  cat("    /_/", "\n")
+  cat("      /_/", "\n")
   cat("\n")
 
   cat("\nSparkSession available as 'spark'.\n")
