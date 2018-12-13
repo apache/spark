@@ -78,6 +78,10 @@ class SparkContext(config: SparkConf) extends Logging {
   // If true, log warnings instead of throwing exceptions when multiple SparkContexts are active
   private val allowMultipleContexts: Boolean =
     config.getBoolean("spark.driver.allowMultipleContexts", false)
+  if (allowMultipleContexts) {
+    logWarning("'spark.driver.allowMultipleContexts' is deprecated as of Spark 3.0.0, and " +
+      "creation of multiple SparkContexts will be disallowed afterward.")
+  }
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having started construction.
