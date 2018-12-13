@@ -605,6 +605,15 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
+    if (contains("spark.executor.cores") && contains("spark.task.cpus")) {
+      val executorCores = getInt("spark.executor.cores", 1)
+      val taskCpus = getInt("spark.task.cpus", 1)
+
+      if (executorCores < taskCpus) {
+        throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.")
+      }
+    }
+
     val encryptionEnabled = get(NETWORK_ENCRYPTION_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
     require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
