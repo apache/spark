@@ -22,7 +22,10 @@ import javax.management.ObjectName
 import scala.collection.mutable
 
 import org.apache.spark.executor.ProcfsMetricsGetter
+import org.apache.spark.internal.config
 import org.apache.spark.memory.MemoryManager
+import org.apache.spark.SparkEnv
+
 
 /**
  * Executor metric types for executor-level metrics stored in ExecutorMetrics.
@@ -85,16 +88,19 @@ case object ProcessTreeMetrics extends ExecutorMetricType {
     "ProcessTreePythonRSSMemory",
     "ProcessTreeOtherVMemory",
     "ProcessTreeOtherRSSMemory")
-
+  val shouldLogStageExecutorProcessTreeMetrics =
+    SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
-    val allMetrics = ProcfsMetricsGetter.pTreeInfo.computeAllMetrics()
     val processTreeMetrics = new Array[Long](names.length)
-    processTreeMetrics(0) = allMetrics.jvmVmemTotal
-    processTreeMetrics(1) = allMetrics.jvmRSSTotal
-    processTreeMetrics(2) = allMetrics.pythonVmemTotal
-    processTreeMetrics(3) = allMetrics.pythonRSSTotal
-    processTreeMetrics(4) = allMetrics.otherVmemTotal
-    processTreeMetrics(5) = allMetrics.otherRSSTotal
+    if (shouldLogStageExecutorProcessTreeMetrics) {
+      val allMetrics = ProcfsMetricsGetter.pTreeInfo.computeAllMetrics()
+      processTreeMetrics(0) = allMetrics.jvmVmemTotal
+      processTreeMetrics(1) = allMetrics.jvmRSSTotal
+      processTreeMetrics(2) = allMetrics.pythonVmemTotal
+      processTreeMetrics(3) = allMetrics.pythonRSSTotal
+      processTreeMetrics(4) = allMetrics.otherVmemTotal
+      processTreeMetrics(5) = allMetrics.otherRSSTotal
+    }
     processTreeMetrics
   }
 }
@@ -139,7 +145,6 @@ private[spark] object ExecutorMetricType {
     MappedPoolMemory,
     ProcessTreeMetrics
   )
-
 
   val (metricToOffset, numMetrics) = {
     var numberOfMetrics = 0

@@ -62,7 +62,21 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
         SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
       val shouldLogStageExecutorProcessTreeMetrics =
         SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
-      procDirExists.get && shouldLogStageExecutorProcessTreeMetrics && shouldLogStageExecutorMetrics
+      val shouldAddProcessTreeMetricsToMetricsSet =
+        SparkEnv.get.conf.get(config.METRICS_PROCESS_TREE_METRICS)
+      val pickEitherUIOrMetricsSet = shouldLogStageExecutorProcessTreeMetrics ^
+        shouldAddProcessTreeMetricsToMetricsSet
+      val areBothUIMetricsEnabled = shouldLogStageExecutorProcessTreeMetrics &&
+        shouldAddProcessTreeMetricsToMetricsSet
+      if (areBothUIMetricsEnabled) {
+        logWarning("You have enabled " +
+          "both spark.eventLog.logStageExecutorProcessTreeMetrics.enabled" +
+          " and spark.metrics.logStageExecutorProcessTreeMetrics.enabled. This isn't " +
+          "allowed. As a result Procfs metrics won't be reported to UI or Metricsset")
+      }
+      (procDirExists.get && shouldLogStageExecutorMetrics && pickEitherUIOrMetricsSet) ||
+        (procDirExists.get && !shouldLogStageExecutorMetrics &&
+          pickEitherUIOrMetricsSet && shouldAddProcessTreeMetricsToMetricsSet)
     }
   }
 
