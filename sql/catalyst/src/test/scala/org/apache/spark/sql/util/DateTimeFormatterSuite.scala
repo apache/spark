@@ -24,22 +24,14 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeFormatter, DateTimeTestUtils}
 import org.apache.spark.sql.internal.SQLConf
 
-class DateTimeFormatterSuite  extends SparkFunSuite with SQLHelper {
+class DateTimeFormatterSuite extends SparkFunSuite with SQLHelper {
   test("parsing dates") {
-    val localDate = "2018-12-02"
-    val expectedDays = Map(
-      "UTC" -> 17867,
-      "PST" -> 17867,
-      "CET" -> 17867,
-      "Africa/Dakar" -> 17867,
-      "America/Los_Angeles" -> 17867,
-      "Antarctica/Vostok" -> 17867,
-      "Asia/Hong_Kong" -> 17867,
-      "Europe/Amsterdam" -> 17867)
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
-      val daysSinceEpoch = formatter.parse(localDate)
-      assert(daysSinceEpoch === expectedDays(timeZone))
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
+        val daysSinceEpoch = formatter.parse("2018-12-02")
+        assert(daysSinceEpoch === 17867)
+      }
     }
   }
 
@@ -65,11 +57,10 @@ class DateTimeFormatterSuite  extends SparkFunSuite with SQLHelper {
   }
 
   test("format dates") {
-    val daysSinceEpoch = 17867
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
         val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
-        val date = formatter.format(daysSinceEpoch)
+        val date = formatter.format(17867)
         assert(date === "2018-12-02")
       }
     }
