@@ -35,6 +35,10 @@ function is_dev_build {
   [ ! -f "$SPARK_HOME/RELEASE" ]
 }
 
+function is_gpu_build {
+  [ "${GPU_BUILD}" = "true" ]
+}
+
 function cleanup_ctx_dir {
   if is_dev_build; then
     rm -rf "$CTX_DIR"
@@ -45,6 +49,9 @@ trap cleanup_ctx_dir EXIT
 
 function image_ref {
   local image="$1"
+  if is_gpu_build; then
+    image+="-gpu"
+  fi
   local add_repo="${2:-1}"
   if [ $add_repo = 1 ] && [ -n "$REPO" ]; then
     image="$REPO/$image"
@@ -158,7 +165,11 @@ function build {
     --build-arg
     base_img=$(image_ref spark)
   )
-  local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile"}
+  if is_gpu_build; then
+    local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile.gpu"}
+  else
+    local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile"}
+  fi
   local PYDOCKERFILE=${PYDOCKERFILE:-false}
   local RDOCKERFILE=${RDOCKERFILE:-false}
 
@@ -192,6 +203,9 @@ function push {
   docker_push "spark"
   docker_push "spark-py"
   docker_push "spark-r"
+  docker_push "spark-gpu"
+  docker_push "spark-py-gpu"
+  docker_push "spark-r-gpu"
 }
 
 function usage {
@@ -210,6 +224,7 @@ Options:
                         Skips building PySpark docker image if not specified.
   -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
                         Skips building SparkR docker image if not specified.
+  -g                    Build GPU docker images.
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
@@ -250,16 +265,18 @@ TAG=
 BASEDOCKERFILE=
 PYDOCKERFILE=
 RDOCKERFILE=
+GPU_BUILD=false
 NOCACHEARG=
 BUILD_PARAMS=
 SPARK_UID=
-while getopts f:p:R:mr:t:nb:u: option
+while getopts f:p:R:gmr:t:nb:u: option
 do
  case "${option}"
  in
  f) BASEDOCKERFILE=${OPTARG};;
  p) PYDOCKERFILE=${OPTARG};;
  R) RDOCKERFILE=${OPTARG};;
+ g) GPU_BUILD=true;;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  n) NOCACHEARG="--no-cache";;

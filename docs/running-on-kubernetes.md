@@ -101,6 +101,21 @@ $ ./bin/docker-image-tool.sh -r <repo> -t my-tag -p ./kubernetes/dockerfiles/spa
 $ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile build
 ```
 
+By default `bin/docker-image-tool.sh` builds docker image for running on CPUs. You need to opt-in to build 
+docker images for running on GPUs.
+
+Example usage is
+```bash
+# To build Spark GPU docker image
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -g build
+
+# To build additional PySpark GPU docker image
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -g -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile.gpu build
+
+# To build additional SparkR GPU docker image
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -g -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile.gpu build
+```
+
 ## Cluster Mode
 
 To launch Spark Pi in cluster mode,
