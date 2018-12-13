@@ -199,7 +199,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
       ReplaceIntersectWithSemiJoin.ruleName ::
-      ReplaceExceptWithFilter.ruleName ::
       ReplaceExceptWithAntiJoin.ruleName ::
       RewriteExceptAll.ruleName ::
       RewriteIntersectAll.ruleName ::
