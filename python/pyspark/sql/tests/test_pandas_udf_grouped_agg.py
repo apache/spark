@@ -51,6 +51,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
     @property
     def pandas_scalar_plus_two(self):
         import pandas as pd
+
         @pandas_udf('double', PandasUDFType.SCALAR)
         def plus_two(v):
             assert isinstance(v, pd.Series)
@@ -74,6 +75,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
     @property
     def pandas_agg_weighted_mean_udf(self):
         import numpy as np
+
         @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def weighted_mean(v, w):
             return np.average(v, weights=w)

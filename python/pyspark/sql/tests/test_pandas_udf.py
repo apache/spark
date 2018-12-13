@@ -27,6 +27,7 @@ from pyspark.testing.utils import QuietTest
 
 from py4j.protocol import Py4JJavaError
 
+
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message)
