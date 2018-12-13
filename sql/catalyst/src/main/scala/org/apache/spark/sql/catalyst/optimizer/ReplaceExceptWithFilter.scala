@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
