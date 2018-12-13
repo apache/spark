@@ -36,10 +36,11 @@ import org.apache.spark.util.Utils
  * [[ServiceCredentialProvider]] interface, as well as the builtin providers defined
  * in [[HadoopDelegationTokenManager]].
  */
-private[yarn] class YARNHadoopDelegationTokenManager(
+private[spark] class YARNHadoopDelegationTokenManager(
     _sparkConf: SparkConf,
-    _hadoopConf: Configuration)
-  extends HadoopDelegationTokenManager(_sparkConf, _hadoopConf) {
+    _hadoopConf: Configuration,
+    _driverRef: RpcEndpointRef)
+  extends HadoopDelegationTokenManager(_sparkConf, _hadoopConf, _driverRef) {
 
   private val credentialProviders = {
     ServiceLoader.load(classOf[ServiceCredentialProvider], Utils.getContextOrSparkClassLoader)

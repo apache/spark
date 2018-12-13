@@ -49,7 +49,8 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   private val krb5File = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_FILE)
   private val krb5CMap = kubernetesConf.get(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP)
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf)
-  private val tokenManager = new HadoopDelegationTokenManager(kubernetesConf.sparkConf, hadoopConf)
+  private val tokenManager = new HadoopDelegationTokenManager(kubernetesConf.sparkConf,
+    hadoopConf, null)
   private val isKerberosEnabled =
     (hadoopConfDir.isDefined && UserGroupInformation.isSecurityEnabled) ||
       (hadoopConfigMapName.isDefined && (krb5File.isDefined || krb5CMap.isDefined))

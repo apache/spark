@@ -162,11 +162,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       case UpdateDelegationTokens(newDelegationTokens) =>
-        SparkHadoopUtil.get.addDelegationTokens(newDelegationTokens, conf)
-        delegationTokens.set(newDelegationTokens)
-        executorDataMap.values.foreach { ed =>
-          ed.executorEndpoint.send(UpdateDelegationTokens(newDelegationTokens))
-        }
+        updateDelegationTokens(newDelegationTokens)
 
       case RemoveExecutor(executorId, reason) =>
         // We will remove the executor's state and cannot restore it. However, the connection
@@ -404,17 +400,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     driverEndpoint = createDriverEndpointRef(properties)
 
     if (UserGroupInformation.isSecurityEnabled()) {
-      delegationTokenManager = createTokenManager()
+      delegationTokenManager = createTokenManager(driverEndpoint)
       delegationTokenManager.foreach { dtm =>
-        dtm.setDriverRef(driverEndpoint)
-        val creds = if (dtm.renewalEnabled) {
-          dtm.start().getCredentials()
+        val tokens = if (dtm.renewalEnabled) {
+          dtm.start()
         } else {
           val creds = UserGroupInformation.getCurrentUser().getCredentials()
           dtm.obtainDelegationTokens(creds)
-          creds
+          SparkHadoopUtil.get.serialize(creds)
         }
-        delegationTokens.set(SparkHadoopUtil.get.serialize(creds))
+        if (tokens != null) {
+          delegationTokens.set(tokens)
+        }
       }
     }
   }
@@ -717,7 +714,23 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * once during the start of the scheduler backend (so after the object has already been
    * fully constructed), only if security is enabled in the Hadoop configuration.
    */
-  protected def createTokenManager(): Option[HadoopDelegationTokenManager] = None
+  protected def createTokenManager(
+      driverRef: RpcEndpointRef): Option[HadoopDelegationTokenManager] = None
+
+  /**
+   * Called when a new set of delegation tokens is sent to the driver. Child classes can override
+   * this method but should always call this implementation, which handles token distribution to
+   * executors.
+   */
+  protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
+    SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
+    delegationTokens.set(tokens)
+    executorDataMap.values.foreach { ed =>
+      ed.executorEndpoint.send(UpdateDelegationTokens(tokens))
+    }
+  }
+
+  protected def currentDelegationTokens: Array[Byte] = delegationTokens.get()
 
 }
 
