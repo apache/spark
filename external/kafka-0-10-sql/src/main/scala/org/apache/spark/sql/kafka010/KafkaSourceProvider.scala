@@ -266,8 +266,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // We convert the options argument from V2 -> Java map -> scala mutable -> scala immutable.
     val producerParams = kafkaParamsForProducer(options.asMap.asScala.toMap)
 
-    KafkaWriter.validateQuery(schema.toAttributes, producerParams, topic)
-
     new KafkaStreamingWriteSupport(topic, producerParams, schema)
   }
 
