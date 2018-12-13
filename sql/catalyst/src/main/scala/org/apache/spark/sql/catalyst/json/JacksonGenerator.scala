@@ -77,7 +77,7 @@ private[sql] class JacksonGenerator(
 
   private val lineSeparator: String = options.lineSeparatorInWrite
 
-  private val timeFormatter = TimestampFormatter(
+  private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)
@@ -122,7 +122,7 @@ private[sql] class JacksonGenerator(
 
     case TimestampType =>
       (row: SpecializedGetters, ordinal: Int) =>
-        val timestampString = timeFormatter.format(row.getLong(ordinal))
+        val timestampString = timestampFormatter.format(row.getLong(ordinal))
         gen.writeString(timestampString)
 
     case DateType =>

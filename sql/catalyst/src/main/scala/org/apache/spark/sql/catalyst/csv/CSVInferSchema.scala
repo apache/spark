@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   @transient
-  private lazy val timeParser = TimestampFormatter(
+  private lazy val timestampParser = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)
@@ -160,7 +160,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private def tryParseTimestamp(field: String): DataType = {
     // This case infers a custom `dataFormat` is set.
-    if ((allCatch opt timeParser.parse(field)).isDefined) {
+    if ((allCatch opt timestampParser.parse(field)).isDefined) {
       TimestampType
     } else {
       tryParseBoolean(field)

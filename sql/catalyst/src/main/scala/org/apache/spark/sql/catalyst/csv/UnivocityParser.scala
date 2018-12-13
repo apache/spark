@@ -74,7 +74,7 @@ class UnivocityParser(
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
-  private val timeFormatter = TimestampFormatter(
+  private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)
@@ -158,7 +158,7 @@ class UnivocityParser(
       }
 
     case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(timeFormatter.parse)
+      nullSafeDatum(d, name, nullable, options)(timestampFormatter.parse)
 
     case _: DateType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(dateFormatter.parse)

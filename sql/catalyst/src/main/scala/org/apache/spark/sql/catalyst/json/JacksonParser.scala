@@ -55,7 +55,7 @@ class JacksonParser(
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
-  private val timeFormatter = TimestampFormatter(
+  private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)
@@ -224,7 +224,7 @@ class JacksonParser(
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
-          timeFormatter.parse(parser.getText)
+          timestampFormatter.parse(parser.getText)
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L

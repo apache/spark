@@ -41,7 +41,7 @@ class UnivocityGenerator(
   private val valueConverters: Array[ValueConverter] =
     schema.map(_.dataType).map(makeConverter).toArray
 
-  private val timeFormatter = TimestampFormatter(
+  private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)
@@ -52,7 +52,7 @@ class UnivocityGenerator(
       (row: InternalRow, ordinal: Int) => dateFormatter.format(row.getInt(ordinal))
 
     case TimestampType =>
-      (row: InternalRow, ordinal: Int) => timeFormatter.format(row.getLong(ordinal))
+      (row: InternalRow, ordinal: Int) => timestampFormatter.format(row.getLong(ordinal))
 
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 
