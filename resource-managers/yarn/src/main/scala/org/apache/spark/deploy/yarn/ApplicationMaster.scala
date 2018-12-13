@@ -451,7 +451,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     val ms = MetricsSystem.createMetricsSystem("applicationMaster", sparkConf, securityMgr)
     val prefix = _sparkConf.get(YARN_METRICS_NAMESPACE).getOrElse(appId)
     ms.registerSource(new ApplicationMasterSource(prefix, allocator))
-    ms.start()
+    // do not register static sources in this case as per SPARK-25277
+    ms.start(false)
     metricsSystem = Some(ms)
     reporterThread = launchReporterThread()
   }
