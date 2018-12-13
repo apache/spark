@@ -340,15 +340,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // Validate user-specified Kafka options
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
-      logWarning(
-        s"It is not recommended to set Kafka option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}'. " +
-        "This option is unsafe to use since multiple concurrent queries or sources using the " +
-        "same group id will interfere with each other as they are part of the same consumer " +
-        "group. Restarted queries may also suffer interference from the previous run having the " +
-        "same group id. The user should have only one query per group id, and/or set " +
-        "'kafka.session.timeout.ms' to be very small so that the Kafka consumers from the " +
-        "previous query are marked dead by the Kafka group coordinator before the restarted " +
-       "query starts running.")
+      logWarning(CUSTOM_GROUP_ID_ERROR_MESSAGE)
       if (caseInsensitiveParams.contains(GROUP_ID_PREFIX)) {
         logWarning("Option 'groupIdPrefix' will be ignored as " +
           s"option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}' has been set.")
@@ -475,7 +467,16 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       | source option "failOnDataLoss" to "false".
     """.stripMargin
 
-
+  val CUSTOM_GROUP_ID_ERROR_MESSAGE =
+    s"""Kafka option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}' has been set on this query, it is
+       | not recommended to set this option. This option is unsafe to use since multiple concurrent
+       | queries or sources using the same group id will interfere with each other as they are part
+       | of the same consumer group. Restarted queries may also suffer interference from the
+       | previous run having the same group id. The user should have only one query per group id,
+       | and/or set the option 'kafka.session.timeout.ms' to be very small so that the Kafka
+       | consumers from the previous query are marked dead by the Kafka group coordinator before the
+       | restarted query starts running.
+    """.stripMargin
 
   private val serClassName = classOf[ByteArraySerializer].getName
   private val deserClassName = classOf[ByteArrayDeserializer].getName
