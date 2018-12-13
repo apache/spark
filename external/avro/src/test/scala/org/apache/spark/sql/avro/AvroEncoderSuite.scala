@@ -32,7 +32,7 @@ class AvroEncoderSuite extends SharedSQLContext {
   import testImplicits._
 
   test("encoder from json schema") {
-    val avroSchema =
+    val jsonFormatSchema =
       """
         |{
         |  "type" : "record",
@@ -60,9 +60,9 @@ class AvroEncoderSuite extends SharedSQLContext {
         |   ]
         |}
       """.stripMargin
-    val encoder = AvroEncoder.of(avroSchema)
+    val encoder = AvroEncoder.of(jsonFormatSchema)
     val expressionEncoder = encoder.asInstanceOf[ExpressionEncoder[GenericData.Record]]
-    val schema = new Schema.Parser().parse(avroSchema)
+    val schema = new Schema.Parser().parse(jsonFormatSchema)
     val record = new GenericRecordBuilder(schema).build
     val row = expressionEncoder.toRow(record)
     val recordFromRow = expressionEncoder.resolveAndBind().fromRow(row)
@@ -72,7 +72,7 @@ class AvroEncoderSuite extends SharedSQLContext {
   test("generic record converts to row and back") {
     // complex schema including type of basic type, array with int/string/record/enum,
     // nested record and map.
-    val avroSchema =
+    val jsonFormatSchema =
       """
         |{
         |  "type" : "record",
@@ -198,9 +198,8 @@ class AvroEncoderSuite extends SharedSQLContext {
         |}
       """.stripMargin
 
-    val schema = new Schema.Parser().parse(avroSchema)
+    val schema = new Schema.Parser().parse(jsonFormatSchema)
     val encoder = AvroEncoder.of[GenericData.Record](schema)
-    logInfo(schema.toString)
     val expressionEncoder = encoder.asInstanceOf[ExpressionEncoder[GenericData.Record]]
     val record = new GenericRecordBuilder(schema).build
     val row = expressionEncoder.toRow(record)
@@ -209,7 +208,7 @@ class AvroEncoderSuite extends SharedSQLContext {
   }
 
   test("encoder resolves union types to rows") {
-    val avroSchema =
+    val jsonFormatSchema =
       """
         |{
         |  "type" : "record",
@@ -234,9 +233,8 @@ class AvroEncoderSuite extends SharedSQLContext {
         |}
       """.stripMargin
 
-    val schema = new Schema.Parser().parse(avroSchema)
+    val schema = new Schema.Parser().parse(jsonFormatSchema)
     val encoder = AvroEncoder.of[GenericData.Record](schema)
-    logInfo(schema.toString(true))
     val expressionEncoder = encoder.asInstanceOf[ExpressionEncoder[GenericData.Record]]
     val record = new GenericRecordBuilder(schema).build
     val row = expressionEncoder.toRow(record)
@@ -269,7 +267,6 @@ class AvroEncoderSuite extends SharedSQLContext {
     ).withDefault(null).endRecord()
 
     val encoder = AvroEncoder.of[GenericData.Record](schema)
-    logInfo(schema.toString(true))
     val expressionEncoder = encoder.asInstanceOf[ExpressionEncoder[GenericData.Record]]
     val record = new GenericRecordBuilder(schema).build
     var row = expressionEncoder.toRow(record)
