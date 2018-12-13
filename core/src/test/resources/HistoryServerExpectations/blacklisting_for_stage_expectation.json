@@ -76,10 +76,6 @@
           "recordsWritten" : 0
         }
       },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64279/logPage/?appId=app-20180109111548-0000&executorId=0&logType=stdout",
-        "stderr" : "http://172.30.65.138:64279/logPage/?appId=app-20180109111548-0000&executorId=0&logType=stderr"
-      },
       "schedulerDelay" : 102,
       "gettingResultTime" : 0
     },
@@ -128,10 +124,6 @@
           "writeTime" : 262919,
           "recordsWritten" : 1
         }
-      },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
       },
       "schedulerDelay" : 10,
       "gettingResultTime" : 0
@@ -182,10 +174,6 @@
           "recordsWritten" : 1
         }
       },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
-      },
       "schedulerDelay" : 4,
       "gettingResultTime" : 0
     },
@@ -234,10 +222,6 @@
           "writeTime" : 2409488,
           "recordsWritten" : 1
         }
-      },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
       },
       "schedulerDelay" : 51,
       "gettingResultTime" : 0
@@ -288,10 +272,6 @@
           "recordsWritten" : 1
         }
       },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
-      },
       "schedulerDelay" : 3,
       "gettingResultTime" : 0
     },
@@ -340,10 +320,6 @@
           "writeTime" : 259354,
           "recordsWritten" : 1
         }
-      },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
       },
       "schedulerDelay" : 3,
       "gettingResultTime" : 0
@@ -395,10 +371,6 @@
           "recordsWritten" : 0
         }
       },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64279/logPage/?appId=app-20180109111548-0000&executorId=0&logType=stdout",
-        "stderr" : "http://172.30.65.138:64279/logPage/?appId=app-20180109111548-0000&executorId=0&logType=stderr"
-      },
       "schedulerDelay" : 11,
       "gettingResultTime" : 0
     },
@@ -447,10 +419,6 @@
           "writeTime" : 205520,
           "recordsWritten" : 1
         }
-      },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
       },
       "schedulerDelay" : 4,
       "gettingResultTime" : 0
@@ -501,10 +469,6 @@
           "recordsWritten" : 1
         }
       },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
-      },
       "schedulerDelay" : 6,
       "gettingResultTime" : 0
     },
@@ -553,10 +517,6 @@
           "writeTime" : 233652,
           "recordsWritten" : 1
         }
-      },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
       },
       "schedulerDelay" : 6,
       "gettingResultTime" : 0
@@ -607,10 +567,6 @@
           "recordsWritten" : 1
         }
       },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
-      },
       "schedulerDelay" : 3,
       "gettingResultTime" : 0
     },
@@ -659,10 +615,6 @@
           "writeTime" : 292381,
           "recordsWritten" : 1
         }
-      },
-      "executorLogs" : {
-        "stdout" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stdout",
-        "stderr" : "http://172.30.65.138:64278/logPage/?appId=app-20180109111548-0000&executorId=1&logType=stderr"
       },
       "schedulerDelay" : 5,
       "gettingResultTime" : 0

@@ -44,7 +44,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 18,
   "gettingResultTime" : 0
 }, {
@@ -93,7 +92,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 8,
   "gettingResultTime" : 0
 }, {
@@ -142,7 +140,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 7,
   "gettingResultTime" : 0
 }, {
@@ -191,7 +188,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 53,
   "gettingResultTime" : 0
 }, {
@@ -240,7 +236,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 5,
   "gettingResultTime" : 0
 }, {
@@ -289,7 +284,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 4,
   "gettingResultTime" : 0
 }, {
@@ -338,7 +332,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 4,
   "gettingResultTime" : 0
 }, {
@@ -387,7 +380,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 20,
   "gettingResultTime" : 0
 }, {
@@ -436,7 +428,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 3,
   "gettingResultTime" : 0
 }, {
@@ -485,7 +476,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 5,
   "gettingResultTime" : 0
 }, {
@@ -534,7 +524,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 4,
   "gettingResultTime" : 0
 }, {
@@ -583,7 +572,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 3,
   "gettingResultTime" : 0
 }, {
@@ -632,7 +620,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 3,
   "gettingResultTime" : 0
 }, {
@@ -681,7 +668,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 16,
   "gettingResultTime" : 0
 }, {
@@ -730,7 +716,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 5,
   "gettingResultTime" : 0
 }, {
@@ -779,7 +764,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 9,
   "gettingResultTime" : 0
 }, {
@@ -828,7 +812,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 8,
   "gettingResultTime" : 0
 }, {
@@ -877,7 +860,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 6,
   "gettingResultTime" : 0
 }, {
@@ -926,7 +908,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 17,
   "gettingResultTime" : 0
 }, {
@@ -975,7 +956,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 11,
   "gettingResultTime" : 0
 }, {
@@ -1024,7 +1004,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 24,
   "gettingResultTime" : 0
 }, {
@@ -1073,7 +1052,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 14,
   "gettingResultTime" : 0
 }, {
@@ -1122,7 +1100,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 13,
   "gettingResultTime" : 0
 }, {
@@ -1171,7 +1148,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 10,
   "gettingResultTime" : 0
 }, {
@@ -1220,7 +1196,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 9,
   "gettingResultTime" : 0
 }, {
@@ -1269,7 +1244,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 10,
   "gettingResultTime" : 0
 }, {
@@ -1318,7 +1292,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 6,
   "gettingResultTime" : 0
 }, {
@@ -1367,7 +1340,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 6,
   "gettingResultTime" : 0
 }, {
@@ -1416,7 +1388,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 13,
   "gettingResultTime" : 0
 }, {
@@ -1465,7 +1436,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 13,
   "gettingResultTime" : 0
 }, {
@@ -1514,7 +1484,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 6,
   "gettingResultTime" : 0
 }, {
@@ -1563,7 +1532,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 6,
   "gettingResultTime" : 0
 }, {
@@ -1612,7 +1580,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 15,
   "gettingResultTime" : 0
 }, {
@@ -1661,7 +1628,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 21,
   "gettingResultTime" : 0
 }, {
@@ -1710,7 +1676,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 16,
   "gettingResultTime" : 0
 }, {
@@ -1759,7 +1724,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 16,
   "gettingResultTime" : 0
 }, {
@@ -1808,7 +1772,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 11,
   "gettingResultTime" : 0
 }, {
@@ -1857,7 +1820,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 13,
   "gettingResultTime" : 0
 }, {
@@ -1906,7 +1868,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 3,
   "gettingResultTime" : 0
 }, {
@@ -1955,7 +1916,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 4,
   "gettingResultTime" : 0
 }, {
@@ -2004,7 +1964,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 4,
   "gettingResultTime" : 0
 }, {
@@ -2053,7 +2012,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 2,
   "gettingResultTime" : 0
 }, {
@@ -2102,7 +2060,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 5,
   "gettingResultTime" : 0
 }, {
@@ -2151,7 +2108,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 5,
   "gettingResultTime" : 0
 }, {
@@ -2200,7 +2156,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 38,
   "gettingResultTime" : 0
 }, {
@@ -2249,7 +2204,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 5,
   "gettingResultTime" : 0
 }, {
@@ -2298,7 +2252,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 6,
   "gettingResultTime" : 0
 }, {
@@ -2347,7 +2300,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 2,
   "gettingResultTime" : 0
 }, {
@@ -2396,7 +2348,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 4,
   "gettingResultTime" : 0
 }, {
@@ -2445,7 +2396,6 @@
       "recordsWritten" : 10
     }
   },
-  "executorLogs" : { },
   "schedulerDelay" : 3,
   "gettingResultTime" : 0
 } ]

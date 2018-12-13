@@ -285,7 +285,6 @@ private[spark] class TaskDataWrapper(
       accumulatorUpdates,
       errorMessage,
       metrics,
-      executorLogs = null,
       schedulerDelay = 0L,
       gettingResultTime = 0L)
   }

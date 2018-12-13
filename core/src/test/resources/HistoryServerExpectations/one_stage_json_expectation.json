@@ -75,7 +75,6 @@
           "recordsWritten" : 0
         }
       },
-      "executorLogs" : { },
       "schedulerDelay" : 19,
       "gettingResultTime" : 0
     },
@@ -125,7 +124,6 @@
           "recordsWritten" : 0
         }
       },
-      "executorLogs" : { },
       "schedulerDelay" : 13,
       "gettingResultTime" : 0
     },
@@ -175,7 +173,6 @@
           "recordsWritten" : 0
         }
       },
-      "executorLogs" : { },
       "schedulerDelay" : 17,
       "gettingResultTime" : 0
     },
@@ -225,7 +222,6 @@
           "recordsWritten" : 0
         }
       },
-      "executorLogs" : { },
       "schedulerDelay" : 14,
       "gettingResultTime" : 0
     },
@@ -275,7 +271,6 @@
           "recordsWritten" : 0
         }
       },
-      "executorLogs" : { },
       "schedulerDelay" : 17,
       "gettingResultTime" : 0
     },
@@ -325,7 +320,6 @@
           "recordsWritten" : 0
         }
       },
-      "executorLogs" : { },
       "schedulerDelay" : 17,
       "gettingResultTime" : 0
     },
@@ -375,7 +369,6 @@
           "recordsWritten" : 0
         }
       },
-      "executorLogs" : { },
       "schedulerDelay" : 16,
       "gettingResultTime" : 0
     },
@@ -425,7 +418,6 @@
           "recordsWritten" : 0
         }
       },
-      "executorLogs" : { },
       "schedulerDelay" : 13,
       "gettingResultTime" : 0
     }

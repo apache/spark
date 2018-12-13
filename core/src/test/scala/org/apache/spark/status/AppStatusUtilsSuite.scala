@@ -53,7 +53,6 @@ class AppStatusUtilsSuite extends SparkFunSuite {
         outputMetrics = null,
         shuffleReadMetrics = null,
         shuffleWriteMetrics = null)),
-      executorLogs = null,
       schedulerDelay = 0L,
       gettingResultTime = 0L)
     assert(AppStatusUtils.schedulerDelay(runningTask) === 0L)
@@ -87,7 +86,6 @@ class AppStatusUtilsSuite extends SparkFunSuite {
         outputMetrics = null,
         shuffleReadMetrics = null,
         shuffleWriteMetrics = null)),
-      executorLogs = null,
       schedulerDelay = 0L,
       gettingResultTime = 0L)
     assert(AppStatusUtils.schedulerDelay(finishedTask) === 3L)
