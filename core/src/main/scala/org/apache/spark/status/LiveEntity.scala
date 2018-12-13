@@ -64,7 +64,8 @@ private class LiveJob(
     val submissionTime: Option[Date],
     val stageIds: Seq[Int],
     jobGroup: Option[String],
-    numTasks: Int) extends LiveEntity {
+    numTasks: Int,
+    sqlExecutionId: Option[Long]) extends LiveEntity {
 
   var activeTasks = 0
   var completedTasks = 0
@@ -108,7 +109,7 @@ private class LiveJob(
       skippedStages.size,
       failedStages,
       killedSummary)
-    new JobDataWrapper(info, skippedStages)
+    new JobDataWrapper(info, skippedStages, sqlExecutionId)
   }
 
 }
