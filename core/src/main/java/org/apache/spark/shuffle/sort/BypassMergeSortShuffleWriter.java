@@ -58,9 +58,8 @@ import org.apache.spark.util.Utils;
  * simultaneously opens separate serializers and file streams for all partitions. As a result,
  * {@link SortShuffleManager} only selects this write path when
  * <ul>
- *    <li>no Ordering is specified,</li>
- *    <li>no Aggregator is specified, and</li>
- *    <li>the number of partitions is less than
+ *    <li>no map-side combine is specified, and</li>
+ *    <li>the number of partitions is less than or equal to
  *      <code>spark.shuffle.sort.bypassMergeThreshold</code>.</li>
  * </ul>
  *
