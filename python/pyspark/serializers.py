@@ -281,7 +281,10 @@ def _create_batch(series, timezone):
             # TODO: see ARROW-2432. Remove when the minimum PyArrow version becomes 0.10.0.
             return pa.Array.from_pandas(s.apply(
                 lambda v: decimal.Decimal('NaN') if v is None else v), mask=mask, type=t)
-        return pa.Array.from_pandas(s, mask=mask, type=t)
+        elif LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
+            # TODO: see ARROW-1949. Remove when the minimum PyArrow version becomes 0.11.0.
+            return pa.Array.from_pandas(s, mask=mask, type=t)
+        return pa.Array.from_pandas(s, mask=mask, type=t, safe=False)
 
     arrs = [create_array(s, t) for s, t in series]
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
