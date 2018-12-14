@@ -18,6 +18,8 @@
 import unittest
 
 from pyspark.sql.utils import AnalysisException
+from pyspark.sql.functions import array, explode, col, lit, mean, min, max, rank, \
+    udf, pandas_udf, PandasUDFType
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -30,7 +32,6 @@ from pyspark.testing.utils import QuietTest
 class WindowPandasUDFTests(ReusedSQLTestCase):
     @property
     def data(self):
-        from pyspark.sql.functions import array, explode, col, lit
         return self.spark.range(10).toDF('id') \
             .withColumn("vs", array([lit(i * 1.0) + col('id') for i in range(20, 30)])) \
             .withColumn("v", explode(col('vs'))) \
@@ -39,18 +40,14 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def python_plus_one(self):
-        from pyspark.sql.functions import udf
         return udf(lambda v: v + 1, 'double')
 
     @property
     def pandas_scalar_time_two(self):
-        from pyspark.sql.functions import pandas_udf
         return pandas_udf(lambda v: v * 2, 'double')
 
     @property
     def pandas_agg_mean_udf(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def avg(v):
             return v.mean()
@@ -58,8 +55,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def pandas_agg_max_udf(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def max(v):
             return v.max()
@@ -67,8 +62,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def pandas_agg_min_udf(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def min(v):
             return v.min()
@@ -88,8 +81,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         return Window.partitionBy()
 
     def test_simple(self):
-        from pyspark.sql.functions import mean
-
         df = self.data
         w = self.unbounded_window
 
@@ -105,8 +96,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
 
     def test_multiple_udfs(self):
-        from pyspark.sql.functions import max, min, mean
-
         df = self.data
         w = self.unbounded_window
 
@@ -121,8 +110,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
     def test_replace_existing(self):
-        from pyspark.sql.functions import mean
-
         df = self.data
         w = self.unbounded_window
 
@@ -132,8 +119,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
     def test_mixed_sql(self):
-        from pyspark.sql.functions import mean
-
         df = self.data
         w = self.unbounded_window
         mean_udf = self.pandas_agg_mean_udf
@@ -144,8 +129,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
     def test_mixed_udf(self):
-        from pyspark.sql.functions import mean
-
         df = self.data
         w = self.unbounded_window
 
@@ -171,8 +154,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
 
     def test_without_partitionBy(self):
-        from pyspark.sql.functions import mean
-
         df = self.data
         w = self.unpartitioned_window
         mean_udf = self.pandas_agg_mean_udf
@@ -187,8 +168,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
 
     def test_mixed_sql_and_udf(self):
-        from pyspark.sql.functions import max, min, rank, col
-
         df = self.data
         w = self.unbounded_window
         ow = self.ordered_window
@@ -221,8 +200,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
 
     def test_array_type(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         df = self.data
         w = self.unbounded_window
 
@@ -231,8 +208,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(result1.first()['v2'], [1.0, 2.0])
 
     def test_invalid_args(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         df = self.data
         w = self.unbounded_window
         ow = self.ordered_window
