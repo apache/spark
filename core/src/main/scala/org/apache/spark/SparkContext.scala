@@ -64,9 +64,8 @@ import org.apache.spark.util.logging.DriverLogger
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
- * Only one SparkContext should be active per JVM. You must `stop()` the active SparkContext before
- * creating a new one.
- *
+ * @note Only one `SparkContext` should be active per JVM. You must `stop()` the
+ *   active `SparkContext` before creating a new one.
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
  */
@@ -2480,8 +2479,6 @@ object SparkContext extends Logging {
    *
    * This method allows not passing a SparkConf (useful if just retrieving).
    *
-   * @note This function cannot be used to create multiple SparkContext instances
-   * even if multiple contexts are allowed.
    * @return current `SparkContext` (or a new one if wasn't created before the function call)
    */
   def getOrCreate(): SparkContext = {
