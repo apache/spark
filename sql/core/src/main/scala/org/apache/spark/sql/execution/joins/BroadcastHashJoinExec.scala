@@ -118,9 +118,6 @@ case class BroadcastHashJoinExec(
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     val clsName = broadcastRelation.value.getClass.getName
 
-    // At the end of the task, we update the avg hash probe.
-    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
-
     // Inline mutable state since not many join operations in a task
     val relationTerm = ctx.addMutableState(clsName, "relation",
       v => s"""
