@@ -47,8 +47,7 @@ case class BroadcastHashJoinExec(
   extends BinaryExecNode with HashJoin with CodegenSupport {
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "avgHashProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hash probe"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
     val mode = HashedRelationBroadcastMode(buildKeys)
@@ -62,13 +61,12 @@ case class BroadcastHashJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val avgHashProbe = longMetric("avgHashProbe")
 
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashed = broadcastRelation.value.asReadOnlyCopy()
       TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-      join(streamedIter, hashed, numOutputRows, avgHashProbe)
+      join(streamedIter, hashed, numOutputRows)
     }
   }
 
@@ -111,23 +109,6 @@ case class BroadcastHashJoinExec(
   }
 
   /**
-   * Returns the codes used to add a task completion listener to update avg hash probe
-   * at the end of the task.
-   */
-  private def genTaskListener(avgHashProbe: String, relationTerm: String): String = {
-    val listenerClass = classOf[TaskCompletionListener].getName
-    val taskContextClass = classOf[TaskContext].getName
-    s"""
-       | $taskContextClass$$.MODULE$$.get().addTaskCompletionListener(new $listenerClass() {
-       |   @Override
-       |   public void onTaskCompletion($taskContextClass context) {
-       |     $avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
-       |   }
-       | });
-     """.stripMargin
-  }
-
-  /**
    * Returns a tuple of Broadcast of HashedRelation and the variable name for it.
    */
   private def prepareBroadcast(ctx: CodegenContext): (Broadcast[HashedRelation], String) = {
@@ -144,7 +125,6 @@ case class BroadcastHashJoinExec(
       v => s"""
          | $v = (($clsName) $broadcast.value()).asReadOnlyCopy();
          | incPeakExecutionMemory($v.estimatedSize());
-         | ${genTaskListener(avgHashProbe, v)}
        """.stripMargin, forceInline = true)
     (broadcastRelation, relationTerm)
   }
