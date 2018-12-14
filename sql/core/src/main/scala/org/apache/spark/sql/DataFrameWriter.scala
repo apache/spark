@@ -252,13 +252,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val dsOptions = new DataSourceOptions(options.asJava)
       provider.getTable(dsOptions) match {
         case table: SupportsBatchWrite =>
-          val relation = DataSourceV2Relation.create(table, options)
           if (mode == SaveMode.Append) {
+            val relation = DataSourceV2Relation.create(table, options)
             runCommand(df.sparkSession, "save") {
               AppendData.byName(relation, df.logicalPlan)
             }
           } else {
-            val writeBuilder = relation.newWriteBuilder(df.logicalPlan.schema)
+            val writeBuilder = table.newWriteBuilder(df.logicalPlan.schema, dsOptions)
             writeBuilder match {
               case s: SupportsSaveMode =>
                 val write = s.mode(mode).buildForBatch()
@@ -271,7 +271,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 }
 
               case _ => throw new AnalysisException(
-                s"data source ${relation.name} does not support SaveMode")
+                s"data source ${table.name} does not support SaveMode")
             }
           }
 

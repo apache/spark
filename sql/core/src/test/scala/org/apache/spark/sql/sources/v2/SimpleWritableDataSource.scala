@@ -136,25 +136,25 @@ class SimpleWritableDataSource extends DataSourceV2
     }
   }
 
-  override def getTable(options: DataSourceOptions): Table = {
-    val path = new Path(options.get("path").get())
-    val conf = SparkContext.getActive.get.hadoopConfiguration
-    new SimpleBatchTable with SupportsBatchWrite {
+  class MyTable(options: DataSourceOptions) extends SimpleBatchTable with SupportsBatchWrite {
+    private val path = options.get("path").get()
+    private val conf = SparkContext.getActive.get.hadoopConfiguration
 
-      override def schema(): StructType = tableSchema
+    override def schema(): StructType = tableSchema
 
-      override def newScanBuilder(options: DataSourceOptions): ScanBuilder = {
-        new MyScanBuilder(path.toUri.toString, conf)
-      }
+    override def newScanBuilder(options: DataSourceOptions): ScanBuilder = {
+      new MyScanBuilder(new Path(path).toUri.toString, conf)
+    }
 
-      override def newWriteBuilder(schema: StructType, options: DataSourceOptions): WriteBuilder = {
-        val path = options.get("path").get()
-        val uniqueId = UUID.randomUUID().toString
-        new MyWriteBuilder(path, uniqueId)
-      }
+    override def newWriteBuilder(schema: StructType, options: DataSourceOptions): WriteBuilder = {
+      val uniqueId = UUID.randomUUID().toString
+      new MyWriteBuilder(path, uniqueId)
     }
   }
 
+  override def getTable(options: DataSourceOptions): Table = {
+    new MyTable(options)
+  }
 }
 
 case class CSVInputPartitionReader(path: String) extends InputPartition

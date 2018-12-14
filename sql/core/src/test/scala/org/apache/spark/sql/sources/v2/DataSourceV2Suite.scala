@@ -350,6 +350,22 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-25700: do not read schema when writing in other modes except append mode") {
+    withTempPath { file =>
+      val cls = classOf[SimpleWriteOnlyDataSource]
+      val path = file.getCanonicalPath
+      val df = spark.range(5).select('id as 'i, -'id as 'j)
+      // non-append mode should not throw exception, as they don't access schema.
+      df.write.format(cls.getName).option("path", path).mode("error").save()
+      df.write.format(cls.getName).option("path", path).mode("overwrite").save()
+      df.write.format(cls.getName).option("path", path).mode("ignore").save()
+      // append mode will access schema and should throw exception.
+      intercept[SchemaReadAttemptException] {
+        df.write.format(cls.getName).option("path", path).mode("append").save()
+      }
+    }
+  }
 }
 
 
@@ -655,6 +671,19 @@ object SpecificReaderFactory extends PartitionReaderFactory {
       override def get(): InternalRow = InternalRow(p.i(current), p.j(current))
 
       override def close(): Unit = {}
+    }
+  }
+}
+
+class SchemaReadAttemptException(m: String) extends RuntimeException(m)
+
+class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
+
+  override def getTable(options: DataSourceOptions): Table = {
+    new MyTable(options) {
+      override def schema(): StructType = {
+        throw new SchemaReadAttemptException("schema should not be read.")
+      }
     }
   }
 }
