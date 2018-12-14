@@ -101,7 +101,7 @@ package object expressions  {
       StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
     }
 
-    // It's possible that `attrs` is a linked list, which can lead to bad O(n^2) loops when
+    // It's possible that `attrs` is a linked list, which can lead to bad O(n) loops when
     // accessing attributes by their ordinals. To avoid this performance penalty, convert the input
     // to an array.
     @transient private lazy val attrsArray = attrs.toArray

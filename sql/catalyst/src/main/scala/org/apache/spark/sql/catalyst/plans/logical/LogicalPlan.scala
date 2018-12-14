@@ -93,7 +93,7 @@ abstract class LogicalPlan
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
    * nodes of this LogicalPlan. The attribute is expressed as
-   * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
+   * string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
   def resolveChildren(
       nameParts: Seq[String],
