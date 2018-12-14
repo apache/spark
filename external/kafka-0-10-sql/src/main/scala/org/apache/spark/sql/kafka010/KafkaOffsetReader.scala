@@ -21,6 +21,7 @@ import java.{util => ju}
 import java.util.concurrent.{Executors, ThreadFactory}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
@@ -144,16 +145,22 @@ private[kafka010] class KafkaOffsetReader(
             s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions.asScala}")
         logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
 
-        partitionOffsets.foreach {
-          case (tp, KafkaOffsetRangeLimit.LATEST) =>
-            consumer.seekToEnd(ju.Arrays.asList(tp))
-          case (tp, KafkaOffsetRangeLimit.EARLIEST) =>
-            consumer.seekToBeginning(ju.Arrays.asList(tp))
-          case (tp, off) => consumer.seek(tp, off)
+        def _fetchOffsets(): PartitionOffsetMap = {
+          partitionOffsets.foreach {
+            case (tp, KafkaOffsetRangeLimit.LATEST) =>
+              consumer.seekToEnd(ju.Arrays.asList(tp))
+            case (tp, KafkaOffsetRangeLimit.EARLIEST) =>
+              consumer.seekToBeginning(ju.Arrays.asList(tp))
+            case (tp, off) => consumer.seek(tp, off)
+          }
+          partitionOffsets.map {
+            case (tp, _) => tp -> consumer.position(tp)
+          }
         }
-        partitionOffsets.map {
-          case (tp, _) => tp -> consumer.position(tp)
-        }
+
+        // Fetch the offsets twice to reduce the chance to hit KAFKA-7703.
+        _fetchOffsets()
+        _fetchOffsets()
       }
     }
 
@@ -192,8 +199,20 @@ private[kafka010] class KafkaOffsetReader(
   /**
    * Fetch the latest offsets for the topic partitions that are indicated
    * in the [[ConsumerStrategy]].
+   *
+   * Kafka may return earliest offsets when we are requesting latest offsets (KAFKA-7703). To avoid
+   * hitting this issue, we will use the given `knownOffsets` to audit the latest offsets returned
+   * by Kafka, if we find some incorrect offsets (a latest offset is less than an offset in
+   * `knownOffsets`), we will retry at most `maxOffsetFetchAttempts` times. If `knownOffsets` is not
+   * provided, we simply fetch the latest offsets twice and use the second result which is more
+   * likely correct.
+   *
+   * When a topic is recreated, the latest offsets may be less than offsets in `knownOffsets`. We
+   * cannot distinguish this with KAFKA-7703, so we just return whatever we get from Kafka after
+   * retrying.
    */
-  def fetchLatestOffsets(): Map[TopicPartition, Long] = runUninterruptibly {
+  def fetchLatestOffsets(
+      knownOffsets: Option[PartitionOffsetMap]): PartitionOffsetMap = runUninterruptibly {
     withRetriesWithoutInterrupt {
       // Poll to get the latest assigned partitions
       consumer.poll(0)
@@ -201,10 +220,55 @@ private[kafka010] class KafkaOffsetReader(
       consumer.pause(partitions)
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the end.")
 
-      consumer.seekToEnd(partitions)
-      val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
-      logDebug(s"Got latest offsets for partition : $partitionOffsets")
-      partitionOffsets
+      if (knownOffsets.isEmpty) {
+        // Fetch the latest offsets twice and use the second result which is more likely correct.
+        consumer.seekToEnd(partitions)
+        partitions.asScala.map(p => p -> consumer.position(p)).toMap
+        consumer.seekToEnd(partitions)
+        partitions.asScala.map(p => p -> consumer.position(p)).toMap
+      } else {
+        var partitionOffsets: PartitionOffsetMap = Map.empty
+
+        /**
+         * Compare `knownOffsets` and `partitionOffsets`. Returns all partitions that have incorrect
+         * latest offset (offset in `knownOffsets` is great than the one in `partitionOffsets`).
+         */
+        def findIncorrectOffsets: Seq[(TopicPartition, Long, Long)] = {
+          var incorrectOffsets = ArrayBuffer[(TopicPartition, Long, Long)]()
+          partitionOffsets.foreach { case (tp, offset) =>
+            knownOffsets.foreach(_.get(tp).foreach { knownOffset =>
+              if (knownOffset > offset) {
+                val incorrectOffset = (tp, knownOffset, offset)
+                incorrectOffsets += incorrectOffset
+              }
+            })
+          }
+          incorrectOffsets
+        }
+
+        // Retry to fetch latest offsets when detecting incorrect offsets. We don't use
+        // `withRetriesWithoutInterrupt` to retry because:
+        //
+        // - `withRetriesWithoutInterrupt` will reset the consumer for each attempt but a fresh
+        //    consumer has a much bigger chance to hit KAFKA-7703.
+        // - Avoid calling `consumer.poll(0)` which may cause KAFKA-7703.
+        var incorrectOffsets: Seq[(TopicPartition, Long, Long)] = Nil
+        var attempt = 0
+        do {
+          consumer.seekToEnd(partitions)
+          partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
+          attempt += 1
+
+          incorrectOffsets = findIncorrectOffsets
+          if (incorrectOffsets.nonEmpty && attempt < maxOffsetFetchAttempts) {
+            logWarning("Retrying to fetch latest offsets because of incorrect offsets " +
+              "(partition, previous offset, fetched offset): " + incorrectOffsets)
+          }
+        } while (incorrectOffsets.nonEmpty && attempt < maxOffsetFetchAttempts)
+
+        logDebug(s"Got latest offsets for partition : $partitionOffsets")
+        partitionOffsets
+      }
     }
   }
 

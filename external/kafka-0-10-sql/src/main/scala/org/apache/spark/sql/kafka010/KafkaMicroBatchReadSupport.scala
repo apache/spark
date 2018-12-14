@@ -84,7 +84,7 @@ private[kafka010] class KafkaMicroBatchReadSupport(
 
   override def latestOffset(start: Offset): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets()
+    val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
     endPartitionOffsets = KafkaSourceOffset(maxOffsetsPerTrigger.map { maxOffsets =>
       rateLimit(maxOffsets, startPartitionOffsets, latestPartitionOffsets)
     }.getOrElse {
@@ -138,6 +138,15 @@ private[kafka010] class KafkaMicroBatchReadSupport(
       fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets,
       untilOffsets = endPartitionOffsets,
       executorLocations = getSortedExecutorList())
+    offsetRanges.filter { range =>
+      if (range.untilOffset < range.fromOffset) {
+        reportDataLoss(s"Partition ${range.topicPartition}'s offset was changed from " +
+          s"${range.fromOffset} to ${range.untilOffset}, some data may have been missed")
+        false
+      } else {
+        true
+      }
+    }
 
     // Reuse Kafka consumers only when all the offset ranges have distinct TopicPartitions,
     // that is, concurrent tasks will not read the same TopicPartitions.
@@ -186,7 +195,7 @@ private[kafka010] class KafkaMicroBatchReadSupport(
         case EarliestOffsetRangeLimit =>
           KafkaSourceOffset(kafkaOffsetReader.fetchEarliestOffsets())
         case LatestOffsetRangeLimit =>
-          KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets())
+          KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets(None))
         case SpecificOffsetRangeLimit(p) =>
           kafkaOffsetReader.fetchSpecificOffsets(p, reportDataLoss)
       }
