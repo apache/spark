@@ -59,9 +59,9 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   override def afterEach(): Unit = {
     try {
-      resetGlobalConfig
-      resetUGI
-      resetSparkEnv
+      resetGlobalConfig()
+      resetUGI()
+      resetSparkEnv()
     } finally {
       super.afterEach()
     }
@@ -71,7 +71,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with BeforeAndAfterEach {
     Configuration.setConfiguration(new KafkaJaasConfiguration)
   }
 
-  private def resetGlobalConfig: Unit = {
+  private def resetGlobalConfig(): Unit = {
     Configuration.setConfiguration(null)
   }
 
@@ -87,7 +87,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with BeforeAndAfterEach {
     UserGroupInformation.getCurrentUser.addCredentials(creds)
   }
 
-  private def resetUGI: Unit = {
+  private def resetUGI(): Unit = {
     UserGroupInformation.setLoginUser(null)
   }
 
@@ -98,7 +98,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with BeforeAndAfterEach {
     SparkEnv.set(env)
   }
 
-  private def resetSparkEnv: Unit = {
+  private def resetSparkEnv(): Unit = {
     SparkEnv.set(null)
   }
 
