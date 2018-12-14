@@ -1664,9 +1664,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         StructField("a", StringType, nullable = true),
         StructField("b", StringType, nullable = true))))
 
-    val exceptDF = inputDF.filter(
-      col("a").isin(Seq("0"): _*) or col("b").isin())
-
+    val exceptDF = inputDF.filter(col("a").isin("0") or col("b") > "c")
     checkAnswer(inputDF.except(exceptDF), Seq(Row("1", null)))
   }
 }
