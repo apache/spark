@@ -1125,17 +1125,18 @@ private[spark] class Client(
     // Add AMRMToken to establish connection between RM and AM
     val token = report.getAMRMToken
     val amRMToken: org.apache.hadoop.security.token.Token[AMRMTokenIdentifier] =
-      new org.apache.hadoop.security.token.Token[AMRMTokenIdentifier](token
-        .getIdentifier().array(), token.getPassword().array, new Text(
-        token.getKind()), new Text(token.getService()))
+      new org.apache.hadoop.security.token.Token[AMRMTokenIdentifier](
+        token.getIdentifier().array(), token.getPassword().array,
+        new Text(token.getKind()), new Text(token.getService()))
     val currentUGI = UserGroupInformation.getCurrentUser
     currentUGI.addToken(amRMToken)
 
     sparkConf.set("spark.yarn.containerId",
       ContainerId.newContainerId(report.getCurrentApplicationAttemptId, 1).toString)
     // Start Application Service in a separate thread and continue with application monitoring
-    val amService = new Thread() {
-      override def run(): Unit = new ApplicationMaster(sparkConf, hadoopConf, rpcEnv).run()
+    val amService = new Thread("Unmanaged Application Master Service") {
+      override def run(): Unit = new ApplicationMaster(new ApplicationMasterArguments(Array.empty),
+        sparkConf, hadoopConf).runUnmanaged(rpcEnv)
     }
     amService.setDaemon(true)
     amService.start()

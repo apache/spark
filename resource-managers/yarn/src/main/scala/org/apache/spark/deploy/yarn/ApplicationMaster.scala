@@ -55,19 +55,10 @@ import org.apache.spark.util._
  * Common application master functionality for Spark on Yarn.
  */
 private[spark] class ApplicationMaster(
-    val args: ApplicationMasterArguments,
-    val sparkConf: SparkConf,
-    val yarnConf: YarnConfiguration)
-  extends Logging {
+    args: ApplicationMasterArguments,
+    sparkConf: SparkConf,
+    yarnConf: YarnConfiguration) extends Logging {
 
-  def this(sparkConf: SparkConf,
-           yarnConf: YarnConfiguration,
-           clientRpcEnv: RpcEnv) {
-    this(new ApplicationMasterArguments(Array.empty), sparkConf, yarnConf)
-    this.clientRpcEnv = clientRpcEnv
-  }
-
-  private var clientRpcEnv: RpcEnv = null
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
 
@@ -164,8 +155,6 @@ private[spark] class ApplicationMaster(
   // Next wait interval before allocator poll.
   private var nextAllocationInterval = initialAllocationInterval
 
-  private var rpcEnv: RpcEnv = null
-
   // In cluster mode, used to tell the AM when the user's SparkContext has been initialized.
   private val sparkContextPromise = Promise[SparkContext]()
 
@@ -235,12 +224,18 @@ private[spark] class ApplicationMaster(
 
   final def run(): Int = {
     doAsUser {
-      runImpl()
+      runImpl(
+        if (isClusterMode) {
+          runDriver()
+        } else {
+          runExecutorLauncher()
+        }
+      )
     }
     exitCode
   }
 
-  private def runImpl(): Unit = {
+  private def runImpl(opBlock: => Unit): Unit = {
     try {
       val appAttemptId = client.getAttemptId(sparkConf)
 
@@ -294,11 +289,8 @@ private[spark] class ApplicationMaster(
         }
       }
 
-      if (isClusterMode) {
-        runDriver()
-      } else {
-        runExecutorLauncher()
-      }
+      opBlock
+
     } catch {
       case e: Exception =>
         // catch everything else if not specifically handled
@@ -316,6 +308,23 @@ private[spark] class ApplicationMaster(
         case e: Exception =>
           logWarning("Exception during stopping of the metric system: ", e)
       }
+    }
+  }
+
+  def runUnmanaged(clientRpcEnv: RpcEnv): Unit = {
+    runImpl {
+      val driverRef = clientRpcEnv.setupEndpointRef(
+        RpcAddress(sparkConf.get("spark.driver.host"),
+          sparkConf.get("spark.driver.port").toInt),
+        YarnSchedulerBackend.ENDPOINT_NAME)
+      // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
+      registerAM(
+        Utils.localHostName, -1, sparkConf, sparkConf.getOption("spark.driver.appUIAddress"))
+      addAmIpFilter(Some(driverRef))
+      createAllocator(driverRef, sparkConf, clientRpcEnv)
+
+      // In client mode the actor will stop the reporter thread.
+      reporterThread.join()
     }
   }
 
@@ -410,7 +419,10 @@ private[spark] class ApplicationMaster(
     registered = true
   }
 
-  private def createAllocator(driverRef: RpcEndpointRef, _sparkConf: SparkConf): Unit = {
+  private def createAllocator(
+      driverRef: RpcEndpointRef,
+      _sparkConf: SparkConf,
+      rpcEnv: RpcEnv): Unit = {
     val appId = client.getAttemptId(_sparkConf).getApplicationId().toString()
     val driverUrl = RpcEndpointAddress(driverRef.address.host, driverRef.address.port,
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
@@ -462,7 +474,7 @@ private[spark] class ApplicationMaster(
       val sc = ThreadUtils.awaitResult(sparkContextPromise.future,
         Duration(totalWaitTime, TimeUnit.MILLISECONDS))
       if (sc != null) {
-        rpcEnv = sc.env.rpcEnv
+        val rpcEnv = sc.env.rpcEnv
 
         val userConf = sc.getConf
         val host = userConf.get("spark.driver.host")
@@ -472,7 +484,7 @@ private[spark] class ApplicationMaster(
         val driverRef = rpcEnv.setupEndpointRef(
           RpcAddress(host, port),
           YarnSchedulerBackend.ENDPOINT_NAME)
-        createAllocator(driverRef, userConf)
+        createAllocator(driverRef, userConf, rpcEnv)
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
         // if the user app did not create a SparkContext.
@@ -494,31 +506,22 @@ private[spark] class ApplicationMaster(
   }
 
   private def runExecutorLauncher(): Unit = {
-    var driverRef : RpcEndpointRef = null
-    if (sparkConf.get(YARN_UNMANAGED_AM)) {
-      rpcEnv = clientRpcEnv
-      driverRef = rpcEnv.setupEndpointRef(
-        RpcAddress(sparkConf.get("spark.driver.host"),
-          sparkConf.get("spark.driver.port").toInt),
-        YarnSchedulerBackend.ENDPOINT_NAME)
-    } else {
-      val hostname = Utils.localHostName
-      val amCores = sparkConf.get(AM_CORES)
-      rpcEnv = RpcEnv.create("sparkYarnAM", hostname, hostname, -1, sparkConf, securityMgr,
-        amCores, true)
+    val hostname = Utils.localHostName
+    val amCores = sparkConf.get(AM_CORES)
+    val rpcEnv = RpcEnv.create("sparkYarnAM", hostname, hostname, -1, sparkConf, securityMgr,
+      amCores, true)
 
-      // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
-      registerAM(hostname, -1, sparkConf, sparkConf.getOption("spark.driver.appUIAddress"))
+    // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
+    registerAM(hostname, -1, sparkConf, sparkConf.getOption("spark.driver.appUIAddress"))
 
-      // The driver should be up and listening, so unlike cluster mode, just try to connect to it
-      // with no waiting or retrying.
-      val (driverHost, driverPort) = Utils.parseHostPort(args.userArgs(0))
-      driverRef = rpcEnv.setupEndpointRef(
-        RpcAddress(driverHost, driverPort),
-        YarnSchedulerBackend.ENDPOINT_NAME)
-    }
+    // The driver should be up and listening, so unlike cluster mode, just try to connect to it
+    // with no waiting or retrying.
+    val (driverHost, driverPort) = Utils.parseHostPort(args.userArgs(0))
+    val driverRef = rpcEnv.setupEndpointRef(
+      RpcAddress(driverHost, driverPort),
+      YarnSchedulerBackend.ENDPOINT_NAME)
     addAmIpFilter(Some(driverRef))
-    createAllocator(driverRef, sparkConf)
+    createAllocator(driverRef, sparkConf, rpcEnv)
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
