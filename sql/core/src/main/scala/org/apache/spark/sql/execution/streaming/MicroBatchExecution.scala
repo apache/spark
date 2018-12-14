@@ -147,6 +147,12 @@ class MicroBatchExecution(
     logInfo(s"Query $prettyIdString was stopped")
   }
 
+  /** Begins recording statistics about query progress for a given trigger. */
+  override protected def startTrigger(): Unit = {
+    super.startTrigger()
+    currentStatus = currentStatus.copy(isTriggerActive = true)
+  }
+
   /**
    * Repeatedly attempts to run batches as data arrives.
    */
