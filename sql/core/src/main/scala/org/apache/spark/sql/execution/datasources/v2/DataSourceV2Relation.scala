@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
@@ -37,8 +39,7 @@ import org.apache.spark.sql.types.StructType
 case class DataSourceV2Relation(
     table: Table,
     output: Seq[AttributeReference],
-    // TODO: use a simple case insensitive map instead.
-    options: DataSourceOptions)
+    options: Map[String, String])
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   override def name: String = table.name()
@@ -48,14 +49,18 @@ case class DataSourceV2Relation(
   }
 
   def newScanBuilder(): ScanBuilder = table match {
-    case s: SupportsBatchRead => s.newScanBuilder(options)
+    case s: SupportsBatchRead =>
+      val dsOptions = new DataSourceOptions(options.asJava)
+      s.newScanBuilder(dsOptions)
     case _ => throw new AnalysisException(s"Table is not readable: ${table.name()}")
   }
 
 
 
   def newWriteBuilder(schema: StructType): WriteBuilder = table match {
-    case s: SupportsBatchWrite => s.newWriteBuilder(schema, options)
+    case s: SupportsBatchWrite =>
+      val dsOptions = new DataSourceOptions(options.asJava)
+      s.newWriteBuilder(schema, dsOptions)
     case _ => throw new AnalysisException(s"Table is not writable: ${table.name()}")
   }
 
@@ -122,7 +127,7 @@ case class StreamingDataSourceV2Relation(
 }
 
 object DataSourceV2Relation {
-  def create(table: Table, options: DataSourceOptions): DataSourceV2Relation = {
+  def create(table: Table, options: Map[String, String]): DataSourceV2Relation = {
     val output = table.schema().toAttributes
     DataSourceV2Relation(table, output, options)
   }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
-import java.util.{Optional, UUID}
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 
@@ -69,8 +69,17 @@ class SimpleWritableDataSource extends DataSourceV2
     override def readSchema(): StructType = tableSchema
   }
 
-  class MyWriteBuilder(path: String, uniqueId: String) extends WriteBuilder {
-    override def buildWithSaveMode(mode: SaveMode): Optional[BatchWrite] = {
+  class MyWriteBuilder(path: String, uniqueId: String) extends WriteBuilder with SupportsSaveMode {
+    private var mode: SaveMode = _
+
+    override def mode(mode: SaveMode): WriteBuilder = {
+      this.mode = mode
+      this
+    }
+
+    override def buildForBatch(): BatchWrite = {
+      assert(mode != null)
+
       val hadoopPath = new Path(path)
       val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
       val fs = hadoopPath.getFileSystem(hadoopConf)
@@ -82,7 +91,7 @@ class SimpleWritableDataSource extends DataSourceV2
       }
       if (mode == SaveMode.Ignore) {
         if (fs.exists(hadoopPath)) {
-          return Optional.empty()
+          return null
         }
       }
       if (mode == SaveMode.Overwrite) {
@@ -90,7 +99,7 @@ class SimpleWritableDataSource extends DataSourceV2
       }
 
       val pathStr = hadoopPath.toUri.toString
-      Optional.of(new MyBatchWrite(uniqueId, pathStr, hadoopConf))
+      new MyBatchWrite(uniqueId, pathStr, hadoopConf)
     }
   }
 

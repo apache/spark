@@ -15,24 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.sources.v2.writer;
 
-import org.apache.spark.sql.sources.v2.reader.Scan;
-import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
+import org.apache.spark.sql.SaveMode;
 
-/**
- * An internal base interface of mix-in interfaces for readable {@link Table}. This adds
- * {@link #newScanBuilder(DataSourceOptions)} that is used to create a scan for batch, micro-batch,
- * or continuous processing.
- */
-interface SupportsRead extends Table {
-
-  /**
-   * Returns a {@link ScanBuilder} which can be used to build a {@link Scan}. Spark will call this
-   * method to configure each data source scan.
-   *
-   * @param options The options for reading, which is an immutable case-insensitive
-   *                string-to-string map.
-   */
-  ScanBuilder newScanBuilder(DataSourceOptions options);
+// A temporary mixin trait for `WriteBuilder` to support `SaveMode`. Will be removed before
+// Spark 3.0 when all the new write operators are finished.
+public interface SupportsSaveMode extends WriteBuilder {
+  WriteBuilder mode(SaveMode mode);
 }

@@ -209,8 +209,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         case _ => provider.getTable(dsOptions)
       }
       table match {
-        case readableTable: SupportsBatchRead =>
-          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(readableTable, dsOptions))
+        case _: SupportsBatchRead =>
+          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, finalOptions))
         case _ => loadV1Source(paths: _*)
       }
     } else {

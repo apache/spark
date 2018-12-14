@@ -18,7 +18,6 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder;
 import org.apache.spark.sql.types.StructType;
 
@@ -27,7 +26,7 @@ import org.apache.spark.sql.types.StructType;
  * <p>
  * If a {@link Table} implements this interface, the
  * {@link SupportsWrite#newWriteBuilder(StructType, DataSourceOptions)} must return a
- * {@link WriteBuilder} with {@link WriteBuilder#buildWithSaveMode(SaveMode)} implemented.
+ * {@link WriteBuilder} with {@link WriteBuilder#buildForBatch()} implemented.
  * </p>
  */
 @Evolving

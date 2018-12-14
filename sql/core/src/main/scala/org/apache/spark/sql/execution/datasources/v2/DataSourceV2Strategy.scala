@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.{sources, SaveMode, Strategy}
+import org.apache.spark.sql.{sources, AnalysisException, SaveMode, Strategy}
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Repartition}
@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReadSupport
+import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 
 object DataSourceV2Strategy extends Strategy {
 
@@ -136,8 +137,14 @@ object DataSourceV2Strategy extends Strategy {
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
-      val write = r.newWriteBuilder(query.schema).buildWithSaveMode(SaveMode.Append).get()
-      WriteToDataSourceV2Exec(write, planLater(query)) :: Nil
+      val writeBuilder = r.newWriteBuilder(query.schema)
+      writeBuilder match {
+        case s: SupportsSaveMode =>
+          val write = s.mode(SaveMode.Append).buildForBatch()
+          assert(write != null)
+          WriteToDataSourceV2Exec(write, planLater(query)) :: Nil
+        case _ => throw new AnalysisException(s"data source ${r.name} does not support SaveMode")
+      }
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil

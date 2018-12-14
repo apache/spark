@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, Logi
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, WriteToDataSourceV2}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.writer.SupportsSaveMode
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -251,17 +252,26 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val dsOptions = new DataSourceOptions(options.asJava)
       provider.getTable(dsOptions) match {
         case table: SupportsBatchWrite =>
-          val relation = DataSourceV2Relation.create(table, dsOptions)
+          val relation = DataSourceV2Relation.create(table, options)
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {
               AppendData.byName(relation, df.logicalPlan)
             }
           } else {
-            val write = relation.newWriteBuilder(df.logicalPlan.schema).buildWithSaveMode(mode)
-            if (write.isPresent) {
-              runCommand(df.sparkSession, "save") {
-                WriteToDataSourceV2(write.get, df.logicalPlan)
-              }
+            val writeBuilder = relation.newWriteBuilder(df.logicalPlan.schema)
+            writeBuilder match {
+              case s: SupportsSaveMode =>
+                val write = s.mode(mode).buildForBatch()
+                // It can only return null with `SupportsSaveMode`. We can clean it up after
+                // removing `SupportsSaveMode`.
+                if (write != null) {
+                  runCommand(df.sparkSession, "save") {
+                    WriteToDataSourceV2(write, df.logicalPlan)
+                  }
+                }
+
+              case _ => throw new AnalysisException(
+                s"data source ${relation.name} does not support SaveMode")
             }
           }
 

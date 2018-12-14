@@ -17,14 +17,27 @@
 
 package org.apache.spark.sql.sources.v2.writer;
 
-import java.util.Optional;
-
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.SaveMode;
+import org.apache.spark.sql.sources.v2.SupportsBatchWrite;
+import org.apache.spark.sql.sources.v2.Table;
 
+/**
+ * An interface for building the {@link BatchWrite}. Implementations can mix in interfaces like
+ * {@link SupportsSaveMode} to support different ways to write data to data sources.
+ */
 @Evolving
 public interface WriteBuilder {
 
-  // TODO: remove it after we finish all the new write operators.
-  Optional<BatchWrite> buildWithSaveMode(SaveMode mode);
+  /**
+   * Returns a {@link BatchWrite} to write data to batch source. By default this method throws
+   * exception, data sources must overwrite this method to provide an implementation, if the
+   * {@link Table} that creates this scan implements {@link SupportsBatchWrite}.
+   *
+   * Note that, the returned {@link BatchWrite} can be null if the implementation supports SaveMode,
+   * to indicate that no writing is needed. We can clean it up after removing
+   * {@link SupportsSaveMode}.
+   */
+  default BatchWrite buildForBatch() {
+    throw new UnsupportedOperationException("Batch scans are not supported");
+  }
 }
