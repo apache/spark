@@ -161,9 +161,6 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter = new GaussianMixtureModel.GaussianMixtureModelWriter(this)
 
-  private[ml] override def setSummary(summary: Option[GaussianMixtureSummary]): this.type =
-    super.setSummary(summary)
-
   /**
    * Gets summary of model on training set. An exception is
    * thrown if `trainingSummary == None`.

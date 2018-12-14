@@ -1055,10 +1055,6 @@ class GeneralizedLinearRegressionModel private[ml] (
     output.toDF()
   }
 
-  private[ml]
-  override def setSummary(summary: Option[GeneralizedLinearRegressionTrainingSummary]): this.type =
-    super.setSummary(summary)
-
   /**
    * Gets R-like summary of model on training set. An exception is
    * thrown if there is no summary available.

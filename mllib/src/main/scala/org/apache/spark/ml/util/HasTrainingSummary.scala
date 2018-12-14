@@ -26,20 +26,20 @@ import org.apache.spark.annotation.Since
  *
  * @tparam T Summary instance type
  */
-@Since("2.3.0")
+@Since("3.0.0")
 private[ml] trait HasTrainingSummary[T] {
 
   private[ml] final var trainingSummary: Option[T] = None
 
   /** Indicates whether a training summary exists for this model instance. */
-  @Since("2.3.0")
+  @Since("3.0.0")
   def hasSummary: Boolean = trainingSummary.isDefined
 
   /**
    * Gets summary of model on training set. An exception is
    * thrown if `trainingSummary == None`.
    */
-  @Since("2.3.0")
+  @Since("3.0.0")
   def summary: T = trainingSummary.getOrElse {
     throw new SparkException(
       s"No training summary available for this ${this.getClass.getSimpleName}")

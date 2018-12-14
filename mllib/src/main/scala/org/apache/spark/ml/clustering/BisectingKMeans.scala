@@ -144,9 +144,6 @@ class BisectingKMeansModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter = new BisectingKMeansModel.BisectingKMeansModelWriter(this)
 
-  private[ml] override def setSummary(summary: Option[BisectingKMeansSummary]): this.type =
-    super.setSummary(summary)
-
   /**
    * Gets summary of model on training set. An exception is
    * thrown if `trainingSummary == None`.

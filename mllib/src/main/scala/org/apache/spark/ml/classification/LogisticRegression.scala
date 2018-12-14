@@ -1018,16 +1018,12 @@ class LogisticRegressionModel private[spark] (
   @Since("1.6.0")
   override val numFeatures: Int = coefficientMatrix.numCols
 
-  private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None
-
   /**
    * Gets summary of model on training set. An exception is thrown
    * if `trainingSummary == None`.
    */
   @Since("1.5.0")
-  def summary: LogisticRegressionTrainingSummary = trainingSummary.getOrElse {
-    throw new SparkException("No training summary available for this LogisticRegressionModel")
-  }
+  override def summary: LogisticRegressionTrainingSummary = super.summary
 
   /**
    * Gets summary of model on training set. An exception is thrown
@@ -1061,18 +1057,6 @@ class LogisticRegressionModel private[spark] (
     }
     (model, model.getProbabilityCol, model.getPredictionCol)
   }
-
-  private[classification] override def setSummary(
-    summary: Option[LogisticRegressionTrainingSummary]
-  ): this.type = {
-    super.setSummary(summary)
-  }
-
-  /**
-   * Gets summary of model on training set. An exception is thrown if `trainingSummary == None`.
-   */
-  @Since("1.5.0")
-  override def summary: LogisticRegressionTrainingSummary = super.summary
 
   /**
    * Evaluates the model on a test dataset.

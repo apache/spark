@@ -154,9 +154,6 @@ class KMeansModel private[ml] (
   @Since("1.6.0")
   override def write: GeneralMLWriter = new GeneralMLWriter(this)
 
-  private[ml] override def setSummary(summary: Option[KMeansSummary]): this.type =
-    super.setSummary(summary)
-
   /**
    * Gets summary of model on training set. An exception is
    * thrown if `trainingSummary == None`.

@@ -653,13 +653,7 @@ class LinearRegressionModel private[ml] (
   private[ml] def this(uid: String, coefficients: Vector, intercept: Double) =
     this(uid, coefficients, intercept, 1.0)
 
-  private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
-
   override val numFeatures: Int = coefficients.size
-
-  private[ml]
-  override def setSummary(summary: Option[LinearRegressionTrainingSummary]): this.type =
-    super.setSummary(summary)
 
   /**
    * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
