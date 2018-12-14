@@ -700,7 +700,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     writeLong(numKeys)
     writeLong(numValues)
 
-
     writeLong(array.length)
     writeLongArray(writeBuffer, array, array.length)
     val used = ((cursor - Platform.LONG_ARRAY_OFFSET) / 8).toInt
