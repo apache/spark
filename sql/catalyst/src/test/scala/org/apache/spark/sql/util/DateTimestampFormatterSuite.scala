@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 
-class DateTimeFormatterSuite extends SparkFunSuite with SQLHelper {
+class DateTimestampFormatterSuite extends SparkFunSuite with SQLHelper {
   test("parsing dates") {
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
