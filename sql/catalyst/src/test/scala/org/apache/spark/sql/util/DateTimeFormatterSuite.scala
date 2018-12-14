@@ -87,24 +87,87 @@ class DateTimeFormatterSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("roundtrip parsing timestamps using timezones") {
-    DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
-      val timestamp = "2018-12-02T11:22:33.123456"
-      val formatter = TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", timeZone, Locale.US)
-      val micros = formatter.parse(timestamp)
-      val formatted = formatter.format(micros)
-      assert(timestamp === formatted)
+  test("roundtrip timestamp -> micros -> timestamp using timezones") {
+    Seq(
+      -58710115316212000L,
+      -18926315945345679L,
+      -9463427405253013L,
+      -244000001L,
+      0L,
+      99628200102030L,
+      1543749753123456L,
+      2177456523456789L,
+      11858049903010203L).foreach { micros =>
+      DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+        val formatter = TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", timeZone, Locale.US)
+        val timestamp = formatter.format(micros)
+        val parsed = formatter.parse(timestamp)
+        assert(micros === parsed)
+      }
     }
   }
 
-  test("roundtrip date parsing") {
-    val date = "2018-12-12"
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
-        val days = formatter.parse(date)
-        val formatted = formatter.format(days)
-        assert(date === formatted)
+  test("roundtrip micros -> timestamp -> micros using timezones") {
+    Seq(
+      "0109-07-20T18:38:03.788000",
+      "1370-04-01T10:00:54.654321",
+      "1670-02-11T14:09:54.746987",
+      "1969-12-31T23:55:55.999999",
+      "1970-01-01T00:00:00.000000",
+      "1973-02-27T02:30:00.102030",
+      "2018-12-02T11:22:33.123456",
+      "2039-01-01T01:02:03.456789",
+      "2345-10-07T22:45:03.010203").foreach { timestamp =>
+      DateTimeTestUtils.outstandingTimezones.foreach { timeZone =>
+        val formatter = TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", timeZone, Locale.US)
+        val micros = formatter.parse(timestamp)
+        val formatted = formatter.format(micros)
+        assert(timestamp === formatted)
+      }
+    }
+  }
+
+  test("roundtrip date -> days -> date") {
+    Seq(
+      "0050-01-01",
+      "0953-02-02",
+      "1423-03-08",
+      "1969-12-31",
+      "1972-08-25",
+      "1975-09-26",
+      "2018-12-12",
+      "2038-01-01",
+      "5010-11-17").foreach { date =>
+      DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+          val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
+          val days = formatter.parse(date)
+          val formatted = formatter.format(days)
+          assert(date === formatted)
+        }
+      }
+    }
+  }
+
+  test("roundtrip days -> date -> days") {
+    Seq(
+      -701265,
+      -371419,
+      -199722,
+      -1,
+      0,
+      967,
+      2094,
+      17877,
+      24837,
+      1110657).foreach { days =>
+      DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+          val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
+          val date = formatter.format(days)
+          val parsed = formatter.parse(date)
+          assert(days === parsed)
+        }
       }
     }
   }
