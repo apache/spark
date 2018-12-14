@@ -18,3 +18,4 @@
 # Added
 
 * Gradle plugin to easily create custom docker images for use with k8s
+* Filter rLibDir by exists so that daemon.R references the correct file [460](https://github.com/palantir/spark/pull/460) 
