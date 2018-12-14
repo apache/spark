@@ -690,6 +690,7 @@ namedWindow
 
 windowSpec
     : name=identifier  #windowRef
+    | '('name=identifier')'  #windowRef
     | '('
       ( CLUSTER BY partition+=expression (',' partition+=expression)*
       | ((PARTITION | DISTRIBUTE) BY partition+=expression (',' partition+=expression)*)?

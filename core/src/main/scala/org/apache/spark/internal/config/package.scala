@@ -240,7 +240,7 @@ package object config {
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
       .intConf
-      .checkValue(_ > 0, "The capacity of listener bus event queue must not be negative")
+      .checkValue(_ > 0, "The capacity of listener bus event queue must be positive")
       .createWithDefault(10000)
 
   private[spark] val LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED =
@@ -389,8 +389,8 @@ package object config {
       .doc("The chunk size in bytes during writing out the bytes of ChunkedByteBuffer.")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
-        "The chunk size during writing out the bytes of" +
-        " ChunkedByteBuffer should not larger than Int.MaxValue - 15.")
+        "The chunk size during writing out the bytes of ChunkedByteBuffer should" +
+          s" be less than or equal to ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefault(64 * 1024 * 1024)
 
   private[spark] val CHECKPOINT_COMPRESS =
@@ -462,7 +462,7 @@ package object config {
         "made in creating intermediate shuffle files.")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
-        s"The file buffer size must be greater than 0 and less than" +
+        s"The file buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
@@ -472,7 +472,7 @@ package object config {
         "is written in unsafe shuffle writer. In KiB unless otherwise specified.")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
-        s"The buffer size must be greater than 0 and less than" +
+        s"The buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
@@ -527,6 +527,12 @@ package object config {
       .doc("Value for HTTP Strict Transport Security Response Header")
       .stringConf
       .createOptional
+
+  private[spark] val UI_REQUEST_HEADER_SIZE =
+    ConfigBuilder("spark.ui.requestHeaderSize")
+      .doc("Value for HTTP request header size in bytes.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("8k")
 
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
     .doc("Class names of listeners to add to SparkContext during initialization.")

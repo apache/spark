@@ -15,7 +15,19 @@ container images and entrypoints.**
 # Security
 
 Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
-Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
+Please see [Spark Security](security.html) and the specific advice below before running Spark.
+
+## User Identity
+
+Images built from the project provided Dockerfiles do not contain any [`USER`](https://docs.docker.com/engine/reference/builder/#user) directives.  This means that the resulting images will be running the Spark processes as `root` inside the container.  On unsecured clusters this may provide an attack vector for privilege escalation and container breakout.  Therefore security conscious deployments should consider providing custom images with `USER` directives specifying an unprivileged UID and GID.
+
+Alternatively the [Pod Template](#pod-template) feature can be used to add a [Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#volumes-and-file-systems) with a `runAsUser` to the pods that Spark submits.  Please bear in mind that this requires cooperation from your users and as such may not be a suitable solution for shared environments.  Cluster administrators should use [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#users-and-groups) if they wish to limit the users that pods may run as.
+
+## Volume Mounts
+
+As described later in this document under [Using Kubernetes Volumes](#using-kubernetes-volumes) Spark on K8S provides configuration options that allow for mounting certain volume types into the driver and executor pods.  In particular it allows for [`hostPath`](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath) volumes which as described in the Kubernetes documentation have known security vulnerabilities.
+
+Cluster administrators should use [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/) to limit the ability to mount `hostPath` volumes appropriately for their environments.
 
 # Prerequisites
 
@@ -141,7 +153,7 @@ hostname via `spark.driver.host` and your spark driver's port to `spark.driver.p
 
 ### Client Mode Executor Pod Garbage Collection
 
-If you run your Spark driver in a pod, it is highly recommended to set `spark.driver.pod.name` to the name of that pod.
+If you run your Spark driver in a pod, it is highly recommended to set `spark.kubernetes.driver.pod.name` to the name of that pod.
 When this property is set, the Spark scheduler will deploy the executor pods with an
 [OwnerReference](https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/), which in turn will
 ensure that once the driver pod is deleted from the cluster, all of the application's executor pods will also be deleted.
@@ -150,7 +162,7 @@ an OwnerReference pointing to that pod will be added to each executor pod's Owne
 setting the OwnerReference to a pod that is not actually that driver pod, or else the executors may be terminated
 prematurely when the wrong pod is deleted.
 
-If your application is not running inside a pod, or if `spark.driver.pod.name` is not set when your application is
+If your application is not running inside a pod, or if `spark.kubernetes.driver.pod.name` is not set when your application is
 actually running in a pod, keep in mind that the executor pods may not be properly deleted from the cluster when the
 application exits. The Spark scheduler attempts to delete these pods, but if the network request to the API server fails
 for any reason, these pods will remain in the cluster. The executor processes should exit when they cannot reach the
@@ -196,6 +208,8 @@ Starting with Spark 2.4.0, users can mount the following types of Kubernetes [vo
 * [hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath): mounts a file or directory from the host node’s filesystem into a pod.
 * [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir): an initially empty volume created when a pod is assigned to a node.
 * [persistentVolumeClaim](https://kubernetes.io/docs/concepts/storage/volumes/#persistentvolumeclaim): used to mount a `PersistentVolume` into a pod.
+
+**NB:** Please see the [Security](#security) section of this document for security issues related to volume mounts.
 
 To mount a volume of any of the types above into the driver pod, use the following configuration property:
 
