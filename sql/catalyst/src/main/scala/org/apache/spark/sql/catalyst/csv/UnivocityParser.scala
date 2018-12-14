@@ -239,6 +239,7 @@ class UnivocityParser(
         } catch {
           case NonFatal(e) =>
             badRecordException = badRecordException.orElse(Some(e))
+            row(i) = null
         }
         i += 1
       }
