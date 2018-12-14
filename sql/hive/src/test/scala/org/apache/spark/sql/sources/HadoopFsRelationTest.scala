@@ -126,7 +126,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     } else {
       Seq(false)
     }
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> "true") {
       for (dataType <- supportedDataTypes) {
         for (parquetDictionaryEncodingEnabled <- parquetDictionaryEncodingEnabledConfs) {
           val extraMessage = if (isParquetDataSource) {
