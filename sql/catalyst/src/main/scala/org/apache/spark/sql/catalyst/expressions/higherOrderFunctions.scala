@@ -44,6 +44,10 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
   override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
   override def newInstance(): NamedExpression = throw new UnresolvedException(this, "newInstance")
   override lazy val resolved = false
+
+  override def toString: String = s"lambda '$name"
+
+  override def sql: String = name
 }
 
 /**
