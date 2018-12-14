@@ -39,7 +39,8 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         ColumnPruning,
         CollapseProject) ::
       Batch("Join Reorder", Once,
-        CostBasedJoinReorder) :: Nil
+        CostBasedJoinReorder,
+        RemoveRedundantProject) :: Nil
   }
 
   var originalConfCBOEnabled = false

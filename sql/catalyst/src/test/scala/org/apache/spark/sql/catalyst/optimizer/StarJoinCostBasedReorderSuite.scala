@@ -39,7 +39,8 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         ColumnPruning,
         CollapseProject) ::
       Batch("Join Reorder", Once,
-        CostBasedJoinReorder) :: Nil
+        CostBasedJoinReorder,
+        RemoveRedundantProject) :: Nil
   }
 
   var originalConfCBOEnabled = false

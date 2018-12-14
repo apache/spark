@@ -155,7 +155,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
     Batch("Join Reorder", Once,
-      CostBasedJoinReorder) :+
+      CostBasedJoinReorder,
+      RemoveRedundantProject) :+
     Batch("Remove Redundant Sorts", Once,
       RemoveRedundantSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
@@ -403,10 +404,35 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 
 /**
  * Remove projections from the query plan that do not make any modifications.
+ * It handles top-level and intermediate [[Project]]s differently:
+ *  - Top-level:
+ *      A [[Project]] is only considered redundant if its output attributes are exactly the same as
+ *      its child, include the order of attributes.
+ *               This affects how the outside world perceives this query plan.
+ *  - Intermediate (not top-leve):
+ *      A [[Project]] is redundant as long as its outputSet is the same as the child's. It won't
+ *      affect the outer appearance so we're free to change the order of the output attributes.
+ *      We should, however, retain the [[Project]]s that have a shorter output attribute list than
+ *      the child's. That can reduce the materialized data size so it's worth keeping.
  */
 object RemoveRedundantProject extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p @ Project(_, child) if p.output == child.output => child
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val newTopLevel = plan match {
+      // Find exact match of output attribute list
+      case p @ Project(_, child) if p.output == child.output => child
+      case p => p
+    }
+
+    newTopLevel mapChildren { inner =>
+      inner transformDown {
+        // Find relaxed match for the intermediate Project
+        case p @ Project(_, child) if internallyRedundant(p) => child
+      }
+    }
+  }
+
+  private def internallyRedundant(p: Project): Boolean = {
+    p.outputSet == p.child.outputSet && p.output.length >= p.child.output.length
   }
 }
 
