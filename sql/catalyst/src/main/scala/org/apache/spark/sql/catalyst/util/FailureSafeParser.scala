@@ -34,20 +34,26 @@ class FailureSafeParser[IN](
   private val actualSchema = StructType(schema.filterNot(_.name == columnNameOfCorruptRecord))
   private val resultRow = new GenericInternalRow(schema.length)
 
-  // This function takes 2 parameters: an optional partial result, and the bad record. If the given
+  // This function takes 3 parameters: an optional partial result, the bad record, and a flag
+  // indicating whether there was a parse error. This code rewrites the row only if there
+  // was a parsing error or the user's schema contains a corrupted record column. If the given
   // schema doesn't contain a field for corrupted record, we just return the partial result or a
   // row with all fields null. If the given schema contains a field for corrupted record, we will
   // set the bad record to this field, and set other fields according to the partial result or null.
-  private val toResultRow: (Option[InternalRow], () => UTF8String) => InternalRow = {
-    (row, badRecord) => {
-      var i = 0
-      while (i < actualSchema.length) {
-        val from = actualSchema(i)
-        resultRow(schema.fieldIndex(from.name)) = row.map(_.get(i, from.dataType)).orNull
-        i += 1
+  private val toResultRow: (Option[InternalRow], () => UTF8String, Boolean) => InternalRow = {
+    (row, badRecord, parseError) => {
+      if (parseError || corruptFieldIndex.isDefined) {
+        var i = 0
+        while (i < actualSchema.length) {
+          val from = actualSchema(i)
+          resultRow(schema.fieldIndex(from.name)) = row.map(_.get(i, from.dataType)).orNull
+          i += 1
+        }
+        corruptFieldIndex.foreach(index => resultRow(index) = badRecord())
+        resultRow
+      } else {
+        row.get
       }
-      corruptFieldIndex.foreach(index => resultRow(index) = badRecord())
-      resultRow
     }
   }
 
@@ -58,12 +64,12 @@ class FailureSafeParser[IN](
      if (skipParsing) {
        Iterator.single(InternalRow.empty)
      } else {
-       rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
+       rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null, false))
      }
     } catch {
       case e: BadRecordException => mode match {
         case PermissiveMode =>
-          Iterator(toResultRow(e.partialResult(), e.record))
+          Iterator(toResultRow(e.partialResult(), e.record, true))
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>
