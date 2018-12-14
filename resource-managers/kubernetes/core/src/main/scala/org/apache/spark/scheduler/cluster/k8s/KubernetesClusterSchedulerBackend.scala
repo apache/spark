@@ -18,12 +18,14 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.ExecutorService
 
-import io.fabric8.kubernetes.client.KubernetesClient
 import scala.concurrent.{ExecutionContext, Future}
+
+import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
@@ -58,6 +60,43 @@ private[spark] class KubernetesClusterSchedulerBackend(
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     removeExecutor(executorId, reason)
+  }
+
+  /**
+    * Get an application ID associated with the job.
+    * This returns the string value of [[appId]] if set, otherwise
+    * the locally-generated ID from the superclass.
+    * @return The application ID
+    */
+
+  var appId: Option[String] = None;
+
+  override def applicationId(): String = {
+
+    appId.map(_.toString).getOrElse {
+      logInfo("Initializing Application ID.")
+      bindApplicationId();
+      appId.get
+    }
+  }
+
+  def bindApplicationId(): Unit = {
+    val appIdString = {
+      val wasSparkSubmittedInClusterMode = conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK)
+
+      // cluster mode: get appId from driver env
+      if (wasSparkSubmittedInClusterMode) {
+        val sparkAppId = conf.getOption("spark.app.id")
+        sparkAppId.map(_.toString).getOrElse {
+          logWarning("Application ID is not initialized yet in cluster mode.")
+          super.applicationId
+        }
+      } else {
+        // client mode: generate new appId
+        KubernetesUtils.generateAppId()
+      }
+    }
+    appId = Some(appIdString)
   }
 
   override def start(): Unit = {

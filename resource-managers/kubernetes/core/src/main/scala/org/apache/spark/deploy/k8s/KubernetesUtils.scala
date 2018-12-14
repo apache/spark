@@ -17,12 +17,11 @@
 package org.apache.spark.deploy.k8s
 
 import java.io.File
+import java.util.UUID
 
 import scala.collection.JavaConverters._
-
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -205,4 +204,9 @@ private[spark] object KubernetesUtils extends Logging {
   def formatTime(time: String): String = {
     if (time != null) time else "N/A"
   }
+
+  def generateAppId(): String = {
+    s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
+  }
+
 }
