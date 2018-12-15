@@ -192,6 +192,7 @@ class LSHModel(JavaModel):
                  "datasetA" and "datasetB", and a column "distCol" is added to show the distance
                  between each pair.
         """
+        threshold = TypeConverters.toFloat(threshold)
         return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
 
 
@@ -230,6 +231,16 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
     [Row(id=4, features=DenseVector([2.0, 2.0]), hashes=[DenseVector([1.0])], distCol=1.0)]
     >>> model.approxSimilarityJoin(df, df2, 3.0, distCol="EuclideanDistance").select(
+    ...     col("datasetA.id").alias("idA"),
+    ...     col("datasetB.id").alias("idB"),
+    ...     col("EuclideanDistance")).show()
+    +---+---+-----------------+
+    |idA|idB|EuclideanDistance|
+    +---+---+-----------------+
+    |  3|  6| 2.23606797749979|
+    +---+---+-----------------+
+    ...
+    >>> model.approxSimilarityJoin(df, df2, 3, distCol="EuclideanDistance").select(
     ...     col("datasetA.id").alias("idA"),
     ...     col("datasetB.id").alias("idB"),
     ...     col("EuclideanDistance")).show()
