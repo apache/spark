@@ -120,7 +120,7 @@ public class ExternalShuffleServiceSuite {
   }
 
   @Test
-  public void  restartExternalShuffleServiceWithoutInitRegisteredExecutorsD() throws IOException {
+  public void  restartExternalShuffleServiceWithoutInitRegisteredExecutorsDB() throws IOException {
     sparkConf.set("spark.shuffle.service.db.enabled", "false");
     externalShuffleService = new ExternalShuffleService(sparkConf, securityManager);
     //externalShuffleService restart
