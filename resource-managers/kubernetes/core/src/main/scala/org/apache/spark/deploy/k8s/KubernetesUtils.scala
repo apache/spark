@@ -204,9 +204,4 @@ private[spark] object KubernetesUtils extends Logging {
   def formatTime(time: String): String = {
     if (time != null) time else "N/A"
   }
-
-  def generateAppId(): String = {
-    s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
-  }
-
 }
