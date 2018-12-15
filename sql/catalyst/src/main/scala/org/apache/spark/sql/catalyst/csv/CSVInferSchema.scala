@@ -24,7 +24,7 @@ import scala.util.control.Exception.allCatch
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.DateTimeFormatter
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeFormatter}
 import org.apache.spark.sql.types._
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
@@ -32,6 +32,11 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   @transient
   private lazy val timeParser = DateTimeFormatter(
     options.timestampFormat,
+    options.timeZone,
+    options.locale)
+  @transient
+  private lazy val dateFormatter = DateFormatter(
+    options.dateFormat,
     options.timeZone,
     options.locale)
 
@@ -162,14 +167,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   private def tryParseDate(field: String): DataType = {
-    val dateTry = allCatch opt {
-      val pos = new ParsePosition(0)
-      options.dateFormat.parse(field, pos)
-      if (pos.getErrorIndex != -1 || pos.getIndex != field.length) {
-        throw new IllegalArgumentException(s"${field} cannot be parsed as ${DateType.simpleString}")
-      }
-    }
-    if (dateTry.isDefined) {
+    if ((allCatch opt dateFormatter.parse(field)).isDefined) {
       DateType
     } else {
       tryParseTimestamp(field)
