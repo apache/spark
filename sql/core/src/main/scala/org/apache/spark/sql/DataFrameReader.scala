@@ -455,7 +455,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val createParser = CreateJacksonParser.string _
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
-      val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = true)
+      val rawParser = new JacksonParser(
+        actualSchema,
+        parsedOptions,
+        allowArrayAsStructs = true,
+        skipInputWithoutTokens = true)
       val parser = new FailureSafeParser[String](
         input => rawParser.parse(input, createParser, UTF8String.fromString),
         parsedOptions.parseMode,

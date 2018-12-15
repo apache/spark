@@ -66,7 +66,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       val dummyOption = new JSONOptions(Map.empty[String, String], "GMT")
       val dummySchema = StructType(Seq.empty)
-      val parser = new JacksonParser(dummySchema, dummyOption, allowArrayAsStructs = true)
+      val parser = new JacksonParser(
+        dummySchema,
+        dummyOption,
+        allowArrayAsStructs = true,
+        skipInputWithoutTokens = true)
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
         jsonParser.nextToken()
@@ -1114,7 +1118,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Row(null, null, null),
         Row(null, null, null),
         Row(null, null, null),
-        Row(null, null, null),
         Row("str_a_4", "str_b_4", "str_c_4"),
         Row(null, null, null))
     )
@@ -1136,7 +1139,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkAnswer(
         jsonDF.select($"a", $"b", $"c", $"_unparsed"),
         Row(null, null, null, "{") ::
-          Row(null, null, null, "") ::
           Row(null, null, null, """{"a":1, b:2}""") ::
           Row(null, null, null, """{"a":{, b:3}""") ::
           Row("str_a_4", "str_b_4", "str_c_4", null) ::
@@ -1151,7 +1153,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkAnswer(
         jsonDF.filter($"_unparsed".isNotNull).select($"_unparsed"),
         Row("{") ::
-          Row("") ::
           Row("""{"a":1, b:2}""") ::
           Row("""{"a":{, b:3}""") ::
           Row("]") :: Nil
@@ -1173,7 +1174,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(
       jsonDF.selectExpr("a", "b", "c", "_malformed"),
       Row(null, null, null, "{") ::
-        Row(null, null, null, "") ::
         Row(null, null, null, """{"a":1, b:2}""") ::
         Row(null, null, null, """{"a":{, b:3}""") ::
         Row("str_a_4", "str_b_4", "str_c_4", null) ::
@@ -2517,7 +2517,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
 
     checkCount(2)
-    countForMalformedJSON(1, Seq(""))
+    countForMalformedJSON(0, Seq(""))
   }
 
   test("SPARK-25040: empty strings should be disallowed") {

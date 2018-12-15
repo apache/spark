@@ -40,7 +40,8 @@ import org.apache.spark.util.Utils
 class JacksonParser(
     schema: DataType,
     val options: JSONOptions,
-    allowArrayAsStructs: Boolean) extends Logging {
+    allowArrayAsStructs: Boolean,
+    skipInputWithoutTokens: Boolean) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
@@ -418,6 +419,7 @@ class JacksonParser(
         // a null first token is equivalent to testing for input.trim.isEmpty
         // but it works on any token stream and not just strings
         parser.nextToken() match {
+          case null if skipInputWithoutTokens => Nil
           case null => throw new RuntimeException("Not found any JSON token")
           case _ => rootConverter.apply(parser) match {
             case null => throw new RuntimeException("Root converter returned null")
