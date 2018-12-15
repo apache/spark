@@ -332,7 +332,7 @@ public class ExternalShuffleBlockResolver {
 
   /**ForTesting**/
   public static File getFileForTest(String[] localDirs, int subDirsPerLocalDir, String filename) {
-    return getFile(localDirs,subDirsPerLocalDir,filename);
+    return getFile(localDirs, subDirsPerLocalDir, filename);
   }
 
   /**

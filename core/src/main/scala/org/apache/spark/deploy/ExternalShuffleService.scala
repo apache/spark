@@ -20,10 +20,10 @@ package org.apache.spark.deploy
 import java.io.{File, IOException}
 import java.util.concurrent.CountDownLatch
 
-
 import scala.collection.JavaConverters._
+
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.crypto.AuthServerBootstrap
@@ -64,7 +64,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private val shuffleServiceSource = new ExternalShuffleServiceSource
 
-  protected  def createDirectory(root: String,name: String): File = {
+  protected def createDirectory(root: String, name: String): File = {
     var attempts = 0
     val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
     var dir: File = null
@@ -81,8 +81,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
         }
       } catch { case e: SecurityException => dir = null; }
     }
-    logInfo(s"registeredExecutorsDb path is : {}  \n ${dir.getAbsolutePath}")
-    new File(dir.getAbsolutePath,name)
+    logInfo(s"registeredExecutorsDb path is ${dir.getAbsolutePath}")
+    new File(dir.getAbsolutePath, name)
   }
 
   protected def initRegisteredExecutorsDB(dbName: String): File = {
@@ -90,10 +90,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     if (localDirs.length >= 1 && !"".equals(localDirs(0))) {
       createDirectory(localDirs(0), dbName)
     }
-    else
-    {
-      logWarning(s"The ExternalShuffleService's initRegisteredExecutorsDB is't used ,'spark.local.dir' should be set first " +
-        s"when you want to use initRegisteredExecutorsDB on ExternalShuffleService.")
+    else {
+      logWarning(s"'spark.local.dir' should be set first.")
       null
     }
   }
