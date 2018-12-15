@@ -63,6 +63,9 @@ class SparkContext(object):
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create L{RDD} and
     broadcast variables on that cluster.
+
+    .. note:: Only one :class:`SparkContext` should be active per JVM. You must `stop()`
+        the active :class:`SparkContext` before creating a new one.
     """
 
     _gateway = None
