@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{QueryPlanningMetricsSupport, SQLMetrics}
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -302,11 +302,13 @@ case class FileSourceScanExec(
     inputRDD :: Nil
   }
 
+  private lazy val fileListingMetrics =
+    QueryPlanningMetricsSupport.createFileListingMetrics(sparkContext)
+
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
-      "fileListingTime" -> SQLMetrics.createMetric(sparkContext, "file listing time (ms)"),
-      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
+      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time")) ++ fileListingMetrics
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {
@@ -502,11 +504,13 @@ case class FileSourceScanExec(
    */
   private def updateDriverMetrics() = {
     metrics("numFiles").add(selectedPartitions.map(_.files.size.toLong).sum)
-    metrics("fileListingTime").add(0)
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      metrics("numFiles") :: metrics("fileListingTime") :: Nil)
+    SQLMetrics.postDriverMetricUpdates(
+      sparkContext,
+      executionId,
+      QueryPlanningMetricsSupport.getUpdatedFileListingMetrics(fileListingMetrics)
+        :+ metrics("numFiles"))
   }
 
   override def doCanonicalize(): FileSourceScanExec = {

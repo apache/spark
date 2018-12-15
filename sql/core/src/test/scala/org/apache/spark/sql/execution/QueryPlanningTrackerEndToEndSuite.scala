@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
@@ -41,56 +40,37 @@ class QueryPlanningTrackerEndToEndSuite extends SharedSQLContext {
     checkTrackerWithPhaseKeySet(df, Set("parsing", "analysis", "optimization", "planning"))
   }
 
-  test("file listing time - analysis rules") {
-    withTable("src") {
-      sql("CREATE TABLE src (key INT, value STRING) using parquet")
-      // File listing will be triggered in FindDataSourceTable rule.
-      val df = sql("SELECT * FROM src")
-      val tracker = df.queryExecution.tracker
-      assert(tracker.phases.keySet ==
-        Set("parsing", "fileListing", "analysis"))
-      assert(tracker.rules.nonEmpty)
-    }
-  }
-
-  test("file listing time - optimization rules") {
-    withTable("tbl") {
-      spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
-      // File listing will be triggered in PruneFileSourcePartitions rule.
-      val df = sql("SELECT * FROM tbl WHERE p = 1")
-      df.collect()
-      checkTrackerWithPhaseKeySet(
-        df,
-        Set("parsing", "analysis", "optimization", "planning", "fileListing"))
-
-      // File listing will be triggered in OptimizeMetadataOnlyQuery rule.
-      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
-        val df = sql("SELECT p FROM tbl GROUP BY p")
-        df.collect()
-        checkTrackerWithPhaseKeySet(
-          df,
-          Set("parsing", "analysis", "optimization", "planning", "fileListing"))
-      }
-
-      withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "false") {
-        val df = sql("SELECT p FROM tbl GROUP BY p")
-        df.collect()
-        checkTrackerWithPhaseKeySet(
-          df,
-          Set("parsing", "analysis", "optimization", "planning"))
-      }
-    }
-  }
-
-  test("file listing time - DataFrameReader") {
+  test("file listing time in schema resolving") {
     withTempPath { path =>
       val pathStr = path.getAbsolutePath
       spark.range(0, 10).write.parquet(pathStr)
-      // File listing will be triggered by DataSource.resolveRelation
       val df = spark.read.parquet(pathStr)
       checkTrackerWithPhaseKeySet(
         df,
         Set("analysis", "fileListing"))
+    }
+  }
+
+  test("file listing time in execution") {
+    withTable("src") {
+      sql("CREATE TABLE src (key INT, value STRING) using parquet")
+      val df = spark.read.table("src")
+      df.collect()
+      val tracker = df.queryExecution.tracker
+      assert(tracker.phases.keySet ==
+        Set("planning", "optimization", "analysis", "fileListing"))
+      assert(tracker.rules.nonEmpty)
+    }
+  }
+
+  test("partition pruning time and file listing time") {
+    withTable("tbl") {
+      spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
+      val df = sql("SELECT * FROM tbl WHERE p = 1")
+      df.collect()
+      checkTrackerWithPhaseKeySet(
+        df,
+        Set("parsing", "analysis", "optimization", "planning", "fileListing", "partitionPruning"))
     }
   }
 

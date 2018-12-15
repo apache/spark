@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
@@ -69,16 +70,19 @@ class CatalogFileIndex(
    */
   def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = {
     if (table.partitionColumnNames.nonEmpty) {
-      val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
-        table.identifier, filters)
-      val partitions = selectedPartitions.map { p =>
-        val path = new Path(p.location)
-        val fs = path.getFileSystem(hadoopConf)
-        PartitionPath(
-          p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
-          path.makeQualified(fs.getUri, fs.getWorkingDirectory))
-      }
-      val partitionSpec = PartitionSpec(partitionSchema, partitions)
+      val partitionSpec =
+        QueryPlanningTracker.get.measurePhase(QueryPlanningTracker.PARTITION_PRUNING) {
+          val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
+            table.identifier, filters)
+          val partitions = selectedPartitions.map { p =>
+            val path = new Path(p.location)
+            val fs = path.getFileSystem(hadoopConf)
+            PartitionPath(
+              p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+              path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+          }
+          PartitionSpec(partitionSchema, partitions)
+        }
       new PrunedInMemoryFileIndex(
         sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
     } else {

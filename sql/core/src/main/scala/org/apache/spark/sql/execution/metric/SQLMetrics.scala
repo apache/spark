@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.metric
 
+import java.sql.Timestamp
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -82,6 +83,7 @@ object SQLMetrics {
   private val TIMING_METRIC = "timing"
   private val NS_TIMING_METRIC = "nsTiming"
   private val AVERAGE_METRIC = "average"
+  private val TIMESTAMP_METRIC = "timestamp"
 
   private val baseForAvgMetric: Int = 10
 
@@ -131,6 +133,14 @@ object SQLMetrics {
     acc
   }
 
+  def createTimestampMetric(sc: SparkContext, name: String): SQLMetric = {
+    // The final result of this metric in physical operator UI may looks like:
+    // start: 2018-12-15T16:49:12.634
+    val acc = new SQLMetric(TIMESTAMP_METRIC)
+    acc.register(sc, name = Some(name), countFailedValues = false)
+    acc
+  }
+
   /**
    * Create a metric to report the average information (including min, med, max) like
    * avg hash probe. As average metrics are double values, this kind of metrics should be
@@ -154,6 +164,11 @@ object SQLMetrics {
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
+    } else if (metricsType == TIMESTAMP_METRIC) {
+      val validValue = values.filter(_ > 0)
+      assert(validValue.size == 1, "Timestamp metrics should has only 1 valid value.")
+      val ts = new Timestamp(validValue.head)
+      ts.toLocalDateTime.toString
     } else if (metricsType == AVERAGE_METRIC) {
       val numberFormat = NumberFormat.getNumberInstance(Locale.US)
 

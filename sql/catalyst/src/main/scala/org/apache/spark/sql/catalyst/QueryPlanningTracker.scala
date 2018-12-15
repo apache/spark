@@ -40,7 +40,10 @@ object QueryPlanningTracker {
   val ANALYSIS = "analysis"
   val OPTIMIZATION = "optimization"
   val PLANNING = "planning"
+
+  // Define a list about file listing phases.
   val FILE_LISTING = "fileListing"
+  val PARTITION_PRUNING = "partitionPruning"
 
   /**
    * Summary for a rule.

@@ -545,18 +545,58 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     }
   }
 
-  test("SPARK-26327: FileSourceScanExec metrics") {
+  test("File listing timestamp metrics with and without cache") {
+    withTable("parquetTable") {
+      sql("CREATE TABLE parquetTable (key INT, value STRING) using parquet")
+
+      // First time reading.
+      val df0 = spark.read.table("parquetTable")
+      df0.collect()
+      val metrics0 = df0.queryExecution.executedPlan.collectLeaves().head.metrics
+      // Partition pruning duration and timestamp not change.
+      assert(metrics0("partitionPruningStart").value == 0)
+      assert(metrics0("partitionPruningEnd").value == 0)
+      // Check file listing duration and timestamp.
+      assert(metrics0("fileListingStart").value > 0)
+      assert(metrics0("fileListingEnd").value > 0)
+      assert(metrics0("fileListingTime").value > 0)
+      // Insert 10 rows into table.
+      spark.range(10).selectExpr("id", "id + 1").write.insertInto("parquetTable")
+
+      // Second time reading, file listing time will not update cause read from cache.
+      val df1 = spark.read.table("parquetTable")
+      df1.collect()
+      val metrics1 = df1.queryExecution.executedPlan.collectLeaves().head.metrics
+      // Check deterministic metrics.
+      assert(metrics1("numFiles").value == 2)
+      assert(metrics1("numOutputRows").value == 10)
+      // Check file listing duration and timestamp.
+      assert(metrics1("fileListingStart").value == 0)
+      assert(metrics1("fileListingEnd").value == 0)
+      assert(metrics1("fileListingTime").value == 0)
+    }
+  }
+
+  test("File listing and partition pruning metrics") {
     withTable("testDataForScan") {
       spark.range(10).selectExpr("id", "id % 3 as p")
         .write.partitionBy("p").saveAsTable("testDataForScan")
       // The execution plan only has 1 FileScan node.
       val df = spark.sql(
         "SELECT * FROM testDataForScan WHERE p = 1")
-      testSparkPlanMetrics(df, 1, Map(
-        0L -> (("Scan parquet default.testdataforscan", Map(
-          "number of output rows" -> 3L,
-          "number of files" -> 2L))))
-      )
+      df.collect()
+      val metrics = df.queryExecution.executedPlan.collectLeaves().head.metrics
+
+      // Check deterministic metrics.
+      assert(metrics("numFiles").value == 2)
+      assert(metrics("numOutputRows").value == 3)
+      // Check file listing duration and timestamp.
+      assert(metrics("fileListingStart").value > 0)
+      assert(metrics("fileListingEnd").value > 0)
+      assert(metrics("fileListingTime").value > 0)
+      // Check partition pruning duration and timestamp.
+      assert(metrics("partitionPruningStart").value > 0)
+      assert(metrics("partitionPruningEnd").value > 0)
     }
   }
 }
