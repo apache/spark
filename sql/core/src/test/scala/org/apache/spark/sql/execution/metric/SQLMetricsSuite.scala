@@ -564,7 +564,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       // Insert ten rows into the table.
       spark.range(10).selectExpr("id", "id + 1").write.insertInto("parquetTable")
 
-      // For second time read, file listing time will not update cause read from cache.
+      // For the second time read, file listing time will not update cause read from cache.
       val df1 = spark.read.table("parquetTable")
       df1.collect()
       val metrics1 = df1.queryExecution.executedPlan.collectLeaves().head.metrics
