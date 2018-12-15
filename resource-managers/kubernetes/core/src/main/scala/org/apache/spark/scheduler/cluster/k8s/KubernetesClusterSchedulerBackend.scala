@@ -68,13 +68,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     * @return The application ID
     */
   override def applicationId(): String = {
-    val appId = {
-      val sparkAppId = conf.getOption("spark.app.id")
-      sparkAppId.map(_.toString).getOrElse {
-        super.applicationId
-      }
-    }
-    appId
+    conf.getOption("spark.app.id").map(_.toString).getOrElse {super.applicationId}
   }
 
   override def start(): Unit = {
