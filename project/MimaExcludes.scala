@@ -220,6 +220,10 @@ object MimaExcludes {
     // [SPARK-26139] Implement shuffle write metrics in SQL
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ShuffleDependency.this"),
 
+    // [SPARK-26362][CORE] Remove 'spark.driver.allowMultipleContexts' to disallow multiple creation of SparkContexts
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkContext.setActiveContext"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkContext.markPartiallyConstructed"),
+
     // Data Source V2 API changes
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) =>
