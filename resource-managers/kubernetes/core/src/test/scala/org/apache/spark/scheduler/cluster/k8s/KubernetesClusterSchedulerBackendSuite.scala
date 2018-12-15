@@ -36,7 +36,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   private val requestExecutorsService = new DeterministicScheduler()
   private val sparkConf = new SparkConf(false)
-    .set("spark.executor.instances", "3")
+    .set("spark.executor.instances", "3").set("spark.app.id", TEST_SPARK_APP_ID)
 
   @Mock
   private var sc: SparkContext = _
@@ -100,9 +100,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       podAllocator,
       lifecycleEventHandler,
       watchEvents,
-      pollEvents) {
-      override def applicationId(): String = TEST_SPARK_APP_ID
-    }
+      pollEvents)
   }
 
   test("Start all components") {
