@@ -85,7 +85,7 @@ object SQLExecution {
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
             sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
             time = System.currentTimeMillis()))
-          // Sets the tracker in the `queryExecution` for execution.
+          // Set the tracker in the query execution as the `localTracker` during execute.
           QueryPlanningTracker.withTracker(queryExecution.tracker) {
             body
           }

@@ -194,6 +194,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
+    // Pass the new tracker into the created DataFrame.
     val tracker = new QueryPlanningTracker
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     if (classOf[TableProvider].isAssignableFrom(cls)) {

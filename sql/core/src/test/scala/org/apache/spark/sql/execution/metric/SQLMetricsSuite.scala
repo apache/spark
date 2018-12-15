@@ -549,21 +549,22 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     withTable("parquetTable") {
       sql("CREATE TABLE parquetTable (key INT, value STRING) using parquet")
 
-      // First time reading.
+      // First time read.
       val df0 = spark.read.table("parquetTable")
       df0.collect()
       val metrics0 = df0.queryExecution.executedPlan.collectLeaves().head.metrics
-      // Partition pruning duration and timestamp not change.
+      // Check partition pruning duration and timestamp not change.
       assert(metrics0("partitionPruningStart").value == 0)
       assert(metrics0("partitionPruningEnd").value == 0)
-      // Check file listing duration and timestamp.
+      // Check file listing duration and timestamp change.
       assert(metrics0("fileListingStart").value > 0)
       assert(metrics0("fileListingEnd").value > 0)
       assert(metrics0("fileListingTime").value > 0)
-      // Insert 10 rows into table.
+
+      // Insert ten rows into the table.
       spark.range(10).selectExpr("id", "id + 1").write.insertInto("parquetTable")
 
-      // Second time reading, file listing time will not update cause read from cache.
+      // For second time read, file listing time will not update cause read from cache.
       val df1 = spark.read.table("parquetTable")
       df1.collect()
       val metrics1 = df1.queryExecution.executedPlan.collectLeaves().head.metrics
@@ -590,11 +591,11 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       // Check deterministic metrics.
       assert(metrics("numFiles").value == 2)
       assert(metrics("numOutputRows").value == 3)
-      // Check file listing duration and timestamp.
+      // Check file listing duration and timestamp changed.
       assert(metrics("fileListingStart").value > 0)
       assert(metrics("fileListingEnd").value > 0)
       assert(metrics("fileListingTime").value > 0)
-      // Check partition pruning duration and timestamp.
+      // Check partition pruning duration and timestamp changed.
       assert(metrics("partitionPruningStart").value > 0)
       assert(metrics("partitionPruningEnd").value > 0)
     }

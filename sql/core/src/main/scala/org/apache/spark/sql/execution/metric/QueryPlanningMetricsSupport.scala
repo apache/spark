@@ -52,7 +52,7 @@ object QueryPlanningMetricsSupport {
   def getUpdatedFileListingMetrics(metrics: Map[String, SQLMetric]): Seq[SQLMetric] = {
     val updatedMetrics = new ArrayBuffer[SQLMetric]()
 
-    // Update all metric relative with file listing phase.
+    // Update all metrics relative with file listing phase.
     def phaseMetricsUpdate(phase: String): Unit = {
       val phaseSummary = QueryPlanningTracker.get.phases.get(phase)
       if (phaseSummary.isDefined) {

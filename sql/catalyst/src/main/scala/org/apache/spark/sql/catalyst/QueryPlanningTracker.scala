@@ -41,7 +41,7 @@ object QueryPlanningTracker {
   val OPTIMIZATION = "optimization"
   val PLANNING = "planning"
 
-  // Define a list about file listing phases.
+  // File listing relative phases.
   val FILE_LISTING = "fileListing"
   val PARTITION_PRUNING = "partitionPruning"
 
@@ -170,6 +170,7 @@ class QueryPlanningTracker {
 
 }
 
+/** A no-op tracker used for current tracker in scope not set. */
 object NoopTracker extends QueryPlanningTracker {
   override def measurePhase[T](phase: String)(f: => T): T = f
   override def recordRuleInvocation(rule: String, timeNs: Long, effective: Boolean): Unit = {}

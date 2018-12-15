@@ -433,7 +433,8 @@ class SparkSession private(
   }
 
   /**
-   * Convert a `BaseRelation` created for external data sources into a `DataFrame`.
+   * Convert a `BaseRelation` created for external data sources into a `DataFrame`. Use the local
+   * tracker in scope if it exists.
    *
    * @since 2.0.0
    */

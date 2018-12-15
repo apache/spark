@@ -166,7 +166,7 @@ object SQLMetrics {
       numberFormat.format(values.sum)
     } else if (metricsType == TIMESTAMP_METRIC) {
       val validValue = values.filter(_ > 0)
-      assert(validValue.size == 1, "Timestamp metrics should has only 1 valid value.")
+      assert(validValue.size == 1, "Timestamp metrics should have only one valid value.")
       val ts = new Timestamp(validValue.head)
       ts.toLocalDateTime.toString
     } else if (metricsType == AVERAGE_METRIC) {
