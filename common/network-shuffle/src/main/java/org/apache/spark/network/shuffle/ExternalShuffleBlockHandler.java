@@ -17,22 +17,8 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.Metric;
-import com.codahale.metrics.MetricSet;
-import com.codahale.metrics.Timer;
+import com.codahale.metrics.*;
 import com.google.common.annotations.VisibleForTesting;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
@@ -41,8 +27,18 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.apache.spark.network.shuffle.protocol.*;
-import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
  * RPC Handler for a server which can serve shuffle blocks from outside of an Executor process.
@@ -63,6 +59,12 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     throws IOException {
     this(new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
+  }
+
+
+  /** ForTesting */
+  public  ExternalShuffleBlockResolver getBlockResolver(){
+    return blockManager;
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */

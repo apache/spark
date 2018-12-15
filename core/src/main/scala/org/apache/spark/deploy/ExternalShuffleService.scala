@@ -97,6 +97,12 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
       null
     }
   }
+
+  /** ForTesting */
+  def getBlockHandler: ExternalShuffleBlockHandler = {
+    blockHandler
+  }
+
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
     if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED)) {
