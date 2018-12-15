@@ -157,7 +157,8 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
     assert(updatedParams.size() === 2)
     assert(updatedParams.containsKey(SaslConfigs.SASL_JAAS_CONFIG))
-    assert(updatedParams.get(SaslConfigs.SASL_MECHANISM) === "SCRAM-SHA-512")
+    assert(updatedParams.get(SaslConfigs.SASL_MECHANISM) ===
+      Kafka.TOKEN_SASL_MECHANISM.defaultValueString)
   }
 
   test("setAuthenticationConfigIfNeeded with token and invalid mechanism should throw exception") {
