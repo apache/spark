@@ -162,6 +162,14 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field)) {
       DoubleType
     } else {
+      tryParseTimestamp(field)
+    }
+  }
+
+  private def tryParseTimestamp(field: String): DataType = {
+    if ((allCatch opt timeParser.parse(field)).isDefined) {
+      TimestampType
+    } else {
       tryParseDate(field)
     }
   }
@@ -169,15 +177,6 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   private def tryParseDate(field: String): DataType = {
     if ((allCatch opt dateFormatter.parse(field)).isDefined) {
       DateType
-    } else {
-      tryParseTimestamp(field)
-    }
-  }
-
-  private def tryParseTimestamp(field: String): DataType = {
-    // This case infers a custom `dataFormat` is set.
-    if ((allCatch opt timeParser.parse(field)).isDefined) {
-      TimestampType
     } else {
       tryParseBoolean(field)
     }
