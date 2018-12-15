@@ -430,6 +430,11 @@ object RemoveRedundantProject extends Rule[LogicalPlan] {
     // Remove intermediate projection when the output attribute order doesn't depend on it
     case p @ Project(_, child) if outputDefined && internallyRedundant(p) =>
       transformDown(child, expectedOutput, outputDefined)
+    // Union needs special handling: all children must have compatible output attribute.
+    // Treat Union like a top-level operator just to be safe.
+    case u: Union => u mapChildren { c =>
+      transformDown(c, c.output, false)
+    }
     // Check if we're coming across an operator that defines the output attribute list
     case p => p mapChildren { c =>
       transformDown(c, c.output,
