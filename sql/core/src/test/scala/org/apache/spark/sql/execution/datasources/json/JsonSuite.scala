@@ -248,7 +248,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     checkAnswer(
       sql("select nullstr, headers.Host from jsonTable"),
-      Seq(Row("", "1.abc.com"), Row("", null), Row(null, null), Row(null, null))
+      Seq(Row("", "1.abc.com"), Row("", null), Row("", null), Row(null, null))
     )
   }
 
@@ -1463,7 +1463,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
         DateType, TimestampType,
         ArrayType(IntegerType), MapType(StringType, LongType), struct,
-        new UDT.MyDenseVectorUDT())
+        new TestUDT.MyDenseVectorUDT())
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
       StructField(s"col$index", dataType, nullable = true)
     }
@@ -1487,7 +1487,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Seq(2, 3, 4),
         Map("a string" -> 2000L),
         Row(4.75.toFloat, Seq(false, true)),
-        new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))
+        new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25)))
     val data =
       Row.fromSeq(Seq("Spark " + spark.sparkContext.version) ++ constantValues) :: Nil
 
@@ -2562,5 +2562,18 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val files = new File(path).listFiles()
       assert(!files.exists(_.getName.endsWith("json")))
     }
+  }
+
+  test("return partial result for bad records") {
+    val schema = "a double, b array<int>, c string, _corrupt_record string"
+    val badRecords = Seq(
+      """{"a":"-","b":[0, 1, 2],"c":"abc"}""",
+      """{"a":0.1,"b":{},"c":"def"}""").toDS()
+    val df = spark.read.schema(schema).json(badRecords)
+
+    checkAnswer(
+      df,
+      Row(null, Array(0, 1, 2), "abc", """{"a":"-","b":[0, 1, 2],"c":"abc"}""") ::
+      Row(0.1, null, "def", """{"a":0.1,"b":{},"c":"def"}""") :: Nil)
   }
 }

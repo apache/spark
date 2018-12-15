@@ -64,9 +64,9 @@ the following case-insensitive options:
             Example:<br>
             <code>
                spark.read.format("jdbc")<br>
-               &nbsp&nbsp .option("dbtable", "(select c1, c2 from t1) as subq")<br>
-               &nbsp&nbsp .option("partitionColumn", "subq.c1"<br>
-               &nbsp&nbsp .load()
+                 .option("url", jdbcUrl)<br>
+                 .option("query", "select c1, c2 from t1")<br>
+                 .load()
             </code></li>
       </ol>
     </td>

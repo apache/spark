@@ -22,13 +22,12 @@ import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class CSVInferSchemaSuite extends SparkFunSuite  with SQLHelper {
+class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
   test("String fields types are inferred correctly from null types") {
-    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
+    val options = new CSVOptions(Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss"), false, "GMT")
     val inferSchema = new CSVInferSchema(options)
 
     assert(inferSchema.inferField(NullType, "") == NullType)
@@ -48,7 +47,7 @@ class CSVInferSchemaSuite extends SparkFunSuite  with SQLHelper {
   }
 
   test("String fields types are inferred correctly from other types") {
-    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
+    val options = new CSVOptions(Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss"), false, "GMT")
     val inferSchema = new CSVInferSchema(options)
 
     assert(inferSchema.inferField(LongType, "1.0") == DoubleType)
