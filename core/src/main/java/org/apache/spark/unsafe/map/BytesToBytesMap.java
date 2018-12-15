@@ -274,36 +274,39 @@ public final class BytesToBytesMap extends MemoryConsumer {
       // reference to the page to free and free it after releasing the lock of `MapIterator`.
       MemoryBlock pageToFree = null;
 
-      synchronized (this) {
-        int nextIdx = dataPages.indexOf(currentPage) + 1;
-        if (destructive && currentPage != null) {
-          dataPages.remove(currentPage);
-          pageToFree = currentPage;
-          nextIdx --;
-        }
-        if (dataPages.size() > nextIdx) {
-          currentPage = dataPages.get(nextIdx);
-          pageBaseObject = currentPage.getBaseObject();
-          offsetInPage = currentPage.getBaseOffset();
-          recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
-          offsetInPage += UnsafeAlignedOffset.getUaoSize();
-        } else {
-          currentPage = null;
-          if (reader != null) {
-            handleFailedDelete();
+      try {
+        synchronized (this) {
+          int nextIdx = dataPages.indexOf(currentPage) + 1;
+          if (destructive && currentPage != null) {
+            dataPages.remove(currentPage);
+            pageToFree = currentPage;
+            nextIdx--;
           }
-          try {
-            Closeables.close(reader, /* swallowIOException = */ false);
-            reader = spillWriters.getFirst().getReader(serializerManager);
-            recordsInPage = -1;
-          } catch (IOException e) {
-            // Scala iterator does not handle exception
-            Platform.throwException(e);
+          if (dataPages.size() > nextIdx) {
+            currentPage = dataPages.get(nextIdx);
+            pageBaseObject = currentPage.getBaseObject();
+            offsetInPage = currentPage.getBaseOffset();
+            recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
+            offsetInPage += UnsafeAlignedOffset.getUaoSize();
+          } else {
+            currentPage = null;
+            if (reader != null) {
+              handleFailedDelete();
+            }
+            try {
+              Closeables.close(reader, /* swallowIOException = */ false);
+              reader = spillWriters.getFirst().getReader(serializerManager);
+              recordsInPage = -1;
+            } catch (IOException e) {
+              // Scala iterator does not handle exception
+              Platform.throwException(e);
+            }
           }
         }
-      }
-      if (pageToFree != null) {
-        freePage(pageToFree);
+      } finally {
+        if (pageToFree != null) {
+          freePage(pageToFree);
+        }
       }
     }
 
