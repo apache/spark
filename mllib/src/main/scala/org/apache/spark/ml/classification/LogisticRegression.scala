@@ -1020,14 +1020,14 @@ class LogisticRegressionModel private[spark] (
 
   /**
    * Gets summary of model on training set. An exception is thrown
-   * if `trainingSummary == None`.
+   * if `hasSummary` is false.
    */
   @Since("1.5.0")
   override def summary: LogisticRegressionTrainingSummary = super.summary
 
   /**
    * Gets summary of model on training set. An exception is thrown
-   * if `trainingSummary == None` or it is a multiclass model.
+   * if `hasSummary` is false or it is a multiclass model.
    */
   @Since("2.3.0")
   def binarySummary: BinaryLogisticRegressionTrainingSummary = summary match {

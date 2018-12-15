@@ -146,7 +146,7 @@ class BisectingKMeansModel private[ml] (
 
   /**
    * Gets summary of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
+   * thrown if `hasSummary` is false.
    */
   @Since("2.1.0")
   override def summary: BisectingKMeansSummary = super.summary

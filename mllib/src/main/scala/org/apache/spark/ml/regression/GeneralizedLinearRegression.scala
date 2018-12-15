@@ -1002,7 +1002,7 @@ class GeneralizedLinearRegressionModel private[ml] (
     @Since("2.0.0") val intercept: Double)
   extends RegressionModel[Vector, GeneralizedLinearRegressionModel]
   with GeneralizedLinearRegressionBase with MLWritable
-  with HasTrainingSummary[GeneralizedLinearRegressionTrainingSummary]{
+  with HasTrainingSummary[GeneralizedLinearRegressionTrainingSummary] {
 
   /**
    * Sets the link prediction (linear predictor) column name.

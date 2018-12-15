@@ -657,7 +657,7 @@ class LinearRegressionModel private[ml] (
 
   /**
    * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
+   * thrown if `hasSummary` is false.
    */
   @Since("1.5.0")
   override def summary: LinearRegressionTrainingSummary = super.summary
