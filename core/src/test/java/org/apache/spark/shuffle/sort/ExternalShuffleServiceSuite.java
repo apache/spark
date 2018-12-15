@@ -33,6 +33,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.None$;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -62,7 +63,7 @@ public class ExternalShuffleServiceSuite {
     sparkConf.set("spark.shuffle.service.enabled", "true");
     sparkConf.set("spark.local.dir", System.getProperty("java.io.tmpdir"));
     Utils.loadDefaultSparkProperties(sparkConf, null);
-    securityManager = new SecurityManager(sparkConf, scala.Option.apply(new byte[0]));
+    securityManager = new SecurityManager(sparkConf, None$.empty());
 
     dataContext = new TestShuffleDataContext(2, 5);
     dataContext.create();
