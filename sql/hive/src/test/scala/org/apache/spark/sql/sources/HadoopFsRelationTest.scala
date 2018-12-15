@@ -126,6 +126,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     } else {
       Seq(false)
     }
+    // TODO: Support new parser too, see SPARK-26374.
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> "true") {
       for (dataType <- supportedDataTypes) {
         for (parquetDictionaryEncodingEnabled <- parquetDictionaryEncodingEnabledConfs) {
