@@ -167,16 +167,8 @@ case class FileSourceScanExec(
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf)
 
-  private var fileListingTime = 0L
-
-  @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
-    val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
-    val startTime = System.nanoTime()
-    val ret = relation.location.listFiles(partitionFilters, dataFilters)
-    val timeTakenMs = ((System.nanoTime() - startTime) + optimizerMetadataTimeNs) / 1000 / 1000
-    fileListingTime = timeTakenMs
-    ret
-  }
+  @transient private lazy val selectedPartitions: Seq[PartitionDirectory] =
+    relation.location.listFiles(partitionFilters, dataFilters)
 
   override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
@@ -510,7 +502,7 @@ case class FileSourceScanExec(
    */
   private def updateDriverMetrics() = {
     metrics("numFiles").add(selectedPartitions.map(_.files.size.toLong).sum)
-    metrics("fileListingTime").add(fileListingTime)
+    metrics("fileListingTime").add(0)
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
