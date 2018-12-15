@@ -40,10 +40,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
+    extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
-  private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
-    requestExecutorsService)
+  private implicit val requestExecutorContext =
+    ExecutionContext.fromExecutorService(requestExecutorsService)
 
   protected override val minRegisteredRatio =
     if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
@@ -62,11 +62,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   /**
-    * Get an application ID associated with the job.
-    * This returns the string value of spark.app.id if set, otherwise
-    * the locally-generated ID from the superclass.
-    * @return The application ID
-    */
+   * Get an application ID associated with the job.
+   * This returns the string value of spark.app.id if set, otherwise
+   * the locally-generated ID from the superclass.
+   *
+   * @return The application ID
+   */
   override def applicationId(): String = {
     conf.getOption("spark.app.id").map(_.toString).getOrElse(super.applicationId)
   }
@@ -99,7 +100,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
     if (shouldDeleteExecutors) {
       Utils.tryLogNonFatalError {
-        kubernetesClient.pods()
+        kubernetesClient
+          .pods()
           .withLabel(SPARK_APP_ID_LABEL, applicationId())
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
           .delete()
@@ -131,7 +133,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = Future[Boolean] {
-    kubernetesClient.pods()
+    kubernetesClient
+      .pods()
       .withLabel(SPARK_APP_ID_LABEL, applicationId())
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
       .withLabelIn(SPARK_EXECUTOR_ID_LABEL, executorIds: _*)
@@ -144,7 +147,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   private class KubernetesDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
-    extends DriverEndpoint(rpcEnv, sparkProperties) {
+      extends DriverEndpoint(rpcEnv, sparkProperties) {
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       // Don't do anything besides disabling the executor - allow the Kubernetes API events to
