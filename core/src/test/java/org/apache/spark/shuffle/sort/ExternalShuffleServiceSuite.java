@@ -62,7 +62,7 @@ public class ExternalShuffleServiceSuite {
     sparkConf.set("spark.shuffle.service.enabled", "true");
     sparkConf.set("spark.local.dir", System.getProperty("java.io.tmpdir"));
     Utils.loadDefaultSparkProperties(sparkConf, null);
-    securityManager = new SecurityManager(sparkConf, scala.Option.apply(null));
+    securityManager = new SecurityManager(sparkConf, scala.Option.apply(new byte[0]));
 
     dataContext = new TestShuffleDataContext(2, 5);
     dataContext.create();
