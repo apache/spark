@@ -417,18 +417,32 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  */
 object RemoveRedundantProject extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val newTopLevel = plan match {
-      // Find exact match of output attribute list
-      case p @ Project(_, child) if p.output == child.output => child
-      case p => p
-    }
+    transformDown(plan, expectedOutput = plan.output, outputDefined = false)
+  }
 
-    newTopLevel mapChildren { inner =>
-      inner transformDown {
-        // Find relaxed match for the intermediate Project
-        case p @ Project(_, child) if internallyRedundant(p) => child
-      }
+  private def transformDown(
+      plan: LogicalPlan,
+      expectedOutput: Seq[Attribute],
+      outputDefined: Boolean): LogicalPlan = plan match {
+    // Remove fully redundant projection
+    case p @ Project(_, child) if p.output == child.output =>
+      transformDown(child, expectedOutput, outputDefined)
+    // Remove intermediate projection when the output attribute order doesn't depend on it
+    case p @ Project(_, child) if outputDefined && internallyRedundant(p) =>
+      transformDown(child, expectedOutput, outputDefined)
+    // Check if we're coming across an operator that defines the output attribute list
+    case p => p mapChildren { c =>
+      transformDown(c, c.output,
+        outputDefined = outputDefined || definesOutput(p) && p.output == expectedOutput)
     }
+  }
+
+  private def definesOutput(plan: LogicalPlan): Boolean = plan match {
+    // The output attributes of these operators do not depend on their children.
+    // i.e. they're not sensitive to the order of output attributes from their children
+    case _: Project | _: ObjectConsumer | _: ObjectProducer | _: Aggregate => true
+    // Others may depend on the child
+    case _ => false
   }
 
   private def internallyRedundant(p: Project): Boolean = {
