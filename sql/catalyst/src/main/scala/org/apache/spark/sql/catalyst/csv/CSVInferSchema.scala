@@ -24,13 +24,13 @@ import scala.util.control.Exception.allCatch
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
 import org.apache.spark.sql.types._
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   @transient
-  private lazy val timeParser = DateTimeFormatter(
+  private lazy val timestampParser = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)
@@ -167,7 +167,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   private def tryParseTimestamp(field: String): DataType = {
-    if ((allCatch opt timeParser.parse(field)).isDefined) {
+    if ((allCatch opt timestampParser.parse(field)).isDefined) {
       TimestampType
     } else {
       tryParseDate(field)
