@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import java.text.ParsePosition
-
 import scala.util.control.Exception.allCatch
 
 import org.apache.spark.rdd.RDD
@@ -30,14 +28,13 @@ import org.apache.spark.sql.types._
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   @transient
-  private lazy val timestampParser = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)
   @transient
   private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
-    options.timeZone,
     options.locale)
 
   private val decimalParser = {
@@ -167,7 +164,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   private def tryParseTimestamp(field: String): DataType = {
-    if ((allCatch opt timestampParser.parse(field)).isDefined) {
+    if ((allCatch opt timestampFormatter.parse(field)).isDefined) {
       TimestampType
     } else {
       tryParseDate(field)
