@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -158,6 +158,22 @@ case class FileSourceScanExec(
       SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
     } else {
       false
+    }
+  }
+
+  private lazy val updatedFileListingMetrics = {
+    val fileListingPhase = relation.location.fileListingPhase
+    if (fileListingPhase.isDefined) {
+      val phase = fileListingPhase.get
+      metrics("fileListingTime").add(phase.durationMs)
+      metrics("fileListingStart").set(phase.startTimeMs)
+      metrics("fileListingEnd").set(phase.endTimeMs)
+      Seq(
+        metrics("fileListingTime"),
+        metrics("fileListingStart"),
+        metrics("fileListingEnd"))
+    } else {
+      Seq.empty
     }
   }
 
@@ -325,8 +341,10 @@ case class FileSourceScanExec(
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
-      "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time"),
-      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
+      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"),
+      "fileListingTime" -> SQLMetrics.createMetric(sparkContext, "file listing time (ms)"),
+      "fileListingStart" -> SQLMetrics.createTimestampMetric(sparkContext, "file listing start"),
+      "fileListingEnd" -> SQLMetrics.createTimestampMetric(sparkContext, "file listing end"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {

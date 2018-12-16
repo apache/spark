@@ -67,9 +67,8 @@ class CatalogFileIndex(
    *
    * @param filters partition-pruning filters
    */
-  def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = {
+  def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = measureFileListingPhase {
     if (table.partitionColumnNames.nonEmpty) {
-      val startTime = System.nanoTime()
       val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
         table.identifier, filters)
       val partitions = selectedPartitions.map { p =>
@@ -80,9 +79,8 @@ class CatalogFileIndex(
           path.makeQualified(fs.getUri, fs.getWorkingDirectory))
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
-      val timeNs = System.nanoTime() - startTime
       new PrunedInMemoryFileIndex(
-        sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec, Option(timeNs))
+        sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
     } else {
       new InMemoryFileIndex(
         sparkSession, rootPaths, table.storage.properties, userSpecifiedSchema = None)
@@ -113,8 +111,7 @@ private class PrunedInMemoryFileIndex(
     sparkSession: SparkSession,
     tableBasePath: Path,
     fileStatusCache: FileStatusCache,
-    override val partitionSpec: PartitionSpec,
-    override val metadataOpsTimeNs: Option[Long])
+    override val partitionSpec: PartitionSpec)
   extends InMemoryFileIndex(
     sparkSession,
     partitionSpec.partitions.map(_.path),

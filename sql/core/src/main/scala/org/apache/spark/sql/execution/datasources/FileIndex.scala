@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs._
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
 
@@ -34,6 +34,9 @@ case class PartitionDirectory(values: InternalRow, files: Seq[FileStatus])
  * partitions of a relation subject to some pruning expressions.
  */
 trait FileIndex {
+  import QueryPlanningTracker._
+
+  private var _fileListingPhase: Option[PhaseSummary] = None
 
   /**
    * Returns the list of root input paths from which the catalog will get files. There may be a
@@ -73,13 +76,21 @@ trait FileIndex {
   /** Schema of the partitioning columns, or the empty schema if the table is not partitioned. */
   def partitionSchema: StructType
 
+  /** Measure the start and end time of file listing phase and memorize result. */
+  protected def measureFileListingPhase[T](f: => T): T = {
+    val startTime = System.currentTimeMillis()
+    val ret = f
+    val endTime = System.currentTimeMillis
+    _fileListingPhase = Some(new PhaseSummary(startTime, endTime))
+    ret
+  }
+
   /**
-   * Returns an optional metadata operation time, in nanoseconds, for listing files.
+   * Returns an optional file listing phase summary.
    *
-   * We do file listing in query optimization (in order to get the proper statistics) and we want
-   * to account for file listing time in physical execution (as metrics). To do that, we save the
-   * file listing time in some implementations and physical execution calls it in this method
-   * to update the metrics.
+   * We call this in physical execution while we want to account for the file listing time as
+   * metrics. If partition pruning happened in query planning, the phase also contains this
+   * part of the cost, otherwise, it only contains file listing time of FileIndex initialize.
    */
-  def metadataOpsTimeNs: Option[Long] = None
+  final def fileListingPhase: Option[PhaseSummary] = _fileListingPhase
 }

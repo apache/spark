@@ -87,7 +87,7 @@ class InMemoryFileIndex(
     refresh0()
   }
 
-  private def refresh0(): Unit = {
+  private def refresh0(): Unit = measureFileListingPhase {
     val files = listLeafFiles(rootPaths)
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)

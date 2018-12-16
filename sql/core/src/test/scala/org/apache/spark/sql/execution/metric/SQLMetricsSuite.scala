@@ -545,18 +545,57 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     }
   }
 
-  test("SPARK-26327: FileSourceScanExec metrics") {
+  test("File listing timestamp metrics") {
+    withTable("parquetTable") {
+      sql("CREATE TABLE parquetTable (key INT, value STRING) using parquet")
+      // First time read.
+      val df0 = spark.read.table("parquetTable")
+      df0.collect()
+      val metrics0 = df0.queryExecution.executedPlan.collectLeaves().head.metrics
+      // Check file listing duration and timestamp change.
+      assert(metrics0("fileListingStart").value > 0)
+      assert(metrics0("fileListingEnd").value > 0)
+      assert(metrics0("fileListingTime").value > 0)
+      // Insert 10 rows into the table, this will trigger file index refresh.
+      spark.range(10).selectExpr("id", "id + 1").write.insertInto("parquetTable")
+      // For the second time read, file listing metrics will change.
+      val df1 = spark.read.table("parquetTable")
+      df1.collect()
+      val metrics1 = df1.queryExecution.executedPlan.collectLeaves().head.metrics
+      // Check deterministic metrics.
+      assert(metrics1("numFiles").value == 2)
+      assert(metrics1("numOutputRows").value == 10)
+      // Check file listing duration and timestamp.
+      assert(metrics1("fileListingStart").value > metrics0("fileListingStart").value)
+      assert(metrics1("fileListingEnd").value > metrics0("fileListingEnd").value)
+      assert(metrics1("fileListingTime").value > 0)
+
+      val df2 = spark.read.table("parquetTable")
+      df2.collect()
+      val metrics2 = df2.queryExecution.executedPlan.collectLeaves().head.metrics
+      // Check file listing duration and timestamp not change.
+      assert(metrics2("fileListingStart").value == metrics1("fileListingStart").value)
+      assert(metrics2("fileListingEnd").value == metrics1("fileListingEnd").value)
+      assert(metrics2("fileListingTime").value == metrics1("fileListingTime").value)
+    }
+  }
+
+  test("File listing with partition pruning") {
     withTable("testDataForScan") {
       spark.range(10).selectExpr("id", "id % 3 as p")
         .write.partitionBy("p").saveAsTable("testDataForScan")
       // The execution plan only has 1 FileScan node.
       val df = spark.sql(
         "SELECT * FROM testDataForScan WHERE p = 1")
-      testSparkPlanMetrics(df, 1, Map(
-        0L -> (("Scan parquet default.testdataforscan", Map(
-          "number of output rows" -> 3L,
-          "number of files" -> 2L))))
-      )
+      df.collect()
+      val metrics = df.queryExecution.executedPlan.collectLeaves().head.metrics
+      // Check deterministic metrics.
+      assert(metrics("numFiles").value == 2)
+      assert(metrics("numOutputRows").value == 3)
+      // Check file listing duration and timestamp changed.
+      assert(metrics("fileListingStart").value > 0)
+      assert(metrics("fileListingEnd").value > 0)
+      assert(metrics("fileListingTime").value > 0)
     }
   }
 }
