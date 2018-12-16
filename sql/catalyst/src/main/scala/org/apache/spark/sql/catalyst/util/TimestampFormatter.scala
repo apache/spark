@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time._
 import java.time.format.DateTimeFormatterBuilder
-import java.time.temporal.{ChronoField, TemporalQueries}
+import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.{Locale, TimeZone}
 
 import scala.util.Try
@@ -28,31 +28,44 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.internal.SQLConf
 
-sealed trait DateTimeFormatter {
+sealed trait TimestampFormatter {
   def parse(s: String): Long // returns microseconds since epoch
   def format(us: Long): String
 }
 
-class Iso8601DateTimeFormatter(
+trait FormatterUtils {
+  protected def zoneId: ZoneId
+  protected def buildFormatter(
+      pattern: String,
+      locale: Locale): java.time.format.DateTimeFormatter = {
+    new DateTimeFormatterBuilder()
+      .appendPattern(pattern)
+      .parseDefaulting(ChronoField.YEAR_OF_ERA, 1970)
+      .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
+      .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
+      .parseDefaulting(ChronoField.HOUR_OF_DAY, 0)
+      .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
+      .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
+      .toFormatter(locale)
+  }
+  protected def toInstantWithZoneId(temporalAccessor: TemporalAccessor): java.time.Instant = {
+    val localDateTime = LocalDateTime.from(temporalAccessor)
+    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+    Instant.from(zonedDateTime)
+  }
+}
+
+class Iso8601TimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
-    locale: Locale) extends DateTimeFormatter {
-  val formatter = new DateTimeFormatterBuilder()
-    .appendPattern(pattern)
-    .parseDefaulting(ChronoField.YEAR_OF_ERA, 1970)
-    .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
-    .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
-    .parseDefaulting(ChronoField.HOUR_OF_DAY, 0)
-    .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
-    .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
-    .toFormatter(locale)
+    locale: Locale) extends TimestampFormatter with FormatterUtils {
+  val zoneId = timeZone.toZoneId
+  val formatter = buildFormatter(pattern, locale)
 
   def toInstant(s: String): Instant = {
     val temporalAccessor = formatter.parse(s)
     if (temporalAccessor.query(TemporalQueries.offset()) == null) {
-      val localDateTime = LocalDateTime.from(temporalAccessor)
-      val zonedDateTime = ZonedDateTime.of(localDateTime, timeZone.toZoneId)
-      Instant.from(zonedDateTime)
+      toInstantWithZoneId(temporalAccessor)
     } else {
       Instant.from(temporalAccessor)
     }
@@ -75,10 +88,10 @@ class Iso8601DateTimeFormatter(
   }
 }
 
-class LegacyDateTimeFormatter(
+class LegacyTimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
-    locale: Locale) extends DateTimeFormatter {
+    locale: Locale) extends TimestampFormatter {
   val format = FastDateFormat.getInstance(pattern, timeZone, locale)
 
   protected def toMillis(s: String): Long = format.parse(s).getTime
@@ -90,21 +103,21 @@ class LegacyDateTimeFormatter(
   }
 }
 
-class LegacyFallbackDateTimeFormatter(
+class LegacyFallbackTimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
-    locale: Locale) extends LegacyDateTimeFormatter(pattern, timeZone, locale) {
+    locale: Locale) extends LegacyTimestampFormatter(pattern, timeZone, locale) {
   override def toMillis(s: String): Long = {
     Try {super.toMillis(s)}.getOrElse(DateTimeUtils.stringToTime(s).getTime)
   }
 }
 
-object DateTimeFormatter {
-  def apply(format: String, timeZone: TimeZone, locale: Locale): DateTimeFormatter = {
+object TimestampFormatter {
+  def apply(format: String, timeZone: TimeZone, locale: Locale): TimestampFormatter = {
     if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyFallbackDateTimeFormatter(format, timeZone, locale)
+      new LegacyFallbackTimestampFormatter(format, timeZone, locale)
     } else {
-      new Iso8601DateTimeFormatter(format, timeZone, locale)
+      new Iso8601TimestampFormatter(format, timeZone, locale)
     }
   }
 }
@@ -116,13 +129,19 @@ sealed trait DateFormatter {
 
 class Iso8601DateFormatter(
     pattern: String,
-    timeZone: TimeZone,
-    locale: Locale) extends DateFormatter {
+    locale: Locale) extends DateFormatter with FormatterUtils {
 
-  val dateTimeFormatter = new Iso8601DateTimeFormatter(pattern, timeZone, locale)
+  val zoneId = ZoneId.of("UTC")
+
+  val formatter = buildFormatter(pattern, locale)
+
+  def toInstant(s: String): Instant = {
+    val temporalAccessor = formatter.parse(s)
+    toInstantWithZoneId(temporalAccessor)
+  }
 
   override def parse(s: String): Int = {
-    val seconds = dateTimeFormatter.toInstant(s).getEpochSecond
+    val seconds = toInstant(s).getEpochSecond
     val days = Math.floorDiv(seconds, DateTimeUtils.SECONDS_PER_DAY)
 
     days.toInt
@@ -130,15 +149,12 @@ class Iso8601DateFormatter(
 
   override def format(days: Int): String = {
     val instant = Instant.ofEpochSecond(days * DateTimeUtils.SECONDS_PER_DAY)
-    dateTimeFormatter.formatter.withZone(timeZone.toZoneId).format(instant)
+    formatter.withZone(zoneId).format(instant)
   }
 }
 
-class LegacyDateFormatter(
-    pattern: String,
-    timeZone: TimeZone,
-    locale: Locale) extends DateFormatter {
-  val format = FastDateFormat.getInstance(pattern, timeZone, locale)
+class LegacyDateFormatter(pattern: String, locale: Locale) extends DateFormatter {
+  val format = FastDateFormat.getInstance(pattern, locale)
 
   def parse(s: String): Int = {
     val milliseconds = format.parse(s).getTime
@@ -153,8 +169,7 @@ class LegacyDateFormatter(
 
 class LegacyFallbackDateFormatter(
     pattern: String,
-    timeZone: TimeZone,
-    locale: Locale) extends LegacyDateFormatter(pattern, timeZone, locale) {
+    locale: Locale) extends LegacyDateFormatter(pattern, locale) {
   override def parse(s: String): Int = {
     Try(super.parse(s)).orElse {
       // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
@@ -169,11 +184,11 @@ class LegacyFallbackDateFormatter(
 }
 
 object DateFormatter {
-  def apply(format: String, timeZone: TimeZone, locale: Locale): DateFormatter = {
+  def apply(format: String, locale: Locale): DateFormatter = {
     if (SQLConf.get.legacyTimeParserEnabled) {
-      new LegacyFallbackDateFormatter(format, timeZone, locale)
+      new LegacyFallbackDateFormatter(format, locale)
     } else {
-      new Iso8601DateFormatter(format, timeZone, locale)
+      new Iso8601DateFormatter(format, locale)
     }
   }
 }

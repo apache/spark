@@ -74,11 +74,11 @@ class UnivocityParser(
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
-  private val timeFormatter = DateTimeFormatter(
+  private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)
-  private val dateFormatter = DateFormatter(options.dateFormat, options.timeZone, options.locale)
+  private val dateFormatter = DateFormatter(options.dateFormat, options.locale)
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
@@ -158,7 +158,7 @@ class UnivocityParser(
       }
 
     case _: TimestampType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(timeFormatter.parse)
+      nullSafeDatum(d, name, nullable, options)(timestampFormatter.parse)
 
     case _: DateType => (d: String) =>
       nullSafeDatum(d, name, nullable, options)(dateFormatter.parse)
