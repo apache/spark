@@ -27,18 +27,20 @@ import org.apache.spark.internal.Logging
 private[spark] class KerberosConfExecutorFeatureStep(conf: KubernetesExecutorConf)
   extends KubernetesFeatureConfigStep with Logging {
 
-  private val maybeKrb5CMap = conf.getOption(KRB5_CONFIG_MAP_NAME)
-  require(maybeKrb5CMap.isDefined, "HADOOP_CONF_DIR ConfigMap not found")
-
   override def configurePod(pod: SparkPod): SparkPod = {
-    logInfo(s"Mounting Resources for Kerberos")
-    HadoopBootstrapUtil.bootstrapKerberosPod(
-      conf.get(KERBEROS_DT_SECRET_NAME),
-      conf.get(KERBEROS_DT_SECRET_KEY),
-      conf.get(KERBEROS_SPARK_USER_NAME),
-      None,
-      None,
-      maybeKrb5CMap,
-      pod)
+    val maybeKrb5CMap = conf.getOption(KRB5_CONFIG_MAP_NAME)
+    if (maybeKrb5CMap.isDefined) {
+      logInfo(s"Mounting Resources for Kerberos")
+      HadoopBootstrapUtil.bootstrapKerberosPod(
+        conf.get(KERBEROS_DT_SECRET_NAME),
+        conf.get(KERBEROS_DT_SECRET_KEY),
+        conf.get(KERBEROS_SPARK_USER_NAME),
+        None,
+        None,
+        maybeKrb5CMap,
+        pod)
+    } else {
+      pod
+    }
   }
 }

@@ -246,9 +246,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     val analyzedPlan = df.queryExecution.analyzed
     df.queryExecution.assertAnalyzed()
 
-    if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
-      UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
-    }
+    val operationCheckEnabled = sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled
 
     if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
       logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
@@ -257,7 +255,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
     (sink, trigger) match {
       case (v2Sink: StreamingWriteSupportProvider, trigger: ContinuousTrigger) =>
-        if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
+        if (operationCheckEnabled) {
           UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
         }
         new StreamingQueryWrapper(new ContinuousExecution(
@@ -272,6 +270,9 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           extraOptions,
           deleteCheckpointOnStop))
       case _ =>
+        if (operationCheckEnabled) {
+          UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
+        }
         new StreamingQueryWrapper(new MicroBatchExecution(
           sparkSession,
           userSpecifiedName.orNull,
