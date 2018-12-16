@@ -681,4 +681,18 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         Row("S2", "P2", 300, 300, 500)))
 
   }
+
+  test("NaN and -0.0 in window partition keys") {
+    val df = Seq(
+      (Float.NaN, Double.NaN, 1),
+      (0.0f/0.0f, 0.0/0.0, 1),
+      (0.0f, 0.0, 1),
+      (-0.0f, -0.0, 1)).toDF("f", "d", "i")
+    val result = df.select($"f", count("i").over(Window.partitionBy("f", "d")))
+    checkAnswer(result, Seq(
+      Row(Float.NaN, 2),
+      Row(Float.NaN, 2),
+      Row(0.0f, 2),
+      Row(0.0f, 2)))
+  }
 }

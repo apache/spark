@@ -255,32 +255,45 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
 
     private void advanceToNextPage() {
-      synchronized (this) {
-        int nextIdx = dataPages.indexOf(currentPage) + 1;
-        if (destructive && currentPage != null) {
-          dataPages.remove(currentPage);
-          freePage(currentPage);
-          nextIdx --;
+      // SPARK-26265: We will first lock this `MapIterator` and then `TaskMemoryManager` when going
+      // to free a memory page by calling `freePage`. At the same time, it is possibly that another
+      // memory consumer first locks `TaskMemoryManager` and then this `MapIterator` when it
+      // acquires memory and causes spilling on this `MapIterator`. To avoid deadlock here, we keep
+      // reference to the page to free and free it after releasing the lock of `MapIterator`.
+      MemoryBlock pageToFree = null;
+
+      try {
+        synchronized (this) {
+          int nextIdx = dataPages.indexOf(currentPage) + 1;
+          if (destructive && currentPage != null) {
+            dataPages.remove(currentPage);
+            pageToFree = currentPage;
+            nextIdx--;
+          }
+          if (dataPages.size() > nextIdx) {
+            currentPage = dataPages.get(nextIdx);
+            pageBaseObject = currentPage.getBaseObject();
+            offsetInPage = currentPage.getBaseOffset();
+            recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
+            offsetInPage += UnsafeAlignedOffset.getUaoSize();
+          } else {
+            currentPage = null;
+            if (reader != null) {
+              handleFailedDelete();
+            }
+            try {
+              Closeables.close(reader, /* swallowIOException = */ false);
+              reader = spillWriters.getFirst().getReader(serializerManager);
+              recordsInPage = -1;
+            } catch (IOException e) {
+              // Scala iterator does not handle exception
+              Platform.throwException(e);
+            }
+          }
         }
-        if (dataPages.size() > nextIdx) {
-          currentPage = dataPages.get(nextIdx);
-          pageBaseObject = currentPage.getBaseObject();
-          offsetInPage = currentPage.getBaseOffset();
-          recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
-          offsetInPage += UnsafeAlignedOffset.getUaoSize();
-        } else {
-          currentPage = null;
-          if (reader != null) {
-            handleFailedDelete();
-          }
-          try {
-            Closeables.close(reader, /* swallowIOException = */ false);
-            reader = spillWriters.getFirst().getReader(serializerManager);
-            recordsInPage = -1;
-          } catch (IOException e) {
-            // Scala iterator does not handle exception
-            Platform.throwException(e);
-          }
+      } finally {
+        if (pageToFree != null) {
+          freePage(pageToFree);
         }
       }
     }
@@ -329,52 +342,50 @@ public final class BytesToBytesMap extends MemoryConsumer {
       }
     }
 
-    public long spill(long numBytes) throws IOException {
-      synchronized (this) {
-        if (!destructive || dataPages.size() == 1) {
-          return 0L;
-        }
-
-        updatePeakMemoryUsed();
-
-        // TODO: use existing ShuffleWriteMetrics
-        ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
-
-        long released = 0L;
-        while (dataPages.size() > 0) {
-          MemoryBlock block = dataPages.getLast();
-          // The currentPage is used, cannot be released
-          if (block == currentPage) {
-            break;
-          }
-
-          Object base = block.getBaseObject();
-          long offset = block.getBaseOffset();
-          int numRecords = UnsafeAlignedOffset.getSize(base, offset);
-          int uaoSize = UnsafeAlignedOffset.getUaoSize();
-          offset += uaoSize;
-          final UnsafeSorterSpillWriter writer =
-            new UnsafeSorterSpillWriter(blockManager, 32 * 1024, writeMetrics, numRecords);
-          while (numRecords > 0) {
-            int length = UnsafeAlignedOffset.getSize(base, offset);
-            writer.write(base, offset + uaoSize, length, 0);
-            offset += uaoSize + length + 8;
-            numRecords--;
-          }
-          writer.close();
-          spillWriters.add(writer);
-
-          dataPages.removeLast();
-          released += block.size();
-          freePage(block);
-
-          if (released >= numBytes) {
-            break;
-          }
-        }
-
-        return released;
+    public synchronized long spill(long numBytes) throws IOException {
+      if (!destructive || dataPages.size() == 1) {
+        return 0L;
       }
+
+      updatePeakMemoryUsed();
+
+      // TODO: use existing ShuffleWriteMetrics
+      ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
+
+      long released = 0L;
+      while (dataPages.size() > 0) {
+        MemoryBlock block = dataPages.getLast();
+        // The currentPage is used, cannot be released
+        if (block == currentPage) {
+          break;
+        }
+
+        Object base = block.getBaseObject();
+        long offset = block.getBaseOffset();
+        int numRecords = UnsafeAlignedOffset.getSize(base, offset);
+        int uaoSize = UnsafeAlignedOffset.getUaoSize();
+        offset += uaoSize;
+        final UnsafeSorterSpillWriter writer =
+                new UnsafeSorterSpillWriter(blockManager, 32 * 1024, writeMetrics, numRecords);
+        while (numRecords > 0) {
+          int length = UnsafeAlignedOffset.getSize(base, offset);
+          writer.write(base, offset + uaoSize, length, 0);
+          offset += uaoSize + length + 8;
+          numRecords--;
+        }
+        writer.close();
+        spillWriters.add(writer);
+
+        dataPages.removeLast();
+        released += block.size();
+        freePage(block);
+
+        if (released >= numBytes) {
+          break;
+        }
+      }
+
+      return released;
     }
 
     @Override

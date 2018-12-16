@@ -44,7 +44,7 @@ case class WindowInPandasExec(
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (partitionSpec.isEmpty) {
-      // Only show warning when the number of bytes is larger than 100 MB?
+      // Only show warning when the number of bytes is larger than 100 MiB?
       logWarning("No Partition Defined for Window operation! Moving all data to a single "
         + "partition, this can cause serious performance degradation.")
       AllTuples :: Nil

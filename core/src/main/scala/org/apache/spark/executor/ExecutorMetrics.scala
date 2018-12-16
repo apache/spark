@@ -27,17 +27,15 @@ import org.apache.spark.metrics.ExecutorMetricType
  */
 @DeveloperApi
 class ExecutorMetrics private[spark] extends Serializable {
-
-  // Metrics are indexed by ExecutorMetricType.values
-  private val metrics = new Array[Long](ExecutorMetricType.values.length)
-
+  // Metrics are indexed by ExecutorMetricType.metricToOffset
+  private val metrics = new Array[Long](ExecutorMetricType.numMetrics)
   // the first element is initialized to -1, indicating that the values for the array
   // haven't been set yet.
   metrics(0) = -1
 
-  /** Returns the value for the specified metricType. */
-  def getMetricValue(metricType: ExecutorMetricType): Long = {
-    metrics(ExecutorMetricType.metricIdxMap(metricType))
+  /** Returns the value for the specified metric. */
+  def getMetricValue(metricName: String): Long = {
+    metrics(ExecutorMetricType.metricToOffset(metricName))
   }
 
   /** Returns true if the values for the metrics have been set, false otherwise. */
@@ -49,14 +47,14 @@ class ExecutorMetrics private[spark] extends Serializable {
   }
 
   /**
-   * Constructor: create the ExecutorMetrics with the values specified.
+   * Constructor: create the ExecutorMetrics with using a given map.
    *
    * @param executorMetrics map of executor metric name to value
    */
   private[spark] def this(executorMetrics: Map[String, Long]) {
     this()
-    (0 until ExecutorMetricType.values.length).foreach { idx =>
-      metrics(idx) = executorMetrics.getOrElse(ExecutorMetricType.values(idx).name, 0L)
+    ExecutorMetricType.metricToOffset.foreach { case(name, idx) =>
+      metrics(idx) = executorMetrics.getOrElse(name, 0L)
     }
   }
 
@@ -69,9 +67,8 @@ class ExecutorMetrics private[spark] extends Serializable {
    */
   private[spark] def compareAndUpdatePeakValues(executorMetrics: ExecutorMetrics): Boolean = {
     var updated = false
-
-    (0 until ExecutorMetricType.values.length).foreach { idx =>
-       if (executorMetrics.metrics(idx) > metrics(idx)) {
+    (0 until ExecutorMetricType.numMetrics).foreach { idx =>
+      if (executorMetrics.metrics(idx) > metrics(idx)) {
         updated = true
         metrics(idx) = executorMetrics.metrics(idx)
       }
