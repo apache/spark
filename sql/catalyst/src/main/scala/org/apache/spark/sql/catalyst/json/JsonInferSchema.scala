@@ -38,6 +38,14 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
+  @transient
+  private lazy val timestampFormatter = TimestampFormatter(
+    options.timestampFormat,
+    options.timeZone,
+    options.locale)
+  @transient
+  private lazy val dateFormatter = DateFormatter(options.dateFormat, options.locale)
+
   /**
    * Infer the type of a collection of json records in three stages:
    *   1. Infer the type of each record
@@ -124,21 +132,10 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         decimalTry.getOrElse(StringType)
       case VALUE_STRING =>
         val stringValue = parser.getText
-        val dateTry = allCatch opt {
-          val pos = new ParsePosition(0)
-          options.dateFormat.parse(stringValue, pos)
-          if (pos.getErrorIndex != -1 || pos.getIndex != stringValue.length) {
-            throw new IllegalArgumentException(
-              s"$stringValue cannot be parsed as ${DateType.simpleString}")
-          }
-        }
-        if (dateTry.isDefined) {
+        if ((allCatch opt timestampFormatter.parse(stringValue)).isDefined) {
+          TimestampType
+        } else if ((allCatch opt dateFormatter.parse(stringValue)).isDefined) {
           DateType
-        } else if ((allCatch opt options.timestampFormat.parse(stringValue)).isDefined) {
-          TimestampType
-        } else if ((allCatch opt DateTimeUtils.stringToTime(stringValue)).isDefined) {
-          // We keep this for backwards compatibility.
-          TimestampType
         } else {
           StringType
         }

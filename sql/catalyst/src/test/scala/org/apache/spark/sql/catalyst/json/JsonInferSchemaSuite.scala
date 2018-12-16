@@ -62,7 +62,7 @@ class JsonInferSchemaSuite extends SparkFunSuite {
     checkDateType("yyyy-MM-dd", """{"a": "2018-12-02"}""")
   }
 
-  test("inferring the date type before timestamps") {
+  test("strict inferring of date and timestamps") {
     checkType(
       options = Map(
         "dateFormat" -> "yyyy-MM-dd",
