@@ -170,7 +170,7 @@ case class FileSourceScanExec(
   val driverMetrics: HashMap[String, Long] = HashMap.empty
 
   /**
-   * Send the driver-side metrics, while this function calling, selectedPartitions has
+   * Send the driver-side metrics. Before calling this function, selectedPartitions has
    * been initialized. See SPARK-26327 for more details.
    */
   private def sendDriverMetrics(): Unit = {
