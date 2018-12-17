@@ -2814,16 +2814,13 @@ See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections f
 
 **Notes**
 
-- There're couple of configurations which are not modifiable once you run the query. If you really want to make changes for these configurations, you have to discard checkpoint and start a new query.
+- Several configurations are not modifiable after the query has run. To change them, discard the checkpoint and start a new query. These configurations include:
   - `spark.sql.shuffle.partitions`
     - This is due to the physical partitioning of state: state is partitioned via applying hash function to key, hence the number of partitions for state should be unchanged.
-    - If you want to run less tasks for stateful operations, `coalesce` would help with avoiding unnecessary repartitioning.
-      - e.g. `df.groupBy("time").count().coalesce(10)` reduces the number of tasks by 10, whereas `spark.sql.shuffle.partitions` may be bigger.
+    - If you want to run fewer tasks for stateful operations, `coalesce` would help with avoiding unnecessary repartitioning.
       - After `coalesce`, the number of (reduced) tasks will be kept unless another shuffle happens.
-  - `spark.sql.streaming.stateStore.providerClass`
-    - To read previous state of the query properly, the class of state store provider should be unchanged.
-  - `spark.sql.streaming.multipleWatermarkPolicy`
-    - Modification of this would lead inconsistent watermark value when query contains multiple watermarks, hence the policy should be unchanged.
+  - `spark.sql.streaming.stateStore.providerClass`: To read the previous state of the query properly, the class of state store provider should be unchanged.
+  - `spark.sql.streaming.multipleWatermarkPolicy`: Modification of this would lead inconsistent watermark value when query contains multiple watermarks, hence the policy should be unchanged.
 
 **Further Reading**
 
