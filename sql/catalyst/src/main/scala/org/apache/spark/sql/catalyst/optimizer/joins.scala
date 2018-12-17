@@ -99,13 +99,28 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         createOrderedJoin(input, conditions)
       }
 
-      if (p.sameOutput(reordered)) {
+      if (sameOutput(p, reordered)) {
         reordered
       } else {
         // Reordering the joins have changed the order of the columns.
         // Inject a projection to make sure we restore to the expected ordering.
         Project(p.output, reordered)
       }
+  }
+
+  /**
+   * Returns true iff output of both plans are semantically the same, ie.:
+   *  - they contain the same number of `Attribute`s;
+   *  - references are the same;
+   *  - the order is equal too.
+   * NOTE: this is copied over from SPARK-25691 from master.
+   */
+  def sameOutput(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
+    val output1 = plan1.output
+    val output2 = plan2.output
+    output1.length == output2.length && output1.zip(output2).forall {
+      case (a1, a2) => a1.semanticEquals(a2)
+    }
   }
 }
 
