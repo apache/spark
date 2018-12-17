@@ -70,8 +70,7 @@ import org.apache.spark.util.Utils
  * (1) Bounded window takes the window bound indices in addition to the input columns.
  *     Unbounded window takes only input columns.
  * (2) Bounded window evaluates the udf once per input row.
- *     Unbounded window evaluates the udf once per window partition. (Because the udf
- *     is deterministic and window bounds are the same for all input rows)
+ *     Unbounded window evaluates the udf once per window partition.
  * This is controlled by Python runner conf "pandas_window_bound_types"
  *
  * The logic to compute window bounds is delegated to [[WindowFunctionFrame]] and shared with
@@ -126,7 +125,7 @@ case class WindowInPandasExec(
   private object UnboundedWindow extends WindowBoundType("unbounded")
   private object BoundedWindow extends WindowBoundType("bounded")
 
-  private val WindowBoundTypeConf = "pandas_window_bound_types"
+  private val windowBoundTypeConf = "pandas_window_bound_types"
 
   private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
     udf.children match {
@@ -146,8 +145,7 @@ case class WindowInPandasExec(
   private def computeWindowBoundHelpers(
       factories: Seq[InternalRow => WindowFunctionFrame]
   ): WindowBoundHelpers = {
-    val dummyRow = EmptyRow
-    val functionFrames = factories.map(_(dummyRow))
+    val functionFrames = factories.map(_(EmptyRow))
 
     val windowBoundTypes = functionFrames.map {
       case _: UnboundedWindowFunctionFrame => UnboundedWindow
@@ -184,7 +182,7 @@ case class WindowInPandasExec(
     // Unwrap the expressions and factories from the map.
     val expressionsWithFrameIndex =
       windowFrameExpressionFactoryPairs.map(_._1).zipWithIndex.flatMap {
-        case (buffer, frameIndex) => buffer.map( expr => (expr, frameIndex))
+        case (buffer, frameIndex) => buffer.map(expr => (expr, frameIndex))
       }
 
     val expressions = expressionsWithFrameIndex.map(_._1)
@@ -193,14 +191,14 @@ case class WindowInPandasExec(
 
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
 
+    // Helper functions
     val (numBoundIndices, lowerBoundIndex, upperBoundIndex, frameWindowBoundTypes) =
       computeWindowBoundHelpers(factories)
-
+    val isBounded = { frameIndex: Int => lowerBoundIndex(frameIndex) >= 0 }
     val numFrames = factories.length
 
     val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
     val spillThreshold = conf.windowExecBufferSpillThreshold
-
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
 
     // Extract window expressions and window functions
@@ -215,10 +213,11 @@ case class WindowInPandasExec(
     val udfWindowBoundTypes = pyFuncs.indices.map(i =>
       frameWindowBoundTypes(expressionIndexToFrameIndex(i)))
     val pythonRunnerConf: Map[String, String] = (ArrowUtils.getPythonRunnerConfMap(conf)
-      + (WindowBoundTypeConf -> udfWindowBoundTypes.map(_.value).mkString(",")))
+      + (windowBoundTypeConf -> udfWindowBoundTypes.map(_.value).mkString(",")))
 
     // Filter child output attributes down to only those that are UDF inputs.
-    // Also eliminate duplicate UDF inputs.
+    // Also eliminate duplicate UDF inputs. This is similar to how other Python UDF node
+    // handles UDF inputs.
     val dataInputs = new ArrayBuffer[Expression]
     val dataInputTypes = new ArrayBuffer[DataType]
     val argOffsets = inputs.map { input =>
@@ -233,9 +232,15 @@ case class WindowInPandasExec(
       }.toArray
     }.toArray
 
-    // Add window indices to allInputs, dataTypes and argOffsets
-    val indiceInputs = factories.indices.flatMap { frameIndex =>
-      if (lowerBoundIndex(frameIndex) >= 0) {
+    // In addition to UDF inputs, we will prepend window bounds for each UDFs.
+    // For bounded windows, we prepend lower bound and upper bound. For unbounded windows,
+    // we no not add window bounds. (strictly speaking, we only need to lower or upper bound
+    // if the window is bounded only on one side, this can be improved in the future)
+
+    // Setting window bounds for each window frames. Each window frame has different bounds so
+    // each has its own window bound columns.
+    val windowBoundsInput = factories.indices.flatMap { frameIndex =>
+      if (isBounded(frameIndex)) {
         Seq(
           BoundReference(lowerBoundIndex(frameIndex), IntegerType, nullable = false),
           BoundReference(upperBoundIndex(frameIndex), IntegerType, nullable = false)
@@ -245,18 +250,21 @@ case class WindowInPandasExec(
       }
     }
 
+    // Setting the window bounds argOffset for each UDF. For UDFs with bounded window, argOffset
+    // for the UDF is (lowerBoundOffet, upperBoundOffset, inputOffset1, inputOffset2, ...)
+    // For UDFs with unbounded window, argOffset is (inputOffset1, inputOffset2, ...)
     pyFuncs.indices.foreach { exprIndex =>
       val frameIndex = expressionIndexToFrameIndex(exprIndex)
-      if (lowerBoundIndex(frameIndex) >= 0) {
+      if (isBounded(frameIndex)) {
         argOffsets(exprIndex) =
           Array(lowerBoundIndex(frameIndex), upperBoundIndex(frameIndex)) ++
-            argOffsets(exprIndex).map(_ + indiceInputs.length)
+            argOffsets(exprIndex).map(_ + windowBoundsInput.length)
       } else {
-        argOffsets(exprIndex) = argOffsets(exprIndex).map(_ + indiceInputs.length)
+        argOffsets(exprIndex) = argOffsets(exprIndex).map(_ + windowBoundsInput.length)
       }
     }
 
-    val allInputs = indiceInputs ++ dataInputs
+    val allInputs = windowBoundsInput ++ dataInputs
     val allInputTypes = allInputs.map(_.dataType)
 
     // Start processing.
@@ -267,7 +275,7 @@ case class WindowInPandasExec(
       val resultProj = createResultProjection(expressions)
       val pythonInputProj = UnsafeProjection.create(
         allInputs,
-        indiceInputs.map(ref =>
+        windowBoundsInput.map(ref =>
           AttributeReference(s"i_${ref.ordinal}", ref.dataType)()) ++ child.output
       )
       val pythonInputSchema = StructType(
@@ -361,9 +369,8 @@ case class WindowInPandasExec(
               var frameIndex = 0
               while (frameIndex < numFrames) {
                 frames(frameIndex).write(index, current)
-                // If lowerBoundIndex of frame is < 0, it means the window is unbounded
-                // and we don't need to write out window bounds.
-                if (lowerBoundIndex(frameIndex) >= 0) {
+                // If the window is unbounded we don't need to write out window bounds.
+                if (isBounded(frameIndex)) {
                   indexRow.setInt(
                     lowerBoundIndex(frameIndex), frames(frameIndex).currentLowerBound())
                   indexRow.setInt(
