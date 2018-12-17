@@ -178,7 +178,7 @@ case class FileSourceScanExec(
     val fileListingPhase = relation.location.fileListingPhase
     if (fileListingPhase.isDefined) {
       val phase = fileListingPhase.get
-      driverMetrics("fileListingTime") = phase.durationMs
+      driverMetrics("metadataTime") = phase.durationMs
       driverMetrics("fileListingStart") = phase.startTimeMs
       driverMetrics("fileListingEnd") = phase.endTimeMs
     }
@@ -328,7 +328,7 @@ case class FileSourceScanExec(
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"),
-      "fileListingTime" -> SQLMetrics.createMetric(sparkContext, "file listing time (ms)"),
+      "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time (ms)"),
       "fileListingStart" -> SQLMetrics.createTimestampMetric(sparkContext, "file listing start"),
       "fileListingEnd" -> SQLMetrics.createTimestampMetric(sparkContext, "file listing end"))
 

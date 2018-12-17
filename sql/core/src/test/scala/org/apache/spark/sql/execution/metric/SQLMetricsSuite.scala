@@ -574,7 +574,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       // Check file listing duration and timestamp not change.
       assert(metrics2("fileListingStart").value == metrics1("fileListingStart").value)
       assert(metrics2("fileListingEnd").value == metrics1("fileListingEnd").value)
-      assert(metrics2("fileListingTime").value == metrics1("fileListingTime").value)
+      assert(metrics2("metadataTime").value == metrics1("metadataTime").value)
     }
   }
 
