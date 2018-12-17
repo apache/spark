@@ -239,4 +239,16 @@ class ReplaceOperatorSuite extends PlanTest {
         basePlan)).analyze
     comparePlans(result, correctAnswer)
   }
+
+  test("SPARK-26366: ReplaceExceptWithFilter should not transform non-detrministic") {
+    val basePlan = LocalRelation(Seq('a.int, 'b.int))
+    val otherPlan = basePlan.where('a > rand(1L))
+    val except = Except(basePlan, otherPlan, false)
+    val result = Optimize.execute(except.analyze)
+    val condition = basePlan.output.zip(otherPlan.output).map { case (a1, a2) =>
+      a1 <=> a2 }.reduce( _ && _)
+    val correctAnswer = Aggregate(basePlan.output, otherPlan.output,
+      Join(basePlan, otherPlan, LeftAnti, Option(condition))).analyze
+    comparePlans(result, correctAnswer)
+  }
 }
