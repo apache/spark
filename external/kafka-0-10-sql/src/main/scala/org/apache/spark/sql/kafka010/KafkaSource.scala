@@ -243,7 +243,7 @@ private[kafka010] class KafkaSource(
     val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
     if (deletedPartitions.nonEmpty) {
       val message = if (kafkaReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-        s"$deletedPartitions are gone. " + KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE
+        s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
       } else {
         s"$deletedPartitions are gone. Some data may have been missed"
       }
