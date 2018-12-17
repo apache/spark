@@ -19,6 +19,7 @@ package org.apache.spark.metrics
 import java.lang.management.{BufferPoolMXBean, ManagementFactory}
 import javax.management.ObjectName
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.executor.ProcfsMetricsGetter
@@ -99,6 +100,61 @@ case object ProcessTreeMetrics extends ExecutorMetricType {
   }
 }
 
+case object GarbageCollectionMetrics extends ExecutorMetricType {
+  import GC_TYPE._
+  override val names = Seq(
+    "MinorGCCount",
+    "MinorGCTime",
+    "MajorGCCount",
+    "MajorGCTime"
+  )
+  override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
+    var allMetrics = GCMetrics(0, 0, 0, 0)
+    ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
+      val metrics = mxBean.getName match {
+        case `copy` | `psScavenge` | `parNew` | `g1Young` =>
+          GCMetrics(mxBean.getCollectionCount, mxBean.getCollectionTime, 0, 0)
+        case `markSweepCompact` | `psMarkSweep` | `cms` | `g1Old` =>
+          GCMetrics(0, 0, mxBean.getCollectionCount, mxBean.getCollectionTime)
+        case _ =>
+          GCMetrics(0, 0, 0, 0)
+      }
+      allMetrics += metrics
+    }
+    val gcMetricsAsSet = new Array[Long](names.size)
+    gcMetricsAsSet(0) = allMetrics.minorCount
+    gcMetricsAsSet(1) = allMetrics.minorTime
+    gcMetricsAsSet(2) = allMetrics.majorCount
+    gcMetricsAsSet(3) = allMetrics.majorTime
+    gcMetricsAsSet
+  }
+}
+
+private[spark] object GC_TYPE {
+  // Young Gen
+  val copy = "Copy"
+  val psScavenge = "PS Scavenge"
+  val parNew = "ParNew"
+  val g1Young = "G1 Young Generation"
+
+  // Old Gen
+  val markSweepCompact = "MarkSweepCompact"
+  val psMarkSweep = "PS MarkSweep"
+  val cms = "ConcurrentMarkSweep"
+  val g1Old = "G1 Old Generation"
+}
+
+private[spark] case class GCMetrics(
+    minorCount: Long,
+    minorTime: Long,
+    majorCount: Long,
+    majorTime: Long) {
+  def + (other: GCMetrics): GCMetrics = {
+    GCMetrics(this.minorCount + other.minorCount, this.minorTime + other.minorTime,
+      this.majorCount + other.majorCount, this.majorTime + other.majorTime)
+  }
+}
+
 case object OnHeapExecutionMemory extends MemoryManagerExecutorMetricType(
   _.onHeapExecutionMemoryUsed)
 
@@ -137,7 +193,8 @@ private[spark] object ExecutorMetricType {
     OffHeapUnifiedMemory,
     DirectPoolMemory,
     MappedPoolMemory,
-    ProcessTreeMetrics
+    ProcessTreeMetrics,
+    GarbageCollectionMetrics
   )
 
 
