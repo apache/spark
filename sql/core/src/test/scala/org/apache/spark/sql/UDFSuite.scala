@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable
+import java.math.BigDecimal
+
 import org.apache.spark.sql.api.java._
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -26,7 +30,7 @@ import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationComm
 import org.apache.spark.sql.functions.{lit, udf}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
-import org.apache.spark.sql.types.{DataTypes, DecimalType, DoubleType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.QueryExecutionListener
 
 
@@ -423,11 +427,29 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-26308: udf with decimal") {
     val df1 = spark.createDataFrame(
-      sparkContext.parallelize(Seq(Row(new java.math.BigDecimal("2011000000000002456556")))),
+      sparkContext.parallelize(Seq(Row(new BigDecimal("2011000000000002456556")))),
       StructType(Seq(StructField("col1", DecimalType(30, 0)))))
-    val udf1 = org.apache.spark.sql.functions.udf((value: java.math.BigDecimal) => {
+    val udf1 = org.apache.spark.sql.functions.udf((value: BigDecimal) => {
       if (value == null) null else value.toBigInteger.toString
     })
     checkAnswer(df1.select(udf1(df1.col("col1"))), Seq(Row("2011000000000002456556")))
+  }
+
+  test("SPARK-26308: udf with complex types of decimal") {
+    val df1 = spark.createDataFrame(
+      sparkContext.parallelize(Seq(Row(Array(new BigDecimal("2011000000000002456556"))))),
+      StructType(Seq(StructField("col1", ArrayType(DecimalType(30, 0))))))
+    val udf1 = org.apache.spark.sql.functions.udf((arr: mutable.WrappedArray[BigDecimal]) => {
+      arr.map(value => if (value == null) null else value.toBigInteger.toString)
+    })
+    checkAnswer(df1.select(udf1(df1.col("col1"))), Seq(Row(Array("2011000000000002456556"))))
+
+    val df2 = spark.createDataFrame(
+      sparkContext.parallelize(Seq(Row(Map("a" -> new BigDecimal("2011000000000002456556"))))),
+      StructType(Seq(StructField("col1", MapType(StringType, DecimalType(30, 0))))))
+    val udf2 = org.apache.spark.sql.functions.udf((map: Map[String, BigDecimal]) => {
+      map.mapValues(value => if (value == null) null else value.toBigInteger.toString)
+    })
+    checkAnswer(df2.select(udf2(df2.col("col1"))), Seq(Row(Map("a" -> "2011000000000002456556"))))
   }
 }
