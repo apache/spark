@@ -762,6 +762,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
+
   Seq("LOCAL", "").foreach { local =>
     Seq(true, false).foreach { caseSensitivity =>
       Seq("orc", "parquet").foreach { format =>
