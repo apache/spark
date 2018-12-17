@@ -61,6 +61,7 @@ else:
 from pyspark import keyword_only
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
+from pyspark.java_gateway import _launch_gateway
 from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
@@ -2380,6 +2381,34 @@ class ContextTests(unittest.TestCase):
     def test_startTime(self):
         with SparkContext() as sc:
             self.assertGreater(sc.startTime, 0)
+
+    def test_forbid_insecure_gateway(self):
+        # By default, we fail immediately if you try to create a SparkContext
+        # with an insecure gateway
+        gateway = _launch_gateway(insecure=True)
+        with self.assertRaises(Exception) as context:
+            SparkContext(gateway=gateway)
+        self.assertIn("insecure py4j gateway", context.exception.message)
+        self.assertIn("spark.python.allowInsecurePy4j", context.exception.message)
+        self.assertIn("removed in Spark 3.0", context.exception.message)
+
+    def test_allow_insecure_gateway_with_conf(self):
+        with SparkContext._lock:
+            SparkContext._gateway = None
+            SparkContext._jvm = None
+        gateway = _launch_gateway(insecure=True)
+        conf = SparkConf()
+        conf.set("spark.python.allowInsecurePy4j", "true")
+        print("entering allow insecure test")
+        with SparkContext(conf=conf, gateway=gateway) as sc:
+            print("sc created, about to create accum")
+            a = sc.accumulator(1)
+            rdd = sc.parallelize([1,2,3])
+            def f(x):
+                a.add(x)
+            rdd.foreach(f)
+            self.assertEqual(7, a.value)
+        print("exiting allow insecure test")
 
 
 class ConfTests(unittest.TestCase):

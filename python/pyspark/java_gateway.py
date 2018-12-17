@@ -43,6 +43,16 @@ def launch_gateway(conf=None):
     :param conf: spark configuration passed to spark-submit
     :return:
     """
+    return _launch_gateway(conf)
+
+def _launch_gateway(conf=None, insecure=False):
+    """
+    launch jvm gateway
+    :param conf: spark configuration passed to spark-submit
+    :return:
+    """
+    if insecure and not os.environ.get("SPARK_TESTING", "0") == "1":
+        raise Exception("creating insecure gateways is only for testing")
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
         gateway_secret = os.environ["PYSPARK_GATEWAY_SECRET"]
@@ -74,6 +84,8 @@ def launch_gateway(conf=None):
 
             env = dict(os.environ)
             env["_PYSPARK_DRIVER_CONN_INFO_PATH"] = conn_info_file
+            if insecure:
+                env["_PYSPARK_INSECURE_GATEWAY"] = "1"
 
             # Launch the Java gateway.
             # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
@@ -116,9 +128,10 @@ def launch_gateway(conf=None):
             atexit.register(killChild)
 
     # Connect to the gateway
-    gateway = JavaGateway(
-        gateway_parameters=GatewayParameters(port=gateway_port, auth_token=gateway_secret,
-                                             auto_convert=True))
+    gateway_params = GatewayParameters(port=gateway_port, auto_convert=True)
+    if not insecure:
+        gateway_params.auth_token=gateway_secret
+    gateway = JavaGateway(gateway_parameters=gateway_params)
 
     # Import the classes used by PySpark
     java_import(gateway.jvm, "org.apache.spark.SparkConf")
