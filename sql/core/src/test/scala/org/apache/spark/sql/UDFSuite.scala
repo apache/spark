@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationComm
 import org.apache.spark.sql.functions.{lit, udf}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
-import org.apache.spark.sql.types.{DataTypes, DecimalType, DoubleType, StructField, StructType}
+import org.apache.spark.sql.types.{DataTypes, DoubleType}
 import org.apache.spark.sql.util.QueryExecutionListener
 
 
@@ -419,15 +419,5 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       val df = spark.sql("SELECT f(a, b, c) FROM t")
       checkAnswer(df, Seq(Row("null1x"), Row(null), Row("N3null")))
     }
-  }
-
-  test("SPARK-26308: udf with decimal") {
-    val df1 = spark.createDataFrame(
-      sparkContext.parallelize(Seq(Row(new java.math.BigDecimal("2011000000000002456556")))),
-      StructType(Seq(StructField("col1", DecimalType(30, 0)))))
-    val udf1 = org.apache.spark.sql.functions.udf((value: java.math.BigDecimal) => {
-      if (value == null) null else value.toBigInteger.toString
-    })
-    checkAnswer(df1.select(udf1(df1.col("col1"))), Seq(Row("2011000000000002456556")))
   }
 }
