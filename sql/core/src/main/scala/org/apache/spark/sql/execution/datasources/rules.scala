@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -61,7 +61,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         case _: ClassNotFoundException => u
         case e: Exception =>
           // the provider is valid, but failed to create a logical plan
-          u.failAnalysis(e.getMessage, e)
+          u.failAnalysis(e.getMessage)
       }
   }
 }
@@ -117,14 +117,6 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         throw new AnalysisException(s"The format of the existing table $tableName is " +
           s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
           s"`${specifiedProvider.getSimpleName}`.")
-      }
-      tableDesc.storage.locationUri match {
-        case Some(location) if location.getPath != existingTable.location.getPath =>
-          throw new AnalysisException(
-            s"The location of the existing table ${tableIdentWithDB.quotedString} is " +
-              s"`${existingTable.location}`. It doesn't match the specified location " +
-              s"`${tableDesc.location}`.")
-        case _ =>
       }
 
       if (query.schema.length != existingTable.schema.length) {
@@ -186,8 +178,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
       c.copy(
         tableDesc = existingTable,
-        query = Some(DDLPreprocessingUtils.castAndRenameQueryOutput(
-          newQuery, existingTable.schema.toAttributes, conf)))
+        query = Some(newQuery))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
@@ -325,7 +316,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
+case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
@@ -345,8 +336,6 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
-    val newQuery = DDLPreprocessingUtils.castAndRenameQueryOutput(
-      insert.query, expectedColumns, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
@@ -357,11 +346,37 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
            """.stripMargin)
       }
 
-      insert.copy(query = newQuery, partition = normalizedPartSpec)
+      castAndRenameChildOutput(insert.copy(partition = normalizedPartSpec), expectedColumns)
     } else {
       // All partition columns are dynamic because the InsertIntoTable command does
       // not explicitly specify partitioning columns.
-      insert.copy(query = newQuery, partition = partColNames.map(_ -> None).toMap)
+      castAndRenameChildOutput(insert, expectedColumns)
+        .copy(partition = partColNames.map(_ -> None).toMap)
+    }
+  }
+
+  private def castAndRenameChildOutput(
+      insert: InsertIntoTable,
+      expectedOutput: Seq[Attribute]): InsertIntoTable = {
+    val newChildOutput = expectedOutput.zip(insert.query.output).map {
+      case (expected, actual) =>
+        if (expected.dataType.sameType(actual.dataType) &&
+            expected.name == actual.name &&
+            expected.metadata == actual.metadata) {
+          actual
+        } else {
+          // Renaming is needed for handling the following cases like
+          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
+          // 2) Target tables have column metadata
+          Alias(cast(actual, expected.dataType), expected.name)(
+            explicitMetadata = Option(expected.metadata))
+        }
+    }
+
+    if (newChildOutput == insert.query.output) {
+      insert
+    } else {
+      insert.copy(query = Project(newChildOutput, insert.query))
     }
   }
 
@@ -473,39 +488,6 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 
       case _ => // OK
-    }
-  }
-}
-
-object DDLPreprocessingUtils {
-
-  /**
-   * Adjusts the name and data type of the input query output columns, to match the expectation.
-   */
-  def castAndRenameQueryOutput(
-      query: LogicalPlan,
-      expectedOutput: Seq[Attribute],
-      conf: SQLConf): LogicalPlan = {
-    val newChildOutput = expectedOutput.zip(query.output).map {
-      case (expected, actual) =>
-        if (expected.dataType.sameType(actual.dataType) &&
-          expected.name == actual.name &&
-          expected.metadata == actual.metadata) {
-          actual
-        } else {
-          // Renaming is needed for handling the following cases like
-          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
-          // 2) Target tables have column metadata
-          Alias(
-            Cast(actual, expected.dataType, Option(conf.sessionLocalTimeZone)),
-            expected.name)(explicitMetadata = Option(expected.metadata))
-        }
-    }
-
-    if (newChildOutput == query.output) {
-      query
-    } else {
-      Project(newChildOutput, query)
     }
   }
 }

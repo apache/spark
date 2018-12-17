@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -29,7 +26,6 @@ import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.{MicroBatchExecution, StreamExecution}
 import org.apache.spark.sql.execution.streaming.continuous.{CommitPartitionEpoch, ContinuousExecution, EpochCoordinatorRef, SetWriterPartitions}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
@@ -57,7 +53,6 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
       case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
     }
 
-    val useCommitCoordinator = writer.useCommitCoordinator
     val rdd = query.execute()
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
 
@@ -65,10 +60,25 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
       s"The input RDD has ${messages.length} partitions.")
 
     try {
+      val runTask = writer match {
+        // This case means that we're doing continuous processing. In microbatch streaming, the
+        // StreamWriter is wrapped in a MicroBatchWriter, which is executed as a normal batch.
+        case w: StreamWriter =>
+          EpochCoordinatorRef.get(
+            sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
+            sparkContext.env)
+            .askSync[Unit](SetWriterPartitions(rdd.getNumPartitions))
+
+          (context: TaskContext, iter: Iterator[InternalRow]) =>
+            DataWritingSparkTask.runContinuous(writeTask, context, iter)
+        case _ =>
+          (context: TaskContext, iter: Iterator[InternalRow]) =>
+            DataWritingSparkTask.run(writeTask, context, iter)
+      }
+
       sparkContext.runJob(
         rdd,
-        (context: TaskContext, iter: Iterator[InternalRow]) =>
-          DataWritingSparkTask.run(writeTask, context, iter, useCommitCoordinator),
+        runTask,
         rdd.partitions.indices,
         (index, message: WriterCommitMessage) => {
           messages(index) = message
@@ -76,10 +86,14 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
         }
       )
 
-      logInfo(s"Data source writer $writer is committing.")
-      writer.commit(messages)
-      logInfo(s"Data source writer $writer committed.")
+      if (!writer.isInstanceOf[StreamWriter]) {
+        logInfo(s"Data source writer $writer is committing.")
+        writer.commit(messages)
+        logInfo(s"Data source writer $writer committed.")
+      }
     } catch {
+      case _: InterruptedException if writer.isInstanceOf[StreamWriter] =>
+        // Interruption is how continuous queries are ended, so accept and ignore the exception.
       case cause: Throwable =>
         logError(s"Data source writer $writer is aborting.")
         try {
@@ -91,11 +105,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
             throw new SparkException("Writing job failed.", cause)
         }
         logError(s"Data source writer $writer aborted.")
-        cause match {
-          // Only wrap non fatal exceptions.
-          case NonFatal(e) => throw new SparkException("Writing job aborted.", e)
-          case _ => throw cause
-        }
+        throw new SparkException("Writing job aborted.", cause)
     }
 
     sparkContext.emptyRDD
@@ -106,48 +116,60 @@ object DataWritingSparkTask extends Logging {
   def run(
       writeTask: DataWriterFactory[InternalRow],
       context: TaskContext,
-      iter: Iterator[InternalRow],
-      useCommitCoordinator: Boolean): WriterCommitMessage = {
-    val stageId = context.stageId()
-    val partId = context.partitionId()
-    val attemptId = context.attemptNumber()
-    val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).getOrElse("0")
-    val dataWriter = writeTask.createDataWriter(partId, attemptId, epochId.toLong)
+      iter: Iterator[InternalRow]): WriterCommitMessage = {
+    val dataWriter = writeTask.createDataWriter(context.partitionId(), context.attemptNumber())
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-      while (iter.hasNext) {
-        dataWriter.write(iter.next())
-      }
-
-      val msg = if (useCommitCoordinator) {
-        val coordinator = SparkEnv.get.outputCommitCoordinator
-        val commitAuthorized = coordinator.canCommit(context.stageId(), partId, attemptId)
-        if (commitAuthorized) {
-          logInfo(s"Writer for stage $stageId, task $partId.$attemptId is authorized to commit.")
-          dataWriter.commit()
-        } else {
-          val message = s"Stage $stageId, task $partId.$attemptId: driver did not authorize commit"
-          logInfo(message)
-          // throwing CommitDeniedException will trigger the catch block for abort
-          throw new CommitDeniedException(message, stageId, partId, attemptId)
-        }
-
-      } else {
-        logInfo(s"Writer for partition ${context.partitionId()} is committing.")
-        dataWriter.commit()
-      }
-
-      logInfo(s"Writer for stage $stageId, task $partId.$attemptId committed.")
-
+      iter.foreach(dataWriter.write)
+      logInfo(s"Writer for partition ${context.partitionId()} is committing.")
+      val msg = dataWriter.commit()
+      logInfo(s"Writer for partition ${context.partitionId()} committed.")
       msg
-
     })(catchBlock = {
       // If there is an error, abort this writer
-      logError(s"Writer for stage $stageId, task $partId.$attemptId is aborting.")
+      logError(s"Writer for partition ${context.partitionId()} is aborting.")
       dataWriter.abort()
-      logError(s"Writer for stage $stageId, task $partId.$attemptId aborted.")
+      logError(s"Writer for partition ${context.partitionId()} aborted.")
     })
+  }
+
+  def runContinuous(
+      writeTask: DataWriterFactory[InternalRow],
+      context: TaskContext,
+      iter: Iterator[InternalRow]): WriterCommitMessage = {
+    val dataWriter = writeTask.createDataWriter(context.partitionId(), context.attemptNumber())
+    val epochCoordinator = EpochCoordinatorRef.get(
+      context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
+      SparkEnv.get)
+    val currentMsg: WriterCommitMessage = null
+    var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
+
+    do {
+      // write the data and commit this writer.
+      Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
+        try {
+          iter.foreach(dataWriter.write)
+          logInfo(s"Writer for partition ${context.partitionId()} is committing.")
+          val msg = dataWriter.commit()
+          logInfo(s"Writer for partition ${context.partitionId()} committed.")
+          epochCoordinator.send(
+            CommitPartitionEpoch(context.partitionId(), currentEpoch, msg)
+          )
+          currentEpoch += 1
+        } catch {
+          case _: InterruptedException =>
+            // Continuous shutdown always involves an interrupt. Just finish the task.
+        }
+      })(catchBlock = {
+        // If there is an error, abort this writer
+        logError(s"Writer for partition ${context.partitionId()} is aborting.")
+        dataWriter.abort()
+        logError(s"Writer for partition ${context.partitionId()} aborted.")
+      })
+    } while (!context.isInterrupted())
+
+    currentMsg
   }
 }
 
@@ -155,12 +177,9 @@ class InternalRowDataWriterFactory(
     rowWriterFactory: DataWriterFactory[Row],
     schema: StructType) extends DataWriterFactory[InternalRow] {
 
-  override def createDataWriter(
-      partitionId: Int,
-      attemptNumber: Int,
-      epochId: Long): DataWriter[InternalRow] = {
+  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
     new InternalRowDataWriter(
-      rowWriterFactory.createDataWriter(partitionId, attemptNumber, epochId),
+      rowWriterFactory.createDataWriter(partitionId, attemptNumber),
       RowEncoder.apply(schema).resolveAndBind())
   }
 }

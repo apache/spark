@@ -23,6 +23,8 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 
+import org.apache.spark.unsafe.Platform;
+
 /**
  * A simple {@link MemoryAllocator} that can allocate up to 16GB using a JVM long primitive array.
  */
@@ -44,31 +46,28 @@ public class HeapMemoryAllocator implements MemoryAllocator {
 
   @Override
   public MemoryBlock allocate(long size) throws OutOfMemoryError {
-    int numWords = (int) ((size + 7) / 8);
-    long alignedSize = numWords * 8L;
-    assert (alignedSize >= size);
-    if (shouldPool(alignedSize)) {
+    if (shouldPool(size)) {
       synchronized (this) {
-        final LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(alignedSize);
+        final LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(size);
         if (pool != null) {
           while (!pool.isEmpty()) {
             final WeakReference<long[]> arrayReference = pool.pop();
             final long[] array = arrayReference.get();
             if (array != null) {
               assert (array.length * 8L >= size);
-              MemoryBlock memory = OnHeapMemoryBlock.fromArray(array, size);
+              MemoryBlock memory = new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
               if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
                 memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
               }
               return memory;
             }
           }
-          bufferPoolsBySize.remove(alignedSize);
+          bufferPoolsBySize.remove(size);
         }
       }
     }
-    long[] array = new long[numWords];
-    MemoryBlock memory = OnHeapMemoryBlock.fromArray(array, size);
+    long[] array = new long[(int) ((size + 7) / 8)];
+    MemoryBlock memory = new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
     if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
       memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
     }
@@ -77,13 +76,12 @@ public class HeapMemoryAllocator implements MemoryAllocator {
 
   @Override
   public void free(MemoryBlock memory) {
-    assert(memory instanceof OnHeapMemoryBlock);
-    assert (memory.getBaseObject() != null) :
+    assert (memory.obj != null) :
       "baseObject was null; are you trying to use the on-heap allocator to free off-heap memory?";
-    assert (memory.getPageNumber() != MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER) :
+    assert (memory.pageNumber != MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER) :
       "page has already been freed";
-    assert ((memory.getPageNumber() == MemoryBlock.NO_PAGE_NUMBER)
-            || (memory.getPageNumber() == MemoryBlock.FREED_IN_TMM_PAGE_NUMBER)) :
+    assert ((memory.pageNumber == MemoryBlock.NO_PAGE_NUMBER)
+            || (memory.pageNumber == MemoryBlock.FREED_IN_TMM_PAGE_NUMBER)) :
       "TMM-allocated pages must first be freed via TMM.freePage(), not directly in allocator " +
         "free()";
 
@@ -93,20 +91,19 @@ public class HeapMemoryAllocator implements MemoryAllocator {
     }
 
     // Mark the page as freed (so we can detect double-frees).
-    memory.setPageNumber(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER);
+    memory.pageNumber = MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER;
 
     // As an additional layer of defense against use-after-free bugs, we mutate the
     // MemoryBlock to null out its reference to the long[] array.
-    long[] array = ((OnHeapMemoryBlock)memory).getLongArray();
-    memory.resetObjAndOffset();
+    long[] array = (long[]) memory.obj;
+    memory.setObjAndOffset(null, 0);
 
-    long alignedSize = ((size + 7) / 8) * 8;
-    if (shouldPool(alignedSize)) {
+    if (shouldPool(size)) {
       synchronized (this) {
-        LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(alignedSize);
+        LinkedList<WeakReference<long[]>> pool = bufferPoolsBySize.get(size);
         if (pool == null) {
           pool = new LinkedList<>();
-          bufferPoolsBySize.put(alignedSize, pool);
+          bufferPoolsBySize.put(size, pool);
         }
         pool.add(new WeakReference<>(array));
       }

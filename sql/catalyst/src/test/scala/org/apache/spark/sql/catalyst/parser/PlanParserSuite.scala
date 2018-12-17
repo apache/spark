@@ -318,16 +318,6 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "select * from t lateral view posexplode(x) posexpl as x, y",
       expected)
-
-    intercept(
-      """select *
-        |from t
-        |lateral view explode(x) expl
-        |pivot (
-        |  sum(x)
-        |  FOR y IN ('a', 'b')
-        |)""".stripMargin,
-      "LATERAL cannot be used together with PIVOT in FROM clause")
   }
 
   test("joins") {

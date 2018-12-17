@@ -116,7 +116,7 @@ private[columnar] case object PassThrough extends CompressionScheme {
       while (pos < capacity) {
         if (pos != nextNullIndex) {
           val len = nextNullIndex - pos
-          assert(len * unitSize.toLong < Int.MaxValue)
+          assert(len * unitSize < Int.MaxValue)
           putFunction(columnVector, pos, bufferPos, len)
           bufferPos += len * unitSize
           pos += len

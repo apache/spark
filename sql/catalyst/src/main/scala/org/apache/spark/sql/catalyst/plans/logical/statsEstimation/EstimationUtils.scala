@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
 
+
 object EstimationUtils {
 
   /** Check if each plan has rowCount in its statistics. */
@@ -37,18 +38,9 @@ object EstimationUtils {
     }
   }
 
-  /** Check if each attribute has column stat containing distinct and null counts
-   *  in the corresponding statistic. */
-  def columnStatsWithCountsExist(statsAndAttr: (Statistics, Attribute)*): Boolean = {
-    statsAndAttr.forall { case (stats, attr) =>
-      stats.attributeStats.get(attr).map(_.hasCountStats).getOrElse(false)
-    }
-  }
-
-  /** Statistics for a Column containing only NULLs. */
   def nullColumnStat(dataType: DataType, rowCount: BigInt): ColumnStat = {
-    ColumnStat(distinctCount = Some(0), min = None, max = None, nullCount = Some(rowCount),
-      avgLen = Some(dataType.defaultSize), maxLen = Some(dataType.defaultSize))
+    ColumnStat(distinctCount = 0, min = None, max = None, nullCount = rowCount,
+      avgLen = dataType.defaultSize, maxLen = dataType.defaultSize)
   }
 
   /**
@@ -71,33 +63,29 @@ object EstimationUtils {
     AttributeMap(output.flatMap(a => inputMap.get(a).map(a -> _)))
   }
 
-  def getSizePerRow(
+  def getOutputSize(
       attributes: Seq[Attribute],
+      outputRowCount: BigInt,
       attrStats: AttributeMap[ColumnStat] = AttributeMap(Nil)): BigInt = {
     // We assign a generic overhead for a Row object, the actual overhead is different for different
     // Row format.
-    8 + attributes.map { attr =>
-      if (attrStats.get(attr).map(_.avgLen.isDefined).getOrElse(false)) {
+    val sizePerRow = 8 + attributes.map { attr =>
+      if (attrStats.contains(attr)) {
         attr.dataType match {
           case StringType =>
             // UTF8String: base + offset + numBytes
-            attrStats(attr).avgLen.get + 8 + 4
+            attrStats(attr).avgLen + 8 + 4
           case _ =>
-            attrStats(attr).avgLen.get
+            attrStats(attr).avgLen
         }
       } else {
         attr.dataType.defaultSize
       }
     }.sum
-  }
 
-  def getOutputSize(
-      attributes: Seq[Attribute],
-      outputRowCount: BigInt,
-      attrStats: AttributeMap[ColumnStat] = AttributeMap(Nil)): BigInt = {
     // Output size can't be zero, or sizeInBytes of BinaryNode will also be zero
     // (simple computation of statistics returns product of children).
-    if (outputRowCount > 0) outputRowCount * getSizePerRow(attributes, attrStats) else 1
+    if (outputRowCount > 0) outputRowCount * sizePerRow else 1
   }
 
   /**

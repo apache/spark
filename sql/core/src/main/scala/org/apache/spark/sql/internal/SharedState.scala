@@ -99,7 +99,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   /**
    * A catalog that interacts with external systems.
    */
-  lazy val externalCatalog: ExternalCatalogWithListener = {
+  lazy val externalCatalog: ExternalCatalog = {
     val externalCatalog = SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
       SharedState.externalCatalogClassName(sparkContext.conf),
       sparkContext.conf,
@@ -117,17 +117,14 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
       externalCatalog.createDatabase(defaultDbDefinition, ignoreIfExists = true)
     }
 
-    // Wrap to provide catalog events
-    val wrapped = new ExternalCatalogWithListener(externalCatalog)
-
     // Make sure we propagate external catalog events to the spark listener bus
-    wrapped.addListener(new ExternalCatalogEventListener {
+    externalCatalog.addListener(new ExternalCatalogEventListener {
       override def onEvent(event: ExternalCatalogEvent): Unit = {
         sparkContext.listenerBus.post(event)
       }
     })
 
-    wrapped
+    externalCatalog
   }
 
   /**

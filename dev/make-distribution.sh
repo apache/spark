@@ -72,16 +72,8 @@ while (( "$#" )); do
     --help)
       exit_with_usage
       ;;
-    --*)
-      echo "Error: $1 is not supported"
-      exit_with_usage
-      ;;
-    -*)
-      break
-      ;;
     *)
-      echo "Error: $1 is not supported"
-      exit_with_usage
+      break
       ;;
   esac
   shift

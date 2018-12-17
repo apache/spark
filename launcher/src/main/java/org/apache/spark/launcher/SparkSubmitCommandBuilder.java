@@ -88,9 +88,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       SparkLauncher.NO_RESOURCE);
   }
 
-  final List<String> userArgs;
-  private final List<String> parsedArgs;
-  private final boolean requiresAppResource;
+  final List<String> sparkArgs;
+  private final boolean isAppResourceReq;
   private final boolean isExample;
 
   /**
@@ -100,27 +99,17 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    */
   private boolean allowsMixedArguments;
 
-  /**
-   * This constructor is used when creating a user-configurable launcher. It allows the
-   * spark-submit argument list to be modified after creation.
-   */
   SparkSubmitCommandBuilder() {
-    this.requiresAppResource = true;
+    this.sparkArgs = new ArrayList<>();
+    this.isAppResourceReq = true;
     this.isExample = false;
-    this.parsedArgs = new ArrayList<>();
-    this.userArgs = new ArrayList<>();
   }
 
-  /**
-   * This constructor is used when invoking spark-submit; it parses and validates arguments
-   * provided by the user on the command line.
-   */
   SparkSubmitCommandBuilder(List<String> args) {
     this.allowsMixedArguments = false;
-    this.parsedArgs = new ArrayList<>();
+    this.sparkArgs = new ArrayList<>();
     boolean isExample = false;
     List<String> submitArgs = args;
-    this.userArgs = Collections.emptyList();
 
     if (args.size() > 0) {
       switch (args.get(0)) {
@@ -142,21 +131,21 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       }
 
       this.isExample = isExample;
-      OptionParser parser = new OptionParser(true);
+      OptionParser parser = new OptionParser();
       parser.parse(submitArgs);
-      this.requiresAppResource = parser.requiresAppResource;
-    } else {
+      this.isAppResourceReq = parser.isAppResourceReq;
+    }  else {
       this.isExample = isExample;
-      this.requiresAppResource = false;
+      this.isAppResourceReq = false;
     }
   }
 
   @Override
   public List<String> buildCommand(Map<String, String> env)
       throws IOException, IllegalArgumentException {
-    if (PYSPARK_SHELL.equals(appResource) && requiresAppResource) {
+    if (PYSPARK_SHELL.equals(appResource) && isAppResourceReq) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL.equals(appResource) && requiresAppResource) {
+    } else if (SPARKR_SHELL.equals(appResource) && isAppResourceReq) {
       return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -165,19 +154,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   List<String> buildSparkSubmitArgs() {
     List<String> args = new ArrayList<>();
-    OptionParser parser = new OptionParser(false);
-    final boolean requiresAppResource;
+    SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
 
-    // If the user args array is not empty, we need to parse it to detect exactly what
-    // the user is trying to run, so that checks below are correct.
-    if (!userArgs.isEmpty()) {
-      parser.parse(userArgs);
-      requiresAppResource = parser.requiresAppResource;
-    } else {
-      requiresAppResource = this.requiresAppResource;
-    }
-
-    if (!allowsMixedArguments && requiresAppResource) {
+    if (!allowsMixedArguments && isAppResourceReq) {
       checkArgument(appResource != null, "Missing application resource.");
     }
 
@@ -229,16 +208,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(join(",", pyFiles));
     }
 
-    if (isExample) {
-      checkArgument(mainClass != null, "Missing example class name.");
+    if (isAppResourceReq) {
+      checkArgument(!isExample || mainClass != null, "Missing example class name.");
     }
-
     if (mainClass != null) {
       args.add(parser.CLASS);
       args.add(mainClass);
     }
 
-    args.addAll(parsedArgs);
+    args.addAll(sparkArgs);
     if (appResource != null) {
       args.add(appResource);
     }
@@ -421,12 +399,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private class OptionParser extends SparkSubmitOptionParser {
 
-    boolean requiresAppResource = true;
-    private final boolean errorOnUnknownArgs;
-
-    OptionParser(boolean errorOnUnknownArgs) {
-      this.errorOnUnknownArgs = errorOnUnknownArgs;
-    }
+    boolean isAppResourceReq = true;
 
     @Override
     protected boolean handle(String opt, String value) {
@@ -470,23 +443,23 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           break;
         case KILL_SUBMISSION:
         case STATUS:
-          requiresAppResource = false;
-          parsedArgs.add(opt);
-          parsedArgs.add(value);
+          isAppResourceReq = false;
+          sparkArgs.add(opt);
+          sparkArgs.add(value);
           break;
         case HELP:
         case USAGE_ERROR:
-          requiresAppResource = false;
-          parsedArgs.add(opt);
+          isAppResourceReq = false;
+          sparkArgs.add(opt);
           break;
         case VERSION:
-          requiresAppResource = false;
-          parsedArgs.add(opt);
+          isAppResourceReq = false;
+          sparkArgs.add(opt);
           break;
         default:
-          parsedArgs.add(opt);
+          sparkArgs.add(opt);
           if (value != null) {
-            parsedArgs.add(value);
+            sparkArgs.add(value);
           }
           break;
       }
@@ -510,13 +483,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         mainClass = className;
         appResource = SparkLauncher.NO_RESOURCE;
         return false;
-      } else if (errorOnUnknownArgs) {
+      } else {
         checkArgument(!opt.startsWith("-"), "Unrecognized option: %s", opt);
         checkState(appResource == null, "Found unrecognized argument but resource is already set.");
         appResource = opt;
         return false;
       }
-      return true;
     }
 
     @Override

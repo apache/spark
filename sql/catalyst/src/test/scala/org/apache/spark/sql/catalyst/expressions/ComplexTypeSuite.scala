@@ -180,7 +180,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         null, null)
     }
     intercept[RuntimeException] {
-      checkEvaluationWithUnsafeProjection(
+      checkEvalutionWithUnsafeProjection(
         CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
         null, null)
     }

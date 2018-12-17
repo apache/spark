@@ -25,9 +25,6 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Physical plan node for scanning data from a local collection.
- *
- * `Seq` may not be serializable and ideally we should not send `rows` and `unsafeRows`
- * to the executors. Thus marking them as transient.
  */
 case class LocalTableScanExec(
     output: Seq[Attribute],

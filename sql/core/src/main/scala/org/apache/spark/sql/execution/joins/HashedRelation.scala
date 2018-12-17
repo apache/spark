@@ -557,7 +557,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   def append(key: Long, row: UnsafeRow): Unit = {
     val sizeInBytes = row.getSizeInBytes
     if (sizeInBytes >= (1 << SIZE_BITS)) {
-      throw new UnsupportedOperationException("Does not support row that is larger than 256M")
+      sys.error("Does not support row that is larger than 256M")
     }
 
     if (key < minKey) {
@@ -567,7 +567,19 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       maxKey = key
     }
 
-    grow(row.getSizeInBytes)
+    // There is 8 bytes for the pointer to next value
+    if (cursor + 8 + row.getSizeInBytes > page.length * 8L + Platform.LONG_ARRAY_OFFSET) {
+      val used = page.length
+      if (used >= (1 << 30)) {
+        sys.error("Can not build a HashedRelation that is larger than 8G")
+      }
+      ensureAcquireMemory(used * 8L * 2)
+      val newPage = new Array[Long](used * 2)
+      Platform.copyMemory(page, Platform.LONG_ARRAY_OFFSET, newPage, Platform.LONG_ARRAY_OFFSET,
+        cursor - Platform.LONG_ARRAY_OFFSET)
+      page = newPage
+      freeMemory(used * 8L)
+    }
 
     // copy the bytes of UnsafeRow
     val offset = cursor
@@ -603,8 +615,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
           growArray()
         } else if (numKeys > array.length / 2 * 0.75) {
           // The fill ratio should be less than 0.75
-          throw new UnsupportedOperationException(
-            "Cannot build HashedRelation with more than 1/3 billions unique keys")
+          sys.error("Cannot build HashedRelation with more than 1/3 billions unique keys")
         }
       }
     } else {
@@ -612,25 +623,6 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       val pointer = toOffset(address) + toSize(address)
       Platform.putLong(page, pointer, array(pos + 1))
       array(pos + 1) = address
-    }
-  }
-
-  private def grow(inputRowSize: Int): Unit = {
-    // There is 8 bytes for the pointer to next value
-    val neededNumWords = (cursor - Platform.LONG_ARRAY_OFFSET + 8 + inputRowSize + 7) / 8
-    if (neededNumWords > page.length) {
-      if (neededNumWords > (1 << 30)) {
-        throw new UnsupportedOperationException(
-          "Can not build a HashedRelation that is larger than 8G")
-      }
-      val newNumWords = math.max(neededNumWords, math.min(page.length * 2, 1 << 30))
-      ensureAcquireMemory(newNumWords * 8L)
-      val newPage = new Array[Long](newNumWords.toInt)
-      Platform.copyMemory(page, Platform.LONG_ARRAY_OFFSET, newPage, Platform.LONG_ARRAY_OFFSET,
-        cursor - Platform.LONG_ARRAY_OFFSET)
-      val used = page.length
-      page = newPage
-      freeMemory(used * 8L)
     }
   }
 

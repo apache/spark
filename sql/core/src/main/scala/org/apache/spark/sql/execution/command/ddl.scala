@@ -314,8 +314,8 @@ case class AlterTableChangeColumnCommand(
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
-    // Find the origin column from dataSchema by column name.
-    val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
+    // Find the origin column from schema by column name.
+    val originColumn = findColumnByName(table.schema, columnName, resolver)
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw new AnalysisException(
@@ -324,7 +324,7 @@ case class AlterTableChangeColumnCommand(
           s"'${newColumn.name}' with type '${newColumn.dataType}'")
     }
 
-    val newDataSchema = table.dataSchema.fields.map { field =>
+    val newSchema = table.schema.fields.map { field =>
       if (field.name == originColumn.name) {
         // Create a new column from the origin column with the new comment.
         addComment(field, newColumn.getComment)
@@ -332,7 +332,8 @@ case class AlterTableChangeColumnCommand(
         field
       }
     }
-    catalog.alterTableDataSchema(tableName, StructType(newDataSchema))
+    val newTable = table.copy(schema = StructType(newSchema))
+    catalog.alterTable(newTable)
 
     Seq.empty[Row]
   }
@@ -344,8 +345,7 @@ case class AlterTableChangeColumnCommand(
     schema.fields.collectFirst {
       case field if resolver(field.name, name) => field
     }.getOrElse(throw new AnalysisException(
-      s"Can't find column `$name` given table data columns " +
-        s"${schema.fieldNames.mkString("[`", "`, `", "`]")}"))
+      s"Invalid column reference '$name', table schema is '${schema}'"))
   }
 
   // Add the comment to a column, if comment is empty, return the original column.
@@ -610,10 +610,10 @@ case class AlterTableRecoverPartitionsCommand(
 
     val root = new Path(table.location)
     logInfo(s"Recover all the partitions in $root")
-    val hadoopConf = spark.sessionState.newHadoopConf()
-    val fs = root.getFileSystem(hadoopConf)
+    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
 
     val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
     val pathFilter = getPathFilter(hadoopConf)
 
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
@@ -697,7 +697,7 @@ case class AlterTableRecoverPartitionsCommand(
       pathFilter: PathFilter,
       threshold: Int): GenMap[String, PartitionStatistics] = {
     if (partitionSpecsAndLocs.length > threshold) {
-      val hadoopConf = spark.sessionState.newHadoopConf()
+      val hadoopConf = spark.sparkContext.hadoopConfiguration
       val serializableConfiguration = new SerializableConfiguration(hadoopConf)
       val serializedPaths = partitionSpecsAndLocs.map(_._2.toString).toArray
 

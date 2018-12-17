@@ -93,21 +93,11 @@ private[spark] class Client(
 
   private val distCacheMgr = new ClientDistributedCacheManager()
 
-  private val principal = sparkConf.get(PRINCIPAL).orNull
-  private val keytab = sparkConf.get(KEYTAB).orNull
-  private val loginFromKeytab = principal != null
-  private val amKeytabFileName: String = {
-    require((principal == null) == (keytab == null),
-      "Both principal and keytab must be defined, or neither.")
-    if (loginFromKeytab) {
-      logInfo(s"Kerberos credentials: principal = $principal, keytab = $keytab")
-      // Generate a file name that can be used for the keytab file, that does not conflict
-      // with any user file.
-      new File(keytab).getName() + "-" + UUID.randomUUID().toString
-    } else {
-      null
-    }
-  }
+  private var loginFromKeytab = false
+  private var principal: String = null
+  private var keytab: String = null
+  private var credentials: Credentials = null
+  private var amKeytabFileName: String = null
 
   private val launcherBackend = new LauncherBackend() {
     override protected def conf: SparkConf = sparkConf
@@ -130,6 +120,11 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
+  private val credentialManager = new YARNHadoopDelegationTokenManager(
+    sparkConf,
+    hadoopConf,
+    conf => YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, conf))
+
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
@@ -150,6 +145,9 @@ private[spark] class Client(
     var appId: ApplicationId = null
     try {
       launcherBackend.connect()
+      // Setup the credentials before doing anything else,
+      // so we have don't have issues at any point.
+      setupCredentials()
       yarnClient.init(hadoopConf)
       yarnClient.start()
 
@@ -290,26 +288,8 @@ private[spark] class Client(
     appContext
   }
 
-  /**
-   * Set up security tokens for launching our ApplicationMaster container.
-   *
-   * This method will obtain delegation tokens from all the registered providers, and set them in
-   * the AM's launch context.
-   */
+  /** Set up security tokens for launching our ApplicationMaster container. */
   private def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = {
-    val credentials = UserGroupInformation.getCurrentUser().getCredentials()
-    val credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf)
-    credentialManager.obtainDelegationTokens(hadoopConf, credentials)
-
-    // When using a proxy user, copy the delegation tokens to the user's credentials. Avoid
-    // that for regular users, since in those case the user already has access to the TGT,
-    // and adding delegation tokens could lead to expired or cancelled tokens being used
-    // later, as reported in SPARK-15754.
-    val currentUser = UserGroupInformation.getCurrentUser()
-    if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
-      currentUser.addCredentials(credentials)
-    }
-
     val dob = new DataOutputBuffer
     credentials.writeTokenStorageToStream(dob)
     amContainer.setTokens(ByteBuffer.wrap(dob.getData))
@@ -403,6 +383,36 @@ private[spark] class Client(
     // Upload Spark and the application JAR to the remote file system if necessary,
     // and add them as local resources to the application master.
     val fs = destDir.getFileSystem(hadoopConf)
+
+    // Merge credentials obtained from registered providers
+    val nearestTimeOfNextRenewal = credentialManager.obtainDelegationTokens(hadoopConf, credentials)
+
+    if (credentials != null) {
+      // Add credentials to current user's UGI, so that following operations don't need to use the
+      // Kerberos tgt to get delegations again in the client side.
+      val currentUser = UserGroupInformation.getCurrentUser()
+      if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
+        currentUser.addCredentials(credentials)
+      }
+      logDebug(SparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+    }
+
+    // If we use principal and keytab to login, also credentials can be renewed some time
+    // after current time, we should pass the next renewal and updating time to credential
+    // renewer and updater.
+    if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
+      nearestTimeOfNextRenewal != Long.MaxValue) {
+
+      // Valid renewal time is 75% of next renewal time, and the valid update time will be
+      // slightly later then renewal time (80% of next renewal time). This is to make sure
+      // credentials are renewed and updated before expired.
+      val currTime = System.currentTimeMillis()
+      val renewalTime = (nearestTimeOfNextRenewal - currTime) * 0.75 + currTime
+      val updateTime = (nearestTimeOfNextRenewal - currTime) * 0.8 + currTime
+
+      sparkConf.set(CREDENTIALS_RENEWAL_TIME, renewalTime.toLong)
+      sparkConf.set(CREDENTIALS_UPDATE_TIME, updateTime.toLong)
+    }
 
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
     // multiple times, YARN will fail to launch containers for the app with an internal
@@ -686,13 +696,7 @@ private[spark] class Client(
       }
     }
 
-    // SPARK-23630: during testing, Spark scripts filter out hadoop conf dirs so that user's
-    // environments do not interfere with tests. This allows a special env variable during
-    // tests so that custom conf dirs can be used by unit tests.
-    val confDirs = Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR") ++
-      (if (Utils.isTesting) Seq("SPARK_TEST_HADOOP_CONF_DIR") else Nil)
-
-    confDirs.foreach { envKey =>
+    Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
         if (dir.isDirectory()) {
@@ -749,7 +753,7 @@ private[spark] class Client(
 
       // Save the YARN configuration into a separate file that will be overlayed on top of the
       // cluster's Hadoop conf.
-      confStream.putNextEntry(new ZipEntry(SparkHadoopUtil.SPARK_HADOOP_CONF_FILE))
+      confStream.putNextEntry(new ZipEntry(SPARK_HADOOP_CONF_FILE))
       hadoopConf.writeXml(confStream)
       confStream.closeEntry()
 
@@ -783,6 +787,11 @@ private[spark] class Client(
     populateClasspath(args, hadoopConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+    if (loginFromKeytab) {
+      val credentialsFile = "credentials-" + UUID.randomUUID().toString
+      sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
+      logInfo(s"Credentials file set to: $credentialsFile")
+    }
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
     val amEnvPrefix = "spark.yarn.appMasterEnv."
@@ -892,9 +901,7 @@ private[spark] class Client(
     // Include driver-specific java options if we are launching a driver
     if (isClusterMode) {
       sparkConf.get(DRIVER_JAVA_OPTIONS).foreach { opts =>
-        javaOpts ++= Utils.splitCommandString(opts)
-          .map(Utils.substituteAppId(_, appId.toString))
-          .map(YarnSparkHadoopUtil.escapeForShell)
+        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
       }
       val libraryPaths = Seq(sparkConf.get(DRIVER_LIBRARY_PATH),
         sys.props.get("spark.driver.libraryPath")).flatten
@@ -916,9 +923,7 @@ private[spark] class Client(
             s"(was '$opts'). Use spark.yarn.am.memory instead."
           throw new SparkException(msg)
         }
-        javaOpts ++= Utils.splitCommandString(opts)
-          .map(Utils.substituteAppId(_, appId.toString))
-          .map(YarnSparkHadoopUtil.escapeForShell)
+        javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
       }
       sparkConf.get(AM_LIBRARY_PATH).foreach { paths =>
         prefixEnv = Some(getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(paths))))
@@ -1003,6 +1008,25 @@ private[spark] class Client(
     amContainer
   }
 
+  def setupCredentials(): Unit = {
+    loginFromKeytab = sparkConf.contains(PRINCIPAL.key)
+    if (loginFromKeytab) {
+      principal = sparkConf.get(PRINCIPAL).get
+      keytab = sparkConf.get(KEYTAB).orNull
+
+      require(keytab != null, "Keytab must be specified when principal is specified.")
+      logInfo("Attempting to login to the Kerberos" +
+        s" using principal: $principal and keytab: $keytab")
+      val f = new File(keytab)
+      // Generate a file name that can be used for the keytab file, that does not conflict
+      // with any user file.
+      amKeytabFileName = f.getName + "-" + UUID.randomUUID().toString
+      sparkConf.set(PRINCIPAL.key, principal)
+    }
+    // Defensive copy of the credentials
+    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
+  }
+
   /**
    * Report the state of an application until it has exited, either successfully or
    * due to some failure, then return a pair of the yarn application state (FINISHED, FAILED,
@@ -1019,7 +1043,8 @@ private[spark] class Client(
       appId: ApplicationId,
       returnOnRunning: Boolean = false,
       logApplicationReport: Boolean = true,
-      interval: Long = sparkConf.get(REPORT_INTERVAL)): YarnAppReport = {
+      interval: Long = sparkConf.get(REPORT_INTERVAL)):
+      (YarnApplicationState, FinalApplicationStatus) = {
     var lastState: YarnApplicationState = null
     while (true) {
       Thread.sleep(interval)
@@ -1030,13 +1055,11 @@ private[spark] class Client(
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
             cleanupStagingDir(appId)
-            return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
+            return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
           case NonFatal(e) =>
-            val msg = s"Failed to contact YARN for application $appId."
-            logError(msg, e)
+            logError(s"Failed to contact YARN for application $appId.", e)
             // Don't necessarily clean up staging dir because status is unknown
-            return YarnAppReport(YarnApplicationState.FAILED, FinalApplicationStatus.FAILED,
-              Some(msg))
+            return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
         }
       val state = report.getYarnApplicationState
 
@@ -1074,14 +1097,14 @@ private[spark] class Client(
       }
 
       if (state == YarnApplicationState.FINISHED ||
-          state == YarnApplicationState.FAILED ||
-          state == YarnApplicationState.KILLED) {
+        state == YarnApplicationState.FAILED ||
+        state == YarnApplicationState.KILLED) {
         cleanupStagingDir(appId)
-        return createAppReport(report)
+        return (state, report.getFinalApplicationStatus)
       }
 
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
-        return createAppReport(report)
+        return (state, report.getFinalApplicationStatus)
       }
 
       lastState = state
@@ -1130,17 +1153,16 @@ private[spark] class Client(
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
-      val YarnAppReport(appState, finalState, diags) = monitorApplication(appId)
-      if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
-        diags.foreach { err =>
-          logError(s"Application diagnostics message: $err")
-        }
+      val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
+      if (yarnApplicationState == YarnApplicationState.FAILED ||
+        finalApplicationStatus == FinalApplicationStatus.FAILED) {
         throw new SparkException(s"Application $appId finished with failed status")
       }
-      if (appState == YarnApplicationState.KILLED || finalState == FinalApplicationStatus.KILLED) {
+      if (yarnApplicationState == YarnApplicationState.KILLED ||
+        finalApplicationStatus == FinalApplicationStatus.KILLED) {
         throw new SparkException(s"Application $appId is killed")
       }
-      if (finalState == FinalApplicationStatus.UNDEFINED) {
+      if (finalApplicationStatus == FinalApplicationStatus.UNDEFINED) {
         throw new SparkException(s"The final status of application $appId is undefined")
       }
     }
@@ -1154,7 +1176,7 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.7-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.10.6-src.zip")
         require(py4jFile.exists(),
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
@@ -1197,6 +1219,10 @@ private object Client extends Logging {
 
   // Name of the file in the conf archive containing Spark configuration.
   val SPARK_CONF_FILE = "__spark_conf__.properties"
+
+  // Name of the file containing the gateway's Hadoop configuration, to be overlayed on top of the
+  // cluster's Hadoop config.
+  val SPARK_HADOOP_CONF_FILE = "__spark_hadoop_conf__.xml"
 
   // Subdirectory where the user's python files (not archives) will be placed.
   val LOCALIZED_PYTHON_DIR = "__pyfiles__"
@@ -1479,12 +1505,6 @@ private object Client extends Logging {
     uri.startsWith(s"$LOCAL_SCHEME:")
   }
 
-  def createAppReport(report: ApplicationReport): YarnAppReport = {
-    val diags = report.getDiagnostics()
-    val diagsOpt = if (diags != null && diags.nonEmpty) Some(diags) else None
-    YarnAppReport(report.getYarnApplicationState(), report.getFinalApplicationStatus(), diagsOpt)
-  }
-
 }
 
 private[spark] class YarnClusterApplication extends SparkApplication {
@@ -1499,8 +1519,3 @@ private[spark] class YarnClusterApplication extends SparkApplication {
   }
 
 }
-
-private[spark] case class YarnAppReport(
-    appState: YarnApplicationState,
-    finalState: FinalApplicationStatus,
-    diagnostics: Option[String])

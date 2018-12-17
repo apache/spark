@@ -97,18 +97,6 @@ case class FlatMapGroupsWithStateExec(
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
 
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
-    timeoutConf match {
-      case ProcessingTimeTimeout =>
-        true  // Always run batches to process timeouts
-      case EventTimeTimeout =>
-        // Process another non-data batch only if the watermark has changed in this executed plan
-        eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
-      case _ =>
-        false
-    }
-  }
-
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
@@ -138,6 +126,7 @@ case class FlatMapGroupsWithStateExec(
           case _ =>
             iter
         }
+
         // Generate a iterator that returns the rows grouped by the grouping function
         // Note that this code ensures that the filtering for timeout occurs only after
         // all the data has been processed. This is to ensure that the timeout information of all
@@ -205,11 +194,11 @@ case class FlatMapGroupsWithStateExec(
             throw new IllegalStateException(
               s"Cannot filter timed out keys for $timeoutConf")
         }
-        val timingOutPairs = store.getRange(None, None).filter { rowPair =>
+        val timingOutKeys = store.getRange(None, None).filter { rowPair =>
           val timeoutTimestamp = getTimeoutTimestamp(rowPair.value)
           timeoutTimestamp != NO_TIMESTAMP && timeoutTimestamp < timeoutThreshold
         }
-        timingOutPairs.flatMap { rowPair =>
+        timingOutKeys.flatMap { rowPair =>
           callFunctionAndUpdateState(rowPair.key, Iterator.empty, rowPair.value, hasTimedOut = true)
         }
       } else Iterator.empty

@@ -347,7 +347,7 @@ rather than using the old parameter class `Strategy`.  These new training method
 separate classification and regression, and they replace specialized parameter types with
 simple `String` types.
 
-Examples of the new recommended `trainClassifier` and `trainRegressor` are given in the
+Examples of the new, recommended `trainClassifier` and `trainRegressor` are given in the
 [Decision Trees Guide](mllib-decision-tree.html#examples).
 
 ## From 0.9 to 1.0

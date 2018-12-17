@@ -17,14 +17,10 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.lang.reflect.Constructor
-
-import org.apache.commons.lang3.reflect.ConstructorUtils
-
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -386,22 +382,22 @@ object ScalaReflection extends ScalaReflection {
           val clsName = getClassNameFromType(fieldType)
           val newTypePath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           // For tuples, we based grab the inner fields by ordinal instead of name.
-          val constructor = if (cls.getName startsWith "scala.Tuple") {
+          if (cls.getName startsWith "scala.Tuple") {
             deserializerFor(
               fieldType,
               Some(addToPathOrdinal(i, dataType, newTypePath)),
               newTypePath)
           } else {
-            deserializerFor(
+            val constructor = deserializerFor(
               fieldType,
               Some(addToPath(fieldName, dataType, newTypePath)),
               newTypePath)
-          }
 
-          if (!nullable) {
-            AssertNotNull(constructor, newTypePath)
-          } else {
-            constructor
+            if (!nullable) {
+              AssertNotNull(constructor, newTypePath)
+            } else {
+              constructor
+            }
           }
         }
 
@@ -786,15 +782,6 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-   * Finds an accessible constructor with compatible parameters. This is a more flexible search
-   * than the exact matching algorithm in `Class.getConstructor`. The first assignment-compatible
-   * matching constructor is returned. Otherwise, it returns `None`.
-   */
-  def findConstructor(cls: Class[_], paramTypes: Seq[Class[_]]): Option[Constructor[_]] = {
-    Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*))
-  }
-
-  /**
    * Whether the fields of the given type is defined entirely by its constructor parameters.
    */
   def definedByConstructorParams(tpe: Type): Boolean = cleanUpReflectionObjects {
@@ -807,65 +794,6 @@ object ScalaReflection extends ScalaReflection {
     "interface", "long", "native", "new", "null", "package", "private", "protected", "public",
     "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this", "throw",
     "throws", "transient", "true", "try", "void", "volatile", "while")
-
-  val typeJavaMapping = Map[DataType, Class[_]](
-    BooleanType -> classOf[Boolean],
-    ByteType -> classOf[Byte],
-    ShortType -> classOf[Short],
-    IntegerType -> classOf[Int],
-    LongType -> classOf[Long],
-    FloatType -> classOf[Float],
-    DoubleType -> classOf[Double],
-    StringType -> classOf[UTF8String],
-    DateType -> classOf[DateType.InternalType],
-    TimestampType -> classOf[TimestampType.InternalType],
-    BinaryType -> classOf[BinaryType.InternalType],
-    CalendarIntervalType -> classOf[CalendarInterval]
-  )
-
-  val typeBoxedJavaMapping = Map[DataType, Class[_]](
-    BooleanType -> classOf[java.lang.Boolean],
-    ByteType -> classOf[java.lang.Byte],
-    ShortType -> classOf[java.lang.Short],
-    IntegerType -> classOf[java.lang.Integer],
-    LongType -> classOf[java.lang.Long],
-    FloatType -> classOf[java.lang.Float],
-    DoubleType -> classOf[java.lang.Double],
-    DateType -> classOf[java.lang.Integer],
-    TimestampType -> classOf[java.lang.Long]
-  )
-
-  def dataTypeJavaClass(dt: DataType): Class[_] = {
-    dt match {
-      case _: DecimalType => classOf[Decimal]
-      case _: StructType => classOf[InternalRow]
-      case _: ArrayType => classOf[ArrayData]
-      case _: MapType => classOf[MapData]
-      case ObjectType(cls) => cls
-      case _ => typeJavaMapping.getOrElse(dt, classOf[java.lang.Object])
-    }
-  }
-
-  def javaBoxedType(dt: DataType): Class[_] = dt match {
-    case _: DecimalType => classOf[Decimal]
-    case BinaryType => classOf[Array[Byte]]
-    case StringType => classOf[UTF8String]
-    case CalendarIntervalType => classOf[CalendarInterval]
-    case _: StructType => classOf[InternalRow]
-    case _: ArrayType => classOf[ArrayType]
-    case _: MapType => classOf[MapType]
-    case udt: UserDefinedType[_] => javaBoxedType(udt.sqlType)
-    case ObjectType(cls) => cls
-    case _ => ScalaReflection.typeBoxedJavaMapping.getOrElse(dt, classOf[java.lang.Object])
-  }
-
-  def expressionJavaClasses(arguments: Seq[Expression]): Seq[Class[_]] = {
-    if (arguments != Nil) {
-      arguments.map(e => dataTypeJavaClass(e.dataType))
-    } else {
-      Seq.empty
-    }
-  }
 }
 
 /**

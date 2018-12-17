@@ -19,8 +19,6 @@ package org.apache.spark
 
 import scala.collection.mutable
 
-import org.mockito.Matchers.{any, eq => meq}
-import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.executor.TaskMetrics
@@ -28,7 +26,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ExternalClusterManager
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
-import org.apache.spark.storage.BlockManagerMaster
 import org.apache.spark.util.ManualClock
 
 /**
@@ -144,39 +141,6 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 10)
     assert(numExecutorsToAdd(manager) === 1)
   }
-
-  def testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
-    val conf = new SparkConf()
-      .setMaster("myDummyLocalExternalClusterManager")
-      .setAppName("test-executor-allocation-manager")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
-      .set("spark.dynamicAllocation.maxExecutors", "15")
-      .set("spark.dynamicAllocation.minExecutors", "3")
-      .set("spark.dynamicAllocation.executorAllocationRatio", divisor.toString)
-      .set("spark.executor.cores", cores.toString)
-    val sc = new SparkContext(conf)
-    contexts += sc
-    var manager = sc.executorAllocationManager.get
-    post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(0, 20)))
-    for (i <- 0 to 5) {
-      addExecutors(manager)
-    }
-    assert(numExecutorsTarget(manager) === expected)
-    sc.stop()
-  }
-
-  test("executionAllocationRatio is correctly handled") {
-    testAllocationRatio(1, 0.5, 10)
-    testAllocationRatio(1, 1.0/3.0, 7)
-    testAllocationRatio(2, 1.0/3.0, 4)
-    testAllocationRatio(1, 0.385, 8)
-
-    // max/min executors capping
-    testAllocationRatio(1, 1.0, 15) // should be 20 but capped by max
-    testAllocationRatio(4, 1.0/3.0, 3)  // should be 2 but elevated by min
-  }
-
 
   test("add executors capped by num pending tasks") {
     sc = createSparkContext(0, 10, 0)
@@ -1086,66 +1050,6 @@ class ExecutorAllocationManagerSuite
     assert(removeTimes(manager) === Map.empty)
   }
 
-  test("SPARK-23365 Don't update target num executors when killing idle executors") {
-    val minExecutors = 1
-    val initialExecutors = 1
-    val maxExecutors = 2
-    val conf = new SparkConf()
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.shuffle.service.enabled", "true")
-      .set("spark.dynamicAllocation.minExecutors", minExecutors.toString)
-      .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
-      .set("spark.dynamicAllocation.initialExecutors", initialExecutors.toString)
-      .set("spark.dynamicAllocation.schedulerBacklogTimeout", "1000ms")
-      .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout", "1000ms")
-      .set("spark.dynamicAllocation.executorIdleTimeout", s"3000ms")
-    val mockAllocationClient = mock(classOf[ExecutorAllocationClient])
-    val mockBMM = mock(classOf[BlockManagerMaster])
-    val manager = new ExecutorAllocationManager(
-      mockAllocationClient, mock(classOf[LiveListenerBus]), conf, mockBMM)
-    val clock = new ManualClock()
-    manager.setClock(clock)
-
-    when(mockAllocationClient.requestTotalExecutors(meq(2), any(), any())).thenReturn(true)
-    // test setup -- job with 2 tasks, scale up to two executors
-    assert(numExecutorsTarget(manager) === 1)
-    manager.listener.onExecutorAdded(SparkListenerExecutorAdded(
-      clock.getTimeMillis(), "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
-    manager.listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 2)))
-    clock.advance(1000)
-    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.getTimeMillis())
-    assert(numExecutorsTarget(manager) === 2)
-    val taskInfo0 = createTaskInfo(0, 0, "executor-1")
-    manager.listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo0))
-    manager.listener.onExecutorAdded(SparkListenerExecutorAdded(
-      clock.getTimeMillis(), "executor-2", new ExecutorInfo("host1", 1, Map.empty)))
-    val taskInfo1 = createTaskInfo(1, 1, "executor-2")
-    manager.listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo1))
-    assert(numExecutorsTarget(manager) === 2)
-
-    // have one task finish -- we should adjust the target number of executors down
-    // but we should *not* kill any executors yet
-    manager.listener.onTaskEnd(SparkListenerTaskEnd(0, 0, null, Success, taskInfo0, null))
-    assert(maxNumExecutorsNeeded(manager) === 1)
-    assert(numExecutorsTarget(manager) === 2)
-    clock.advance(1000)
-    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.getTimeMillis())
-    assert(numExecutorsTarget(manager) === 1)
-    verify(mockAllocationClient, never).killExecutors(any(), any(), any(), any())
-
-    // now we cross the idle timeout for executor-1, so we kill it.  the really important
-    // thing here is that we do *not* ask the executor allocation client to adjust the target
-    // number of executors down
-    when(mockAllocationClient.killExecutors(Seq("executor-1"), false, false, false))
-      .thenReturn(Seq("executor-1"))
-    clock.advance(3000)
-    schedule(manager)
-    assert(maxNumExecutorsNeeded(manager) === 1)
-    assert(numExecutorsTarget(manager) === 1)
-    // here's the important verify -- we did kill the executors, but did not adjust the target count
-    verify(mockAllocationClient).killExecutors(Seq("executor-1"), false, false, false)
-  }
-
   private def createSparkContext(
       minExecutors: Int = 1,
       maxExecutors: Int = 5,
@@ -1364,8 +1268,7 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
 
   override def killExecutors(
       executorIds: Seq[String],
-      adjustTargetNumExecutors: Boolean,
-      countFailures: Boolean,
+      replace: Boolean,
       force: Boolean): Seq[String] = executorIds
 
   override def start(): Unit = sb.start()

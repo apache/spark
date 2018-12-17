@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
  *
  * Also, each HadoopDelegationTokenProvider is controlled by
  * spark.security.credentials.{service}.enabled, and will not be loaded if this config is set to
- * false. For example, Hive's delegation token provider [[HiveDelegationTokenProvider]] can be
+ * false.  For example, Hive's delegation token provider [[HiveDelegationTokenProvider]] can be
  * enabled/disabled by the configuration spark.security.credentials.hive.enabled.
  *
  * @param sparkConf Spark configuration
@@ -52,7 +52,7 @@ private[spark] class HadoopDelegationTokenManager(
 
   // Maintain all the registered delegation token providers
   private val delegationTokenProviders = getDelegationTokenProviders
-  logDebug("Using the following builtin delegation token providers: " +
+  logDebug(s"Using the following delegation token providers: " +
     s"${delegationTokenProviders.keys.mkString(", ")}.")
 
   /** Construct a [[HadoopDelegationTokenManager]] for the default Hadoop filesystem */

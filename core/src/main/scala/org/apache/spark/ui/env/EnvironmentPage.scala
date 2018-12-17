@@ -94,7 +94,7 @@ private[ui] class EnvironmentPage(
         </div>
       </span>
 
-    UIUtils.headerSparkPage(request, "Environment", content, parent)
+    UIUtils.headerSparkPage("Environment", content, parent)
   }
 
   private def propertyHeader = Seq("Name", "Value")

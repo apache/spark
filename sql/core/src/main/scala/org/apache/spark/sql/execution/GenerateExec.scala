@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 
 /**
  * For lazy computing, be sure the generator.terminate() called in the very last
@@ -171,11 +170,9 @@ case class GenerateExec(
     // Add position
     val position = if (e.position) {
       if (outer) {
-        Seq(ExprCode(
-          JavaCode.isNullExpression(s"$index == -1"),
-          JavaCode.variable(index, IntegerType)))
+        Seq(ExprCode("", s"$index == -1", index))
       } else {
-        Seq(ExprCode(FalseLiteral, JavaCode.variable(index, IntegerType)))
+        Seq(ExprCode("", "false", index))
       }
     } else {
       Seq.empty
@@ -308,19 +305,19 @@ case class GenerateExec(
       nullable: Boolean,
       initialChecks: Seq[String]): ExprCode = {
     val value = ctx.freshName(name)
-    val javaType = CodeGenerator.javaType(dt)
-    val getter = CodeGenerator.getValue(source, dt, index)
+    val javaType = ctx.javaType(dt)
+    val getter = ctx.getValue(source, dt, index)
     val checks = initialChecks ++ optionalCode(nullable, s"$source.isNullAt($index)")
     if (checks.nonEmpty) {
       val isNull = ctx.freshName("isNull")
       val code =
-        code"""
+        s"""
            |boolean $isNull = ${checks.mkString(" || ")};
-           |$javaType $value = $isNull ? ${CodeGenerator.defaultValue(dt)} : $getter;
+           |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
          """.stripMargin
-      ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, dt))
+      ExprCode(code, isNull, value)
     } else {
-      ExprCode(code"$javaType $value = $getter;", FalseLiteral, JavaCode.variable(value, dt))
+      ExprCode(s"$javaType $value = $getter;", "false", value)
     }
   }
 

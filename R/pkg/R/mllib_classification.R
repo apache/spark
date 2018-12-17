@@ -21,24 +21,28 @@
 #' S4 class that represents an LinearSVCModel
 #'
 #' @param jobj a Java object reference to the backing Scala LinearSVCModel
+#' @export
 #' @note LinearSVCModel since 2.2.0
 setClass("LinearSVCModel", representation(jobj = "jobj"))
 
 #' S4 class that represents an LogisticRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala LogisticRegressionModel
+#' @export
 #' @note LogisticRegressionModel since 2.1.0
 setClass("LogisticRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a MultilayerPerceptronClassificationModel
 #'
 #' @param jobj a Java object reference to the backing Scala MultilayerPerceptronClassifierWrapper
+#' @export
 #' @note MultilayerPerceptronClassificationModel since 2.1.0
 setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a NaiveBayesModel
 #'
 #' @param jobj a Java object reference to the backing Scala NaiveBayesWrapper
+#' @export
 #' @note NaiveBayesModel since 2.0.0
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
@@ -78,6 +82,7 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @rdname spark.svmLinear
 #' @aliases spark.svmLinear,SparkDataFrame,formula-method
 #' @name spark.svmLinear
+#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -126,6 +131,7 @@ setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formu
 #' @return \code{predict} returns the predicted values based on a LinearSVCModel.
 #' @rdname spark.svmLinear
 #' @aliases predict,LinearSVCModel,SparkDataFrame-method
+#' @export
 #' @note predict(LinearSVCModel) since 2.2.0
 setMethod("predict", signature(object = "LinearSVCModel"),
           function(object, newData) {
@@ -140,6 +146,7 @@ setMethod("predict", signature(object = "LinearSVCModel"),
 #'         \code{numClasses} (number of classes), \code{numFeatures} (number of features).
 #' @rdname spark.svmLinear
 #' @aliases summary,LinearSVCModel-method
+#' @export
 #' @note summary(LinearSVCModel) since 2.2.0
 setMethod("summary", signature(object = "LinearSVCModel"),
           function(object) {
@@ -162,6 +169,7 @@ setMethod("summary", signature(object = "LinearSVCModel"),
 #'
 #' @rdname spark.svmLinear
 #' @aliases write.ml,LinearSVCModel,character-method
+#' @export
 #' @note write.ml(LogisticRegression, character) since 2.2.0
 setMethod("write.ml", signature(object = "LinearSVCModel", path = "character"),
 function(object, path, overwrite = FALSE) {
@@ -249,6 +257,7 @@ function(object, path, overwrite = FALSE) {
 #' @rdname spark.logit
 #' @aliases spark.logit,SparkDataFrame,formula-method
 #' @name spark.logit
+#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -365,6 +374,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
 #'         The list includes \code{coefficients} (coefficients matrix of the fitted model).
 #' @rdname spark.logit
 #' @aliases summary,LogisticRegressionModel-method
+#' @export
 #' @note summary(LogisticRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "LogisticRegressionModel"),
           function(object) {
@@ -392,6 +402,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' @return \code{predict} returns the predicted values based on an LogisticRegressionModel.
 #' @rdname spark.logit
 #' @aliases predict,LogisticRegressionModel,SparkDataFrame-method
+#' @export
 #' @note predict(LogisticRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "LogisticRegressionModel"),
           function(object, newData) {
@@ -406,6 +417,7 @@ setMethod("predict", signature(object = "LogisticRegressionModel"),
 #'
 #' @rdname spark.logit
 #' @aliases write.ml,LogisticRegressionModel,character-method
+#' @export
 #' @note write.ml(LogisticRegression, character) since 2.1.0
 setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -446,6 +458,7 @@ setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "char
 #' @aliases spark.mlp,SparkDataFrame,formula-method
 #' @name spark.mlp
 #' @seealso \link{read.ml}
+#' @export
 #' @examples
 #' \dontrun{
 #' df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
@@ -504,6 +517,7 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
 #'         For \code{weights}, it is a numeric vector with length equal to the expected
 #'         given the architecture (i.e., for 8-10-2 network, 112 connection weights).
 #' @rdname spark.mlp
+#' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
 #' @note summary(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
@@ -524,6 +538,7 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
 #' "prediction".
 #' @rdname spark.mlp
 #' @aliases predict,MultilayerPerceptronClassificationModel-method
+#' @export
 #' @note predict(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object, newData) {
@@ -538,6 +553,7 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 #'
 #' @rdname spark.mlp
 #' @aliases write.ml,MultilayerPerceptronClassificationModel,character-method
+#' @export
 #' @seealso \link{write.ml}
 #' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationModel",
@@ -569,6 +585,7 @@ setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationMode
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
 #' @seealso e1071: \url{https://cran.r-project.org/package=e1071}
+#' @export
 #' @examples
 #' \dontrun{
 #' data <- as.data.frame(UCBAdmissions)
@@ -607,6 +624,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #'         The list includes \code{apriori} (the label distribution) and
 #'         \code{tables} (conditional probabilities given the target label).
 #' @rdname spark.naiveBayes
+#' @export
 #' @note summary(NaiveBayesModel) since 2.0.0
 setMethod("summary", signature(object = "NaiveBayesModel"),
           function(object) {
@@ -630,6 +648,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
 #' "prediction".
 #' @rdname spark.naiveBayes
+#' @export
 #' @note predict(NaiveBayesModel) since 2.0.0
 setMethod("predict", signature(object = "NaiveBayesModel"),
           function(object, newData) {
@@ -643,6 +662,7 @@ setMethod("predict", signature(object = "NaiveBayesModel"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.naiveBayes
+#' @export
 #' @seealso \link{write.ml}
 #' @note write.ml(NaiveBayesModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),

@@ -65,69 +65,9 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(count50 > 0 && count50 < countTotal)
   }
 
-  test("readImages test: recursive = false") {
-    val df = readImages(imagePath, null, false, 3, true, 1.0, 0)
-    assert(df.count() === 0)
-  }
-
-  test("readImages test: read jpg image") {
-    val df = readImages(imagePath + "/kittens/DP153539.jpg", null, false, 3, true, 1.0, 0)
-    assert(df.count() === 1)
-  }
-
-  test("readImages test: read png image") {
-    val df = readImages(imagePath + "/multi-channel/BGRA.png", null, false, 3, true, 1.0, 0)
-    assert(df.count() === 1)
-  }
-
-  test("readImages test: read non image") {
-    val df = readImages(imagePath + "/kittens/not-image.txt", null, false, 3, true, 1.0, 0)
-    assert(df.schema("image").dataType == columnSchema, "data do not fit ImageSchema")
-    assert(df.count() === 0)
-  }
-
-  test("readImages test: read non image and dropImageFailures is false") {
-    val df = readImages(imagePath + "/kittens/not-image.txt", null, false, 3, false, 1.0, 0)
-    assert(df.count() === 1)
-  }
-
-  test("readImages test: sampleRatio > 1") {
-    val e = intercept[IllegalArgumentException] {
-      readImages(imagePath, null, true, 3, true, 1.1, 0)
-    }
-    assert(e.getMessage.contains("sampleRatio"))
-  }
-
-  test("readImages test: sampleRatio < 0") {
-    val e = intercept[IllegalArgumentException] {
-      readImages(imagePath, null, true, 3, true, -0.1, 0)
-    }
-    assert(e.getMessage.contains("sampleRatio"))
-  }
-
-  test("readImages test: sampleRatio = 0") {
-    val df = readImages(imagePath, null, true, 3, true, 0.0, 0)
-    assert(df.count() === 0)
-  }
-
-  test("readImages test: with sparkSession") {
-    val df = readImages(imagePath, sparkSession = spark, true, 3, true, 1.0, 0)
-    assert(df.count() === 8)
-  }
-
   test("readImages partition test") {
     val df = readImages(imagePath, null, true, 3, true, 1.0, 0)
     assert(df.rdd.getNumPartitions === 3)
-  }
-
-  test("readImages partition test: < 0") {
-    val df = readImages(imagePath, null, true, -3, true, 1.0, 0)
-    assert(df.rdd.getNumPartitions === spark.sparkContext.defaultParallelism)
-  }
-
-  test("readImages partition test: = 0") {
-    val df = readImages(imagePath, null, true, 0, true, 1.0, 0)
-    assert(df.rdd.getNumPartitions === spark.sparkContext.defaultParallelism)
   }
 
   // Images with the different number of channels
@@ -153,7 +93,7 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
   // - default representation for 3-channel RGB images is BGR row-wise:
   //   (B00, G00, R00,      B10, G10, R10,      ...)
   // - default representation for 4-channel RGB images is BGRA row-wise:
-  //   (B00, G00, R00, A00, B10, G10, R10, A10, ...)
+  //   (B00, G00, R00, A00, B10, G10, R10, A00, ...)
   private val firstBytes20 = Map(
     "grayscale.jpg" ->
       (("CV_8UC1", Array[Byte](-2, -33, -61, -60, -59, -59, -64, -59, -66, -67, -73, -73, -62,

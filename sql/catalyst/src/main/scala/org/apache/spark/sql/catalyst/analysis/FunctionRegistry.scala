@@ -299,15 +299,6 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
-    expression[RegrCount]("regr_count"),
-    expression[RegrSXX]("regr_sxx"),
-    expression[RegrSYY]("regr_syy"),
-    expression[RegrAvgX]("regr_avgx"),
-    expression[RegrAvgY]("regr_avgy"),
-    expression[RegrSXY]("regr_sxy"),
-    expression[RegrSlope]("regr_slope"),
-    expression[RegrR2]("regr_r2"),
-    expression[RegrIntercept]("regr_intercept"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -317,6 +308,7 @@ object FunctionRegistry {
     expression[BitLength]("bit_length"),
     expression[Length]("char_length"),
     expression[Length]("character_length"),
+    expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
     expression[Elt]("elt"),
@@ -344,6 +336,7 @@ object FunctionRegistry {
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
+    expression[StringReverse]("reverse"),
     expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
@@ -402,7 +395,6 @@ object FunctionRegistry {
     expression[TruncTimestamp]("date_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
     expression[DayOfWeek]("dayofweek"),
-    expression[WeekDay]("weekday"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
@@ -410,36 +402,13 @@ object FunctionRegistry {
     // collection functions
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
-    expression[ArraysOverlap]("arrays_overlap"),
-    expression[ArrayJoin]("array_join"),
-    expression[ArrayPosition]("array_position"),
-    expression[ArraySort]("array_sort"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
-    expression[ElementAt]("element_at"),
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
-    expression[MapEntries]("map_entries"),
     expression[Size]("size"),
-    expression[Slice]("slice"),
-    expression[Size]("cardinality"),
     expression[SortArray]("sort_array"),
-    expression[ArrayMin]("array_min"),
-    expression[ArrayMax]("array_max"),
-    expression[Reverse]("reverse"),
-    expression[Concat]("concat"),
-    expression[Flatten]("flatten"),
-    expression[ArrayRepeat]("array_repeat"),
-    expression[ArrayRemove]("array_remove"),
     CreateStruct.registryEntry,
-
-    // mask functions
-    expression[Mask]("mask"),
-    expression[MaskFirstN]("mask_first_n"),
-    expression[MaskLastN]("mask_last_n"),
-    expression[MaskShowFirstN]("mask_show_first_n"),
-    expression[MaskShowLastN]("mask_show_last_n"),
-    expression[MaskHash]("mask_hash"),
 
     // misc functions
     expression[AssertTrue]("assert_true"),
@@ -557,9 +526,7 @@ object FunctionRegistry {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
-          val validParametersCount = constructors
-            .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
-            .map(_.getParameterCount).distinct.sorted
+          val validParametersCount = constructors.map(_.getParameterCount).distinct.sorted
           val expectedNumberOfParameters = if (validParametersCount.length == 1) {
             validParametersCount.head.toString
           } else {

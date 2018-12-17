@@ -38,20 +38,20 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<InputPartition<UnsafeRow>> planUnsafeInputPartitions() {
+    public List<DataReaderFactory<UnsafeRow>> createUnsafeRowReaderFactories() {
       return java.util.Arrays.asList(
-        new JavaUnsafeRowInputPartition(0, 5),
-        new JavaUnsafeRowInputPartition(5, 10));
+        new JavaUnsafeRowDataReaderFactory(0, 5),
+        new JavaUnsafeRowDataReaderFactory(5, 10));
     }
   }
 
-  static class JavaUnsafeRowInputPartition
-      implements InputPartition<UnsafeRow>, InputPartitionReader<UnsafeRow> {
+  static class JavaUnsafeRowDataReaderFactory
+      implements DataReaderFactory<UnsafeRow>, DataReader<UnsafeRow> {
     private int start;
     private int end;
     private UnsafeRow row;
 
-    JavaUnsafeRowInputPartition(int start, int end) {
+    JavaUnsafeRowDataReaderFactory(int start, int end) {
       this.start = start;
       this.end = end;
       this.row = new UnsafeRow(2);
@@ -59,8 +59,8 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public InputPartitionReader<UnsafeRow> createPartitionReader() {
-      return new JavaUnsafeRowInputPartition(start - 1, end);
+    public DataReader<UnsafeRow> createDataReader() {
+      return new JavaUnsafeRowDataReaderFactory(start - 1, end);
     }
 
     @Override

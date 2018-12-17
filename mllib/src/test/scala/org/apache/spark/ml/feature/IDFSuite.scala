@@ -17,15 +17,17 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.feature.{IDFModel => OldIDFModel}
 import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
-class IDFSuite extends MLTest with DefaultReadWriteTest {
+class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -55,7 +57,7 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
       Vectors.dense(0.0, 1.0, 2.0, 3.0),
       Vectors.sparse(numOfFeatures, Array(1), Array(1.0))
     )
-    val numOfData = data.length
+    val numOfData = data.size
     val idf = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       math.log((numOfData + 1.0) / (x + 1.0))
     })
@@ -70,7 +72,7 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
 
     MLTestingUtils.checkCopyAndUids(idfEst, idfModel)
 
-    testTransformer[(Vector, Vector)](df, idfModel, "idfValue", "expected") {
+    idfModel.transform(df).select("idfValue", "expected").collect().foreach {
       case Row(x: Vector, y: Vector) =>
         assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
     }
@@ -83,7 +85,7 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
       Vectors.dense(0.0, 1.0, 2.0, 3.0),
       Vectors.sparse(numOfFeatures, Array(1), Array(1.0))
     )
-    val numOfData = data.length
+    val numOfData = data.size
     val idf = Vectors.dense(Array(0, 3, 1, 2).map { x =>
       if (x > 0) math.log((numOfData + 1.0) / (x + 1.0)) else 0
     })
@@ -97,7 +99,7 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
       .setMinDocFreq(1)
       .fit(df)
 
-    testTransformer[(Vector, Vector)](df, idfModel, "idfValue", "expected") {
+    idfModel.transform(df).select("idfValue", "expected").collect().foreach {
       case Row(x: Vector, y: Vector) =>
         assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
     }

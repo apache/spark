@@ -89,7 +89,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
       s"""
           ${ctx.INPUT_ROW} = a;
           boolean $isNullA;
-          ${CodeGenerator.javaType(order.child.dataType)} $primitiveA;
+          ${ctx.javaType(order.child.dataType)} $primitiveA;
           {
             ${eval.code}
             $isNullA = ${eval.isNull};
@@ -97,7 +97,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           }
           ${ctx.INPUT_ROW} = b;
           boolean $isNullB;
-          ${CodeGenerator.javaType(order.child.dataType)} $primitiveB;
+          ${ctx.javaType(order.child.dataType)} $primitiveB;
           {
             ${eval.code}
             $isNullB = ${eval.isNull};

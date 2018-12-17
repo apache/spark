@@ -48,9 +48,7 @@ private[kafka010] class KafkaRelation(
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
     "kafkaConsumer.pollTimeoutMs",
-    (sqlContext.sparkContext.conf.getTimeAsSeconds(
-      "spark.network.timeout",
-      "120s") * 1000L).toString
+    sqlContext.sparkContext.conf.getTimeAsMs("spark.network.timeout", "120s").toString
   ).toLong
 
   override def schema: StructType = KafkaOffsetReader.kafkaSchema

@@ -30,6 +30,7 @@ setOldClass("jobj")
 #' @seealso groupBy
 #'
 #' @param sgd A Java object reference to the backing Scala GroupedData
+#' @export
 #' @note GroupedData since 1.4.0
 setClass("GroupedData",
          slots = list(sgd = "jobj"))
@@ -47,6 +48,7 @@ groupedData <- function(sgd) {
 
 #' @rdname show
 #' @aliases show,GroupedData-method
+#' @export
 #' @note show(GroupedData) since 1.4.0
 setMethod("show", "GroupedData",
           function(object) {
@@ -61,6 +63,7 @@ setMethod("show", "GroupedData",
 #' @return A SparkDataFrame.
 #' @rdname count
 #' @aliases count,GroupedData-method
+#' @export
 #' @examples
 #' \dontrun{
 #'   count(groupBy(df, "name"))
@@ -84,6 +87,7 @@ setMethod("count",
 #' @aliases agg,GroupedData-method
 #' @name agg
 #' @family agg_funcs
+#' @export
 #' @examples
 #' \dontrun{
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
@@ -146,6 +150,7 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #' @rdname pivot
 #' @aliases pivot,GroupedData,character-method
 #' @name pivot
+#' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(data.frame(
@@ -197,6 +202,7 @@ createMethods()
 #' @rdname gapply
 #' @aliases gapply,GroupedData-method
 #' @name gapply
+#' @export
 #' @note gapply(GroupedData) since 2.0.0
 setMethod("gapply",
           signature(x = "GroupedData"),
@@ -210,6 +216,7 @@ setMethod("gapply",
 #' @rdname gapplyCollect
 #' @aliases gapplyCollect,GroupedData-method
 #' @name gapplyCollect
+#' @export
 #' @note gapplyCollect(GroupedData) since 2.0.0
 setMethod("gapplyCollect",
           signature(x = "GroupedData"),

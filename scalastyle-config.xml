@@ -229,7 +229,7 @@ This file is divided into 3 sections:
 
   <check customId="extractopt" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">extractOpt</parameter></parameters>
-    <customMessage>Use jsonOption(x).map(.extract[T]) instead of .extractOpt[T], as the latter
+    <customMessage>Use Utils.jsonOption(x).map(.extract[T]) instead of .extractOpt[T], as the latter
     is slower.  </customMessage>
   </check>
 

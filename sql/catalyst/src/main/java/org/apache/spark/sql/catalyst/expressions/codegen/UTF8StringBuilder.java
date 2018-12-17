@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -31,34 +29,43 @@ public class UTF8StringBuilder {
 
   private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 
-  private ByteArrayMemoryBlock buffer;
-  private int length = 0;
+  private byte[] buffer;
+  private int cursor = Platform.BYTE_ARRAY_OFFSET;
 
   public UTF8StringBuilder() {
     // Since initial buffer size is 16 in `StringBuilder`, we set the same size here
-    this.buffer = new ByteArrayMemoryBlock(16);
+    this.buffer = new byte[16];
   }
 
   // Grows the buffer by at least `neededSize`
   private void grow(int neededSize) {
-    if (neededSize > ARRAY_MAX - length) {
+    if (neededSize > ARRAY_MAX - totalSize()) {
       throw new UnsupportedOperationException(
         "Cannot grow internal buffer by size " + neededSize + " because the size after growing " +
           "exceeds size limitation " + ARRAY_MAX);
     }
-    final int requestedSize = length + neededSize;
-    if (buffer.size() < requestedSize) {
-      int newLength = requestedSize < ARRAY_MAX / 2 ? requestedSize * 2 : ARRAY_MAX;
-      final ByteArrayMemoryBlock tmp = new ByteArrayMemoryBlock(newLength);
-      MemoryBlock.copyMemory(buffer, tmp, length);
+    final int length = totalSize() + neededSize;
+    if (buffer.length < length) {
+      int newLength = length < ARRAY_MAX / 2 ? length * 2 : ARRAY_MAX;
+      final byte[] tmp = new byte[newLength];
+      Platform.copyMemory(
+        buffer,
+        Platform.BYTE_ARRAY_OFFSET,
+        tmp,
+        Platform.BYTE_ARRAY_OFFSET,
+        totalSize());
       buffer = tmp;
     }
   }
 
+  private int totalSize() {
+    return cursor - Platform.BYTE_ARRAY_OFFSET;
+  }
+
   public void append(UTF8String value) {
     grow(value.numBytes());
-    value.writeToMemory(buffer.getByteArray(), length + Platform.BYTE_ARRAY_OFFSET);
-    length += value.numBytes();
+    value.writeToMemory(buffer, cursor);
+    cursor += value.numBytes();
   }
 
   public void append(String value) {
@@ -66,6 +73,6 @@ public class UTF8StringBuilder {
   }
 
   public UTF8String build() {
-    return UTF8String.fromBytes(buffer.getByteArray(), 0, length);
+    return UTF8String.fromBytes(buffer, 0, totalSize());
   }
 }

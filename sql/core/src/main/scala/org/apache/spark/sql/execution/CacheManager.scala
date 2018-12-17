@@ -71,7 +71,7 @@ class CacheManager extends Logging {
 
   /** Clears all cached tables. */
   def clearCache(): Unit = writeLock {
-    cachedData.asScala.foreach(_.cachedRepresentation.cacheBuilder.clearCache())
+    cachedData.asScala.foreach(_.cachedRepresentation.cachedColumnBuffers.unpersist())
     cachedData.clear()
   }
 
@@ -99,7 +99,7 @@ class CacheManager extends Logging {
         sparkSession.sessionState.conf.columnBatchSize, storageLevel,
         sparkSession.sessionState.executePlan(planToCache).executedPlan,
         tableName,
-        planToCache)
+        planToCache.stats)
       cachedData.add(CachedData(planToCache, inMemoryRelation))
     }
   }
@@ -119,7 +119,7 @@ class CacheManager extends Logging {
     while (it.hasNext) {
       val cd = it.next()
       if (cd.plan.find(_.sameResult(plan)).isDefined) {
-        cd.cachedRepresentation.cacheBuilder.clearCache(blocking)
+        cd.cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
         it.remove()
       }
     }
@@ -138,15 +138,17 @@ class CacheManager extends Logging {
     while (it.hasNext) {
       val cd = it.next()
       if (condition(cd.plan)) {
-        cd.cachedRepresentation.cacheBuilder.clearCache()
+        cd.cachedRepresentation.cachedColumnBuffers.unpersist()
         // Remove the cache entry before we create a new one, so that we can have a different
         // physical plan.
         it.remove()
-        val plan = spark.sessionState.executePlan(cd.plan).executedPlan
         val newCache = InMemoryRelation(
-          cacheBuilder = cd.cachedRepresentation
-            .cacheBuilder.copy(cachedPlan = plan)(_cachedColumnBuffers = null),
-          logicalPlan = cd.plan)
+          useCompression = cd.cachedRepresentation.useCompression,
+          batchSize = cd.cachedRepresentation.batchSize,
+          storageLevel = cd.cachedRepresentation.storageLevel,
+          child = spark.sessionState.executePlan(cd.plan).executedPlan,
+          tableName = cd.cachedRepresentation.tableName,
+          statsOfPlanToCache = cd.plan.stats)
         needToRecache += cd.copy(cachedRepresentation = newCache)
       }
     }

@@ -504,40 +504,4 @@ trait HasLoss extends Params {
   /** @group getParam */
   final def getLoss: String = $(loss)
 }
-
-/**
- * Trait for shared param distanceMeasure (default: org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN). This trait may be changed or
- * removed between minor versions.
- */
-@DeveloperApi
-trait HasDistanceMeasure extends Params {
-
-  /**
-   * Param for The distance measure. Supported options: 'euclidean' and 'cosine'.
-   * @group param
-   */
-  final val distanceMeasure: Param[String] = new Param[String](this, "distanceMeasure", "The distance measure. Supported options: 'euclidean' and 'cosine'", (value: String) => org.apache.spark.mllib.clustering.DistanceMeasure.validateDistanceMeasure(value))
-
-  setDefault(distanceMeasure, org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN)
-
-  /** @group getParam */
-  final def getDistanceMeasure: String = $(distanceMeasure)
-}
-
-/**
- * Trait for shared param validationIndicatorCol. This trait may be changed or
- * removed between minor versions.
- */
-@DeveloperApi
-trait HasValidationIndicatorCol extends Params {
-
-  /**
-   * Param for name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation..
-   * @group param
-   */
-  final val validationIndicatorCol: Param[String] = new Param[String](this, "validationIndicatorCol", "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.")
-
-  /** @group getParam */
-  final def getValidationIndicatorCol: String = $(validationIndicatorCol)
-}
 // scalastyle:on

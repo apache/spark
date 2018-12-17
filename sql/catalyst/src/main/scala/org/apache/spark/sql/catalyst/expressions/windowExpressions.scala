@@ -342,10 +342,7 @@ abstract class OffsetWindowFunction
   override lazy val frame: WindowFrame = {
     val boundary = direction match {
       case Ascending => offset
-      case Descending => UnaryMinus(offset) match {
-          case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
-          case o => o
-      }
+      case Descending => UnaryMinus(offset)
     }
     SpecifiedWindowFrame(RowFrame, boundary, boundary)
   }

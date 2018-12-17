@@ -19,7 +19,6 @@ import cProfile
 import pstats
 import os
 import atexit
-import sys
 
 from pyspark.accumulators import AccumulatorParam
 
@@ -174,4 +173,4 @@ if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        sys.exit(-1)
+        exit(-1)

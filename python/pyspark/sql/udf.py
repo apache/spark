@@ -18,14 +18,12 @@
 User-defined function related classes and functions
 """
 import functools
-import sys
 
 from pyspark import SparkContext, since
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string,\
-    to_arrow_type, to_arrow_schema
-from pyspark.util import _get_argspec, fail_on_stopiteration
+from pyspark.sql.types import StringType, DataType, ArrayType, StructType, MapType, \
+    _parse_datatype_string
 
 __all__ = ["UDFRegistration"]
 
@@ -43,10 +41,11 @@ def _create_udf(f, returnType, evalType):
                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
 
+        import inspect
         from pyspark.sql.utils import require_minimum_pyarrow_version
-        require_minimum_pyarrow_version()
 
-        argspec = _get_argspec(f)
+        require_minimum_pyarrow_version()
+        argspec = inspect.getargspec(f)
 
         if evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF and len(argspec.args) == 0 and \
                 argspec.varargs is None:
@@ -55,11 +54,11 @@ def _create_udf(f, returnType, evalType):
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
 
-        if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF \
-                and len(argspec.args) not in (1, 2):
+        if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and len(argspec.args) != 1:
             raise ValueError(
                 "Invalid function: pandas_udfs with function type GROUPED_MAP "
-                "must take either one argument (data) or two arguments (key, data).")
+                "must take a single arg that is a pandas DataFrame."
+            )
 
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
@@ -113,31 +112,15 @@ class UserDefinedFunction(object):
             else:
                 self._returnType_placeholder = _parse_datatype_string(self._returnType)
 
-        if self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-            try:
-                to_arrow_type(self._returnType_placeholder)
-            except TypeError:
-                raise NotImplementedError(
-                    "Invalid returnType with scalar Pandas UDFs: %s is "
-                    "not supported" % str(self._returnType_placeholder))
-        elif self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-            if isinstance(self._returnType_placeholder, StructType):
-                try:
-                    to_arrow_schema(self._returnType_placeholder)
-                except TypeError:
-                    raise NotImplementedError(
-                        "Invalid returnType with grouped map Pandas UDFs: "
-                        "%s is not supported" % str(self._returnType_placeholder))
-            else:
-                raise TypeError("Invalid returnType for grouped map Pandas "
-                                "UDFs: returnType must be a StructType.")
-        elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
-            try:
-                to_arrow_type(self._returnType_placeholder)
-            except TypeError:
-                raise NotImplementedError(
-                    "Invalid returnType with grouped aggregate Pandas UDFs: "
-                    "%s is not supported" % str(self._returnType_placeholder))
+        if self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF \
+                and not isinstance(self._returnType_placeholder, StructType):
+            raise ValueError("Invalid returnType: returnType must be a StructType for "
+                             "pandas_udf with function type GROUPED_MAP")
+        elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF \
+                and isinstance(self._returnType_placeholder, (StructType, ArrayType, MapType)):
+            raise NotImplementedError(
+                "ArrayType, StructType and MapType are not supported with "
+                "PandasUDFType.GROUPED_AGG")
 
         return self._returnType_placeholder
 
@@ -157,17 +140,7 @@ class UserDefinedFunction(object):
         spark = SparkSession.builder.getOrCreate()
         sc = spark.sparkContext
 
-        func = fail_on_stopiteration(self.func)
-
-        # for pandas UDFs the worker needs to know if the function takes
-        # one or two arguments, but the signature is lost when wrapping with
-        # fail_on_stopiteration, so we store it here
-        if self.evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-                             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
-            func._argspec = _get_argspec(self.func)
-
-        wrapped_func = _wrap_function(sc, func, self.returnType)
+        wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             self._name, wrapped_func, jdt, self.evalType, self.deterministic)
@@ -406,7 +379,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        sys.exit(-1)
+        exit(-1)
 
 
 if __name__ == "__main__":

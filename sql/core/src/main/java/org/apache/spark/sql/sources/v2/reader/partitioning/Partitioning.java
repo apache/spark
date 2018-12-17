@@ -18,7 +18,7 @@
 package org.apache.spark.sql.sources.v2.reader.partitioning;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.InputPartition;
+import org.apache.spark.sql.sources.v2.reader.DataReaderFactory;
 import org.apache.spark.sql.sources.v2.reader.SupportsReportPartitioning;
 
 /**
@@ -31,7 +31,7 @@ import org.apache.spark.sql.sources.v2.reader.SupportsReportPartitioning;
 public interface Partitioning {
 
   /**
-   * Returns the number of partitions(i.e., {@link InputPartition}s) the data source outputs.
+   * Returns the number of partitions(i.e., {@link DataReaderFactory}s) the data source outputs.
    */
   int numPartitions();
 

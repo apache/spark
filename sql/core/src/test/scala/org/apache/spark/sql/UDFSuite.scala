@@ -144,81 +144,73 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   }
 
   test("UDF in a WHERE") {
-    withTempView("integerData") {
-      spark.udf.register("oneArgFilter", (n: Int) => { n > 80 })
+    spark.udf.register("oneArgFilter", (n: Int) => { n > 80 })
 
-      val df = sparkContext.parallelize(
-        (1 to 100).map(i => TestData(i, i.toString))).toDF()
-      df.createOrReplaceTempView("integerData")
+    val df = sparkContext.parallelize(
+      (1 to 100).map(i => TestData(i, i.toString))).toDF()
+    df.createOrReplaceTempView("integerData")
 
-      val result =
-        sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
-      assert(result.count() === 20)
-    }
+    val result =
+      sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
+    assert(result.count() === 20)
   }
 
   test("UDF in a HAVING") {
-    withTempView("groupData") {
-      spark.udf.register("havingFilter", (n: Long) => { n > 5 })
+    spark.udf.register("havingFilter", (n: Long) => { n > 5 })
 
-      val df = Seq(("red", 1), ("red", 2), ("blue", 10),
-        ("green", 100), ("green", 200)).toDF("g", "v")
-      df.createOrReplaceTempView("groupData")
+    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+      ("green", 100), ("green", 200)).toDF("g", "v")
+    df.createOrReplaceTempView("groupData")
 
-      val result =
-        sql(
-          """
-           | SELECT g, SUM(v) as s
-           | FROM groupData
-           | GROUP BY g
-           | HAVING havingFilter(s)
-          """.stripMargin)
+    val result =
+      sql(
+        """
+         | SELECT g, SUM(v) as s
+         | FROM groupData
+         | GROUP BY g
+         | HAVING havingFilter(s)
+        """.stripMargin)
 
-      assert(result.count() === 2)
-    }
+    assert(result.count() === 2)
   }
 
   test("UDF in a GROUP BY") {
-    withTempView("groupData") {
-      spark.udf.register("groupFunction", (n: Int) => { n > 10 })
+    spark.udf.register("groupFunction", (n: Int) => { n > 10 })
 
-      val df = Seq(("red", 1), ("red", 2), ("blue", 10),
-        ("green", 100), ("green", 200)).toDF("g", "v")
-      df.createOrReplaceTempView("groupData")
+    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+      ("green", 100), ("green", 200)).toDF("g", "v")
+    df.createOrReplaceTempView("groupData")
 
-      val result =
-        sql(
-          """
-           | SELECT SUM(v)
-           | FROM groupData
-           | GROUP BY groupFunction(v)
-          """.stripMargin)
-      assert(result.count() === 2)
-    }
+    val result =
+      sql(
+        """
+         | SELECT SUM(v)
+         | FROM groupData
+         | GROUP BY groupFunction(v)
+        """.stripMargin)
+    assert(result.count() === 2)
   }
 
   test("UDFs everywhere") {
-    withTempView("groupData") {
-      spark.udf.register("groupFunction", (n: Int) => { n > 10 })
-      spark.udf.register("havingFilter", (n: Long) => { n > 2000 })
-      spark.udf.register("whereFilter", (n: Int) => { n < 150 })
-      spark.udf.register("timesHundred", (n: Long) => { n * 100 })
+    spark.udf.register("groupFunction", (n: Int) => { n > 10 })
+    spark.udf.register("havingFilter", (n: Long) => { n > 2000 })
+    spark.udf.register("whereFilter", (n: Int) => { n < 150 })
+    spark.udf.register("timesHundred", (n: Long) => { n * 100 })
 
-      val df = Seq(("red", 1), ("red", 2), ("blue", 10),
-        ("green", 100), ("green", 200)).toDF("g", "v")
-      df.createOrReplaceTempView("groupData")
+    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+      ("green", 100), ("green", 200)).toDF("g", "v")
+    df.createOrReplaceTempView("groupData")
 
-      val result =
-        sql(
-          """
-           | SELECT timesHundred(SUM(v)) as v100
-           | FROM groupData
-           | WHERE whereFilter(v)
-           | GROUP BY groupFunction(v)
-           | HAVING havingFilter(v100)
-          """.stripMargin)
-      assert(result.count() === 1)
-    }
+    val result =
+      sql(
+        """
+         | SELECT timesHundred(SUM(v)) as v100
+         | FROM groupData
+         | WHERE whereFilter(v)
+         | GROUP BY groupFunction(v)
+         | HAVING havingFilter(v100)
+        """.stripMargin)
+    assert(result.count() === 1)
   }
 
   test("struct UDF") {
@@ -311,17 +303,5 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
     assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
       .contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
-  }
-
-  test("SPARK-23666 Do not display exprId in argument names") {
-    withTempView("x") {
-      Seq(((1, 2), 3)).toDF("a", "b").createOrReplaceTempView("x")
-      spark.udf.register("f", (a: Int) => a)
-      val outputStream = new java.io.ByteArrayOutputStream()
-      Console.withOut(outputStream) {
-        spark.sql("SELECT f(a._1) FROM x").show
-      }
-      assert(outputStream.toString.contains("UDF:f(a._1 AS `_1`)"))
-    }
   }
 }

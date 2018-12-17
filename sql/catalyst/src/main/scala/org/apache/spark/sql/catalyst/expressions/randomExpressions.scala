@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -32,7 +31,7 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful {
+abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterministic {
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize and initialize it.
@@ -69,8 +68,7 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
        0.8446490682263027
       > SELECT _FUNC_(null);
        0.8446490682263027
-  """,
-  note = "The function is non-deterministic in general case.")
+  """)
 // scalastyle:on line.size.limit
 case class Rand(child: Expression) extends RDG {
 
@@ -83,12 +81,9 @@ case class Rand(child: Expression) extends RDG {
     val rngTerm = ctx.addMutableState(className, "rng")
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
-    ev.copy(code = code"""
-      final ${CodeGenerator.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();""",
-      isNull = FalseLiteral)
+    ev.copy(code = s"""
+      final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();""", isNull = "false")
   }
-
-  override def freshCopy(): Rand = Rand(child)
 }
 
 object Rand {
@@ -98,7 +93,7 @@ object Rand {
 /** Generate a random column with i.i.d. values drawn from the standard normal distribution. */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.""",
+  usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.",
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -107,8 +102,7 @@ object Rand {
        1.1164209726833079
       > SELECT _FUNC_(null);
        1.1164209726833079
-  """,
-  note = "The function is non-deterministic in general case.")
+  """)
 // scalastyle:on line.size.limit
 case class Randn(child: Expression) extends RDG {
 
@@ -121,12 +115,9 @@ case class Randn(child: Expression) extends RDG {
     val rngTerm = ctx.addMutableState(className, "rng")
     ctx.addPartitionInitializationStatement(
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
-    ev.copy(code = code"""
-      final ${CodeGenerator.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""",
-      isNull = FalseLiteral)
+    ev.copy(code = s"""
+      final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""", isNull = "false")
   }
-
-  override def freshCopy(): Randn = Randn(child)
 }
 
 object Randn {

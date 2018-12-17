@@ -386,7 +386,7 @@ object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
         .head()
       val categorySizes = data.getAs[Seq[Int]](0).toArray
       val model = new OneHotEncoderModel(metadata.uid, categorySizes)
-      metadata.getAndSetParams(model)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }

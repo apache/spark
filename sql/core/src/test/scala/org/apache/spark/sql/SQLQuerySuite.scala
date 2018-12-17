@@ -2150,8 +2150,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("data source table created in InMemoryCatalog should be able to read/write") {
     withTable("tbl") {
-      val provider = spark.sessionState.conf.defaultDataSourceName
-      sql(s"CREATE TABLE tbl(i INT, j STRING) USING $provider")
+      sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
       checkAnswer(sql("SELECT i, j FROM tbl"), Nil)
 
       Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
@@ -2475,9 +2474,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-16975: Column-partition path starting '_' should be handled correctly") {
     withTempDir { dir =>
-      val dataDir = new File(dir, "data").getCanonicalPath
-      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(dataDir)
-      spark.read.load(dataDir)
+      val parquetDir = new File(dir, "parquet").getCanonicalPath
+      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(parquetDir)
+      spark.read.parquet(parquetDir)
     }
   }
 

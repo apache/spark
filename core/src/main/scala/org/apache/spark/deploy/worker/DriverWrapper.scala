@@ -25,7 +25,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil, SparkSubmit}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.util._
+import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
 /**
  * Utility object for launching driver programs such that they share fate with the Worker process.
@@ -79,21 +79,16 @@ object DriverWrapper extends Logging {
     val secMgr = new SecurityManager(sparkConf)
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
 
-    val Seq(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath) =
-      Seq(
-        "spark.jars.excludes",
-        "spark.jars.packages",
-        "spark.jars.repositories",
-        "spark.jars.ivy",
-        "spark.jars.ivySettings"
-      ).map(sys.props.get(_).orNull)
+    val Seq(packagesExclusions, packages, repositories, ivyRepoPath) =
+      Seq("spark.jars.excludes", "spark.jars.packages", "spark.jars.repositories", "spark.jars.ivy")
+        .map(sys.props.get(_).orNull)
 
     val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(packagesExclusions,
-      packages, repositories, ivyRepoPath, Option(ivySettingsPath))
+      packages, repositories, ivyRepoPath)
     val jars = {
       val jarsProp = sys.props.get("spark.jars").orNull
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
-        DependencyUtils.mergeFileLists(jarsProp, resolvedMavenCoordinates)
+        SparkSubmit.mergeFileLists(jarsProp, resolvedMavenCoordinates)
       } else {
         jarsProp
       }

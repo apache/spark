@@ -234,7 +234,7 @@ class StringIndexerModel (
     val metadata = NominalAttribute.defaultAttr
       .withName($(outputCol)).withValues(filteredLabels).toMetadata()
     // If we are skipping invalid records, filter them out.
-    val (filteredDataset, keepInvalid) = $(handleInvalid) match {
+    val (filteredDataset, keepInvalid) = getHandleInvalid match {
       case StringIndexer.SKIP_INVALID =>
         val filterer = udf { label: String =>
           labelToIndex.contains(label)
@@ -315,7 +315,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
         .head()
       val labels = data.getAs[Seq[String]](0).toArray
       val model = new StringIndexerModel(metadata.uid, labels)
-      metadata.getAndSetParams(model)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }

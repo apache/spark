@@ -196,7 +196,7 @@ class Dataset[T] private[sql](
   }
 
   // Wraps analyzed logical plans with an analysis barrier so we won't traverse/resolve it again.
-  @transient private[sql] val planWithBarrier = AnalysisBarrier(logicalPlan)
+  @transient private val planWithBarrier = AnalysisBarrier(logicalPlan)
 
   /**
    * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
@@ -231,17 +231,16 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Get rows represented in Sequence by specific truncate and vertical requirement.
+   * Compose the string representing rows for output
    *
-   * @param numRows Number of rows to return
+   * @param _numRows Number of rows to show
    * @param truncate If set to more than 0, truncates strings to `truncate` characters and
    *                   all cells will be aligned right.
-   * @param vertical If set to true, the rows to return do not need truncate.
+   * @param vertical If set to true, prints output rows vertically (one line per column value).
    */
-  private[sql] def getRows(
-      numRows: Int,
-      truncate: Int,
-      vertical: Boolean): Seq[Seq[String]] = {
+  private[sql] def showString(
+      _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
+    val numRows = _numRows.max(0).min(Int.MaxValue - 1)
     val newDf = toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
       // Since binary types in top-level schema fields have a specific format to print,
@@ -252,12 +251,14 @@ class Dataset[T] private[sql](
         Column(col).cast(StringType)
       }
     }
-    val data = newDf.select(castCols: _*).take(numRows + 1)
+    val takeResult = newDf.select(castCols: _*).take(numRows + 1)
+    val hasMoreData = takeResult.length > numRows
+    val data = takeResult.take(numRows)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
-    schema.fieldNames.toSeq +: data.map { row =>
+    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
@@ -273,26 +274,6 @@ class Dataset[T] private[sql](
         }
       }: Seq[String]
     }
-  }
-
-  /**
-   * Compose the string representing rows for output
-   *
-   * @param _numRows Number of rows to show
-   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
-   *                   all cells will be aligned right.
-   * @param vertical If set to true, prints output rows vertically (one line per column value).
-   */
-  private[sql] def showString(
-      _numRows: Int,
-      truncate: Int = 20,
-      vertical: Boolean = false): String = {
-    val numRows = _numRows.max(0).min(Int.MaxValue - 1)
-    // Get rows represented by Seq[Seq[String]], we may get one more line if it has more data.
-    val tmpRows = getRows(numRows, truncate, vertical)
-
-    val hasMoreData = tmpRows.length - 1 > numRows
-    val rows = tmpRows.take(numRows + 1)
 
     val sb = new StringBuilder
     val numCols = schema.fieldNames.length
@@ -310,25 +291,31 @@ class Dataset[T] private[sql](
         }
       }
 
-      val paddedRows = rows.map { row =>
-        row.zipWithIndex.map { case (cell, i) =>
-          if (truncate > 0) {
-            StringUtils.leftPad(cell, colWidths(i))
-          } else {
-            StringUtils.rightPad(cell, colWidths(i))
-          }
-        }
-      }
-
       // Create SeparateLine
       val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
 
       // column names
-      paddedRows.head.addString(sb, "|", "|", "|\n")
+      rows.head.zipWithIndex.map { case (cell, i) =>
+        if (truncate > 0) {
+          StringUtils.leftPad(cell, colWidths(i))
+        } else {
+          StringUtils.rightPad(cell, colWidths(i))
+        }
+      }.addString(sb, "|", "|", "|\n")
+
       sb.append(sep)
 
       // data
-      paddedRows.tail.foreach(_.addString(sb, "|", "|", "|\n"))
+      rows.tail.foreach {
+        _.zipWithIndex.map { case (cell, i) =>
+          if (truncate > 0) {
+            StringUtils.leftPad(cell.toString, colWidths(i))
+          } else {
+            StringUtils.rightPad(cell.toString, colWidths(i))
+          }
+        }.addString(sb, "|", "|", "|\n")
+      }
+
       sb.append(sep)
     } else {
       // Extended display mode enabled
@@ -359,7 +346,7 @@ class Dataset[T] private[sql](
     }
 
     // Print a footer
-    if (vertical && rows.tail.isEmpty) {
+    if (vertical && data.isEmpty) {
       // In a vertical mode, print an empty row set explicitly
       sb.append("(0 rows)\n")
     } else if (hasMoreData) {
@@ -523,16 +510,6 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
-
-  /**
-   * Returns true if the `Dataset` is empty.
-   *
-   * @group basic
-   * @since 2.4.0
-   */
-  def isEmpty: Boolean = withAction("isEmpty", limit(1).groupBy().count().queryExecution) { plan =>
-    plan.executeCollect().head.getLong(0) == 0
-  }
 
   /**
    * Returns true if this Dataset contains one or more sources that continuously
@@ -1630,9 +1607,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def reduce(func: (T, T) => T): T = withNewRDDExecutionId {
-    rdd.reduce(func)
-  }
+  def reduce(func: (T, T) => T): T = rdd.reduce(func)
 
   /**
    * :: Experimental ::
@@ -2958,7 +2933,7 @@ class Dataset[T] private[sql](
    */
   def storageLevel: StorageLevel = {
     sparkSession.sharedState.cacheManager.lookupCachedData(this).map { cachedData =>
-      cachedData.cachedRepresentation.cacheBuilder.storageLevel
+      cachedData.cachedRepresentation.storageLevel
     }.getOrElse(StorageLevel.NONE)
   }
 
@@ -3212,41 +3187,27 @@ class Dataset[T] private[sql](
     EvaluatePython.javaToPython(rdd)
   }
 
-  private[sql] def collectToPython(): Array[Any] = {
+  private[sql] def collectToPython(): Int = {
     EvaluatePython.registerPicklers()
-    withAction("collectToPython", queryExecution) { plan =>
+    withNewExecutionId {
       val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
-      val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
-        plan.executeCollect().iterator.map(toJava))
+      val iter = new SerDeUtil.AutoBatchedPickler(
+        queryExecution.executedPlan.executeCollect().iterator.map(toJava))
       PythonRDD.serveIterator(iter, "serve-DataFrame")
     }
-  }
-
-  private[sql] def getRowsToPython(
-      _numRows: Int,
-      truncate: Int,
-      vertical: Boolean): Array[Any] = {
-    EvaluatePython.registerPicklers()
-    val numRows = _numRows.max(0).min(Int.MaxValue - 1)
-    val rows = getRows(numRows, truncate, vertical).map(_.toArray).toArray
-    val toJava: (Any) => Any = EvaluatePython.toJava(_, ArrayType(ArrayType(StringType)))
-    val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
-      rows.iterator.map(toJava))
-    PythonRDD.serveIterator(iter, "serve-GetRows")
   }
 
   /**
    * Collect a Dataset as ArrowPayload byte arrays and serve to PySpark.
    */
-  private[sql] def collectAsArrowToPython(): Array[Any] = {
-    withAction("collectAsArrowToPython", queryExecution) { plan =>
-      val iter: Iterator[Array[Byte]] =
-        toArrowPayload(plan).collect().iterator.map(_.asPythonSerializable)
+  private[sql] def collectAsArrowToPython(): Int = {
+    withNewExecutionId {
+      val iter = toArrowPayload.collect().iterator.map(_.asPythonSerializable)
       PythonRDD.serveIterator(iter, "serve-Arrow")
     }
   }
 
-  private[sql] def toPythonIterator(): Array[Any] = {
+  private[sql] def toPythonIterator(): Int = {
     withNewExecutionId {
       PythonRDD.toLocalIteratorAndServe(javaToPython.rdd)
     }
@@ -3350,19 +3311,14 @@ class Dataset[T] private[sql](
   }
 
   /** Convert to an RDD of ArrowPayload byte arrays */
-  private[sql] def toArrowPayload(plan: SparkPlan): RDD[ArrowPayload] = {
+  private[sql] def toArrowPayload: RDD[ArrowPayload] = {
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
-    plan.execute().mapPartitionsInternal { iter =>
+    queryExecution.toRdd.mapPartitionsInternal { iter =>
       val context = TaskContext.get()
       ArrowConverters.toPayloadIterator(
         iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, context)
     }
-  }
-
-  // This is only used in tests, for now.
-  private[sql] def toArrowPayload: RDD[ArrowPayload] = {
-    toArrowPayload(queryExecution.executedPlan)
   }
 }

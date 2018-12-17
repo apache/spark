@@ -49,7 +49,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private implicit val kExprEnc = encoderFor(kEncoder)
   private implicit val vExprEnc = encoderFor(vEncoder)
 
-  private def logicalPlan = AnalysisBarrier(queryExecution.analyzed)
+  private def logicalPlan = queryExecution.analyzed
   private def sparkSession = queryExecution.sparkSession
 
   /**

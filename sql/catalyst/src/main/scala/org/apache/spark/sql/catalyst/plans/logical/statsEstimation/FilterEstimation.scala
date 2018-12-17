@@ -225,7 +225,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       attr: Attribute,
       isNull: Boolean,
       update: Boolean): Option[Double] = {
-    if (!colStatsMap.contains(attr) || !colStatsMap(attr).hasCountStats) {
+    if (!colStatsMap.contains(attr)) {
       logDebug("[CBO] No statistics for " + attr)
       return None
     }
@@ -234,14 +234,14 @@ case class FilterEstimation(plan: Filter) extends Logging {
     val nullPercent: Double = if (rowCountValue == 0) {
       0
     } else {
-      (BigDecimal(colStat.nullCount.get) / BigDecimal(rowCountValue)).toDouble
+      (BigDecimal(colStat.nullCount) / BigDecimal(rowCountValue)).toDouble
     }
 
     if (update) {
       val newStats = if (isNull) {
-        colStat.copy(distinctCount = Some(0), min = None, max = None)
+        colStat.copy(distinctCount = 0, min = None, max = None)
       } else {
-        colStat.copy(nullCount = Some(0))
+        colStat.copy(nullCount = 0)
       }
       colStatsMap.update(attr, newStats)
     }
@@ -322,21 +322,17 @@ case class FilterEstimation(plan: Filter) extends Logging {
         // value.
         val newStats = attr.dataType match {
           case StringType | BinaryType =>
-            colStat.copy(distinctCount = Some(1), nullCount = Some(0))
+            colStat.copy(distinctCount = 1, nullCount = 0)
           case _ =>
-            colStat.copy(distinctCount = Some(1), min = Some(literal.value),
-              max = Some(literal.value), nullCount = Some(0))
+            colStat.copy(distinctCount = 1, min = Some(literal.value),
+              max = Some(literal.value), nullCount = 0)
         }
         colStatsMap.update(attr, newStats)
       }
 
       if (colStat.histogram.isEmpty) {
-        if (!colStat.distinctCount.isEmpty) {
-          // returns 1/ndv if there is no histogram
-          Some(1.0 / colStat.distinctCount.get.toDouble)
-        } else {
-          None
-        }
+        // returns 1/ndv if there is no histogram
+        Some(1.0 / colStat.distinctCount.toDouble)
       } else {
         Some(computeEqualityPossibilityByHistogram(literal, colStat))
       }
@@ -382,23 +378,19 @@ case class FilterEstimation(plan: Filter) extends Logging {
       attr: Attribute,
       hSet: Set[Any],
       update: Boolean): Option[Double] = {
-    if (!colStatsMap.hasDistinctCount(attr)) {
+    if (!colStatsMap.contains(attr)) {
       logDebug("[CBO] No statistics for " + attr)
       return None
     }
 
     val colStat = colStatsMap(attr)
-    val ndv = colStat.distinctCount.get
+    val ndv = colStat.distinctCount
     val dataType = attr.dataType
     var newNdv = ndv
 
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>
-        if (ndv.toDouble == 0 || colStat.min.isEmpty || colStat.max.isEmpty)  {
-          return Some(0.0)
-        }
-
         val statsInterval =
           ValueInterval(colStat.min, colStat.max, dataType).asInstanceOf[NumericValueInterval]
         val validQuerySet = hSet.filter { v =>
@@ -415,20 +407,16 @@ case class FilterEstimation(plan: Filter) extends Logging {
         // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
         newNdv = ndv.min(BigInt(validQuerySet.size))
         if (update) {
-          val newStats = colStat.copy(distinctCount = Some(newNdv), min = Some(newMin),
-            max = Some(newMax), nullCount = Some(0))
+          val newStats = colStat.copy(distinctCount = newNdv, min = Some(newMin),
+            max = Some(newMax), nullCount = 0)
           colStatsMap.update(attr, newStats)
         }
 
       // We assume the whole set since there is no min/max information for String/Binary type
       case StringType | BinaryType =>
-        if (ndv.toDouble == 0)  {
-          return Some(0.0)
-        }
-
         newNdv = ndv.min(BigInt(hSet.size))
         if (update) {
-          val newStats = colStat.copy(distinctCount = Some(newNdv), nullCount = Some(0))
+          val newStats = colStat.copy(distinctCount = newNdv, nullCount = 0)
           colStatsMap.update(attr, newStats)
         }
     }
@@ -455,17 +443,12 @@ case class FilterEstimation(plan: Filter) extends Logging {
       literal: Literal,
       update: Boolean): Option[Double] = {
 
-    if (!colStatsMap.hasMinMaxStats(attr) || !colStatsMap.hasDistinctCount(attr)) {
-      logDebug("[CBO] No statistics for " + attr)
-      return None
-    }
-
     val colStat = colStatsMap(attr)
     val statsInterval =
       ValueInterval(colStat.min, colStat.max, attr.dataType).asInstanceOf[NumericValueInterval]
     val max = statsInterval.max
     val min = statsInterval.min
-    val ndv = colStat.distinctCount.get.toDouble
+    val ndv = colStat.distinctCount.toDouble
 
     // determine the overlapping degree between predicate interval and column's interval
     val numericLiteral = EstimationUtils.toDouble(literal.value, literal.dataType)
@@ -537,8 +520,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
             newMax = newValue
         }
 
-        val newStats = colStat.copy(distinctCount = Some(ceil(ndv * percent)),
-          min = newMin, max = newMax, nullCount = Some(0))
+        val newStats = colStat.copy(distinctCount = ceil(ndv * percent),
+          min = newMin, max = newMax, nullCount = 0)
 
         colStatsMap.update(attr, newStats)
       }
@@ -654,11 +637,11 @@ case class FilterEstimation(plan: Filter) extends Logging {
       attrRight: Attribute,
       update: Boolean): Option[Double] = {
 
-    if (!colStatsMap.hasCountStats(attrLeft)) {
+    if (!colStatsMap.contains(attrLeft)) {
       logDebug("[CBO] No statistics for " + attrLeft)
       return None
     }
-    if (!colStatsMap.hasCountStats(attrRight)) {
+    if (!colStatsMap.contains(attrRight)) {
       logDebug("[CBO] No statistics for " + attrRight)
       return None
     }
@@ -685,7 +668,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
     val minRight = statsIntervalRight.min
 
     // determine the overlapping degree between predicate interval and column's interval
-    val allNotNull = (colStatLeft.nullCount.get == 0) && (colStatRight.nullCount.get == 0)
+    val allNotNull = (colStatLeft.nullCount == 0) && (colStatRight.nullCount == 0)
     val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
       // Left < Right or Left <= Right
       // - no overlap:
@@ -724,14 +707,14 @@ case class FilterEstimation(plan: Filter) extends Logging {
       case _: EqualTo =>
         ((maxLeft < minRight) || (maxRight < minLeft),
           (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
-          && (colStatLeft.distinctCount.get == colStatRight.distinctCount.get)
+          && (colStatLeft.distinctCount == colStatRight.distinctCount)
         )
       case _: EqualNullSafe =>
         // For null-safe equality, we use a very restrictive condition to evaluate its overlap.
         // If null values exists, we set it to partial overlap.
         (((maxLeft < minRight) || (maxRight < minLeft)) && allNotNull,
           (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
-            && (colStatLeft.distinctCount.get == colStatRight.distinctCount.get)
+            && (colStatLeft.distinctCount == colStatRight.distinctCount)
         )
     }
 
@@ -748,9 +731,9 @@ case class FilterEstimation(plan: Filter) extends Logging {
       if (update) {
         // Need to adjust new min/max after the filter condition is applied
 
-        val ndvLeft = BigDecimal(colStatLeft.distinctCount.get)
+        val ndvLeft = BigDecimal(colStatLeft.distinctCount)
         val newNdvLeft = ceil(ndvLeft * percent)
-        val ndvRight = BigDecimal(colStatRight.distinctCount.get)
+        val ndvRight = BigDecimal(colStatRight.distinctCount)
         val newNdvRight = ceil(ndvRight * percent)
 
         var newMaxLeft = colStatLeft.max
@@ -834,10 +817,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
           }
         }
 
-        val newStatsLeft = colStatLeft.copy(distinctCount = Some(newNdvLeft), min = newMinLeft,
+        val newStatsLeft = colStatLeft.copy(distinctCount = newNdvLeft, min = newMinLeft,
           max = newMaxLeft)
         colStatsMap(attrLeft) = newStatsLeft
-        val newStatsRight = colStatRight.copy(distinctCount = Some(newNdvRight), min = newMinRight,
+        val newStatsRight = colStatRight.copy(distinctCount = newNdvRight, min = newMinRight,
           max = newMaxRight)
         colStatsMap(attrRight) = newStatsRight
       }
@@ -866,33 +849,15 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
   def contains(a: Attribute): Boolean = updatedMap.contains(a.exprId) || originalMap.contains(a)
 
   /**
-   * Gets an Option of column stat for the given attribute.
-   * Prefer the column stat in updatedMap than that in originalMap,
-   * because updatedMap has the latest (updated) column stats.
-   */
-  def get(a: Attribute): Option[ColumnStat] = {
-    if (updatedMap.contains(a.exprId)) {
-      updatedMap.get(a.exprId).map(_._2)
-    } else {
-      originalMap.get(a)
-    }
-  }
-
-  def hasCountStats(a: Attribute): Boolean =
-    get(a).map(_.hasCountStats).getOrElse(false)
-
-  def hasDistinctCount(a: Attribute): Boolean =
-    get(a).map(_.distinctCount.isDefined).getOrElse(false)
-
-  def hasMinMaxStats(a: Attribute): Boolean =
-    get(a).map(_.hasCountStats).getOrElse(false)
-
-  /**
    * Gets column stat for the given attribute. Prefer the column stat in updatedMap than that in
    * originalMap, because updatedMap has the latest (updated) column stats.
    */
   def apply(a: Attribute): ColumnStat = {
-    get(a).get
+    if (updatedMap.contains(a.exprId)) {
+      updatedMap(a.exprId)._2
+    } else {
+      originalMap(a)
+    }
   }
 
   /** Updates column stats in updatedMap. */
@@ -906,14 +871,11 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
     : AttributeMap[ColumnStat] = {
     val newColumnStats = originalMap.map { case (attr, oriColStat) =>
       val colStat = updatedMap.get(attr.exprId).map(_._2).getOrElse(oriColStat)
-      val newNdv = if (colStat.distinctCount.isEmpty) {
-        // No NDV in the original stats.
-        None
-      } else if (colStat.distinctCount.get > 1) {
+      val newNdv = if (colStat.distinctCount > 1) {
         // Update ndv based on the overall filter selectivity: scale down ndv if the number of rows
         // decreases; otherwise keep it unchanged.
-        Some(EstimationUtils.updateNdv(oldNumRows = rowsBeforeFilter,
-          newNumRows = rowsAfterFilter, oldNdv = oriColStat.distinctCount.get))
+        EstimationUtils.updateNdv(oldNumRows = rowsBeforeFilter,
+          newNumRows = rowsAfterFilter, oldNdv = oriColStat.distinctCount)
       } else {
         // no need to scale down since it is already down to 1 (for skewed distribution case)
         colStat.distinctCount

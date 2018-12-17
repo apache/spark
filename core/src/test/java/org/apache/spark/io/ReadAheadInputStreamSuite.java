@@ -19,27 +19,16 @@ package org.apache.spark.io;
 import org.junit.Before;
 
 import java.io.IOException;
-import java.io.InputStream;
 
 /**
- * Tests functionality of {@link ReadAheadInputStreamSuite}
+ * Tests functionality of {@link NioBufferedFileInputStream}
  */
 public class ReadAheadInputStreamSuite extends GenericFileInputStreamSuite {
 
   @Before
   public void setUp() throws IOException {
     super.setUp();
-    inputStreams = new InputStream[] {
-      // Tests equal and aligned buffers of wrapped an outer stream.
-      new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 8 * 1024), 8 * 1024),
-      // Tests aligned buffers, wrapped bigger than outer.
-      new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 3 * 1024), 2 * 1024),
-      // Tests aligned buffers, wrapped smaller than outer.
-      new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 2 * 1024), 3 * 1024),
-      // Tests unaligned buffers, wrapped bigger than outer.
-      new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 321), 123),
-      // Tests unaligned buffers, wrapped smaller than outer.
-      new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 123), 321)
-    };
+    inputStream = new ReadAheadInputStream(
+        new NioBufferedFileInputStream(inputFile), 8 * 1024, 4 * 1024);
   }
 }

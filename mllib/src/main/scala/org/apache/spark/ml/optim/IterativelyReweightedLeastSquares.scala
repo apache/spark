@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.optim
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.util.OptionalInstrumentation
 import org.apache.spark.rdd.RDD
 
 /**
@@ -61,12 +61,9 @@ private[ml] class IterativelyReweightedLeastSquares(
     val fitIntercept: Boolean,
     val regParam: Double,
     val maxIter: Int,
-    val tol: Double) extends Serializable {
+    val tol: Double) extends Logging with Serializable {
 
-  def fit(
-      instances: RDD[OffsetInstance],
-      instr: OptionalInstrumentation = OptionalInstrumentation.create(
-        classOf[IterativelyReweightedLeastSquares])): IterativelyReweightedLeastSquaresModel = {
+  def fit(instances: RDD[OffsetInstance]): IterativelyReweightedLeastSquaresModel = {
 
     var converged = false
     var iter = 0
@@ -86,8 +83,7 @@ private[ml] class IterativelyReweightedLeastSquares(
 
       // Estimate new model
       model = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
-        standardizeFeatures = false, standardizeLabel = false)
-        .fit(newInstances, instr = instr)
+        standardizeFeatures = false, standardizeLabel = false).fit(newInstances)
 
       // Check convergence
       val oldCoefficients = oldModel.coefficients
@@ -100,14 +96,14 @@ private[ml] class IterativelyReweightedLeastSquares(
 
       if (maxTol < tol) {
         converged = true
-        instr.logInfo(s"IRLS converged in $iter iterations.")
+        logInfo(s"IRLS converged in $iter iterations.")
       }
 
-      instr.logInfo(s"Iteration $iter : relative tolerance = $maxTol")
+      logInfo(s"Iteration $iter : relative tolerance = $maxTol")
       iter = iter + 1
 
       if (iter == maxIter) {
-        instr.logInfo(s"IRLS reached the max number of iterations: $maxIter.")
+        logInfo(s"IRLS reached the max number of iterations: $maxIter.")
       }
 
     }

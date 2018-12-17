@@ -22,7 +22,7 @@ if sys.version >= '3':
 
 from py4j.java_gateway import JavaClass
 
-from pyspark import RDD, since
+from pyspark import RDD, since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
@@ -147,8 +147,8 @@ class DataFrameReader(OptionUtils):
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param options: all other string options
 
-        >>> df = spark.read.format("parquet").load('python/test_support/sql/parquet_partitioned',
-        ...     opt1=True, opt2=1, opt3='str')
+        >>> df = spark.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
+        ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
 
@@ -176,8 +176,7 @@ class DataFrameReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
-             encoding=None):
+             multiLine=None, allowUnquotedControlChars=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -210,13 +209,13 @@ class DataFrameReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
-                  fields to ``null``. To keep corrupt records, an user can set a string type \
-                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
-                  schema does not have the field, it drops corrupt records during parsing. \
-                  When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
-                  field in an output schema.
+                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
+                 record, and puts the malformed string into a field configured by \
+                 ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
+                 a string type field named ``columnNameOfCorruptRecord`` in an user-defined \
+                 schema. If a schema does not have the field, it drops corrupt records during \
+                 parsing. When inferring a schema, it implicitly adds a \
+                 ``columnNameOfCorruptRecord`` field in an output schema.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -238,14 +237,6 @@ class DataFrameReader(OptionUtils):
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
-        :param encoding: allows to forcibly set one of standard basic or extended encoding for
-                         the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
-                         the encoding of input JSON will be detected automatically
-                         when the multiLine option is set to ``true``.
-        :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        :param samplingRatio: defines fraction of input JSON objects used for schema inferring.
-                              If None is set, it uses the default value, ``1.0``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -263,8 +254,7 @@ class DataFrameReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
-            samplingRatio=samplingRatio, encoding=encoding)
+            allowUnquotedControlChars=allowUnquotedControlChars)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -314,18 +304,16 @@ class DataFrameReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, paths, wholetext=False, lineSep=None):
+    def text(self, paths, wholetext=False):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
 
-        By default, each line in the text file is a new row in the resulting DataFrame.
+        Each line in the text file is a new row in the resulting DataFrame.
 
         :param paths: string, or list of strings, for input path(s).
         :param wholetext: if true, read each file from input path(s) as a single row.
-        :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
@@ -334,7 +322,7 @@ class DataFrameReader(OptionUtils):
         >>> df.collect()
         [Row(value=u'hello\\nthis')]
         """
-        self._set_opts(wholetext=wholetext, lineSep=lineSep)
+        self._set_opts(wholetext=wholetext)
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
@@ -345,8 +333,7 @@ class DataFrameReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            samplingRatio=None, enforceSchema=None):
+            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -373,16 +360,6 @@ class DataFrameReader(OptionUtils):
                        default value, ``false``.
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
-        :param enforceSchema: If it is set to ``true``, the specified or inferred schema will be
-                              forcibly applied to datasource files, and headers in CSV files will be
-                              ignored. If the option is set to ``false``, the schema will be
-                              validated against all headers in CSV files or the first header in RDD
-                              if the ``header`` option is set to ``true``. Field names in the schema
-                              and column names in CSV headers are checked by their positions
-                              taking into account ``spark.sql.caseSensitive``. If None is set,
-                              ``true`` is used by default. Though the default value is ``true``,
-                              it is recommended to disable the ``enforceSchema`` option
-                              to avoid incorrect results.
         :param ignoreLeadingWhiteSpace: A flag indicating whether or not leading whitespaces from
                                         values being read should be skipped. If None is set, it
                                         uses the default value, ``false``.
@@ -416,15 +393,13 @@ class DataFrameReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
-                  fields to ``null``. To keep corrupt records, an user can set a string type \
-                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
-                  schema does not have the field, it drops corrupt records during parsing. \
-                  A record with less/more tokens than schema is not a corrupted record to CSV. \
-                  When it meets a record having fewer tokens than the length of the schema, \
-                  sets ``null`` to extra fields. When the record has more tokens than the \
-                  length of the schema, it drops extra tokens.
+                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
+                  record, and puts the malformed string into a field configured by \
+                  ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
+                  a string type field named ``columnNameOfCorruptRecord`` in an \
+                  user-defined schema. If a schema does not have the field, it drops corrupt \
+                  records during parsing. When a length of parsed CSV tokens is shorter than \
+                  an expected length of a schema, it sets `null` for extra fields.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -439,8 +414,6 @@ class DataFrameReader(OptionUtils):
                                           the quote character. If None is set, the default value is
                                           escape character when escape and quote characters are
                                           different, ``\0`` otherwise.
-        :param samplingRatio: defines fraction of rows used for schema inferring.
-                              If None is set, it uses the default value, ``1.0``.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -459,8 +432,7 @@ class DataFrameReader(OptionUtils):
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
-            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
-            enforceSchema=enforceSchema)
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -770,8 +742,7 @@ class DataFrameWriter(OptionUtils):
         self._jwrite.saveAsTable(name)
 
     @since(1.4)
-    def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None,
-             lineSep=None, encoding=None):
+    def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None):
         """Saves the content of the :class:`DataFrame` in JSON format
         (`JSON Lines text format or newline-delimited JSON <http://jsonlines.org/>`_) at the
         specified path.
@@ -795,17 +766,12 @@ class DataFrameWriter(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
-        :param encoding: specifies encoding (charset) of saved json files. If None is set,
-                        the default UTF-8 charset will be used.
-        :param lineSep: defines the line separator that should be used for writing. If None is
-                        set, it uses the default value, ``\\n``.
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         self._set_opts(
-            compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
-            lineSep=lineSep, encoding=encoding)
+            compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat)
         self._jwrite.json(path)
 
     @since(1.4)
@@ -836,20 +802,18 @@ class DataFrameWriter(OptionUtils):
         self._jwrite.parquet(path)
 
     @since(1.6)
-    def text(self, path, compression=None, lineSep=None):
+    def text(self, path, compression=None):
         """Saves the content of the DataFrame in a text file at the specified path.
 
         :param path: the path in any Hadoop supported file system
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
-        :param lineSep: defines the line separator that should be used for writing. If None is
-                        set, it uses the default value, ``\\n``.
 
         The DataFrame must have only one column that is of string type.
         Each row becomes a new line in the output file.
         """
-        self._set_opts(compression=compression, lineSep=lineSep)
+        self._set_opts(compression=compression)
         self._jwrite.text(path)
 
     @since(2.0)
@@ -990,7 +954,7 @@ def _test():
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     try:
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession.builder.enableHiveSupport().getOrCreate()
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 
@@ -1004,7 +968,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     sc.stop()
     if failure_count:
-        sys.exit(-1)
+        exit(-1)
 
 
 if __name__ == "__main__":

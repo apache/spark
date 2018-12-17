@@ -61,7 +61,7 @@ if __name__ == "__main__":
         Assumes you have Avro data stored in <data_file>. Reader schema can be optionally specified
         in [reader_schema_file].
         """, file=sys.stderr)
-        sys.exit(-1)
+        exit(-1)
 
     path = sys.argv[1]
 

@@ -113,7 +113,7 @@ Note: Flume support is deprecated as of Spark 2.3.0.
 
 ## Building submodules individually
 
-It's possible to build Spark submodules using the `mvn -pl` option.
+It's possible to build Spark sub-modules using the `mvn -pl` option.
 
 For instance, you can build the Spark Streaming module using:
 

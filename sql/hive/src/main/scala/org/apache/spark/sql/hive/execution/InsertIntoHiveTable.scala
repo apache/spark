@@ -172,7 +172,7 @@ case class InsertIntoHiveTable(
         val enforceBucketingConfig = "hive.enforce.bucketing"
         val enforceSortingConfig = "hive.enforce.sorting"
 
-        val message = s"Output Hive table ${table.identifier} is bucketed but Spark " +
+        val message = s"Output Hive table ${table.identifier} is bucketed but Spark" +
           "currently does NOT populate bucketed output which is compatible with Hive."
 
         if (hadoopConf.get(enforceBucketingConfig, "true").toBoolean ||

@@ -17,15 +17,17 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
-class PCASuite extends MLTest with DefaultReadWriteTest {
+class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -60,10 +62,10 @@ class PCASuite extends MLTest with DefaultReadWriteTest {
     val pcaModel = pca.fit(df)
 
     MLTestingUtils.checkCopyAndUids(pca, pcaModel)
-    testTransformer[(Vector, Vector)](df, pcaModel, "pca_features", "expected") {
-      case Row(result: Vector, expected: Vector) =>
-        assert(result ~== expected absTol 1e-5,
-          "Transformed vector is different with expected vector.")
+
+    pcaModel.transform(df).select("pca_features", "expected").collect().foreach {
+      case Row(x: Vector, y: Vector) =>
+        assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
     }
   }
 

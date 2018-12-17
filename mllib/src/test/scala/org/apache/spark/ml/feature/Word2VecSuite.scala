@@ -17,17 +17,17 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.feature.{Word2VecModel => OldWord2VecModel}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.util.Utils
 
-class Word2VecSuite extends MLTest with DefaultReadWriteTest {
-
-  import testImplicits._
+class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new Word2Vec)
@@ -36,6 +36,10 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Word2Vec") {
+
+    val spark = this.spark
+    import spark.implicits._
+
     val sentence = "a b " * 100 + "a c " * 10
     val numOfWords = sentence.split(" ").size
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
@@ -66,13 +70,17 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
     // These expectations are just magic values, characterizing the current
     // behavior.  The test needs to be updated to be more general, see SPARK-11502
     val magicExp = Vectors.dense(0.30153007534417237, -0.6833061711354689, 0.5116530778733167)
-    testTransformer[(Seq[String], Vector)](docDF, model, "result", "expected") {
+    model.transform(docDF).select("result", "expected").collect().foreach {
       case Row(vector1: Vector, vector2: Vector) =>
         assert(vector1 ~== magicExp absTol 1E-5, "Transformed vector is different with expected.")
     }
   }
 
   test("getVectors") {
+
+    val spark = this.spark
+    import spark.implicits._
+
     val sentence = "a b " * 100 + "a c " * 10
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
 
@@ -111,6 +119,9 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
 
   test("findSynonyms") {
 
+    val spark = this.spark
+    import spark.implicits._
+
     val sentence = "a b " * 100 + "a c " * 10
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
     val docDF = doc.zip(doc).toDF("text", "alsotext")
@@ -142,6 +153,9 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("window size") {
+
+    val spark = this.spark
+    import spark.implicits._
 
     val sentence = "a q s t q s t b b b s t m s t m q " * 100 + "a c " * 10
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
@@ -213,6 +227,8 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Word2Vec works with input that is non-nullable (NGram)") {
+    val spark = this.spark
+    import spark.implicits._
 
     val sentence = "a q s t q s t b b b s t m s t m q "
     val docDF = sc.parallelize(Seq(sentence, sentence)).map(_.split(" ")).toDF("text")
@@ -227,7 +243,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
       .fit(ngramDF)
 
     // Just test that this transformation succeeds
-    testTransformerByGlobalCheckFunc[(Seq[String], Seq[String])](ngramDF, model, "result") { _ => }
+    model.transform(ngramDF).collect()
   }
 
 }

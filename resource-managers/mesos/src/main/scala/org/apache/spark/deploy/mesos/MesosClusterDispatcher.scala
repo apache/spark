@@ -19,7 +19,7 @@ package org.apache.spark.deploy.mesos
 
 import java.util.concurrent.CountDownLatch
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.mesos.MesosRestServer
@@ -100,13 +100,7 @@ private[mesos] object MesosClusterDispatcher
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler)
     Utils.initDaemon(log)
     val conf = new SparkConf
-    val dispatcherArgs = try {
-      new MesosClusterDispatcherArguments(args, conf)
-    } catch {
-      case e: SparkException =>
-        printErrorAndExit(e.getMessage())
-        null
-    }
+    val dispatcherArgs = new MesosClusterDispatcherArguments(args, conf)
     conf.setMaster(dispatcherArgs.masterUrl)
     conf.setAppName(dispatcherArgs.name)
     dispatcherArgs.zookeeperUrl.foreach { z =>

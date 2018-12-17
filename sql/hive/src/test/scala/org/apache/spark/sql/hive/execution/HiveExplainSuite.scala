@@ -128,6 +128,32 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "src")
   }
 
+  test("SPARK-17409: The EXPLAIN output of CTAS only shows the analyzed plan") {
+    withTempView("jt") {
+      val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str$i"}""").toDS()
+      spark.read.json(ds).createOrReplaceTempView("jt")
+      val outputs = sql(
+        s"""
+           |EXPLAIN EXTENDED
+           |CREATE TABLE t1
+           |AS
+           |SELECT * FROM jt
+         """.stripMargin).collect().map(_.mkString).mkString
+
+      val shouldContain =
+        "== Parsed Logical Plan ==" :: "== Analyzed Logical Plan ==" :: "Subquery" ::
+        "== Optimized Logical Plan ==" :: "== Physical Plan ==" ::
+        "CreateHiveTableAsSelect" :: "InsertIntoHiveTable" :: "jt" :: Nil
+      for (key <- shouldContain) {
+        assert(outputs.contains(key), s"$key doesn't exist in result")
+      }
+
+      val physicalIndex = outputs.indexOf("== Physical Plan ==")
+      assert(outputs.substring(physicalIndex).contains("Subquery"),
+        "Physical Plan should contain SubqueryAlias since the query should not be optimized")
+    }
+  }
+
   test("explain output of physical plan should contain proper codegen stage ID") {
     checkKeywordsExist(sql(
       """

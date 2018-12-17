@@ -37,8 +37,6 @@ import org.apache.spark.util.Utils
 
 
 class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with BeforeAndAfterEach {
-  import testImplicits._
-
   override def afterEach(): Unit = {
     try {
       // drop all databases, tables and functions after each test
@@ -134,37 +132,6 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       checkAnswer(spark.table("t"), Row(Row("a", 1)) :: Nil)
     }
   }
-
-  // TODO: This test is copied from HiveDDLSuite, unify it later.
-  test("SPARK-23348: append data to data source table with saveAsTable") {
-    withTable("t", "t1") {
-      Seq(1 -> "a").toDF("i", "j").write.saveAsTable("t")
-      checkAnswer(spark.table("t"), Row(1, "a"))
-
-      sql("INSERT INTO t SELECT 2, 'b'")
-      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
-
-      Seq(3 -> "c").toDF("i", "j").write.mode("append").saveAsTable("t")
-      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Nil)
-
-      Seq("c" -> 3).toDF("i", "j").write.mode("append").saveAsTable("t")
-      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c")
-        :: Row(null, "3") :: Nil)
-
-      Seq(4 -> "d").toDF("i", "j").write.saveAsTable("t1")
-
-      val e = intercept[AnalysisException] {
-        val format = if (spark.sessionState.conf.defaultDataSourceName.equalsIgnoreCase("json")) {
-          "orc"
-        } else {
-          "json"
-        }
-        Seq(5 -> "e").toDF("i", "j").write.mode("append").format(format).saveAsTable("t1")
-      }
-      assert(e.message.contains("The format of the existing table default.t1 is "))
-      assert(e.message.contains("It doesn't match the specified format"))
-    }
-  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -180,13 +147,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   private val escapedIdentifier = "`(.+)`".r
 
-  private def dataSource: String = {
-    if (isUsingHiveMetastore) {
-      "HIVE"
-    } else {
-      "PARQUET"
-    }
-  }
   protected def normalizeCatalogTable(table: CatalogTable): CatalogTable = table
 
   private def normalizeSerdeProp(props: Map[String, String]): Map[String, String] = {
@@ -372,75 +332,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("CTAS a managed table with the existing empty directory") {
-    val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier("tab1")))
-    try {
-      tableLoc.mkdir()
-      withTable("tab1") {
-        sql(s"CREATE TABLE tab1 USING ${dataSource} AS SELECT 1, 'a'")
-        checkAnswer(spark.table("tab1"), Row(1, "a"))
-      }
-    } finally {
-      waitForTasksToFinish()
-      Utils.deleteRecursively(tableLoc)
-    }
-  }
-
-  test("create a managed table with the existing empty directory") {
-    val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier("tab1")))
-    try {
-      tableLoc.mkdir()
-      withTable("tab1") {
-        sql(s"CREATE TABLE tab1 (col1 int, col2 string) USING ${dataSource}")
-        sql("INSERT INTO tab1 VALUES (1, 'a')")
-        checkAnswer(spark.table("tab1"), Row(1, "a"))
-      }
-    } finally {
-      waitForTasksToFinish()
-      Utils.deleteRecursively(tableLoc)
-    }
-  }
-
-  test("create a managed table with the existing non-empty directory") {
-    withTable("tab1") {
-      val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier("tab1")))
-      try {
-        // create an empty hidden file
-        tableLoc.mkdir()
-        val hiddenGarbageFile = new File(tableLoc.getCanonicalPath, ".garbage")
-        hiddenGarbageFile.createNewFile()
-        val exMsg = "Can not create the managed table('`tab1`'). The associated location"
-        val exMsgWithDefaultDB =
-          "Can not create the managed table('`default`.`tab1`'). The associated location"
-        var ex = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tab1 USING ${dataSource} AS SELECT 1, 'a'")
-        }.getMessage
-        if (isUsingHiveMetastore) {
-          assert(ex.contains(exMsgWithDefaultDB))
-        } else {
-          assert(ex.contains(exMsg))
-        }
-
-        ex = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tab1 (col1 int, col2 string) USING ${dataSource}")
-        }.getMessage
-        assert(ex.contains(exMsgWithDefaultDB))
-
-        // Always check location of managed table, with or without (IF NOT EXISTS)
-        withTable("tab2") {
-          sql(s"CREATE TABLE tab2 (col1 int, col2 string) USING ${dataSource}")
-          ex = intercept[AnalysisException] {
-            sql(s"CREATE TABLE IF NOT EXISTS tab1 LIKE tab2")
-          }.getMessage
-          assert(ex.contains(exMsgWithDefaultDB))
-        }
-      } finally {
-        waitForTasksToFinish()
-        Utils.deleteRecursively(tableLoc)
-      }
-    }
-  }
-
   private def checkSchemaInCreatedDataSourceTable(
       path: File,
       userSpecifiedSchema: Option[String],
@@ -613,35 +504,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              """.stripMargin)
         }.getMessage
         assert(errMsg.contains("Found duplicate column(s) in the sort definition"))
-      }
-    }
-  }
-
-  test("create table - append to a non-partitioned table created with different paths") {
-    import testImplicits._
-    withTempDir { dir1 =>
-      withTempDir { dir2 =>
-        withTable("path_test") {
-          Seq(1L -> "a").toDF("v1", "v2")
-            .write
-            .mode(SaveMode.Append)
-            .format("json")
-            .option("path", dir1.getCanonicalPath)
-            .saveAsTable("path_test")
-
-          val ex = intercept[AnalysisException] {
-            Seq((3L, "c")).toDF("v1", "v2")
-              .write
-              .mode(SaveMode.Append)
-              .format("json")
-              .option("path", dir2.getCanonicalPath)
-              .saveAsTable("path_test")
-          }.getMessage
-          assert(ex.contains("The location of the existing table `default`.`path_test`"))
-
-          checkAnswer(
-            spark.table("path_test"), Row(1L, "a") :: Nil)
-        }
       }
     }
   }
@@ -1133,7 +995,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
     val part2 = Map("a" -> "2", "b" -> "6")
     val root = new Path(catalog.getTableMetadata(tableIdent).location)
-    val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
+    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
     fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
@@ -1678,7 +1540,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     // Ensure that change column will preserve other metadata fields.
     sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
-    assert(getMetadata("col1").getString("comment") == "this is col1")
   }
 
   test("drop build-in function") {
@@ -1742,8 +1603,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql("DESCRIBE FUNCTION 'concat'"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
         Row("Function: concat") ::
-        Row("Usage: concat(col1, col2, ..., colN) - " +
-            "Returns the concatenation of col1, col2, ..., colN.") :: Nil
+        Row("Usage: concat(str1, str2, ..., strN) - " +
+            "Returns the concatenation of str1, str2, ..., strN.") :: Nil
     )
     // extended mode
     checkAnswer(

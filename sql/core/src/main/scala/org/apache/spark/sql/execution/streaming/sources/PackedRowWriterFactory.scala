@@ -31,10 +31,7 @@ import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriter, Dat
  * for production-quality sinks. It's intended for use in tests.
  */
 case object PackedRowWriterFactory extends DataWriterFactory[Row] {
-  override def createDataWriter(
-      partitionId: Int,
-      attemptNumber: Int,
-      epochId: Long): DataWriter[Row] = {
+  def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
     new PackedRowDataWriter()
   }
 }

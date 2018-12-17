@@ -95,11 +95,7 @@ private[spark] class AppStatusStore(
   }
 
   def lastStageAttempt(stageId: Int): v1.StageData = {
-    val it = store.view(classOf[StageDataWrapper])
-      .index("stageId")
-      .reverse()
-      .first(stageId)
-      .last(stageId)
+    val it = store.view(classOf[StageDataWrapper]).index("stageId").reverse().first(stageId)
       .closeableIterator()
     try {
       if (it.hasNext()) {

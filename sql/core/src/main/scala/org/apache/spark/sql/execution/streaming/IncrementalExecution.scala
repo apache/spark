@@ -62,7 +62,7 @@ class IncrementalExecution(
       StreamingDeduplicationStrategy :: Nil
   }
 
-  private[sql] val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
+  private val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
@@ -143,14 +143,4 @@ class IncrementalExecution(
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
-
-  /**
-   * Should the MicroBatchExecution run another batch based on this execution and the current
-   * updated metadata.
-   */
-  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
-    executedPlan.collect {
-      case p: StateStoreWriter => p.shouldRunAnotherBatch(newMetadata)
-    }.exists(_ == true)
-  }
 }

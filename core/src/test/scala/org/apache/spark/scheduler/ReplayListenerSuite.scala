@@ -47,7 +47,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   }
 
   test("Simple replay") {
-    val logFilePath = getFilePath(testDir, "events.txt")
+    val logFilePath = Utils.getFilePath(testDir, "events.txt")
     val fstream = fileSystem.create(logFilePath)
     val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
@@ -97,7 +97,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
       // scalastyle:on println
     }
 
-    val logFilePath = getFilePath(testDir, "events.lz4.inprogress")
+    val logFilePath = Utils.getFilePath(testDir, "events.lz4.inprogress")
     val bytes = buffered.toByteArray
     Utils.tryWithResource(fileSystem.create(logFilePath)) { fstream =>
       fstream.write(bytes, 0, buffered.size)
@@ -129,7 +129,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   }
 
   test("Replay incompatible event log") {
-    val logFilePath = getFilePath(testDir, "incompatible.txt")
+    val logFilePath = Utils.getFilePath(testDir, "incompatible.txt")
     val fstream = fileSystem.create(logFilePath)
     val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Incompatible App", None,
@@ -224,12 +224,6 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
       JsonProtocolSuite.assertEquals(
         JsonProtocol.sparkEventFromJson(e1), JsonProtocol.sparkEventFromJson(e2))
     }
-  }
-
-  private def getFilePath(dir: File, fileName: String): Path = {
-    assert(dir.isDirectory)
-    val path = new File(dir, fileName).getAbsolutePath
-    new Path(path)
   }
 
   /**

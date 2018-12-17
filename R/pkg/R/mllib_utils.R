@@ -31,6 +31,7 @@
 #' MLlib model below.
 #' @rdname write.ml
 #' @name write.ml
+#' @export
 #' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.decisionTree},
 #' @seealso \link{spark.gaussianMixture}, \link{spark.gbt},
 #' @seealso \link{spark.glm}, \link{glm}, \link{spark.isoreg},
@@ -47,6 +48,7 @@ NULL
 #' MLlib model below.
 #' @rdname predict
 #' @name predict
+#' @export
 #' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.decisionTree},
 #' @seealso \link{spark.gaussianMixture}, \link{spark.gbt},
 #' @seealso \link{spark.glm}, \link{glm}, \link{spark.isoreg},
@@ -73,6 +75,7 @@ predict_internal <- function(object, newData) {
 #' @return A fitted MLlib model.
 #' @rdname read.ml
 #' @name read.ml
+#' @export
 #' @seealso \link{write.ml}
 #' @examples
 #' \dontrun{

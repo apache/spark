@@ -339,38 +339,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     }
   }
 
-  val defaultIllegalValue = "SomeIllegalValue"
-  val illegalValueTests : Map[String, (SparkConf, String) => Any] = Map(
-    "getTimeAsSeconds" -> (_.getTimeAsSeconds(_)),
-    "getTimeAsSeconds with default" -> (_.getTimeAsSeconds(_, defaultIllegalValue)),
-    "getTimeAsMs" -> (_.getTimeAsMs(_)),
-    "getTimeAsMs with default" -> (_.getTimeAsMs(_, defaultIllegalValue)),
-    "getSizeAsBytes" -> (_.getSizeAsBytes(_)),
-    "getSizeAsBytes with default string" -> (_.getSizeAsBytes(_, defaultIllegalValue)),
-    "getSizeAsBytes with default long" -> (_.getSizeAsBytes(_, 0L)),
-    "getSizeAsKb" -> (_.getSizeAsKb(_)),
-    "getSizeAsKb with default" -> (_.getSizeAsKb(_, defaultIllegalValue)),
-    "getSizeAsMb" -> (_.getSizeAsMb(_)),
-    "getSizeAsMb with default" -> (_.getSizeAsMb(_, defaultIllegalValue)),
-    "getSizeAsGb" -> (_.getSizeAsGb(_)),
-    "getSizeAsGb with default" -> (_.getSizeAsGb(_, defaultIllegalValue)),
-    "getInt" -> (_.getInt(_, 0)),
-    "getLong" -> (_.getLong(_, 0L)),
-    "getDouble" -> (_.getDouble(_, 0.0)),
-    "getBoolean" -> (_.getBoolean(_, false))
-  )
-
-  illegalValueTests.foreach { case (name, getValue) =>
-    test(s"SPARK-24337: $name throws an useful error message with key name") {
-      val key = "SomeKey"
-      val conf = new SparkConf()
-      conf.set(key, "SomeInvalidValue")
-      val thrown = intercept[IllegalArgumentException] {
-        getValue(conf, key)
-      }
-      assert(thrown.getMessage.contains(key))
-    }
-  }
 }
 
 class Class1 {}

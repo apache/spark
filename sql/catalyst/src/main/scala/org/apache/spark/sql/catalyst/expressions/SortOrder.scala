@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
 
@@ -182,7 +181,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
     }
 
     ev.copy(code = childCode.code +
-      code"""
+      s"""
          |long ${ev.value} = 0L;
          |boolean ${ev.isNull} = ${childCode.isNull};
          |if (!${childCode.isNull}) {

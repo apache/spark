@@ -22,7 +22,6 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -105,13 +104,11 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val eval = doGenCode(ctx, ExprCode(
-        JavaCode.isNullVariable(isNull),
-        JavaCode.variable(value, dataType)))
+      val eval = doGenCode(ctx, ExprCode("", isNull, value))
       reduceCodeSize(ctx, eval)
-      if (eval.code.toString.nonEmpty) {
+      if (eval.code.nonEmpty) {
         // Add `this` in the comment.
-        eval.copy(code = ctx.registerComment(this.toString) + eval.code)
+        eval.copy(code = s"${ctx.registerComment(this.toString)}\n" + eval.code.trim)
       } else {
         eval
       }
@@ -120,31 +117,31 @@ abstract class Expression extends TreeNode[Expression] {
 
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
-    if (eval.code.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
-      val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
-        val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
+    if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
+        val globalIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
-        eval.isNull = JavaCode.isNullGlobal(globalIsNull)
+        eval.isNull = globalIsNull
         s"$globalIsNull = $localIsNull;"
       } else {
         ""
       }
 
-      val javaType = CodeGenerator.javaType(dataType)
+      val javaType = ctx.javaType(dataType)
       val newValue = ctx.freshName("value")
 
       val funcName = ctx.freshName(nodeName)
       val funcFullName = ctx.addNewFunction(funcName,
         s"""
            |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
-           |  ${eval.code}
+           |  ${eval.code.trim}
            |  $setIsNull
            |  return ${eval.value};
            |}
            """.stripMargin)
 
-      eval.value = JavaCode.variable(newValue, dataType)
-      eval.code = code"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
+      eval.value = newValue
+      eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
     }
   }
 
@@ -291,7 +288,6 @@ trait NonSQLExpression extends Expression {
   final override def sql: String = {
     transform {
       case a: Attribute => new PrettyAttribute(a)
-      case a: Alias => PrettyAttribute(a.sql, a.dataType)
     }.toString
   }
 }
@@ -332,32 +328,6 @@ trait Nondeterministic extends Expression {
   protected def evalInternal(input: InternalRow): Any
 }
 
-/**
- * An expression that contains mutable state. A stateful expression is always non-deterministic
- * because the results it produces during evaluation are not only dependent on the given input
- * but also on its internal state.
- *
- * The state of the expressions is generally not exposed in the parameter list and this makes
- * comparing stateful expressions problematic because similar stateful expressions (with the same
- * parameter list) but with different internal state will be considered equal. This is especially
- * problematic during tree transformations. In order to counter this the `fastEquals` method for
- * stateful expressions only returns `true` for the same reference.
- *
- * A stateful expression should never be evaluated multiple times for a single row. This should
- * only be a problem for interpreted execution. This can be prevented by creating fresh copies
- * of the stateful expression before execution, these can be made using the `freshCopy` function.
- */
-trait Stateful extends Nondeterministic {
-  /**
-   * Return a fresh uninitialized copy of the stateful expression.
-   */
-  def freshCopy(): Stateful
-
-  /**
-   * Only the same reference is considered equal.
-   */
-  override def fastEquals(other: TreeNode[_]): Boolean = this eq other
-}
 
 /**
  * A leaf expression, i.e. one without any child expressions.
@@ -438,17 +408,18 @@ abstract class UnaryExpression extends Expression {
 
     if (nullable) {
       val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
-      ev.copy(code = code"""
+      ev.copy(code = s"""
         ${childGen.code}
         boolean ${ev.isNull} = ${childGen.isNull};
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
-      ev.copy(code = code"""
+      ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${childGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = FalseLiteral)
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode""", isNull = "false")
     }
   }
 }
@@ -537,17 +508,18 @@ abstract class BinaryExpression extends Expression {
           }
       }
 
-      ev.copy(code = code"""
+      ev.copy(code = s"""
         boolean ${ev.isNull} = true;
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
-      ev.copy(code = code"""
+      ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${rightGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = FalseLiteral)
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode""", isNull = "false")
     }
   }
 }
@@ -680,17 +652,18 @@ abstract class TernaryExpression extends Expression {
           }
       }
 
-      ev.copy(code = code"""
+      ev.copy(code = s"""
         boolean ${ev.isNull} = true;
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         $nullSafeEval""")
     } else {
-      ev.copy(code = code"""
+      ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${midGen.code}
         ${rightGen.code}
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = FalseLiteral)
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode""", isNull = "false")
     }
   }
 }

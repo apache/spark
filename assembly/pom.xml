@@ -254,14 +254,6 @@
           <artifactId>spark-hadoop-cloud_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
-        <!--
-        Redeclare this dependency to force it into the distribution.
-        -->
-        <dependency>
-          <groupId>org.eclipse.jetty</groupId>
-          <artifactId>jetty-util</artifactId>
-          <scope>${hadoop.deps.scope}</scope>
-        </dependency>
       </dependencies>
     </profile>
   </profiles>

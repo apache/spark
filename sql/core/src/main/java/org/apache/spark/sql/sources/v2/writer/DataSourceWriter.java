@@ -21,7 +21,6 @@ import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
-import org.apache.spark.sql.sources.v2.StreamWriteSupport;
 import org.apache.spark.sql.sources.v2.WriteSupport;
 import org.apache.spark.sql.streaming.OutputMode;
 import org.apache.spark.sql.types.StructType;
@@ -34,8 +33,8 @@ import org.apache.spark.sql.types.StructType;
  * It can mix in various writing optimization interfaces to speed up the data saving. The actual
  * writing logic is delegated to {@link DataWriter}.
  *
- * If an exception was throw when applying any of these writing optimizations, the action will fail
- * and no Spark job will be submitted.
+ * If an exception was throw when applying any of these writing optimizations, the action would fail
+ * and no Spark job was submitted.
  *
  * The writing procedure is:
  *   1. Create a writer factory by {@link #createWriterFactory()}, serialize and send it to all the
@@ -58,20 +57,10 @@ public interface DataSourceWriter {
   /**
    * Creates a writer factory which will be serialized and sent to executors.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
    * submitted.
    */
   DataWriterFactory<Row> createWriterFactory();
-
-  /**
-   * Returns whether Spark should use the commit coordinator to ensure that at most one attempt for
-   * each task commits.
-   *
-   * @return true if commit coordinator should be used, false otherwise.
-   */
-  default boolean useCommitCoordinator() {
-    return true;
-  }
 
   /**
    * Handles a commit message on receiving from a successful data writer.
@@ -89,11 +78,10 @@ public interface DataSourceWriter {
    * failed, and {@link #abort(WriterCommitMessage[])} would be called. The state of the destination
    * is undefined and @{@link #abort(WriterCommitMessage[])} may not be able to deal with it.
    *
-   * Note that speculative execution may cause multiple tasks to run for a partition. By default,
-   * Spark uses the commit coordinator to allow at most one attempt to commit. Implementations can
-   * disable this behavior by overriding {@link #useCommitCoordinator()}. If disabled, multiple
-   * attempts may have committed successfully and one successful commit message per task will be
-   * passed to this commit method. The remaining commit messages are ignored by Spark.
+   * Note that, one partition may have multiple committed data writers because of speculative tasks.
+   * Spark will pick the first successful one and get its commit message. Implementations should be
+   * aware of this and handle it correctly, e.g., have a coordinator to make sure only one data
+   * writer can commit, or have a way to clean up the data of already-committed writers.
    */
   void commit(WriterCommitMessage[] messages);
 

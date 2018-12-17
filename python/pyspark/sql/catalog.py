@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import sys
 import warnings
 from collections import namedtuple
 
@@ -307,7 +306,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        sys.exit(-1)
+        exit(-1)
 
 if __name__ == "__main__":
     _test()

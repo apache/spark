@@ -104,13 +104,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
 
-  /**
-   * Returns all field names in an array. This is an alias of `fieldNames`.
-   *
-   * @since 2.4.0
-   */
-  def names: Array[String] = fieldNames
-
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
   private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
@@ -271,9 +264,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
-      throw new IllegalArgumentException(
-        s"""Field "$name" does not exist.
-           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin))
+      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
   /**
@@ -286,8 +277,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
       throw new IllegalArgumentException(
-        s"""Nonexistent field(s): ${nonExistFields.mkString(", ")}.
-           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin)
+        s"Field ${nonExistFields.mkString(",")} does not exist.")
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
@@ -300,9 +290,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
-      throw new IllegalArgumentException(
-        s"""Field "$name" does not exist.
-           |Available fields: ${fieldNames.mkString(", ")}""".stripMargin))
+      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {

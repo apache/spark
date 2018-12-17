@@ -27,7 +27,6 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -56,17 +55,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 public final class UnsafeArrayData extends ArrayData {
 
   public static int calculateHeaderPortionInBytes(int numFields) {
-    return (int)calculateHeaderPortionInBytes((long)numFields);
-  }
-
-  public static long calculateHeaderPortionInBytes(long numFields) {
     return 8 + ((numFields + 63)/ 64) * 8;
-  }
-
-  public static long calculateSizeOfUnderlyingByteArray(long numFields, int elementSize) {
-    long size = UnsafeArrayData.calculateHeaderPortionInBytes(numFields) +
-      ByteArrayMethods.roundNumberOfBytesToNearestWord(numFields * elementSize);
-    return size;
   }
 
   private Object baseObject;
@@ -241,8 +230,7 @@ public final class UnsafeArrayData extends ArrayData {
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
-    MemoryBlock mb = MemoryBlock.allocateFromObject(baseObject, baseOffset + offset, size);
-    return new UTF8String(mb);
+    return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
   }
 
   @Override

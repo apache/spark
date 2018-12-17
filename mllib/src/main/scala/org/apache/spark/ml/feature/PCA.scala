@@ -220,7 +220,7 @@ object PCAModel extends MLReadable[PCAModel] {
         new PCAModel(metadata.uid, pc.asML,
           Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
       }
-      metadata.getAndSetParams(model)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }

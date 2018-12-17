@@ -36,7 +36,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.KEYTAB
 import org.apache.spark.util.Utils
 
-private[spark] class HiveDelegationTokenProvider
+private[security] class HiveDelegationTokenProvider
     extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "hive"
@@ -124,9 +124,9 @@ private[spark] class HiveDelegationTokenProvider
     val currentUser = UserGroupInformation.getCurrentUser()
     val realUser = Option(currentUser.getRealUser()).getOrElse(currentUser)
 
-    // For some reason the Scala-generated anonymous class ends up causing an
-    // UndeclaredThrowableException, even if you annotate the method with @throws.
-    try {
+   // For some reason the Scala-generated anonymous class ends up causing an
+   // UndeclaredThrowableException, even if you annotate the method with @throws.
+   try {
       realUser.doAs(new PrivilegedExceptionAction[T]() {
         override def run(): T = fn
       })

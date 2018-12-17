@@ -21,18 +21,20 @@ import scala.util.Random
 
 import breeze.linalg.{DenseVector => BDV}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.optim.aggregator.HingeAggregator
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.udf
 
 
-class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
+class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -139,11 +141,10 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
         threshold: Double,
         expected: Set[(Int, Double)]): Unit = {
       model.setThreshold(threshold)
-      testTransformerByGlobalCheckFunc[(Int, Vector)](df, model, "id", "prediction") {
-        rows: Seq[Row] =>
-          val results = rows.map(r => (r.getInt(0), r.getDouble(1))).toSet
-          assert(results === expected, s"Failed for threshold = $threshold")
-      }
+      val results = model.transform(df).select("id", "prediction").collect()
+        .map(r => (r.getInt(0), r.getDouble(1)))
+        .toSet
+      assert(results === expected, s"Failed for threshold = $threshold")
     }
 
     def checkResults(threshold: Double, expected: Set[(Int, Double)]): Unit = {
@@ -199,12 +200,6 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
       dataset.as[LabeledPoint], estimator, 2, modelEquals, outlierRatio = 3)
     MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
       dataset.as[LabeledPoint], estimator, modelEquals, 42L)
-  }
-
-  test("prediction on single instance") {
-    val trainer = new LinearSVC()
-    val model = trainer.fit(smallBinaryDataset)
-    testPredictionModelSinglePrediction(model, smallBinaryDataset)
   }
 
   test("linearSVC comparison with R e1071 and scikit-learn") {

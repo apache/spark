@@ -350,7 +350,7 @@ class SingletonReplSuite extends SparkFunSuite {
       """
         |val timeout = 60000 // 60 seconds
         |val start = System.currentTimeMillis
-        |while(sc.statusTracker.getExecutorInfos.size != 3 &&
+        |while(sc.getExecutorStorageStatus.size != 3 &&
         |    (System.currentTimeMillis - start) < timeout) {
         |  Thread.sleep(10)
         |}
@@ -361,11 +361,11 @@ class SingletonReplSuite extends SparkFunSuite {
         |case class Foo(i: Int)
         |val ret = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_AND_DISK_2)
         |ret.count()
-        |val res = sc.getRDDStorageInfo.filter(_.id == ret.id).map(_.numCachedPartitions).sum
+        |val res = sc.getExecutorStorageStatus.map(s => s.rddBlocksById(ret.id).size).sum
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
-    assertContains("res: Int = 10", output)
+    assertContains("res: Int = 20", output)
   }
 
   test("should clone and clean line object in ClosureCleaner") {

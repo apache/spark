@@ -58,6 +58,7 @@
 #' @rdname install.spark
 #' @name install.spark
 #' @aliases install.spark
+#' @export
 #' @examples
 #'\dontrun{
 #' install.spark()

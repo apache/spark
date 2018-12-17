@@ -21,6 +21,8 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
+import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.UTF8String;
 
 import static org.apache.spark.sql.catalyst.expressions.UnsafeArrayData.calculateHeaderPortionInBytes;
 
@@ -28,13 +30,15 @@ import static org.apache.spark.sql.catalyst.expressions.UnsafeArrayData.calculat
  * A helper class to write data into global row buffer using `UnsafeArrayData` format,
  * used by {@link org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection}.
  */
-public final class UnsafeArrayWriter extends UnsafeWriter {
+public class UnsafeArrayWriter {
+
+  private BufferHolder holder;
+
+  // The offset of the global buffer where we start to write this array.
+  private int startingOffset;
 
   // The number of elements in this array
   private int numElements;
-
-  // The element size in this array
-  private int elementSize;
 
   private int headerInBytes;
 
@@ -43,17 +47,13 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     assert index < numElements : "index (" + index + ") should < " + numElements;
   }
 
-  public UnsafeArrayWriter(UnsafeWriter writer, int elementSize) {
-    super(writer.getBufferHolder());
-    this.elementSize = elementSize;
-  }
-
-  public void initialize(int numElements) {
+  public void initialize(BufferHolder holder, int numElements, int elementSize) {
     // We need 8 bytes to store numElements in header
     this.numElements = numElements;
     this.headerInBytes = calculateHeaderPortionInBytes(numElements);
 
-    this.startingOffset = cursor();
+    this.holder = holder;
+    this.startingOffset = holder.cursor;
 
     // Grows the global buffer ahead for header and fixed size data.
     int fixedPartInBytes =
@@ -61,92 +61,130 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     holder.grow(headerInBytes + fixedPartInBytes);
 
     // Write numElements and clear out null bits to header
-    Platform.putLong(getBuffer(), startingOffset, numElements);
+    Platform.putLong(holder.buffer, startingOffset, numElements);
     for (int i = 8; i < headerInBytes; i += 8) {
-      Platform.putLong(getBuffer(), startingOffset + i, 0L);
+      Platform.putLong(holder.buffer, startingOffset + i, 0L);
     }
 
     // fill 0 into reminder part of 8-bytes alignment in unsafe array
     for (int i = elementSize * numElements; i < fixedPartInBytes; i++) {
-      Platform.putByte(getBuffer(), startingOffset + headerInBytes + i, (byte) 0);
+      Platform.putByte(holder.buffer, startingOffset + headerInBytes + i, (byte) 0);
     }
-    increaseCursor(headerInBytes + fixedPartInBytes);
+    holder.cursor += (headerInBytes + fixedPartInBytes);
   }
 
-  private long getElementOffset(int ordinal) {
+  private void zeroOutPaddingBytes(int numBytes) {
+    if ((numBytes & 0x07) > 0) {
+      Platform.putLong(holder.buffer, holder.cursor + ((numBytes >> 3) << 3), 0L);
+    }
+  }
+
+  private long getElementOffset(int ordinal, int elementSize) {
     return startingOffset + headerInBytes + ordinal * elementSize;
+  }
+
+  public void setOffsetAndSize(int ordinal, long currentCursor, int size) {
+    assertIndexIsValid(ordinal);
+    final long relativeOffset = currentCursor - startingOffset;
+    final long offsetAndSize = (relativeOffset << 32) | (long)size;
+
+    write(ordinal, offsetAndSize);
   }
 
   private void setNullBit(int ordinal) {
     assertIndexIsValid(ordinal);
-    BitSetMethods.set(getBuffer(), startingOffset + 8, ordinal);
+    BitSetMethods.set(holder.buffer, startingOffset + 8, ordinal);
   }
 
-  public void setNull1Bytes(int ordinal) {
+  public void setNullBoolean(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    writeByte(getElementOffset(ordinal), (byte)0);
+    Platform.putBoolean(holder.buffer, getElementOffset(ordinal, 1), false);
   }
 
-  public void setNull2Bytes(int ordinal) {
+  public void setNullByte(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    writeShort(getElementOffset(ordinal), (short)0);
+    Platform.putByte(holder.buffer, getElementOffset(ordinal, 1), (byte)0);
   }
 
-  public void setNull4Bytes(int ordinal) {
+  public void setNullShort(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    writeInt(getElementOffset(ordinal), 0);
+    Platform.putShort(holder.buffer, getElementOffset(ordinal, 2), (short)0);
   }
 
-  public void setNull8Bytes(int ordinal) {
+  public void setNullInt(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    writeLong(getElementOffset(ordinal), 0);
+    Platform.putInt(holder.buffer, getElementOffset(ordinal, 4), 0);
   }
 
-  public void setNull(int ordinal) { setNull8Bytes(ordinal); }
+  public void setNullLong(int ordinal) {
+    setNullBit(ordinal);
+    // put zero into the corresponding field when set null
+    Platform.putLong(holder.buffer, getElementOffset(ordinal, 8), (long)0);
+  }
+
+  public void setNullFloat(int ordinal) {
+    setNullBit(ordinal);
+    // put zero into the corresponding field when set null
+    Platform.putFloat(holder.buffer, getElementOffset(ordinal, 4), (float)0);
+  }
+
+  public void setNullDouble(int ordinal) {
+    setNullBit(ordinal);
+    // put zero into the corresponding field when set null
+    Platform.putDouble(holder.buffer, getElementOffset(ordinal, 8), (double)0);
+  }
+
+  public void setNull(int ordinal) { setNullLong(ordinal); }
 
   public void write(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
-    writeBoolean(getElementOffset(ordinal), value);
+    Platform.putBoolean(holder.buffer, getElementOffset(ordinal, 1), value);
   }
 
   public void write(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
-    writeByte(getElementOffset(ordinal), value);
+    Platform.putByte(holder.buffer, getElementOffset(ordinal, 1), value);
   }
 
   public void write(int ordinal, short value) {
     assertIndexIsValid(ordinal);
-    writeShort(getElementOffset(ordinal), value);
+    Platform.putShort(holder.buffer, getElementOffset(ordinal, 2), value);
   }
 
   public void write(int ordinal, int value) {
     assertIndexIsValid(ordinal);
-    writeInt(getElementOffset(ordinal), value);
+    Platform.putInt(holder.buffer, getElementOffset(ordinal, 4), value);
   }
 
   public void write(int ordinal, long value) {
     assertIndexIsValid(ordinal);
-    writeLong(getElementOffset(ordinal), value);
+    Platform.putLong(holder.buffer, getElementOffset(ordinal, 8), value);
   }
 
   public void write(int ordinal, float value) {
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
+    }
     assertIndexIsValid(ordinal);
-    writeFloat(getElementOffset(ordinal), value);
+    Platform.putFloat(holder.buffer, getElementOffset(ordinal, 4), value);
   }
 
   public void write(int ordinal, double value) {
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    }
     assertIndexIsValid(ordinal);
-    writeDouble(getElementOffset(ordinal), value);
+    Platform.putDouble(holder.buffer, getElementOffset(ordinal, 8), value);
   }
 
   public void write(int ordinal, Decimal input, int precision, int scale) {
     // make sure Decimal object has the same scale as DecimalType
     assertIndexIsValid(ordinal);
-    if (input != null && input.changePrecision(precision, scale)) {
+    if (input.changePrecision(precision, scale)) {
       if (precision <= Decimal.MAX_LONG_DIGITS()) {
         write(ordinal, input.toUnscaledLong());
       } else {
@@ -160,14 +198,65 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
 
         // Write the bytes to the variable length portion.
         Platform.copyMemory(
-          bytes, Platform.BYTE_ARRAY_OFFSET, getBuffer(), cursor(), numBytes);
-        setOffsetAndSize(ordinal, numBytes);
+          bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, numBytes);
+        setOffsetAndSize(ordinal, holder.cursor, numBytes);
 
         // move the cursor forward with 8-bytes boundary
-        increaseCursor(roundedSize);
+        holder.cursor += roundedSize;
       }
     } else {
       setNull(ordinal);
     }
+  }
+
+  public void write(int ordinal, UTF8String input) {
+    final int numBytes = input.numBytes();
+    final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
+
+    // grow the global buffer before writing data.
+    holder.grow(roundedSize);
+
+    zeroOutPaddingBytes(numBytes);
+
+    // Write the bytes to the variable length portion.
+    input.writeToMemory(holder.buffer, holder.cursor);
+
+    setOffsetAndSize(ordinal, holder.cursor, numBytes);
+
+    // move the cursor forward.
+    holder.cursor += roundedSize;
+  }
+
+  public void write(int ordinal, byte[] input) {
+    final int numBytes = input.length;
+    final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(input.length);
+
+    // grow the global buffer before writing data.
+    holder.grow(roundedSize);
+
+    zeroOutPaddingBytes(numBytes);
+
+    // Write the bytes to the variable length portion.
+    Platform.copyMemory(
+      input, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, numBytes);
+
+    setOffsetAndSize(ordinal, holder.cursor, numBytes);
+
+    // move the cursor forward.
+    holder.cursor += roundedSize;
+  }
+
+  public void write(int ordinal, CalendarInterval input) {
+    // grow the global buffer before writing data.
+    holder.grow(16);
+
+    // Write the months and microseconds fields of Interval to the variable length portion.
+    Platform.putLong(holder.buffer, holder.cursor, input.months);
+    Platform.putLong(holder.buffer, holder.cursor + 8, input.microseconds);
+
+    setOffsetAndSize(ordinal, holder.cursor, 16);
+
+    // move the cursor forward.
+    holder.cursor += 16;
   }
 }

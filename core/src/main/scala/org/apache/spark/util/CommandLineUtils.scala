@@ -33,13 +33,23 @@ private[spark] trait CommandLineUtils {
   private[spark] var printStream: PrintStream = System.err
 
   // scalastyle:off println
-  private[spark] def printMessage(str: String): Unit = printStream.println(str)
-  // scalastyle:on println
+
+  private[spark] def printWarning(str: String): Unit = printStream.println("Warning: " + str)
 
   private[spark] def printErrorAndExit(str: String): Unit = {
-    printMessage("Error: " + str)
-    printMessage("Run with --help for usage help or --verbose for debug output")
+    printStream.println("Error: " + str)
+    printStream.println("Run with --help for usage help or --verbose for debug output")
     exitFn(1)
+  }
+
+  // scalastyle:on println
+
+  private[spark] def parseSparkConfProperty(pair: String): (String, String) = {
+    pair.split("=", 2).toSeq match {
+      case Seq(k, v) => (k, v)
+      case _ => printErrorAndExit(s"Spark config without '=': $pair")
+        throw new SparkException(s"Spark config without '=': $pair")
+    }
   }
 
   def main(args: Array[String]): Unit

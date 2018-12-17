@@ -49,12 +49,12 @@ private[ui] class ExecutorsPage(
       <div>
         {
           <div id="active-executors" class="row-fluid"></div> ++
-          <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
-          <script src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
+          <script src={UIUtils.prependBaseUri("/static/utils.js")}></script> ++
+          <script src={UIUtils.prependBaseUri("/static/executorspage.js")}></script> ++
           <script>setThreadDumpEnabled({threadDumpEnabled})</script>
         }
       </div>
 
-    UIUtils.headerSparkPage(request, "Executors", content, parent, useDataTables = true)
+    UIUtils.headerSparkPage("Executors", content, parent, useDataTables = true)
   }
 }

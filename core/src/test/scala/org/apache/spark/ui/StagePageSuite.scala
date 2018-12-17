@@ -28,73 +28,12 @@ import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
-import org.apache.spark.status.api.v1.{AccumulableInfo => UIAccumulableInfo, StageData, StageStatus}
 import org.apache.spark.status.config._
-import org.apache.spark.ui.jobs.{ApiHelper, StagePage, StagesTab, TaskPagedTable}
+import org.apache.spark.ui.jobs.{StagePage, StagesTab}
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {
 
   private val peakExecutionMemory = 10
-
-  test("ApiHelper.COLUMN_TO_INDEX should match headers of the task table") {
-    val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-    val statusStore = AppStatusStore.createLiveStore(conf)
-    try {
-      val stageData = new StageData(
-        status = StageStatus.ACTIVE,
-        stageId = 1,
-        attemptId = 1,
-        numTasks = 1,
-        numActiveTasks = 1,
-        numCompleteTasks = 1,
-        numFailedTasks = 1,
-        numKilledTasks = 1,
-        numCompletedIndices = 1,
-
-        executorRunTime = 1L,
-        executorCpuTime = 1L,
-        submissionTime = None,
-        firstTaskLaunchedTime = None,
-        completionTime = None,
-        failureReason = None,
-
-        inputBytes = 1L,
-        inputRecords = 1L,
-        outputBytes = 1L,
-        outputRecords = 1L,
-        shuffleReadBytes = 1L,
-        shuffleReadRecords = 1L,
-        shuffleWriteBytes = 1L,
-        shuffleWriteRecords = 1L,
-        memoryBytesSpilled = 1L,
-        diskBytesSpilled = 1L,
-
-        name = "stage1",
-        description = Some("description"),
-        details = "detail",
-        schedulingPool = "pool1",
-
-        rddIds = Seq(1),
-        accumulatorUpdates = Seq(new UIAccumulableInfo(0L, "acc", None, "value")),
-        tasks = None,
-        executorSummary = None,
-        killedTasksSummary = Map.empty
-      )
-      val taskTable = new TaskPagedTable(
-        stageData,
-        basePath = "/a/b/c",
-        currentTime = 0,
-        pageSize = 10,
-        sortColumn = "Index",
-        desc = false,
-        store = statusStore
-      )
-      val columnNames = (taskTable.headers \ "th" \ "a").map(_.child(1).text).toSet
-      assert(columnNames === ApiHelper.COLUMN_TO_INDEX.keySet)
-    } finally {
-      statusStore.close()
-    }
-  }
 
   test("peak execution memory should displayed") {
     val html = renderStagePage().toString().toLowerCase(Locale.ROOT)

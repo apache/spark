@@ -28,11 +28,12 @@ import org.apache.spark.ml.classification.NaiveBayesSuite._
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
-class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
+class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -55,13 +56,13 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     bernoulliDataset = generateNaiveBayesInput(pi, theta, 100, seed, "bernoulli").toDF()
   }
 
-  def validatePrediction(predictionAndLabels: Seq[Row]): Unit = {
-    val numOfErrorPredictions = predictionAndLabels.filter {
+  def validatePrediction(predictionAndLabels: DataFrame): Unit = {
+    val numOfErrorPredictions = predictionAndLabels.collect().count {
       case Row(prediction: Double, label: Double) =>
         prediction != label
-    }.length
+    }
     // At least 80% of the predictions should be on.
-    assert(numOfErrorPredictions < predictionAndLabels.length / 5)
+    assert(numOfErrorPredictions < predictionAndLabels.count() / 5)
   }
 
   def validateModelFit(
@@ -91,10 +92,10 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
   }
 
   def validateProbabilities(
-      featureAndProbabilities: Seq[Row],
+      featureAndProbabilities: DataFrame,
       model: NaiveBayesModel,
       modelType: String): Unit = {
-    featureAndProbabilities.foreach {
+    featureAndProbabilities.collect().foreach {
       case Row(features: Vector, probability: Vector) =>
         assert(probability.toArray.sum ~== 1.0 relTol 1.0e-10)
         val expected = modelType match {
@@ -153,40 +154,15 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val validationDataset =
       generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
 
-    testTransformerByGlobalCheckFunc[(Double, Vector)](validationDataset, model,
-      "prediction", "label") { predictionAndLabels: Seq[Row] =>
-      validatePrediction(predictionAndLabels)
-    }
+    val predictionAndLabels = model.transform(validationDataset).select("prediction", "label")
+    validatePrediction(predictionAndLabels)
 
-    testTransformerByGlobalCheckFunc[(Double, Vector)](validationDataset, model,
-      "features", "probability") { featureAndProbabilities: Seq[Row] =>
-      validateProbabilities(featureAndProbabilities, model, "multinomial")
-    }
+    val featureAndProbabilities = model.transform(validationDataset)
+      .select("features", "probability")
+    validateProbabilities(featureAndProbabilities, model, "multinomial")
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, NaiveBayesModel](this, model, testDataset)
-  }
-
-  test("prediction on single instance") {
-    val nPoints = 1000
-    val piArray = Array(0.5, 0.1, 0.4).map(math.log)
-    val thetaArray = Array(
-      Array(0.70, 0.10, 0.10, 0.10), // label 0
-      Array(0.10, 0.70, 0.10, 0.10), // label 1
-      Array(0.10, 0.10, 0.70, 0.10)  // label 2
-    ).map(_.map(math.log))
-    val pi = Vectors.dense(piArray)
-    val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
-
-    val trainDataset =
-      generateNaiveBayesInput(piArray, thetaArray, nPoints, seed, "multinomial").toDF()
-    val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
-    val model = nb.fit(trainDataset)
-
-    val validationDataset =
-      generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
-
-    testPredictionModelSinglePrediction(model, validationDataset)
+      Vector, NaiveBayesModel](model, testDataset)
   }
 
   test("Naive Bayes with weighted samples") {
@@ -234,18 +210,15 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val validationDataset =
       generateNaiveBayesInput(piArray, thetaArray, nPoints, 20, "bernoulli").toDF()
 
-    testTransformerByGlobalCheckFunc[(Double, Vector)](validationDataset, model,
-      "prediction", "label") { predictionAndLabels: Seq[Row] =>
-      validatePrediction(predictionAndLabels)
-    }
+    val predictionAndLabels = model.transform(validationDataset).select("prediction", "label")
+    validatePrediction(predictionAndLabels)
 
-    testTransformerByGlobalCheckFunc[(Double, Vector)](validationDataset, model,
-      "features", "probability") { featureAndProbabilities: Seq[Row] =>
-      validateProbabilities(featureAndProbabilities, model, "bernoulli")
-    }
+    val featureAndProbabilities = model.transform(validationDataset)
+      .select("features", "probability")
+    validateProbabilities(featureAndProbabilities, model, "bernoulli")
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, NaiveBayesModel](this, model, testDataset)
+      Vector, NaiveBayesModel](model, testDataset)
   }
 
   test("detect negative values") {

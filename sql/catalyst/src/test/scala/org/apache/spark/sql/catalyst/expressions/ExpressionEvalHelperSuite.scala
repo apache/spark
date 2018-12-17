@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
@@ -46,7 +45,7 @@ case class BadCodegenExpression() extends LeafExpression {
   override def eval(input: InternalRow): Any = 10
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     ev.copy(code =
-      code"""
+      s"""
         |int some_variable = 11;
         |int ${ev.value} = 10;
       """.stripMargin)

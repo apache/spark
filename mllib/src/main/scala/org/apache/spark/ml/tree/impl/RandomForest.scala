@@ -92,7 +92,6 @@ private[spark] object RandomForest extends Logging {
       featureSubsetStrategy: String,
       seed: Long,
       instr: Option[Instrumentation[_]],
-      prune: Boolean = true, // exposed for testing only, real trees are always pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
 
     val timer = new TimeTracker()
@@ -108,11 +107,9 @@ private[spark] object RandomForest extends Logging {
       case Some(instrumentation) =>
         instrumentation.logNumFeatures(metadata.numFeatures)
         instrumentation.logNumClasses(metadata.numClasses)
-        instrumentation.logNumExamples(metadata.numExamples)
       case None =>
         logInfo("numFeatures: " + metadata.numFeatures)
         logInfo("numClasses: " + metadata.numClasses)
-        logInfo("numExamples: " + metadata.numExamples)
     }
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
@@ -226,23 +223,22 @@ private[spark] object RandomForest extends Logging {
       case Some(uid) =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(uid, rootNode.toClassificationNode(prune),
-              numFeatures, strategy.getNumClasses)
+            new DecisionTreeClassificationModel(uid, rootNode.toNode, numFeatures,
+              strategy.getNumClasses)
           }
         } else {
           topNodes.map { rootNode =>
-            new DecisionTreeRegressionModel(uid, rootNode.toRegressionNode(prune), numFeatures)
+            new DecisionTreeRegressionModel(uid, rootNode.toNode, numFeatures)
           }
         }
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(rootNode.toClassificationNode(prune), numFeatures,
+            new DecisionTreeClassificationModel(rootNode.toNode, numFeatures,
               strategy.getNumClasses)
           }
         } else {
-          topNodes.map(rootNode =>
-            new DecisionTreeRegressionModel(rootNode.toRegressionNode(prune), numFeatures))
+          topNodes.map(rootNode => new DecisionTreeRegressionModel(rootNode.toNode, numFeatures))
         }
     }
   }
@@ -894,7 +890,13 @@ private[spark] object RandomForest extends Logging {
     // Sample the input only if there are continuous features.
     val continuousFeatures = Range(0, numFeatures).filter(metadata.isContinuous)
     val sampledInput = if (continuousFeatures.nonEmpty) {
-      val fraction = samplesFractionForFindSplits(metadata)
+      // Calculate the number of samples for approximate quantile calculation.
+      val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000)
+      val fraction = if (requiredSamples < metadata.numExamples) {
+        requiredSamples.toDouble / metadata.numExamples
+      } else {
+        1.0
+      }
       logDebug("fraction of data used for calculating quantiles = " + fraction)
       input.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt())
     } else {
@@ -916,9 +918,8 @@ private[spark] object RandomForest extends Logging {
       val numPartitions = math.min(continuousFeatures.length, input.partitions.length)
 
       input
-        .flatMap { point =>
-          continuousFeatures.map(idx => (idx, point.features(idx))).filter(_._2 != 0.0)
-        }.groupByKey(numPartitions)
+        .flatMap(point => continuousFeatures.map(idx => (idx, point.features(idx))))
+        .groupByKey(numPartitions)
         .map { case (idx, samples) =>
           val thresholds = findSplitsForContinuousFeature(samples, metadata, idx)
           val splits: Array[Split] = thresholds.map(thresh => new ContinuousSplit(idx, thresh))
@@ -930,8 +931,7 @@ private[spark] object RandomForest extends Logging {
     val numFeatures = metadata.numFeatures
     val splits: Array[Array[Split]] = Array.tabulate(numFeatures) {
       case i if metadata.isContinuous(i) =>
-        // some features may contain only zero, so continuousSplits will not have a record
-        val split = continuousSplits.getOrElse(i, Array.empty[Split])
+        val split = continuousSplits(i)
         metadata.setNumSplits(i, split.length)
         split
 
@@ -1001,22 +1001,11 @@ private[spark] object RandomForest extends Logging {
     } else {
       val numSplits = metadata.numSplits(featureIndex)
 
-      // get count for each distinct value except zero value
-      val partNumSamples = featureSamples.size
-      val partValueCountMap = scala.collection.mutable.Map[Double, Int]()
-      featureSamples.foreach { x =>
-        partValueCountMap(x) = partValueCountMap.getOrElse(x, 0) + 1
+      // get count for each distinct value
+      val (valueCountMap, numSamples) = featureSamples.foldLeft((Map.empty[Double, Int], 0)) {
+        case ((m, cnt), x) =>
+          (m + ((x, m.getOrElse(x, 0) + 1)), cnt + 1)
       }
-
-      // Calculate the expected number of samples for finding splits
-      val numSamples = (samplesFractionForFindSplits(metadata) * metadata.numExamples).toInt
-      // add expected zero value count and get complete statistics
-      val valueCountMap: Map[Double, Int] = if (numSamples - partNumSamples > 0) {
-        partValueCountMap.toMap + (0.0 -> (numSamples - partNumSamples))
-      } else {
-        partValueCountMap.toMap
-      }
-
       // sort distinct values
       val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
 
@@ -1156,23 +1145,6 @@ private[spark] object RandomForest extends Logging {
       metadata.numClasses * totalBins
     } else {
       3 * totalBins
-    }
-  }
-
-  /**
-   * Calculate the subsample fraction for finding splits
-   *
-   * @param metadata decision tree metadata
-   * @return subsample fraction
-   */
-  private def samplesFractionForFindSplits(
-      metadata: DecisionTreeMetadata): Double = {
-    // Calculate the number of samples for approximate quantile calculation.
-    val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000)
-    if (requiredSamples < metadata.numExamples) {
-      requiredSamples.toDouble / metadata.numExamples
-    } else {
-      1.0
     }
   }
 }

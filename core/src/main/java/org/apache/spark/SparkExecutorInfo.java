@@ -30,8 +30,4 @@ public interface SparkExecutorInfo extends Serializable {
   int port();
   long cacheSize();
   int numRunningTasks();
-  long usedOnHeapStorageMemory();
-  long usedOffHeapStorageMemory();
-  long totalOnHeapStorageMemory();
-  long totalOffHeapStorageMemory();
 }

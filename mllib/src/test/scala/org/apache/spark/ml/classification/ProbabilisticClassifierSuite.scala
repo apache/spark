@@ -20,7 +20,6 @@ package org.apache.spark.ml.classification
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.MLTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
 
@@ -123,15 +122,13 @@ object ProbabilisticClassifierSuite {
   def testPredictMethods[
       FeaturesType,
       M <: ProbabilisticClassificationModel[FeaturesType, M]](
-    mlTest: MLTest, model: M, testData: Dataset[_]): Unit = {
+    model: M, testData: Dataset[_]): Unit = {
 
     val allColModel = model.copy(ParamMap.empty)
       .setRawPredictionCol("rawPredictionAll")
       .setProbabilityCol("probabilityAll")
       .setPredictionCol("predictionAll")
-
-    val allColResult = allColModel.transform(testData.select(allColModel.getFeaturesCol))
-      .select(allColModel.getFeaturesCol, "rawPredictionAll", "probabilityAll", "predictionAll")
+    val allColResult = allColModel.transform(testData)
 
     for (rawPredictionCol <- Seq("", "rawPredictionSingle")) {
       for (probabilityCol <- Seq("", "probabilitySingle")) {
@@ -141,14 +138,22 @@ object ProbabilisticClassifierSuite {
             .setProbabilityCol(probabilityCol)
             .setPredictionCol(predictionCol)
 
-          import allColResult.sparkSession.implicits._
+          val result = newModel.transform(allColResult)
 
-          mlTest.testTransformer[(Vector, Vector, Vector, Double)](allColResult, newModel,
-            if (rawPredictionCol.isEmpty) "rawPredictionAll" else rawPredictionCol,
-            "rawPredictionAll",
-            if (probabilityCol.isEmpty) "probabilityAll" else probabilityCol, "probabilityAll",
-            if (predictionCol.isEmpty) "predictionAll" else predictionCol, "predictionAll"
-          ) {
+          import org.apache.spark.sql.functions._
+
+          val resultRawPredictionCol =
+            if (rawPredictionCol.isEmpty) col("rawPredictionAll") else col(rawPredictionCol)
+          val resultProbabilityCol =
+            if (probabilityCol.isEmpty) col("probabilityAll") else col(probabilityCol)
+          val resultPredictionCol =
+            if (predictionCol.isEmpty) col("predictionAll") else col(predictionCol)
+
+          result.select(
+            resultRawPredictionCol, col("rawPredictionAll"),
+            resultProbabilityCol, col("probabilityAll"),
+            resultPredictionCol, col("predictionAll")
+          ).collect().foreach {
             case Row(
               rawPredictionSingle: Vector, rawPredictionAll: Vector,
               probabilitySingle: Vector, probabilityAll: Vector,

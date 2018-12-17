@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Matchers.any
-import org.mockito.Mockito.{mock, spy, verify}
+import org.mockito.Mockito.{doReturn, mock, spy, verify}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
@@ -151,9 +151,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       var mergeApplicationListingCall = 0
       override protected def mergeApplicationListing(
           fileStatus: FileStatus,
-          lastSeen: Long,
-          enableSkipToEnd: Boolean): Unit = {
-        super.mergeApplicationListing(fileStatus, lastSeen, enableSkipToEnd)
+          lastSeen: Long): Unit = {
+        super.mergeApplicationListing(fileStatus, lastSeen)
         mergeApplicationListingCall += 1
       }
     }
@@ -257,13 +256,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       )
 
     updateAndCheck(provider) { list =>
+      list should not be (null)
       list.size should be (1)
       list.head.attempts.size should be (3)
       list.head.attempts.head.attemptId should be (Some("attempt3"))
     }
 
     val app2Attempt1 = newLogFile("app2", Some("attempt1"), inProgress = false)
-    writeFile(app2Attempt1, true, None,
+    writeFile(attempt1, true, None,
       SparkListenerApplicationStart("app2", Some("app2"), 5L, "test", Some("attempt1")),
       SparkListenerApplicationEnd(6L)
       )
@@ -382,8 +382,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       val log = newLogFile("downloadApp1", Some(s"attempt$i"), inProgress = false)
       writeFile(log, true, None,
         SparkListenerApplicationStart(
-          "downloadApp1", Some("downloadApp1"), 5000L * i, "test", Some(s"attempt$i")),
-        SparkListenerApplicationEnd(5001L * i)
+          "downloadApp1", Some("downloadApp1"), 5000 * i, "test", Some(s"attempt$i")),
+        SparkListenerApplicationEnd(5001 * i)
       )
       log
     }
@@ -649,7 +649,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     // Add more info to the app log, and trigger the provider to update things.
     writeFile(appLog, true, None,
       SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None),
-      SparkListenerJobStart(0, 1L, Nil, null)
+      SparkListenerJobStart(0, 1L, Nil, null),
+      SparkListenerApplicationEnd(5L)
       )
     provider.checkForLogs()
 
@@ -667,12 +668,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   test("clean up stale app information") {
     val storeDir = Utils.createTempDir()
     val conf = createTestConf().set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
-    val clock = new ManualClock()
-    val provider = spy(new FsHistoryProvider(conf, clock))
+    val provider = spy(new FsHistoryProvider(conf))
     val appId = "new1"
 
     // Write logs for two app attempts.
-    clock.advance(1)
+    doReturn(1L).when(provider).getNewLastScanTime()
     val attempt1 = newLogFile(appId, Some("1"), inProgress = false)
     writeFile(attempt1, true, None,
       SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("1")),
@@ -697,7 +697,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Delete the underlying log file for attempt 1 and rescan. The UI should go away, but since
     // attempt 2 still exists, listing data should be there.
-    clock.advance(1)
+    doReturn(2L).when(provider).getNewLastScanTime()
     attempt1.delete()
     updateAndCheck(provider) { list =>
       assert(list.size === 1)
@@ -708,7 +708,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(provider.getAppUI(appId, None) === None)
 
     // Delete the second attempt's log file. Now everything should go away.
-    clock.advance(1)
+    doReturn(3L).when(provider).getNewLastScanTime()
     attempt2.delete()
     updateAndCheck(provider) { list =>
       assert(list.isEmpty)
@@ -718,7 +718,9 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   test("SPARK-21571: clean up removes invalid history files") {
     val clock = new ManualClock()
     val conf = createTestConf().set(MAX_LOG_AGE_S.key, s"2d")
-    val provider = new FsHistoryProvider(conf, clock)
+    val provider = new FsHistoryProvider(conf, clock) {
+      override def getNewLastScanTime(): Long = clock.getTimeMillis()
+    }
 
     // Create 0-byte size inprogress and complete files
     var logCount = 0
@@ -770,54 +772,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(new File(testDir.toURI).listFiles().size === validLogCount)
   }
 
-  test("always find end event for finished apps") {
-    // Create a log file where the end event is before the configure chunk to be reparsed at
-    // the end of the file. The correct listing should still be generated.
-    val log = newLogFile("end-event-test", None, inProgress = false)
-    writeFile(log, true, None,
-      Seq(
-        SparkListenerApplicationStart("end-event-test", Some("end-event-test"), 1L, "test", None),
-        SparkListenerEnvironmentUpdate(Map(
-          "Spark Properties" -> Seq.empty,
-          "JVM Information" -> Seq.empty,
-          "System Properties" -> Seq.empty,
-          "Classpath Entries" -> Seq.empty
-        )),
-        SparkListenerApplicationEnd(5L)
-      ) ++ (1 to 1000).map { i => SparkListenerJobStart(i, i, Nil) }: _*)
-
-    val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE.key, s"1k")
-    val provider = new FsHistoryProvider(conf)
-    updateAndCheck(provider) { list =>
-      assert(list.size === 1)
-      assert(list(0).attempts.size === 1)
-      assert(list(0).attempts(0).completed)
-    }
-  }
-
-  test("parse event logs with optimizations off") {
-    val conf = createTestConf()
-      .set(END_EVENT_REPARSE_CHUNK_SIZE, 0L)
-      .set(FAST_IN_PROGRESS_PARSING, false)
-    val provider = new FsHistoryProvider(conf)
-
-    val complete = newLogFile("complete", None, inProgress = false)
-    writeFile(complete, true, None,
-      SparkListenerApplicationStart("complete", Some("complete"), 1L, "test", None),
-      SparkListenerApplicationEnd(5L)
-      )
-
-    val incomplete = newLogFile("incomplete", None, inProgress = true)
-    writeFile(incomplete, true, None,
-      SparkListenerApplicationStart("incomplete", Some("incomplete"), 1L, "test", None)
-      )
-
-    updateAndCheck(provider) { list =>
-      list.size should be (2)
-      list.count(_.attempts.head.completed) should be (1)
-    }
-  }
-
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
    * app list. Example:
@@ -861,8 +815,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   private def createTestConf(inMemory: Boolean = false): SparkConf = {
     val conf = new SparkConf()
-      .set(EVENT_LOG_DIR, testDir.getAbsolutePath())
-      .set(FAST_IN_PROGRESS_PARSING, true)
+      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
 
     if (!inMemory) {
       conf.set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
@@ -895,3 +848,4 @@ class TestGroupsMappingProvider extends GroupMappingServiceProvider {
     mappings.get(username).map(Set(_)).getOrElse(Set.empty)
   }
 }
+

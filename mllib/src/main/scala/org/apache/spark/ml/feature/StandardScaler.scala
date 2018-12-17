@@ -212,7 +212,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
         .select("std", "mean")
         .head()
       val model = new StandardScalerModel(metadata.uid, std, mean)
-      metadata.getAndSetParams(model)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }

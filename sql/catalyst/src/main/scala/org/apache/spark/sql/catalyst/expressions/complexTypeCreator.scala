@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -64,9 +63,9 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     val (preprocess, assigns, postprocess, arrayData) =
       GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false)
     ev.copy(
-      code = code"${preprocess}${assigns}${postprocess}",
-      value = JavaCode.variable(arrayData, dataType),
-      isNull = FalseLiteral)
+      code = preprocess + assigns + postprocess,
+      value = arrayData,
+      isNull = "false")
   }
 
   override def prettyName: String = "array"
@@ -91,7 +90,7 @@ private [sql] object GenArrayData {
     val arrayDataName = ctx.freshName("arrayData")
     val numElements = elementsCode.length
 
-    if (!CodeGenerator.isPrimitiveType(elementType)) {
+    if (!ctx.isPrimitiveType(elementType)) {
       val arrayName = ctx.freshName("arrayObject")
       val genericArrayClass = classOf[GenericArrayData].getName
 
@@ -125,7 +124,7 @@ private [sql] object GenArrayData {
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
-      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
+      val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
           s"$arrayDataName.setNullAt($i);"
@@ -220,7 +219,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val (preprocessValueData, assignValues, postprocessValueData, valueArrayData) =
       GenArrayData.genCodeToCreateArrayData(ctx, valueDt, evalValues, false)
     val code =
-      code"""
+      s"""
        final boolean ${ev.isNull} = false;
        $preprocessKeyData
        $assignKeys
@@ -374,12 +373,12 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
       extraArguments = "Object[]" -> values :: Nil)
 
     ev.copy(code =
-      code"""
+      s"""
          |Object[] $values = new Object[${valExprs.size}];
          |$valuesCode
          |final InternalRow ${ev.value} = new $rowClass($values);
          |$values = null;
-       """.stripMargin, isNull = FalseLiteral)
+       """.stripMargin, isNull = "false")
   }
 
   override def prettyName: String = "named_struct"
@@ -395,7 +394,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
 case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateNamedStructLike {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
-    ExprCode(code = eval.code, isNull = FalseLiteral, value = eval.value)
+    ExprCode(code = eval.code, isNull = "false", value = eval.value)
   }
 
   override def prettyName: String = "named_struct_unsafe"

@@ -16,8 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.Platform;
 
 // scalastyle: off
 /**
@@ -72,13 +71,13 @@ public final class XXH64 {
     return fmix(hash);
   }
 
-  public long hashUnsafeWordsBlock(MemoryBlock mb) {
-    return hashUnsafeWordsBlock(mb, seed);
+  public long hashUnsafeWords(Object base, long offset, int length) {
+    return hashUnsafeWords(base, offset, length, seed);
   }
 
-  public static long hashUnsafeWordsBlock(MemoryBlock mb, long seed) {
-    assert (mb.size() % 8 == 0) : "lengthInBytes must be a multiple of 8 (word-aligned)";
-    long hash = hashBytesByWordsBlock(mb, seed);
+  public static long hashUnsafeWords(Object base, long offset, int length, long seed) {
+    assert (length % 8 == 0) : "lengthInBytes must be a multiple of 8 (word-aligned)";
+    long hash = hashBytesByWords(base, offset, length, seed);
     return fmix(hash);
   }
 
@@ -86,34 +85,24 @@ public final class XXH64 {
     return hashUnsafeBytes(base, offset, length, seed);
   }
 
-  public static long hashUnsafeBytesBlock(MemoryBlock mb, long seed) {
-    long offset = 0;
-    long length = mb.size();
+  public static long hashUnsafeBytes(Object base, long offset, int length, long seed) {
     assert (length >= 0) : "lengthInBytes cannot be negative";
-    long hash = hashBytesByWordsBlock(mb, seed);
+    long hash = hashBytesByWords(base, offset, length, seed);
     long end = offset + length;
     offset += length & -8;
 
     if (offset + 4L <= end) {
-      hash ^= (mb.getInt(offset) & 0xFFFFFFFFL) * PRIME64_1;
+      hash ^= (Platform.getInt(base, offset) & 0xFFFFFFFFL) * PRIME64_1;
       hash = Long.rotateLeft(hash, 23) * PRIME64_2 + PRIME64_3;
       offset += 4L;
     }
 
     while (offset < end) {
-      hash ^= (mb.getByte(offset) & 0xFFL) * PRIME64_5;
+      hash ^= (Platform.getByte(base, offset) & 0xFFL) * PRIME64_5;
       hash = Long.rotateLeft(hash, 11) * PRIME64_1;
       offset++;
     }
     return fmix(hash);
-  }
-
-  public static long hashUTF8String(UTF8String str, long seed) {
-    return hashUnsafeBytesBlock(str.getMemoryBlock(), seed);
-  }
-
-  public static long hashUnsafeBytes(Object base, long offset, int length, long seed) {
-    return hashUnsafeBytesBlock(MemoryBlock.allocateFromObject(base, offset, length), seed);
   }
 
   private static long fmix(long hash) {
@@ -125,31 +114,30 @@ public final class XXH64 {
     return hash;
   }
 
-  private static long hashBytesByWordsBlock(MemoryBlock mb, long seed) {
-    long offset = 0;
-    long length = mb.size();
+  private static long hashBytesByWords(Object base, long offset, int length, long seed) {
+    long end = offset + length;
     long hash;
     if (length >= 32) {
-      long limit = length - 32;
+      long limit = end - 32;
       long v1 = seed + PRIME64_1 + PRIME64_2;
       long v2 = seed + PRIME64_2;
       long v3 = seed;
       long v4 = seed - PRIME64_1;
 
       do {
-        v1 += mb.getLong(offset) * PRIME64_2;
+        v1 += Platform.getLong(base, offset) * PRIME64_2;
         v1 = Long.rotateLeft(v1, 31);
         v1 *= PRIME64_1;
 
-        v2 += mb.getLong(offset + 8) * PRIME64_2;
+        v2 += Platform.getLong(base, offset + 8) * PRIME64_2;
         v2 = Long.rotateLeft(v2, 31);
         v2 *= PRIME64_1;
 
-        v3 += mb.getLong(offset + 16) * PRIME64_2;
+        v3 += Platform.getLong(base, offset + 16) * PRIME64_2;
         v3 = Long.rotateLeft(v3, 31);
         v3 *= PRIME64_1;
 
-        v4 += mb.getLong(offset + 24) * PRIME64_2;
+        v4 += Platform.getLong(base, offset + 24) * PRIME64_2;
         v4 = Long.rotateLeft(v4, 31);
         v4 *= PRIME64_1;
 
@@ -190,9 +178,9 @@ public final class XXH64 {
 
     hash += length;
 
-    long limit = length - 8;
+    long limit = end - 8;
     while (offset <= limit) {
-      long k1 = mb.getLong(offset);
+      long k1 = Platform.getLong(base, offset);
       hash ^= Long.rotateLeft(k1 * PRIME64_2, 31) * PRIME64_1;
       hash = Long.rotateLeft(hash, 27) * PRIME64_1 + PRIME64_4;
       offset += 8L;

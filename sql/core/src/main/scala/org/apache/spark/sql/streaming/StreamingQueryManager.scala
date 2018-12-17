@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.StreamWriteSupport
+import org.apache.spark.sql.sources.v2.writer.StreamWriteSupport
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -242,9 +242,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
     (sink, trigger) match {
       case (v2Sink: StreamWriteSupport, trigger: ContinuousTrigger) =>
-        if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
-          UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
-        }
+        UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
         new StreamingQueryWrapper(new ContinuousExecution(
           sparkSession,
           userSpecifiedName.orNull,

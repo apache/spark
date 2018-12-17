@@ -196,7 +196,7 @@ To further tune garbage collection, we first need to understand some basic infor
 
 * A simplified description of the garbage collection procedure: When Eden is full, a minor GC is run on Eden and objects
   that are alive from Eden and Survivor1 are copied to Survivor2. The Survivor regions are swapped. If an object is old
-  enough or Survivor2 is full, it is moved to Old. Finally, when Old is close to full, a full GC is invoked.
+  enough or Survivor2 is full, it is moved to Old. Finally when Old is close to full, a full GC is invoked.
 
 The goal of GC tuning in Spark is to ensure that only long-lived RDDs are stored in the Old generation and that
 the Young generation is sufficiently sized to store short-lived objects. This will help avoid full GCs to collect

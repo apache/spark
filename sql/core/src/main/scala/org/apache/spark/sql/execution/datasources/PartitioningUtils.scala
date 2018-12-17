@@ -407,34 +407,6 @@ object PartitioningUtils {
       Literal(bigDecimal)
     }
 
-    val dateTry = Try {
-      // try and parse the date, if no exception occurs this is a candidate to be resolved as
-      // DateType
-      DateTimeUtils.getThreadLocalDateFormat.parse(raw)
-      // SPARK-23436: Casting the string to date may still return null if a bad Date is provided.
-      // This can happen since DateFormat.parse  may not use the entire text of the given string:
-      // so if there are extra-characters after the date, it returns correctly.
-      // We need to check that we can cast the raw string since we later can use Cast to get
-      // the partition values with the right DataType (see
-      // org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex.inferPartitioning)
-      val dateValue = Cast(Literal(raw), DateType).eval()
-      // Disallow DateType if the cast returned null
-      require(dateValue != null)
-      Literal.create(dateValue, DateType)
-    }
-
-    val timestampTry = Try {
-      val unescapedRaw = unescapePathName(raw)
-      // try and parse the date, if no exception occurs this is a candidate to be resolved as
-      // TimestampType
-      DateTimeUtils.getThreadLocalTimestampFormat(timeZone).parse(unescapedRaw)
-      // SPARK-23436: see comment for date
-      val timestampValue = Cast(Literal(unescapedRaw), TimestampType, Some(timeZone.getID)).eval()
-      // Disallow TimestampType if the cast returned null
-      require(timestampValue != null)
-      Literal.create(timestampValue, TimestampType)
-    }
-
     if (typeInference) {
       // First tries integral types
       Try(Literal.create(Integer.parseInt(raw), IntegerType))
@@ -443,8 +415,16 @@ object PartitioningUtils {
         // Then falls back to fractional types
         .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
         // Then falls back to date/timestamp types
-        .orElse(timestampTry)
-        .orElse(dateTry)
+        .orElse(Try(
+          Literal.create(
+            DateTimeUtils.getThreadLocalTimestampFormat(timeZone)
+              .parse(unescapePathName(raw)).getTime * 1000L,
+            TimestampType)))
+        .orElse(Try(
+          Literal.create(
+            DateTimeUtils.millisToDays(
+              DateTimeUtils.getThreadLocalDateFormat.parse(raw).getTime),
+            DateType)))
         // Then falls back to string
         .getOrElse {
           if (raw == DEFAULT_PARTITION_NAME) {
@@ -486,8 +466,7 @@ object PartitioningUtils {
     val equality = columnNameEquality(caseSensitive)
     StructType(partitionColumns.map { col =>
       schema.find(f => equality(f.name, col)).getOrElse {
-        val schemaCatalog = schema.catalogString
-        throw new AnalysisException(s"Partition column `$col` not found in schema $schemaCatalog")
+        throw new AnalysisException(s"Partition column $col not found in schema $schema")
       }
     }).asNullable
   }

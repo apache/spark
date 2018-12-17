@@ -66,6 +66,7 @@ class RPackageUtilsSuite
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    System.setProperty("spark.testing", "true")
     lineBuffer.clear()
   }
 

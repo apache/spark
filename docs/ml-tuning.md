@@ -103,7 +103,7 @@ Refer to the [`CrossValidator` Python docs](api/python/pyspark.ml.html#pyspark.m
 
 In addition to  `CrossValidator` Spark also offers `TrainValidationSplit` for hyper-parameter tuning.
 `TrainValidationSplit` only evaluates each combination of parameters once, as opposed to k times in
- the case of `CrossValidator`. It is, therefore, less expensive,
+ the case of `CrossValidator`. It is therefore less expensive,
  but will not produce as reliable results when the training dataset is not sufficiently large.
 
 Unlike `CrossValidator`, `TrainValidationSplit` creates a single (training, test) dataset pair.

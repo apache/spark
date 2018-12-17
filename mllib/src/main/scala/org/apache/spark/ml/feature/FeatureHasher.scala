@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
@@ -29,8 +28,6 @@ import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.hash.Murmur3_x86_32.{hashInt, hashLong, hashUnsafeBytes2Block}
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -141,7 +138,7 @@ class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transforme
 
   @Since("2.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val hashFunc: Any => Int = FeatureHasher.murmur3Hash
+    val hashFunc: Any => Int = OldHashingTF.murmur3Hash
     val n = $(numFeatures)
     val localInputCols = $(inputCols)
     val catCols = if (isSet(categoricalCols)) {
@@ -221,31 +218,4 @@ object FeatureHasher extends DefaultParamsReadable[FeatureHasher] {
 
   @Since("2.3.0")
   override def load(path: String): FeatureHasher = super.load(path)
-
-  private val seed = OldHashingTF.seed
-
-  /**
-   * Calculate a hash code value for the term object using
-   * Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32).
-   * This is the default hash algorithm used from Spark 2.0 onwards.
-   * Use hashUnsafeBytes2 to match the original algorithm with the value.
-   * See SPARK-23381.
-   */
-  @Since("2.3.0")
-  private[feature] def murmur3Hash(term: Any): Int = {
-    term match {
-      case null => seed
-      case b: Boolean => hashInt(if (b) 1 else 0, seed)
-      case b: Byte => hashInt(b, seed)
-      case s: Short => hashInt(s, seed)
-      case i: Int => hashInt(i, seed)
-      case l: Long => hashLong(l, seed)
-      case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
-      case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
-      case s: String =>
-        hashUnsafeBytes2Block(UTF8String.fromString(s).getMemoryBlock, seed)
-      case _ => throw new SparkException("FeatureHasher with murmur3 algorithm does not " +
-        s"support type ${term.getClass.getCanonicalName} of input data.")
-    }
-  }
 }

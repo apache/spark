@@ -84,7 +84,7 @@ private[spark] class IndexShuffleBlockResolver(
    */
   private def checkIndexAndDataFile(index: File, data: File, blocks: Int): Array[Long] = {
     // the index file should have `block + 1` longs as offset.
-    if (index.length() != (blocks + 1) * 8L) {
+    if (index.length() != (blocks + 1) * 8) {
       return null
     }
     val lengths = new Array[Long](blocks)
@@ -202,13 +202,13 @@ private[spark] class IndexShuffleBlockResolver(
     // class of issue from re-occurring in the future which is why they are left here even though
     // SPARK-22982 is fixed.
     val channel = Files.newByteChannel(indexFile.toPath)
-    channel.position(blockId.reduceId * 8L)
+    channel.position(blockId.reduceId * 8)
     val in = new DataInputStream(Channels.newInputStream(channel))
     try {
       val offset = in.readLong()
       val nextOffset = in.readLong()
       val actualPosition = channel.position()
-      val expectedPosition = blockId.reduceId * 8L + 16
+      val expectedPosition = blockId.reduceId * 8 + 16
       if (actualPosition != expectedPosition) {
         throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
           s"expected $expectedPosition but actual position was $actualPosition.")

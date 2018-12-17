@@ -48,7 +48,7 @@ def getSparkSessionInstance(sparkConf):
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: sql_network_wordcount.py <hostname> <port> ", file=sys.stderr)
-        sys.exit(-1)
+        exit(-1)
     host, port = sys.argv[1:]
     sc = SparkContext(appName="PythonSqlNetworkWordCount")
     ssc = StreamingContext(sc, 1)

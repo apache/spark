@@ -1174,7 +1174,7 @@ for more details on the API.
 ## SQLTransformer
 
 `SQLTransformer` implements the transformations which are defined by SQL statement.
-Currently, we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
+Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
 where `"__THIS__"` represents the underlying table of the input dataset.
 The select clause specifies the fields, constants, and expressions to display in
 the output, and can be any select clause that Spark SQL supports. Users can also

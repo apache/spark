@@ -31,8 +31,8 @@ import org.apache.spark.sql.types.StructType;
  * {@link ReadSupport#createReader(DataSourceOptions)} or
  * {@link ReadSupportWithSchema#createReader(StructType, DataSourceOptions)}.
  * It can mix in various query optimization interfaces to speed up the data scan. The actual scan
- * logic is delegated to {@link InputPartition}s, which are returned by
- * {@link #planInputPartitions()}.
+ * logic is delegated to {@link DataReaderFactory}s that are returned by
+ * {@link #createDataReaderFactories()}.
  *
  * There are mainly 3 kinds of query optimizations:
  *   1. Operators push-down. E.g., filter push-down, required columns push-down(aka column
@@ -45,8 +45,8 @@ import org.apache.spark.sql.types.StructType;
  *      only one of them would be respected, according to the priority list from high to low:
  *      {@link SupportsScanColumnarBatch}, {@link SupportsScanUnsafeRow}.
  *
- * If an exception was throw when applying any of these query optimizations, the action will fail
- * and no Spark job will be submitted.
+ * If an exception was throw when applying any of these query optimizations, the action would fail
+ * and no Spark job was submitted.
  *
  * Spark first applies all operator push-down optimizations that this data source supports. Then
  * Spark collects information this data source reported for further optimizations. Finally Spark
@@ -59,22 +59,22 @@ public interface DataSourceReader {
    * Returns the actual schema of this data source reader, which may be different from the physical
    * schema of the underlying storage, as column pruning or other optimizations may happen.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
    * submitted.
    */
   StructType readSchema();
 
   /**
-   * Returns a list of {@link InputPartition}s. Each {@link InputPartition} is responsible for
-   * creating a data reader to output data of one RDD partition. The number of input partitions
-   * returned here is the same as the number of RDD partitions this scan outputs.
+   * Returns a list of reader factories. Each factory is responsible for creating a data reader to
+   * output data for one RDD partition. That means the number of factories returned here is same as
+   * the number of RDD partitions this scan outputs.
    *
    * Note that, this may not be a full scan if the data source reader mixes in other optimization
    * interfaces like column pruning, filter push-down, etc. These optimizations are applied before
    * Spark issues the scan request.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
    * submitted.
    */
-  List<InputPartition<Row>> planInputPartitions();
+  List<DataReaderFactory<Row>> createDataReaderFactories();
 }

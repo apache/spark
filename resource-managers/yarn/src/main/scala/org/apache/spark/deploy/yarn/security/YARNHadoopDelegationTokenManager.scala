@@ -22,11 +22,11 @@ import java.util.ServiceLoader
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -37,17 +37,14 @@ import org.apache.spark.util.Utils
  */
 private[yarn] class YARNHadoopDelegationTokenManager(
     sparkConf: SparkConf,
-    hadoopConf: Configuration) extends Logging {
+    hadoopConf: Configuration,
+    fileSystems: Configuration => Set[FileSystem]) extends Logging {
 
-  private val delegationTokenManager = new HadoopDelegationTokenManager(sparkConf, hadoopConf,
-    conf => YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, conf))
+  private val delegationTokenManager =
+    new HadoopDelegationTokenManager(sparkConf, hadoopConf, fileSystems)
 
   // public for testing
   val credentialProviders = getCredentialProviders
-  if (credentialProviders.nonEmpty) {
-    logDebug("Using the following YARN-specific credential providers: " +
-      s"${credentialProviders.keys.mkString(", ")}.")
-  }
 
   /**
    * Writes delegation tokens to creds.  Delegation tokens are fetched from all registered

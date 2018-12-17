@@ -47,9 +47,9 @@ import org.apache.spark.sql.types._
 object TypeCoercion {
 
   def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
-    InConversion(conf) ::
+    InConversion ::
       WidenSetOperationTypes ::
-      PromoteStrings(conf) ::
+      PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
       FunctionArgumentConversion ::
@@ -59,7 +59,7 @@ object TypeCoercion {
       IfCoercion ::
       StackCoercion ::
       Division ::
-      new ImplicitTypeCasts(conf) ::
+      ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
       Nil
@@ -112,14 +112,6 @@ object TypeCoercion {
         StructField(f1.name, dataType, nullable = f1.nullable || f2.nullable)
       }))
 
-    case (a1 @ ArrayType(et1, hasNull1), a2 @ ArrayType(et2, hasNull2)) if a1.sameType(a2) =>
-      findTightestCommonType(et1, et2).map(ArrayType(_, hasNull1 || hasNull2))
-
-    case (m1 @ MapType(kt1, vt1, hasNull1), m2 @ MapType(kt2, vt2, hasNull2)) if m1.sameType(m2) =>
-      val keyType = findTightestCommonType(kt1, kt2)
-      val valueType = findTightestCommonType(vt1, vt2)
-      Some(MapType(keyType.get, valueType.get, hasNull1 || hasNull2))
-
     case _ => None
   }
 
@@ -135,8 +127,7 @@ object TypeCoercion {
    * is a String and the other is not. It also handles when one op is a Date and the
    * other is a Timestamp by making the target type to be String.
    */
-  private def findCommonTypeForBinaryComparison(
-      dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
+  val findCommonTypeForBinaryComparison: (DataType, DataType) => Option[DataType] = {
     // We should cast all relative timestamp/date/string comparison into string comparisons
     // This behaves as a user would expect because timestamp strings sort lexicographically.
     // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
@@ -144,16 +135,10 @@ object TypeCoercion {
     case (DateType, StringType) => Some(StringType)
     case (StringType, TimestampType) => Some(StringType)
     case (TimestampType, StringType) => Some(StringType)
+    case (TimestampType, DateType) => Some(StringType)
+    case (DateType, TimestampType) => Some(StringType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
-
-    // Cast to TimestampType when we compare DateType with TimestampType
-    // if conf.compareDateTimestampInTimestamp is true
-    // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
-    case (TimestampType, DateType)
-      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
-    case (DateType, TimestampType)
-      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
 
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
@@ -162,7 +147,7 @@ object TypeCoercion {
     case (s: StringType, n: DecimalType) => Some(DoubleType)
 
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
-    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
+    case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
     case (l, r) => None
   }
 
@@ -183,27 +168,11 @@ object TypeCoercion {
       })
   }
 
-  /**
-   * Whether the data type contains StringType.
-   */
-  def hasStringType(dt: DataType): Boolean = dt match {
-    case StringType => true
-    case ArrayType(et, _) => hasStringType(et)
-    // Add StructType if we support string promotion for struct fields in the future.
-    case _ => false
-  }
-
   private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
-    // findWiderTypeForTwo doesn't satisfy the associative law, i.e. (a op b) op c may not equal
-    // to a op (b op c). This is only a problem for StringType or nested StringType in ArrayType.
-    // Excluding these types, findWiderTypeForTwo satisfies the associative law. For instance,
-    // (TimestampType, IntegerType, StringType) should have StringType as the wider common type.
-    val (stringTypes, nonStringTypes) = types.partition(hasStringType(_))
-    (stringTypes.distinct ++ nonStringTypes).foldLeft[Option[DataType]](Some(NullType))((r, c) =>
-      r match {
-        case Some(d) => findWiderTypeForTwo(d, c)
-        case _ => None
-      })
+    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
+      case Some(d) => findWiderTypeForTwo(d, c)
+      case None => None
+    })
   }
 
   /**
@@ -344,7 +313,7 @@ object TypeCoercion {
   /**
    * Promotes strings that appear in arithmetic expressions.
    */
-  case class PromoteStrings(conf: SQLConf) extends TypeCoercionRule {
+  object PromoteStrings extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
       (expr.dataType, targetType) match {
         case (NullType, dt) => Literal.create(null, targetType)
@@ -373,8 +342,8 @@ object TypeCoercion {
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
-          if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
-        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
+        if findCommonTypeForBinaryComparison(left.dataType, right.dataType).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
@@ -405,7 +374,7 @@ object TypeCoercion {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  case class InConversion(conf: SQLConf) extends TypeCoercionRule {
+  object InConversion extends TypeCoercionRule {
     private def flattenExpr(expr: Expression): Seq[Expression] = {
       expr match {
         // Multi columns in IN clause is represented as a CreateNamedStruct.
@@ -431,7 +400,7 @@ object TypeCoercion {
         val rhs = sub.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          findCommonTypeForBinaryComparison(l.dataType, r.dataType, conf)
+          findCommonTypeForBinaryComparison(l.dataType, r.dataType)
             .orElse(findTightestCommonType(l.dataType, r.dataType))
         }
 
@@ -526,14 +495,6 @@ object TypeCoercion {
         findWiderCommonType(types) match {
           case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
           case None => a
-        }
-
-      case c @ Concat(children) if children.forall(c => ArrayType.acceptsType(c.dataType)) &&
-        !haveSameType(children) =>
-        val types = children.map(_.dataType)
-        findWiderCommonType(types) match {
-          case Some(finalDataType) => Concat(children.map(Cast(_, finalDataType)))
-          case None => c
         }
 
       case m @ CreateMap(children) if m.keys.length == m.values.length &&
@@ -776,32 +737,11 @@ object TypeCoercion {
   /**
    * Casts types according to the expected input types for [[Expression]]s.
    */
-  class ImplicitTypeCasts(conf: SQLConf) extends TypeCoercionRule {
-
-    private def rejectTzInString = conf.getConf(SQLConf.REJECT_TIMEZONE_IN_STRING)
-
+  object ImplicitTypeCasts extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
-      // Special rules for `from/to_utc_timestamp`. These 2 functions assume the input timestamp
-      // string is in a specific timezone, so the string itself should not contain timezone.
-      // TODO: We should move the type coercion logic to expressions instead of a central
-      // place to put all the rules.
-      case e: FromUTCTimestamp if e.left.dataType == StringType =>
-        if (rejectTzInString) {
-          e.copy(left = StringToTimestampWithoutTimezone(e.left))
-        } else {
-          e.copy(left = Cast(e.left, TimestampType))
-        }
-
-      case e: ToUTCTimestamp if e.left.dataType == StringType =>
-        if (rejectTzInString) {
-          e.copy(left = StringToTimestampWithoutTimezone(e.left))
-        } else {
-          e.copy(left = Cast(e.left, TimestampType))
-        }
 
       case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
@@ -819,7 +759,7 @@ object TypeCoercion {
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
-          ImplicitTypeCasts.implicitCast(in, expected).getOrElse(in)
+          implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
 
@@ -835,9 +775,6 @@ object TypeCoercion {
         }
         e.withNewChildren(children)
     }
-  }
-
-  object ImplicitTypeCasts {
 
     /**
      * Given an expected data type, try to cast the expression and return the cast expression.

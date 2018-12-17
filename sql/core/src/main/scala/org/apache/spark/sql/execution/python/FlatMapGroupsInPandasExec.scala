@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
@@ -76,63 +75,20 @@ case class FlatMapGroupsInPandasExec(
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
+    val argOffsets = Array((0 until (child.output.length - groupingAttributes.length)).toArray)
+    val schema = StructType(child.schema.drop(groupingAttributes.length))
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
-
-    // Deduplicate the grouping attributes.
-    // If a grouping attribute also appears in data attributes, then we don't need to send the
-    // grouping attribute to Python worker. If a grouping attribute is not in data attributes,
-    // then we need to send this grouping attribute to python worker.
-    //
-    // We use argOffsets to distinguish grouping attributes and data attributes as following:
-    //
-    // argOffsets[0] is the length of grouping attributes
-    // argOffsets[1 .. argOffsets[0]+1] is the arg offsets for grouping attributes
-    // argOffsets[argOffsets[0]+1 .. ] is the arg offsets for data attributes
-
-    val dataAttributes = child.output.drop(groupingAttributes.length)
-    val groupingIndicesInData = groupingAttributes.map { attribute =>
-      dataAttributes.indexWhere(attribute.semanticEquals)
-    }
-
-    val groupingArgOffsets = new ArrayBuffer[Int]
-    val nonDupGroupingAttributes = new ArrayBuffer[Attribute]
-    val nonDupGroupingSize = groupingIndicesInData.count(_ == -1)
-
-    // Non duplicate grouping attributes are added to nonDupGroupingAttributes and
-    // their offsets are 0, 1, 2 ...
-    // Duplicate grouping attributes are NOT added to nonDupGroupingAttributes and
-    // their offsets are n + index, where n is the total number of non duplicate grouping
-    // attributes and index is the index in the data attributes that the grouping attribute
-    // is a duplicate of.
-
-    groupingAttributes.zip(groupingIndicesInData).foreach {
-      case (attribute, index) =>
-        if (index == -1) {
-          groupingArgOffsets += nonDupGroupingAttributes.length
-          nonDupGroupingAttributes += attribute
-        } else {
-          groupingArgOffsets += index + nonDupGroupingSize
-        }
-    }
-
-    val dataArgOffsets = nonDupGroupingAttributes.length until
-      (nonDupGroupingAttributes.length + dataAttributes.length)
-
-    val argOffsets = Array(Array(groupingAttributes.length) ++ groupingArgOffsets ++ dataArgOffsets)
-
-    // Attributes after deduplication
-    val dedupAttributes = nonDupGroupingAttributes ++ dataAttributes
-    val dedupSchema = StructType.fromAttributes(dedupAttributes)
 
     inputRDD.mapPartitionsInternal { iter =>
       val grouped = if (groupingAttributes.isEmpty) {
         Iterator(iter)
       } else {
         val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
-        val dedupProj = UnsafeProjection.create(dedupAttributes, child.output)
+        val dropGrouping =
+          UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
         groupedIter.map {
-          case (_, groupedRowIter) => groupedRowIter.map(dedupProj)
+          case (_, groupedRowIter) => groupedRowIter.map(dropGrouping)
         }
       }
 
@@ -140,7 +96,7 @@ case class FlatMapGroupsInPandasExec(
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc, bufferSize, reuseWorker,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF, argOffsets, dedupSchema,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF, argOffsets, schema,
         sessionLocalTimeZone, pandasRespectSessionTimeZone)
           .compute(grouped, context.partitionId(), context)
 

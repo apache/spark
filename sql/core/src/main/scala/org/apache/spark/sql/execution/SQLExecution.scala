@@ -68,18 +68,16 @@ object SQLExecution {
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
       // streaming queries would give us call site like "run at <unknown>:0"
-      val callSite = sc.getCallSite()
+      val callSite = sparkSession.sparkContext.getCallSite()
 
-      withSQLConfPropagated(sparkSession) {
-        sc.listenerBus.post(SparkListenerSQLExecutionStart(
-          executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
-          SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
-        try {
-          body
-        } finally {
-          sc.listenerBus.post(SparkListenerSQLExecutionEnd(
-            executionId, System.currentTimeMillis()))
-        }
+      sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
+        executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
+        SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
+      try {
+        body
+      } finally {
+        sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionEnd(
+          executionId, System.currentTimeMillis()))
       }
     } finally {
       executionIdToQueryExecution.remove(executionId)
@@ -90,43 +88,15 @@ object SQLExecution {
   /**
    * Wrap an action with a known executionId. When running a different action in a different
    * thread from the original one, this method can be used to connect the Spark jobs in this action
-   * with the known executionId, e.g., `BroadcastExchangeExec.relationFuture`.
+   * with the known executionId, e.g., `BroadcastHashJoin.broadcastFuture`.
    */
-  def withExecutionId[T](sparkSession: SparkSession, executionId: String)(body: => T): T = {
-    val sc = sparkSession.sparkContext
+  def withExecutionId[T](sc: SparkContext, executionId: String)(body: => T): T = {
     val oldExecutionId = sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    withSQLConfPropagated(sparkSession) {
-      try {
-        sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, executionId)
-        body
-      } finally {
-        sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, oldExecutionId)
-      }
-    }
-  }
-
-  /**
-   * Wrap an action with specified SQL configs. These configs will be propagated to the executor
-   * side via job local properties.
-   */
-  def withSQLConfPropagated[T](sparkSession: SparkSession)(body: => T): T = {
-    val sc = sparkSession.sparkContext
-    // Set all the specified SQL configs to local properties, so that they can be available at
-    // the executor side.
-    val allConfigs = sparkSession.sessionState.conf.getAllConfs
-    val originalLocalProps = allConfigs.collect {
-      case (key, value) if key.startsWith("spark") =>
-        val originalValue = sc.getLocalProperty(key)
-        sc.setLocalProperty(key, value)
-        (key, originalValue)
-    }
-
     try {
+      sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, executionId)
       body
     } finally {
-      for ((key, value) <- originalLocalProps) {
-        sc.setLocalProperty(key, value)
-      }
+      sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, oldExecutionId)
     }
   }
 }

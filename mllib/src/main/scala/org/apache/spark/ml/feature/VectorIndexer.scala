@@ -537,7 +537,7 @@ object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
       val numFeatures = data.getAs[Int](0)
       val categoryMaps = data.getAs[Map[Int, Map[Double, Int]]](1)
       val model = new VectorIndexerModel(metadata.uid, numFeatures, categoryMaps)
-      metadata.getAndSetParams(model)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }

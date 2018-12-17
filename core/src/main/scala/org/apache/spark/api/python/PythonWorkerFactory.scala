@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream, OutputStreamWriter}
+import java.io.{DataInputStream, DataOutputStream, InputStream, OutputStreamWriter}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.nio.charset.StandardCharsets
 import java.util.Arrays
@@ -27,7 +27,6 @@ import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
@@ -67,8 +66,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       "'spark.python.use.daemon' is disabled or the platform is Windows.")
     value
   }.getOrElse("pyspark.worker")
-
-  private val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
 
   var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
@@ -111,8 +108,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       if (pid < 0) {
         throw new IllegalStateException("Python daemon failed to launch worker with code " + pid)
       }
-
-      authHelper.authToServer(socket)
       daemonWorkers.put(socket, pid)
       socket
     }
@@ -150,24 +145,25 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       workerEnv.put("PYTHONPATH", pythonPath)
       // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
       workerEnv.put("PYTHONUNBUFFERED", "YES")
-      workerEnv.put("PYTHON_WORKER_FACTORY_PORT", serverSocket.getLocalPort.toString)
-      workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
       val worker = pb.start()
 
       // Redirect worker stdout and stderr
       redirectStreamsToStderr(worker.getInputStream, worker.getErrorStream)
 
-      // Wait for it to connect to our socket, and validate the auth secret.
-      serverSocket.setSoTimeout(10000)
+      // Tell the worker our port
+      val out = new  OutputStreamWriter(worker.getOutputStream, StandardCharsets.UTF_8)
+      out.write(serverSocket.getLocalPort + "\n")
+      out.flush()
 
+      // Wait for it to connect to our socket
+      serverSocket.setSoTimeout(10000)
       try {
         val socket = serverSocket.accept()
-        authHelper.authClient(socket)
         simpleWorkers.put(socket, worker)
         return socket
       } catch {
         case e: Exception =>
-          throw new SparkException("Python worker failed to connect back.", e)
+          throw new SparkException("Python worker did not connect back in time", e)
       }
     } finally {
       if (serverSocket != null) {
@@ -186,43 +182,20 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       try {
         // Create and start the daemon
-        val command = Arrays.asList(pythonExec, "-m", daemonModule)
-        val pb = new ProcessBuilder(command)
+        val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", daemonModule))
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
-        workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
         // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
         workerEnv.put("PYTHONUNBUFFERED", "YES")
         daemon = pb.start()
 
         val in = new DataInputStream(daemon.getInputStream)
-        try {
-          daemonPort = in.readInt()
-        } catch {
-          case _: EOFException =>
-            throw new SparkException(s"No port number in $daemonModule's stdout")
-        }
-
-        // test that the returned port number is within a valid range.
-        // note: this does not cover the case where the port number
-        // is arbitrary data but is also coincidentally within range
-        if (daemonPort < 1 || daemonPort > 0xffff) {
-          val exceptionMessage = f"""
-            |Bad data in $daemonModule's standard output. Invalid port number:
-            |  $daemonPort (0x$daemonPort%08x)
-            |Python command to execute the daemon was:
-            |  ${command.asScala.mkString(" ")}
-            |Check that you don't have any unexpected modules or libraries in
-            |your PYTHONPATH:
-            |  $pythonPath
-            |Also, check if you have a sitecustomize.py module in your python path,
-            |or in your python installation, that is printing to standard output"""
-          throw new SparkException(exceptionMessage.stripMargin)
-        }
+        daemonPort = in.readInt()
 
         // Redirect daemon stdout and stderr
         redirectStreamsToStderr(in, daemon.getErrorStream)
+
       } catch {
         case e: Exception =>
 

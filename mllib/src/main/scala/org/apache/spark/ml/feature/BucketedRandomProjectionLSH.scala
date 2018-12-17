@@ -73,14 +73,6 @@ class BucketedRandomProjectionLSHModel private[ml](
     private[ml] val randUnitVectors: Array[Vector])
   extends LSHModel[BucketedRandomProjectionLSHModel] with BucketedRandomProjectionLSHParams {
 
-  /** @group setParam */
-  @Since("2.4.0")
-  override def setInputCol(value: String): this.type = super.set(inputCol, value)
-
-  /** @group setParam */
-  @Since("2.4.0")
-  override def setOutputCol(value: String): this.type = super.set(outputCol, value)
-
   @Since("2.1.0")
   override protected[ml] val hashFunction: Vector => Array[Vector] = {
     key: Vector => {
@@ -238,7 +230,7 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
       val model = new BucketedRandomProjectionLSHModel(metadata.uid,
         randUnitVectors.rowIter.toArray)
 
-      metadata.getAndSetParams(model)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }

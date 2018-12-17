@@ -147,8 +147,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case KillExecutorsOnHost(host) =>
         scheduler.getExecutorsAliveOnHost(host).foreach { exec =>
-          killExecutors(exec.toSeq, adjustTargetNumExecutors = false, countFailures = false,
-            force = true)
+          killExecutors(exec.toSeq, replace = true, force = true)
         }
 
       case UpdateDelegationTokens(newDelegationTokens) =>
@@ -585,18 +584,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   /**
    * Request that the cluster manager kill the specified executors.
    *
+   * When asking the executor to be replaced, the executor loss is considered a failure, and
+   * killed tasks that are running on the executor will count towards the failure limits. If no
+   * replacement is being requested, then the tasks will not count towards the limit.
+   *
    * @param executorIds identifiers of executors to kill
-   * @param adjustTargetNumExecutors whether the target number of executors be adjusted down
-   *                                 after these executors have been killed
-   * @param countFailures if there are tasks running on the executors when they are killed, whether
-   *                      those failures be counted to task failure limits?
+   * @param replace whether to replace the killed executors with new ones, default false
    * @param force whether to force kill busy executors, default false
    * @return the ids of the executors acknowledged by the cluster manager to be removed.
    */
   final override def killExecutors(
       executorIds: Seq[String],
-      adjustTargetNumExecutors: Boolean,
-      countFailures: Boolean,
+      replace: Boolean,
       force: Boolean): Seq[String] = {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
 
@@ -611,7 +610,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val executorsToKill = knownExecutors
         .filter { id => !executorsPendingToRemove.contains(id) }
         .filter { id => force || !scheduler.isExecutorBusy(id) }
-      executorsToKill.foreach { id => executorsPendingToRemove(id) = !countFailures }
+      executorsToKill.foreach { id => executorsPendingToRemove(id) = !replace }
 
       logInfo(s"Actual list of executor(s) to be killed is ${executorsToKill.mkString(", ")}")
 
@@ -619,13 +618,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // with the cluster manager to avoid allocating new ones. When computing the new target,
       // take into account executors that are pending to be added or removed.
       val adjustTotalExecutors =
-        if (adjustTargetNumExecutors) {
+        if (!replace) {
           requestedTotalExecutors = math.max(requestedTotalExecutors - executorsToKill.size, 0)
           if (requestedTotalExecutors !=
               (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size)) {
             logDebug(
-              s"""killExecutors($executorIds, $adjustTargetNumExecutors, $countFailures, $force):
-                 |Executor counts do not match:
+              s"""killExecutors($executorIds, $replace, $force): Executor counts do not match:
                  |requestedTotalExecutors  = $requestedTotalExecutors
                  |numExistingExecutors     = $numExistingExecutors
                  |numPendingExecutors      = $numPendingExecutors
@@ -633,7 +631,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
           doRequestTotalExecutors(requestedTotalExecutors)
         } else {
-          numPendingExecutors += executorsToKill.size
+          numPendingExecutors += knownExecutors.size
           Future.successful(true)
         }
 

@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -50,24 +49,20 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
       ordinal: String,
       dataType: DataType,
       nullable: Boolean): ExprCode = {
-    val javaType = CodeGenerator.javaType(dataType)
-    val value = CodeGenerator.getValueFromVector(columnVar, dataType, ordinal)
-    val isNullVar = if (nullable) {
-      JavaCode.isNullVariable(ctx.freshName("isNull"))
-    } else {
-      FalseLiteral
-    }
+    val javaType = ctx.javaType(dataType)
+    val value = ctx.getValueFromVector(columnVar, dataType, ordinal)
+    val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = code"${ctx.registerComment(str)}" + (if (nullable) {
-      code"""
+    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
+      s"""
         boolean $isNullVar = $columnVar.isNullAt($ordinal);
-        $javaType $valueVar = $isNullVar ? ${CodeGenerator.defaultValue(dataType)} : ($value);
+        $javaType $valueVar = $isNullVar ? ${ctx.defaultValue(dataType)} : ($value);
       """
     } else {
-      code"$javaType $valueVar = $value;"
-    })
-    ExprCode(code, isNullVar, JavaCode.variable(valueVar, dataType))
+      s"$javaType $valueVar = $value;"
+    }).trim
+    ExprCode(code, isNullVar, valueVar)
   }
 
   /**
@@ -90,13 +85,12 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     // metrics
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val scanTimeMetric = metricTerm(ctx, "scanTime")
-    val scanTimeTotalNs =
-      ctx.addMutableState(CodeGenerator.JAVA_LONG, "scanTime") // init as scanTime = 0
+    val scanTimeTotalNs = ctx.addMutableState(ctx.JAVA_LONG, "scanTime") // init as scanTime = 0
 
     val columnarBatchClz = classOf[ColumnarBatch].getName
     val batch = ctx.addMutableState(columnarBatchClz, "batch")
 
-    val idx = ctx.addMutableState(CodeGenerator.JAVA_INT, "batchIdx") // init as batchIdx = 0
+    val idx = ctx.addMutableState(ctx.JAVA_INT, "batchIdx") // init as batchIdx = 0
     val columnVectorClzs = vectorTypes.getOrElse(
       Seq.fill(output.indices.size)(classOf[ColumnVector].getName))
     val (colVars, columnAssigns) = columnVectorClzs.zipWithIndex.map {

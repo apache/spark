@@ -79,29 +79,4 @@ class DataSourceOptionsSuite extends SparkFunSuite {
       options.getDouble("foo", 0.1d)
     }
   }
-
-  test("standard options") {
-    val options = new DataSourceOptions(Map(
-      DataSourceOptions.PATH_KEY -> "abc",
-      DataSourceOptions.TABLE_KEY -> "tbl").asJava)
-
-    assert(options.paths().toSeq == Seq("abc"))
-    assert(options.tableName().get() == "tbl")
-    assert(!options.databaseName().isPresent)
-  }
-
-  test("standard options with both singular path and multi-paths") {
-    val options = new DataSourceOptions(Map(
-      DataSourceOptions.PATH_KEY -> "abc",
-      DataSourceOptions.PATHS_KEY -> """["c", "d"]""").asJava)
-
-    assert(options.paths().toSeq == Seq("abc", "c", "d"))
-  }
-
-  test("standard options with only multi-paths") {
-    val options = new DataSourceOptions(Map(
-      DataSourceOptions.PATHS_KEY -> """["c", "d\"e"]""").asJava)
-
-    assert(options.paths().toSeq == Seq("c", "d\"e"))
-  }
 }

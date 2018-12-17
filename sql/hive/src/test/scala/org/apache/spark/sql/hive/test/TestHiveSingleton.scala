@@ -30,7 +30,7 @@ trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
   protected val spark: SparkSession = TestHive.sparkSession
   protected val hiveContext: TestHiveContext = TestHive
   protected val hiveClient: HiveClient =
-    spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
+    spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
 
   protected override def afterAll(): Unit = {
     try {

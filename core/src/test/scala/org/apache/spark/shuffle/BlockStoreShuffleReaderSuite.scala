@@ -108,7 +108,7 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
         val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, reduceId)
         (shuffleBlockId, byteOutputStream.size().toLong)
       }
-      Seq((localBlockManagerId, shuffleBlockIdsAndSizes)).toIterator
+      Seq((localBlockManagerId, shuffleBlockIdsAndSizes))
     }
 
     // Create a mocked shuffle handle to pass into HashShuffleReader.

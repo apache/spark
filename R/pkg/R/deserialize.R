@@ -60,16 +60,12 @@ readTypedObject <- function(con, type) {
     stop(paste("Unsupported type for deserialization", type)))
 }
 
-readStringData <- function(con, len) {
-  raw <- readBin(con, raw(), len, endian = "big")
+readString <- function(con) {
+  stringLen <- readInt(con)
+  raw <- readBin(con, raw(), stringLen, endian = "big")
   string <- rawToChar(raw)
   Encoding(string) <- "UTF-8"
   string
-}
-
-readString <- function(con) {
-  stringLen <- readInt(con)
-  readStringData(con, stringLen)
 }
 
 readInt <- function(con) {

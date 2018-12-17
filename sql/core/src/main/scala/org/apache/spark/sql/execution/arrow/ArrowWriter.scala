@@ -133,14 +133,6 @@ private[arrow] abstract class ArrowFieldWriter {
     valueVector match {
       case fixedWidthVector: BaseFixedWidthVector => fixedWidthVector.reset()
       case variableWidthVector: BaseVariableWidthVector => variableWidthVector.reset()
-      case listVector: ListVector =>
-        // Manual "reset" the underlying buffer.
-        // TODO: When we upgrade to Arrow 0.10.0, we can simply remove this and call
-        // `listVector.reset()`.
-        val buffers = listVector.getBuffers(false)
-        buffers.foreach(buf => buf.setZero(0, buf.capacity()))
-        listVector.setValueCount(0)
-        listVector.setLastSet(0)
       case _ =>
     }
     count = 0

@@ -43,9 +43,7 @@ private[ui] class StageTableBase(
     killEnabled: Boolean,
     isFailedStage: Boolean) {
   // stripXSS is called to remove suspicious characters used in XSS attacks
-  val allParameters = request.getParameterMap.asScala.toMap.map { case (k, v) =>
-    UIUtils.stripXSS(k) -> v.map(UIUtils.stripXSS).toSeq
-  }
+  val allParameters = request.getParameterMap.asScala.toMap.mapValues(_.map(UIUtils.stripXSS))
   val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
     .map(para => para._1 + "=" + para._2(0))
 
@@ -94,8 +92,7 @@ private[ui] class StageTableBase(
       stageSortColumn,
       stageSortDesc,
       isFailedStage,
-      parameterOtherTable,
-      request
+      parameterOtherTable
     ).table(page)
   } catch {
     case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
@@ -150,8 +147,7 @@ private[ui] class StagePagedTable(
     sortColumn: String,
     desc: Boolean,
     isFailedStage: Boolean,
-    parameterOtherTable: Iterable[String],
-    request: HttpServletRequest) extends PagedTable[StageTableRowData] {
+    parameterOtherTable: Iterable[String]) extends PagedTable[StageTableRowData] {
 
   override def tableId: String = stageTag + "-table"
 
@@ -165,7 +161,7 @@ private[ui] class StagePagedTable(
 
   override def pageNumberFormField: String = stageTag + ".page"
 
-  val parameterPath = UIUtils.prependBaseUri(request, basePath) + s"/$subPath/?" +
+  val parameterPath = UIUtils.prependBaseUri(basePath) + s"/$subPath/?" +
     parameterOtherTable.mkString("&")
 
   override val dataSource = new StageDataSource(
@@ -292,7 +288,7 @@ private[ui] class StagePagedTable(
         {if (isFairScheduler) {
           <td>
             <a href={"%s/stages/pool?poolname=%s"
-              .format(UIUtils.prependBaseUri(request, basePath), data.schedulingPool)}>
+              .format(UIUtils.prependBaseUri(basePath), data.schedulingPool)}>
               {data.schedulingPool}
             </a>
           </td>
@@ -350,7 +346,7 @@ private[ui] class StagePagedTable(
   }
 
   private def makeDescription(s: v1.StageData, descriptionOption: Option[String]): Seq[Node] = {
-    val basePathUri = UIUtils.prependBaseUri(request, basePath)
+    val basePathUri = UIUtils.prependBaseUri(basePath)
 
     val killLink = if (killEnabled) {
       val confirm =

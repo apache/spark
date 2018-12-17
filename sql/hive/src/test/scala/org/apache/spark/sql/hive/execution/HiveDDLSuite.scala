@@ -38,7 +38,6 @@ import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METAS
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -1355,8 +1354,7 @@ class HiveDDLSuite
     val indexName = tabName + "_index"
     withTable(tabName) {
       // Spark SQL does not support creating index. Thus, we have to use Hive client.
-      val client =
-        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
+      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
       sql(s"CREATE TABLE $tabName(a int)")
 
       try {
@@ -1394,8 +1392,7 @@ class HiveDDLSuite
     val tabName = "tab1"
     withTable(tabName) {
       // Spark SQL does not support creating skewed table. Thus, we have to use Hive client.
-      val client =
-        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
+      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
       client.runSqlHive(
         s"""
            |CREATE Table $tabName(col1 int, col2 int)
@@ -1464,7 +1461,7 @@ class HiveDDLSuite
         assert(e2.getMessage.contains(forbiddenPrefix + "foo"))
 
         val e3 = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tbl2 (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
+          sql(s"CREATE TABLE tbl (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
         }
         assert(e3.getMessage.contains(forbiddenPrefix + "foo"))
       }
@@ -1661,8 +1658,8 @@ class HiveDDLSuite
         Seq(5 -> "e").toDF("i", "j")
           .write.format("hive").mode("append").saveAsTable("t1")
       }
-      assert(e.message.contains("The format of the existing table default.t1 is "))
-      assert(e.message.contains("It doesn't match the specified format `HiveFileFormat`."))
+      assert(e.message.contains("The format of the existing table default.t1 is " +
+        "`ParquetFileFormat`. It doesn't match the specified format `HiveFileFormat`."))
     }
   }
 
@@ -1712,12 +1709,11 @@ class HiveDDLSuite
       spark.sessionState.catalog.getTableMetadata(TableIdentifier(tblName)).schema.map(_.name)
     }
 
-    val provider = spark.sessionState.conf.defaultDataSourceName
     withTable("t", "t1", "t2", "t3", "t4", "t5", "t6") {
-      sql(s"CREATE TABLE t(a int, b int, c int, d int) USING $provider PARTITIONED BY (d, b)")
+      sql("CREATE TABLE t(a int, b int, c int, d int) USING parquet PARTITIONED BY (d, b)")
       assert(getTableColumns("t") == Seq("a", "c", "d", "b"))
 
-      sql(s"CREATE TABLE t1 USING $provider PARTITIONED BY (d, b) AS SELECT 1 a, 1 b, 1 c, 1 d")
+      sql("CREATE TABLE t1 USING parquet PARTITIONED BY (d, b) AS SELECT 1 a, 1 b, 1 c, 1 d")
       assert(getTableColumns("t1") == Seq("a", "c", "d", "b"))
 
       Seq((1, 1, 1, 1)).toDF("a", "b", "c", "d").write.partitionBy("d", "b").saveAsTable("t2")
@@ -1727,7 +1723,7 @@ class HiveDDLSuite
         val dataPath = new File(new File(path, "d=1"), "b=1").getCanonicalPath
         Seq(1 -> 1).toDF("a", "c").write.save(dataPath)
 
-        sql(s"CREATE TABLE t3 USING $provider LOCATION '${path.toURI}'")
+        sql(s"CREATE TABLE t3 USING parquet LOCATION '${path.toURI}'")
         assert(getTableColumns("t3") == Seq("a", "c", "d", "b"))
       }
 
@@ -2142,86 +2138,6 @@ class HiveDDLSuite
             val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
             assertCompression(maybeFile, fileFormat, compression)
           }
-        }
-      }
-    }
-  }
-
-  private def getReader(path: String): org.apache.orc.Reader = {
-    val conf = spark.sessionState.newHadoopConf()
-    val files = org.apache.spark.sql.execution.datasources.orc.OrcUtils.listOrcFiles(path, conf)
-    assert(files.length == 1)
-    val file = files.head
-    val fs = file.getFileSystem(conf)
-    val readerOptions = org.apache.orc.OrcFile.readerOptions(conf).filesystem(fs)
-    org.apache.orc.OrcFile.createReader(file, readerOptions)
-  }
-
-  test("SPARK-23355 convertMetastoreOrc should not ignore table properties - STORED AS") {
-    Seq("native", "hive").foreach { orcImpl =>
-      withSQLConf(ORC_IMPLEMENTATION.key -> orcImpl, CONVERT_METASTORE_ORC.key -> "true") {
-        withTable("t") {
-          withTempPath { path =>
-            sql(
-              s"""
-                |CREATE TABLE t(id int) STORED AS ORC
-                |TBLPROPERTIES (
-                |  orc.compress 'ZLIB',
-                |  orc.compress.size '1001',
-                |  orc.row.index.stride '2002',
-                |  hive.exec.orc.default.block.size '3003',
-                |  hive.exec.orc.compression.strategy 'COMPRESSION')
-                |LOCATION '${path.toURI}'
-              """.stripMargin)
-            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-            assert(DDLUtils.isHiveTable(table))
-            assert(table.storage.serde.get.contains("orc"))
-            val properties = table.properties
-            assert(properties.get("orc.compress") == Some("ZLIB"))
-            assert(properties.get("orc.compress.size") == Some("1001"))
-            assert(properties.get("orc.row.index.stride") == Some("2002"))
-            assert(properties.get("hive.exec.orc.default.block.size") == Some("3003"))
-            assert(properties.get("hive.exec.orc.compression.strategy") == Some("COMPRESSION"))
-            assert(spark.table("t").collect().isEmpty)
-
-            sql("INSERT INTO t SELECT 1")
-            checkAnswer(spark.table("t"), Row(1))
-            val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
-
-            val reader = getReader(maybeFile.head.getCanonicalPath)
-            assert(reader.getCompressionKind.name === "ZLIB")
-            assert(reader.getCompressionSize == 1001)
-            assert(reader.getRowIndexStride == 2002)
-          }
-        }
-      }
-    }
-  }
-
-  test("SPARK-23355 convertMetastoreParquet should not ignore table properties - STORED AS") {
-    withSQLConf(CONVERT_METASTORE_PARQUET.key -> "true") {
-      withTable("t") {
-        withTempPath { path =>
-          sql(
-            s"""
-               |CREATE TABLE t(id int) STORED AS PARQUET
-               |TBLPROPERTIES (
-               |  parquet.compression 'GZIP'
-               |)
-               |LOCATION '${path.toURI}'
-            """.stripMargin)
-          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          assert(DDLUtils.isHiveTable(table))
-          assert(table.storage.serde.get.contains("parquet"))
-          val properties = table.properties
-          assert(properties.get("parquet.compression") == Some("GZIP"))
-          assert(spark.table("t").collect().isEmpty)
-
-          sql("INSERT INTO t SELECT 1")
-          checkAnswer(spark.table("t"), Row(1))
-          val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
-
-          assertCompression(maybeFile, "parquet", "GZIP")
         }
       }
     }

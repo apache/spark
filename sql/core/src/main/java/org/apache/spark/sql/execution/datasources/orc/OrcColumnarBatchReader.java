@@ -497,7 +497,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
    * Returns the number of micros since epoch from an element of TimestampColumnVector.
    */
   private static long fromTimestampColumnVector(TimestampColumnVector vector, int index) {
-    return vector.time[index] * 1000 + (vector.nanos[index] / 1000 % 1000);
+    return vector.time[index] * 1000L + vector.nanos[index] / 1000L;
   }
 
   /**

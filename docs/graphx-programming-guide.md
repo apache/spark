@@ -491,7 +491,7 @@ val joinedGraph = graph.joinVertices(uniqueCosts)(
 The more general [`outerJoinVertices`][Graph.outerJoinVertices] behaves similarly to `joinVertices`
 except that the user defined `map` function is applied to all vertices and can change the vertex
 property type.  Because not all vertices may have a matching value in the input RDD the `map`
-function takes an `Option` type.  For example, we can set up a graph for PageRank by initializing
+function takes an `Option` type.  For example, we can setup a graph for PageRank by initializing
 vertex properties with their `outDegree`.
 
 
@@ -969,7 +969,7 @@ A vertex is part of a triangle when it has two adjacent vertices with an edge be
 # Examples
 
 Suppose I want to build a graph from some text files, restrict the graph
-to important relationships and users, run page-rank on the subgraph, and
+to important relationships and users, run page-rank on the sub-graph, and
 then finally return attributes associated with the top users.  I can do
 all of this in just a few lines with GraphX:
 

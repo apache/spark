@@ -60,10 +60,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
 
   test("specify sorting columns without bucketing columns") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-    val e = intercept[AnalysisException] {
-      df.write.sortBy("j").saveAsTable("tt")
-    }
-    assert(e.getMessage == "sortBy must be used together with bucketBy;")
+    intercept[IllegalArgumentException](df.write.sortBy("j").saveAsTable("tt"))
   }
 
   test("sorting by non-orderable column") {
@@ -77,16 +74,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       df.write.bucketBy(2, "i").parquet("/tmp/path")
     }
-    assert(e.getMessage == "'save' does not support bucketBy right now;")
-  }
-
-  test("write bucketed and sorted data using save()") {
-    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-
-    val e = intercept[AnalysisException] {
-      df.write.bucketBy(2, "i").sortBy("i").parquet("/tmp/path")
-    }
-    assert(e.getMessage == "'save' does not support bucketBy and sortBy right now;")
+    assert(e.getMessage == "'save' does not support bucketing right now;")
   }
 
   test("write bucketed data using insertInto()") {
@@ -95,16 +83,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       df.write.bucketBy(2, "i").insertInto("tt")
     }
-    assert(e.getMessage == "'insertInto' does not support bucketBy right now;")
-  }
-
-  test("write bucketed and sorted data using insertInto()") {
-    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-
-    val e = intercept[AnalysisException] {
-      df.write.bucketBy(2, "i").sortBy("i").insertInto("tt")
-    }
-    assert(e.getMessage == "'insertInto' does not support bucketBy and sortBy right now;")
+    assert(e.getMessage == "'insertInto' does not support bucketing right now;")
   }
 
   private lazy val df = {

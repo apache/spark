@@ -236,7 +236,7 @@ test_that("Watermark", {
 
   times <- collect(sql("SELECT * FROM times"))
   # looks like write timing can affect the first bucket; but it should be t
-  expect_equal(times[order(times$eventTime), ][1, 2], 2)
+  expect_equal(times[order(times$eventTime),][1, 2], 2)
 
   stopQuery(q)
   unlink(parquetPath)

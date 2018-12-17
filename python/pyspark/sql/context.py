@@ -22,7 +22,7 @@ import warnings
 if sys.version >= '3':
     basestring = unicode = str
 
-from pyspark import since, _NoValue
+from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
@@ -124,11 +124,11 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(1.3)
-    def getConf(self, key, defaultValue=_NoValue):
+    def getConf(self, key, defaultValue=None):
         """Returns the value of Spark SQL configuration property for the given key.
 
-        If the key is not set and defaultValue is set, return
-        defaultValue. If the key is not set and defaultValue is not set, return
+        If the key is not set and defaultValue is not None, return
+        defaultValue. If the key is not set and defaultValue is None, return
         the system default value.
 
         >>> sqlContext.getConf("spark.sql.shuffle.partitions")
@@ -543,7 +543,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     globs['sc'].stop()
     if failure_count:
-        sys.exit(-1)
+        exit(-1)
 
 
 if __name__ == "__main__":

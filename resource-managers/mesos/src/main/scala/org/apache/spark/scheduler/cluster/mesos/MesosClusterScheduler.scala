@@ -30,7 +30,8 @@ import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
-import org.apache.spark.deploy.mesos.{config, MesosDriverDescription}
+import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.config
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
@@ -417,18 +418,6 @@ private[spark] class MesosClusterScheduler(
     envBuilder.build()
   }
 
-  private def isContainerLocalAppJar(desc: MesosDriverDescription): Boolean = {
-    val isLocalJar = desc.jarUrl.startsWith("local://")
-    val isContainerLocal = desc.conf.getOption("spark.mesos.appJar.local.resolution.mode").exists {
-      case "container" => true
-      case "host" => false
-      case other =>
-        logWarning(s"Unknown spark.mesos.appJar.local.resolution.mode $other, using host.")
-        false
-      }
-    isLocalJar && isContainerLocal
-  }
-
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
     val confUris = List(conf.getOption("spark.mesos.uris"),
       desc.conf.getOption("spark.mesos.uris"),
@@ -436,14 +425,10 @@ private[spark] class MesosClusterScheduler(
       _.map(_.split(",").map(_.trim))
     ).flatten
 
-    if (isContainerLocalAppJar(desc)) {
-      (confUris ++ getDriverExecutorURI(desc).toList).map(uri =>
-        CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache).build())
-    } else {
-      val jarUrl = desc.jarUrl.stripPrefix("file:").stripPrefix("local:")
-      ((jarUrl :: confUris) ++ getDriverExecutorURI(desc).toList).map(uri =>
-        CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache).build())
-    }
+    val jarUrl = desc.jarUrl.stripPrefix("file:").stripPrefix("local:")
+
+    ((jarUrl :: confUris) ++ getDriverExecutorURI(desc).toList).map(uri =>
+      CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache).build())
   }
 
   private def getContainerInfo(desc: MesosDriverDescription): ContainerInfo.Builder = {
@@ -495,14 +480,7 @@ private[spark] class MesosClusterScheduler(
       (cmdExecutable, ".")
     }
     val cmdOptions = generateCmdOption(desc, sandboxPath).mkString(" ")
-    val primaryResource = {
-      if (isContainerLocalAppJar(desc)) {
-        new File(desc.jarUrl.stripPrefix("local://")).toString()
-      } else {
-        new File(sandboxPath, desc.jarUrl.split("/").last).toString()
-      }
-    }
-
+    val primaryResource = new File(sandboxPath, desc.jarUrl.split("/").last).toString()
     val appArguments = desc.command.arguments.mkString(" ")
 
     s"$executable $cmdOptions $primaryResource $appArguments"
@@ -552,9 +530,9 @@ private[spark] class MesosClusterScheduler(
       .filter { case (key, _) => !replicatedOptionsBlacklist.contains(key) }
       .toMap
     (defaultConf ++ driverConf).foreach { case (key, value) =>
-      options ++= Seq("--conf", s"${key}=${value}") }
+      options ++= Seq("--conf", s""""$key=${shellEscape(value)}"""".stripMargin) }
 
-    options.map(shellEscape)
+    options
   }
 
   /**

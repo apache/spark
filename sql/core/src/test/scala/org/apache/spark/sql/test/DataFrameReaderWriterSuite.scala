@@ -276,7 +276,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     assert(LastOptions.parameters("doubleOpt") == "6.7")
   }
 
-  test("check jdbc() does not support partitioning, bucketBy or sortBy") {
+  test("check jdbc() does not support partitioning or bucketing") {
     val df = spark.read.text(Utils.createTempDir(namePrefix = "text").getCanonicalPath)
 
     var w = df.write.partitionBy("value")
@@ -287,19 +287,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
     w = df.write.bucketBy(2, "value")
     e = intercept[AnalysisException](w.jdbc(null, null, null))
-    Seq("jdbc", "does not support bucketBy right now").foreach { s =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
-    }
-
-    w = df.write.sortBy("value")
-    e = intercept[AnalysisException](w.jdbc(null, null, null))
-    Seq("sortBy must be used together with bucketBy").foreach { s =>
-      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
-    }
-
-    w = df.write.bucketBy(2, "value").sortBy("value")
-    e = intercept[AnalysisException](w.jdbc(null, null, null))
-    Seq("jdbc", "does not support bucketBy and sortBy right now").foreach { s =>
+    Seq("jdbc", "bucketing").foreach { s =>
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
@@ -313,6 +301,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       intercept[AnalysisException] {
         spark.range(10).write.format("csv").mode("overwrite").partitionBy("id").save(path)
       }
+      spark.emptyDataFrame.write.format("parquet").mode("overwrite").save(path)
     }
   }
 
@@ -574,8 +563,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     "and a same-name temp view exist") {
     withTable("same_name") {
       withTempView("same_name") {
-        val format = spark.sessionState.conf.defaultDataSourceName
-        sql(s"CREATE TABLE same_name(id LONG) USING $format")
+        sql("CREATE TABLE same_name(id LONG) USING parquet")
         spark.range(10).createTempView("same_name")
         spark.range(20).write.mode(SaveMode.Append).saveAsTable("same_name")
         checkAnswer(spark.table("same_name"), spark.range(10).toDF())

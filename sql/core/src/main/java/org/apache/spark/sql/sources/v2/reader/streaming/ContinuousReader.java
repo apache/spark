@@ -27,7 +27,7 @@ import java.util.Optional;
  * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
  * interface to allow reading in a continuous processing mode stream.
  *
- * Implementations must ensure each partition reader is a {@link ContinuousInputPartitionReader}.
+ * Implementations must ensure each reader factory output is a {@link ContinuousDataReader}.
  *
  * Note: This class currently extends {@link BaseStreamingSource} to maintain compatibility with
  * DataSource V1 APIs. This extension will be removed once we get rid of V1 completely.
@@ -35,8 +35,8 @@ import java.util.Optional;
 @InterfaceStability.Evolving
 public interface ContinuousReader extends BaseStreamingSource, DataSourceReader {
     /**
-     * Merge partitioned offsets coming from {@link ContinuousInputPartitionReader} instances
-     * for each partition to a single global offset.
+     * Merge partitioned offsets coming from {@link ContinuousDataReader} instances for each
+     * partition to a single global offset.
      */
     Offset mergeOffsets(PartitionOffset[] offsets);
 
@@ -47,7 +47,7 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceReader 
     Offset deserializeOffset(String json);
 
     /**
-     * Set the desired start offset for partitions created from this reader. The scan will
+     * Set the desired start offset for reader factories created from this reader. The scan will
      * start from the first record after the provided offset, or from an implementation-defined
      * inferred starting point if no offset is provided.
      */
@@ -61,8 +61,8 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceReader 
     Offset getStartOffset();
 
     /**
-     * The execution engine will call this method in every epoch to determine if new input
-     * partitions need to be generated, which may be required if for example the underlying
+     * The execution engine will call this method in every epoch to determine if new reader
+     * factories need to be generated, which may be required if for example the underlying
      * source system has had partitions added or removed.
      *
      * If true, the query will be shut down and restarted with a new reader.

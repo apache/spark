@@ -32,20 +32,10 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
   def testRFormulaTransform[A: Encoder](
       dataframe: DataFrame,
       formulaModel: RFormulaModel,
-      expected: DataFrame,
-      expectedAttributes: AttributeGroup*): Unit = {
-    val resultSchema = formulaModel.transformSchema(dataframe.schema)
-    assert(resultSchema.json === expected.schema.json)
-    assert(resultSchema === expected.schema)
+      expected: DataFrame): Unit = {
     val (first +: rest) = expected.schema.fieldNames.toSeq
     val expectedRows = expected.collect()
     testTransformerByGlobalCheckFunc[A](dataframe, formulaModel, first, rest: _*) { rows =>
-      assert(rows.head.schema.toString() == resultSchema.toString())
-      for (expectedAttributeGroup <- expectedAttributes) {
-        val attributeGroup =
-          AttributeGroup.fromStructField(rows.head.schema(expectedAttributeGroup.name))
-        assert(attributeGroup === expectedAttributeGroup)
-      }
       assert(rows === expectedRows)
     }
   }
@@ -59,10 +49,15 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     val original = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
     val model = formula.fit(original)
     MLTestingUtils.checkCopyAndUids(formula, model)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
     val expected = Seq(
       (0, 1.0, 3.0, Vectors.dense(1.0, 3.0), 0.0),
       (2, 2.0, 5.0, Vectors.dense(2.0, 5.0), 2.0)
     ).toDF("id", "v1", "v2", "features", "label")
+    // TODO(ekl) make schema comparisons ignore metadata, to avoid .toString
+    assert(result.schema.toString == resultSchema.toString)
+    assert(resultSchema == expected.schema)
     testRFormulaTransform[(Int, Double, Double)](original, model, expected)
   }
 
@@ -78,13 +73,9 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y")
     val original = Seq((0, 1.0), (2, 2.0)).toDF("x", "y")
     val model = formula.fit(original)
-    val expected = Seq(
-      (0, 1.0, Vectors.dense(0.0)),
-      (2, 2.0, Vectors.dense(2.0))
-    ).toDF("x", "y", "features")
     val resultSchema = model.transformSchema(original.schema)
     assert(resultSchema.length == 3)
-    testRFormulaTransform[(Int, Double)](original, model, expected)
+    assert(resultSchema.toString == model.transform(original).schema.toString)
   }
 
   test("label column already exists but forceIndexLabel was set with true") {
@@ -102,11 +93,9 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     intercept[IllegalArgumentException] {
       model.transformSchema(original.schema)
     }
-    testTransformerByInterceptingException[(Int, Boolean)](
-      original,
-      model,
-      "Label column already exists and is not of type NumericType.",
-      "x")
+    intercept[IllegalArgumentException] {
+      model.transform(original)
+    }
   }
 
   test("allow missing label column for test datasets") {
@@ -116,22 +105,21 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     val resultSchema = model.transformSchema(original.schema)
     assert(resultSchema.length == 3)
     assert(!resultSchema.exists(_.name == "label"))
-    val expected = Seq(
-      (0, 1.0, Vectors.dense(0.0)),
-      (2, 2.0, Vectors.dense(2.0))
-    ).toDF("x", "_not_y", "features")
-    testRFormulaTransform[(Int, Double)](original, model, expected)
+    assert(resultSchema.toString == model.transform(original).schema.toString)
   }
 
   test("allow empty label") {
     val original = Seq((1, 2.0, 3.0), (4, 5.0, 6.0), (7, 8.0, 9.0)).toDF("id", "a", "b")
     val formula = new RFormula().setFormula("~ a + b")
     val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
     val expected = Seq(
       (1, 2.0, 3.0, Vectors.dense(2.0, 3.0)),
       (4, 5.0, 6.0, Vectors.dense(5.0, 6.0)),
       (7, 8.0, 9.0, Vectors.dense(8.0, 9.0))
     ).toDF("id", "a", "b", "features")
+    assert(result.schema.toString == resultSchema.toString)
     testRFormulaTransform[(Int, Double, Double)](original, model, expected)
   }
 
@@ -140,12 +128,15 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
       .toDF("id", "a", "b")
     val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
     val expected = Seq(
         (1, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
         (2, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 2.0),
         (3, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 3.0),
         (4, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0)
       ).toDF("id", "a", "b", "features", "label")
+    assert(result.schema.toString == resultSchema.toString)
     testRFormulaTransform[(Int, String, Int)](original, model, expected)
   }
 
@@ -184,6 +175,9 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     var idx = 0
     for (orderType <- StringIndexer.supportedStringOrderType) {
       val model = formula.setStringIndexerOrderType(orderType).fit(original)
+      val result = model.transform(original)
+      val resultSchema = model.transformSchema(original.schema)
+      assert(result.schema.toString == resultSchema.toString)
       testRFormulaTransform[(Int, String, Int)](original, model, expected(idx))
       idx += 1
     }
@@ -224,6 +218,9 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     ).toDF("id", "a", "b", "features", "label")
 
     val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
+    assert(result.schema.toString == resultSchema.toString)
     testRFormulaTransform[(Int, String, Int)](original, model, expected)
   }
 
@@ -257,6 +254,19 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     val formula1 = new RFormula().setFormula("id ~ a + b + c - 1")
       .setStringIndexerOrderType(StringIndexer.alphabetDesc)
     val model1 = formula1.fit(original)
+    val result1 = model1.transform(original)
+    val resultSchema1 = model1.transformSchema(original.schema)
+    // Note the column order is different between R and Spark.
+    val expected1 = Seq(
+      (1, "foo", "zq", 4, Vectors.sparse(5, Array(0, 4), Array(1.0, 4.0)), 1.0),
+      (2, "bar", "zz", 4, Vectors.dense(0.0, 0.0, 1.0, 1.0, 4.0), 2.0),
+      (3, "bar", "zz", 5, Vectors.dense(0.0, 0.0, 1.0, 1.0, 5.0), 3.0),
+      (4, "baz", "zz", 5, Vectors.dense(0.0, 1.0, 0.0, 1.0, 5.0), 4.0)
+    ).toDF("id", "a", "b", "c", "features", "label")
+    assert(result1.schema.toString == resultSchema1.toString)
+    testRFormulaTransform[(Int, String, String, Int)](original, model1, expected1)
+
+    val attrs1 = AttributeGroup.fromStructField(result1.schema("features"))
     val expectedAttrs1 = new AttributeGroup(
       "features",
       Array[Attribute](
@@ -265,20 +275,14 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
         new BinaryAttribute(Some("a_bar"), Some(3)),
         new BinaryAttribute(Some("b_zz"), Some(4)),
         new NumericAttribute(Some("c"), Some(5))))
-    // Note the column order is different between R and Spark.
-    val expected1 = Seq(
-      (1, "foo", "zq", 4, Vectors.sparse(5, Array(0, 4), Array(1.0, 4.0)), 1.0),
-      (2, "bar", "zz", 4, Vectors.dense(0.0, 0.0, 1.0, 1.0, 4.0), 2.0),
-      (3, "bar", "zz", 5, Vectors.dense(0.0, 0.0, 1.0, 1.0, 5.0), 3.0),
-      (4, "baz", "zz", 5, Vectors.dense(0.0, 1.0, 0.0, 1.0, 5.0), 4.0)
-    ).toDF("id", "a", "b", "c", "features", "label")
-
-    testRFormulaTransform[(Int, String, String, Int)](original, model1, expected1, expectedAttrs1)
+    assert(attrs1 === expectedAttrs1)
 
     // There is no impact for string terms interaction.
     val formula2 = new RFormula().setFormula("id ~ a:b + c - 1")
       .setStringIndexerOrderType(StringIndexer.alphabetDesc)
     val model2 = formula2.fit(original)
+    val result2 = model2.transform(original)
+    val resultSchema2 = model2.transformSchema(original.schema)
     // Note the column order is different between R and Spark.
     val expected2 = Seq(
       (1, "foo", "zq", 4, Vectors.sparse(7, Array(1, 6), Array(1.0, 4.0)), 1.0),
@@ -286,6 +290,10 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
       (3, "bar", "zz", 5, Vectors.sparse(7, Array(4, 6), Array(1.0, 5.0)), 3.0),
       (4, "baz", "zz", 5, Vectors.sparse(7, Array(2, 6), Array(1.0, 5.0)), 4.0)
     ).toDF("id", "a", "b", "c", "features", "label")
+    assert(result2.schema.toString == resultSchema2.toString)
+    testRFormulaTransform[(Int, String, String, Int)](original, model2, expected2)
+
+    val attrs2 = AttributeGroup.fromStructField(result2.schema("features"))
     val expectedAttrs2 = new AttributeGroup(
       "features",
       Array[Attribute](
@@ -296,8 +304,7 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
         new NumericAttribute(Some("a_bar:b_zz"), Some(5)),
         new NumericAttribute(Some("a_bar:b_zq"), Some(6)),
         new NumericAttribute(Some("c"), Some(7))))
-
-    testRFormulaTransform[(Int, String, String, Int)](original, model2, expected2, expectedAttrs2)
+    assert(attrs2 === expectedAttrs2)
   }
 
   test("index string label") {
@@ -306,14 +313,13 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
       Seq(("male", "foo", 4), ("female", "bar", 4), ("female", "bar", 5), ("male", "baz", 5))
         .toDF("id", "a", "b")
     val model = formula.fit(original)
-    val attr = NominalAttribute.defaultAttr
     val expected = Seq(
         ("male", "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
         ("female", "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 0.0),
         ("female", "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 0.0),
         ("male", "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 1.0)
     ).toDF("id", "a", "b", "features", "label")
-      .select($"id", $"a", $"b", $"features", $"label".as("label", attr.toMetadata()))
+    // assert(result.schema.toString == resultSchema.toString)
     testRFormulaTransform[(String, String, Int)](original, model, expected)
   }
 
@@ -323,14 +329,13 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
       Seq((1.0, "foo", 4), (1.0, "bar", 4), (0.0, "bar", 5), (1.0, "baz", 5))
     ).toDF("id", "a", "b")
     val model = formula.fit(original)
-    val attr = NominalAttribute.defaultAttr
-    val expected = Seq(
+    val expected = spark.createDataFrame(
+      Seq(
         (1.0, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 0.0),
         (1.0, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 0.0),
         (0.0, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 1.0),
         (1.0, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 0.0))
-      .toDF("id", "a", "b", "features", "label")
-      .select($"id", $"a", $"b", $"features", $"label".as("label", attr.toMetadata()))
+    ).toDF("id", "a", "b", "features", "label")
     testRFormulaTransform[(Double, String, Int)](original, model, expected)
   }
 
@@ -339,20 +344,15 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     val original = Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5))
       .toDF("id", "a", "b")
     val model = formula.fit(original)
-    val expected = Seq(
-      (1, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
-      (2, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 2.0),
-      (3, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 3.0),
-      (4, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 4.0))
-      .toDF("id", "a", "b", "features", "label")
+    val result = model.transform(original)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
     val expectedAttrs = new AttributeGroup(
       "features",
       Array(
         new BinaryAttribute(Some("a_bar"), Some(1)),
         new BinaryAttribute(Some("a_foo"), Some(2)),
         new NumericAttribute(Some("b"), Some(3))))
-    testRFormulaTransform[(Int, String, Int)](original, model, expected, expectedAttrs)
-
+    assert(attrs === expectedAttrs)
   }
 
   test("vector attribute generation") {
@@ -360,19 +360,14 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     val original = Seq((1, Vectors.dense(0.0, 1.0)), (2, Vectors.dense(1.0, 2.0)))
       .toDF("id", "vec")
     val model = formula.fit(original)
-    val attrs = new AttributeGroup("vec", 2)
-    val expected = Seq(
-      (1, Vectors.dense(0.0, 1.0), Vectors.dense(0.0, 1.0), 1.0),
-      (2, Vectors.dense(1.0, 2.0), Vectors.dense(1.0, 2.0), 2.0))
-      .toDF("id", "vec", "features", "label")
-      .select($"id", $"vec".as("vec", attrs.toMetadata()), $"features", $"label")
+    val result = model.transform(original)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
     val expectedAttrs = new AttributeGroup(
       "features",
       Array[Attribute](
         new NumericAttribute(Some("vec_0"), Some(1)),
         new NumericAttribute(Some("vec_1"), Some(2))))
-
-    testRFormulaTransform[(Int, Vector)](original, model, expected, expectedAttrs)
+    assert(attrs === expectedAttrs)
   }
 
   test("vector attribute generation with unnamed input attrs") {
@@ -386,31 +381,31 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
         NumericAttribute.defaultAttr)).toMetadata()
     val original = base.select(base.col("id"), base.col("vec").as("vec2", metadata))
     val model = formula.fit(original)
-    val expected = Seq(
-      (1, Vectors.dense(0.0, 1.0), Vectors.dense(0.0, 1.0), 1.0),
-      (2, Vectors.dense(1.0, 2.0), Vectors.dense(1.0, 2.0), 2.0)
-    ).toDF("id", "vec2", "features", "label")
-      .select($"id", $"vec2".as("vec2", metadata), $"features", $"label")
+    val result = model.transform(original)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
     val expectedAttrs = new AttributeGroup(
       "features",
       Array[Attribute](
         new NumericAttribute(Some("vec2_0"), Some(1)),
         new NumericAttribute(Some("vec2_1"), Some(2))))
-    testRFormulaTransform[(Int, Vector)](original, model, expected, expectedAttrs)
+    assert(attrs === expectedAttrs)
   }
 
   test("numeric interaction") {
     val formula = new RFormula().setFormula("a ~ b:c:d")
     val original = Seq((1, 2, 4, 2), (2, 3, 4, 1)).toDF("a", "b", "c", "d")
     val model = formula.fit(original)
+    val result = model.transform(original)
     val expected = Seq(
       (1, 2, 4, 2, Vectors.dense(16.0), 1.0),
       (2, 3, 4, 1, Vectors.dense(12.0), 2.0)
     ).toDF("a", "b", "c", "d", "features", "label")
+    testRFormulaTransform[(Int, Int, Int, Int)](original, model, expected)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
     val expectedAttrs = new AttributeGroup(
       "features",
       Array[Attribute](new NumericAttribute(Some("b:c:d"), Some(1))))
-    testRFormulaTransform[(Int, Int, Int, Int)](original, model, expected, expectedAttrs)
+    assert(attrs === expectedAttrs)
   }
 
   test("factor numeric interaction") {
@@ -419,6 +414,7 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
       Seq((1, "foo", 4), (2, "bar", 4), (3, "bar", 5), (4, "baz", 5), (4, "baz", 5), (4, "baz", 5))
         .toDF("id", "a", "b")
     val model = formula.fit(original)
+    val result = model.transform(original)
     val expected = Seq(
       (1, "foo", 4, Vectors.dense(0.0, 0.0, 4.0), 1.0),
       (2, "bar", 4, Vectors.dense(0.0, 4.0, 0.0), 2.0),
@@ -427,13 +423,15 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
       (4, "baz", 5, Vectors.dense(5.0, 0.0, 0.0), 4.0),
       (4, "baz", 5, Vectors.dense(5.0, 0.0, 0.0), 4.0)
     ).toDF("id", "a", "b", "features", "label")
+    testRFormulaTransform[(Int, String, Int)](original, model, expected)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
     val expectedAttrs = new AttributeGroup(
       "features",
       Array[Attribute](
         new NumericAttribute(Some("a_baz:b"), Some(1)),
         new NumericAttribute(Some("a_bar:b"), Some(2)),
         new NumericAttribute(Some("a_foo:b"), Some(3))))
-    testRFormulaTransform[(Int, String, Int)](original, model, expected, expectedAttrs)
+    assert(attrs === expectedAttrs)
   }
 
   test("factor factor interaction") {
@@ -441,12 +439,14 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     val original =
       Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz")).toDF("id", "a", "b")
     val model = formula.fit(original)
+    val result = model.transform(original)
     val expected = Seq(
       (1, "foo", "zq", Vectors.dense(0.0, 0.0, 1.0, 0.0), 1.0),
       (2, "bar", "zq", Vectors.dense(1.0, 0.0, 0.0, 0.0), 2.0),
       (3, "bar", "zz", Vectors.dense(0.0, 1.0, 0.0, 0.0), 3.0)
     ).toDF("id", "a", "b", "features", "label")
     testRFormulaTransform[(Int, String, String)](original, model, expected)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
     val expectedAttrs = new AttributeGroup(
       "features",
       Array[Attribute](
@@ -454,7 +454,7 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
         new NumericAttribute(Some("a_bar:b_zz"), Some(2)),
         new NumericAttribute(Some("a_foo:b_zq"), Some(3)),
         new NumericAttribute(Some("a_foo:b_zz"), Some(4))))
-    testRFormulaTransform[(Int, String, String)](original, model, expected, expectedAttrs)
+    assert(attrs === expectedAttrs)
   }
 
   test("read/write: RFormula") {
@@ -517,11 +517,9 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
 
     // Handle unseen features.
     val formula1 = new RFormula().setFormula("id ~ a + b")
-    testTransformerByInterceptingException[(Int, String, String)](
-      df2,
-      formula1.fit(df1),
-      "Unseen label:",
-      "features")
+    intercept[SparkException] {
+      formula1.fit(df1).transform(df2).collect()
+    }
     val model1 = formula1.setHandleInvalid("skip").fit(df1)
     val model2 = formula1.setHandleInvalid("keep").fit(df1)
 
@@ -540,28 +538,21 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
 
     // Handle unseen labels.
     val formula2 = new RFormula().setFormula("b ~ a + id")
-    testTransformerByInterceptingException[(Int, String, String)](
-      df2,
-      formula2.fit(df1),
-      "Unseen label:",
-      "label")
-
+    intercept[SparkException] {
+      formula2.fit(df1).transform(df2).collect()
+    }
     val model3 = formula2.setHandleInvalid("skip").fit(df1)
     val model4 = formula2.setHandleInvalid("keep").fit(df1)
 
-    val attr = NominalAttribute.defaultAttr
     val expected3 = Seq(
       (1, "foo", "zq", Vectors.dense(0.0, 1.0), 0.0),
       (2, "bar", "zq", Vectors.dense(1.0, 2.0), 0.0)
     ).toDF("id", "a", "b", "features", "label")
-      .select($"id", $"a", $"b", $"features", $"label".as("label", attr.toMetadata()))
-
     val expected4 = Seq(
       (1, "foo", "zq", Vectors.dense(0.0, 1.0, 1.0), 0.0),
       (2, "bar", "zq", Vectors.dense(1.0, 0.0, 2.0), 0.0),
       (3, "bar", "zy", Vectors.dense(1.0, 0.0, 3.0), 2.0)
     ).toDF("id", "a", "b", "features", "label")
-      .select($"id", $"a", $"b", $"features", $"label".as("label", attr.toMetadata()))
 
     testRFormulaTransform[(Int, String, String)](df2, model3, expected3)
     testRFormulaTransform[(Int, String, String)](df2, model4, expected4)
@@ -593,26 +584,4 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
         assert(features.toArray === a +: b.toArray)
     }
   }
-
-  test("SPARK-23562 RFormula handleInvalid should handle invalid values in non-string columns.") {
-    val d1 = Seq(
-      (1001L, "a"),
-      (1002L, "b")).toDF("id1", "c1")
-    val d2 = Seq[(java.lang.Long, String)](
-      (20001L, "x"),
-      (20002L, "y"),
-      (null, null)).toDF("id2", "c2")
-    val dataset = d1.crossJoin(d2)
-
-    def get_output(mode: String): DataFrame = {
-      val formula = new RFormula().setFormula("c1 ~ id2").setHandleInvalid(mode)
-      formula.fit(dataset).transform(dataset).select("features", "label")
-    }
-
-    assert(intercept[SparkException](get_output("error").collect())
-      .getMessage.contains("Encountered null while assembling a row"))
-    assert(get_output("skip").count() == 4)
-    assert(get_output("keep").count() == 6)
-  }
-
 }

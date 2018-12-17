@@ -209,8 +209,10 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     System.gc()
     assert(ref.get.isEmpty)
 
-    // Getting a garbage collected accum should return None.
-    assert(AccumulatorContext.get(accId).isEmpty)
+    // Getting a garbage collected accum should throw error
+    intercept[IllegalStateException] {
+      AccumulatorContext.get(accId)
+    }
 
     // Getting a normal accumulator. Note: this has to be separate because referencing an
     // accumulator above in an `assert` would keep it from being garbage collected.

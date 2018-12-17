@@ -21,18 +21,21 @@
 #' S4 class that represents a AFTSurvivalRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
+#' @export
 #' @note AFTSurvivalRegressionModel since 2.0.0
 setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a generalized linear model
 #'
 #' @param jobj a Java object reference to the backing Scala GeneralizedLinearRegressionWrapper
+#' @export
 #' @note GeneralizedLinearRegressionModel since 2.0.0
 setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents an IsotonicRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala IsotonicRegressionModel
+#' @export
 #' @note IsotonicRegressionModel since 2.1.0
 setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
@@ -82,6 +85,7 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @return \code{spark.glm} returns a fitted generalized linear model.
 #' @rdname spark.glm
 #' @name spark.glm
+#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -207,6 +211,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @aliases glm
+#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -239,6 +244,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 #'         and \code{iter} (number of iterations IRLS takes). If there are collinear columns in
 #'         the data, the coefficients matrix only provides coefficients.
 #' @rdname spark.glm
+#' @export
 #' @note summary(GeneralizedLinearRegressionModel) since 2.0.0
 setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
           function(object) {
@@ -284,6 +290,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 
 #' @rdname spark.glm
 #' @param x summary object of fitted generalized linear model returned by \code{summary} function.
+#' @export
 #' @note print.summary.GeneralizedLinearRegressionModel since 2.0.0
 print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   if (x$is.loaded) {
@@ -317,6 +324,7 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
 #' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
 #'         "prediction".
 #' @rdname spark.glm
+#' @export
 #' @note predict(GeneralizedLinearRegressionModel) since 1.5.0
 setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, newData) {
@@ -330,6 +338,7 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.glm
+#' @export
 #' @note write.ml(GeneralizedLinearRegressionModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -354,6 +363,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #' @rdname spark.isoreg
 #' @aliases spark.isoreg,SparkDataFrame,formula-method
 #' @name spark.isoreg
+#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -402,6 +412,7 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
 #'         and \code{predictions} (predictions associated with the boundaries at the same index).
 #' @rdname spark.isoreg
 #' @aliases summary,IsotonicRegressionModel-method
+#' @export
 #' @note summary(IsotonicRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "IsotonicRegressionModel"),
           function(object) {
@@ -418,6 +429,7 @@ setMethod("summary", signature(object = "IsotonicRegressionModel"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted values.
 #' @rdname spark.isoreg
 #' @aliases predict,IsotonicRegressionModel,SparkDataFrame-method
+#' @export
 #' @note predict(IsotonicRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "IsotonicRegressionModel"),
           function(object, newData) {
@@ -432,6 +444,7 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 #'
 #' @rdname spark.isoreg
 #' @aliases write.ml,IsotonicRegressionModel,character-method
+#' @export
 #' @note write.ml(IsotonicRegression, character) since 2.1.0
 setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -464,6 +477,7 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
 #' @seealso survival: \url{https://cran.r-project.org/package=survival}
+#' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(ovarian)
@@ -503,6 +517,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #'         The list includes the model's \code{coefficients} (features, coefficients,
 #'         intercept and log(scale)).
 #' @rdname spark.survreg
+#' @export
 #' @note summary(AFTSurvivalRegressionModel) since 2.0.0
 setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
           function(object) {
@@ -522,6 +537,7 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted values
 #'         on the original scale of the data (mean predicted value at scale = 1.0).
 #' @rdname spark.survreg
+#' @export
 #' @note predict(AFTSurvivalRegressionModel) since 2.0.0
 setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
           function(object, newData) {
@@ -534,6 +550,7 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @param overwrite overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #' @rdname spark.survreg
+#' @export
 #' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
 #' @seealso \link{write.ml}
 setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),

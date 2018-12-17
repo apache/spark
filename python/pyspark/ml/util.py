@@ -30,7 +30,6 @@ if sys.version > '3':
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
-from pyspark.util import VersionUtils
 
 
 def _jvm():
@@ -168,10 +167,6 @@ class JavaMLWriter(MLWriter):
     def overwrite(self):
         """Overwrites if the output path already exists."""
         self._jwrite.overwrite()
-        return self
-
-    def option(self, key, value):
-        self._jwrite.option(key, value)
         return self
 
     def context(self, sqlContext):
@@ -397,7 +392,6 @@ class DefaultParamsWriter(MLWriter):
         - sparkVersion
         - uid
         - paramMap
-        - defaultParamMap (since 2.4.0)
         - (optionally, extra metadata)
         :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
         :param paramMap:  If given, this is saved in the "paramMap" field.
@@ -419,24 +413,15 @@ class DefaultParamsWriter(MLWriter):
         """
         uid = instance.uid
         cls = instance.__module__ + '.' + instance.__class__.__name__
-
-        # User-supplied param values
-        params = instance._paramMap
+        params = instance.extractParamMap()
         jsonParams = {}
         if paramMap is not None:
             jsonParams = paramMap
         else:
             for p in params:
                 jsonParams[p.name] = params[p]
-
-        # Default param values
-        jsonDefaultParams = {}
-        for p in instance._defaultParamMap:
-            jsonDefaultParams[p.name] = instance._defaultParamMap[p]
-
         basicMetadata = {"class": cls, "timestamp": long(round(time.time() * 1000)),
-                         "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams,
-                         "defaultParamMap": jsonDefaultParams}
+                         "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams}
         if extraMetadata is not None:
             basicMetadata.update(extraMetadata)
         return json.dumps(basicMetadata, separators=[',',  ':'])
@@ -534,25 +519,10 @@ class DefaultParamsReader(MLReader):
         """
         Extract Params from metadata, and set them in the instance.
         """
-        # Set user-supplied param values
         for paramName in metadata['paramMap']:
             param = instance.getParam(paramName)
             paramValue = metadata['paramMap'][paramName]
             instance.set(param, paramValue)
-
-        # Set default param values
-        majorAndMinorVersions = VersionUtils.majorMinorVersion(metadata['sparkVersion'])
-        major = majorAndMinorVersions[0]
-        minor = majorAndMinorVersions[1]
-
-        # For metadata file prior to Spark 2.4, there is no default section.
-        if major > 2 or (major == 2 and minor >= 4):
-            assert 'defaultParamMap' in metadata, "Error loading metadata: Expected " + \
-                "`defaultParamMap` section not found"
-
-            for paramName in metadata['defaultParamMap']:
-                paramValue = metadata['defaultParamMap'][paramName]
-                instance._setDefault(**{paramName: paramValue})
 
     @staticmethod
     def loadParamsInstance(path, sc):

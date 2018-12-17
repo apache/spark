@@ -170,7 +170,7 @@ class LinearSVC @Since("2.2.0") (
           Instance(label, weight, features)
       }
 
-    val instr = Instrumentation.create(this, dataset)
+    val instr = Instrumentation.create(this, instances)
     instr.logParams(regParam, maxIter, fitIntercept, tol, standardization, threshold,
       aggregationDepth)
 
@@ -187,9 +187,6 @@ class LinearSVC @Since("2.2.0") (
         (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
-    instr.logNamedValue(Instrumentation.loggerTags.numExamples, summarizer.count)
-    instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
-    instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -212,7 +209,7 @@ class LinearSVC @Since("2.2.0") (
       if (numInvalid != 0) {
         val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
           s"Found $numInvalid invalid labels."
-        instr.logError(msg)
+        logError(msg)
         throw new SparkException(msg)
       }
 
@@ -249,7 +246,7 @@ class LinearSVC @Since("2.2.0") (
       bcFeaturesStd.destroy(blocking = false)
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
-        instr.logError(msg)
+        logError(msg)
         throw new SparkException(msg)
       }
 
@@ -319,7 +316,7 @@ class LinearSVCModel private[classification] (
     BLAS.dot(features, coefficients) + intercept
   }
 
-  override def predict(features: Vector): Double = {
+  override protected def predict(features: Vector): Double = {
     if (margin(features) > $(threshold)) 1.0 else 0.0
   }
 
@@ -380,7 +377,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
       val Row(coefficients: Vector, intercept: Double) =
         data.select("coefficients", "intercept").head()
       val model = new LinearSVCModel(metadata.uid, coefficients, intercept)
-      metadata.getAndSetParams(model)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }

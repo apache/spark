@@ -100,12 +100,12 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // invalid escaping
     val invalidEscape = intercept[AnalysisException] {
-      evaluateWithoutCodegen("""a""" like """\a""")
+      evaluate("""a""" like """\a""")
     }
     assert(invalidEscape.getMessage.contains("pattern"))
 
     val endEscape = intercept[AnalysisException] {
-      evaluateWithoutCodegen("""a""" like """a\""")
+      evaluate("""a""" like """a\""")
     }
     assert(endEscape.getMessage.contains("pattern"))
 
@@ -147,11 +147,11 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkLiteralRow("abc"  rlike _, "^bc", false)
 
     intercept[java.util.regex.PatternSyntaxException] {
-      evaluateWithoutCodegen("abbbbc" rlike "**")
+      evaluate("abbbbc" rlike "**")
     }
     intercept[java.util.regex.PatternSyntaxException] {
       val regex = 'a.string.at(0)
-      evaluateWithoutCodegen("abbbbc" rlike regex, create_row("**"))
+      evaluate("abbbbc" rlike regex, create_row("**"))
     }
   }
 

@@ -1852,7 +1852,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertDataStructuresEmpty()
   }
 
-  test("accumulators are updated on exception failures and task killed") {
+  test("accumulators are updated on exception failures") {
     val acc1 = AccumulatorSuite.createLongAccum("ingenieur")
     val acc2 = AccumulatorSuite.createLongAccum("boulanger")
     val acc3 = AccumulatorSuite.createLongAccum("agriculteur")
@@ -1868,24 +1868,15 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val accUpdate3 = new LongAccumulator
     accUpdate3.metadata = acc3.metadata
     accUpdate3.setValue(18)
-
-    val accumUpdates1 = Seq(accUpdate1, accUpdate2)
-    val accumInfo1 = accumUpdates1.map(AccumulatorSuite.makeInfo)
+    val accumUpdates = Seq(accUpdate1, accUpdate2, accUpdate3)
+    val accumInfo = accumUpdates.map(AccumulatorSuite.makeInfo)
     val exceptionFailure = new ExceptionFailure(
       new SparkException("fondue?"),
-      accumInfo1).copy(accums = accumUpdates1)
+      accumInfo).copy(accums = accumUpdates)
     submit(new MyRDD(sc, 1, Nil), Array(0))
     runEvent(makeCompletionEvent(taskSets.head.tasks.head, exceptionFailure, "result"))
-
     assert(AccumulatorContext.get(acc1.id).get.value === 15L)
     assert(AccumulatorContext.get(acc2.id).get.value === 13L)
-
-    val accumUpdates2 = Seq(accUpdate3)
-    val accumInfo2 = accumUpdates2.map(AccumulatorSuite.makeInfo)
-
-    val taskKilled = new TaskKilled( "test", accumInfo2, accums = accumUpdates2)
-    runEvent(makeCompletionEvent(taskSets.head.tasks.head, taskKilled, "result"))
-
     assert(AccumulatorContext.get(acc3.id).get.value === 18L)
   }
 
@@ -2152,58 +2143,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     complete(taskSets(6), Seq(
       (Success, 53)))
     assert(listener3.results === Map(0 -> 52, 1 -> 53))
-    assertDataStructuresEmpty()
-  }
-
-  test("Trigger mapstage's job listener in submitMissingTasks") {
-    val rdd1 = new MyRDD(sc, 2, Nil)
-    val dep1 = new ShuffleDependency(rdd1, new HashPartitioner(2))
-    val rdd2 = new MyRDD(sc, 2, List(dep1), tracker = mapOutputTracker)
-    val dep2 = new ShuffleDependency(rdd2, new HashPartitioner(2))
-
-    val listener1 = new SimpleListener
-    val listener2 = new SimpleListener
-
-    submitMapStage(dep1, listener1)
-    submitMapStage(dep2, listener2)
-
-    // Complete the stage0.
-    assert(taskSets(0).stageId === 0)
-    complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", rdd1.partitions.length)),
-      (Success, makeMapStatus("hostB", rdd1.partitions.length))))
-    assert(mapOutputTracker.getMapSizesByExecutorId(dep1.shuffleId, 0).map(_._1).toSet ===
-        HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
-    assert(listener1.results.size === 1)
-
-    // When attempting stage1, trigger a fetch failure.
-    assert(taskSets(1).stageId === 1)
-    complete(taskSets(1), Seq(
-      (Success, makeMapStatus("hostC", rdd2.partitions.length)),
-      (FetchFailed(makeBlockManagerId("hostA"), dep1.shuffleId, 0, 0, "ignored"), null)))
-    scheduler.resubmitFailedStages()
-    // Stage1 listener should not have a result yet
-    assert(listener2.results.size === 0)
-
-    // Speculative task succeeded in stage1.
-    runEvent(makeCompletionEvent(
-      taskSets(1).tasks(1),
-      Success,
-      makeMapStatus("hostD", rdd2.partitions.length)))
-    // stage1 listener still should not have a result, though there's no missing partitions
-    // in it. Because stage1 has been failed and is not inside `runningStages` at this moment.
-    assert(listener2.results.size === 0)
-
-    // Stage0 should now be running as task set 2; make its task succeed
-    assert(taskSets(2).stageId === 0)
-    complete(taskSets(2), Seq(
-      (Success, makeMapStatus("hostC", rdd2.partitions.length))))
-    assert(mapOutputTracker.getMapSizesByExecutorId(dep1.shuffleId, 0).map(_._1).toSet ===
-        Set(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
-
-    // After stage0 is finished, stage1 will be submitted and found there is no missing
-    // partitions in it. Then listener got triggered.
-    assert(listener2.results.size === 1)
     assertDataStructuresEmpty()
   }
 
@@ -2506,7 +2445,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val accumUpdates = reason match {
       case Success => task.metrics.accumulators()
       case ef: ExceptionFailure => ef.accums
-      case tk: TaskKilled => tk.accums
       case _ => Seq.empty
     }
     CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, taskInfo)

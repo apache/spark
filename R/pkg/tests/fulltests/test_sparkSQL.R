@@ -67,8 +67,6 @@ sparkSession <- if (windows_with_hadoop()) {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
   }
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
-# materialize the catalog implementation
-listTables()
 
 mockLines <- c("{\"name\":\"Michael\"}",
                "{\"name\":\"Andy\", \"age\":30}",
@@ -1479,88 +1477,23 @@ test_that("column functions", {
   df5 <- createDataFrame(list(list(a = "010101")))
   expect_equal(collect(select(df5, conv(df5$a, 2, 16)))[1, 1], "15")
 
-  # Test array_contains(), array_max(), array_min(), array_position(), element_at() and reverse()
+  # Test array_contains() and sort_array()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
   result <- collect(select(df, array_contains(df[[1]], 1L)))[[1]]
   expect_equal(result, c(TRUE, FALSE))
 
-  result <- collect(select(df, array_max(df[[1]])))[[1]]
-  expect_equal(result, c(3, 6))
-
-  result <- collect(select(df, array_min(df[[1]])))[[1]]
-  expect_equal(result, c(1, 4))
-
-  result <- collect(select(df, array_position(df[[1]], 1L)))[[1]]
-  expect_equal(result, c(1, 0))
-
-  result <- collect(select(df, element_at(df[[1]], 1L)))[[1]]
-  expect_equal(result, c(1, 6))
-
-  result <- collect(select(df, reverse(df[[1]])))[[1]]
-  expect_equal(result, list(list(3L, 2L, 1L), list(4L, 5L, 6L)))
-
-  df2 <- createDataFrame(list(list("abc")))
-  result <- collect(select(df2, reverse(df2[[1]])))[[1]]
-  expect_equal(result, "cba")
-
-  # Test array_repeat()
-  df <- createDataFrame(list(list("a", 3L), list("b", 2L)))
-  result <- collect(select(df, array_repeat(df[[1]], df[[2]])))[[1]]
-  expect_equal(result, list(list("a", "a", "a"), list("b", "b")))
-
-  result <- collect(select(df, array_repeat(df[[1]], 2L)))[[1]]
-  expect_equal(result, list(list("a", "a"), list("b", "b")))
-
-  # Test arrays_overlap()
-  df <- createDataFrame(list(list(list(1L, 2L), list(3L, 1L)),
-                             list(list(1L, 2L), list(3L, 4L)),
-                             list(list(1L, NA), list(3L, 4L))))
-  result <- collect(select(df, arrays_overlap(df[[1]], df[[2]])))[[1]]
-  expect_equal(result, c(TRUE, FALSE, NA))
-
-  # Test array_sort() and sort_array()
-  df <- createDataFrame(list(list(list(2L, 1L, 3L, NA)), list(list(NA, 6L, 5L, NA, 4L))))
-
-  result <- collect(select(df, array_sort(df[[1]])))[[1]]
-  expect_equal(result, list(list(1L, 2L, 3L, NA), list(4L, 5L, 6L, NA, NA)))
-
   result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
-  expect_equal(result, list(list(3L, 2L, 1L, NA), list(6L, 5L, 4L, NA, NA)))
+  expect_equal(result, list(list(3L, 2L, 1L), list(6L, 5L, 4L)))
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
-  expect_equal(result, list(list(NA, 1L, 2L, 3L), list(NA, NA, 4L, 5L, 6L)))
+  expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
 
-  # Test slice()
-  df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(4L, 5L))))
-  result <- collect(select(df, slice(df[[1]], 2L, 2L)))[[1]]
-  expect_equal(result, list(list(2L, 3L), list(5L)))
-
-  # Test concat()
-  df <- createDataFrame(list(list(list(1L, 2L, 3L), list(4L, 5L, 6L)),
-                        list(list(7L, 8L, 9L), list(10L, 11L, 12L))))
-  result <- collect(select(df, concat(df[[1]], df[[2]])))[[1]]
-  expect_equal(result, list(list(1L, 2L, 3L, 4L, 5L, 6L), list(7L, 8L, 9L, 10L, 11L, 12L)))
-
-  # Test flatten()
-  df <- createDataFrame(list(list(list(list(1L, 2L), list(3L, 4L))),
-                        list(list(list(5L, 6L), list(7L, 8L)))))
-  result <- collect(select(df, flatten(df[[1]])))[[1]]
-  expect_equal(result, list(list(1L, 2L, 3L, 4L), list(5L, 6L, 7L, 8L)))
-
-  # Test map_entries(), map_keys(), map_values() and element_at()
+  # Test map_keys() and map_values()
   df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))
-  result <- collect(select(df, map_entries(df$map)))[[1]]
-  expected_entries <-  list(listToStruct(list(key = "x", value = 1)),
-                            listToStruct(list(key = "y", value = 2)))
-  expect_equal(result, list(expected_entries))
-
   result <- collect(select(df, map_keys(df$map)))[[1]]
   expect_equal(result, list(list("x", "y")))
 
   result <- collect(select(df, map_values(df$map)))[[1]]
   expect_equal(result, list(list(1, 2)))
-
-  result <- collect(select(df, element_at(df$map, "y")))[[1]]
-  expect_equal(result, 2)
 
   # Test that stats::lag is working
   expect_equal(length(lag(ldeaths, 12)), 72)
@@ -1716,7 +1649,6 @@ test_that("string operators", {
   expect_false(first(select(df, startsWith(df$name, "m")))[[1]])
   expect_true(first(select(df, endsWith(df$name, "el")))[[1]])
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
-  expect_equal(first(select(df, substr(df$name, 4, 6)))[[1]], "hae")
   if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
     expect_true(startsWith("Hello World", "Hello"))
     expect_false(endsWith("Hello World", "a"))
@@ -2253,8 +2185,8 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_equal(count(where(join(df, df2), df$name == df2$name)), 3)
   # cartesian join
   expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
-               paste0(".*(org.apache.spark.sql.AnalysisException: Detected implicit cartesian",
-                      " product for INNER join between logical plans).*"))
+               paste0(".*(org.apache.spark.sql.AnalysisException: Detected cartesian product for",
+                      " INNER join between logical plans).*"))
 
   joined <- crossJoin(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))
@@ -3162,51 +3094,6 @@ test_that("repartition by columns on DataFrame", {
 
     # Number of partitions is equal to 2
     expect_equal(nrow(df1), 2)
-  },
-  finally = {
-    # Resetting the conf back to default value
-    callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
-  })
-})
-
-test_that("repartitionByRange on a DataFrame", {
-  # The tasks here launch R workers with shuffles. So, we decrease the number of shuffle
-  # partitions to reduce the number of the tasks to speed up the test. This is particularly
-  # slow on Windows because the R workers are unable to be forked. See also SPARK-21693.
-  conf <- callJMethod(sparkSession, "conf")
-  shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
-  callJMethod(conf, "set", "spark.sql.shuffle.partitions", "5")
-  tryCatch({
-    df <- createDataFrame(mtcars)
-    expect_error(repartitionByRange(df, "haha", df$mpg),
-                 "numPartitions and col must be numeric and Column.*")
-    expect_error(repartitionByRange(df),
-                 ".*specify a column.*or the number of partitions with a column.*")
-    expect_error(repartitionByRange(df, col = "haha"),
-                 "col must be Column; however, got.*")
-    expect_error(repartitionByRange(df, 3),
-                 "At least one partition-by column must be specified.")
-
-    # The order of rows should be different with a normal repartition.
-    actual <- repartitionByRange(df, 3, df$mpg)
-    expect_equal(getNumPartitions(actual), 3)
-    expect_false(identical(collect(actual), collect(repartition(df, 3, df$mpg))))
-
-    actual <- repartitionByRange(df, col = df$mpg)
-    expect_false(identical(collect(actual), collect(repartition(df, col = df$mpg))))
-
-    # They should have same data.
-    actual <- collect(repartitionByRange(df, 3, df$mpg))
-    actual <- actual[order(actual$mpg), ]
-    expected <- collect(repartition(df, 3, df$mpg))
-    expected <- expected[order(expected$mpg), ]
-    expect_true(all(actual == expected))
-
-    actual <- collect(repartitionByRange(df, col = df$mpg))
-    actual <- actual[order(actual$mpg), ]
-    expected <- collect(repartition(df, col = df$mpg))
-    expected <- expected[order(expected$mpg), ]
-    expect_true(all(actual == expected))
   },
   finally = {
     # Resetting the conf back to default value

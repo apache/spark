@@ -19,8 +19,8 @@ package org.apache.spark.sql
 
 import scala.util.Random
 
-import org.scalatest.Matchers.the
-
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -35,8 +35,6 @@ case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Doub
 
 class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
-
-  val absTol = 1e-8
 
   test("groupBy") {
     checkAnswer(
@@ -418,6 +416,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("moments") {
+    val absTol = 1e-8
 
     val sparkVariance = testData2.agg(variance('a))
     checkAggregatesWithTol(sparkVariance, Row(4.0 / 5.0), absTol)
@@ -687,34 +686,4 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       }
     }
   }
-
-  test("SPARK-21896: Window functions inside aggregate functions") {
-    def checkWindowError(df: => DataFrame): Unit = {
-      val thrownException = the [AnalysisException] thrownBy {
-        df.queryExecution.analyzed
-      }
-      assert(thrownException.message.contains("not allowed to use a window function"))
-    }
-
-    checkWindowError(testData2.select(min(avg('b).over(Window.partitionBy('a)))))
-    checkWindowError(testData2.agg(sum('b), max(rank().over(Window.orderBy('a)))))
-    checkWindowError(testData2.groupBy('a).agg(sum('b), max(rank().over(Window.orderBy('b)))))
-    checkWindowError(testData2.groupBy('a).agg(max(sum(sum('b)).over(Window.orderBy('a)))))
-    checkWindowError(
-      testData2.groupBy('a).agg(sum('b).as("s"), max(count("*").over())).where('s === 3))
-    checkAnswer(
-      testData2.groupBy('a).agg(max('b), sum('b).as("s"), count("*").over()).where('s === 3),
-      Row(1, 2, 3, 3) :: Row(2, 2, 3, 3) :: Row(3, 2, 3, 3) :: Nil)
-
-    checkWindowError(sql("SELECT MIN(AVG(b) OVER(PARTITION BY a)) FROM testData2"))
-    checkWindowError(sql("SELECT SUM(b), MAX(RANK() OVER(ORDER BY a)) FROM testData2"))
-    checkWindowError(sql("SELECT SUM(b), MAX(RANK() OVER(ORDER BY b)) FROM testData2 GROUP BY a"))
-    checkWindowError(sql("SELECT MAX(SUM(SUM(b)) OVER(ORDER BY a)) FROM testData2 GROUP BY a"))
-    checkWindowError(
-      sql("SELECT MAX(RANK() OVER(ORDER BY b)) FROM testData2 GROUP BY a HAVING SUM(b) = 3"))
-    checkAnswer(
-      sql("SELECT a, MAX(b), RANK() OVER(ORDER BY a) FROM testData2 GROUP BY a HAVING SUM(b) = 3"),
-      Row(1, 2, 1) :: Row(2, 2, 2) :: Row(3, 2, 3) :: Nil)
-  }
-
 }

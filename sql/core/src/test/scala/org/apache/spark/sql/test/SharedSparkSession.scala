@@ -60,7 +60,6 @@ trait SharedSparkSession
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   protected def createSparkSession: TestSparkSession = {
-    SparkSession.cleanupAnyExistingSession()
     new TestSparkSession(sparkConf)
   }
 
@@ -93,22 +92,11 @@ trait SharedSparkSession
    * Stop the underlying [[org.apache.spark.SparkContext]], if any.
    */
   protected override def afterAll(): Unit = {
-    try {
-      super.afterAll()
-    } finally {
-      try {
-        if (_spark != null) {
-          try {
-            _spark.sessionState.catalog.reset()
-          } finally {
-            _spark.stop()
-            _spark = null
-          }
-        }
-      } finally {
-        SparkSession.clearActiveSession()
-        SparkSession.clearDefaultSession()
-      }
+    super.afterAll()
+    if (_spark != null) {
+      _spark.sessionState.catalog.reset()
+      _spark.stop()
+      _spark = null
     }
   }
 

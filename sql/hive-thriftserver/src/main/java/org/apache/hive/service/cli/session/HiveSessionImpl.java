@@ -641,8 +641,6 @@ public class HiveSessionImpl implements HiveSession {
       opHandleSet.clear();
       // Cleanup session log directory.
       cleanupSessionLogDir();
-      // Cleanup pipeout file.
-      cleanupPipeoutFile();
       HiveHistory hiveHist = sessionState.getHiveHistory();
       if (null != hiveHist) {
         hiveHist.closeStream();
@@ -664,22 +662,6 @@ public class HiveSessionImpl implements HiveSession {
         sessionState = null;
       }
       release(true);
-    }
-  }
-
-  private void cleanupPipeoutFile() {
-    String lScratchDir = hiveConf.getVar(ConfVars.LOCALSCRATCHDIR);
-    String sessionID = hiveConf.getVar(ConfVars.HIVESESSIONID);
-
-    File[] fileAry = new File(lScratchDir).listFiles(
-            (dir, name) -> name.startsWith(sessionID) && name.endsWith(".pipeout"));
-
-    for (File file : fileAry) {
-      try {
-        FileUtils.forceDelete(file);
-      } catch (Exception e) {
-        LOG.error("Failed to cleanup pipeout file: " + file, e);
-      }
     }
   }
 

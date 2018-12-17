@@ -18,8 +18,6 @@
 package org.apache.hive.service.auth;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -28,7 +26,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 
 import javax.net.ssl.SSLServerSocket;
 import javax.security.auth.login.LoginException;
@@ -95,30 +92,7 @@ public class HiveAuthFactory {
   public static final String HS2_PROXY_USER = "hive.server2.proxy.user";
   public static final String HS2_CLIENT_TOKEN = "hiveserver2ClientToken";
 
-  private static Field keytabFile = null;
-  private static Method getKeytab = null;
-  static {
-    Class<?> clz = UserGroupInformation.class;
-    try {
-      keytabFile = clz.getDeclaredField("keytabFile");
-      keytabFile.setAccessible(true);
-    } catch (NoSuchFieldException nfe) {
-      LOG.debug("Cannot find private field \"keytabFile\" in class: " +
-        UserGroupInformation.class.getCanonicalName(), nfe);
-      keytabFile = null;
-    }
-
-    try {
-      getKeytab = clz.getDeclaredMethod("getKeytab");
-      getKeytab.setAccessible(true);
-    } catch(NoSuchMethodException nme) {
-      LOG.debug("Cannot find private method \"getKeytab\" in class:" +
-        UserGroupInformation.class.getCanonicalName(), nme);
-      getKeytab = null;
-    }
-  }
-
-  public HiveAuthFactory(HiveConf conf) throws TTransportException, IOException {
+  public HiveAuthFactory(HiveConf conf) throws TTransportException {
     this.conf = conf;
     transportMode = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TRANSPORT_MODE);
     authTypeStr = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_AUTHENTICATION);
@@ -133,16 +107,9 @@ public class HiveAuthFactory {
         authTypeStr = AuthTypes.NONE.getAuthName();
       }
       if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName())) {
-        String principal = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL);
-        String keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB);
-        if (needUgiLogin(UserGroupInformation.getCurrentUser(),
-          SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
-          saslServer = ShimLoader.getHadoopThriftAuthBridge().createServer(principal, keytab);
-        } else {
-          // Using the default constructor to avoid unnecessary UGI login.
-          saslServer = new HadoopThriftAuthBridge.Server();
-        }
-
+        saslServer = ShimLoader.getHadoopThriftAuthBridge()
+          .createServer(conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB),
+                        conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL));
         // start delegation token manager
         try {
           // rawStore is only necessary for DBTokenStore
@@ -395,25 +362,4 @@ public class HiveAuthFactory {
     }
   }
 
-  public static boolean needUgiLogin(UserGroupInformation ugi, String principal, String keytab) {
-    return null == ugi || !ugi.hasKerberosCredentials() || !ugi.getUserName().equals(principal) ||
-      !Objects.equals(keytab, getKeytabFromUgi());
-  }
-
-  private static String getKeytabFromUgi() {
-    synchronized (UserGroupInformation.class) {
-      try {
-        if (keytabFile != null) {
-          return (String) keytabFile.get(null);
-        } else if (getKeytab != null) {
-          return (String) getKeytab.invoke(UserGroupInformation.getCurrentUser());
-        } else {
-          return null;
-        }
-      } catch (Exception e) {
-        LOG.debug("Fail to get keytabFile path via reflection", e);
-        return null;
-      }
-    }
-  }
 }

@@ -19,14 +19,16 @@ package org.apache.spark.ml.feature
 
 import scala.beans.BeanInfo
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.{Dataset, Row}
 
 @BeanInfo
 case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
 
-class TokenizerSuite extends MLTest with DefaultReadWriteTest {
+class TokenizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new Tokenizer)
@@ -40,16 +42,11 @@ class TokenizerSuite extends MLTest with DefaultReadWriteTest {
   }
 }
 
-class RegexTokenizerSuite extends MLTest with DefaultReadWriteTest {
+class RegexTokenizerSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import org.apache.spark.ml.feature.RegexTokenizerSuite._
   import testImplicits._
-
-  def testRegexTokenizer(t: RegexTokenizer, dataframe: DataFrame): Unit = {
-    testTransformer[(String, Seq[String])](dataframe, t, "tokens", "wantedTokens") {
-      case Row(tokens, wantedTokens) =>
-        assert(tokens === wantedTokens)
-    }
-  }
 
   test("params") {
     ParamsSuite.checkParams(new RegexTokenizer)
@@ -108,3 +105,14 @@ class RegexTokenizerSuite extends MLTest with DefaultReadWriteTest {
   }
 }
 
+object RegexTokenizerSuite extends SparkFunSuite {
+
+  def testRegexTokenizer(t: RegexTokenizer, dataset: Dataset[_]): Unit = {
+    t.transform(dataset)
+      .select("tokens", "wantedTokens")
+      .collect()
+      .foreach { case Row(tokens, wantedTokens) =>
+        assert(tokens === wantedTokens)
+      }
+  }
+}

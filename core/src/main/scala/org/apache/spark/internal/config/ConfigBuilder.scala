@@ -23,7 +23,6 @@ import java.util.regex.PatternSyntaxException
 import scala.util.matching.Regex
 
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
-import org.apache.spark.util.Utils
 
 private object ConfigHelpers {
 
@@ -46,7 +45,7 @@ private object ConfigHelpers {
   }
 
   def stringToSeq[T](str: String, converter: String => T): Seq[T] = {
-    Utils.stringToSeq(str).map(converter)
+    str.split(",").map(_.trim()).filter(_.nonEmpty).map(converter)
   }
 
   def seqToString[T](v: Seq[T], stringConverter: T => String): String = {

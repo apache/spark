@@ -170,9 +170,6 @@ object CatalystTypeConverters {
             convertedIterable += elementConverter.toCatalyst(item)
           }
           new GenericArrayData(convertedIterable.toArray)
-        case other => throw new IllegalArgumentException(
-          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-            + s"cannot be converted to an array of ${elementType.catalogString}")
       }
     }
 
@@ -209,10 +206,6 @@ object CatalystTypeConverters {
       scalaValue match {
         case map: Map[_, _] => ArrayBasedMapData(map, keyFunction, valueFunction)
         case javaMap: JavaMap[_, _] => ArrayBasedMapData(javaMap, keyFunction, valueFunction)
-        case other => throw new IllegalArgumentException(
-          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-            + "cannot be converted to a map type with "
-            + s"key type (${keyType.catalogString}) and value type (${valueType.catalogString})")
       }
     }
 
@@ -259,9 +252,6 @@ object CatalystTypeConverters {
           idx += 1
         }
         new GenericInternalRow(ar)
-      case other => throw new IllegalArgumentException(
-        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to ${structType.catalogString}")
     }
 
     override def toScala(row: InternalRow): Row = {
@@ -286,9 +276,6 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): UTF8String = scalaValue match {
       case str: String => UTF8String.fromString(str)
       case utf8: UTF8String => utf8
-      case other => throw new IllegalArgumentException(
-        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to the string type")
     }
     override def toScala(catalystValue: UTF8String): String =
       if (catalystValue == null) null else catalystValue.toString
@@ -322,9 +309,6 @@ object CatalystTypeConverters {
         case d: JavaBigDecimal => Decimal(d)
         case d: JavaBigInteger => Decimal(d)
         case d: Decimal => d
-        case other => throw new IllegalArgumentException(
-          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-            + s"cannot be converted to ${dataType.catalogString}")
       }
       decimal.toPrecision(dataType.precision, dataType.scale)
     }

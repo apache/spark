@@ -104,8 +104,7 @@ class KafkaUtils(object):
         :param topics:  list of topic_name to consume.
         :param kafkaParams: Additional params for Kafka.
         :param fromOffsets: Per-topic/partition Kafka offsets defining the (inclusive) starting
-                            point of the stream (a dictionary mapping `TopicAndPartition` to
-                            integers).
+                            point of the stream.
         :param keyDecoder:  A function used to decode key (default is utf8_decoder).
         :param valueDecoder:  A function used to decode value (default is utf8_decoder).
         :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess

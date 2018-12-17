@@ -111,7 +111,7 @@ and the migration guide below will explain all changes between releases.
 * The class and trait hierarchy for logistic regression model summaries was changed to be cleaner
 and better accommodate the addition of the multi-class summary. This is a breaking change for user
 code that casts a `LogisticRegressionTrainingSummary` to a
-`BinaryLogisticRegressionTrainingSummary`. Users should instead use the `model.binarySummary`
+` BinaryLogisticRegressionTrainingSummary`. Users should instead use the `model.binarySummary`
 method. See [SPARK-17139](https://issues.apache.org/jira/browse/SPARK-17139) for more detail 
 (_note_ this is an `Experimental` API). This _does not_ affect the Python `summary` method, which
 will still work correctly for both multinomial and binary cases.

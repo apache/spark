@@ -22,7 +22,7 @@ import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range, Repartition, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
@@ -67,27 +67,6 @@ class PlannerSuite extends SharedSQLContext {
     val query =
       testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
     testPartialAggregationPlan(query)
-  }
-
-  test("mixed aggregates with same distinct columns") {
-    def assertNoExpand(plan: SparkPlan): Unit = {
-      assert(plan.collect { case e: ExpandExec => e }.isEmpty)
-    }
-
-    withTempView("v") {
-      Seq((1, 1.0, 1.0), (1, 2.0, 2.0)).toDF("i", "j", "k").createTempView("v")
-      // one distinct column
-      val query1 = sql("SELECT sum(DISTINCT j), max(DISTINCT j) FROM v GROUP BY i")
-      assertNoExpand(query1.queryExecution.executedPlan)
-
-      // 2 distinct columns
-      val query2 = sql("SELECT corr(DISTINCT j, k), count(DISTINCT j, k) FROM v GROUP BY i")
-      assertNoExpand(query2.queryExecution.executedPlan)
-
-      // 2 distinct columns with different order
-      val query3 = sql("SELECT corr(DISTINCT j, k), count(DISTINCT k, j) FROM v GROUP BY i")
-      assertNoExpand(query3.queryExecution.executedPlan)
-    }
   }
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
@@ -215,32 +194,7 @@ class PlannerSuite extends SharedSQLContext {
   test("CollectLimit can appear in the middle of a plan when caching is used") {
     val query = testData.select('key, 'value).limit(2).cache()
     val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
-    assert(planned.cachedPlan.isInstanceOf[CollectLimitExec])
-  }
-
-  test("TakeOrderedAndProjectExec appears only when number of limit is below the threshold.") {
-    withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1000") {
-      val query0 = testData.select('value).orderBy('key).limit(100)
-      val planned0 = query0.queryExecution.executedPlan
-      assert(planned0.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
-
-      val query1 = testData.select('value).orderBy('key).limit(2000)
-      val planned1 = query1.queryExecution.executedPlan
-      assert(planned1.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isEmpty)
-    }
-  }
-
-  test("SPARK-23375: Cached sorted data doesn't need to be re-sorted") {
-    val query = testData.select('key, 'value).sort('key.desc).cache()
-    assert(query.queryExecution.optimizedPlan.isInstanceOf[InMemoryRelation])
-    val resorted = query.sort('key.desc)
-    assert(resorted.queryExecution.optimizedPlan.collect { case s: Sort => s}.isEmpty)
-    assert(resorted.select('key).collect().map(_.getInt(0)).toSeq ==
-      (1 to 100).reverse)
-    // with a different order, the sort is needed
-    val sortedAsc = query.sort('key)
-    assert(sortedAsc.queryExecution.optimizedPlan.collect { case s: Sort => s}.size == 1)
-    assert(sortedAsc.select('key).collect().map(_.getInt(0)).toSeq == (1 to 100))
+    assert(planned.child.isInstanceOf[CollectLimitExec])
   }
 
   test("PartitioningCollection") {
@@ -653,31 +607,6 @@ class PlannerSuite extends SharedSQLContext {
       childPlan = DummySparkPlan(outputOrdering = Seq(orderingA)),
       requiredOrdering = Seq(orderingA, orderingB),
       shouldHaveSort = true)
-  }
-
-  test("SPARK-24242: RangeExec should have correct output ordering and partitioning") {
-    val df = spark.range(10)
-    val rangeExec = df.queryExecution.executedPlan.collect {
-      case r: RangeExec => r
-    }
-    val range = df.queryExecution.optimizedPlan.collect {
-      case r: Range => r
-    }
-    assert(rangeExec.head.outputOrdering == range.head.outputOrdering)
-    assert(rangeExec.head.outputPartitioning ==
-      RangePartitioning(rangeExec.head.outputOrdering, df.rdd.getNumPartitions))
-
-    val rangeInOnePartition = spark.range(1, 10, 1, 1)
-    val rangeExecInOnePartition = rangeInOnePartition.queryExecution.executedPlan.collect {
-      case r: RangeExec => r
-    }
-    assert(rangeExecInOnePartition.head.outputPartitioning == SinglePartition)
-
-    val rangeInZeroPartition = spark.range(-10, -9, -20, 1)
-    val rangeExecInZeroPartition = rangeInZeroPartition.queryExecution.executedPlan.collect {
-      case r: RangeExec => r
-    }
-    assert(rangeExecInZeroPartition.head.outputPartitioning == UnknownPartitioning(0))
   }
 }
 

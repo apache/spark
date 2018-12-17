@@ -211,14 +211,6 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     assert(model.getLink === "identity")
   }
 
-  test("prediction on single instance") {
-    val glr = new GeneralizedLinearRegression
-    val model = glr.setFamily("gaussian").setLink("identity")
-      .fit(datasetGaussianIdentity)
-
-    testPredictionModelSinglePrediction(model, datasetGaussianIdentity)
-  }
-
   test("generalized linear regression: gaussian family against glm") {
     /*
        R code:
@@ -493,19 +485,10 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
        }
        [1] -0.0457441 -0.6833928
        [1] 1.8121235  -0.1747493  -0.5815417
-
-       R code for deivance calculation:
-       data = cbind(y=c(0,1,0,0,0,1), x1=c(18, 12, 15, 13, 15, 16), x2=c(1,0,0,2,1,1))
-       summary(glm(y~x1+x2, family=poisson, data=data.frame(data)))$deviance
-       [1] 3.70055
-       summary(glm(y~x1+x2-1, family=poisson, data=data.frame(data)))$deviance
-       [1] 3.809296
      */
     val expected = Seq(
       Vectors.dense(0.0, -0.0457441, -0.6833928),
       Vectors.dense(1.8121235, -0.1747493, -0.5815417))
-
-    val residualDeviancesR = Array(3.809296, 3.70055)
 
     import GeneralizedLinearRegression._
 
@@ -519,7 +502,6 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
       val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
       assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
         s"$link link and fitIntercept = $fitIntercept (with zero values).")
-      assert(model.summary.deviance ~== residualDeviancesR(idx) absTol 1E-3)
       idx += 1
     }
   }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.InterfaceStability
@@ -788,24 +787,6 @@ class Column(val expr: Expression) extends Logging {
   def isin(list: Any*): Column = withExpr { In(expr, list.map(lit(_).expr)) }
 
   /**
-   * A boolean expression that is evaluated to true if the value of this expression is contained
-   * by the provided collection.
-   *
-   * @group expr_ops
-   * @since 2.4.0
-   */
-  def isInCollection(values: scala.collection.Iterable[_]): Column = isin(values.toSeq: _*)
-
-  /**
-   * A boolean expression that is evaluated to true if the value of this expression is contained
-   * by the provided collection.
-   *
-   * @group java_expr_ops
-   * @since 2.4.0
-   */
-  def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
-
-  /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
    *
    * @group expr_ops
@@ -1102,10 +1083,10 @@ class Column(val expr: Expression) extends Logging {
    * and null values return before non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order and null values appearing first.
-   *   df.sort(df("age").asc_nulls_first)
+   *   df.sort(df("age").asc_nulls_last)
    *
    *   // Java
-   *   df.sort(df.col("age").asc_nulls_first());
+   *   df.sort(df.col("age").asc_nulls_last());
    * }}}
    *
    * @group expr_ops

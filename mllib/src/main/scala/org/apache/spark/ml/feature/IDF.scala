@@ -182,7 +182,7 @@ object IDFModel extends MLReadable[IDFModel] {
         .select("idf")
         .head()
       val model = new IDFModel(metadata.uid, new feature.IDFModel(OldVectors.fromML(idf)))
-      metadata.getAndSetParams(model)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }

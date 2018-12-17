@@ -15,16 +15,14 @@
 # limitations under the License.
 #
 import itertools
-import sys
-from multiprocessing.pool import ThreadPool
-
 import numpy as np
+from multiprocessing.pool import ThreadPool
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.common import _py2java
 from pyspark.ml.param import Params, Param, TypeConverters
-from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
+from pyspark.ml.param.shared import HasParallelism, HasSeed
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
@@ -33,7 +31,7 @@ __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainVa
            'TrainValidationSplitModel']
 
 
-def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
+def _parallelFitTasks(est, train, eva, validation, epm):
     """
     Creates a list of callables which can be called from different threads to fit and evaluate
     an estimator in parallel. Each callable returns an `(index, metric)` pair.
@@ -43,15 +41,14 @@ def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
     :param eva: Evaluator, used to compute `metric`
     :param validation: DataFrame, validation data set, used for evaluation.
     :param epm: Sequence of ParamMap, params maps to be used during fitting & evaluation.
-    :param collectSubModel: Whether to collect sub model.
-    :return: (int, float, subModel), an index into `epm` and the associated metric value.
+    :return: (int, float), an index into `epm` and the associated metric value.
     """
     modelIter = est.fitMultiple(train, epm)
 
     def singleTask():
         index, model = next(modelIter)
         metric = eva.evaluate(model.transform(validation, epm[index]))
-        return index, metric, model if collectSubModel else None
+        return index, metric
 
     return [singleTask] * len(epm)
 
@@ -195,8 +192,7 @@ class ValidatorParams(HasSeed):
         return java_estimator, java_epms, java_evaluator
 
 
-class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubModels,
-                     MLReadable, MLWritable):
+class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLWritable):
     """
 
     K-fold cross validation performs model selection by splitting the dataset into a set of
@@ -235,10 +231,10 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
-                 seed=None, parallelism=1, collectSubModels=False):
+                 seed=None, parallelism=1):
         """
         __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                 seed=None, parallelism=1, collectSubModels=False)
+                 seed=None, parallelism=1)
         """
         super(CrossValidator, self).__init__()
         self._setDefault(numFolds=3, parallelism=1)
@@ -248,10 +244,10 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
     @keyword_only
     @since("1.4.0")
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
-                  seed=None, parallelism=1, collectSubModels=False):
+                  seed=None, parallelism=1):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                  seed=None, parallelism=1, collectSubModels=False):
+                  seed=None, parallelism=1):
         Sets params for cross validator.
         """
         kwargs = self._input_kwargs
@@ -284,10 +280,6 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
         metrics = [0.0] * numModels
 
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        subModels = None
-        collectSubModelsParam = self.getCollectSubModels()
-        if collectSubModelsParam:
-            subModels = [[None for j in range(numModels)] for i in range(nFolds)]
 
         for i in range(nFolds):
             validateLB = i * h
@@ -296,12 +288,9 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
             validation = df.filter(condition).cache()
             train = df.filter(~condition).cache()
 
-            tasks = _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam)
-            for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
+            tasks = _parallelFitTasks(est, train, eva, validation, epm)
+            for j, metric in pool.imap_unordered(lambda f: f(), tasks):
                 metrics[j] += (metric / nFolds)
-                if collectSubModelsParam:
-                    subModels[i][j] = subModel
-
             validation.unpersist()
             train.unpersist()
 
@@ -310,7 +299,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return self._copyValues(CrossValidatorModel(bestModel, metrics, subModels))
+        return self._copyValues(CrossValidatorModel(bestModel, metrics))
 
     @since("1.4.0")
     def copy(self, extra=None):
@@ -354,11 +343,9 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
         numFolds = java_stage.getNumFolds()
         seed = java_stage.getSeed()
         parallelism = java_stage.getParallelism()
-        collectSubModels = java_stage.getCollectSubModels()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
-                       numFolds=numFolds, seed=seed, parallelism=parallelism,
-                       collectSubModels=collectSubModels)
+                       numFolds=numFolds, seed=seed, parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -378,7 +365,6 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
         _java_obj.setSeed(self.getSeed())
         _java_obj.setNumFolds(self.getNumFolds())
         _java_obj.setParallelism(self.getParallelism())
-        _java_obj.setCollectSubModels(self.getCollectSubModels())
 
         return _java_obj
 
@@ -393,15 +379,13 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 1.4.0
     """
 
-    def __init__(self, bestModel, avgMetrics=[], subModels=None):
+    def __init__(self, bestModel, avgMetrics=[]):
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
         #: Average cross-validation metrics for each paramMap in
         #: CrossValidator.estimatorParamMaps, in the corresponding order.
         self.avgMetrics = avgMetrics
-        #: sub model list from cross validation
-        self.subModels = subModels
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -413,7 +397,6 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         and some extra params. This copies the underlying bestModel,
         creates a deep copy of the embedded paramMap, and
         copies the embedded and extra parameters over.
-        It does not copy the extra Params into the subModels.
 
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
@@ -422,8 +405,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
             extra = dict()
         bestModel = self.bestModel.copy(extra)
         avgMetrics = self.avgMetrics
-        subModels = self.subModels
-        return CrossValidatorModel(bestModel, avgMetrics, subModels)
+        return CrossValidatorModel(bestModel, avgMetrics)
 
     @since("2.3.0")
     def write(self):
@@ -442,16 +424,12 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         Given a Java CrossValidatorModel, create and return a Python wrapper of it.
         Used for ML persistence.
         """
+
         bestModel = JavaParams._from_java(java_stage.bestModel())
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
 
         py_stage = cls(bestModel=bestModel).setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
-
-        if java_stage.hasSubModels():
-            py_stage.subModels = [[JavaParams._from_java(sub_model)
-                                   for sub_model in fold_sub_models]
-                                  for fold_sub_models in java_stage.subModels()]
 
         py_stage._resetUid(java_stage.uid())
         return py_stage
@@ -474,16 +452,10 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         _java_obj.set("evaluator", evaluator)
         _java_obj.set("estimator", estimator)
         _java_obj.set("estimatorParamMaps", epms)
-
-        if self.subModels is not None:
-            java_sub_models = [[sub_model._to_java() for sub_model in fold_sub_models]
-                               for fold_sub_models in self.subModels]
-            _java_obj.setSubModels(java_sub_models)
         return _java_obj
 
 
-class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollectSubModels,
-                           MLReadable, MLWritable):
+class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -518,10 +490,10 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
-                 parallelism=1, collectSubModels=False, seed=None):
+                 parallelism=1, seed=None):
         """
         __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
-                 parallelism=1, collectSubModels=False, seed=None)
+                 parallelism=1, seed=None)
         """
         super(TrainValidationSplit, self).__init__()
         self._setDefault(trainRatio=0.75, parallelism=1)
@@ -531,10 +503,10 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
     @since("2.0.0")
     @keyword_only
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
-                  parallelism=1, collectSubModels=False, seed=None):
+                  parallelism=1, seed=None):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
-                  parallelism=1, collectSubModels=False, seed=None):
+                  parallelism=1, seed=None):
         Sets params for the train validation split.
         """
         kwargs = self._input_kwargs
@@ -567,19 +539,11 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
         validation = df.filter(condition).cache()
         train = df.filter(~condition).cache()
 
-        subModels = None
-        collectSubModelsParam = self.getCollectSubModels()
-        if collectSubModelsParam:
-            subModels = [None for i in range(numModels)]
-
-        tasks = _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam)
+        tasks = _parallelFitTasks(est, train, eva, validation, epm)
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
         metrics = [None] * numModels
-        for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
+        for j, metric in pool.imap_unordered(lambda f: f(), tasks):
             metrics[j] = metric
-            if collectSubModelsParam:
-                subModels[j] = subModel
-
         train.unpersist()
         validation.unpersist()
 
@@ -588,7 +552,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return self._copyValues(TrainValidationSplitModel(bestModel, metrics, subModels))
+        return self._copyValues(TrainValidationSplitModel(bestModel, metrics))
 
     @since("2.0.0")
     def copy(self, extra=None):
@@ -632,11 +596,9 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
         trainRatio = java_stage.getTrainRatio()
         seed = java_stage.getSeed()
         parallelism = java_stage.getParallelism()
-        collectSubModels = java_stage.getCollectSubModels()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
-                       trainRatio=trainRatio, seed=seed, parallelism=parallelism,
-                       collectSubModels=collectSubModels)
+                       trainRatio=trainRatio, seed=seed, parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -656,7 +618,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
         _java_obj.setTrainRatio(self.getTrainRatio())
         _java_obj.setSeed(self.getSeed())
         _java_obj.setParallelism(self.getParallelism())
-        _java_obj.setCollectSubModels(self.getCollectSubModels())
+
         return _java_obj
 
 
@@ -669,14 +631,12 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 2.0.0
     """
 
-    def __init__(self, bestModel, validationMetrics=[], subModels=None):
+    def __init__(self, bestModel, validationMetrics=[]):
         super(TrainValidationSplitModel, self).__init__()
-        #: best model from train validation split
+        #: best model from cross validation
         self.bestModel = bestModel
         #: evaluated validation metrics
         self.validationMetrics = validationMetrics
-        #: sub models from train validation split
-        self.subModels = subModels
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -689,7 +649,6 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         creates a deep copy of the embedded paramMap, and
         copies the embedded and extra parameters over.
         And, this creates a shallow copy of the validationMetrics.
-        It does not copy the extra Params into the subModels.
 
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
@@ -698,8 +657,7 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
             extra = dict()
         bestModel = self.bestModel.copy(extra)
         validationMetrics = list(self.validationMetrics)
-        subModels = self.subModels
-        return TrainValidationSplitModel(bestModel, validationMetrics, subModels)
+        return TrainValidationSplitModel(bestModel, validationMetrics)
 
     @since("2.3.0")
     def write(self):
@@ -727,10 +685,6 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         py_stage = cls(bestModel=bestModel).setEstimator(estimator)
         py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
 
-        if java_stage.hasSubModels():
-            py_stage.subModels = [JavaParams._from_java(sub_model)
-                                  for sub_model in java_stage.subModels()]
-
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -752,11 +706,6 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         _java_obj.set("evaluator", evaluator)
         _java_obj.set("estimator", estimator)
         _java_obj.set("estimatorParamMaps", epms)
-
-        if self.subModels is not None:
-            java_sub_models = [sub_model._to_java() for sub_model in self.subModels]
-            _java_obj.setSubModels(java_sub_models)
-
         return _java_obj
 
 
@@ -778,4 +727,4 @@ if __name__ == "__main__":
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        sys.exit(-1)
+        exit(-1)

@@ -27,7 +27,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -35,6 +34,87 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+/**
+ * An expression that concatenates multiple inputs into a single output.
+ * If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
+ * If any input is null, concat returns null.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of str1, str2, ..., strN.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark', 'SQL');
+       SparkSQL
+  """)
+case class Concat(children: Seq[Expression]) extends Expression {
+
+  private lazy val isBinaryMode: Boolean = dataType == BinaryType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      val childTypes = children.map(_.dataType)
+      if (childTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
+        return TypeCheckResult.TypeCheckFailure(
+          s"input to function $prettyName should have StringType or BinaryType, but it's " +
+            childTypes.map(_.simpleString).mkString("[", ", ", "]"))
+      }
+      TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
+    }
+  }
+
+  override def dataType: DataType = children.map(_.dataType).headOption.getOrElse(StringType)
+
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def eval(input: InternalRow): Any = {
+    if (isBinaryMode) {
+      val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
+      ByteArray.concat(inputs: _*)
+    } else {
+      val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+      UTF8String.concat(inputs : _*)
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val evals = children.map(_.genCode(ctx))
+    val args = ctx.freshName("args")
+
+    val inputs = evals.zipWithIndex.map { case (eval, index) =>
+      s"""
+        ${eval.code}
+        if (!${eval.isNull}) {
+          $args[$index] = ${eval.value};
+        }
+      """
+    }
+
+    val (concatenator, initCode) = if (isBinaryMode) {
+      (classOf[ByteArray].getName, s"byte[][] $args = new byte[${evals.length}][];")
+    } else {
+      ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
+    }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = inputs,
+      funcName = "valueConcat",
+      extraArguments = (s"${ctx.javaType(dataType)}[]", args) :: Nil)
+    ev.copy(s"""
+      $initCode
+      $codes
+      ${ctx.javaType(dataType)} ${ev.value} = $concatenator.concat($args);
+      boolean ${ev.isNull} = ${ev.value} == null;
+    """)
+  }
+
+  override def toString: String = s"concat(${children.mkString(", ")})"
+
+  override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
+}
 
 
 /**
@@ -106,7 +186,7 @@ case class ConcatWs(children: Seq[Expression])
           expressions = inputs,
           funcName = "valueConcatWs",
           extraArguments = ("UTF8String[]", args) :: Nil)
-      ev.copy(code"""
+      ev.copy(s"""
         UTF8String[] $args = new UTF8String[$numArgs];
         ${separator.code}
         $codes
@@ -116,7 +196,7 @@ case class ConcatWs(children: Seq[Expression])
     } else {
       val array = ctx.freshName("array")
       val varargNum = ctx.freshName("varargNum")
-      val idxVararg = ctx.freshName("idxInVararg")
+      val idxInVararg = ctx.freshName("idxInVararg")
 
       val evals = children.map(_.genCode(ctx))
       val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
@@ -126,7 +206,7 @@ case class ConcatWs(children: Seq[Expression])
              if (eval.isNull == "true") {
                ""
              } else {
-               s"$array[$idxVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
+               s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
              })
           case _: ArrayType =>
             val size = ctx.freshName("n")
@@ -142,7 +222,7 @@ case class ConcatWs(children: Seq[Expression])
                 if (!${eval.isNull}) {
                   final int $size = ${eval.value}.numElements();
                   for (int j = 0; j < $size; j ++) {
-                    $array[$idxVararg ++] = ${CodeGenerator.getValue(eval.value, StringType, "j")};
+                    $array[$idxInVararg ++] = ${ctx.getValue(eval.value, StringType, "j")};
                   }
                 }
                 """)
@@ -150,7 +230,7 @@ case class ConcatWs(children: Seq[Expression])
         }
       }.unzip
 
-      val codes = ctx.splitExpressionsWithCurrentInputs(evals.map(_.code.toString))
+      val codes = ctx.splitExpressionsWithCurrentInputs(evals.map(_.code))
 
       val varargCounts = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargCount,
@@ -167,20 +247,20 @@ case class ConcatWs(children: Seq[Expression])
       val varargBuilds = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargBuild,
         funcName = "varargBuildsConcatWs",
-        extraArguments = ("UTF8String []", array) :: ("int", idxVararg) :: Nil,
+        extraArguments = ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
              |$body
-             |return $idxVararg;
+             |return $idxInVararg;
            """.stripMargin,
-        foldFunctions = _.map(funcCall => s"$idxVararg = $funcCall;").mkString("\n"))
+        foldFunctions = _.map(funcCall => s"$idxInVararg = $funcCall;").mkString("\n"))
 
       ev.copy(
-        code"""
+        s"""
         $codes
         int $varargNum = ${children.count(_.dataType == StringType) - 1};
-        int $idxVararg = 0;
+        int $idxInVararg = 0;
         $varargCounts
         UTF8String[] $array = new UTF8String[$varargNum];
         $varargBuilds
@@ -253,7 +333,7 @@ case class Elt(children: Seq[Expression]) extends Expression {
     val indexVal = ctx.freshName("index")
     val indexMatched = ctx.freshName("eltIndexMatched")
 
-    val inputVal = ctx.addMutableState(CodeGenerator.javaType(dataType), "inputVal")
+    val inputVal = ctx.addMutableState(ctx.javaType(dataType), "inputVal")
 
     val assignInputValue = inputs.zipWithIndex.map { case (eval, index) =>
       s"""
@@ -270,10 +350,10 @@ case class Elt(children: Seq[Expression]) extends Expression {
       expressions = assignInputValue,
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
-      returnType = CodeGenerator.JAVA_BOOLEAN,
+      returnType = ctx.JAVA_BOOLEAN,
       makeSplitFunction = body =>
         s"""
-           |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
+           |${ctx.JAVA_BOOLEAN} $indexMatched = false;
            |do {
            |  $body
            |} while (false);
@@ -289,15 +369,15 @@ case class Elt(children: Seq[Expression]) extends Expression {
       }.mkString)
 
     ev.copy(
-      code"""
+      s"""
          |${index.code}
          |final int $indexVal = ${index.value};
-         |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
+         |${ctx.JAVA_BOOLEAN} $indexMatched = false;
          |$inputVal = null;
          |do {
          |  $codes
          |} while (false);
-         |final ${CodeGenerator.javaType(dataType)} ${ev.value} = $inputVal;
+         |final ${ctx.javaType(dataType)} ${ev.value} = $inputVal;
          |final boolean ${ev.isNull} = ${ev.value} == null;
        """.stripMargin)
   }
@@ -655,7 +735,7 @@ case class StringTrim(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code) :+ code"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -672,7 +752,7 @@ case class StringTrim(
         } else {
           ${ev.value} = ${srcString.value}.trim(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code) :+ code"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -755,7 +835,7 @@ case class StringTrimLeft(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code) :+ code"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -772,7 +852,7 @@ case class StringTrimLeft(
         } else {
           ${ev.value} = ${srcString.value}.trimLeft(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code) :+ code"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -857,7 +937,7 @@ case class StringTrimRight(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code) :+ code"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -874,7 +954,7 @@ case class StringTrimRight(
         } else {
           ${ev.value} = ${srcString.value}.trimRight(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code) :+ code"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -1025,7 +1105,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     val substrGen = substr.genCode(ctx)
     val strGen = str.genCode(ctx)
     val startGen = start.genCode(ctx)
-    ev.copy(code = code"""
+    ev.copy(code = s"""
       int ${ev.value} = 0;
       boolean ${ev.isNull} = false;
       ${startGen.code}
@@ -1330,10 +1410,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val numArgLists = argListGen.length
     val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
       val value =
-        if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
+        if (ctx.boxedType(v._1) != ctx.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
-          s"(${v._2.isNull}) ? (${CodeGenerator.boxedType(v._1)}) null : " +
-            s"new ${CodeGenerator.boxedType(v._1)}(${v._2.value})"
+          s"(${v._2.isNull}) ? (${ctx.boxedType(v._1)}) null : " +
+            s"new ${ctx.boxedType(v._1)}(${v._2.value})"
         } else {
           s"(${v._2.isNull}) ? null : ${v._2.value}"
         }
@@ -1351,10 +1431,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val formatter = classOf[java.util.Formatter].getName
     val sb = ctx.freshName("sb")
     val stringBuffer = classOf[StringBuffer].getName
-    ev.copy(code = code"""
+    ev.copy(code = s"""
       ${pattern.code}
       boolean ${ev.isNull} = ${pattern.isNull};
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         $stringBuffer $sb = new $stringBuffer();
         $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
@@ -1421,6 +1501,26 @@ case class StringRepeat(str: Expression, times: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
+  }
+}
+
+/**
+ * Returns the reversed given string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns the reversed given string.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL');
+       LQS krapS
+  """)
+case class StringReverse(child: Expression) extends UnaryExpression with String2StringExpression {
+  override def convert(v: UTF8String): UTF8String = v.reverse()
+
+  override def prettyName: String = "reverse"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"($c).reverse()")
   }
 }
 
@@ -1916,15 +2016,12 @@ case class Encode(value: Expression, charset: Expression)
   usage = """
     _FUNC_(expr1, expr2) - Formats the number `expr1` like '#,###,###.##', rounded to `expr2`
       decimal places. If `expr2` is 0, the result has no decimal point or fractional part.
-      `expr2` also accept a user specified format.
       This is supposed to function like MySQL's FORMAT.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(12332.123456, 4);
        12,332.1235
-      > SELECT _FUNC_(12332.123456, '##################.###');
-       12332.123
   """)
 case class FormatNumber(x: Expression, d: Expression)
   extends BinaryExpression with ExpectsInputTypes {
@@ -1933,20 +2030,14 @@ case class FormatNumber(x: Expression, d: Expression)
   override def right: Expression = d
   override def dataType: DataType = StringType
   override def nullable: Boolean = true
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(NumericType, TypeCollection(IntegerType, StringType))
-
-  private val defaultFormat = "#,###,###,###,###,###,##0"
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
 
   // Associated with the pattern, for the last d value, and we will update the
   // pattern (DecimalFormat) once the new coming d value differ with the last one.
   // This is an Option to distinguish between 0 (numberFormat is valid) and uninitialized after
   // serialization (numberFormat has not been updated for dValue = 0).
   @transient
-  private var lastDIntValue: Option[Int] = None
-
-  @transient
-  private var lastDStringValue: Option[String] = None
+  private var lastDValue: Option[Int] = None
 
   // A cached DecimalFormat, for performance concern, we will change it
   // only if the d value changed.
@@ -1959,49 +2050,33 @@ case class FormatNumber(x: Expression, d: Expression)
   private lazy val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
-    right.dataType match {
-      case IntegerType =>
-        val dValue = dObject.asInstanceOf[Int]
-        if (dValue < 0) {
-          return null
+    val dValue = dObject.asInstanceOf[Int]
+    if (dValue < 0) {
+      return null
+    }
+
+    lastDValue match {
+      case Some(last) if last == dValue =>
+        // use the current pattern
+      case _ =>
+        // construct a new DecimalFormat only if a new dValue
+        pattern.delete(0, pattern.length)
+        pattern.append("#,###,###,###,###,###,##0")
+
+        // decimal place
+        if (dValue > 0) {
+          pattern.append(".")
+
+          var i = 0
+          while (i < dValue) {
+            i += 1
+            pattern.append("0")
+          }
         }
 
-        lastDIntValue match {
-          case Some(last) if last == dValue =>
-          // use the current pattern
-          case _ =>
-            // construct a new DecimalFormat only if a new dValue
-            pattern.delete(0, pattern.length)
-            pattern.append(defaultFormat)
+        lastDValue = Some(dValue)
 
-            // decimal place
-            if (dValue > 0) {
-              pattern.append(".")
-
-              var i = 0
-              while (i < dValue) {
-                i += 1
-                pattern.append("0")
-              }
-            }
-
-            lastDIntValue = Some(dValue)
-
-            numberFormat.applyLocalizedPattern(pattern.toString)
-        }
-      case StringType =>
-        val dValue = dObject.asInstanceOf[UTF8String].toString
-        lastDStringValue match {
-          case Some(last) if last == dValue =>
-          case _ =>
-            pattern.delete(0, pattern.length)
-            lastDStringValue = Some(dValue)
-            if (dValue.isEmpty) {
-              numberFormat.applyLocalizedPattern(defaultFormat)
-            } else {
-              numberFormat.applyLocalizedPattern(dValue)
-            }
-        }
+        numberFormat.applyLocalizedPattern(pattern.toString)
     }
 
     x.dataType match {
@@ -2033,52 +2108,34 @@ case class FormatNumber(x: Expression, d: Expression)
       // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
       // as a decimal separator.
       val usLocale = "US"
+      val i = ctx.freshName("i")
+      val dFormat = ctx.freshName("dFormat")
+      val lastDValue = ctx.addMutableState(ctx.JAVA_INT, "lastDValue", v => s"$v = -100;")
+      val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
       val numberFormat = ctx.addMutableState(df, "numberFormat",
         v => s"""$v = new $df("", new $dfs($l.$usLocale));""")
 
-      right.dataType match {
-        case IntegerType =>
-          val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
-          val i = ctx.freshName("i")
-          val lastDValue =
-            ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
-          s"""
-            if ($d >= 0) {
-              $pattern.delete(0, $pattern.length());
-              if ($d != $lastDValue) {
-                $pattern.append("$defaultFormat");
+      s"""
+        if ($d >= 0) {
+          $pattern.delete(0, $pattern.length());
+          if ($d != $lastDValue) {
+            $pattern.append("#,###,###,###,###,###,##0");
 
-                if ($d > 0) {
-                  $pattern.append(".");
-                  for (int $i = 0; $i < $d; $i++) {
-                    $pattern.append("0");
-                  }
-                }
-                $lastDValue = $d;
-                $numberFormat.applyLocalizedPattern($pattern.toString());
-              }
-              ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
-            } else {
-              ${ev.value} = null;
-              ${ev.isNull} = true;
-            }
-           """
-        case StringType =>
-          val lastDValue = ctx.addMutableState("String", "lastDValue", v => s"""$v = null;""")
-          val dValue = ctx.freshName("dValue")
-          s"""
-            String $dValue = $d.toString();
-            if (!$dValue.equals($lastDValue)) {
-              $lastDValue = $dValue;
-              if ($dValue.isEmpty()) {
-                $numberFormat.applyLocalizedPattern("$defaultFormat");
-              } else {
-                $numberFormat.applyLocalizedPattern($dValue);
+            if ($d > 0) {
+              $pattern.append(".");
+              for (int $i = 0; $i < $d; $i++) {
+                $pattern.append("0");
               }
             }
-            ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
-           """
-      }
+            $lastDValue = $d;
+            $numberFormat.applyLocalizedPattern($pattern.toString());
+          }
+          ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
+        } else {
+          ${ev.value} = null;
+          ${ev.isNull} = true;
+        }
+       """
     })
   }
 

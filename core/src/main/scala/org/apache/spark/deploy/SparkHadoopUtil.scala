@@ -40,7 +40,6 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -112,9 +111,7 @@ class SparkHadoopUtil extends Logging {
    * subsystems.
    */
   def newConfiguration(conf: SparkConf): Configuration = {
-    val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
-    hadoopConf.addResource(SparkHadoopUtil.SPARK_HADOOP_CONF_FILE)
-    hadoopConf
+    SparkHadoopUtil.newConfiguration(conf)
   }
 
   /**
@@ -147,8 +144,7 @@ class SparkHadoopUtil extends Logging {
   private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
     UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
     val creds = deserialize(tokens)
-    logInfo("Updating delegation tokens for current user.")
-    logDebug(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
+    logInfo(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
     addCurrentUserCredentials(creds)
   }
 
@@ -324,6 +320,19 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
+   * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
+   * This is to prevent the DFSClient from using an old cached token to connect to the NameNode.
+   */
+  private[spark] def getConfBypassingFSCache(
+      hadoopConf: Configuration,
+      scheme: String): Configuration = {
+    val newConf = new Configuration(hadoopConf)
+    val confKey = s"fs.${scheme}.impl.disable.cache"
+    newConf.setBoolean(confKey, true)
+    newConf
+  }
+
+  /**
    * Dump the credentials' tokens to string values.
    *
    * @param credentials credentials
@@ -426,27 +435,19 @@ object SparkHadoopUtil {
    */
   private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
 
-  /**
-   * Name of the file containing the gateway's Hadoop configuration, to be overlayed on top of the
-   * cluster's Hadoop config. It is up to the Spark code launching the application to create
-   * this file if it's desired. If the file doesn't exist, it will just be ignored.
-   */
-  private[spark] val SPARK_HADOOP_CONF_FILE = "__spark_hadoop_conf__.xml"
-
   def get: SparkHadoopUtil = instance
 
   /**
-   * Given an expiration date for the current set of credentials, calculate the time when new
-   * credentials should be created.
-   *
+   * Given an expiration date (e.g. for Hadoop Delegation Tokens) return a the date
+   * when a given fraction of the duration until the expiration date has passed.
+   * Formula: current time + (fraction * (time until expiration))
    * @param expirationDate Drop-dead expiration date
-   * @param conf Spark configuration
-   * @return Timestamp when new credentials should be created.
+   * @param fraction fraction of the time until expiration return
+   * @return Date when the fraction of the time until expiration has passed
    */
-  private[spark] def nextCredentialRenewalTime(expirationDate: Long, conf: SparkConf): Long = {
+  private[spark] def getDateOfNextUpdate(expirationDate: Long, fraction: Double): Long = {
     val ct = System.currentTimeMillis
-    val ratio = conf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
-    (ct + (ratio * (expirationDate - ct))).toLong
+    (ct + (fraction * (expirationDate - ct))).toLong
   }
 
   /**

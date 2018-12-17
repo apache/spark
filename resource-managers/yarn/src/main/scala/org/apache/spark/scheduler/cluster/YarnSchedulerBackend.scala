@@ -24,11 +24,9 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
@@ -71,7 +69,6 @@ private[spark] abstract class YarnSchedulerBackend(
 
   /** Scheduler extension services. */
   private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
-
 
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
@@ -266,13 +263,8 @@ private[spark] abstract class YarnSchedulerBackend(
           logWarning(s"Requesting driver to remove executor $executorId for reason $reason")
           driverEndpoint.send(r)
         }
-
-      case u @ UpdateDelegationTokens(tokens) =>
-        // Add the tokens to the current user and send a message to the scheduler so that it
-        // notifies all registered executors of the new tokens.
-        SparkHadoopUtil.get.addDelegationTokens(tokens, sc.conf)
-        driverEndpoint.send(u)
     }
+
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case r: RequestExecutors =>

@@ -72,7 +72,6 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-allActiveStages','aggregated-allActiveStages');
   collapseTablePageLoad('collapse-aggregated-allPendingStages','aggregated-allPendingStages');
   collapseTablePageLoad('collapse-aggregated-allCompletedStages','aggregated-allCompletedStages');
-  collapseTablePageLoad('collapse-aggregated-allSkippedStages','aggregated-allSkippedStages');
   collapseTablePageLoad('collapse-aggregated-allFailedStages','aggregated-allFailedStages');
   collapseTablePageLoad('collapse-aggregated-activeStages','aggregated-activeStages');
   collapseTablePageLoad('collapse-aggregated-pendingOrSkippedStages','aggregated-pendingOrSkippedStages');
@@ -81,6 +80,4 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-poolActiveStages','aggregated-poolActiveStages');
   collapseTablePageLoad('collapse-aggregated-tasks','aggregated-tasks');
   collapseTablePageLoad('collapse-aggregated-rdds','aggregated-rdds');
-  collapseTablePageLoad('collapse-aggregated-activeBatches','aggregated-activeBatches');
-  collapseTablePageLoad('collapse-aggregated-completedBatches','aggregated-completedBatches');
 });

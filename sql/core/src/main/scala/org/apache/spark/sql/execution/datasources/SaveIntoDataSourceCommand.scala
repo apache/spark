@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.CreatableRelationProvider
+import org.apache.spark.util.Utils
 
 /**
  * Saves the results of `query` in to a data source.
@@ -49,7 +50,7 @@ case class SaveIntoDataSourceCommand(
   }
 
   override def simpleString: String = {
-    val redacted = SQLConf.get.redactOptions(options)
+    val redacted = Utils.redact(SparkEnv.get.conf, options.toSeq).toMap
     s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
   }
 }

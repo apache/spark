@@ -36,7 +36,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
   private def testWithCatalog(
       name: String)(
       f: (ExternalCatalog, Seq[ExternalCatalogEvent] => Unit) => Unit): Unit = test(name) {
-    val catalog = new ExternalCatalogWithListener(newCatalog)
+    val catalog = newCatalog
     val recorder = mutable.Buffer.empty[ExternalCatalogEvent]
     catalog.addListener(new ExternalCatalogEventListener {
       override def onEvent(event: ExternalCatalogEvent): Unit = {

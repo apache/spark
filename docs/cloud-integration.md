@@ -27,13 +27,13 @@ description: Introduction to cloud storage support in Apache Spark SPARK_VERSION
 All major cloud providers offer persistent data storage in *object stores*.
 These are not classic "POSIX" file systems.
 In order to store hundreds of petabytes of data without any single points of failure,
-object stores replace the classic file system directory tree
+object stores replace the classic filesystem directory tree
 with a simpler model of `object-name => data`. To enable remote access, operations
 on objects are usually offered as (slow) HTTP REST operations.
 
 Spark can read and write data in object stores through filesystem connectors implemented
 in Hadoop or provided by the infrastructure suppliers themselves.
-These connectors make the object stores look *almost* like file systems, with directories and files
+These connectors make the object stores look *almost* like filesystems, with directories and files
 and the classic operations on them such as list, delete and rename.
 
 

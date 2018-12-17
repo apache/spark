@@ -167,8 +167,7 @@ case class StreamingSymmetricHashJoinExec(
   val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(leftKeys, stateInfo.map(_.numPartitions)) ::
-      ClusteredDistribution(rightKeys, stateInfo.map(_.numPartitions)) :: Nil
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   override def output: Seq[Attribute] = joinType match {
     case _: InnerLike => left.output ++ right.output
@@ -185,17 +184,6 @@ case class StreamingSymmetricHashJoinExec(
     case x =>
       throw new IllegalArgumentException(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
-  }
-
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
-    val watermarkUsedForStateCleanup =
-      stateWatermarkPredicates.left.nonEmpty || stateWatermarkPredicates.right.nonEmpty
-
-    // Latest watermark value is more than that used in this previous executed plan
-    val watermarkHasChanged =
-      eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get
-
-    watermarkUsedForStateCleanup && watermarkHasChanged
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -330,7 +318,8 @@ case class StreamingSymmetricHashJoinExec(
         // outer join) if possible. In all cases, nothing needs to be outputted, hence the removal
         // needs to be done greedily by immediately consuming the returned iterator.
         val cleanupIter = joinType match {
-          case Inner => leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
+          case Inner =>
+            leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
           case LeftOuter => rightSideJoiner.removeOldState()
           case RightOuter => leftSideJoiner.removeOldState()
           case _ => throwBadJoinTypeException()

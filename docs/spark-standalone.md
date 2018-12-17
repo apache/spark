@@ -255,18 +255,6 @@ SPARK_WORKER_OPTS supports the following system properties:
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
-  <td>true</td>
-  <td>
-    Enable cleanup non-shuffle files(such as temp. shuffle blocks, cached RDD/broadcast blocks,
-    spill files, etc) of worker directories following executor exits. Note that this doesn't
-    overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
-    local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
-    all files/subdirectories of a stopped and timeout application.
-    This only affects Standalone mode, support of other cluster manangers can be added in the future.
-  </td>
-</tr>
-<tr>
   <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
   <td>100</td>
   <td>
@@ -350,7 +338,7 @@ worker during one single schedule iteration.
 
 # Monitoring and Logging
 
-Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default, you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
+Spark's standalone mode offers a web-based user interface to monitor the cluster. The master and each worker has its own web UI that shows cluster and job statistics. By default you can access the web UI for the master at port 8080. The port can be changed either in the configuration file or via command-line options.
 
 In addition, detailed log output for each job is also written to the work directory of each slave node (`SPARK_HOME/work` by default). You will see two files for each job, `stdout` and `stderr`, with all output it wrote to its console.
 

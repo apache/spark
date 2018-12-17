@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-import sys
-
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
@@ -482,4 +480,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        sys.exit(-1)
+        exit(-1)

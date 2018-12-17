@@ -132,7 +132,7 @@ object functions {
    * Returns a sort expression based on ascending order of the column,
    * and null values return before non-null values.
    * {{{
-   *   df.sort(asc_nulls_first("dept"), desc("age"))
+   *   df.sort(asc_nulls_last("dept"), desc("age"))
    * }}}
    *
    * @group sort_funcs
@@ -283,9 +283,6 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on order of rows which may be non-deterministic after a shuffle.
-   *
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -293,9 +290,6 @@ object functions {
 
   /**
    * Aggregate function: returns a list of objects with duplicates.
-   *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on order of rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -305,9 +299,6 @@ object functions {
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on order of rows which may be non-deterministic after a shuffle.
-   *
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -315,9 +306,6 @@ object functions {
 
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
-   *
-   * @note The function is non-deterministic because the order of collected results depends
-   * on order of rows which may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -434,9 +422,6 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
-   *
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -449,9 +434,6 @@ object functions {
    *
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-   *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -466,9 +448,6 @@ object functions {
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
-   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -479,9 +458,6 @@ object functions {
    *
    * The function by default returns the first values it sees. It will return the first non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-   *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -559,9 +535,6 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
-   *
    * @group agg_funcs
    * @since 2.0.0
    */
@@ -574,9 +547,6 @@ object functions {
    *
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-   *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -591,9 +561,6 @@ object functions {
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
    *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
-   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -604,9 +571,6 @@ object functions {
    *
    * The function by default returns the last values it sees. It will return the last non-null
    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-   *
-   * @note The function is non-deterministic because its results depends on order of rows which
-   * may be non-deterministic after a shuffle.
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -810,7 +774,6 @@ object functions {
    * @since 1.6.0
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
-
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -1209,7 +1172,7 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
-   * @note The function is non-deterministic in general case.
+   * @note This is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1220,8 +1183,6 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
-   * @note The function is non-deterministic in general case.
-   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -1231,7 +1192,7 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
-   * @note The function is non-deterministic in general case.
+   * @note This is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1242,8 +1203,6 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
-   * @note The function is non-deterministic in general case.
-   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -1252,7 +1211,7 @@ object functions {
   /**
    * Partition ID.
    *
-   * @note This is non-deterministic because it depends on data partitioning and task scheduling.
+   * @note This is indeterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    * @since 1.6.0
@@ -1354,7 +1313,8 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * @return inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
+   * Computes the cosine inverse of the given value; the returned angle is in the range
+   * 0.0 through pi.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1362,7 +1322,8 @@ object functions {
   def acos(e: Column): Column = withExpr { Acos(e.expr) }
 
   /**
-   * @return inverse cosine of `columnName`, as if computed by `java.lang.Math.acos`
+   * Computes the cosine inverse of the given column; the returned angle is in the range
+   * 0.0 through pi.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1370,7 +1331,8 @@ object functions {
   def acos(columnName: String): Column = acos(Column(columnName))
 
   /**
-   * @return inverse sine of `e` in radians, as if computed by `java.lang.Math.asin`
+   * Computes the sine inverse of the given value; the returned angle is in the range
+   * -pi/2 through pi/2.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1378,7 +1340,8 @@ object functions {
   def asin(e: Column): Column = withExpr { Asin(e.expr) }
 
   /**
-   * @return inverse sine of `columnName`, as if computed by `java.lang.Math.asin`
+   * Computes the sine inverse of the given column; the returned angle is in the range
+   * -pi/2 through pi/2.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1386,7 +1349,8 @@ object functions {
   def asin(columnName: String): Column = asin(Column(columnName))
 
   /**
-   * @return inverse tangent of `e`, as if computed by `java.lang.Math.atan`
+   * Computes the tangent inverse of the given column; the returned angle is in the range
+   * -pi/2 through pi/2
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1394,7 +1358,8 @@ object functions {
   def atan(e: Column): Column = withExpr { Atan(e.expr) }
 
   /**
-   * @return inverse tangent of `columnName`, as if computed by `java.lang.Math.atan`
+   * Computes the tangent inverse of the given column; the returned angle is in the range
+   * -pi/2 through pi/2
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1402,117 +1367,77 @@ object functions {
   def atan(columnName: String): Column = atan(Column(columnName))
 
   /**
-   * @param y coordinate on y-axis
-   * @param x coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta). Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(y: Column, x: Column): Column = withExpr { Atan2(y.expr, x.expr) }
+  def atan2(l: Column, r: Column): Column = withExpr { Atan2(l.expr, r.expr) }
 
   /**
-   * @param y coordinate on y-axis
-   * @param xName coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(y: Column, xName: String): Column = atan2(y, Column(xName))
+  def atan2(l: Column, rightName: String): Column = atan2(l, Column(rightName))
 
   /**
-   * @param yName coordinate on y-axis
-   * @param x coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(yName: String, x: Column): Column = atan2(Column(yName), x)
+  def atan2(leftName: String, r: Column): Column = atan2(Column(leftName), r)
 
   /**
-   * @param yName coordinate on y-axis
-   * @param xName coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(yName: String, xName: String): Column =
-    atan2(Column(yName), Column(xName))
+  def atan2(leftName: String, rightName: String): Column =
+    atan2(Column(leftName), Column(rightName))
 
   /**
-   * @param y coordinate on y-axis
-   * @param xValue coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(y: Column, xValue: Double): Column = atan2(y, lit(xValue))
+  def atan2(l: Column, r: Double): Column = atan2(l, lit(r))
 
   /**
-   * @param yName coordinate on y-axis
-   * @param xValue coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(yName: String, xValue: Double): Column = atan2(Column(yName), xValue)
+  def atan2(leftName: String, r: Double): Column = atan2(Column(leftName), r)
 
   /**
-   * @param yValue coordinate on y-axis
-   * @param x coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(yValue: Double, x: Column): Column = atan2(lit(yValue), x)
+  def atan2(l: Double, r: Column): Column = atan2(lit(l), r)
 
   /**
-   * @param yValue coordinate on y-axis
-   * @param xName coordinate on x-axis
-   * @return the <i>theta</i> component of the point
-   *         (<i>r</i>, <i>theta</i>)
-   *         in polar coordinates that corresponds to the point
-   *         (<i>x</i>, <i>y</i>) in Cartesian coordinates,
-   *         as if computed by `java.lang.Math.atan2`
+   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
+   * polar coordinates (r, theta).
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(yValue: Double, xName: String): Column = atan2(yValue, Column(xName))
+  def atan2(l: Double, rightName: String): Column = atan2(l, Column(rightName))
 
   /**
    * An expression that returns the string representation of the binary value of the given long
@@ -1575,8 +1500,7 @@ object functions {
   }
 
   /**
-   * @param e angle in radians
-   * @return cosine of the angle, as if computed by `java.lang.Math.cos`
+   * Computes the cosine of the given value. Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1584,8 +1508,7 @@ object functions {
   def cos(e: Column): Column = withExpr { Cos(e.expr) }
 
   /**
-   * @param columnName angle in radians
-   * @return cosine of the angle, as if computed by `java.lang.Math.cos`
+   * Computes the cosine of the given column.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1593,8 +1516,7 @@ object functions {
   def cos(columnName: String): Column = cos(Column(columnName))
 
   /**
-   * @param e hyperbolic angle
-   * @return hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
+   * Computes the hyperbolic cosine of the given value.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1602,8 +1524,7 @@ object functions {
   def cosh(e: Column): Column = withExpr { Cosh(e.expr) }
 
   /**
-   * @param columnName hyperbolic angle
-   * @return hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
+   * Computes the hyperbolic cosine of the given column.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2046,8 +1967,7 @@ object functions {
   def signum(columnName: String): Column = signum(Column(columnName))
 
   /**
-   * @param e angle in radians
-   * @return sine of the angle, as if computed by `java.lang.Math.sin`
+   * Computes the sine of the given value. Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2055,8 +1975,7 @@ object functions {
   def sin(e: Column): Column = withExpr { Sin(e.expr) }
 
   /**
-   * @param columnName angle in radians
-   * @return sine of the angle, as if computed by `java.lang.Math.sin`
+   * Computes the sine of the given column.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2064,8 +1983,7 @@ object functions {
   def sin(columnName: String): Column = sin(Column(columnName))
 
   /**
-   * @param e hyperbolic angle
-   * @return hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
+   * Computes the hyperbolic sine of the given value.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2073,8 +1991,7 @@ object functions {
   def sinh(e: Column): Column = withExpr { Sinh(e.expr) }
 
   /**
-   * @param columnName hyperbolic angle
-   * @return hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
+   * Computes the hyperbolic sine of the given column.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2082,8 +1999,7 @@ object functions {
   def sinh(columnName: String): Column = sinh(Column(columnName))
 
   /**
-   * @param e angle in radians
-   * @return tangent of the given value, as if computed by `java.lang.Math.tan`
+   * Computes the tangent of the given value. Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2091,8 +2007,7 @@ object functions {
   def tan(e: Column): Column = withExpr { Tan(e.expr) }
 
   /**
-   * @param columnName angle in radians
-   * @return tangent of the given value, as if computed by `java.lang.Math.tan`
+   * Computes the tangent of the given column.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2100,8 +2015,7 @@ object functions {
   def tan(columnName: String): Column = tan(Column(columnName))
 
   /**
-   * @param e hyperbolic angle
-   * @return hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
+   * Computes the hyperbolic tangent of the given value.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2109,8 +2023,7 @@ object functions {
   def tanh(e: Column): Column = withExpr { Tanh(e.expr) }
 
   /**
-   * @param columnName hyperbolic angle
-   * @return hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
+   * Computes the hyperbolic tangent of the given column.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2134,9 +2047,6 @@ object functions {
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
    *
-   * @param e angle in radians
-   * @return angle in degrees, as if computed by `java.lang.Math.toDegrees`
-   *
    * @group math_funcs
    * @since 2.1.0
    */
@@ -2144,9 +2054,6 @@ object functions {
 
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
-   *
-   * @param columnName angle in radians
-   * @return angle in degrees, as if computed by `java.lang.Math.toDegrees`
    *
    * @group math_funcs
    * @since 2.1.0
@@ -2170,9 +2077,6 @@ object functions {
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
-   * @param e angle in degrees
-   * @return angle in radians, as if computed by `java.lang.Math.toRadians`
-   *
    * @group math_funcs
    * @since 2.1.0
    */
@@ -2180,9 +2084,6 @@ object functions {
 
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
-   *
-   * @param columnName angle in degrees
-   * @return angle in radians, as if computed by `java.lang.Math.toRadians`
    *
    * @group math_funcs
    * @since 2.1.0
@@ -2268,6 +2169,16 @@ object functions {
    * @since 1.5.0
    */
   def base64(e: Column): Column = withExpr { Base64(e.expr) }
+
+  /**
+   * Concatenates multiple input columns together into a single column.
+   * If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  def concat(exprs: Column*): Column = withExpr { Concat(exprs.map(_.expr)) }
 
   /**
    * Concatenates multiple input string columns together into a single string column,
@@ -2494,6 +2405,14 @@ object functions {
   def repeat(str: Column, n: Int): Column = withExpr {
     StringRepeat(str.expr, lit(n).expr)
   }
+
+  /**
+   * Reverses the string column and returns it as a new string column.
+   *
+   * @group string_funcs
+   * @since 1.5.0
+   */
+  def reverse(str: Column): Column = withExpr { StringReverse(str.expr) }
 
   /**
    * Trim the spaces from right end for the specified string value.
@@ -2732,27 +2651,11 @@ object functions {
 
   /**
    * Returns number of months between dates `date1` and `date2`.
-   * If `date1` is later than `date2`, then the result is positive.
-   * If `date1` and `date2` are on the same day of month, or both are the last day of month,
-   * time of day will be ignored.
-   *
-   * Otherwise, the difference is calculated based on 31 days per month, and rounded to
-   * 8 digits.
    * @group datetime_funcs
    * @since 1.5.0
    */
   def months_between(date1: Column, date2: Column): Column = withExpr {
-    new MonthsBetween(date1.expr, date2.expr)
-  }
-
-  /**
-   * Returns number of months between dates `date1` and `date2`. If `roundOff` is set to true, the
-   * result is rounded off to 8 digits; it is not rounded otherwise.
-   * @group datetime_funcs
-   * @since 2.4.0
-   */
-  def months_between(date1: Column, date2: Column, roundOff: Boolean): Column = withExpr {
-    MonthsBetween(date1.expr, date2.expr, lit(roundOff).expr)
+    MonthsBetween(date1.expr, date2.expr)
   }
 
   /**
@@ -2970,7 +2873,7 @@ object functions {
    *                      or equal to the `windowDuration`. Check
    *                      `org.apache.spark.unsafe.types.CalendarInterval` for valid duration
    *                      identifiers. This duration is likewise absolute, and does not vary
-   *                      according to a calendar.
+    *                     according to a calendar.
    * @param startTime The offset with respect to 1970-01-01 00:00:00 UTC with which to start
    *                  window intervals. For example, in order to have hourly tumbling windows that
    *                  start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
@@ -3026,7 +2929,7 @@ object functions {
    *                      or equal to the `windowDuration`. Check
    *                      `org.apache.spark.unsafe.types.CalendarInterval` for valid duration
    *                      identifiers. This duration is likewise absolute, and does not vary
-   *                      according to a calendar.
+   *                     according to a calendar.
    *
    * @group datetime_funcs
    * @since 2.0.0
@@ -3083,99 +2986,6 @@ object functions {
    */
   def array_contains(column: Column, value: Any): Column = withExpr {
     ArrayContains(column.expr, Literal(value))
-  }
-
-  /**
-   * Returns `true` if `a1` and `a2` have at least one non-null element in common. If not and both
-   * the arrays are non-empty and any of them contains a `null`, it returns `null`. It returns
-   * `false` otherwise.
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def arrays_overlap(a1: Column, a2: Column): Column = withExpr {
-    ArraysOverlap(a1.expr, a2.expr)
-  }
-
-  /**
-   * Returns an array containing all the elements in `x` from index `start` (or starting from the
-   * end if `start` is negative) with the specified `length`.
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def slice(x: Column, start: Int, length: Int): Column = withExpr {
-    Slice(x.expr, Literal(start), Literal(length))
-  }
-
-  /**
-   * Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
-   * `nullReplacement`.
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def array_join(column: Column, delimiter: String, nullReplacement: String): Column = withExpr {
-    ArrayJoin(column.expr, Literal(delimiter), Some(Literal(nullReplacement)))
-  }
-
-  /**
-   * Concatenates the elements of `column` using the `delimiter`.
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def array_join(column: Column, delimiter: String): Column = withExpr {
-    ArrayJoin(column.expr, Literal(delimiter), None)
-  }
-
-  /**
-   * Concatenates multiple input columns together into a single column.
-   * The function works with strings, binary and compatible array columns.
-   *
-   * @group collection_funcs
-   * @since 1.5.0
-   */
-  @scala.annotation.varargs
-  def concat(exprs: Column*): Column = withExpr { Concat(exprs.map(_.expr)) }
-
-  /**
-   * Locates the position of the first occurrence of the value in the given array as long.
-   * Returns null if either of the arguments are null.
-   *
-   * @note The position is not zero based, but 1 based index. Returns 0 if value
-   * could not be found in array.
-   *
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def array_position(column: Column, value: Any): Column = withExpr {
-    ArrayPosition(column.expr, Literal(value))
-  }
-
-  /**
-   * Returns element of array at given index in value if column is array. Returns value for
-   * the given key in value if column is map.
-   *
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def element_at(column: Column, value: Any): Column = withExpr {
-    ElementAt(column.expr, Literal(value))
-  }
-
-  /**
-   * Sorts the input array in ascending order. The elements of the input array must be orderable.
-   * Null elements will be placed at the end of the returned array.
-   *
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
-
-  /**
-   * Remove all elements that equal to element from the given array.
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def array_remove(column: Column, element: Any): Column = withExpr {
-    ArrayRemove(column.expr, Literal(element))
   }
 
   /**
@@ -3251,9 +3061,9 @@ object functions {
     from_json(e, schema.asInstanceOf[DataType], options)
 
   /**
-   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
+   * string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3264,7 +3074,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    new JsonToStructs(schema, options, e.expr)
+    JsonToStructs(schema, options, e.expr)
   }
 
   /**
@@ -3283,9 +3093,9 @@ object functions {
     from_json(e, schema, options.asScala.toMap)
 
   /**
-   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * (Java-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
+   * string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3312,9 +3122,8 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * Parses a column containing a JSON string into a `MapType` with `StringType` as keys type,
-   * `StructType` or `ArrayType` of `StructType`s with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * Parses a column containing a JSON string into a `StructType` or `ArrayType` of `StructType`s
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3326,9 +3135,9 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * (Java-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
+   * string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
@@ -3343,9 +3152,9 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
-   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
+   * string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string as a json string, it could be a
@@ -3418,7 +3227,6 @@ object functions {
   /**
    * Sorts the input array for the given column in ascending order,
    * according to the natural ordering of the array elements.
-   * Null elements will be placed at the beginning of the returned array.
    *
    * @group collection_funcs
    * @since 1.5.0
@@ -3428,64 +3236,11 @@ object functions {
   /**
    * Sorts the input array for the given column in ascending or descending order,
    * according to the natural ordering of the array elements.
-   * Null elements will be placed at the beginning of the returned array in ascending order or
-   * at the end of the returned array in descending order.
    *
    * @group collection_funcs
    * @since 1.5.0
    */
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
-
-  /**
-   * Returns the minimum value in the array.
-   *
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def array_min(e: Column): Column = withExpr { ArrayMin(e.expr) }
-
-  /**
-   * Returns the maximum value in the array.
-   *
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
-
-  /**
-   * Returns a reversed string or an array with reverse order of elements.
-   * @group collection_funcs
-   * @since 1.5.0
-   */
-  def reverse(e: Column): Column = withExpr { Reverse(e.expr) }
-
-  /**
-   * Creates a single array from an array of arrays. If a structure of nested arrays is deeper than
-   * two levels, only one level of nesting is removed.
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
-
-  /**
-   * Creates an array containing the left argument repeated the number of times given by the
-   * right argument.
-   *
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def array_repeat(left: Column, right: Column): Column = withExpr {
-    ArrayRepeat(left.expr, right.expr)
-  }
-
-  /**
-   * Creates an array containing the left argument repeated the number of times given by the
-   * right argument.
-   *
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def array_repeat(e: Column, count: Int): Column = array_repeat(e, lit(count))
 
   /**
    * Returns an unordered array containing the keys of the map.
@@ -3500,132 +3255,6 @@ object functions {
    * @since 2.3.0
    */
   def map_values(e: Column): Column = withExpr { MapValues(e.expr) }
-
-  /**
-   * Returns an unordered array of all entries in the given map.
-   * @group collection_funcs
-   * @since 2.4.0
-   */
-  def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
-
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  // Mask functions
-  //////////////////////////////////////////////////////////////////////////////////////////////
-  /**
-   * Returns a string which is the masked representation of the input.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask(e: Column): Column = withExpr { new Mask(e.expr) }
-
-  /**
-   * Returns a string which is the masked representation of the input, using `upper`, `lower` and
-   * `digit` as replacement characters.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask(e: Column, upper: String, lower: String, digit: String): Column = withExpr {
-    Mask(e.expr, upper, lower, digit)
-  }
-
-  /**
-   * Returns a string with the first `n` characters masked.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_first_n(e: Column, n: Int): Column = withExpr { new MaskFirstN(e.expr, Literal(n)) }
-
-  /**
-   * Returns a string with the first `n` characters masked, using `upper`, `lower` and `digit` as
-   * replacement characters.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_first_n(
-      e: Column,
-      n: Int,
-      upper: String,
-      lower: String,
-      digit: String): Column = withExpr {
-    MaskFirstN(e.expr, n, upper, lower, digit)
-  }
-
-  /**
-   * Returns a string with the last `n` characters masked.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_last_n(e: Column, n: Int): Column = withExpr { new MaskLastN(e.expr, Literal(n)) }
-
-  /**
-   * Returns a string with the last `n` characters masked, using `upper`, `lower` and `digit` as
-   * replacement characters.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_last_n(
-      e: Column,
-      n: Int,
-      upper: String,
-      lower: String,
-      digit: String): Column = withExpr {
-    MaskLastN(e.expr, n, upper, lower, digit)
-  }
-
-  /**
-   * Returns a string with all but the first `n` characters masked.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_show_first_n(e: Column, n: Int): Column = withExpr {
-    new MaskShowFirstN(e.expr, Literal(n))
-  }
-
-  /**
-   * Returns a string with all but the first `n` characters masked, using `upper`, `lower` and
-   * `digit` as replacement characters.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_show_first_n(
-      e: Column,
-      n: Int,
-      upper: String,
-      lower: String,
-      digit: String): Column = withExpr {
-    MaskShowFirstN(e.expr, n, upper, lower, digit)
-  }
-
-  /**
-   * Returns a string with all but the last `n` characters masked.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_show_last_n(e: Column, n: Int): Column = withExpr {
-    new MaskShowLastN(e.expr, Literal(n))
-  }
-
-  /**
-   * Returns a string with all but the last `n` characters masked, using `upper`, `lower` and
-   * `digit` as replacement characters.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_show_last_n(
-      e: Column,
-      n: Int,
-      upper: String,
-      lower: String,
-      digit: String): Column = withExpr {
-    MaskShowLastN(e.expr, n, upper, lower, digit)
-  }
-
-  /**
-   * Returns a hashed value based on the input column.
-   * @group mask_funcs
-   * @since 2.4.0
-   */
-  def mask_hash(e: Column): Column = withExpr { MaskHash(e.expr) }
 
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number

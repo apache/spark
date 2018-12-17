@@ -405,12 +405,12 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-18016: define mutable states by using an array") {
     val ctx1 = new CodegenContext
     for (i <- 1 to CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10) {
-      ctx1.addMutableState(CodeGenerator.JAVA_INT, "i", v => s"$v = $i;")
+      ctx1.addMutableState(ctx1.JAVA_INT, "i", v => s"$v = $i;")
     }
     assert(ctx1.inlinedMutableStates.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
     // When the number of primitive type mutable states is over the threshold, others are
     // allocated into an array
-    assert(ctx1.arrayCompactedMutableStates.get(CodeGenerator.JAVA_INT).get.arrayNames.size == 1)
+    assert(ctx1.arrayCompactedMutableStates.get(ctx1.JAVA_INT).get.arrayNames.size == 1)
     assert(ctx1.mutableStateInitCode.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10)
 
     val ctx2 = new CodegenContext
@@ -435,68 +435,5 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     ctx.addImmutableStateIfNotExists("int", mutableState1)
     ctx.addImmutableStateIfNotExists("String", mutableState2)
     assert(ctx.inlinedMutableStates.length == 2)
-  }
-
-  test("SPARK-23628: calculateParamLength should compute properly the param length") {
-    assert(CodeGenerator.calculateParamLength(Seq.range(0, 100).map(Literal(_))) == 101)
-    assert(CodeGenerator.calculateParamLength(
-      Seq.range(0, 100).map(x => Literal(x.toLong))) == 201)
-  }
-
-  test("SPARK-23760: CodegenContext.withSubExprEliminationExprs should save/restore correctly") {
-
-    val ref = BoundReference(0, IntegerType, true)
-    val add1 = Add(ref, ref)
-    val add2 = Add(add1, add1)
-    val dummy = SubExprEliminationState(
-      JavaCode.variable("dummy", BooleanType),
-      JavaCode.variable("dummy", BooleanType))
-
-    // raw testing of basic functionality
-    {
-      val ctx = new CodegenContext
-      val e = ref.genCode(ctx)
-      // before
-      ctx.subExprEliminationExprs += ref -> SubExprEliminationState(e.isNull, e.value)
-      assert(ctx.subExprEliminationExprs.contains(ref))
-      // call withSubExprEliminationExprs
-      ctx.withSubExprEliminationExprs(Map(add1 -> dummy)) {
-        assert(ctx.subExprEliminationExprs.contains(add1))
-        assert(!ctx.subExprEliminationExprs.contains(ref))
-        Seq.empty
-      }
-      // after
-      assert(ctx.subExprEliminationExprs.nonEmpty)
-      assert(ctx.subExprEliminationExprs.contains(ref))
-      assert(!ctx.subExprEliminationExprs.contains(add1))
-    }
-
-    // emulate an actual codegen workload
-    {
-      val ctx = new CodegenContext
-      // before
-      ctx.generateExpressions(Seq(add2, add1), doSubexpressionElimination = true) // trigger CSE
-      assert(ctx.subExprEliminationExprs.contains(add1))
-      // call withSubExprEliminationExprs
-      ctx.withSubExprEliminationExprs(Map(ref -> dummy)) {
-        assert(ctx.subExprEliminationExprs.contains(ref))
-        assert(!ctx.subExprEliminationExprs.contains(add1))
-        Seq.empty
-      }
-      // after
-      assert(ctx.subExprEliminationExprs.nonEmpty)
-      assert(ctx.subExprEliminationExprs.contains(add1))
-      assert(!ctx.subExprEliminationExprs.contains(ref))
-    }
-  }
-
-  test("SPARK-23986: freshName can generate duplicated names") {
-    val ctx = new CodegenContext
-    val names1 = ctx.freshName("myName1") :: ctx.freshName("myName1") ::
-      ctx.freshName("myName11") :: Nil
-    assert(names1.distinct.length == 3)
-    val names2 = ctx.freshName("a") :: ctx.freshName("a") ::
-      ctx.freshName("a_1") :: ctx.freshName("a_0") :: Nil
-    assert(names2.distinct.length == 4)
   }
 }

@@ -26,8 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.sql.execution.datasources.{FileFormat, FileFormatWriter}
 
 object FileStreamSink extends Logging {
   // The name of the subdirectory that is used to store metadata about which files are valid.
@@ -43,11 +42,9 @@ object FileStreamSink extends Logging {
         try {
           val hdfsPath = new Path(singlePath)
           val fs = hdfsPath.getFileSystem(hadoopConf)
-          if (fs.isDirectory(hdfsPath)) {
-            fs.exists(new Path(hdfsPath, metadataDir))
-          } else {
-            false
-          }
+          val metadataPath = new Path(hdfsPath, metadataDir)
+          val res = fs.exists(metadataPath)
+          res
         } catch {
           case NonFatal(e) =>
             logWarning(s"Error while looking for metadata directory.")
@@ -98,11 +95,6 @@ class FileStreamSink(
     new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toUri.toString)
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
-  private def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
-    val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
-    new BasicWriteJobStatsTracker(serializableHadoopConf, BasicWriteJobStatsTracker.metrics)
-  }
-
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
@@ -137,7 +129,7 @@ class FileStreamSink(
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = None,
-        statsTrackers = Seq(basicWriteJobStatsTracker),
+        statsTrackers = Nil,
         options = options)
     }
   }

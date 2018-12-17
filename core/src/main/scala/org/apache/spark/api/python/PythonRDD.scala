@@ -38,7 +38,6 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
 
@@ -108,12 +107,6 @@ private[spark] object PythonRDD extends Logging {
   // remember the broadcasts sent to each worker
   private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
 
-  // Authentication helper used when serving iterator data.
-  private lazy val authHelper = {
-    val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
-    new SocketAuthHelper(conf)
-  }
-
   def getWorkerBroadcasts(worker: Socket): mutable.Set[Long] = {
     synchronized {
       workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
@@ -136,13 +129,12 @@ private[spark] object PythonRDD extends Logging {
    * (effectively a collect()), but allows you to run on a certain subset of partitions,
    * or to enable local execution.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return the port number of a local socket which serves the data collected from this job.
    */
   def runJob(
       sc: SparkContext,
       rdd: JavaRDD[Array[Byte]],
-      partitions: JArrayList[Int]): Array[Any] = {
+      partitions: JArrayList[Int]): Int = {
     type ByteArray = Array[Byte]
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
@@ -155,14 +147,13 @@ private[spark] object PythonRDD extends Logging {
   /**
    * A helper function to collect an RDD as an iterator, then serve it via socket.
    *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
+   * @return the port number of a local socket which serves the data collected from this job.
    */
-  def collectAndServe[T](rdd: RDD[T]): Array[Any] = {
+  def collectAndServe[T](rdd: RDD[T]): Int = {
     serveIterator(rdd.collect().iterator, s"serve RDD ${rdd.id}")
   }
 
-  def toLocalIteratorAndServe[T](rdd: RDD[T]): Array[Any] = {
+  def toLocalIteratorAndServe[T](rdd: RDD[T]): Int = {
     serveIterator(rdd.toLocalIterator, s"serve toLocalIterator")
   }
 
@@ -393,11 +384,8 @@ private[spark] object PythonRDD extends Logging {
    * and send them into this connection.
    *
    * The thread will terminate after all the data are sent or any exceptions happen.
-   *
-   * @return 2-tuple (as a Java array) with the port number of a local socket which serves the
-   *         data collected from this job, and the secret for authentication.
    */
-  def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
+  def serveIterator[T](items: Iterator[T], threadName: String): Int = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 15 seconds
     serverSocket.setSoTimeout(15000)
@@ -407,14 +395,11 @@ private[spark] object PythonRDD extends Logging {
       override def run() {
         try {
           val sock = serverSocket.accept()
-          authHelper.authClient(sock)
-
           val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
           Utils.tryWithSafeFinally {
             writeIteratorToStream(items, out)
           } {
             out.close()
-            sock.close()
           }
         } catch {
           case NonFatal(e) =>
@@ -425,7 +410,7 @@ private[spark] object PythonRDD extends Logging {
       }
     }.start()
 
-    Array(serverSocket.getLocalPort, authHelper.secret)
+    serverSocket.getLocalPort
   }
 
   private def getMergedConf(confAsMap: java.util.HashMap[String, String],

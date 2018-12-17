@@ -178,6 +178,4 @@ private[spark] class TaskContextImpl(
 
   private[spark] def fetchFailed: Option[FetchFailedException] = _fetchFailedException
 
-  // TODO: shall we publish it and define it in `TaskContext`?
-  private[spark] def getLocalProperties(): Properties = localProperties
 }

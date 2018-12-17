@@ -53,7 +53,7 @@ if __name__ == "__main__":
         msg = ("Usage: structured_network_wordcount_windowed.py <hostname> <port> "
                "<window duration in seconds> [<slide duration in seconds>]")
         print(msg, file=sys.stderr)
-        sys.exit(-1)
+        exit(-1)
 
     host = sys.argv[1]
     port = int(sys.argv[2])

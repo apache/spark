@@ -865,10 +865,10 @@ trait Params extends Identifiable with Serializable {
   }
 
   /** Internal param map for user-supplied values. */
-  private[ml] val paramMap: ParamMap = ParamMap.empty
+  private val paramMap: ParamMap = ParamMap.empty
 
   /** Internal param map for default values. */
-  private[ml] val defaultParamMap: ParamMap = ParamMap.empty
+  private val defaultParamMap: ParamMap = ParamMap.empty
 
   /** Validates that the input param belongs to this instance. */
   private def shouldOwn(param: Param[_]): Unit = {
@@ -902,15 +902,6 @@ trait Params extends Identifiable with Serializable {
       }
     }
     to
-  }
-}
-
-private[ml] object Params {
-  /**
-   * Sets a default param value for a `Params`.
-   */
-  private[ml] final def setDefault[T](params: Params, param: Param[T], value: T): Unit = {
-    params.defaultParamMap.put(param -> value)
   }
 }
 

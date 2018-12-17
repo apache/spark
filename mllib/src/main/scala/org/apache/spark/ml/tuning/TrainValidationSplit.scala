@@ -143,7 +143,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     } else None
 
     // Fit models in a Future for training in parallel
-    instr.logDebug(s"Train split with multiple sets of parameters.")
+    logDebug(s"Train split with multiple sets of parameters.")
     val metricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
       Future[Double] {
         val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
@@ -153,7 +153,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
         }
         // TODO: duplicate evaluator to take extra params from input
         val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-        instr.logDebug(s"Got metric $metric for model trained with $paramMap.")
+        logDebug(s"Got metric $metric for model trained with $paramMap.")
         metric
       } (executionContext)
     }
@@ -165,12 +165,12 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     trainingDataset.unpersist()
     validationDataset.unpersist()
 
-    instr.logInfo(s"Train validation split metrics: ${metrics.toSeq}")
+    logInfo(s"Train validation split metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
-    instr.logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
-    instr.logInfo(s"Best train validation split metric: $bestMetric.")
+    logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
+    logInfo(s"Best train validation split metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     instr.logSuccess(bestModel)
     copyValues(new TrainValidationSplitModel(uid, bestModel, metrics)
@@ -228,7 +228,8 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
         .setEstimator(estimator)
         .setEvaluator(evaluator)
         .setEstimatorParamMaps(estimatorParamMaps)
-      metadata.getAndSetParams(tvs, skipParams = Option(List("estimatorParamMaps")))
+      DefaultParamsReader.getAndSetParams(tvs, metadata,
+        skipParams = Option(List("estimatorParamMaps")))
       tvs
     }
   }
@@ -258,17 +259,6 @@ class TrainValidationSplitModel private[ml] (
   private[tuning] def setSubModels(subModels: Option[Array[Model[_]]])
     : TrainValidationSplitModel = {
     _subModels = subModels
-    this
-  }
-
-  // A Python-friendly auxiliary method
-  private[tuning] def setSubModels(subModels: JList[Model[_]])
-    : TrainValidationSplitModel = {
-    _subModels = if (subModels != null) {
-      Some(subModels.asScala.toArray)
-    } else {
-      None
-    }
     this
   }
 
@@ -406,7 +396,8 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       model.set(model.estimator, estimator)
         .set(model.evaluator, evaluator)
         .set(model.estimatorParamMaps, estimatorParamMaps)
-      metadata.getAndSetParams(model, skipParams = Option(List("estimatorParamMaps")))
+      DefaultParamsReader.getAndSetParams(model, metadata,
+        skipParams = Option(List("estimatorParamMaps")))
       model
     }
   }

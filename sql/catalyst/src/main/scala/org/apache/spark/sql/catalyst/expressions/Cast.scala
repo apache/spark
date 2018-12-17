@@ -23,7 +23,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -624,13 +623,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
-
-    ev.copy(code =
-      code"""
-        ${eval.code}
-        // This comment is added for manually tracking reference of ${eval.value}, ${eval.isNull}
-        ${castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast)}
-      """)
+    ev.copy(code = eval.code +
+      castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
 
   // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
@@ -675,7 +669,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     result: String, resultIsNull: String, resultType: DataType, cast: CastFunction): String = {
     s"""
       boolean $resultIsNull = $inputIsNull;
-      ${CodeGenerator.javaType(resultType)} $result = ${CodeGenerator.defaultValue(resultType)};
+      ${ctx.javaType(resultType)} $result = ${ctx.defaultValue(resultType)};
       if (!$inputIsNull) {
         ${cast(input, result, resultIsNull)}
       }
@@ -691,7 +685,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val funcName = ctx.freshName("elementToString")
     val elementToStringFunc = ctx.addNewFunction(funcName,
       s"""
-         |private UTF8String $funcName(${CodeGenerator.javaType(et)} element) {
+         |private UTF8String $funcName(${ctx.javaType(et)} element) {
          |  UTF8String elementStr = null;
          |  ${elementToStringCode("element", "elementStr", null /* resultIsNull won't be used */)}
          |  return elementStr;
@@ -703,13 +697,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
        |  if (!$array.isNullAt(0)) {
-       |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
+       |    $buffer.append($elementToStringFunc(${ctx.getValue(array, et, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if (!$array.isNullAt($loopIndex)) {
        |      $buffer.append(" ");
-       |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
+       |      $buffer.append($elementToStringFunc(${ctx.getValue(array, et, loopIndex)}));
        |    }
        |  }
        |}
@@ -729,7 +723,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val dataToStringCode = castToStringCode(dataType, ctx)
       ctx.addNewFunction(funcName,
         s"""
-           |private UTF8String $funcName(${CodeGenerator.javaType(dataType)} data) {
+           |private UTF8String $funcName(${ctx.javaType(dataType)} data) {
            |  UTF8String dataStr = null;
            |  ${dataToStringCode("data", "dataStr", null /* resultIsNull won't be used */)}
            |  return dataStr;
@@ -740,26 +734,23 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val keyToStringFunc = dataToStringFunc("keyToString", kt)
     val valueToStringFunc = dataToStringFunc("valueToString", vt)
     val loopIndex = ctx.freshName("loopIndex")
-    val getMapFirstKey = CodeGenerator.getValue(s"$map.keyArray()", kt, "0")
-    val getMapFirstValue = CodeGenerator.getValue(s"$map.valueArray()", vt, "0")
-    val getMapKeyArray = CodeGenerator.getValue(s"$map.keyArray()", kt, loopIndex)
-    val getMapValueArray = CodeGenerator.getValue(s"$map.valueArray()", vt, loopIndex)
     s"""
        |$buffer.append("[");
        |if ($map.numElements() > 0) {
-       |  $buffer.append($keyToStringFunc($getMapFirstKey));
+       |  $buffer.append($keyToStringFunc(${ctx.getValue(s"$map.keyArray()", kt, "0")}));
        |  $buffer.append(" ->");
        |  if (!$map.valueArray().isNullAt(0)) {
        |    $buffer.append(" ");
-       |    $buffer.append($valueToStringFunc($getMapFirstValue));
+       |    $buffer.append($valueToStringFunc(${ctx.getValue(s"$map.valueArray()", vt, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
        |    $buffer.append(", ");
-       |    $buffer.append($keyToStringFunc($getMapKeyArray));
+       |    $buffer.append($keyToStringFunc(${ctx.getValue(s"$map.keyArray()", kt, loopIndex)}));
        |    $buffer.append(" ->");
        |    if (!$map.valueArray().isNullAt($loopIndex)) {
        |      $buffer.append(" ");
-       |      $buffer.append($valueToStringFunc($getMapValueArray));
+       |      $buffer.append($valueToStringFunc(
+       |        ${ctx.getValue(s"$map.valueArray()", vt, loopIndex)}));
        |    }
        |  }
        |}
@@ -782,7 +773,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
          |  ${if (i != 0) s"""$buffer.append(" ");""" else ""}
          |
          |  // Append $i field into the string buffer
-         |  ${CodeGenerator.javaType(ft)} $field = ${CodeGenerator.getValue(row, ft, s"$i")};
+         |  ${ctx.javaType(ft)} $field = ${ctx.getValue(row, ft, s"$i")};
          |  UTF8String $fieldStr = null;
          |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
          |  $buffer.append($fieldStr);
@@ -1211,8 +1202,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
             $values[$j] = null;
           } else {
             boolean $fromElementNull = false;
-            ${CodeGenerator.javaType(fromType)} $fromElementPrim =
-              ${CodeGenerator.getValue(c, fromType, j)};
+            ${ctx.javaType(fromType)} $fromElementPrim =
+              ${ctx.getValue(c, fromType, j)};
             ${castCode(ctx, fromElementPrim,
               fromElementNull, toElementPrim, toElementNull, toType, elementCast)}
             if ($toElementNull) {
@@ -1268,20 +1259,20 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val fromFieldNull = ctx.freshName("ffn")
       val toFieldPrim = ctx.freshName("tfp")
       val toFieldNull = ctx.freshName("tfn")
-      val fromType = CodeGenerator.javaType(from.fields(i).dataType)
+      val fromType = ctx.javaType(from.fields(i).dataType)
       s"""
         boolean $fromFieldNull = $tmpInput.isNullAt($i);
         if ($fromFieldNull) {
           $tmpResult.setNullAt($i);
         } else {
           $fromType $fromFieldPrim =
-            ${CodeGenerator.getValue(tmpInput, from.fields(i).dataType, i.toString)};
+            ${ctx.getValue(tmpInput, from.fields(i).dataType, i.toString)};
           ${castCode(ctx, fromFieldPrim,
             fromFieldNull, toFieldPrim, toFieldNull, to.fields(i).dataType, cast)}
           if ($toFieldNull) {
             $tmpResult.setNullAt($i);
           } else {
-            ${CodeGenerator.setColumn(tmpResult, to.fields(i).dataType, i, toFieldPrim)};
+            ${ctx.setColumn(tmpResult, to.fields(i).dataType, i, toFieldPrim)};
           }
         }
        """

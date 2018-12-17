@@ -29,7 +29,6 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
-import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.ThreadUtils
 
 
@@ -64,7 +63,7 @@ private[spark] class MesosHadoopDelegationTokenManager(
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
       val rt = tokenManager.obtainDelegationTokens(hadoopConf, creds)
       logInfo(s"Initialized tokens: ${SparkHadoopUtil.get.dumpTokens(creds)}")
-      (SparkHadoopUtil.get.serialize(creds), SparkHadoopUtil.nextCredentialRenewalTime(rt, conf))
+      (SparkHadoopUtil.get.serialize(creds), SparkHadoopUtil.getDateOfNextUpdate(rt, 0.75))
     } catch {
       case e: Exception =>
         logError(s"Failed to fetch Hadoop delegation tokens $e")
@@ -105,10 +104,8 @@ private[spark] class MesosHadoopDelegationTokenManager(
           } catch {
             case e: Exception =>
               // Log the error and try to write new tokens back in an hour
-              val delay = TimeUnit.SECONDS.toMillis(conf.get(config.CREDENTIALS_RENEWAL_RETRY_WAIT))
-              logWarning(
-                s"Couldn't broadcast tokens, trying again in ${UIUtils.formatDuration(delay)}", e)
-              credentialRenewerThread.schedule(this, delay, TimeUnit.MILLISECONDS)
+              logWarning("Couldn't broadcast tokens, trying again in an hour", e)
+              credentialRenewerThread.schedule(this, 1, TimeUnit.HOURS)
               return
           }
           scheduleRenewal(this)
@@ -138,7 +135,7 @@ private[spark] class MesosHadoopDelegationTokenManager(
         "related configurations in the target services.")
       currTime
     } else {
-      SparkHadoopUtil.nextCredentialRenewalTime(nextRenewalTime, conf)
+      SparkHadoopUtil.getDateOfNextUpdate(nextRenewalTime, 0.75)
     }
     logInfo(s"Time of next renewal is in ${timeOfNextRenewal - System.currentTimeMillis()} ms")
 

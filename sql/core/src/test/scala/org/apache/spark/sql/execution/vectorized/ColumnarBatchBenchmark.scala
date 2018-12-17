@@ -295,7 +295,7 @@ object ColumnarBatchBenchmark {
 
   def booleanAccess(iters: Int): Unit = {
     val count = 8 * 1024
-    val benchmark = new Benchmark("Boolean Read/Write", iters * count.toLong)
+    val benchmark = new Benchmark("Boolean Read/Write", iters * count)
     benchmark.addCase("Bitset") { i: Int => {
       val b = new BitSet(count)
       var sum = 0L

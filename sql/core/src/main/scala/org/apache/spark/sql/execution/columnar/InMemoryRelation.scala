@@ -24,12 +24,24 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Statistics}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.LongAccumulator
+
+
+object InMemoryRelation {
+  def apply(
+      useCompression: Boolean,
+      batchSize: Int,
+      storageLevel: StorageLevel,
+      child: SparkPlan,
+      tableName: Option[String],
+      statsOfPlanToCache: Statistics): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)(
+      statsOfPlanToCache = statsOfPlanToCache)
+}
 
 
 /**
@@ -42,41 +54,47 @@ import org.apache.spark.util.LongAccumulator
 private[columnar]
 case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
-case class CachedRDDBuilder(
+case class InMemoryRelation(
+    output: Seq[Attribute],
     useCompression: Boolean,
     batchSize: Int,
     storageLevel: StorageLevel,
-    @transient cachedPlan: SparkPlan,
+    @transient child: SparkPlan,
     tableName: Option[String])(
-    @transient private var _cachedColumnBuffers: RDD[CachedBatch] = null) {
+    @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
+    val sizeInBytesStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator,
+    statsOfPlanToCache: Statistics)
+  extends logical.LeafNode with MultiInstanceRelation {
 
-  val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
+  override protected def innerChildren: Seq[SparkPlan] = Seq(child)
 
-  def cachedColumnBuffers: RDD[CachedBatch] = {
-    if (_cachedColumnBuffers == null) {
-      synchronized {
-        if (_cachedColumnBuffers == null) {
-          _cachedColumnBuffers = buildBuffers()
-        }
-      }
+  override def producedAttributes: AttributeSet = outputSet
+
+  @transient val partitionStatistics = new PartitionStatistics(output)
+
+  override def computeStats(): Statistics = {
+    if (sizeInBytesStats.value == 0L) {
+      // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache.
+      // Note that we should drop the hint info here. We may cache a plan whose root node is a hint
+      // node. When we lookup the cache with a semantically same plan without hint info, the plan
+      // returned by cache lookup should not have hint info. If we lookup the cache with a
+      // semantically same plan with a different hint info, `CacheManager.useCachedData` will take
+      // care of it and retain the hint info in the lookup input plan.
+      statsOfPlanToCache.copy(hints = HintInfo())
+    } else {
+      Statistics(sizeInBytes = sizeInBytesStats.value.longValue)
     }
-    _cachedColumnBuffers
   }
 
-  def clearCache(blocking: Boolean = true): Unit = {
-    if (_cachedColumnBuffers != null) {
-      synchronized {
-        if (_cachedColumnBuffers != null) {
-          _cachedColumnBuffers.unpersist(blocking)
-          _cachedColumnBuffers = null
-        }
-      }
-    }
+  // If the cached column buffers were not passed in, we calculate them in the constructor.
+  // As in Spark, the actual work of caching is lazy.
+  if (_cachedColumnBuffers == null) {
+    buildBuffers()
   }
 
-  private def buildBuffers(): RDD[CachedBatch] = {
-    val output = cachedPlan.output
-    val cached = cachedPlan.execute().mapPartitionsInternal { rowIterator =>
+  private def buildBuffers(): Unit = {
+    val output = child.output
+    val cached = child.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[CachedBatch] {
         def next(): CachedBatch = {
           val columnBuilders = output.map { attribute =>
@@ -124,77 +142,31 @@ case class CachedRDDBuilder(
 
     cached.setName(
       tableName.map(n => s"In-memory table $n")
-        .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024)))
-    cached
-  }
-}
-
-object InMemoryRelation {
-
-  def apply(
-      useCompression: Boolean,
-      batchSize: Int,
-      storageLevel: StorageLevel,
-      child: SparkPlan,
-      tableName: Option[String],
-      logicalPlan: LogicalPlan): InMemoryRelation = {
-    val cacheBuilder = CachedRDDBuilder(useCompression, batchSize, storageLevel, child, tableName)()
-    new InMemoryRelation(child.output, cacheBuilder)(
-      statsOfPlanToCache = logicalPlan.stats, outputOrdering = logicalPlan.outputOrdering)
-  }
-
-  def apply(cacheBuilder: CachedRDDBuilder, logicalPlan: LogicalPlan): InMemoryRelation = {
-    new InMemoryRelation(cacheBuilder.cachedPlan.output, cacheBuilder)(
-      statsOfPlanToCache = logicalPlan.stats, outputOrdering = logicalPlan.outputOrdering)
-  }
-}
-
-case class InMemoryRelation(
-    output: Seq[Attribute],
-    @transient cacheBuilder: CachedRDDBuilder)(
-    statsOfPlanToCache: Statistics,
-    override val outputOrdering: Seq[SortOrder])
-  extends logical.LeafNode with MultiInstanceRelation {
-
-  override protected def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
-
-  override def doCanonicalize(): logical.LogicalPlan =
-    copy(output = output.map(QueryPlan.normalizeExprId(_, cachedPlan.output)),
-      cacheBuilder)(
-      statsOfPlanToCache,
-      outputOrdering)
-
-  override def producedAttributes: AttributeSet = outputSet
-
-  @transient val partitionStatistics = new PartitionStatistics(output)
-
-  def cachedPlan: SparkPlan = cacheBuilder.cachedPlan
-
-  override def computeStats(): Statistics = {
-    if (cacheBuilder.sizeInBytesStats.value == 0L) {
-      // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache.
-      // Note that we should drop the hint info here. We may cache a plan whose root node is a hint
-      // node. When we lookup the cache with a semantically same plan without hint info, the plan
-      // returned by cache lookup should not have hint info. If we lookup the cache with a
-      // semantically same plan with a different hint info, `CacheManager.useCachedData` will take
-      // care of it and retain the hint info in the lookup input plan.
-      statsOfPlanToCache.copy(hints = HintInfo())
-    } else {
-      Statistics(sizeInBytes = cacheBuilder.sizeInBytesStats.value.longValue)
-    }
+        .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
+    _cachedColumnBuffers = cached
   }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
-    InMemoryRelation(newOutput, cacheBuilder)(statsOfPlanToCache, outputOrdering)
+    InMemoryRelation(
+      newOutput, useCompression, batchSize, storageLevel, child, tableName)(
+        _cachedColumnBuffers, sizeInBytesStats, statsOfPlanToCache)
   }
 
   override def newInstance(): this.type = {
     new InMemoryRelation(
       output.map(_.newInstance()),
-      cacheBuilder)(
-        statsOfPlanToCache,
-        outputOrdering).asInstanceOf[this.type]
+      useCompression,
+      batchSize,
+      storageLevel,
+      child,
+      tableName)(
+        _cachedColumnBuffers,
+        sizeInBytesStats,
+        statsOfPlanToCache).asInstanceOf[this.type]
   }
 
-  override protected def otherCopyArgs: Seq[AnyRef] = Seq(statsOfPlanToCache)
+  def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
+
+  override protected def otherCopyArgs: Seq[AnyRef] =
+    Seq(_cachedColumnBuffers, sizeInBytesStats, statsOfPlanToCache)
 }

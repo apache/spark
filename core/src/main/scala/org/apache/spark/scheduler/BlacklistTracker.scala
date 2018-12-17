@@ -152,8 +152,7 @@ private[scheduler] class BlacklistTracker (
         case Some(a) =>
           logInfo(s"Killing blacklisted executor id $exec " +
             s"since ${config.BLACKLIST_KILL_ENABLED.key} is set.")
-          a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
-            force = true)
+          a.killExecutors(Seq(exec), true, true)
         case None =>
           logWarning(s"Not attempting to kill blacklisted executor id $exec " +
             s"since allocation client is not defined.")
@@ -210,7 +209,7 @@ private[scheduler] class BlacklistTracker (
         updateNextExpiryTime()
         killBlacklistedExecutor(exec)
 
-        val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(host, HashSet[String]())
+        val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(exec, HashSet[String]())
         blacklistedExecsOnNode += exec
       }
     }

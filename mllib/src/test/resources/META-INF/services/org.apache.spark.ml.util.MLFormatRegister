@@ -1,3 +1,0 @@
-org.apache.spark.ml.util.DuplicateLinearRegressionWriter1
-org.apache.spark.ml.util.DuplicateLinearRegressionWriter2
-org.apache.spark.ml.util.FakeLinearRegressionWriterWithName

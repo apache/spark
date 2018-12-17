@@ -191,7 +191,6 @@ class KafkaRDD[
 
     private def fetchBatch: Iterator[MessageAndOffset] = {
       val req = new FetchRequestBuilder()
-        .clientId(consumer.clientId)
         .addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes)
         .build()
       val resp = consumer.fetch(req)

@@ -126,10 +126,6 @@ package object config {
   private[spark] val DYN_ALLOCATION_MAX_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.maxExecutors").intConf.createWithDefault(Int.MaxValue)
 
-  private[spark] val DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO =
-    ConfigBuilder("spark.dynamicAllocation.executorAllocationRatio")
-      .doubleConf.createWithDefault(1.0)
-
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("3s")
@@ -305,12 +301,6 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
-  private[spark] val IGNORE_MISSING_FILES = ConfigBuilder("spark.files.ignoreMissingFiles")
-    .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
-        "encountering missing files and the contents that have been read will still be returned.")
-    .booleanConf
-    .createWithDefault(false)
-
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
     .stringConf
     .createOptional
@@ -342,7 +332,7 @@ package object config {
         "a property key or value, the value is redacted from the environment UI and various logs " +
         "like YARN and event logs.")
       .regexConf
-      .createWithDefault("(?i)secret|password".r)
+      .createWithDefault("(?i)secret|password|url|user|username".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -351,11 +341,6 @@ package object config {
         "dummy value. This is currently used to redact the output of SQL explain commands.")
       .regexConf
       .createOptional
-
-  private[spark] val AUTH_SECRET_BIT_LENGTH =
-    ConfigBuilder("spark.authenticate.secretBitLength")
-      .intConf
-      .createWithDefault(256)
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")
@@ -534,22 +519,5 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The threshold should be positive.")
       .createWithDefault(10000000)
-
-  private[spark] val MAX_RESULT_SIZE = ConfigBuilder("spark.driver.maxResultSize")
-    .doc("Size limit for results.")
-    .bytesConf(ByteUnit.BYTE)
-    .createWithDefaultString("1g")
-
-  private[spark] val CREDENTIALS_RENEWAL_INTERVAL_RATIO =
-    ConfigBuilder("spark.security.credentials.renewalRatio")
-      .doc("Ratio of the credential's expiration time when Spark should fetch new credentials.")
-      .doubleConf
-      .createWithDefault(0.75d)
-
-  private[spark] val CREDENTIALS_RENEWAL_RETRY_WAIT =
-    ConfigBuilder("spark.security.credentials.retryWait")
-      .doc("How long to wait before retrying to fetch new credentials after a failure.")
-      .timeConf(TimeUnit.SECONDS)
-      .createWithDefaultString("1h")
 
 }

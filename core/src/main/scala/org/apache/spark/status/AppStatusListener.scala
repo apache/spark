@@ -213,13 +213,11 @@ private[spark] class AppStatusListener(
 
   override def onExecutorBlacklistedForStage(
       event: SparkListenerExecutorBlacklistedForStage): Unit = {
-    val now = System.nanoTime()
-
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
-      setStageBlackListStatus(stage, now, event.executorId)
-    }
-    liveExecutors.get(event.executorId).foreach { exec =>
-      addBlackListedStageTo(exec, event.stageId, now)
+      val now = System.nanoTime()
+      val esummary = stage.executorSummary(event.executorId)
+      esummary.isBlacklisted = true
+      maybeUpdate(esummary, now)
     }
   }
 
@@ -228,27 +226,14 @@ private[spark] class AppStatusListener(
 
     // Implicitly blacklist every available executor for the stage associated with this node
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
-      val executorIds = liveExecutors.values.filter(_.host == event.hostId).map(_.executorId).toSeq
-      setStageBlackListStatus(stage, now, executorIds: _*)
+      liveExecutors.values.foreach { exec =>
+        if (exec.hostname == event.hostId) {
+          val esummary = stage.executorSummary(exec.executorId)
+          esummary.isBlacklisted = true
+          maybeUpdate(esummary, now)
+        }
+      }
     }
-    liveExecutors.values.filter(_.hostname == event.hostId).foreach { exec =>
-      addBlackListedStageTo(exec, event.stageId, now)
-    }
-  }
-
-  private def addBlackListedStageTo(exec: LiveExecutor, stageId: Int, now: Long): Unit = {
-    exec.blacklistedInStages += stageId
-    liveUpdate(exec, now)
-  }
-
-  private def setStageBlackListStatus(stage: LiveStage, now: Long, executorIds: String*): Unit = {
-    executorIds.foreach { executorId =>
-      val executorStageSummary = stage.executorSummary(executorId)
-      executorStageSummary.isBlacklisted = true
-      maybeUpdate(executorStageSummary, now)
-    }
-    stage.blackListedExecutors ++= executorIds
-    maybeUpdate(stage, now)
   }
 
   override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
@@ -609,22 +594,10 @@ private[spark] class AppStatusListener(
 
       stage.executorSummaries.values.foreach(update(_, now))
       update(stage, now, last = true)
-
-      val executorIdsForStage = stage.blackListedExecutors
-      executorIdsForStage.foreach { executorId =>
-        liveExecutors.get(executorId).foreach { exec =>
-          removeBlackListedStageFrom(exec, event.stageInfo.stageId, now)
-        }
-      }
     }
 
     appSummary = new AppSummary(appSummary.numCompletedJobs, appSummary.numCompletedStages + 1)
     kvstore.write(appSummary)
-  }
-
-  private def removeBlackListedStageFrom(exec: LiveExecutor, stageId: Int, now: Long) = {
-    exec.blacklistedInStages -= stageId
-    liveUpdate(exec, now)
   }
 
   override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded): Unit = {
@@ -915,10 +888,7 @@ private[spark] class AppStatusListener(
       return
     }
 
-    // As the completion time of a skipped stage is always -1, we will remove skipped stages first.
-    // This is safe since the job itself contains enough information to render skipped stages in the
-    // UI.
-    val view = kvstore.view(classOf[StageDataWrapper]).index("completionTime")
+    val view = kvstore.view(classOf[StageDataWrapper]).index("completionTime").first(0L)
     val stages = KVUtils.viewToSeq(view, countToDelete.toInt) { s =>
       s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING
     }

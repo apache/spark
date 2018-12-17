@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
@@ -103,8 +104,6 @@ private[hive] class HiveClientImpl(
     case hive.v1_2 => new Shim_v1_2()
     case hive.v2_0 => new Shim_v2_0()
     case hive.v2_1 => new Shim_v2_1()
-    case hive.v2_2 => new Shim_v2_2()
-    case hive.v2_3 => new Shim_v2_3()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -292,18 +291,12 @@ private[hive] class HiveClientImpl(
     state.err = stream
   }
 
-  private def setCurrentDatabaseRaw(db: String): Unit = {
-    if (state.getCurrentDatabase != db) {
-      if (databaseExists(db)) {
-        state.setCurrentDatabase(db)
-      } else {
-        throw new NoSuchDatabaseException(db)
-      }
-    }
-  }
-
   override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
-    setCurrentDatabaseRaw(databaseName)
+    if (databaseExists(databaseName)) {
+      state.setCurrentDatabase(databaseName)
+    } else {
+      throw new NoSuchDatabaseException(databaseName)
+    }
   }
 
   override def createDatabase(
@@ -605,18 +598,8 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withHiveState {
-    // Note: Before altering table partitions in Hive, you *must* set the current database
-    // to the one that contains the table of interest. Otherwise you will end up with the
-    // most helpful error message ever: "Unable to alter partition. alter is not possible."
-    // See HIVE-2742 for more detail.
-    val original = state.getCurrentDatabase
-    try {
-      setCurrentDatabaseRaw(db)
-      val hiveTable = toHiveTable(getTable(db, table), Some(userName))
-      shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
-    } finally {
-      state.setCurrentDatabase(original)
-    }
+    val hiveTable = toHiveTable(getTable(db, table), Some(userName))
+    shim.alterPartitions(client, table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
   }
 
   /**

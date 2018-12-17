@@ -35,7 +35,7 @@ public interface ReadSupportWithSchema extends DataSourceV2 {
   /**
    * Create a {@link DataSourceReader} to scan the data from this data source.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
    * submitted.
    *
    * @param schema the full schema of this data source reader. Full schema usually maps to the

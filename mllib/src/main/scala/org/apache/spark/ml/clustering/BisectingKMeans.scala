@@ -22,23 +22,24 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans,
-  BisectingKMeansModel => MLlibBisectingKMeansModel}
+import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans, BisectingKMeansModel => MLlibBisectingKMeansModel}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 
 /**
  * Common params for BisectingKMeans and BisectingKMeansModel
  */
-private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
-  with HasFeaturesCol with HasSeed with HasPredictionCol with HasDistanceMeasure {
+private[clustering] trait BisectingKMeansParams extends Params
+  with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
 
   /**
    * The desired number of leaf clusters. Must be &gt; 1. Default: 4.
@@ -73,7 +74,7 @@ private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
 }
@@ -103,16 +104,11 @@ class BisectingKMeansModel private[ml] (
   @Since("2.1.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  /** @group expertSetParam */
-  @Since("2.4.0")
-  def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
-    dataset.withColumn($(predictionCol),
-      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
   @Since("2.0.0")
@@ -131,9 +127,9 @@ class BisectingKMeansModel private[ml] (
    */
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
-    SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
-    val data = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
-    parentModel.computeCost(data)
+    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
+    val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
+    parentModel.computeCost(data.map(OldVectors.fromML))
   }
 
   @Since("2.0.0")
@@ -192,7 +188,7 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
       val dataPath = new Path(path, "data").toString
       val mllibModel = MLlibBisectingKMeansModel.load(sc, dataPath)
       val model = new BisectingKMeansModel(metadata.uid, mllibModel)
-      metadata.getAndSetParams(model)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }
@@ -252,31 +248,26 @@ class BisectingKMeans @Since("2.0.0") (
   @Since("2.0.0")
   def setMinDivisibleClusterSize(value: Double): this.type = set(minDivisibleClusterSize, value)
 
-  /** @group expertSetParam */
-  @Since("2.4.0")
-  def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
-
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
     transformSchema(dataset.schema, logging = true)
-    val rdd = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
+    val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
+      case Row(point: Vector) => OldVectors.fromML(point)
+    }
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(featuresCol, predictionCol, k, maxIter, seed,
-      minDivisibleClusterSize, distanceMeasure)
+    val instr = Instrumentation.create(this, rdd)
+    instr.logParams(featuresCol, predictionCol, k, maxIter, seed, minDivisibleClusterSize)
 
     val bkm = new MLlibBisectingKMeans()
       .setK($(k))
       .setMaxIterations($(maxIter))
       .setMinDivisibleClusterSize($(minDivisibleClusterSize))
       .setSeed($(seed))
-      .setDistanceMeasure($(distanceMeasure))
     val parentModel = bkm.run(rdd)
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
-    instr.logNamedValue("clusterSizes", summary.clusterSizes)
     instr.logSuccess(model)
     model
   }

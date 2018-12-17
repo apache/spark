@@ -35,6 +35,7 @@ connExists <- function(env) {
 #' Also terminates the backend this R session is connected to.
 #' @rdname sparkR.session.stop
 #' @name sparkR.session.stop
+#' @export
 #' @note sparkR.session.stop since 2.0.0
 sparkR.session.stop <- function() {
   env <- .sparkREnv
@@ -83,6 +84,7 @@ sparkR.session.stop <- function() {
 
 #' @rdname sparkR.session.stop
 #' @name sparkR.stop
+#' @export
 #' @note sparkR.stop since 1.4.0
 sparkR.stop <- function() {
   sparkR.session.stop()
@@ -101,6 +103,7 @@ sparkR.stop <- function() {
 #' @param sparkPackages Character vector of package coordinates
 #' @seealso \link{sparkR.session}
 #' @rdname sparkR.init-deprecated
+#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init("local[2]", "SparkR", "/home/spark")
@@ -158,16 +161,11 @@ sparkR.sparkContext <- function(
                     " please use the --packages commandline instead", sep = ","))
     }
     backendPort <- existingPort
-    authSecret <- Sys.getenv("SPARKR_BACKEND_AUTH_SECRET")
-    if (nchar(authSecret) == 0) {
-      stop("Auth secret not provided in environment.")
-    }
   } else {
     path <- tempfile(pattern = "backend_port")
     submitOps <- getClientModeSparkSubmitOpts(
         Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
         sparkEnvirMap)
-    checkJavaVersion()
     launchBackend(
         args = path,
         sparkHome = sparkHome,
@@ -191,27 +189,16 @@ sparkR.sparkContext <- function(
     monitorPort <- readInt(f)
     rLibPath <- readString(f)
     connectionTimeout <- readInt(f)
-
-    # Don't use readString() so that we can provide a useful
-    # error message if the R and Java versions are mismatched.
-    authSecretLen <- readInt(f)
-    if (length(authSecretLen) == 0 || authSecretLen == 0) {
-      stop("Unexpected EOF in JVM connection data. Mismatched versions?")
-    }
-    authSecret <- readStringData(f, authSecretLen)
     close(f)
     file.remove(path)
     if (length(backendPort) == 0 || backendPort == 0 ||
         length(monitorPort) == 0 || monitorPort == 0 ||
-        length(rLibPath) != 1 || length(authSecret) == 0) {
+        length(rLibPath) != 1) {
       stop("JVM failed to launch")
     }
-
-    monitorConn <- socketConnection(port = monitorPort, blocking = TRUE,
-                                    timeout = connectionTimeout, open = "wb")
-    doServerAuth(monitorConn, authSecret)
-
-    assign(".monitorConn", monitorConn, envir = .sparkREnv)
+    assign(".monitorConn",
+           socketConnection(port = monitorPort, timeout = connectionTimeout),
+           envir = .sparkREnv)
     assign(".backendLaunched", 1, envir = .sparkREnv)
     if (rLibPath != "") {
       assign(".libPath", rLibPath, envir = .sparkREnv)
@@ -221,7 +208,7 @@ sparkR.sparkContext <- function(
 
   .sparkREnv$backendPort <- backendPort
   tryCatch({
-    connectBackend("localhost", backendPort, timeout = connectionTimeout, authSecret = authSecret)
+    connectBackend("localhost", backendPort, timeout = connectionTimeout)
   },
   error = function(err) {
     stop("Failed to connect JVM\n")
@@ -283,6 +270,7 @@ sparkR.sparkContext <- function(
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
 #' @seealso \link{sparkR.session}
 #' @rdname sparkRSQL.init-deprecated
+#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -310,6 +298,7 @@ sparkRSQL.init <- function(jsc = NULL) {
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
 #' @seealso \link{sparkR.session}
 #' @rdname sparkRHive.init-deprecated
+#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -358,6 +347,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' @param enableHiveSupport enable support for Hive, fallback if not built with Hive support; once
 #'        set, this cannot be turned off on an existing session
 #' @param ... named Spark properties passed to the method.
+#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -452,6 +442,7 @@ sparkR.session <- function(
 #' @return the SparkUI URL, or NA if it is disabled, or not started.
 #' @rdname sparkR.uiWebUrl
 #' @name sparkR.uiWebUrl
+#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -701,19 +692,5 @@ sparkCheckInstall <- function(sparkHome, master, deployMode) {
     }
   } else {
     NULL
-  }
-}
-
-# Utility function for sending auth data over a socket and checking the server's reply.
-doServerAuth <- function(con, authSecret) {
-  if (nchar(authSecret) == 0) {
-    stop("Auth secret not provided.")
-  }
-  writeString(con, authSecret)
-  flush(con)
-  reply <- readString(con)
-  if (reply != "ok") {
-    close(con)
-    stop("Unexpected reply from server.")
   }
 }

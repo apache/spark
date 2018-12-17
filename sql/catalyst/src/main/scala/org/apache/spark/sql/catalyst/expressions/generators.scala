@@ -22,8 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 
@@ -216,10 +215,10 @@ case class Stack(children: Seq[Expression]) extends Generator {
     // Create the collection.
     val wrapperClass = classOf[mutable.WrappedArray[_]].getName
     ev.copy(code =
-      code"""
+      s"""
          |$code
          |$wrapperClass<InternalRow> ${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);
-       """.stripMargin, isNull = FalseLiteral)
+       """.stripMargin, isNull = "false")
   }
 }
 

@@ -41,17 +41,17 @@ import org.apache.spark.util.SerializableConfiguration
  * @param rootPathsSpecified the list of root table paths to scan (some of which might be
  *                           filtered out later)
  * @param parameters as set of options to control discovery
- * @param userSpecifiedSchema an optional user specified schema that will be use to provide
- *                            types for the discovered partitions
+ * @param partitionSchema an optional partition schema that will be use to provide types for the
+ *                        discovered partitions
  */
 class InMemoryFileIndex(
     sparkSession: SparkSession,
     rootPathsSpecified: Seq[Path],
     parameters: Map[String, String],
-    userSpecifiedSchema: Option[StructType],
+    partitionSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache)
   extends PartitioningAwareFileIndex(
-    sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
+    sparkSession, parameters, partitionSchema, fileStatusCache) {
 
   // Filter out streaming metadata dirs or files such as "/.../_spark_metadata" (the metadata dir)
   // or "/.../_spark_metadata/0" (a file in the metadata dir). `rootPathsSpecified` might contain
@@ -294,12 +294,9 @@ object InMemoryFileIndex extends Logging {
       if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
     }
 
-    val missingFiles = mutable.ArrayBuffer.empty[String]
-    val filteredLeafStatuses = allLeafStatuses.filterNot(
-      status => shouldFilterOut(status.getPath.getName))
-    val resolvedLeafStatuses = filteredLeafStatuses.flatMap {
+    allLeafStatuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
       case f: LocatedFileStatus =>
-        Some(f)
+        f
 
       // NOTE:
       //
@@ -314,27 +311,14 @@ object InMemoryFileIndex extends Logging {
         // The other constructor of LocatedFileStatus will call FileStatus.getPermission(),
         // which is very slow on some file system (RawLocalFileSystem, which is launch a
         // subprocess and parse the stdout).
-        try {
-          val locations = fs.getFileBlockLocations(f, 0, f.getLen)
-          val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
-            f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
-          if (f.isSymlink) {
-            lfs.setSymlink(f.getSymlink)
-          }
-          Some(lfs)
-        } catch {
-          case _: FileNotFoundException =>
-            missingFiles += f.getPath.toString
-            None
+        val locations = fs.getFileBlockLocations(f, 0, f.getLen)
+        val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
+          f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
+        if (f.isSymlink) {
+          lfs.setSymlink(f.getSymlink)
         }
+        lfs
     }
-
-    if (missingFiles.nonEmpty) {
-      logWarning(
-        s"the following files were missing during file scan:\n  ${missingFiles.mkString("\n  ")}")
-    }
-
-    resolvedLeafStatuses
   }
 
   /** Checks if we should filter out this path name. */

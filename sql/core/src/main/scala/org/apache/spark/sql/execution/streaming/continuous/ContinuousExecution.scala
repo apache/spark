@@ -29,11 +29,12 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
-import org.apache.spark.sql.sources.v2
-import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.sources.v2.reader.ContinuousReadSupport
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, PartitionOffset}
+import org.apache.spark.sql.sources.v2.writer.StreamWriteSupport
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Clock, Utils}
@@ -122,7 +123,16 @@ class ContinuousExecution(
             s"Batch $latestEpochId was committed without end epoch offsets!")
         }
         committedOffsets = nextOffsets.toStreamProgress(sources)
-        currentBatchId = latestEpochId + 1
+
+        // Get to an epoch ID that has definitely never been sent to a sink before. Since sink
+        // commit happens between offset log write and commit log write, this means an epoch ID
+        // which is not in the offset log.
+        val (latestOffsetEpoch, _) = offsetLog.getLatest().getOrElse {
+          throw new IllegalStateException(
+            s"Offset log had no latest element. This shouldn't be possible because nextOffsets is" +
+              s"an element.")
+        }
+        currentBatchId = latestOffsetEpoch + 1
 
         logDebug(s"Resuming at epoch $currentBatchId with committed offsets $committedOffsets")
         nextOffsets
@@ -159,7 +169,7 @@ class ContinuousExecution(
 
     var insertedSourceId = 0
     val withNewSources = logicalPlan transform {
-      case ContinuousExecutionRelation(source, options, output) =>
+      case ContinuousExecutionRelation(_, _, output) =>
         val reader = continuousSources(insertedSourceId)
         insertedSourceId += 1
         val newOutput = reader.readSchema().toAttributes
@@ -172,7 +182,7 @@ class ContinuousExecution(
         val loggedOffset = offsets.offsets(0)
         val realOffset = loggedOffset.map(off => reader.deserializeOffset(off.json))
         reader.setStartOffset(java.util.Optional.ofNullable(realOffset.orNull))
-        StreamingDataSourceV2Relation(newOutput, source, options, reader)
+        new StreamingDataSourceV2Relation(newOutput, reader)
     }
 
     // Rewire the plan to use the new attributes that were returned by the source.
@@ -190,10 +200,10 @@ class ContinuousExecution(
       triggerLogicalPlan.schema,
       outputMode,
       new DataSourceOptions(extraOptions.asJava))
-    val withSink = WriteToContinuousDataSource(writer, triggerLogicalPlan)
+    val withSink = WriteToDataSourceV2(writer, triggerLogicalPlan)
 
     val reader = withSink.collect {
-      case StreamingDataSourceV2Relation(_, _, _, r: ContinuousReader) => r
+      case DataSourceV2Relation(_, r: ContinuousReader) => r
     }.head
 
     reportTimeTaken("queryPlanning") {
@@ -228,7 +238,9 @@ class ContinuousExecution(
             startTrigger()
 
             if (reader.needsReconfiguration() && state.compareAndSet(ACTIVE, RECONFIGURING)) {
+              stopSources()
               if (queryExecutionThread.isAlive) {
+                sparkSession.sparkContext.cancelJobGroup(runId.toString)
                 queryExecutionThread.interrupt()
               }
               false
@@ -256,20 +268,12 @@ class ContinuousExecution(
         SQLExecution.withNewExecutionId(
           sparkSessionForQuery, lastExecution)(lastExecution.toRdd)
       }
-    } catch {
-      case t: Throwable
-          if StreamExecution.isInterruptionException(t) && state.get() == RECONFIGURING =>
-        logInfo(s"Query $id ignoring exception from reconfiguring: $t")
-        // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
       epochEndpoint.askSync[Unit](StopContinuousExecutionWrites)
       SparkEnv.get.rpcEnv.stop(epochEndpoint)
 
       epochUpdateThread.interrupt()
       epochUpdateThread.join()
-
-      stopSources()
-      sparkSession.sparkContext.cancelJobGroup(runId.toString)
     }
   }
 
@@ -309,23 +313,16 @@ class ContinuousExecution(
     synchronized {
       if (queryExecutionThread.isAlive) {
         commitLog.add(epoch)
-        val offset =
-          continuousSources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
+        val offset = offsetLog.get(epoch).get.offsets(0).get
         committedOffsets ++= Seq(continuousSources(0) -> offset)
-        continuousSources(0).commit(offset.asInstanceOf[v2.reader.streaming.Offset])
       } else {
         return
       }
     }
 
-    // Since currentBatchId increases independently in cp mode, the current committed epoch may
-    // be far behind currentBatchId. It is not safe to discard the metadata with thresholdBatchId
-    // computed based on currentBatchId. As minLogEntriesToMaintain is used to keep the minimum
-    // number of batches that must be retained and made recoverable, so we should keep the
-    // specified number of metadata that have been committed.
-    if (minLogEntriesToMaintain <= epoch) {
-      offsetLog.purge(epoch + 1 - minLogEntriesToMaintain)
-      commitLog.purge(epoch + 1 - minLogEntriesToMaintain)
+    if (minLogEntriesToMaintain < currentBatchId) {
+      offsetLog.purge(currentBatchId - minLogEntriesToMaintain)
+      commitLog.purge(currentBatchId - minLogEntriesToMaintain)
     }
 
     awaitProgressLock.lock()
@@ -360,22 +357,6 @@ class ContinuousExecution(
         awaitProgressLock.unlock()
       }
     }
-  }
-
-  /**
-   * Stops the query execution thread to terminate the query.
-   */
-  override def stop(): Unit = {
-    // Set the state to TERMINATED so that the batching thread knows that it was interrupted
-    // intentionally
-    state.set(TERMINATED)
-    if (queryExecutionThread.isAlive) {
-      // The query execution thread will clean itself up in the finally clause of runContinuous.
-      // We just need to interrupt the long running job.
-      queryExecutionThread.interrupt()
-      queryExecutionThread.join()
-    }
-    logInfo(s"Query $prettyIdString was stopped")
   }
 }
 

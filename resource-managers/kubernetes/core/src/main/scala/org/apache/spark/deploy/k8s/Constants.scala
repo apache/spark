@@ -63,13 +63,22 @@ private[spark] object Constants {
   val ENV_MOUNTED_CLASSPATH = "SPARK_MOUNTED_CLASSPATH"
   val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
+  val ENV_DRIVER_MAIN_CLASS = "SPARK_DRIVER_CLASS"
+  val ENV_DRIVER_ARGS = "SPARK_DRIVER_ARGS"
+  val ENV_DRIVER_JAVA_OPTS = "SPARK_DRIVER_JAVA_OPTS"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
-  val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
-  // Spark app configs for containers
-  val SPARK_CONF_VOLUME = "spark-conf-volume"
-  val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
-  val SPARK_CONF_FILE_NAME = "spark.properties"
-  val SPARK_CONF_PATH = s"$SPARK_CONF_DIR_INTERNAL/$SPARK_CONF_FILE_NAME"
+  val ENV_DRIVER_MEMORY = "SPARK_DRIVER_MEMORY"
+  val ENV_MOUNTED_FILES_DIR = "SPARK_MOUNTED_FILES_DIR"
+
+  // Bootstrapping dependencies with the init-container
+  val INIT_CONTAINER_DOWNLOAD_JARS_VOLUME_NAME = "download-jars-volume"
+  val INIT_CONTAINER_DOWNLOAD_FILES_VOLUME_NAME = "download-files-volume"
+  val INIT_CONTAINER_PROPERTIES_FILE_VOLUME = "spark-init-properties"
+  val INIT_CONTAINER_PROPERTIES_FILE_DIR = "/etc/spark-init"
+  val INIT_CONTAINER_PROPERTIES_FILE_NAME = "spark-init.properties"
+  val INIT_CONTAINER_PROPERTIES_FILE_PATH =
+    s"$INIT_CONTAINER_PROPERTIES_FILE_DIR/$INIT_CONTAINER_PROPERTIES_FILE_NAME"
+  val INIT_CONTAINER_SECRET_VOLUME_NAME = "spark-init-secret"
 
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"

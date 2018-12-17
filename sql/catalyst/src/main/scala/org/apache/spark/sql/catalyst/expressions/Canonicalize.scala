@@ -30,7 +30,6 @@ package org.apache.spark.sql.catalyst.expressions
  *    by `hashCode`.
  *  - [[EqualTo]] and [[EqualNullSafe]] are reordered by `hashCode`.
  *  - Other comparisons ([[GreaterThan]], [[LessThan]]) are reversed by `hashCode`.
- *  - Elements in [[In]] are reordered by `hashCode`.
  */
 object Canonicalize {
   def execute(e: Expression): Expression = {
@@ -85,11 +84,6 @@ object Canonicalize {
     case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
     case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
     case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
-
-    // order the list in the In operator
-    // In subqueries contain only one element of type ListQuery. So checking that the length > 1
-    // we are not reordering In subqueries.
-    case In(value, list) if list.length > 1 => In(value, list.sortBy(_.hashCode()))
 
     case _ => e
   }

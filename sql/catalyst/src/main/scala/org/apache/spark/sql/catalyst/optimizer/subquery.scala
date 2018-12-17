@@ -116,16 +116,15 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           //   (a1,a2,...) = (b1,b2,...)
           // to
           //   (a1=b1 OR isnull(a1=b1)) AND (a2=b2 OR isnull(a2=b2)) AND ...
-          val baseJoinConds = splitConjunctivePredicates(joinCond.get)
-          val nullAwareJoinConds = baseJoinConds.map(c => Or(c, IsNull(c)))
+          val joinConds = splitConjunctivePredicates(joinCond.get)
           // After that, add back the correlated join predicate(s) in the subquery
           // Example:
           // SELECT ... FROM A WHERE A.A1 NOT IN (SELECT B.B1 FROM B WHERE B.B2 = A.A2 AND B.B3 > 1)
           // will have the final conditions in the LEFT ANTI as
-          // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
-          val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
+          // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2)
+          val pairs = (joinConds.map(c => Or(c, IsNull(c))) ++ conditions).reduceLeft(And)
           // Deduplicate conflicting attributes if any.
-          dedupJoin(Join(outerPlan, sub, LeftAnti, Option(finalJoinCond)))
+          dedupJoin(Join(outerPlan, sub, LeftAnti, Option(pairs)))
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))

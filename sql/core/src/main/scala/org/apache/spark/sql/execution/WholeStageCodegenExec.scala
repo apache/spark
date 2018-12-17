@@ -27,7 +27,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -112,7 +111,7 @@ trait CodegenSupport extends SparkPlan {
 
   private def prepareRowVar(ctx: CodegenContext, row: String, colVars: Seq[ExprCode]): ExprCode = {
     if (row != null) {
-      ExprCode.forNonNullValue(JavaCode.variable(row, classOf[UnsafeRow]))
+      ExprCode("", "false", row)
     } else {
       if (colVars.nonEmpty) {
         val colExprs = output.zipWithIndex.map { case (attr, i) =>
@@ -123,14 +122,14 @@ trait CodegenSupport extends SparkPlan {
         ctx.INPUT_ROW = row
         ctx.currentVars = colVars
         val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
-        val code = code"""
+        val code = s"""
           |$evaluateInputs
-          |${ev.code}
-         """.stripMargin
-        ExprCode(code, FalseLiteral, ev.value)
+          |${ev.code.trim}
+         """.stripMargin.trim
+        ExprCode(code, "false", ev.value)
       } else {
-        // There are no columns
-        ExprCode.forNonNullValue(JavaCode.variable("unsafeRow", classOf[UnsafeRow]))
+        // There is no columns
+        ExprCode("", "false", "unsafeRow")
       }
     }
   }
@@ -175,9 +174,8 @@ trait CodegenSupport extends SparkPlan {
     //    declaration.
     val confEnabled = SQLConf.get.wholeStageSplitConsumeFuncByOperator
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
-    val paramLength = CodeGenerator.calculateParamLength(output) + (if (row != null) 1 else 0)
-    val consumeFunc = if (confEnabled && requireAllOutput
-        && CodeGenerator.isValidParamLength(paramLength)) {
+    val paramLength = ctx.calculateParamLength(output) + (if (row != null) 1 else 0)
+    val consumeFunc = if (confEnabled && requireAllOutput && ctx.isValidParamLength(paramLength)) {
       constructDoConsumeFunction(ctx, inputVars, row)
     } else {
       parent.doConsume(ctx, inputVars, rowVar)
@@ -236,21 +234,21 @@ trait CodegenSupport extends SparkPlan {
 
     variables.zipWithIndex.foreach { case (ev, i) =>
       val paramName = ctx.freshName(s"expr_$i")
-      val paramType = CodeGenerator.javaType(attributes(i).dataType)
+      val paramType = ctx.javaType(attributes(i).dataType)
 
       arguments += ev.value
       parameters += s"$paramType $paramName"
       val paramIsNull = if (!attributes(i).nullable) {
         // Use constant `false` without passing `isNull` for non-nullable variable.
-        FalseLiteral
+        "false"
       } else {
         val isNull = ctx.freshName(s"exprIsNull_$i")
         arguments += ev.isNull
         parameters += s"boolean $isNull"
-        JavaCode.isNullVariable(isNull)
+        isNull
       }
 
-      paramVars += ExprCode(paramIsNull, JavaCode.variable(paramName, attributes(i).dataType))
+      paramVars += ExprCode("", paramIsNull, paramName)
     }
     (arguments, parameters, paramVars)
   }
@@ -260,8 +258,8 @@ trait CodegenSupport extends SparkPlan {
    * them to be evaluated twice.
    */
   protected def evaluateVariables(variables: Seq[ExprCode]): String = {
-    val evaluate = variables.filter(_.code.nonEmpty).map(_.code.toString).mkString("\n")
-    variables.foreach(_.code = EmptyBlock)
+    val evaluate = variables.filter(_.code != "").map(_.code.trim).mkString("\n")
+    variables.foreach(_.code = "")
     evaluate
   }
 
@@ -276,8 +274,8 @@ trait CodegenSupport extends SparkPlan {
     val evaluateVars = new StringBuilder
     variables.zipWithIndex.foreach { case (ev, i) =>
       if (ev.code != "" && required.contains(attributes(i))) {
-        evaluateVars.append(ev.code.toString + "\n")
-        ev.code = EmptyBlock
+        evaluateVars.append(ev.code.trim + "\n")
+        ev.code = ""
       }
     }
     evaluateVars.toString()
@@ -542,9 +540,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
       ${ctx.registerComment(
         s"""Codegend pipeline for stage (id=$codegenStageId)
-           |${this.treeString.trim}""".stripMargin,
-         "wsc_codegenPipeline")}
-      ${ctx.registerComment(s"codegenStageId=$codegenStageId", "wsc_codegenStageId", true)}
+           |${this.treeString.trim}""".stripMargin)}
       final class $className extends ${classOf[BufferedRowIterator].getName} {
 
         private Object[] references;

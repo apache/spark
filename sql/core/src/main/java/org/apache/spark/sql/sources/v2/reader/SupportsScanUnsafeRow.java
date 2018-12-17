@@ -33,14 +33,14 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 public interface SupportsScanUnsafeRow extends DataSourceReader {
 
   @Override
-  default List<InputPartition<Row>> planInputPartitions() {
+  default List<DataReaderFactory<Row>> createDataReaderFactories() {
     throw new IllegalStateException(
-      "planInputPartitions not supported by default within SupportsScanUnsafeRow");
+      "createDataReaderFactories not supported by default within SupportsScanUnsafeRow");
   }
 
   /**
-   * Similar to {@link DataSourceReader#planInputPartitions()},
+   * Similar to {@link DataSourceReader#createDataReaderFactories()},
    * but returns data in unsafe row format.
    */
-  List<InputPartition<UnsafeRow>> planUnsafeInputPartitions();
+  List<DataReaderFactory<UnsafeRow>> createUnsafeRowReaderFactories();
 }

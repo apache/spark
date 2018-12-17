@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
+import java.io.Closeable
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
@@ -26,7 +29,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
+import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -86,7 +89,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new TextOutputWriter(path, dataSchema, textOptions.lineSeparatorInWrite, context)
+        new TextOutputWriter(path, dataSchema, context)
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
@@ -110,18 +113,18 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions)
+    readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions.wholeText)
   }
 
   private def readToUnsafeMem(
       conf: Broadcast[SerializableConfiguration],
       requiredSchema: StructType,
-      textOptions: TextOptions): (PartitionedFile) => Iterator[UnsafeRow] = {
+      wholeTextMode: Boolean): (PartitionedFile) => Iterator[UnsafeRow] = {
 
     (file: PartitionedFile) => {
       val confValue = conf.value.value
-      val reader = if (!textOptions.wholeText) {
-        new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
+      val reader = if (!wholeTextMode) {
+        new HadoopFileLinesReader(file, confValue)
       } else {
         new HadoopFileWholeTextReader(file, confValue)
       }
@@ -130,13 +133,16 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
         val emptyUnsafeRow = new UnsafeRow(0)
         reader.map(_ => emptyUnsafeRow)
       } else {
-        val unsafeRowWriter = new UnsafeRowWriter(1)
+        val unsafeRow = new UnsafeRow(1)
+        val bufferHolder = new BufferHolder(unsafeRow)
+        val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
 
         reader.map { line =>
           // Writes to an UnsafeRow directly
-          unsafeRowWriter.reset()
+          bufferHolder.reset()
           unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
-          unsafeRowWriter.getRow()
+          unsafeRow.setTotalSize(bufferHolder.totalSize())
+          unsafeRow
         }
       }
     }
@@ -146,7 +152,6 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 class TextOutputWriter(
     path: String,
     dataSchema: StructType,
-    lineSeparator: Array[Byte],
     context: TaskAttemptContext)
   extends OutputWriter {
 
@@ -157,7 +162,7 @@ class TextOutputWriter(
       val utf8string = row.getUTF8String(0)
       utf8string.writeTo(writer)
     }
-    writer.write(lineSeparator)
+    writer.write('\n')
   }
 
   override def close(): Unit = {

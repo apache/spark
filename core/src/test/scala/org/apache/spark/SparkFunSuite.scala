@@ -59,7 +59,6 @@ abstract class SparkFunSuite
   protected val enableAutoThreadAudit = true
 
   protected override def beforeAll(): Unit = {
-    System.setProperty("spark.testing", "true")
     if (enableAutoThreadAudit) {
       doThreadPreAudit()
     }

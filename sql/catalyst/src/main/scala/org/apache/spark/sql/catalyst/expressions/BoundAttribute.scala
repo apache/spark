@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
 
 /**
@@ -34,14 +33,28 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
-  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
-
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {
-    if (nullable && input.isNullAt(ordinal)) {
+    if (input.isNullAt(ordinal)) {
       null
     } else {
-      accessor(input, ordinal)
+      dataType match {
+        case BooleanType => input.getBoolean(ordinal)
+        case ByteType => input.getByte(ordinal)
+        case ShortType => input.getShort(ordinal)
+        case IntegerType | DateType => input.getInt(ordinal)
+        case LongType | TimestampType => input.getLong(ordinal)
+        case FloatType => input.getFloat(ordinal)
+        case DoubleType => input.getDouble(ordinal)
+        case StringType => input.getUTF8String(ordinal)
+        case BinaryType => input.getBinary(ordinal)
+        case CalendarIntervalType => input.getInterval(ordinal)
+        case t: DecimalType => input.getDecimal(ordinal, t.precision, t.scale)
+        case t: StructType => input.getStruct(ordinal, t.size)
+        case _: ArrayType => input.getArray(ordinal)
+        case _: MapType => input.getMap(ordinal)
+        case _ => input.get(ordinal, dataType)
+      }
     }
   }
 
@@ -53,17 +66,16 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
       ev.copy(code = oev.code)
     } else {
       assert(ctx.INPUT_ROW != null, "INPUT_ROW and currentVars cannot both be null.")
-      val javaType = CodeGenerator.javaType(dataType)
-      val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
+      val javaType = ctx.javaType(dataType)
+      val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
       if (nullable) {
         ev.copy(code =
-          code"""
+          s"""
              |boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
-             |$javaType ${ev.value} = ${ev.isNull} ?
-             |  ${CodeGenerator.defaultValue(dataType)} : ($value);
+             |$javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
            """.stripMargin)
       } else {
-        ev.copy(code = code"$javaType ${ev.value} = $value;", isNull = FalseLiteral)
+        ev.copy(code = s"$javaType ${ev.value} = $value;", isNull = "false")
       }
     }
   }

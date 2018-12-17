@@ -17,12 +17,15 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.storage.StorageLevel
 
-class SQLTransformerSuite extends MLTest with DefaultReadWriteTest {
+class SQLTransformerSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -34,22 +37,14 @@ class SQLTransformerSuite extends MLTest with DefaultReadWriteTest {
     val original = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
     val sqlTrans = new SQLTransformer().setStatement(
       "SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
-     val expected = Seq((0, 1.0, 3.0, 4.0, 3.0), (2, 2.0, 5.0, 7.0, 10.0))
-      .toDF("id", "v1", "v2", "v3", "v4")
+    val result = sqlTrans.transform(original)
     val resultSchema = sqlTrans.transformSchema(original.schema)
-    testTransformerByGlobalCheckFunc[(Int, Double, Double)](
-      original,
-      sqlTrans,
-      "id",
-      "v1",
-      "v2",
-      "v3",
-      "v4") { rows =>
-      assert(rows.head.schema.toString == resultSchema.toString)
-      assert(resultSchema == expected.schema)
-      assert(rows == expected.collect().toSeq)
-      assert(original.sparkSession.catalog.listTables().count() == 0)
-    }
+    val expected = Seq((0, 1.0, 3.0, 4.0, 3.0), (2, 2.0, 5.0, 7.0, 10.0))
+      .toDF("id", "v1", "v2", "v3", "v4")
+    assert(result.schema.toString == resultSchema.toString)
+    assert(resultSchema == expected.schema)
+    assert(result.collect().toSeq == expected.collect().toSeq)
+    assert(original.sparkSession.catalog.listTables().count() == 0)
   }
 
   test("read/write") {
@@ -68,13 +63,13 @@ class SQLTransformerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("SPARK-22538: SQLTransformer should not unpersist given dataset") {
-    val df = spark.range(10).toDF()
+    val df = spark.range(10)
     df.cache()
     df.count()
     assert(df.storageLevel != StorageLevel.NONE)
-    val sqlTrans = new SQLTransformer()
+    new SQLTransformer()
       .setStatement("SELECT id + 1 AS id1 FROM __THIS__")
-    testTransformerByGlobalCheckFunc[Long](df, sqlTrans, "id1") { _ => }
+      .transform(df)
     assert(df.storageLevel != StorageLevel.NONE)
   }
 }

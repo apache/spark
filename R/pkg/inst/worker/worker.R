@@ -100,12 +100,9 @@ suppressPackageStartupMessages(library(SparkR))
 
 port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))
 inputCon <- socketConnection(
-    port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
-SparkR:::doServerAuth(inputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
-
+    port = port, blocking = TRUE, open = "rb", timeout = connectionTimeout)
 outputCon <- socketConnection(
     port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
-SparkR:::doServerAuth(outputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
 
 # read the index of the current partition inside the RDD
 partition <- SparkR:::readInt(inputCon)

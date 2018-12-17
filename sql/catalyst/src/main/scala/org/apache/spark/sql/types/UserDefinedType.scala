@@ -97,16 +97,6 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
   override def catalogString: String = sqlType.simpleString
 }
 
-private[spark] object UserDefinedType {
-  /**
-   * Get the sqlType of a (potential) [[UserDefinedType]].
-   */
-  def sqlType(dt: DataType): DataType = dt match {
-    case udt: UserDefinedType[_] => udt.sqlType
-    case _ => dt
-  }
-}
-
 /**
  * The user defined type in Python.
  *

@@ -25,18 +25,12 @@ function getThreadDumpEnabled() {
     return threadDumpEnabled;
 }
 
-function formatStatus(status, type, row) {
-    if (row.isBlacklisted) {
-        return "Blacklisted";
-    }
-
+function formatStatus(status, type) {
     if (status) {
-        if (row.blacklistedInStages.length == 0) {
-            return "Active"
-        }
-        return "Active (Blacklisted in Stages: [" + row.blacklistedInStages.join(", ") + "])";
+        return "Active"
+    } else {
+        return "Dead"
     }
-    return "Dead"
 }
 
 jQuery.extend(jQuery.fn.dataTableExt.oSort, {
@@ -421,10 +415,9 @@ $(document).ready(function () {
                             }
                         },
                         {data: 'hostPort'},
-                        {
-                            data: 'isActive',
-                            render: function (data, type, row) {
-                                return formatStatus (data, type, row);
+                        {data: 'isActive', render: function (data, type, row) {
+                            if (row.isBlacklisted) return "Blacklisted";
+                            else return formatStatus (data, type);
                             }
                         },
                         {data: 'rddBlocks'},

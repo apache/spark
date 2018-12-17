@@ -296,28 +296,10 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
   def stringToTimestamp(s: UTF8String): Option[SQLTimestamp] = {
-    stringToTimestamp(s, defaultTimeZone(), rejectTzInString = false)
+    stringToTimestamp(s, defaultTimeZone())
   }
 
   def stringToTimestamp(s: UTF8String, timeZone: TimeZone): Option[SQLTimestamp] = {
-    stringToTimestamp(s, timeZone, rejectTzInString = false)
-  }
-
-  /**
-   * Converts a timestamp string to microseconds from the unix epoch, w.r.t. the given timezone.
-   * Returns None if the input string is not a valid timestamp format.
-   *
-   * @param s the input timestamp string.
-   * @param timeZone the timezone of the timestamp string, will be ignored if the timestamp string
-   *                 already contains timezone information and `forceTimezone` is false.
-   * @param rejectTzInString if true, rejects timezone in the input string, i.e., if the
-   *                         timestamp string contains timezone, like `2000-10-10 00:00:00+00:00`,
-   *                         return None.
-   */
-  def stringToTimestamp(
-      s: UTF8String,
-      timeZone: TimeZone,
-      rejectTzInString: Boolean): Option[SQLTimestamp] = {
     if (s == null) {
       return None
     }
@@ -434,8 +416,6 @@ object DateTimeUtils {
         segments(7) < 0 || segments(7) > 23 || segments(8) < 0 || segments(8) > 59) {
       return None
     }
-
-    if (tz.isDefined && rejectTzInString) return None
 
     val c = if (tz.isEmpty) {
       Calendar.getInstance(timeZone)
@@ -885,19 +865,29 @@ object DateTimeUtils {
 
   /**
    * Returns number of months between time1 and time2. time1 and time2 are expressed in
-   * microseconds since 1.1.1970. If time1 is later than time2, the result is positive.
+   * microseconds since 1.1.1970.
    *
-   * If time1 and time2 are on the same day of month, or both are the last day of month,
-   * returns, time of day will be ignored.
+   * If time1 and time2 having the same day of month, or both are the last day of month,
+   * it returns an integer (time under a day will be ignored).
    *
-   * Otherwise, the difference is calculated based on 31 days per month.
-   * The result is rounded to 8 decimal places if `roundOff` is set to true.
+   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
+   * 8 digits.
    */
-  def monthsBetween(
-      time1: SQLTimestamp,
-      time2: SQLTimestamp,
-      roundOff: Boolean,
-      timeZone: TimeZone): Double = {
+  def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp): Double = {
+    monthsBetween(time1, time2, defaultTimeZone())
+  }
+
+  /**
+   * Returns number of months between time1 and time2. time1 and time2 are expressed in
+   * microseconds since 1.1.1970.
+   *
+   * If time1 and time2 having the same day of month, or both are the last day of month,
+   * it returns an integer (time under a day will be ignored).
+   *
+   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
+   * 8 digits.
+   */
+  def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp, timeZone: TimeZone): Double = {
     val millis1 = time1 / 1000L
     val millis2 = time2 / 1000L
     val date1 = millisToDays(millis1, timeZone)
@@ -908,25 +898,16 @@ object DateTimeUtils {
     val months1 = year1 * 12 + monthInYear1
     val months2 = year2 * 12 + monthInYear2
 
-    val monthDiff = (months1 - months2).toDouble
-
     if (dayInMonth1 == dayInMonth2 || ((daysToMonthEnd1 == 0) && (daysToMonthEnd2 == 0))) {
-      return monthDiff
+      return (months1 - months2).toDouble
     }
-    // using milliseconds can cause precision loss with more than 8 digits
-    // we follow Hive's implementation which uses seconds
-    val secondsInDay1 = (millis1 - daysToMillis(date1, timeZone)) / 1000L
-    val secondsInDay2 = (millis2 - daysToMillis(date2, timeZone)) / 1000L
-    val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
-    // 2678400D is the number of seconds in 31 days
-    // every month is considered to be 31 days long in this function
-    val diff = monthDiff + secondsDiff / 2678400D
-    if (roundOff) {
-      // rounding to 8 digits
-      math.round(diff * 1e8) / 1e8
-    } else {
-      diff
-    }
+    // milliseconds is enough for 8 digits precision on the right side
+    val timeInDay1 = millis1 - daysToMillis(date1, timeZone)
+    val timeInDay2 = millis2 - daysToMillis(date2, timeZone)
+    val timesBetween = (timeInDay1 - timeInDay2).toDouble / MILLIS_PER_DAY
+    val diff = (months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
+    // rounding to 8 digits
+    math.round(diff * 1e8) / 1e8
   }
 
   // Thursday = 0 since 1970/Jan/01 => Thursday

@@ -206,9 +206,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       jobs: Seq[v1.JobData],
       killEnabled: Boolean): Seq[Node] = {
     // stripXSS is called to remove suspicious characters used in XSS attacks
-    val allParameters = request.getParameterMap.asScala.toMap.map { case (k, v) =>
-      UIUtils.stripXSS(k) -> v.map(UIUtils.stripXSS).toSeq
-    }
+    val allParameters = request.getParameterMap.asScala.toMap.mapValues(_.map(UIUtils.stripXSS))
     val parameterOtherTable = allParameters.filterNot(_._1.startsWith(jobTag))
       .map(para => para._1 + "=" + para._2(0))
 
@@ -250,7 +248,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         jobs,
         tableHeaderId,
         jobTag,
-        UIUtils.prependBaseUri(request, parent.basePath),
+        UIUtils.prependBaseUri(parent.basePath),
         "jobs", // subPath
         parameterOtherTable,
         killEnabled,
@@ -409,7 +407,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val helpText = """A job is triggered by an action, like count() or saveAsTextFile().""" +
       " Click on a job to see information about the stages of tasks inside it."
 
-    UIUtils.headerSparkPage(request, "Spark Jobs", content, parent, helpText = Some(helpText))
+    UIUtils.headerSparkPage("Spark Jobs", content, parent, helpText = Some(helpText))
   }
 
 }

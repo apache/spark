@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, Nondeterministic}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 
 /**
  * A trait that can be used to provide a fallback mode for expression code generation.
@@ -45,22 +44,21 @@ trait CodegenFallback extends Expression {
     }
     val objectTerm = ctx.freshName("obj")
     val placeHolder = ctx.registerComment(this.toString)
-    val javaType = CodeGenerator.javaType(this.dataType)
     if (nullable) {
-      ev.copy(code = code"""
+      ev.copy(code = s"""
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
         boolean ${ev.isNull} = $objectTerm == null;
-        $javaType ${ev.value} = ${CodeGenerator.defaultValue(this.dataType)};
+        ${ctx.javaType(this.dataType)} ${ev.value} = ${ctx.defaultValue(this.dataType)};
         if (!${ev.isNull}) {
-          ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
+          ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
         }""")
     } else {
-      ev.copy(code = code"""
+      ev.copy(code = s"""
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
-        $javaType ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
-        """, isNull = FalseLiteral)
+        ${ctx.javaType(this.dataType)} ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
+        """, isNull = "false")
     }
   }
 }

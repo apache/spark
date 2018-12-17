@@ -125,11 +125,4 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
       assertConsistency(spark.range(10000).map(i => Random.nextInt(1000).toLong))
     }
   }
-
-  test("SPARK-23614: Fix incorrect reuse exchange when caching is used") {
-    val cached = spark.createDataset(Seq((1, 2, 3), (4, 5, 6))).cache()
-    val projection1 = cached.select("_1", "_2").queryExecution.executedPlan
-    val projection2 = cached.select("_1", "_3").queryExecution.executedPlan
-    assert(!projection1.sameResult(projection2))
-  }
 }

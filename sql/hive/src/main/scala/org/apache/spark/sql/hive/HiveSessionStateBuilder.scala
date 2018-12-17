@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
@@ -36,14 +35,15 @@ import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLo
 class HiveSessionStateBuilder(session: SparkSession, parentState: Option[SessionState] = None)
   extends BaseSessionStateBuilder(session, parentState) {
 
-  private def externalCatalog: ExternalCatalogWithListener = session.sharedState.externalCatalog
+  private def externalCatalog: HiveExternalCatalog =
+    session.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
 
   /**
    * Create a Hive aware resource loader.
    */
   override protected lazy val resourceLoader: HiveSessionResourceLoader = {
-    new HiveSessionResourceLoader(
-      session, () => externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client)
+    val client: HiveClient = externalCatalog.client
+    new HiveSessionResourceLoader(session, client)
   }
 
   /**
@@ -51,8 +51,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    */
   override protected lazy val catalog: HiveSessionCatalog = {
     val catalog = new HiveSessionCatalog(
-      () => externalCatalog,
-      () => session.sharedState.globalTempViewManager,
+      externalCatalog,
+      session.sharedState.globalTempViewManager,
       new HiveMetastoreCatalog(session),
       functionRegistry,
       conf,
@@ -105,9 +105,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
 
 class HiveSessionResourceLoader(
     session: SparkSession,
-    clientBuilder: () => HiveClient)
+    client: HiveClient)
   extends SessionResourceLoader(session) {
-  private lazy val client = clientBuilder()
   override def addJar(path: String): Unit = {
     client.addJar(path)
     super.addJar(path)

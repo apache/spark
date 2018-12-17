@@ -37,8 +37,7 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
 
   private val stopped = new AtomicBoolean(false)
 
-  // Exposed for testing.
-  private[spark] val eventThread = new Thread(name) {
+  private val eventThread = new Thread(name) {
     setDaemon(true)
 
     override def run(): Unit = {

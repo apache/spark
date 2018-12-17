@@ -57,18 +57,15 @@ function build {
   else
     # Not passed as an argument to docker, but used to validate the Spark directory.
     IMG_PATH="kubernetes/dockerfiles"
-    BUILD_ARGS=()
   fi
 
   if [ ! -d "$IMG_PATH" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
 
-  local DOCKERFILE=${DOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
-
   docker build "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
-    -f "$DOCKERFILE" .
+    -f "$IMG_PATH/spark/Dockerfile" .
 }
 
 function push {
@@ -86,7 +83,6 @@ Commands:
   push        Push a pre-built image to a registry. Requires a repository address to be provided.
 
 Options:
-  -f file     Dockerfile to build. By default builds the Dockerfile shipped with Spark.
   -r repo     Repository address.
   -t tag      Tag to apply to the built image, or to identify the image to be pushed.
   -m          Use minikube's Docker daemon.
@@ -116,12 +112,10 @@ fi
 
 REPO=
 TAG=
-DOCKERFILE=
-while getopts f:mr:t: option
+while getopts mr:t: option
 do
  case "${option}"
  in
- f) DOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  m)

@@ -256,19 +256,4 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       assert(jarPath.indexOf("mydep") >= 0, "should find dependency")
     }
   }
-
-  test("SPARK-10878: test resolution files cleaned after resolving artifact") {
-    val main = new MavenCoordinate("my.great.lib", "mylib", "0.1")
-
-    IvyTestUtils.withRepository(main, None, None) { repo =>
-      val ivySettings = SparkSubmitUtils.buildIvySettings(Some(repo), Some(tempIvyPath))
-      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
-        main.toString,
-        ivySettings,
-        isTest = true)
-      val r = """.*org.apache.spark-spark-submit-parent-.*""".r
-      assert(!ivySettings.getDefaultCache.listFiles.map(_.getName)
-        .exists(r.findFirstIn(_).isDefined), "resolution files should be cleaned")
-    }
-  }
 }

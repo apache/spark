@@ -126,10 +126,8 @@ class NaiveBayes @Since("1.5.0") (
   private[spark] def trainWithLabelCheck(
       dataset: Dataset[_],
       positiveLabel: Boolean): NaiveBayesModel = {
-    val instr = Instrumentation.create(this, dataset)
     if (positiveLabel && isDefined(thresholds)) {
       val numClasses = getNumClasses(dataset)
-      instr.logNumClasses(numClasses)
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
         ".train() called with non-matching numClasses and thresholds.length." +
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
@@ -148,6 +146,7 @@ class NaiveBayes @Since("1.5.0") (
       }
     }
 
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
       probabilityCol, modelType, smoothing, thresholds)
 
@@ -408,7 +407,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
         .head()
       val model = new NaiveBayesModel(metadata.uid, pi, theta)
 
-      metadata.getAndSetParams(model)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }

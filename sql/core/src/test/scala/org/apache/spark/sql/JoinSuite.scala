@@ -239,7 +239,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
             Row(2, 2, 1, null) ::
             Row(2, 2, 2, 2) :: Nil)
       }
-      assert(e.getMessage.contains("Detected implicit cartesian product for INNER join " +
+      assert(e.getMessage.contains("Detected cartesian product for INNER join " +
         "between logical plans"))
     }
   }
@@ -611,7 +611,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       val e = intercept[Exception] {
         checkAnswer(sql(query), Nil);
       }
-      assert(e.getMessage.contains("Detected implicit cartesian product"))
+      assert(e.getMessage.contains("Detected cartesian product"))
     }
 
     cartesianQueries.foreach(checkCartesianDetection)

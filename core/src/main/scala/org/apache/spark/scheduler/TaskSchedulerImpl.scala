@@ -42,7 +42,7 @@ import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
  * up to launch speculative tasks, etc.
  *
  * Clients should first call initialize() and start(), then submit task sets through the
- * submitTasks method.
+ * runTasks method.
  *
  * THREADING: [[SchedulerBackend]]s and task-submitting clients can call this class from multiple
  * threads, so it needs locks in public API methods to maintain its state. In addition, some
@@ -62,7 +62,7 @@ private[spark] class TaskSchedulerImpl(
     this(sc, sc.conf.get(config.MAX_TASK_FAILURES))
   }
 
-  // Lazily initializing blacklistTrackerOpt to avoid getting empty ExecutorAllocationClient,
+  // Lazily initializing blackListTrackOpt to avoid getting empty ExecutorAllocationClient,
   // because ExecutorAllocationClient is created after this TaskSchedulerImpl.
   private[scheduler] lazy val blacklistTrackerOpt = maybeCreateBlacklistTracker(sc)
 
@@ -228,7 +228,7 @@ private[spark] class TaskSchedulerImpl(
         // 1. The task set manager has been created and some tasks have been scheduled.
         //    In this case, send a kill signal to the executors to kill the task and then abort
         //    the stage.
-        // 2. The task set manager has been created but no tasks have been scheduled. In this case,
+        // 2. The task set manager has been created but no tasks has been scheduled. In this case,
         //    simply abort the stage.
         tsm.runningTasksSet.foreach { tid =>
             taskIdToExecutorId.get(tid).foreach(execId =>
@@ -686,20 +686,6 @@ private[spark] class TaskSchedulerImpl(
       manager <- attempts.get(stageAttemptId)
     } yield {
       manager
-    }
-  }
-
-  /**
-   * Marks the task has completed in all TaskSetManagers for the given stage.
-   *
-   * After stage failure and retry, there may be multiple TaskSetManagers for the stage.
-   * If an earlier attempt of a stage completes a task, we should ensure that the later attempts
-   * do not also submit those same tasks.  That also means that a task completion from an earlier
-   * attempt can lead to the entire stage getting marked as successful.
-   */
-  private[scheduler] def markPartitionCompletedInAllTaskSets(stageId: Int, partitionId: Int) = {
-    taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
-      tsm.markPartitionCompleted(partitionId)
     }
   }
 

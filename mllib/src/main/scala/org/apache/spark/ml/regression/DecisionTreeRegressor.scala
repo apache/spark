@@ -160,7 +160,7 @@ object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor
 @Since("1.4.0")
 class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
-    override val rootNode: RegressionNode,
+    override val rootNode: Node,
     override val numFeatures: Int)
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with DecisionTreeRegressorParams with MLWritable with Serializable {
@@ -175,10 +175,10 @@ class DecisionTreeRegressionModel private[ml] (
    * Construct a decision tree regression model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  private[ml] def this(rootNode: RegressionNode, numFeatures: Int) =
+  private[ml] def this(rootNode: Node, numFeatures: Int) =
     this(Identifiable.randomUID("dtr"), rootNode, numFeatures)
 
-  override def predict(features: Vector): Double = {
+  override protected def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
   }
 
@@ -279,10 +279,9 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
-      val root = loadTreeNodes(path, metadata, sparkSession, isClassification = false)
-      val model = new DecisionTreeRegressionModel(metadata.uid,
-        root.asInstanceOf[RegressionNode], numFeatures)
-      metadata.getAndSetParams(model)
+      val root = loadTreeNodes(path, metadata, sparkSession)
+      val model = new DecisionTreeRegressionModel(metadata.uid, root, numFeatures)
+      DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }
@@ -296,8 +295,8 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
-    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures, isClassification = false)
+    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtr")
-    new DecisionTreeRegressionModel(uid, rootNode.asInstanceOf[RegressionNode], numFeatures)
+    new DecisionTreeRegressionModel(uid, rootNode, numFeatures)
   }
 }

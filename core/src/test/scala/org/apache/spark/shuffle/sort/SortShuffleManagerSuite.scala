@@ -85,14 +85,6 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
       mapSideCombine = false
     )))
 
-    // We support serialized shuffle if we do not need to do map-side aggregation
-    assert(canUseSerializedShuffle(shuffleDep(
-      partitioner = new HashPartitioner(2),
-      serializer = kryo,
-      keyOrdering = None,
-      aggregator = Some(mock(classOf[Aggregator[Any, Any, Any]])),
-      mapSideCombine = false
-    )))
   }
 
   test("unsupported shuffle dependencies for serialized shuffle") {
@@ -119,7 +111,14 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
       mapSideCombine = false
     )))
 
-    // We do not support serialized shuffle if we need to do map-side aggregation
+    // We do not support shuffles that perform aggregation
+    assert(!canUseSerializedShuffle(shuffleDep(
+      partitioner = new HashPartitioner(2),
+      serializer = kryo,
+      keyOrdering = None,
+      aggregator = Some(mock(classOf[Aggregator[Any, Any, Any]])),
+      mapSideCombine = false
+    )))
     assert(!canUseSerializedShuffle(shuffleDep(
       partitioner = new HashPartitioner(2),
       serializer = kryo,

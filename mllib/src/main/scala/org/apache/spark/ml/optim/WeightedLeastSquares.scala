@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.optim
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.util.OptionalInstrumentation
 import org.apache.spark.rdd.RDD
 
 /**
@@ -81,11 +81,13 @@ private[ml] class WeightedLeastSquares(
     val standardizeLabel: Boolean,
     val solverType: WeightedLeastSquares.Solver = WeightedLeastSquares.Auto,
     val maxIter: Int = 100,
-    val tol: Double = 1e-6
-  ) extends Serializable {
+    val tol: Double = 1e-6) extends Logging with Serializable {
   import WeightedLeastSquares._
 
   require(regParam >= 0.0, s"regParam cannot be negative: $regParam")
+  if (regParam == 0.0) {
+    logWarning("regParam is zero, which might cause numerical instability and overfitting.")
+  }
   require(elasticNetParam >= 0.0 && elasticNetParam <= 1.0,
     s"elasticNetParam must be in [0, 1]: $elasticNetParam")
   require(maxIter >= 0, s"maxIter must be a positive integer: $maxIter")
@@ -94,17 +96,10 @@ private[ml] class WeightedLeastSquares(
   /**
    * Creates a [[WeightedLeastSquaresModel]] from an RDD of [[Instance]]s.
    */
-  def fit(
-      instances: RDD[Instance],
-      instr: OptionalInstrumentation = OptionalInstrumentation.create(classOf[WeightedLeastSquares])
-    ): WeightedLeastSquaresModel = {
-    if (regParam == 0.0) {
-      instr.logWarning("regParam is zero, which might cause numerical instability and overfitting.")
-    }
-
+  def fit(instances: RDD[Instance]): WeightedLeastSquaresModel = {
     val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_))
     summary.validate()
-    instr.logInfo(s"Number of instances: ${summary.count}.")
+    logInfo(s"Number of instances: ${summary.count}.")
     val k = if (fitIntercept) summary.k + 1 else summary.k
     val numFeatures = summary.k
     val triK = summary.triK
@@ -119,12 +114,11 @@ private[ml] class WeightedLeastSquares(
     if (rawBStd == 0) {
       if (fitIntercept || rawBBar == 0.0) {
         if (rawBBar == 0.0) {
-          instr.logWarning(s"Mean and standard deviation of the label are zero, so the " +
-            s"coefficients and the intercept will all be zero; as a result, training is not " +
-            s"needed.")
+          logWarning(s"Mean and standard deviation of the label are zero, so the coefficients " +
+            s"and the intercept will all be zero; as a result, training is not needed.")
         } else {
-          instr.logWarning(s"The standard deviation of the label is zero, so the coefficients " +
-            s"will be zeros and the intercept will be the mean of the label; as a result, " +
+          logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
+            s"zeros and the intercept will be the mean of the label; as a result, " +
             s"training is not needed.")
         }
         val coefficients = new DenseVector(Array.ofDim(numFeatures))
@@ -134,7 +128,7 @@ private[ml] class WeightedLeastSquares(
       } else {
         require(!(regParam > 0.0 && standardizeLabel), "The standard deviation of the label is " +
           "zero. Model cannot be regularized with standardization=true")
-        instr.logWarning(s"The standard deviation of the label is zero. Consider setting " +
+        logWarning(s"The standard deviation of the label is zero. Consider setting " +
           s"fitIntercept=true.")
       }
     }
@@ -262,7 +256,7 @@ private[ml] class WeightedLeastSquares(
           // if Auto solver is used and Cholesky fails due to singular AtA, then fall back to
           // Quasi-Newton solver.
           case _: SingularMatrixException if solverType == WeightedLeastSquares.Auto =>
-            instr.logWarning("Cholesky solver failed due to singular covariance matrix. " +
+            logWarning("Cholesky solver failed due to singular covariance matrix. " +
               "Retrying with Quasi-Newton solver.")
             // ab and aa were modified in place, so reconstruct them
             val _aa = getAtA(aaBarValues, aBarValues)

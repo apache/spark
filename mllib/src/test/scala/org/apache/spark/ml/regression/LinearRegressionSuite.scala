@@ -17,23 +17,18 @@
 
 package org.apache.spark.ml.regression
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.util.Random
-
-import org.dmg.pmml.{OpType, PMML, RegressionModel => PMMLRegressionModel}
 
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.sql.{DataFrame, Row}
 
-
-class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTest {
+class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -641,13 +636,6 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
     }
   }
 
-  test("prediction on single instance") {
-    val trainer = new LinearRegression
-    val model = trainer.fit(datasetWithDenseFeature)
-
-    testPredictionModelSinglePrediction(model, datasetWithDenseFeature)
-  }
-
   test("linear regression model with constant label") {
     /*
        R code:
@@ -1055,24 +1043,6 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
     val lr = new LinearRegression()
     testEstimatorAndModelReadWrite(lr, datasetWithWeight, LinearRegressionSuite.allParamSettings,
       LinearRegressionSuite.allParamSettings, checkModelData)
-  }
-
-  test("pmml export") {
-    val lr = new LinearRegression()
-    val model = lr.fit(datasetWithWeight)
-    def checkModel(pmml: PMML): Unit = {
-      val dd = pmml.getDataDictionary
-      assert(dd.getNumberOfFields === 3)
-      val fields = dd.getDataFields.asScala
-      assert(fields(0).getName().toString === "field_0")
-      assert(fields(0).getOpType() == OpType.CONTINUOUS)
-      val pmmlRegressionModel = pmml.getModels().get(0).asInstanceOf[PMMLRegressionModel]
-      val pmmlPredictors = pmmlRegressionModel.getRegressionTables.get(0).getNumericPredictors
-      val pmmlWeights = pmmlPredictors.asScala.map(_.getCoefficient()).toList
-      assert(pmmlWeights(0) ~== model.coefficients(0) relTol 1E-3)
-      assert(pmmlWeights(1) ~== model.coefficients(1) relTol 1E-3)
-    }
-    testPMMLWrite(sc, model, checkModel)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {

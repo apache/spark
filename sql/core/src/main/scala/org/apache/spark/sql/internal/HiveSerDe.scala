@@ -31,8 +31,7 @@ object HiveSerDe {
     "sequencefile" ->
       HiveSerDe(
         inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
-        outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"),
-        serde = Option("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
+        outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat")),
 
     "rcfile" ->
       HiveSerDe(
@@ -55,8 +54,7 @@ object HiveSerDe {
     "textfile" ->
       HiveSerDe(
         inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
-        outputFormat = Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"),
-        serde = Option("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
+        outputFormat = Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
 
     "avro" ->
       HiveSerDe(

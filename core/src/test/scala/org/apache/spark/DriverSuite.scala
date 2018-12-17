@@ -51,7 +51,7 @@ class DriverSuite extends SparkFunSuite with TimeLimits {
  */
 object DriverWithoutCleanup {
   def main(args: Array[String]) {
-    TestUtils.configTestLog4j("INFO")
+    Utils.configTestLog4j("INFO")
     val conf = new SparkConf
     val sc = new SparkContext(args(0), "DriverWithoutCleanup", conf)
     sc.parallelize(1 to 100, 4).count()

@@ -330,8 +330,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
-    if (sortColumnNames.isDefined && numBuckets.isEmpty) {
-      throw new AnalysisException("sortBy must be used together with bucketBy")
+    if (sortColumnNames.isDefined) {
+      require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
     }
 
     numBuckets.map { n =>
@@ -340,12 +340,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def assertNotBucketed(operation: String): Unit = {
-    if (getBucketSpec.isDefined) {
-      if (sortColumnNames.isEmpty) {
-        throw new AnalysisException(s"'$operation' does not support bucketBy right now")
-      } else {
-        throw new AnalysisException(s"'$operation' does not support bucketBy and sortBy right now")
-      }
+    if (numBuckets.isDefined || sortColumnNames.isDefined) {
+      throw new AnalysisException(s"'$operation' does not support bucketing right now")
     }
   }
 
@@ -522,9 +518,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`encoding` (by default it is not set): specifies encoding (charset) of saved json
-   * files. If it is not set, the UTF-8 charset will be used. </li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -594,7 +587,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.</li>
    * </ul>
    *
    * @since 1.6.0

@@ -35,6 +35,7 @@
 #' @param ... parameters to pass to the Java method.
 #' @return the return value of the Java method. Either returned as a R object
 #'  if it can be deserialized or returned as a "jobj". See details section for more.
+#' @export
 #' @seealso \link{sparkR.callJStatic}, \link{sparkR.newJObject}
 #' @rdname sparkR.callJMethod
 #' @examples
@@ -68,6 +69,7 @@ sparkR.callJMethod <- function(x, methodName, ...) {
 #' @param ... parameters to pass to the Java method.
 #' @return the return value of the Java method. Either returned as a R object
 #'  if it can be deserialized or returned as a "jobj". See details section for more.
+#' @export
 #' @seealso \link{sparkR.callJMethod}, \link{sparkR.newJObject}
 #' @rdname sparkR.callJStatic
 #' @examples
@@ -98,6 +100,7 @@ sparkR.callJStatic <- function(x, methodName, ...) {
 #' @param ... arguments to be passed to the constructor.
 #' @return the object created. Either returned as a R object
 #'   if it can be deserialized or returned as a "jobj". See details section for more.
+#' @export
 #' @seealso \link{sparkR.callJMethod}, \link{sparkR.callJStatic}
 #' @rdname sparkR.newJObject
 #' @examples

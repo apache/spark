@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.execution.vectorized.{MutableColumnarRow, OnHeapColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -127,8 +127,7 @@ class VectorizedHashMapGenerator(
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        val value = CodeGenerator.getValueFromVector(s"vectors[$ordinal]", key.dataType,
-          "buckets[idx]")
+        val value = ctx.getValueFromVector(s"vectors[$ordinal]", key.dataType, "buckets[idx]")
         s"(${ctx.genEqual(key.dataType, value, key.name)})"
       }.mkString(" && ")
     }
@@ -183,14 +182,14 @@ class VectorizedHashMapGenerator(
 
     def genCodeToSetKeys(groupingKeys: Seq[Buffer]): Seq[String] = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        CodeGenerator.setValue(s"vectors[$ordinal]", "numRows", key.dataType, key.name)
+        ctx.setValue(s"vectors[$ordinal]", "numRows", key.dataType, key.name)
       }
     }
 
     def genCodeToSetAggBuffers(bufferValues: Seq[Buffer]): Seq[String] = {
       bufferValues.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        CodeGenerator.updateColumn(s"vectors[${groupingKeys.length + ordinal}]", "numRows",
-          key.dataType, buffVars(ordinal), nullable = true)
+        ctx.updateColumn(s"vectors[${groupingKeys.length + ordinal}]", "numRows", key.dataType,
+          buffVars(ordinal), nullable = true)
       }
     }
 

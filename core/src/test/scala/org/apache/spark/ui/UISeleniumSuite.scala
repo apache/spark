@@ -707,23 +707,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     }
   }
 
-  test("stages page should show skipped stages") {
-    withSpark(newSparkContext()) { sc =>
-      val rdd = sc.parallelize(0 to 100, 100).repartition(10).cache()
-      rdd.count()
-      rdd.count()
-
-      eventually(timeout(5 seconds), interval(50 milliseconds)) {
-        goToUi(sc, "/stages")
-        find(id("skipped")).get.text should be("Skipped Stages (1)")
-      }
-      val stagesJson = getJson(sc.ui.get, "stages")
-      stagesJson.children.size should be (4)
-      val stagesStatus = stagesJson.children.map(_ \ "status")
-      stagesStatus.count(_ == JString(StageStatus.SKIPPED.name())) should be (1)
-    }
-  }
-
   def goToUi(sc: SparkContext, path: String): Unit = {
     goToUi(sc.ui.get, path)
   }

@@ -20,9 +20,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-import org.apache.parquet.bytes.ByteBufferInputStream;
-import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.unsafe.Platform;
 
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
@@ -31,18 +30,24 @@ import org.apache.parquet.io.api.Binary;
  * An implementation of the Parquet PLAIN decoder that supports the vectorized interface.
  */
 public class VectorizedPlainValuesReader extends ValuesReader implements VectorizedValuesReader {
-  private ByteBufferInputStream in = null;
+  private byte[] buffer;
+  private int offset;
+  private int bitOffset; // Only used for booleans.
+  private ByteBuffer byteBuffer; // used to wrap the byte array buffer
 
-  // Only used for booleans.
-  private int bitOffset;
-  private byte currentByte = 0;
+  private static final boolean bigEndianPlatform =
+    ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
 
   public VectorizedPlainValuesReader() {
   }
 
   @Override
-  public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
-    this.in = in;
+  public void initFromPage(int valueCount, byte[] bytes, int offset) throws IOException {
+    this.buffer = bytes;
+    this.offset = offset + Platform.BYTE_ARRAY_OFFSET;
+    if (bigEndianPlatform) {
+      byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+    }
   }
 
   @Override
@@ -58,157 +63,115 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
   }
 
-  private ByteBuffer getBuffer(int length) {
-    try {
-      return in.slice(length).order(ByteOrder.LITTLE_ENDIAN);
-    } catch (IOException e) {
-      throw new ParquetDecodingException("Failed to read " + length + " bytes", e);
-    }
-  }
-
   @Override
   public final void readIntegers(int total, WritableColumnVector c, int rowId) {
-    int requiredBytes = total * 4;
-    ByteBuffer buffer = getBuffer(requiredBytes);
-
-    if (buffer.hasArray()) {
-      int offset = buffer.arrayOffset() + buffer.position();
-      c.putIntsLittleEndian(rowId, total, buffer.array(), offset);
-    } else {
-      for (int i = 0; i < total; i += 1) {
-        c.putInt(rowId + i, buffer.getInt());
-      }
-    }
+    c.putIntsLittleEndian(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
+    offset += 4 * total;
   }
 
   @Override
   public final void readLongs(int total, WritableColumnVector c, int rowId) {
-    int requiredBytes = total * 8;
-    ByteBuffer buffer = getBuffer(requiredBytes);
-
-    if (buffer.hasArray()) {
-      int offset = buffer.arrayOffset() + buffer.position();
-      c.putLongsLittleEndian(rowId, total, buffer.array(), offset);
-    } else {
-      for (int i = 0; i < total; i += 1) {
-        c.putLong(rowId + i, buffer.getLong());
-      }
-    }
+    c.putLongsLittleEndian(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
+    offset += 8 * total;
   }
 
   @Override
   public final void readFloats(int total, WritableColumnVector c, int rowId) {
-    int requiredBytes = total * 4;
-    ByteBuffer buffer = getBuffer(requiredBytes);
-
-    if (buffer.hasArray()) {
-      int offset = buffer.arrayOffset() + buffer.position();
-      c.putFloats(rowId, total, buffer.array(), offset);
-    } else {
-      for (int i = 0; i < total; i += 1) {
-        c.putFloat(rowId + i, buffer.getFloat());
-      }
-    }
+    c.putFloats(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
+    offset += 4 * total;
   }
 
   @Override
   public final void readDoubles(int total, WritableColumnVector c, int rowId) {
-    int requiredBytes = total * 8;
-    ByteBuffer buffer = getBuffer(requiredBytes);
-
-    if (buffer.hasArray()) {
-      int offset = buffer.arrayOffset() + buffer.position();
-      c.putDoubles(rowId, total, buffer.array(), offset);
-    } else {
-      for (int i = 0; i < total; i += 1) {
-        c.putDouble(rowId + i, buffer.getDouble());
-      }
-    }
+    c.putDoubles(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
+    offset += 8 * total;
   }
 
   @Override
   public final void readBytes(int total, WritableColumnVector c, int rowId) {
-    // Bytes are stored as a 4-byte little endian int. Just read the first byte.
-    // TODO: consider pushing this in ColumnVector by adding a readBytes with a stride.
-    int requiredBytes = total * 4;
-    ByteBuffer buffer = getBuffer(requiredBytes);
-
-    for (int i = 0; i < total; i += 1) {
-      c.putByte(rowId + i, buffer.get());
-      // skip the next 3 bytes
-      buffer.position(buffer.position() + 3);
+    for (int i = 0; i < total; i++) {
+      // Bytes are stored as a 4-byte little endian int. Just read the first byte.
+      // TODO: consider pushing this in ColumnVector by adding a readBytes with a stride.
+      c.putByte(rowId + i, Platform.getByte(buffer, offset));
+      offset += 4;
     }
   }
 
   @Override
   public final boolean readBoolean() {
-    // TODO: vectorize decoding and keep boolean[] instead of currentByte
-    if (bitOffset == 0) {
-      try {
-        currentByte = (byte) in.read();
-      } catch (IOException e) {
-        throw new ParquetDecodingException("Failed to read a byte", e);
-      }
-    }
-
-    boolean v = (currentByte & (1 << bitOffset)) != 0;
+    byte b = Platform.getByte(buffer, offset);
+    boolean v = (b & (1 << bitOffset)) != 0;
     bitOffset += 1;
     if (bitOffset == 8) {
       bitOffset = 0;
+      offset++;
     }
     return v;
   }
 
   @Override
   public final int readInteger() {
-    return getBuffer(4).getInt();
+    int v = Platform.getInt(buffer, offset);
+    if (bigEndianPlatform) {
+      v = java.lang.Integer.reverseBytes(v);
+    }
+    offset += 4;
+    return v;
   }
 
   @Override
   public final long readLong() {
-    return getBuffer(8).getLong();
+    long v = Platform.getLong(buffer, offset);
+    if (bigEndianPlatform) {
+      v = java.lang.Long.reverseBytes(v);
+    }
+    offset += 8;
+    return v;
   }
 
   @Override
   public final byte readByte() {
-    return (byte) readInteger();
+    return (byte)readInteger();
   }
 
   @Override
   public final float readFloat() {
-    return getBuffer(4).getFloat();
+    float v;
+    if (!bigEndianPlatform) {
+      v = Platform.getFloat(buffer, offset);
+    } else {
+      v = byteBuffer.getFloat(offset - Platform.BYTE_ARRAY_OFFSET);
+    }
+    offset += 4;
+    return v;
   }
 
   @Override
   public final double readDouble() {
-    return getBuffer(8).getDouble();
+    double v;
+    if (!bigEndianPlatform) {
+      v = Platform.getDouble(buffer, offset);
+    } else {
+      v = byteBuffer.getDouble(offset - Platform.BYTE_ARRAY_OFFSET);
+    }
+    offset += 8;
+    return v;
   }
 
   @Override
   public final void readBinary(int total, WritableColumnVector v, int rowId) {
     for (int i = 0; i < total; i++) {
       int len = readInteger();
-      ByteBuffer buffer = getBuffer(len);
-      if (buffer.hasArray()) {
-        v.putByteArray(rowId + i, buffer.array(), buffer.arrayOffset() + buffer.position(), len);
-      } else {
-        byte[] bytes = new byte[len];
-        buffer.get(bytes);
-        v.putByteArray(rowId + i, bytes);
-      }
+      int start = offset;
+      offset += len;
+      v.putByteArray(rowId + i, buffer, start - Platform.BYTE_ARRAY_OFFSET, len);
     }
   }
 
   @Override
   public final Binary readBinary(int len) {
-    ByteBuffer buffer = getBuffer(len);
-    if (buffer.hasArray()) {
-      return Binary.fromConstantByteArray(
-          buffer.array(), buffer.arrayOffset() + buffer.position(), len);
-    } else {
-      byte[] bytes = new byte[len];
-      buffer.get(bytes);
-      return Binary.fromConstantByteArray(bytes);
-    }
+    Binary result = Binary.fromConstantByteArray(buffer, offset - Platform.BYTE_ARRAY_OFFSET, len);
+    offset += len;
+    return result;
   }
 }

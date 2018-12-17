@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{DataType, LongType}
 
 /**
@@ -39,9 +38,8 @@ import org.apache.spark.sql.types.{DataType, LongType}
       puts the partition ID in the upper 31 bits, and the lower 33 bits represent the record number
       within each partition. The assumption is that the data frame has less than 1 billion
       partitions, and each partition has less than 8 billion records.
-      The function is non-deterministic because its result depends on partition IDs.
   """)
-case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
+case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
 
   /**
    * Record ID within each partition. By being transient, count's value is reset to 0 every time
@@ -67,20 +65,18 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val countTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "count")
+    val countTerm = ctx.addMutableState(ctx.JAVA_LONG, "count")
     val partitionMaskTerm = "partitionMask"
-    ctx.addImmutableStateIfNotExists(CodeGenerator.JAVA_LONG, partitionMaskTerm)
+    ctx.addImmutableStateIfNotExists(ctx.JAVA_LONG, partitionMaskTerm)
     ctx.addPartitionInitializationStatement(s"$countTerm = 0L;")
     ctx.addPartitionInitializationStatement(s"$partitionMaskTerm = ((long) partitionIndex) << 33;")
 
-    ev.copy(code = code"""
-      final ${CodeGenerator.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
-      $countTerm++;""", isNull = FalseLiteral)
+    ev.copy(code = s"""
+      final ${ctx.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
+      $countTerm++;""", isNull = "false")
   }
 
   override def prettyName: String = "monotonically_increasing_id"
 
   override def sql: String = s"$prettyName()"
-
-  override def freshCopy(): MonotonicallyIncreasingID = MonotonicallyIncreasingID()
 }

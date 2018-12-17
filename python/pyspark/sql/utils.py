@@ -121,10 +121,7 @@ def require_minimum_pandas_version():
     from distutils.version import LooseVersion
     try:
         import pandas
-        have_pandas = True
     except ImportError:
-        have_pandas = False
-    if not have_pandas:
         raise ImportError("Pandas >= %s must be installed; however, "
                           "it was not found." % minimum_pandas_version)
     if LooseVersion(pandas.__version__) < LooseVersion(minimum_pandas_version):
@@ -141,10 +138,7 @@ def require_minimum_pyarrow_version():
     from distutils.version import LooseVersion
     try:
         import pyarrow
-        have_arrow = True
     except ImportError:
-        have_arrow = False
-    if not have_arrow:
         raise ImportError("PyArrow >= %s must be installed; however, "
                           "it was not found." % minimum_pyarrow_version)
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):

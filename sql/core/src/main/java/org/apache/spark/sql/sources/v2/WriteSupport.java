@@ -35,7 +35,7 @@ public interface WriteSupport extends DataSourceV2 {
    * Creates an optional {@link DataSourceWriter} to save the data to this data source. Data
    * sources can return None if there is no writing needed to be done according to the save mode.
    *
-   * If this method fails (by throwing an exception), the action will fail and no Spark job will be
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
    * submitted.
    *
    * @param jobId A unique string for the writing job. It's possible that there are many writing

@@ -63,17 +63,17 @@ class RelationalGroupedDataset protected[sql](
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(groupingExprs, aliasedAgg, df.planWithBarrier))
+          df.sparkSession, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.RollupType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.planWithBarrier))
+          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.CubeType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.planWithBarrier))
+          df.sparkSession, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         Dataset.ofRows(
-          df.sparkSession, Pivot(Some(aliasedGrps), pivotCol, values, aggExprs, df.planWithBarrier))
+          df.sparkSession, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
     }
   }
 
@@ -433,7 +433,7 @@ class RelationalGroupedDataset protected[sql](
           df.exprEnc.schema,
           groupingAttributes,
           df.logicalPlan.output,
-          df.planWithBarrier))
+          df.logicalPlan))
   }
 
   /**
@@ -459,7 +459,7 @@ class RelationalGroupedDataset protected[sql](
       case other => Alias(other, other.toString)()
     }
     val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
-    val child = df.planWithBarrier
+    val child = df.logicalPlan
     val project = Project(groupingNamedExpressions ++ child.output, child)
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
     val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)

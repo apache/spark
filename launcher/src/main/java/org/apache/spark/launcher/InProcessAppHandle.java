@@ -25,7 +25,7 @@ import java.util.logging.Logger;
 class InProcessAppHandle extends AbstractAppHandle {
 
   private static final String THREAD_NAME_FMT = "spark-app-%d: '%s'";
-  private static final Logger LOG = Logger.getLogger(InProcessAppHandle.class.getName());
+  private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
   private static final AtomicLong THREAD_IDS = new AtomicLong();
 
   // Avoid really long thread names.

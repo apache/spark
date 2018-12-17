@@ -108,6 +108,7 @@ isRDD <- function(name, env) {
 #'
 #' @param key the object to be hashed
 #' @return the hash code as an integer
+#' @export
 #' @examples
 #'\dontrun{
 #' hashCode(1L) # 1
@@ -746,7 +747,7 @@ varargsToJProperties <- function(...) {
   props
 }
 
-launchScript <- function(script, combinedArgs, wait = FALSE, stdout = "", stderr = "") {
+launchScript <- function(script, combinedArgs, wait = FALSE) {
   if (.Platform$OS.type == "windows") {
     scriptWithArgs <- paste(script, combinedArgs, sep = " ")
     # on Windows, intern = F seems to mean output to the console. (documentation on this is missing)
@@ -756,7 +757,7 @@ launchScript <- function(script, combinedArgs, wait = FALSE, stdout = "", stderr
     # stdout = F means discard output
     # stdout = "" means to its console (default)
     # Note that the console of this child process might not be the same as the running R process.
-    system2(script, combinedArgs, stdout = stdout, wait = wait, stderr = stderr)
+    system2(script, combinedArgs, stdout = "", wait = wait)
   }
 }
 

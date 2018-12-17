@@ -26,7 +26,7 @@ class HiveExternalSessionCatalogSuite extends SessionCatalogSuite with TestHiveS
 
   private val externalCatalog = {
     val catalog = spark.sharedState.externalCatalog
-    catalog.unwrapped.asInstanceOf[HiveExternalCatalog].client.reset()
+    catalog.asInstanceOf[HiveExternalCatalog].client.reset()
     catalog
   }
 

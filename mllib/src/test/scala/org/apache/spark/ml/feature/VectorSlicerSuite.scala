@@ -17,16 +17,16 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
-import org.apache.spark.sql.Row
+import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.{StructField, StructType}
 
-class VectorSlicerSuite extends MLTest with DefaultReadWriteTest {
-
-  import testImplicits._
+class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     val slicer = new VectorSlicer().setInputCol("feature")
@@ -84,12 +84,12 @@ class VectorSlicerSuite extends MLTest with DefaultReadWriteTest {
 
     val vectorSlicer = new VectorSlicer().setInputCol("features").setOutputCol("result")
 
-    def validateResults(rows: Seq[Row]): Unit = {
-      rows.foreach { case Row(vec1: Vector, vec2: Vector) =>
+    def validateResults(df: DataFrame): Unit = {
+      df.select("result", "expected").collect().foreach { case Row(vec1: Vector, vec2: Vector) =>
         assert(vec1 === vec2)
       }
-      val resultMetadata = AttributeGroup.fromStructField(rows.head.schema("result"))
-      val expectedMetadata = AttributeGroup.fromStructField(rows.head.schema("expected"))
+      val resultMetadata = AttributeGroup.fromStructField(df.schema("result"))
+      val expectedMetadata = AttributeGroup.fromStructField(df.schema("expected"))
       assert(resultMetadata.numAttributes === expectedMetadata.numAttributes)
       resultMetadata.attributes.get.zip(expectedMetadata.attributes.get).foreach { case (a, b) =>
         assert(a === b)
@@ -97,16 +97,13 @@ class VectorSlicerSuite extends MLTest with DefaultReadWriteTest {
     }
 
     vectorSlicer.setIndices(Array(1, 4)).setNames(Array.empty)
-    testTransformerByGlobalCheckFunc[(Vector, Vector)](df, vectorSlicer, "result", "expected")(
-      validateResults)
+    validateResults(vectorSlicer.transform(df))
 
     vectorSlicer.setIndices(Array(1)).setNames(Array("f4"))
-    testTransformerByGlobalCheckFunc[(Vector, Vector)](df, vectorSlicer, "result", "expected")(
-      validateResults)
+    validateResults(vectorSlicer.transform(df))
 
     vectorSlicer.setIndices(Array.empty).setNames(Array("f1", "f4"))
-    testTransformerByGlobalCheckFunc[(Vector, Vector)](df, vectorSlicer, "result", "expected")(
-      validateResults)
+    validateResults(vectorSlicer.transform(df))
   }
 
   test("read/write") {

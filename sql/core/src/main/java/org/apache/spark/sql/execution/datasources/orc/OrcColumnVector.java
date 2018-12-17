@@ -136,7 +136,7 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   public long getLong(int rowId) {
     int index = getRowIndex(rowId);
     if (isTimestamp) {
-      return timestampData.time[index] * 1000 + timestampData.nanos[index] / 1000 % 1000;
+      return timestampData.time[index] * 1000 + timestampData.nanos[index] / 1000;
     } else {
       return longData.vector[index];
     }

@@ -356,7 +356,25 @@ abstract class StreamExecution(
 
   private def isInterruptedByStop(e: Throwable): Boolean = {
     if (state.get == TERMINATED) {
-      StreamExecution.isInterruptionException(e)
+      e match {
+        // InterruptedIOException - thrown when an I/O operation is interrupted
+        // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
+        case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
+          true
+        // The cause of the following exceptions may be one of the above exceptions:
+        //
+        // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
+        //                        BiFunction.apply
+        // ExecutionException - thrown by codes running in a thread pool and these codes throw an
+        //                      exception
+        // UncheckedExecutionException - thrown by codes that cannot throw a checked
+        //                               ExecutionException, such as BiFunction.apply
+        case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
+          if e2.getCause != null =>
+          isInterruptedByStop(e2.getCause)
+        case _ =>
+          false
+      }
     } else {
       false
     }
@@ -376,6 +394,24 @@ abstract class StreamExecution(
           logWarning(s"Failed to stop streaming source: $source. Resources may have leaked.", e)
       }
     }
+  }
+
+  /**
+   * Signals to the thread executing micro-batches that it should stop running after the next
+   * batch. This method blocks until the thread stops running.
+   */
+  override def stop(): Unit = {
+    // Set the state to TERMINATED so that the batching thread knows that it was interrupted
+    // intentionally
+    state.set(TERMINATED)
+    if (queryExecutionThread.isAlive) {
+      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+      queryExecutionThread.interrupt()
+      queryExecutionThread.join()
+      // microBatchThread may spawn new jobs, so we need to cancel again to prevent a leak
+      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+    }
+    logInfo(s"Query $prettyIdString was stopped")
   }
 
   /**
@@ -529,26 +565,6 @@ abstract class StreamExecution(
 
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
-
-  def isInterruptionException(e: Throwable): Boolean = e match {
-    // InterruptedIOException - thrown when an I/O operation is interrupted
-    // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
-    case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
-      true
-    // The cause of the following exceptions may be one of the above exceptions:
-    //
-    // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
-    //                        BiFunction.apply
-    // ExecutionException - thrown by codes running in a thread pool and these codes throw an
-    //                      exception
-    // UncheckedExecutionException - thrown by codes that cannot throw a checked
-    //                               ExecutionException, such as BiFunction.apply
-    case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
-        if e2.getCause != null =>
-      isInterruptionException(e2.getCause)
-    case _ =>
-      false
-  }
 }
 
 /**

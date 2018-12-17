@@ -109,7 +109,6 @@ private[spark] object TaskIndexNames {
   final val DURATION = "dur"
   final val ERROR = "err"
   final val EXECUTOR = "exe"
-  final val HOST = "hst"
   final val EXEC_CPU_TIME = "ect"
   final val EXEC_RUN_TIME = "ert"
   final val GC_TIME = "gc"
@@ -166,7 +165,6 @@ private[spark] class TaskDataWrapper(
     val duration: Long,
     @KVIndexParam(value = TaskIndexNames.EXECUTOR, parent = TaskIndexNames.STAGE)
     val executorId: String,
-    @KVIndexParam(value = TaskIndexNames.HOST, parent = TaskIndexNames.STAGE)
     val host: String,
     @KVIndexParam(value = TaskIndexNames.STATUS, parent = TaskIndexNames.STAGE)
     val status: String,

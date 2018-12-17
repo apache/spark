@@ -28,6 +28,8 @@ import org.apache.spark.sql.types._
 class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = "json"
 
+  private val badJson = "\u0000\u0000\u0000A\u0001AAA"
+
   // JSON does not write data of NullType and does not play well with BinaryType.
   override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: NullType => false
@@ -104,5 +106,37 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
         df
       )
     }
+  }
+
+  test("invalid json with leading nulls - from file (multiLine=true)") {
+    import testImplicits._
+    withTempDir { tempDir =>
+      val path = tempDir.getAbsolutePath
+      Seq(badJson, """{"a":1}""").toDS().write.mode("overwrite").text(path)
+      val expected = s"""$badJson\n{"a":1}\n"""
+      val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
+      val df =
+        spark.read.format(dataSourceName).option("multiLine", true).schema(schema).load(path)
+      checkAnswer(df, Row(null, expected))
+    }
+  }
+
+  test("invalid json with leading nulls - from file (multiLine=false)") {
+    import testImplicits._
+    withTempDir { tempDir =>
+      val path = tempDir.getAbsolutePath
+      Seq(badJson, """{"a":1}""").toDS().write.mode("overwrite").text(path)
+      val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
+      val df =
+        spark.read.format(dataSourceName).option("multiLine", false).schema(schema).load(path)
+      checkAnswer(df, Seq(Row(1, null), Row(null, badJson)))
+    }
+  }
+
+  test("invalid json with leading nulls - from dataset") {
+    import testImplicits._
+    checkAnswer(
+      spark.read.json(Seq(badJson).toDS()),
+      Row(badJson))
   }
 }

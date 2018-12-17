@@ -39,7 +39,7 @@ from pyspark.streaming.flume import FlumeUtils
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: flume_wordcount.py <hostname> <port>", file=sys.stderr)
-        sys.exit(-1)
+        exit(-1)
 
     sc = SparkContext(appName="PythonStreamingFlumeWordCount")
     ssc = StreamingContext(sc, 1)

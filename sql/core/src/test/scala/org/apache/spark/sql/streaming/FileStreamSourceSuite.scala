@@ -207,19 +207,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       .collect { case s @ StreamingRelation(dataSource, _, _) => s.schema }.head
   }
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    spark.sessionState.conf.setConf(SQLConf.ORC_IMPLEMENTATION, "native")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
-    } finally {
-      super.afterAll()
-    }
-  }
-
   // ============= Basic parameter exists tests ================
 
   test("FileStreamSource schema: no path") {

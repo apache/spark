@@ -30,22 +30,22 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 @InterfaceStability.Evolving
 public interface SupportsScanColumnarBatch extends DataSourceReader {
   @Override
-  default List<InputPartition<Row>> planInputPartitions() {
+  default List<DataReaderFactory<Row>> createDataReaderFactories() {
     throw new IllegalStateException(
-      "planInputPartitions not supported by default within SupportsScanColumnarBatch.");
+      "createDataReaderFactories not supported by default within SupportsScanColumnarBatch.");
   }
 
   /**
-   * Similar to {@link DataSourceReader#planInputPartitions()}, but returns columnar data
+   * Similar to {@link DataSourceReader#createDataReaderFactories()}, but returns columnar data
    * in batches.
    */
-  List<InputPartition<ColumnarBatch>> planBatchInputPartitions();
+  List<DataReaderFactory<ColumnarBatch>> createBatchDataReaderFactories();
 
   /**
    * Returns true if the concrete data source reader can read data in batch according to the scan
    * properties like required columns, pushes filters, etc. It's possible that the implementation
    * can only support some certain columns with certain types. Users can overwrite this method and
-   * {@link #planInputPartitions()} to fallback to normal read path under some conditions.
+   * {@link #createDataReaderFactories()} to fallback to normal read path under some conditions.
    */
   default boolean enableBatchRead() {
     return true;

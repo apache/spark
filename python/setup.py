@@ -26,7 +26,7 @@ from shutil import copyfile, copytree, rmtree
 if sys.version_info < (2, 7):
     print("Python versions prior to 2.7 are not supported for pip installed PySpark.",
           file=sys.stderr)
-    sys.exit(-1)
+    exit(-1)
 
 try:
     exec(open('pyspark/version.py').read())
@@ -98,7 +98,7 @@ if (in_spark):
     except:
         print("Temp path for symlink to parent already exists {0}".format(TEMP_PATH),
               file=sys.stderr)
-        sys.exit(-1)
+        exit(-1)
 
 # If you are changing the versions here, please also change ./python/pyspark/sql/utils.py and
 # ./python/run-tests.py. In case of Arrow, you should also check ./pom.xml.
@@ -140,7 +140,7 @@ try:
 
     if not os.path.isdir(SCRIPTS_TARGET):
         print(incorrect_invocation_message, file=sys.stderr)
-        sys.exit(-1)
+        exit(-1)
 
     # Scripts directive requires a list of each script path and does not take wild cards.
     script_names = os.listdir(SCRIPTS_TARGET)
@@ -201,7 +201,7 @@ try:
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
-        install_requires=['py4j==0.10.7'],
+        install_requires=['py4j==0.10.6'],
         setup_requires=['pypandoc'],
         extras_require={
             'ml': ['numpy>=1.7'],

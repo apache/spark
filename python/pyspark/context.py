@@ -211,21 +211,9 @@ class SparkContext(object):
         for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
-                try:
-                    filepath = os.path.join(SparkFiles.getRootDirectory(), filename)
-                    if not os.path.exists(filepath):
-                        # In case of YARN with shell mode, 'spark.submit.pyFiles' files are
-                        # not added via SparkContext.addFile. Here we check if the file exists,
-                        # try to copy and then add it to the path. See SPARK-21945.
-                        shutil.copyfile(path, filepath)
-                    if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
-                        self._python_includes.append(filename)
-                        sys.path.insert(1, filepath)
-                except Exception:
-                    warnings.warn(
-                        "Failed to add file [%s] speficied in 'spark.submit.pyFiles' to "
-                        "Python path:\n  %s" % (path, "\n  ".join(sys.path)),
-                        RuntimeWarning)
+                if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
+                    self._python_includes.append(filename)
+                    sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
@@ -1010,8 +998,8 @@ class SparkContext(object):
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
-        return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))
+        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
+        return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):
         """ Print the profile stats to stdout """
@@ -1047,7 +1035,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        sys.exit(-1)
+        exit(-1)
 
 
 if __name__ == "__main__":

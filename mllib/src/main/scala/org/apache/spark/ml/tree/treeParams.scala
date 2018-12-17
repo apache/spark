@@ -21,7 +21,6 @@ import java.util.Locale
 
 import scala.util.Try
 
-import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -461,34 +460,18 @@ private[ml] trait RandomForestRegressorParams
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize
-  with HasValidationIndicatorCol {
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize {
 
-  /**
-   * Threshold for stopping early when fit with validation is used.
-   * (This parameter is ignored when fit without validation is used.)
-   * The decision to stop early is decided based on this logic:
-   * If the current loss on the validation set is greater than 0.01, the diff
-   * of validation error is compared to relative tolerance which is
-   * validationTol * (current loss on the validation set).
-   * If the current loss on the validation set is less than or equal to 0.01,
-   * the diff of validation error is compared to absolute tolerance which is
-   * validationTol * 0.01.
+  /* TODO: Add this doc when we add this param.  SPARK-7132
+   * Threshold for stopping early when runWithValidation is used.
+   * If the error rate on the validation input changes by less than the validationTol,
+   * then learning will stop early (before [[numIterations]]).
+   * This parameter is ignored when run is used.
+   * (default = 1e-5)
    * @group param
-   * @see validationIndicatorCol
    */
-  @Since("2.4.0")
-  final val validationTol: DoubleParam = new DoubleParam(this, "validationTol",
-    "Threshold for stopping early when fit with validation is used." +
-    "If the error rate on the validation input changes by less than the validationTol," +
-    "then learning will stop early (before `maxIter`)." +
-    "This parameter is ignored when fit without validation is used.",
-    ParamValidators.gtEq(0.0)
-  )
-
-  /** @group getParam */
-  @Since("2.4.0")
-  final def getValidationTol: Double = $(validationTol)
+  // final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
+  // validationTol -> 1e-5
 
   /**
    * @deprecated This method is deprecated and will be removed in 3.0.0.
@@ -514,7 +497,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
   @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
-  setDefault(maxIter -> 20, stepSize -> 0.1, validationTol -> 0.01)
+  setDefault(maxIter -> 20, stepSize -> 0.1)
 
   setDefault(featureSubsetStrategy -> "all")
 
@@ -524,7 +507,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
       oldAlgo: OldAlgo.Algo): OldBoostingStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2, oldAlgo, OldVariance)
     // NOTE: The old API does not support "seed" so we ignore it.
-    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize, getValidationTol)
+    new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize)
   }
 
   /** Get old Gradient Boosting Loss type */
@@ -596,11 +579,7 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
-    convertToOldLossType(getLossType)
-  }
-
-  private[ml] def convertToOldLossType(loss: String): OldLoss = {
-    loss match {
+    getLossType match {
       case "squared" => OldSquaredError
       case "absolute" => OldAbsoluteError
       case _ =>

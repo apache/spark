@@ -19,13 +19,13 @@ package org.apache.spark.status.api.v1
 import java.io.OutputStream
 import java.util.{List => JList}
 import java.util.zip.ZipOutputStream
-import javax.ws.rs._
+import javax.ws.rs.{GET, Path, PathParam, Produces, QueryParam}
 import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{JobExecutionStatus, SparkContext}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.JobExecutionStatus
+import org.apache.spark.ui.SparkUI
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AbstractApplicationResource extends BaseAppResource {
@@ -50,29 +50,6 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @GET
   @Path("executors")
   def executorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(true))
-
-  @GET
-  @Path("executors/{executorId}/threads")
-  def threadDump(@PathParam("executorId") execId: String): Array[ThreadStackTrace] = withUI { ui =>
-    if (execId != SparkContext.DRIVER_IDENTIFIER && !execId.forall(Character.isDigit)) {
-      throw new BadParameterException(
-        s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
-    }
-
-    val safeSparkContext = ui.sc.getOrElse {
-      throw new ServiceUnavailable("Thread dumps not available through the history server.")
-    }
-
-    ui.store.asOption(ui.store.executorSummary(execId)) match {
-      case Some(executorSummary) if executorSummary.isActive =>
-          val safeThreadDump = safeSparkContext.getExecutorThreadDump(execId).getOrElse {
-            throw new NotFoundException("No thread dump is available.")
-          }
-          safeThreadDump
-      case Some(_) => throw new BadParameterException("Executor is not active.")
-      case _ => throw new NotFoundException("Executor does not exist.")
-    }
-  }
 
   @GET
   @Path("allexecutors")

@@ -67,13 +67,13 @@ private[spark] abstract class LauncherBackend {
   }
 
   def setAppId(appId: String): Unit = {
-    if (connection != null && isConnected) {
+    if (connection != null) {
       connection.send(new SetAppId(appId))
     }
   }
 
   def setState(state: SparkAppHandle.State): Unit = {
-    if (connection != null && isConnected && lastState != state) {
+    if (connection != null && lastState != state) {
       connection.send(new SetState(state))
       lastState = state
     }
@@ -114,10 +114,10 @@ private[spark] abstract class LauncherBackend {
 
     override def close(): Unit = {
       try {
-        _isConnected = false
         super.close()
       } finally {
         onDisconnected()
+        _isConnected = false
       }
     }
 

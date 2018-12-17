@@ -208,14 +208,4 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
       }
     }
   }
-
-  test("SPARK-23340 Empty float/double array columns raise EOFException") {
-    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
-      withTable("spark_23340") {
-        sql("CREATE TABLE spark_23340(a array<float>, b array<double>) STORED AS ORC")
-        sql("INSERT INTO spark_23340 VALUES (array(), array())")
-        checkAnswer(spark.table("spark_23340"), Seq(Row(Array.empty[Float], Array.empty[Double])))
-      }
-    }
-  }
 }

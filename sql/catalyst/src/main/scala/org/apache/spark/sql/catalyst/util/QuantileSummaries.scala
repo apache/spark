@@ -40,14 +40,12 @@ import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
  *   See the G-K article for more details.
  * @param count the count of all the elements *inserted in the sampled buffer*
  *              (excluding the head buffer)
- * @param compressed whether the statistics have been compressed
  */
 class QuantileSummaries(
     val compressThreshold: Int,
     val relativeError: Double,
     val sampled: Array[Stats] = Array.empty,
-    val count: Long = 0L,
-    var compressed: Boolean = false) extends Serializable {
+    val count: Long = 0L) extends Serializable {
 
   // a buffer of latest samples seen so far
   private val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty
@@ -62,7 +60,6 @@ class QuantileSummaries(
    */
   def insert(x: Double): QuantileSummaries = {
     headSampled += x
-    compressed = false
     if (headSampled.size >= defaultHeadSize) {
       val result = this.withHeadBufferInserted
       if (result.sampled.length >= compressThreshold) {
@@ -138,11 +135,11 @@ class QuantileSummaries(
     assert(inserted.count == count + headSampled.size)
     val compressed =
       compressImmut(inserted.sampled, mergeThreshold = 2 * relativeError * inserted.count)
-    new QuantileSummaries(compressThreshold, relativeError, compressed, inserted.count, true)
+    new QuantileSummaries(compressThreshold, relativeError, compressed, inserted.count)
   }
 
   private def shallowCopy: QuantileSummaries = {
-    new QuantileSummaries(compressThreshold, relativeError, sampled, count, compressed)
+    new QuantileSummaries(compressThreshold, relativeError, sampled, count)
   }
 
   /**
@@ -166,7 +163,7 @@ class QuantileSummaries(
       val res = (sampled ++ other.sampled).sortBy(_.value)
       val comp = compressImmut(res, mergeThreshold = 2 * relativeError * count)
       new QuantileSummaries(
-        other.compressThreshold, other.relativeError, comp, other.count + count, true)
+        other.compressThreshold, other.relativeError, comp, other.count + count)
     }
   }
 

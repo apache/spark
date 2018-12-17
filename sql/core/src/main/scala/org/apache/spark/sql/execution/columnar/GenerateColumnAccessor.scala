@@ -91,7 +91,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       val accessorName = ctx.addMutableState(accessorCls, "accessor")
 
       val createCode = dt match {
-        case t if CodeGenerator.isPrimitiveType(dt) =>
+        case t if ctx.isPrimitiveType(dt) =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case NullType | StringType | BinaryType =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
@@ -165,7 +165,9 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         private ByteOrder nativeOrder = null;
         private byte[][] buffers = null;
-        private UnsafeRowWriter rowWriter = new UnsafeRowWriter($numFields);
+        private UnsafeRow unsafeRow = new UnsafeRow($numFields);
+        private BufferHolder bufferHolder = new BufferHolder(unsafeRow);
+        private UnsafeRowWriter rowWriter = new UnsafeRowWriter(bufferHolder, $numFields);
         private MutableUnsafeRow mutableRow = null;
 
         private int currentRow = 0;
@@ -210,10 +212,11 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         public InternalRow next() {
           currentRow += 1;
-          rowWriter.reset();
+          bufferHolder.reset();
           rowWriter.zeroOutNullBytes();
           ${extractorCalls}
-          return rowWriter.getRow();
+          unsafeRow.setTotalSize(bufferHolder.totalSize());
+          return unsafeRow;
         }
 
         ${ctx.declareAddedFunctions()}

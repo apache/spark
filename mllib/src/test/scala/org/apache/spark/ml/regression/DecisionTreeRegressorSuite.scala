@@ -136,21 +136,6 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     assert(importances.toArray.forall(_ >= 0.0))
   }
 
-  test("prediction on single instance") {
-    val dt = new DecisionTreeRegressor()
-      .setImpurity("variance")
-      .setMaxDepth(3)
-      .setSeed(123)
-
-    // In this data, feature 1 is very important.
-    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
-    val categoricalFeatures = Map.empty[Int, Int]
-    val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
-
-    val model = dt.fit(df)
-    testPredictionModelSinglePrediction(model, df)
-  }
-
   test("should support all NumericType labels and not support other types") {
     val dt = new DecisionTreeRegressor().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[DecisionTreeRegressionModel, DecisionTreeRegressor](
@@ -190,20 +175,6 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     testEstimatorAndModelReadWrite(dt, continuousData,
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0),
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
-  }
-
-  test("label/impurity stats") {
-    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
-    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
-    val dtr = new DecisionTreeRegressor()
-      .setImpurity("variance")
-      .setMaxDepth(2)
-      .setMaxBins(8)
-    val model = dtr.fit(df)
-    val statInfo = model.rootNode
-
-    assert(statInfo.getCount == 1000.0 && statInfo.getSum == 600.0
-      && statInfo.getSumOfSquares == 600.0)
   }
 }
 

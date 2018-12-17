@@ -139,13 +139,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   }
 
   /**
-   * Clean up any non-shuffle files in any local directories associated with an finished executor.
-   */
-  public void executorRemoved(String executorId, String appId) {
-    blockManager.executorRemoved(executorId, appId);
-  }
-
-  /**
    * Register an (application, executor) with the given shuffle info.
    *
    * The "re-" is meant to highlight the intended use of this method -- when this service is

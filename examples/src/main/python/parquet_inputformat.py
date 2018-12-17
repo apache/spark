@@ -45,7 +45,7 @@ if __name__ == "__main__":
                 /path/to/examples/parquet_inputformat.py <data_file>
         Assumes you have Parquet data stored in <data_file>.
         """, file=sys.stderr)
-        sys.exit(-1)
+        exit(-1)
 
     path = sys.argv[1]
 

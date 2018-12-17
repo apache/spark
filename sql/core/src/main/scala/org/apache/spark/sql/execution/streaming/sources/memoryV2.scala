@@ -27,10 +27,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Complete, Update}
-import org.apache.spark.sql.execution.streaming.{MemorySinkBase, Sink}
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamWriteSupport}
+import org.apache.spark.sql.execution.streaming.Sink
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.OutputMode
@@ -40,7 +39,7 @@ import org.apache.spark.sql.types.StructType
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkBase with Logging {
+class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
   override def createStreamWriter(
       queryId: String,
       schema: StructType,
@@ -66,10 +65,6 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
 
   def latestBatchData: Seq[Row] = synchronized {
     batches.lastOption.toSeq.flatten(_.data)
-  }
-
-  def dataSinceBatch(sinceBatchId: Long): Seq[Row] = synchronized {
-    batches.filter(_.batchId > sinceBatchId).flatMap(_.data)
   }
 
   def toDebugString: String = synchronized {
@@ -101,7 +96,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
 
         case _ =>
           throw new IllegalArgumentException(
-            s"Output mode $outputMode is not supported by MemorySinkV2")
+            s"Output mode $outputMode is not supported by MemorySink")
       }
     } else {
       logDebug(s"Skipping already committed batch: $batchId")
@@ -112,7 +107,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with MemorySinkB
     batches.clear()
   }
 
-  override def toString(): String = "MemorySinkV2"
+  override def toString(): String = "MemorySink"
 }
 
 case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row]) extends WriterCommitMessage {}
@@ -152,10 +147,7 @@ class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
 }
 
 case class MemoryWriterFactory(outputMode: OutputMode) extends DataWriterFactory[Row] {
-  override def createDataWriter(
-      partitionId: Int,
-      attemptNumber: Int,
-      epochId: Long): DataWriter[Row] = {
+  def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
     new MemoryDataWriter(partitionId, outputMode)
   }
 }
@@ -180,10 +172,10 @@ class MemoryDataWriter(partition: Int, outputMode: OutputMode)
 
 
 /**
- * Used to query the data that has been written into a [[MemorySinkV2]].
+ * Used to query the data that has been written into a [[MemorySink]].
  */
 case class MemoryPlanV2(sink: MemorySinkV2, override val output: Seq[Attribute]) extends LeafNode {
-  private val sizePerRow = EstimationUtils.getSizePerRow(output)
+  private val sizePerRow = output.map(_.dataType.defaultSize).sum
 
   override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
 }

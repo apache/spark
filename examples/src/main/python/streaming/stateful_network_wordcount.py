@@ -39,7 +39,7 @@ from pyspark.streaming import StreamingContext
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: stateful_network_wordcount.py <hostname> <port>", file=sys.stderr)
-        sys.exit(-1)
+        exit(-1)
     sc = SparkContext(appName="PythonStreamingStatefulNetworkWordCount")
     ssc = StreamingContext(sc, 1)
     ssc.checkpoint("checkpoint")

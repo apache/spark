@@ -29,7 +29,7 @@ class ParquetFileFormatSuite extends QueryTest with ParquetTest with SharedSQLCo
   test("read parquet footers in parallel") {
     def testReadFooters(ignoreCorruptFiles: Boolean): Unit = {
       withTempDir { dir =>
-        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val fs = FileSystem.get(sparkContext.hadoopConfiguration)
         val basePath = dir.getCanonicalPath
 
         val path1 = new Path(basePath, "first")
@@ -44,7 +44,7 @@ class ParquetFileFormatSuite extends QueryTest with ParquetTest with SharedSQLCo
           Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
 
         val footers = ParquetFileFormat.readParquetFootersInParallel(
-          spark.sessionState.newHadoopConf(), fileStatuses, ignoreCorruptFiles)
+          sparkContext.hadoopConfiguration, fileStatuses, ignoreCorruptFiles)
 
         assert(footers.size == 2)
       }

@@ -215,7 +215,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           }
         </div>;
 
-    UIUtils.basicSparkPage(request, content, "Spark Master at " + state.uri)
+    UIUtils.basicSparkPage(content, "Spark Master at " + state.uri)
   }
 
   private def workerRow(worker: WorkerInfo): Seq[Node] = {

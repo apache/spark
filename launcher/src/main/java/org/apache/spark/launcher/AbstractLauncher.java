@@ -139,7 +139,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> {
   public T addSparkArg(String arg) {
     SparkSubmitOptionParser validator = new ArgumentValidator(false);
     validator.parse(Arrays.asList(arg));
-    builder.userArgs.add(arg);
+    builder.sparkArgs.add(arg);
     return self();
   }
 
@@ -187,8 +187,8 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> {
       }
     } else {
       validator.parse(Arrays.asList(name, value));
-      builder.userArgs.add(name);
-      builder.userArgs.add(value);
+      builder.sparkArgs.add(name);
+      builder.sparkArgs.add(value);
     }
     return self();
   }

@@ -76,7 +76,6 @@ object JdbcUtils extends Logging {
     Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
       try {
-        statement.setQueryTimeout(options.queryTimeout)
         statement.executeQuery()
       } finally {
         statement.close()
@@ -87,10 +86,9 @@ object JdbcUtils extends Logging {
   /**
    * Drops a table from the JDBC database.
    */
-  def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
+  def dropTable(conn: Connection, table: String): Unit = {
     val statement = conn.createStatement
     try {
-      statement.setQueryTimeout(options.queryTimeout)
       statement.executeUpdate(s"DROP TABLE $table")
     } finally {
       statement.close()
@@ -104,7 +102,6 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(options.url)
     val statement = conn.createStatement
     try {
-      statement.setQueryTimeout(options.queryTimeout)
       statement.executeUpdate(dialect.getTruncateQuery(options.table))
     } finally {
       statement.close()
@@ -257,7 +254,6 @@ object JdbcUtils extends Logging {
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(options.table))
       try {
-        statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(statement.executeQuery(), dialect))
       } catch {
         case _: SQLException => None
@@ -600,8 +596,7 @@ object JdbcUtils extends Logging {
       insertStmt: String,
       batchSize: Int,
       dialect: JdbcDialect,
-      isolationLevel: Int,
-      options: JDBCOptions): Iterator[Byte] = {
+      isolationLevel: Int): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
 
@@ -642,9 +637,6 @@ object JdbcUtils extends Logging {
 
       try {
         var rowCount = 0
-
-        stmt.setQueryTimeout(options.queryTimeout)
-
         while (iterator.hasNext) {
           val row = iterator.next()
           var i = 0
@@ -827,8 +819,7 @@ object JdbcUtils extends Logging {
       case _ => df
     }
     repartitionedDF.rdd.foreachPartition(iterator => savePartition(
-      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
-      options)
+      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel)
     )
   }
 
@@ -850,7 +841,6 @@ object JdbcUtils extends Logging {
     val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
     val statement = conn.createStatement
     try {
-      statement.setQueryTimeout(options.queryTimeout)
       statement.executeUpdate(sql)
     } finally {
       statement.close()

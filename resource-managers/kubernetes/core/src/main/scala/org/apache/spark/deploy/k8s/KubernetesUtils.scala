@@ -16,7 +16,9 @@
  */
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.LocalObjectReference
+import java.io.File
+
+import io.fabric8.kubernetes.api.model.{Container, Pod, PodBuilder}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
@@ -42,22 +44,71 @@ private[spark] object KubernetesUtils {
   }
 
   /**
+   * Append the given init-container to a pod's list of init-containers.
+   *
+   * @param originalPodSpec original specification of the pod
+   * @param initContainer the init-container to add to the pod
+   * @return the pod with the init-container added to the list of InitContainers
+   */
+  def appendInitContainer(originalPodSpec: Pod, initContainer: Container): Pod = {
+    new PodBuilder(originalPodSpec)
+      .editOrNewSpec()
+        .addToInitContainers(initContainer)
+        .endSpec()
+      .build()
+  }
+
+  /**
    * For the given collection of file URIs, resolves them as follows:
+   * - File URIs with scheme file:// are resolved to the given download path.
    * - File URIs with scheme local:// resolve to just the path of the URI.
    * - Otherwise, the URIs are returned as-is.
    */
-  def resolveFileUrisAndPath(fileUris: Iterable[String]): Iterable[String] = {
+  def resolveFileUris(
+      fileUris: Iterable[String],
+      fileDownloadPath: String): Iterable[String] = {
     fileUris.map { uri =>
-      resolveFileUri(uri)
+      resolveFileUri(uri, fileDownloadPath, false)
     }
   }
 
-  private def resolveFileUri(uri: String): String = {
+  /**
+   * If any file uri has any scheme other than local:// it is mapped as if the file
+   * was downloaded to the file download path. Otherwise, it is mapped to the path
+   * part of the URI.
+   */
+  def resolveFilePaths(fileUris: Iterable[String], fileDownloadPath: String): Iterable[String] = {
+    fileUris.map { uri =>
+      resolveFileUri(uri, fileDownloadPath, true)
+    }
+  }
+
+  /**
+   * Get from a given collection of file URIs the ones that represent remote files.
+   */
+  def getOnlyRemoteFiles(uris: Iterable[String]): Iterable[String] = {
+    uris.filter { uri =>
+      val scheme = Utils.resolveURI(uri).getScheme
+      scheme != "file" && scheme != "local"
+    }
+  }
+
+  private def resolveFileUri(
+      uri: String,
+      fileDownloadPath: String,
+      assumesDownloaded: Boolean): String = {
     val fileUri = Utils.resolveURI(uri)
     val fileScheme = Option(fileUri.getScheme).getOrElse("file")
     fileScheme match {
-      case "local" => fileUri.getPath
-      case _ => uri
+      case "local" =>
+        fileUri.getPath
+      case _ =>
+        if (assumesDownloaded || fileScheme == "file") {
+          val fileName = new File(fileUri.getPath).getName
+          s"$fileDownloadPath/$fileName"
+        } else {
+          uri
+        }
     }
   }
 }

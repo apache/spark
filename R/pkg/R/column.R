@@ -29,6 +29,7 @@ setOldClass("jobj")
 #' @rdname column
 #'
 #' @slot jc reference to JVM SparkDataFrame column
+#' @export
 #' @note Column since 1.4.0
 setClass("Column",
          slots = list(jc = "jobj"))
@@ -55,6 +56,7 @@ setMethod("column",
 #' @rdname show
 #' @name show
 #' @aliases show,Column-method
+#' @export
 #' @note show(Column) since 1.4.0
 setMethod("show", "Column",
           function(object) {
@@ -132,6 +134,7 @@ createMethods()
 #' @name alias
 #' @aliases alias,Column-method
 #' @family colum_func
+#' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(iris)
@@ -161,18 +164,12 @@ setMethod("alias",
 #' @aliases substr,Column-method
 #'
 #' @param x a Column.
-#' @param start starting position. It should be 1-base.
+#' @param start starting position.
 #' @param stop ending position.
-#' @examples
-#' \dontrun{
-#' df <- createDataFrame(list(list(a="abcdef")))
-#' collect(select(df, substr(df$a, 1, 4))) # the result is `abcd`.
-#' collect(select(df, substr(df$a, 2, 4))) # the result is `bcd`.
-#' }
 #' @note substr since 1.4.0
 setMethod("substr", signature(x = "Column"),
           function(x, start, stop) {
-            jc <- callJMethod(x@jc, "substr", as.integer(start), as.integer(stop - start + 1))
+            jc <- callJMethod(x@jc, "substr", as.integer(start - 1), as.integer(stop - start + 1))
             column(jc)
           })
 
@@ -273,6 +270,7 @@ setMethod("cast",
 #' @name %in%
 #' @aliases %in%,Column-method
 #' @return A matched values as a result of comparing with given values.
+#' @export
 #' @examples
 #' \dontrun{
 #' filter(df, "age in (10, 30)")
@@ -298,6 +296,7 @@ setMethod("%in%",
 #' @name otherwise
 #' @family colum_func
 #' @aliases otherwise,Column-method
+#' @export
 #' @note otherwise since 1.5.0
 setMethod("otherwise",
           signature(x = "Column", value = "ANY"),
@@ -319,6 +318,7 @@ setMethod("otherwise",
 #' @rdname eq_null_safe
 #' @name %<=>%
 #' @aliases %<=>%,Column-method
+#' @export
 #' @examples
 #' \dontrun{
 #' df1 <- createDataFrame(data.frame(
@@ -348,6 +348,7 @@ setMethod("%<=>%",
 #' @rdname not
 #' @name not
 #' @aliases !,Column-method
+#' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(data.frame(x = c(-1, 0, 1)))

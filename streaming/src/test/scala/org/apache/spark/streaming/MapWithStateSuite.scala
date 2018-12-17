@@ -39,7 +39,7 @@ class MapWithStateSuite extends SparkFunSuite
 
   before {
     StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
-    checkpointDir = Utils.createTempDir(namePrefix = "checkpoint")
+    checkpointDir = Utils.createTempDir("checkpoint")
   }
 
   after {
