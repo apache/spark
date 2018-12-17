@@ -554,13 +554,6 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
       return null
     }
 
-    val numElements = maps.foldLeft(0L)((sum, ad) => sum + ad.numElements())
-    if (numElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      throw new RuntimeException(s"Unsuccessful attempt to concat maps with $numElements " +
-        s"elements due to exceeding the map size limit " +
-        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
-    }
-
     for (map <- maps) {
       mapBuilder.putAll(map.keyArray(), map.valueArray())
     }
@@ -569,8 +562,6 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mapCodes = children.map(_.genCode(ctx))
-    val keyType = dataType.keyType
-    val valueType = dataType.valueType
     val argsName = ctx.freshName("args")
     val hasNullName = ctx.freshName("hasNull")
     val builderTerm = ctx.addReferenceObj("mapBuilder", mapBuilder)
@@ -610,41 +601,12 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
     )
 
     val idxName = ctx.freshName("idx")
-    val numElementsName = ctx.freshName("numElems")
-    val finKeysName = ctx.freshName("finalKeys")
-    val finValsName = ctx.freshName("finalValues")
-
-    val keyConcat = genCodeForArrays(ctx, keyType, false)
-
-    val valueConcat =
-      if (valueType.sameType(keyType) &&
-          !(CodeGenerator.isPrimitiveType(valueType) && dataType.valueContainsNull)) {
-        keyConcat
-      } else {
-        genCodeForArrays(ctx, valueType, dataType.valueContainsNull)
-      }
-
-    val keyArgsName = ctx.freshName("keyArgs")
-    val valArgsName = ctx.freshName("valArgs")
-
     val mapMerge =
       s"""
-        |ArrayData[] $keyArgsName = new ArrayData[${mapCodes.size}];
-        |ArrayData[] $valArgsName = new ArrayData[${mapCodes.size}];
-        |long $numElementsName = 0;
         |for (int $idxName = 0; $idxName < $argsName.length; $idxName++) {
-        |  $keyArgsName[$idxName] = $argsName[$idxName].keyArray();
-        |  $valArgsName[$idxName] = $argsName[$idxName].valueArray();
-        |  $numElementsName += $argsName[$idxName].numElements();
+        |  $builderTerm.putAll($argsName[$idxName].keyArray(), $argsName[$idxName].valueArray());
         |}
-        |if ($numElementsName > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-        |  throw new RuntimeException("Unsuccessful attempt to concat maps with " +
-        |     $numElementsName + " elements due to exceeding the map size limit " +
-        |     "${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.");
-        |}
-        |ArrayData $finKeysName = $keyConcat($keyArgsName, (int) $numElementsName);
-        |ArrayData $finValsName = $valueConcat($valArgsName, (int) $numElementsName);
-        |${ev.value} = $builderTerm.from($finKeysName, $finValsName);
+        |${ev.value} = $builderTerm.build();
       """.stripMargin
 
     ev.copy(
@@ -658,41 +620,6 @@ case class MapConcat(children: Seq[Expression]) extends ComplexTypeMergingExpres
         |  $mapMerge
         |}
       """.stripMargin)
-  }
-
-  private def genCodeForArrays(
-      ctx: CodegenContext,
-      elementType: DataType,
-      checkForNull: Boolean): String = {
-    val counter = ctx.freshName("counter")
-    val arrayData = ctx.freshName("arrayData")
-    val argsName = ctx.freshName("args")
-    val numElemName = ctx.freshName("numElements")
-    val y = ctx.freshName("y")
-    val z = ctx.freshName("z")
-
-    val allocation = CodeGenerator.createArrayData(
-      arrayData, elementType, numElemName, s" $prettyName failed.")
-    val assignment = CodeGenerator.createArrayAssignment(
-      arrayData, elementType, s"$argsName[$y]", counter, z, checkForNull)
-
-    val concat = ctx.freshName("concat")
-    val concatDef =
-      s"""
-         |private ArrayData $concat(ArrayData[] $argsName, int $numElemName) {
-         |  $allocation
-         |  int $counter = 0;
-         |  for (int $y = 0; $y < ${children.length}; $y++) {
-         |    for (int $z = 0; $z < $argsName[$y].numElements(); $z++) {
-         |      $assignment
-         |      $counter++;
-         |    }
-         |  }
-         |  return $arrayData;
-         |}
-       """.stripMargin
-
-    ctx.addNewFunction(concat, concatDef)
   }
 
   override def prettyName: String = "map_concat"

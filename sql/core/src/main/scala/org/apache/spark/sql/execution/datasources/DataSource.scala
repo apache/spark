@@ -122,21 +122,14 @@ case class DataSource(
    *     be any further inference in any triggers.
    *
    * @param format the file format object for this DataSource
-   * @param fileIndex optional [[InMemoryFileIndex]] for getting partition schema and file list
+   * @param getFileIndex [[InMemoryFileIndex]] for getting partition schema and file list
    * @return A pair of the data schema (excluding partition columns) and the schema of the partition
    *         columns.
    */
   private def getOrInferFileFormatSchema(
       format: FileFormat,
-      fileIndex: Option[InMemoryFileIndex] = None): (StructType, StructType) = {
-    // The operations below are expensive therefore try not to do them if we don't need to, e.g.,
-    // in streaming mode, we have already inferred and registered partition columns, we will
-    // never have to materialize the lazy val below
-    lazy val tempFileIndex = fileIndex.getOrElse {
-      val globbedPaths =
-        checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
-      createInMemoryFileIndex(globbedPaths)
-    }
+      getFileIndex: () => InMemoryFileIndex): (StructType, StructType) = {
+    lazy val tempFileIndex = getFileIndex()
 
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
@@ -236,7 +229,15 @@ case class DataSource(
               "you may be able to create a static DataFrame on that directory with " +
               "'spark.read.load(directory)' and infer schema from it.")
         }
-        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format)
+
+        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format, () => {
+          // The operations below are expensive therefore try not to do them if we don't need to,
+          // e.g., in streaming mode, we have already inferred and registered partition columns,
+          // we will never have to materialize the lazy val below
+          val globbedPaths =
+            checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
+          createInMemoryFileIndex(globbedPaths)
+        })
         SourceInfo(
           s"FileSource[$path]",
           StructType(dataSchema ++ partitionSchema),
@@ -370,7 +371,7 @@ case class DataSource(
         } else {
           val index = createInMemoryFileIndex(globbedPaths)
           val (resultDataSchema, resultPartitionSchema) =
-            getOrInferFileFormatSchema(format, Some(index))
+            getOrInferFileFormatSchema(format, () => index)
           (index, resultDataSchema, resultPartitionSchema)
         }
 
