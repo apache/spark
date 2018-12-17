@@ -38,6 +38,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.util.Utils
 
 class TestFileFilter extends PathFilter {
@@ -2588,5 +2589,22 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       df,
       Row(null, Array(0, 1, 2), "abc", """{"a":"-","b":[0, 1, 2],"c":"abc"}""") ::
       Row(0.1, null, "def", """{"a":0.1,"b":{},"c":"def"}""") :: Nil)
+  }
+
+  test("inferring timestamp type") {
+    def schemaOf(jsons: String*): StructType = spark.read.json(jsons.toDS).schema
+
+    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""",
+      """{"a":"2018-12-16T22:23:24.123-02:00"}""") === fromDDL("a timestamp"))
+
+    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":1}""")
+      === fromDDL("a string"))
+    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":"123"}""")
+      === fromDDL("a string"))
+
+    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":null}""")
+      === fromDDL("a timestamp"))
+    assert(schemaOf("""{"a":null}""", """{"a":"2018-12-17T10:11:12.123-01:00"}""")
+      === fromDDL("a timestamp"))
   }
 }
