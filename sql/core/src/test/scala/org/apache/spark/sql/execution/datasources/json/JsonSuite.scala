@@ -2592,44 +2592,53 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("inferring timestamp type") {
-    def schemaOf(jsons: String*): StructType = spark.read.json(jsons.toDS).schema
+    Seq(true, false).foreach { legacyParser =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+        def schemaOf(jsons: String*): StructType = spark.read.json(jsons.toDS).schema
 
-    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""",
-      """{"a":"2018-12-16T22:23:24.123-02:00"}""") === fromDDL("a timestamp"))
+        assert(schemaOf(
+          """{"a":"2018-12-17T10:11:12.123-01:00"}""",
+          """{"a":"2018-12-16T22:23:24.123-02:00"}""") === fromDDL("a timestamp"))
 
-    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":1}""")
-      === fromDDL("a string"))
-    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":"123"}""")
-      === fromDDL("a string"))
+        assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":1}""")
+          === fromDDL("a string"))
+        assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":"123"}""")
+          === fromDDL("a string"))
 
-    assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":null}""")
-      === fromDDL("a timestamp"))
-    assert(schemaOf("""{"a":null}""", """{"a":"2018-12-17T10:11:12.123-01:00"}""")
-      === fromDDL("a timestamp"))
+        assert(schemaOf("""{"a":"2018-12-17T10:11:12.123-01:00"}""", """{"a":null}""")
+          === fromDDL("a timestamp"))
+        assert(schemaOf("""{"a":null}""", """{"a":"2018-12-17T10:11:12.123-01:00"}""")
+          === fromDDL("a timestamp"))
+      }
+    }
   }
 
   test("roundtrip for timestamp type inferring") {
-    val customSchema = new StructType(Array(StructField("date", TimestampType, true)))
-    withTempDir { dir =>
-      val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.json"
-      val timestampsWithFormat = spark.read
-        .option("timestampFormat", "dd/MM/yyyy HH:mm")
-        .json(datesRecords)
-      assert(timestampsWithFormat.schema === customSchema)
+    Seq(true, false).foreach { legacyParser =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> legacyParser.toString) {
+        val customSchema = new StructType().add("date", TimestampType)
+        withTempDir { dir =>
+          val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.json"
+          val timestampsWithFormat = spark.read
+            .option("timestampFormat", "dd/MM/yyyy HH:mm")
+            .json(datesRecords)
+          assert(timestampsWithFormat.schema === customSchema)
 
-      timestampsWithFormat.write
-        .format("json")
-        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
-        .save(timestampsWithFormatPath)
+          timestampsWithFormat.write
+            .format("json")
+            .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
+            .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+            .save(timestampsWithFormatPath)
 
-      val readBack = spark.read
-        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
-        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
-        .json(timestampsWithFormatPath)
+          val readBack = spark.read
+            .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
+            .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+            .json(timestampsWithFormatPath)
 
-      assert(readBack.schema === customSchema)
-      checkAnswer(readBack, timestampsWithFormat)
+          assert(readBack.schema === customSchema)
+          checkAnswer(readBack, timestampsWithFormat)
+        }
+      }
     }
   }
 }
