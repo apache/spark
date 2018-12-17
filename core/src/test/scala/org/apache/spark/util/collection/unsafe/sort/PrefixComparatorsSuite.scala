@@ -140,7 +140,7 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
   }
 
   test("double prefix comparator handles other special values properly") {
-    // See `SortPrefix.nulValue` for how we deal with nulls for float/double type
+    // See `SortPrefix.nullValue` for how we deal with nulls for float/double type
     val smallestNullPrefix = 0L
     val largestNullPrefix = -1L
     val nan = PrefixComparators.DoublePrefixComparator.computePrefix(Double.NaN)
