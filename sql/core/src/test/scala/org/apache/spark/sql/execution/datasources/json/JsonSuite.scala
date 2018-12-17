@@ -2607,4 +2607,29 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(schemaOf("""{"a":null}""", """{"a":"2018-12-17T10:11:12.123-01:00"}""")
       === fromDDL("a timestamp"))
   }
+
+  test("roundtrip for timestamp type inferring") {
+    val customSchema = new StructType(Array(StructField("date", TimestampType, true)))
+    withTempDir { dir =>
+      val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.json"
+      val timestampsWithFormat = spark.read
+        .option("timestampFormat", "dd/MM/yyyy HH:mm")
+        .json(datesRecords)
+      assert(timestampsWithFormat.schema === customSchema)
+
+      timestampsWithFormat.write
+        .format("json")
+        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+        .save(timestampsWithFormatPath)
+
+      val readBack = spark.read
+        .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+        .json(timestampsWithFormatPath)
+
+      assert(readBack.schema === customSchema)
+      checkAnswer(readBack, timestampsWithFormat)
+    }
+  }
 }
