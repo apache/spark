@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import scala.collection.mutable
-
 import java.math.BigDecimal
+
+import scala.collection.mutable
 
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.plans.logical.Project
