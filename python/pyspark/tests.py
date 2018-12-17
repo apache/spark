@@ -2403,9 +2403,11 @@ class ContextTests(unittest.TestCase):
         with SparkContext(conf=conf, gateway=gateway) as sc:
             print("sc created, about to create accum")
             a = sc.accumulator(1)
-            rdd = sc.parallelize([1,2,3])
+            rdd = sc.parallelize([1, 2, 3])
+
             def f(x):
                 a.add(x)
+
             rdd.foreach(f)
             self.assertEqual(7, a.value)
         print("exiting allow insecure test")

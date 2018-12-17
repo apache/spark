@@ -45,6 +45,7 @@ def launch_gateway(conf=None):
     """
     return _launch_gateway(conf)
 
+
 def _launch_gateway(conf=None, insecure=False):
     """
     launch jvm gateway
@@ -130,7 +131,7 @@ def _launch_gateway(conf=None, insecure=False):
     # Connect to the gateway
     gateway_params = GatewayParameters(port=gateway_port, auto_convert=True)
     if not insecure:
-        gateway_params.auth_token=gateway_secret
+        gateway_params.auth_token = gateway_secret
     gateway = JavaGateway(gateway_parameters=gateway_params)
 
     # Import the classes used by PySpark
