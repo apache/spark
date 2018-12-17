@@ -26,11 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
-/**
- * Base class shared by [[WindowExec]] and [[org.apache.spark.sql.execution.python.WindowInPandasExec]]
- *
- * This class provides common helper functions to implement
- */
 abstract class WindowExecBase(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
@@ -164,7 +159,7 @@ abstract class WindowExecBase(
         // in a single Window physical node. Therefore, we can assume no SQL aggregation
         // functions if Pandas UDF exists. In the future, we might mix Pandas UDF and SQL
         // aggregation function in a single physical node.
-        def processor = if (functions.exists{f => f.isInstanceOf[PythonUDF]}) {
+        def processor = if (functions.exists(_.isInstanceOf[PythonUDF])) {
           null
         } else {
           AggregateProcessor(
