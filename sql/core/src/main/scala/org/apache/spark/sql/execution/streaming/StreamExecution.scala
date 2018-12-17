@@ -36,6 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
+import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
@@ -113,6 +114,9 @@ abstract class StreamExecution(
    */
   @volatile
   var availableOffsets = new StreamProgress
+
+  @volatile
+  var sinkCommitProgress: Option[StreamWriterCommitProgress] = None
 
   /** The current batchId or -1 if execution has not yet been initialized. */
   protected var currentBatchId: Long = -1
