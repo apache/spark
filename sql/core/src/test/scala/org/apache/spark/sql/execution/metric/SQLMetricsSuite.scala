@@ -96,8 +96,8 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
     val shuffleExpected1 = Map(
       "records read" -> 2L,
-      "local blocks fetched" -> 2L,
-      "remote blocks fetched" -> 0L,
+      "local blocks read" -> 2L,
+      "remote blocks read" -> 0L,
       "shuffle records written" -> 2L)
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("HashAggregate", expected1(0))),
@@ -114,8 +114,8 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
     val shuffleExpected2 = Map(
       "records read" -> 4L,
-      "local blocks fetched" -> 4L,
-      "remote blocks fetched" -> 0L,
+      "local blocks read" -> 4L,
+      "remote blocks read" -> 0L,
       "shuffle records written" -> 4L)
     testSparkPlanMetrics(df2, 1, Map(
       2L -> (("HashAggregate", expected2(0))),
@@ -175,8 +175,8 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       1L -> (("Exchange", Map(
         "shuffle records written" -> 2L,
         "records read" -> 2L,
-        "local blocks fetched" -> 2L,
-        "remote blocks fetched" -> 0L))),
+        "local blocks read" -> 2L,
+        "remote blocks read" -> 0L))),
       0L -> (("ObjectHashAggregate", Map("number of output rows" -> 1L))))
     )
 
@@ -187,8 +187,8 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       1L -> (("Exchange", Map(
         "shuffle records written" -> 4L,
         "records read" -> 4L,
-        "local blocks fetched" -> 4L,
-        "remote blocks fetched" -> 0L))),
+        "local blocks read" -> 4L,
+        "remote blocks read" -> 0L))),
       0L -> (("ObjectHashAggregate", Map("number of output rows" -> 3L))))
     )
   }
@@ -216,8 +216,8 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
           "number of output rows" -> 4L))),
         2L -> (("Exchange", Map(
           "records read" -> 4L,
-          "local blocks fetched" -> 2L,
-          "remote blocks fetched" -> 0L,
+          "local blocks read" -> 2L,
+          "remote blocks read" -> 0L,
           "shuffle records written" -> 2L))))
       )
     }
