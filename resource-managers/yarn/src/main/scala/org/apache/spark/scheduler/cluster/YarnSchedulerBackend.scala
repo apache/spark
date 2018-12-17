@@ -168,8 +168,10 @@ private[spark] abstract class YarnSchedulerBackend(
       filterName != null && filterName.nonEmpty &&
       filterParams != null && filterParams.nonEmpty
     if (hasFilter) {
+      // SPARK-26255: Append user provided filters(spark.ui.filters) with yarn filter.
+      val allFilters = filterName + "," + conf.get("spark.ui.filters", "")
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
-      conf.set("spark.ui.filters", filterName)
+      conf.set("spark.ui.filters", allFilters)
       filterParams.foreach { case (k, v) => conf.set(s"spark.$filterName.param.$k", v) }
       scheduler.sc.ui.foreach { ui => JettyUtils.addFilters(ui.getHandlers, conf) }
     }
