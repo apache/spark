@@ -52,32 +52,22 @@ class JsonInferSchemaSuite extends SparkFunSuite {
       """{"a": "2018-12-02T21:04:00.123567+01:00"}""")
   }
 
-  def checkDateType(pattern: String, json: String): Unit = {
-    checkType(Map("dateFormat" -> pattern), json, DateType)
-  }
-
-  test("inferring date type") {
-    checkDateType("yyyy", """{"a": "2018"}""")
-    checkDateType("yyyy-MM", """{"a": "2018-12"}""")
-    checkDateType("yyyy-MM-dd", """{"a": "2018-12-02"}""")
-  }
-
-  test("inferring the date type before timestamps") {
+  test("inferring decimals and timestamps") {
     checkType(
       options = Map(
-        "dateFormat" -> "yyyy-MM-dd",
-        "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SSS"
+        "prefersDecimal" -> "true",
+        "timestampFormat" -> "yyyyMMdd.HHmmssSSS"
       ),
-      json = """{"a": "2018-12-02T21:04:00.123"}""",
-      `type` = TimestampType
+      json = """{"a": "20181202.210400123"}""",
+      `type` = DecimalType(17, 9)
     )
     checkType(
       options = Map(
-        "dateFormat" -> "yyyy-MM-dd",
-        "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SSS"
+        "prefersDecimal" -> "false",
+        "timestampFormat" -> "yyyyMMdd.HHmmssSSS"
       ),
-      json = """{"a": "2018-12-02"}""",
-    `type` = DateType
+      json = """{"a": "20181202.210400123"}""",
+      `type` = TimestampType
     )
   }
 }
