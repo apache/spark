@@ -24,12 +24,13 @@ import scala.language.postfixOps
 import org.apache.hadoop.fs.Path
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.when
-import org.scalatest.BeforeAndAfterEach
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.MLWriter
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql._
@@ -41,7 +42,6 @@ class MLEventsSuite
     with MLlibTestSparkContext
     with Eventually {
 
-  private val dirName: String = "pipeline"
   private val events = mutable.ArrayBuffer.empty[MLEvent]
   private val listener: SparkListener = new SparkListener {
     override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
@@ -49,8 +49,8 @@ class MLEventsSuite
       case e: FitEnd[_] => events.append(e)
       case e: TransformStart => events.append(e)
       case e: TransformEnd => events.append(e)
-      case e: SaveInstanceStart if e.path.endsWith(dirName) => events.append(e)
-      case e: SaveInstanceEnd if e.path.endsWith(dirName) => events.append(e)
+      case e: SaveInstanceStart => events.append(e)
+      case e: SaveInstanceEnd => events.append(e)
       case _ =>
     }
   }
@@ -147,36 +147,48 @@ class MLEventsSuite
   }
 
   test("pipeline read/write events") {
+    def getInstance(w: MLWriter): AnyRef =
+      w.getClass.getDeclaredMethod("instance").invoke(w)
+
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath, dirName).toUri.toString
+      val path = new Path(dir.getCanonicalPath, "pipeline").toUri.toString
       val writableStage = new WritableStage("writableStage")
       val newPipeline = new Pipeline().setStages(Array(writableStage))
       val pipelineWriter = newPipeline.write
       pipelineWriter.save(path)
 
-      val expected =
-        SaveInstanceStart(pipelineWriter, path) ::
-        SaveInstanceEnd(pipelineWriter, path) :: Nil
       eventually(timeout(10 seconds), interval(1 second)) {
-        assert(expected === events)
+        events.foreach {
+          case e: SaveInstanceStart =>
+            assert(getInstance(e.writer).asInstanceOf[Pipeline].uid === newPipeline.uid)
+          case e: SaveInstanceEnd =>
+            assert(getInstance(e.writer).asInstanceOf[Pipeline].uid === newPipeline.uid)
+          case e => fail(s"Unexpected event thrown: $e")
+        }
       }
     }
   }
 
   test("pipeline model read/write events") {
+    def getInstance(w: MLWriter): AnyRef =
+      w.getClass.getDeclaredMethod("instance").invoke(w)
+
     withTempDir { dir =>
-      val path = new Path(dir.getCanonicalPath, dirName).toUri.toString
+      val path = new Path(dir.getCanonicalPath, "pipeline").toUri.toString
       val writableStage = new WritableStage("writableStage")
       val pipelineModel =
         new PipelineModel("pipeline_89329329", Array(writableStage.asInstanceOf[Transformer]))
       val pipelineWriter = pipelineModel.write
       pipelineWriter.save(path)
 
-      val expected =
-        SaveInstanceStart(pipelineWriter, path) ::
-        SaveInstanceEnd(pipelineWriter, path) :: Nil
       eventually(timeout(10 seconds), interval(1 second)) {
-        assert(expected === events)
+        events.foreach {
+          case e: SaveInstanceStart =>
+            assert(getInstance(e.writer).asInstanceOf[PipelineModel].uid === pipelineModel.uid)
+          case e: SaveInstanceEnd =>
+            assert(getInstance(e.writer).asInstanceOf[PipelineModel].uid === pipelineModel.uid)
+          case e => fail(s"Unexpected events were thrown: $e")
+        }
       }
     }
   }
