@@ -17,90 +17,16 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.{util => ju}
-import java.util.UUID
-import javax.security.auth.login.{AppConfigurationEntry, Configuration}
-
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.Token
 import org.apache.kafka.common.config.SaslConfigs
-import org.mockito.Mockito._
-import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
-import org.apache.spark.deploy.security.KafkaTokenUtil
-import org.apache.spark.deploy.security.KafkaTokenUtil.KafkaDelegationTokenIdentifier
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config._
 
-class KafkaConfigUpdaterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   private val testModule = "testModule"
   private val testKey = "testKey"
   private val testValue = "testValue"
   private val otherTestValue = "otherTestValue"
-  private val tokenId = "tokenId" + UUID.randomUUID().toString
-  private val tokenPassword = "tokenPassword" + UUID.randomUUID().toString
-
-  private class KafkaJaasConfiguration extends Configuration {
-    val entry =
-      new AppConfigurationEntry(
-        "DummyModule",
-        AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
-        ju.Collections.emptyMap[String, Object]()
-      )
-
-    override def getAppConfigurationEntry(name: String): Array[AppConfigurationEntry] = {
-      if (name.equals("KafkaClient")) {
-        Array(entry)
-      } else {
-        null
-      }
-    }
-  }
-
-  override def afterEach(): Unit = {
-    try {
-      resetGlobalConfig()
-      resetUGI()
-      resetSparkEnv()
-    } finally {
-      super.afterEach()
-    }
-  }
-
-  private def setGlobalKafkaClientConfig(): Unit = {
-    Configuration.setConfiguration(new KafkaJaasConfiguration)
-  }
-
-  private def resetGlobalConfig(): Unit = {
-    Configuration.setConfiguration(null)
-  }
-
-  private def addTokenToUGI(): Unit = {
-    val token = new Token[KafkaDelegationTokenIdentifier](
-      tokenId.getBytes,
-      tokenPassword.getBytes,
-      KafkaTokenUtil.TOKEN_KIND,
-      KafkaTokenUtil.TOKEN_SERVICE
-    )
-    val creds = new Credentials()
-    creds.addToken(KafkaTokenUtil.TOKEN_SERVICE, token)
-    UserGroupInformation.getCurrentUser.addCredentials(creds)
-  }
-
-  private def resetUGI(): Unit = {
-    UserGroupInformation.setLoginUser(null)
-  }
-
-  private def setSparkEnv(settings: Traversable[(String, String)]): Unit = {
-    val conf = new SparkConf().setAll(settings)
-    val env = mock(classOf[SparkEnv])
-    doReturn(conf).when(env).conf
-    SparkEnv.set(env)
-  }
-
-  private def resetSparkEnv(): Unit = {
-    SparkEnv.set(null)
-  }
 
   test("set should always set value") {
     val params = Map.empty[String, String]

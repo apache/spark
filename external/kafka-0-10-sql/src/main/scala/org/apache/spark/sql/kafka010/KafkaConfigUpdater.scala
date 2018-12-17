@@ -41,7 +41,7 @@ private[kafka010] case class KafkaConfigUpdater(module: String, kafkaParams: Map
     this
   }
 
-  def setIfUnset(key: String, value: Object): KafkaConfigUpdater = {
+  def setIfUnset(key: String, value: Object): this.type = {
     if (!map.containsKey(key)) {
       map.put(key, value)
       logDebug(s"$module: Set $key to $value")
@@ -49,7 +49,7 @@ private[kafka010] case class KafkaConfigUpdater(module: String, kafkaParams: Map
     this
   }
 
-  def setAuthenticationConfigIfNeeded(): KafkaConfigUpdater = {
+  def setAuthenticationConfigIfNeeded(): this.type = {
     // There are multiple possibilities to log in and applied in the following order:
     // - JVM global security provided -> try to log in with JVM global security configuration
     //   which can be configured for example with 'java.security.auth.login.config'.
