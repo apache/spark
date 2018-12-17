@@ -22,19 +22,15 @@ import scala.util.control.Exception.allCatch
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.types._
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   @transient
-  private lazy val timestampFormatter = TimestampFormatter(
+  private lazy val timestampParser = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
-    options.locale)
-  @transient
-  private lazy val dateFormatter = DateFormatter(
-    options.dateFormat,
     options.locale)
 
   private val decimalParser = {
@@ -108,7 +104,6 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
           compatibleType(typeSoFar, tryParseDecimal(field)).getOrElse(StringType)
         case DoubleType => tryParseDouble(field)
         case TimestampType => tryParseTimestamp(field)
-        case DateType => tryParseDate(field)
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
@@ -164,16 +159,9 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   private def tryParseTimestamp(field: String): DataType = {
-    if ((allCatch opt timestampFormatter.parse(field)).isDefined) {
+    // This case infers a custom `dataFormat` is set.
+    if ((allCatch opt timestampParser.parse(field)).isDefined) {
       TimestampType
-    } else {
-      tryParseDate(field)
-    }
-  }
-
-  private def tryParseDate(field: String): DataType = {
-    if ((allCatch opt dateFormatter.parse(field)).isDefined) {
-      DateType
     } else {
       tryParseBoolean(field)
     }
