@@ -239,9 +239,11 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
         // if we had an error getting any of the metrics, we don't
         // want to report partial metrics, as that would be misleading.
         if (!isAvailable) {
-          return ProcfsMetrics(0, 0, 0, 0, 0, 0, System.currentTimeMillis)
+          cachedAllMetric = ProcfsMetrics(0, 0, 0, 0, 0, 0, System.currentTimeMillis)
+          return cachedAllMetric
         }
       }
+      cachedAllMetric = allMetrics
       allMetrics
     }
     else {
