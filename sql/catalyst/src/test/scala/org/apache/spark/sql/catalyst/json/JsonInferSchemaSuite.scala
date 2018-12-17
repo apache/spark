@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 class JsonInferSchemaSuite extends SparkFunSuite {
 
   def checkType(options: Map[String, String], json: String, dt: DataType): Unit = {
-    val jsonOptions = new JSONOptions(options, "GMT", "")
+    val jsonOptions = new JSONOptions(options, "UTC", "")
     val inferSchema = new JsonInferSchema(jsonOptions)
     val factory = new JsonFactory()
     jsonOptions.setJacksonOptions(factory)
