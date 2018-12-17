@@ -265,10 +265,10 @@ private[kafka010] class KafkaOffsetReader(
           if (incorrectOffsets.nonEmpty) {
             logWarning("Found incorrect offsets in some partitions " +
               s"(partition, previous offset, fetched offset): $incorrectOffsets")
-          }
-          if (attempt < maxOffsetFetchAttempts) {
-            logWarning("Retrying to fetch latest offsets because of incorrect offsets")
-            Thread.sleep(offsetFetchAttemptIntervalMs)
+            if (attempt < maxOffsetFetchAttempts) {
+              logWarning("Retrying to fetch latest offsets because of incorrect offsets")
+              Thread.sleep(offsetFetchAttemptIntervalMs)
+            }
           }
         } while (incorrectOffsets.nonEmpty && attempt < maxOffsetFetchAttempts)
 

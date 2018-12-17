@@ -133,20 +133,22 @@ private[kafka010] class KafkaMicroBatchReadSupport(
     }.toSeq
     logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
 
-    // Calculate offset ranges
-    val offsetRanges = rangeCalculator.getRanges(
-      fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets,
-      untilOffsets = endPartitionOffsets,
-      executorLocations = getSortedExecutorList())
-    offsetRanges.filter { range =>
-      if (range.untilOffset < range.fromOffset) {
-        reportDataLoss(s"Partition ${range.topicPartition}'s offset was changed from " +
-          s"${range.fromOffset} to ${range.untilOffset}, some data may have been missed")
-        false
-      } else {
-        true
+    val fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets
+    val untilOffsets = endPartitionOffsets
+    untilOffsets.foreach { case (tp, untilOffset) =>
+      fromOffsets.get(tp).foreach { fromOffset =>
+        if (untilOffset < fromOffset) {
+          reportDataLoss(s"Partition $tp's offset was changed from " +
+            s"$fromOffset to $untilOffset, some data may have been missed")
+        }
       }
     }
+
+    // Calculate offset ranges
+    val offsetRanges = rangeCalculator.getRanges(
+      fromOffsets = fromOffsets,
+      untilOffsets = untilOffsets,
+      executorLocations = getSortedExecutorList())
 
     // Reuse Kafka consumers only when all the offset ranges have distinct TopicPartitions,
     // that is, concurrent tasks will not read the same TopicPartitions.
