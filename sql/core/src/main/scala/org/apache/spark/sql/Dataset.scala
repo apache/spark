@@ -2173,8 +2173,7 @@ class Dataset[T] private[sql](
       !output.exists(f => resolver(f.name, colName))
     }.map { case (colName, col) => col.as(colName).named }
 
-    val newPlan = Project(replacedAndExistingColumns ++ newColumns, logicalPlan)
-    CollapseProject(sparkSession.sessionState.analyzer.execute(newPlan))
+    CollapseProject(Project(replacedAndExistingColumns ++ newColumns, logicalPlan))
   }
 
   /**
