@@ -37,7 +37,7 @@ private[ml] trait HasTrainingSummary[T] {
 
   /**
    * Gets summary of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
+   * thrown if if `hasSummary` is false.
    */
   @Since("3.0.0")
   def summary: T = trainingSummary.getOrElse {
