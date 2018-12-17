@@ -155,8 +155,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
     Batch("Join Reorder", Once,
-      CostBasedJoinReorder,
-      RemoveRedundantProject) :+
+      CostBasedJoinReorder) :+
     Batch("Remove Redundant Sorts", Once,
       RemoveRedundantSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
@@ -404,54 +403,10 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 
 /**
  * Remove projections from the query plan that do not make any modifications.
- * It handles top-level and intermediate [[Project]]s differently:
- *  - Top-level:
- *      A [[Project]] is only considered redundant if its output attributes are exactly the same as
- *      its child, include the order of attributes.
- *               This affects how the outside world perceives this query plan.
- *  - Intermediate (not top-leve):
- *      A [[Project]] is redundant as long as its outputSet is the same as the child's. It won't
- *      affect the outer appearance so we're free to change the order of the output attributes.
- *      We should, however, retain the [[Project]]s that have a shorter output attribute list than
- *      the child's. That can reduce the materialized data size so it's worth keeping.
  */
 object RemoveRedundantProject extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    transformDown(plan, expectedOutput = plan.output, outputDefined = false)
-  }
-
-  private def transformDown(
-      plan: LogicalPlan,
-      expectedOutput: Seq[Attribute],
-      outputDefined: Boolean): LogicalPlan = plan match {
-    // Remove fully redundant projection
-    case p @ Project(_, child) if p.output == child.output =>
-      transformDown(child, expectedOutput, outputDefined)
-    // Remove intermediate projection when the output attribute order doesn't depend on it
-    case p @ Project(_, child) if outputDefined && internallyRedundant(p) =>
-      transformDown(child, expectedOutput, outputDefined)
-    // Union needs special handling: all children must have compatible output attribute.
-    // Treat Union like a top-level operator just to be safe.
-    case u: Union => u mapChildren { c =>
-      transformDown(c, c.output, false)
-    }
-    // Check if we're coming across an operator that defines the output attribute list
-    case p => p mapChildren { c =>
-      transformDown(c, c.output,
-        outputDefined = outputDefined || definesOutput(p) && p.output == expectedOutput)
-    }
-  }
-
-  private def definesOutput(plan: LogicalPlan): Boolean = plan match {
-    // The output attributes of these operators do not depend on their children.
-    // i.e. they're not sensitive to the order of output attributes from their children
-    case _: Project | _: ObjectConsumer | _: ObjectProducer | _: Aggregate => true
-    // Others may depend on the child
-    case _ => false
-  }
-
-  private def internallyRedundant(p: Project): Boolean = {
-    p.outputSet == p.child.outputSet && p.output.length >= p.child.output.length
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p @ Project(_, child) if p.output == child.output => child
   }
 }
 

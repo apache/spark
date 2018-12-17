@@ -39,8 +39,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         ColumnPruning,
         CollapseProject) ::
       Batch("Join Reorder", Once,
-        CostBasedJoinReorder,
-        RemoveRedundantProject) :: Nil
+        CostBasedJoinReorder) :: Nil
   }
 
   var originalConfCBOEnabled = false
@@ -141,6 +140,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     val bestPlan =
       t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
         .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(outputsOf(t1, t2, t3): _*) // this is redundant but we'll take it for now
         .join(t4)
         .select(outputsOf(t1, t2, t4, t3): _*)
 
