@@ -601,7 +601,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val df = maybeDf.get._2
 
     val expected = estimator.fit(df)
-    val actuals = dfs.filter(_ != baseType).map(t => (t, estimator.fit(t._2)))
+    val actuals = dfs.map(t => (t, estimator.fit(t._2)))
     actuals.foreach { case (_, actual) => check(expected, actual) }
     actuals.foreach { case (t, actual) => check2(expected, actual, t._2, t._1.encoder) }
 

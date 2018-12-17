@@ -250,7 +250,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
       val bos = new ByteArrayOutputStream()
       val out = new DataOutputStream(codec.compressedOutputStream(bos))
-      while (iter.hasNext && (n < 0 || count < n)) {
+      // `iter.hasNext` may produce one row and buffer it, we should only call it when the limit is
+      // not hit.
+      while ((n < 0 || count < n) && iter.hasNext) {
         val row = iter.next().asInstanceOf[UnsafeRow]
         out.writeInt(row.getSizeInBytes)
         row.writeToStream(out, buffer)
@@ -419,11 +421,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     newOrdering(order, Seq.empty)
   }
-}
-
-object SparkPlan {
-  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
 trait LeafExecNode extends SparkPlan {

@@ -505,7 +505,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   test("upper") {
     checkAnswer(
       lowerCaseData.select(upper('l)),
-      ('a' to 'd').map(c => Row(c.toString.toUpperCase))
+      ('a' to 'd').map(c => Row(c.toString.toUpperCase(Locale.ROOT)))
     )
 
     checkAnswer(
@@ -526,7 +526,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   test("lower") {
     checkAnswer(
       upperCaseData.select(lower('L)),
-      ('A' to 'F').map(c => Row(c.toString.toLowerCase))
+      ('A' to 'F').map(c => Row(c.toString.toLowerCase(Locale.ROOT)))
     )
 
     checkAnswer(

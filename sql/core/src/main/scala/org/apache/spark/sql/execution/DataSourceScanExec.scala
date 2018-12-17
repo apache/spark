@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -56,8 +57,8 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
       case (key, value) =>
         key + ": " + StringUtils.abbreviate(redact(value), 100)
     }
-    val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
-    s"$nodeNamePrefix$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
+    val metadataStr = truncatedString(metadataEntries, " ", ", ", "")
+    s"$nodeNamePrefix$nodeName${truncatedString(output, "[", ",", "]")}$metadataStr"
   }
 
   override def verboseString: String = redact(super.verboseString)
@@ -83,7 +84,7 @@ case class RowDataSourceScanExec(
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val tableIdentifier: Option[TableIdentifier])
-  extends DataSourceScanExec {
+  extends DataSourceScanExec with InputRDDCodegen {
 
   def output: Seq[Attribute] = requiredColumnsIndex.map(fullOutput)
 
@@ -103,30 +104,10 @@ case class RowDataSourceScanExec(
     }
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    rdd :: Nil
-  }
+  // Input can be InternalRow, has to be turned into UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = true
 
-  override protected def doProduce(ctx: CodegenContext): String = {
-    val numOutputRows = metricTerm(ctx, "numOutputRows")
-    // PhysicalRDD always just has one input
-    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];")
-    val exprRows = output.zipWithIndex.map{ case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable)
-    }
-    val row = ctx.freshName("row")
-    ctx.INPUT_ROW = row
-    ctx.currentVars = null
-    val columnsRowInput = exprRows.map(_.genCode(ctx))
-    s"""
-       |while ($input.hasNext()) {
-       |  InternalRow $row = (InternalRow) $input.next();
-       |  $numOutputRows.add(1);
-       |  ${consume(ctx, columnsRowInput).trim}
-       |  if (shouldStop()) return;
-       |}
-     """.stripMargin
-  }
+  override def inputRDD: RDD[InternalRow] = rdd
 
   override val metadata: Map[String, String] = {
     val markedFilters = for (filter <- filters) yield {
@@ -168,10 +149,11 @@ case class FileSourceScanExec(
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
-  override lazy val supportsBatch: Boolean = relation.fileFormat.supportBatch(
-    relation.sparkSession, StructType.fromAttributes(output))
+  override lazy val supportsBatch: Boolean = {
+    relation.fileFormat.supportBatch(relation.sparkSession, schema)
+  }
 
-  override lazy val needsUnsafeRowConversion: Boolean = {
+  private lazy val needsUnsafeRowConversion: Boolean = {
     if (relation.fileFormat.isInstanceOf[ParquetSource]) {
       SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
     } else {
@@ -185,19 +167,14 @@ case class FileSourceScanExec(
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf)
 
+  private var fileListingTime = 0L
+
   @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret = relation.location.listFiles(partitionFilters, dataFilters)
     val timeTakenMs = ((System.nanoTime() - startTime) + optimizerMetadataTimeNs) / 1000 / 1000
-
-    metrics("numFiles").add(ret.map(_.files.size.toLong).sum)
-    metrics("metadataTime").add(timeTakenMs)
-
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      metrics("numFiles") :: metrics("metadataTime") :: Nil)
-
+    fileListingTime = timeTakenMs
     ret
   }
 
@@ -309,6 +286,8 @@ case class FileSourceScanExec(
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
+    // Update metrics for taking effect in both code generation node and normal node.
+    updateDriverMetrics()
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
@@ -334,7 +313,7 @@ case class FileSourceScanExec(
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
-      "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time (ms)"),
+      "fileListingTime" -> SQLMetrics.createMetric(sparkContext, "file listing time (ms)"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -386,7 +365,7 @@ case class FileSourceScanExec(
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val filesGroupedToBuckets =
       selectedPartitions.flatMap { p =>
-        p.files.map { f =>
+        p.files.filter(_.getLen > 0).map { f =>
           val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
           PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
         }
@@ -436,7 +415,7 @@ case class FileSourceScanExec(
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
     val splitFiles = selectedPartitions.flatMap { partition =>
-      partition.files.flatMap { file =>
+      partition.files.filter(_.getLen > 0).flatMap { file =>
         val blockLocations = getBlockLocations(file)
         if (fsRelation.fileFormat.isSplitable(
             fsRelation.sparkSession, fsRelation.options, file.getPath)) {
@@ -523,6 +502,19 @@ case class FileSourceScanExec(
       val (hosts, _) = candidates.maxBy { case (_, size) => size }
       hosts
     }
+  }
+
+  /**
+   * Send the updated metrics to driver, while this function calling, selectedPartitions has
+   * been initialized. See SPARK-26327 for more detail.
+   */
+  private def updateDriverMetrics() = {
+    metrics("numFiles").add(selectedPartitions.map(_.files.size.toLong).sum)
+    metrics("fileListingTime").add(fileListingTime)
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
+      metrics("numFiles") :: metrics("fileListingTime") :: Nil)
   }
 
   override def doCanonicalize(): FileSourceScanExec = {

@@ -134,6 +134,8 @@ public class JavaDataFrameSuite {
     private Map<String, int[]> c = ImmutableMap.of("hello", new int[] { 1, 2 });
     private List<String> d = Arrays.asList("floppy", "disk");
     private BigInteger e = new BigInteger("1234567");
+    private NestedBean f = new NestedBean();
+    private NestedBean g = null;
 
     public double getA() {
       return a;
@@ -152,6 +154,22 @@ public class JavaDataFrameSuite {
     }
 
     public BigInteger getE() { return e; }
+
+    public NestedBean getF() {
+      return f;
+    }
+
+    public NestedBean getG() {
+      return g;
+    }
+
+    public static class NestedBean implements Serializable {
+      private int a = 1;
+
+      public int getA() {
+        return a;
+      }
+    }
   }
 
   void validateDataFrameWithBeans(Bean bean, Dataset<Row> df) {
@@ -171,7 +189,14 @@ public class JavaDataFrameSuite {
       schema.apply("d"));
     Assert.assertEquals(new StructField("e", DataTypes.createDecimalType(38,0), true,
       Metadata.empty()), schema.apply("e"));
-    Row first = df.select("a", "b", "c", "d", "e").first();
+    StructType nestedBeanType =
+      DataTypes.createStructType(Collections.singletonList(new StructField(
+        "a", IntegerType$.MODULE$, false, Metadata.empty())));
+    Assert.assertEquals(new StructField("f", nestedBeanType, true, Metadata.empty()),
+      schema.apply("f"));
+    Assert.assertEquals(new StructField("g", nestedBeanType, true, Metadata.empty()),
+      schema.apply("g"));
+    Row first = df.select("a", "b", "c", "d", "e", "f", "g").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
     // Now Java lists and maps are converted to Scala Seq's and Map's. Once we get a Seq below,
     // verify that it has the expected length, and contains expected elements.
@@ -192,6 +217,9 @@ public class JavaDataFrameSuite {
     }
     // Java.math.BigInteger is equivalent to Spark Decimal(38,0)
     Assert.assertEquals(new BigDecimal(bean.getE()), first.getDecimal(4));
+    Row nested = first.getStruct(5);
+    Assert.assertEquals(bean.getF().getA(), nested.getInt(0));
+    Assert.assertTrue(first.isNullAt(6));
   }
 
   @Test
@@ -306,6 +334,22 @@ public class JavaDataFrameSuite {
     Dataset<Row> df = spark.table("courseSales");
     List<Row> actual = df.groupBy("year")
       .pivot("course", Arrays.asList("dotNET", "Java"))
+      .agg(sum("earnings")).orderBy("year").collectAsList();
+
+    Assert.assertEquals(2012, actual.get(0).getInt(0));
+    Assert.assertEquals(15000.0, actual.get(0).getDouble(1), 0.01);
+    Assert.assertEquals(20000.0, actual.get(0).getDouble(2), 0.01);
+
+    Assert.assertEquals(2013, actual.get(1).getInt(0));
+    Assert.assertEquals(48000.0, actual.get(1).getDouble(1), 0.01);
+    Assert.assertEquals(30000.0, actual.get(1).getDouble(2), 0.01);
+  }
+
+  @Test
+  public void pivotColumnValues() {
+    Dataset<Row> df = spark.table("courseSales");
+    List<Row> actual = df.groupBy("year")
+      .pivot(col("course"), Arrays.asList(lit("dotNET"), lit("Java")))
       .agg(sum("earnings")).orderBy("year").collectAsList();
 
     Assert.assertEquals(2012, actual.get(0).getInt(0));

@@ -323,7 +323,7 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
       > SELECT 3 _FUNC_ 2;
        1
   """,
-  since = "2.5.0")
+  since = "3.0.0")
 // scalastyle:on line.size.limit
 case class IntegralDivide(left: Expression, right: Expression) extends DivModLike {
 

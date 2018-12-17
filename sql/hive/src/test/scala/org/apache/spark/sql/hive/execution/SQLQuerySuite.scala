@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, Set}
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Functio
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -1985,6 +1987,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-25738: defaultFs can have a port") {
+    val defaultURI = new URI("hdfs://fizz.buzz.com:8020")
+    val r = LoadDataCommand.makeQualified(defaultURI, new Path("/foo/bar"), new Path("/flim/flam"))
+    assert(r === new Path("hdfs://fizz.buzz.com:8020/flim/flam"))
+  }
+
   test("Insert overwrite with partition") {
     withTable("tableWithPartition") {
       sql(
@@ -2264,6 +2272,20 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             }
           }
         }
+      }
+    }
+  }
+
+
+  test("SPARK-26181 hasMinMaxStats method of ColumnStatsMap is not correct") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("all_null") {
+        sql("create table all_null (attr1 int, attr2 int)")
+        sql("insert into all_null values (null, null)")
+        sql("analyze table all_null compute statistics for columns attr1, attr2")
+        // check if the stats can be calculated without Cast exception.
+        sql("select * from all_null where attr1 < 1").queryExecution.stringWithStats
+        sql("select * from all_null where attr1 < attr2").queryExecution.stringWithStats
       }
     }
   }

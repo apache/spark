@@ -13,6 +13,11 @@ The advantages of deploying Spark with Mesos include:
   [frameworks](https://mesos.apache.org/documentation/latest/frameworks/)
 - scalable partitioning between multiple instances of Spark
 
+# Security
+
+Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
+
 # How it Works
 
 In a standalone cluster deployment, the cluster manager in the below diagram is a Spark master
@@ -432,7 +437,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.executor.memoryOverhead</code></td>
   <td>executor memory * 0.10, with minimum of 384</td>
   <td>
-    The amount of additional memory, specified in MB, to be allocated per executor. By default,
+    The amount of additional memory, specified in MiB, to be allocated per executor. By default,
     the overhead will be larger of either 384 or 10% of <code>spark.executor.memory</code>. If set,
     the final overhead will be this value.
   </td>
@@ -682,7 +687,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>0</code></td>
   <td>
     Set the maximum number GPU resources to acquire for this job. Note that executors will still launch when no GPU resources are found
-    since this configuration is just a upper limit and not a guaranteed amount.
+    since this configuration is just an upper limit and not a guaranteed amount.
   </td>
   </tr>
 <tr>

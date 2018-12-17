@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 
 /**
  * Take the first `limit` elements and collect them to a single partition.
@@ -37,12 +38,31 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
     val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
-        locallyLimited, child.output, SinglePartition, serializer))
+        locallyLimited,
+        child.output,
+        SinglePartition,
+        serializer,
+        writeMetrics),
+      readMetrics)
     shuffled.mapPartitionsInternal(_.take(limit))
+  }
+}
+
+object BaseLimitExec {
+  private val curId = new java.util.concurrent.atomic.AtomicInteger()
+
+  def newLimitCountTerm(): String = {
+    val id = curId.getAndIncrement()
+    s"_limit_counter_$id"
   }
 }
 
@@ -66,27 +86,25 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
   // to the parent operator.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
+  private lazy val countTerm = BaseLimitExec.newLimitCountTerm()
+
+  override lazy val limitNotReachedChecks: Seq[String] = {
+    s"$countTerm < $limit" +: super.limitNotReachedChecks
+  }
+
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val stopEarly =
-      ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "stopEarly") // init as stopEarly = false
-
-    ctx.addNewFunction("stopEarly", s"""
-      @Override
-      protected boolean stopEarly() {
-        return $stopEarly;
-      }
-    """, inlineToOuterClass = true)
-    val countTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "count") // init as count = 0
+    // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.
+    // Here we have to inline it to not change its name. This is fine as we won't have many limit
+    // operators in one query.
+    ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
     s"""
        | if ($countTerm < $limit) {
        |   $countTerm += 1;
        |   ${consume(ctx, input)}
-       | } else {
-       |   $stopEarly = true;
        | }
      """.stripMargin
   }
@@ -144,6 +162,12 @@ case class TakeOrderedAndProjectExec(
 
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
+
   protected override def doExecute(): RDD[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val localTopK: RDD[InternalRow] = {
@@ -153,7 +177,12 @@ case class TakeOrderedAndProjectExec(
     }
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
-        localTopK, child.output, SinglePartition, serializer))
+        localTopK,
+        child.output,
+        SinglePartition,
+        serializer,
+        writeMetrics),
+      readMetrics)
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
       if (projectList != child.output) {
@@ -170,8 +199,8 @@ case class TakeOrderedAndProjectExec(
   override def outputPartitioning: Partitioning = SinglePartition
 
   override def simpleString: String = {
-    val orderByString = Utils.truncatedString(sortOrder, "[", ",", "]")
-    val outputString = Utils.truncatedString(output, "[", ",", "]")
+    val orderByString = truncatedString(sortOrder, "[", ",", "]")
+    val outputString = truncatedString(output, "[", ",", "]")
 
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
   }

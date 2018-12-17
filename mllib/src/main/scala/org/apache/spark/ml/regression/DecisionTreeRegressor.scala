@@ -54,27 +54,27 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   // Override parameter setters from parent trait for Java API compatibility.
   /** @group setParam */
   @Since("1.4.0")
-  override def setMaxDepth(value: Int): this.type = set(maxDepth, value)
+  def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setMaxBins(value: Int): this.type = set(maxBins, value)
+  def setMaxBins(value: Int): this.type = set(maxBins, value)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
+  def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
+  def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
   /** @group expertSetParam */
   @Since("1.4.0")
-  override def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
+  def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
 
   /** @group expertSetParam */
   @Since("1.4.0")
-  override def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
+  def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
 
   /**
    * Specifies how often to checkpoint the cached node IDs.
@@ -86,15 +86,15 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
    * @group setParam
    */
   @Since("1.4.0")
-  override def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+  def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setImpurity(value: String): this.type = set(impurity, value)
+  def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group setParam */
   @Since("1.6.0")
-  override def setSeed(value: Long): this.type = set(seed, value)
+  def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group setParam */
   @Since("2.0.0")
@@ -145,7 +145,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 @Since("1.4.0")
 object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor] {
   /** Accessor for supported impurities: variance */
-  final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
+  final val supportedImpurities: Array[String] = HasVarianceImpurity.supportedImpurities
 
   @Since("2.0.0")
   override def load(path: String): DecisionTreeRegressor = super.load(path)
@@ -160,7 +160,7 @@ object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor
 @Since("1.4.0")
 class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
-    override val rootNode: RegressionNode,
+    override val rootNode: Node,
     override val numFeatures: Int)
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with DecisionTreeRegressorParams with MLWritable with Serializable {
@@ -175,7 +175,7 @@ class DecisionTreeRegressionModel private[ml] (
    * Construct a decision tree regression model.
    * @param rootNode  Root node of tree, with other nodes attached.
    */
-  private[ml] def this(rootNode: RegressionNode, numFeatures: Int) =
+  private[ml] def this(rootNode: Node, numFeatures: Int) =
     this(Identifiable.randomUID("dtr"), rootNode, numFeatures)
 
   override def predict(features: Vector): Double = {
@@ -279,9 +279,8 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
-      val root = loadTreeNodes(path, metadata, sparkSession, isClassification = false)
-      val model = new DecisionTreeRegressionModel(metadata.uid,
-        root.asInstanceOf[RegressionNode], numFeatures)
+      val root = loadTreeNodes(path, metadata, sparkSession)
+      val model = new DecisionTreeRegressionModel(metadata.uid, root, numFeatures)
       metadata.getAndSetParams(model)
       model
     }
@@ -296,8 +295,8 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
-    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures, isClassification = false)
+    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtr")
-    new DecisionTreeRegressionModel(uid, rootNode.asInstanceOf[RegressionNode], numFeatures)
+    new DecisionTreeRegressionModel(uid, rootNode, numFeatures)
   }
 }

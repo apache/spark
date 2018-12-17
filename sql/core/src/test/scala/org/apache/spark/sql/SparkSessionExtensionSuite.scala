@@ -18,12 +18,12 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Literal}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
 /**
  * Test cases for the [[SparkSessionExtensions]].
@@ -90,6 +90,16 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
+  test("inject function") {
+    val extensions = create { extensions =>
+      extensions.injectFunction(MyExtensions.myFunction)
+    }
+    withSession(extensions) { session =>
+      assert(session.sessionState.functionRegistry
+        .lookupFunction(MyExtensions.myFunction._1).isDefined)
+    }
+  }
+
   test("use custom class for extensions") {
     val session = SparkSession.builder()
       .master("local[1]")
@@ -98,6 +108,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     try {
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
       assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
+      assert(session.sessionState.functionRegistry
+        .lookupFunction(MyExtensions.myFunction._1).isDefined)
     } finally {
       stop(session)
     }
@@ -136,9 +148,17 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
     delegate.parseDataType(sqlText)
 }
 
+object MyExtensions {
+
+  val myFunction = (FunctionIdentifier("myFunction"),
+    new ExpressionInfo("noClass", "myDb", "myFunction", "usage", "extended usage" ),
+    (myArgs: Seq[Expression]) => Literal(5, IntegerType))
+}
+
 class MyExtensions extends (SparkSessionExtensions => Unit) {
   def apply(e: SparkSessionExtensions): Unit = {
     e.injectPlannerStrategy(MySparkStrategy)
     e.injectResolutionRule(MyRule)
+    e.injectFunction(MyExtensions.myFunction)
   }
 }

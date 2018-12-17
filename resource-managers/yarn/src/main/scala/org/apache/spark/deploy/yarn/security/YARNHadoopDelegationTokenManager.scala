@@ -22,12 +22,13 @@ import java.util.ServiceLoader
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 /**
@@ -36,27 +37,25 @@ import org.apache.spark.util.Utils
  * in [[HadoopDelegationTokenManager]].
  */
 private[yarn] class YARNHadoopDelegationTokenManager(
-    sparkConf: SparkConf,
-    hadoopConf: Configuration) extends Logging {
+    _sparkConf: SparkConf,
+    _hadoopConf: Configuration)
+  extends HadoopDelegationTokenManager(_sparkConf, _hadoopConf) {
 
-  private val delegationTokenManager = new HadoopDelegationTokenManager(sparkConf, hadoopConf,
-    conf => YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, conf))
-
-  // public for testing
-  val credentialProviders = getCredentialProviders
+  private val credentialProviders = {
+    ServiceLoader.load(classOf[ServiceCredentialProvider], Utils.getContextOrSparkClassLoader)
+      .asScala
+      .toList
+      .filter { p => isServiceEnabled(p.serviceName) }
+      .map { p => (p.serviceName, p) }
+      .toMap
+  }
   if (credentialProviders.nonEmpty) {
     logDebug("Using the following YARN-specific credential providers: " +
       s"${credentialProviders.keys.mkString(", ")}.")
   }
 
-  /**
-   * Writes delegation tokens to creds.  Delegation tokens are fetched from all registered
-   * providers.
-   *
-   * @return Time after which the fetched delegation tokens should be renewed.
-   */
-  def obtainDelegationTokens(hadoopConf: Configuration, creds: Credentials): Long = {
-    val superInterval = delegationTokenManager.obtainDelegationTokens(hadoopConf, creds)
+  override def obtainDelegationTokens(creds: Credentials): Long = {
+    val superInterval = super.obtainDelegationTokens(creds)
 
     credentialProviders.values.flatMap { provider =>
       if (provider.credentialsRequired(hadoopConf)) {
@@ -69,18 +68,13 @@ private[yarn] class YARNHadoopDelegationTokenManager(
     }.foldLeft(superInterval)(math.min)
   }
 
-  private def getCredentialProviders: Map[String, ServiceCredentialProvider] = {
-    val providers = loadCredentialProviders
-
-    providers.
-      filter { p => delegationTokenManager.isServiceEnabled(p.serviceName) }
-      .map { p => (p.serviceName, p) }
-      .toMap
+  // For testing.
+  override def isProviderLoaded(serviceName: String): Boolean = {
+    credentialProviders.contains(serviceName) || super.isProviderLoaded(serviceName)
   }
 
-  private def loadCredentialProviders: List[ServiceCredentialProvider] = {
-    ServiceLoader.load(classOf[ServiceCredentialProvider], Utils.getContextOrSparkClassLoader)
-      .asScala
-      .toList
+  override protected def fileSystemsToAccess(): Set[FileSystem] = {
+    YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, hadoopConf)
   }
+
 }

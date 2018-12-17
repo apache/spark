@@ -43,7 +43,8 @@ private[python] object Converter extends Logging {
                   defaultConverter: Converter[Any, Any]): Converter[Any, Any] = {
     converterClass.map { cc =>
       Try {
-        val c = Utils.classForName(cc).newInstance().asInstanceOf[Converter[Any, Any]]
+        val c = Utils.classForName(cc).getConstructor().
+          newInstance().asInstanceOf[Converter[Any, Any]]
         logInfo(s"Loaded converter: $cc")
         c
       } match {

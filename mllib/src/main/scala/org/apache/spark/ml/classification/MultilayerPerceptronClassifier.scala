@@ -205,8 +205,8 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
       dataset: Dataset[_]): MultilayerPerceptronClassificationModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, labelCol, featuresCol, predictionCol, layers, maxIter, tol,
-      blockSize, solver, stepSize, seed)
+    instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol, layers, maxIter,
+      tol, blockSize, solver, stepSize, seed)
 
     val myLayers = $(layers)
     val labels = myLayers.last

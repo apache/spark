@@ -24,13 +24,14 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWritSupport, RateControlMicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.Clock
 
 class MicroBatchExecution(
     sparkSession: SparkSession,
@@ -144,6 +145,12 @@ class MicroBatchExecution(
       sparkSession.sparkContext.cancelJobGroup(runId.toString)
     }
     logInfo(s"Query $prettyIdString was stopped")
+  }
+
+  /** Begins recording statistics about query progress for a given trigger. */
+  override protected def startTrigger(): Unit = {
+    super.startTrigger()
+    currentStatus = currentStatus.copy(isTriggerActive = true)
   }
 
   /**
@@ -475,8 +482,8 @@ class MicroBatchExecution(
       case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { dataPlan =>
           assert(output.size == dataPlan.output.size,
-            s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
-              s"${Utils.truncatedString(dataPlan.output, ",")}")
+            s"Invalid batch: ${truncatedString(output, ",")} != " +
+              s"${truncatedString(dataPlan.output, ",")}")
 
           val aliases = output.zip(dataPlan.output).map { case (to, from) =>
             Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
@@ -520,6 +527,7 @@ class MicroBatchExecution(
         triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
+        id,
         runId,
         currentBatchId,
         offsetSeqMetadata)
