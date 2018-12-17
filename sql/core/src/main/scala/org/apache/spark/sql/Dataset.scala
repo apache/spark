@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
-import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, CombineUnions}
+import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2146,7 +2146,7 @@ class Dataset[T] private[sql](
    * Returns a new Dataset by adding columns or replacing the existing columns that has
    * the same names.
    */
-  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = withPlan {
+  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
@@ -2164,16 +2164,16 @@ class Dataset[T] private[sql](
       columnMap.find { case (colName, _) =>
         resolver(field.name, colName)
       } match {
-        case Some((colName: String, col: Column)) => col.as(colName).named
-        case _ => field
+        case Some((colName: String, col: Column)) => col.as(colName)
+        case _ => Column(field)
       }
     }
 
-    val newColumns = columnMap.filter { case (colName, _) =>
+    val newColumns = columnMap.filter { case (colName, col) =>
       !output.exists(f => resolver(f.name, colName))
-    }.map { case (colName, col) => col.as(colName).named }
+    }.map { case (colName, col) => col.as(colName) }
 
-    CollapseProject(Project(replacedAndExistingColumns ++ newColumns, logicalPlan))
+    select(replacedAndExistingColumns ++ newColumns : _*)
   }
 
   /**
