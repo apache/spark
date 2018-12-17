@@ -713,9 +713,6 @@ object ScalaReflection extends ScalaReflection {
       throw new UnsupportedOperationException(s"Attributes for type $others is not supported")
   }
 
-  def concreteDataTypeFor(tpe: `Type`): DataType =
-    schemaFor(tpe).dataType.defaultConcreteType
-
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor[T: TypeTag]: Schema = schemaFor(localTypeOf[T])
 

@@ -660,7 +660,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
       val classSymbol = runtimeMirror(getClass.getClassLoader).staticClass(className)
       val tpe = classSymbol.selfType
 
-      val itemType = ScalaReflection.concreteDataTypeFor(tpe)
+      val itemType = ScalaReflection.schemaFor(tpe).dataType
       val fields = Array(StructField("sequence", ArrayType(ArrayType(itemType))),
         StructField("freq", LongType))
       val schema = StructType(fields)
