@@ -24,14 +24,14 @@ import org.apache.spark.sql.types._
 
 class JsonInferSchemaSuite extends SparkFunSuite {
 
-  def checkType(options: Map[String, String], json: String, `type`: DataType): Unit = {
+  def checkType(options: Map[String, String], json: String, dt: DataType): Unit = {
     val jsonOptions = new JSONOptions(options, "GMT", "")
     val inferSchema = new JsonInferSchema(jsonOptions)
     val factory = new JsonFactory()
     jsonOptions.setJacksonOptions(factory)
     val parser = CreateJacksonParser.string(factory, json)
     parser.nextToken()
-    val expectedType = StructType(Seq(StructField("a", `type`, true)))
+    val expectedType = StructType(Seq(StructField("a", dt, true)))
 
     assert(inferSchema.inferField(parser) === expectedType)
   }
@@ -59,7 +59,7 @@ class JsonInferSchemaSuite extends SparkFunSuite {
         "timestampFormat" -> "yyyyMMdd.HHmmssSSS"
       ),
       json = """{"a": "20181202.210400123"}""",
-      `type` = DecimalType(17, 9)
+      dt = DecimalType(17, 9)
     )
     checkType(
       options = Map(
@@ -67,7 +67,7 @@ class JsonInferSchemaSuite extends SparkFunSuite {
         "timestampFormat" -> "yyyyMMdd.HHmmssSSS"
       ),
       json = """{"a": "20181202.210400123"}""",
-      `type` = TimestampType
+      dt = TimestampType
     )
   }
 }
