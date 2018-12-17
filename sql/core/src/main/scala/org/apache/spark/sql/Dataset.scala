@@ -32,6 +32,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis._
@@ -179,7 +180,7 @@ class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     encoder: Encoder[T])
-  extends Serializable {
+  extends Serializable with Logging {
 
   queryExecution.assertAnalyzed()
 
@@ -2154,6 +2155,18 @@ class Dataset[T] private[sql](
       colNames,
       "in given column names",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    var numProjects = 0
+    var currPlan = logicalPlan
+    while (currPlan.isInstanceOf[Project] && numProjects < 50) {
+      numProjects += 1
+      currPlan = currPlan.children.head // Since it is a Project, it has 1 and only 1 child
+    }
+    if (numProjects == 50) {
+      logWarning("The current plan contains many projects on the top. This happens usually when " +
+        "using `withColumn` in a loop. Please, avoid this pattern as it can seriously affect " +
+        "performance and even cause OOM due to the huge size of the generated plan. Please use " +
+        "a single select providing all the needed rows to it instead.")
+    }
 
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
