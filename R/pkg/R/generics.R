@@ -1479,6 +1479,10 @@ setGeneric("spark.associationRules", function(object) { standardGeneric("spark.a
 setGeneric("spark.findFrequentSequentialPatterns",
             function(data, ...) { standardGeneric("spark.findFrequentSequentialPatterns") })
 
+#' @rdname spark.powerIterationClustering
+setGeneric("spark.assignClusters",
+            function(data, ...) { standardGeneric("spark.assignClusters") })
+
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.
 #' @param ... additional argument(s) passed to the method.

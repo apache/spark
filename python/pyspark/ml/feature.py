@@ -192,6 +192,7 @@ class LSHModel(JavaModel):
                  "datasetA" and "datasetB", and a column "distCol" is added to show the distance
                  between each pair.
         """
+        threshold = TypeConverters.toFloat(threshold)
         return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
 
 
@@ -230,6 +231,16 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
     [Row(id=4, features=DenseVector([2.0, 2.0]), hashes=[DenseVector([1.0])], distCol=1.0)]
     >>> model.approxSimilarityJoin(df, df2, 3.0, distCol="EuclideanDistance").select(
+    ...     col("datasetA.id").alias("idA"),
+    ...     col("datasetB.id").alias("idB"),
+    ...     col("EuclideanDistance")).show()
+    +---+---+-----------------+
+    |idA|idB|EuclideanDistance|
+    +---+---+-----------------+
+    |  3|  6| 2.23606797749979|
+    +---+---+-----------------+
+    ...
+    >>> model.approxSimilarityJoin(df, df2, 3, distCol="EuclideanDistance").select(
     ...     col("datasetA.id").alias("idA"),
     ...     col("datasetB.id").alias("idB"),
     ...     col("EuclideanDistance")).show()
@@ -1648,22 +1659,22 @@ class OneHotEncoder(JavaEstimator, HasInputCols, HasOutputCols, HasHandleInvalid
     at most a single one-value per row that indicates the input category index.
     For example with 5 categories, an input value of 2.0 would map to an output vector of
     `[0.0, 0.0, 1.0, 0.0]`.
-    The last category is not included by default (configurable via `dropLast`),
+    The last category is not included by default (configurable via :py:attr:`dropLast`),
     because it makes the vector entries sum up to one, and hence linearly dependent.
     So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
 
-    Note: This is different from scikit-learn's OneHotEncoder, which keeps all categories.
-    The output vectors are sparse.
+    .. note:: This is different from scikit-learn's OneHotEncoder, which keeps all categories.
+        The output vectors are sparse.
 
-    When `handleInvalid` is configured to 'keep', an extra "category" indicating invalid values is
-    added as last category. So when `dropLast` is true, invalid values are encoded as all-zeros
-    vector.
+    When :py:attr:`handleInvalid` is configured to 'keep', an extra "category" indicating invalid
+    values is added as last category. So when :py:attr:`dropLast` is true, invalid values are
+    encoded as all-zeros vector.
 
-    Note: When encoding multi-column by using `inputCols` and `outputCols` params, input/output
-    cols come in pairs, specified by the order in the arrays, and each pair is treated
-    independently.
+    .. note:: When encoding multi-column by using :py:attr:`inputCols` and
+        :py:attr:`outputCols` params, input/output cols come in pairs, specified by the order in
+        the arrays, and each pair is treated independently.
 
-    See `StringIndexer` for converting categorical values into category indices
+    .. seealso:: :py:class:`StringIndexer` for converting categorical values into category indices
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
@@ -1671,7 +1682,7 @@ class OneHotEncoder(JavaEstimator, HasInputCols, HasOutputCols, HasHandleInvalid
     >>> model = ohe.fit(df)
     >>> model.transform(df).head().output
     SparseVector(2, {0: 1.0})
-    >>> ohePath = temp_path + "/oheEstimator"
+    >>> ohePath = temp_path + "/ohe"
     >>> ohe.save(ohePath)
     >>> loadedOHE = OneHotEncoder.load(ohePath)
     >>> loadedOHE.getInputCols() == ohe.getInputCols()

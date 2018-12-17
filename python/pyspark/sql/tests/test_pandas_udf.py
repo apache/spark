@@ -17,11 +17,15 @@
 
 import unittest
 
+from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import *
 from pyspark.sql.utils import ParseException
+from pyspark.rdd import PythonEvalType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
+
+from py4j.protocol import Py4JJavaError
 
 
 @unittest.skipIf(
@@ -30,9 +34,6 @@ from pyspark.testing.utils import QuietTest
 class PandasUDFTests(ReusedSQLTestCase):
 
     def test_pandas_udf_basic(self):
-        from pyspark.rdd import PythonEvalType
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         udf = pandas_udf(lambda x: x, DoubleType())
         self.assertEqual(udf.returnType, DoubleType())
         self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
@@ -65,10 +66,6 @@ class PandasUDFTests(ReusedSQLTestCase):
         self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
     def test_pandas_udf_decorator(self):
-        from pyspark.rdd import PythonEvalType
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-        from pyspark.sql.types import StructType, StructField, DoubleType
-
         @pandas_udf(DoubleType())
         def foo(x):
             return x
@@ -114,8 +111,6 @@ class PandasUDFTests(ReusedSQLTestCase):
         self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
     def test_udf_wrong_arg(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         with QuietTest(self.sc):
             with self.assertRaises(ParseException):
                 @pandas_udf('blah')
@@ -151,9 +146,6 @@ class PandasUDFTests(ReusedSQLTestCase):
                     return k
 
     def test_stopiteration_in_udf(self):
-        from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
-        from py4j.protocol import Py4JJavaError
-
         def foo(x):
             raise StopIteration()
 

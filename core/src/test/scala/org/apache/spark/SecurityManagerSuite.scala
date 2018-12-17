@@ -19,7 +19,9 @@ package org.apache.spark
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
+import java.util.Base64
 
 import org.apache.hadoop.security.UserGroupInformation
 
@@ -395,15 +397,69 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
   }
 
-  test("secret key generation") {
-    Seq(
-      ("yarn", true),
-      ("local", true),
-      ("local[*]", true),
-      ("local[1, 2]", true),
-      ("local-cluster[2, 1, 1024]", false),
-      ("invalid", false)
-    ).foreach { case (master, shouldGenerateSecret) =>
+  test("use executor-specific secret file configuration.") {
+    val secretFileFromDriver = createTempSecretFile("driver-secret")
+    val secretFileFromExecutor = createTempSecretFile("executor-secret")
+    val conf = new SparkConf()
+      .setMaster("k8s://127.0.0.1")
+      .set(AUTH_SECRET_FILE_DRIVER, Some(secretFileFromDriver.getAbsolutePath))
+      .set(AUTH_SECRET_FILE_EXECUTOR, Some(secretFileFromExecutor.getAbsolutePath))
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+    val mgr = new SecurityManager(conf, authSecretFileConf = AUTH_SECRET_FILE_EXECUTOR)
+    assert(encodeFileAsBase64(secretFileFromExecutor) === mgr.getSecretKey())
+  }
+
+  test("secret file must be defined in both driver and executor") {
+    val conf1 = new SparkConf()
+      .set(AUTH_SECRET_FILE_DRIVER, Some("/tmp/driver-secret.txt"))
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+    val mgr1 = new SecurityManager(conf1)
+    intercept[IllegalArgumentException] {
+      mgr1.initializeAuth()
+    }
+
+    val conf2 = new SparkConf()
+      .set(AUTH_SECRET_FILE_EXECUTOR, Some("/tmp/executor-secret.txt"))
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+    val mgr2 = new SecurityManager(conf2)
+    intercept[IllegalArgumentException] {
+      mgr2.initializeAuth()
+    }
+  }
+
+  Seq("yarn", "local", "local[*]", "local[1,2]", "mesos://localhost:8080").foreach { master =>
+    test(s"master $master cannot use file mounted secrets") {
+      val conf = new SparkConf()
+        .set(AUTH_SECRET_FILE, "/tmp/secret.txt")
+        .set(SecurityManager.SPARK_AUTH_CONF, "true")
+        .setMaster(master)
+      intercept[IllegalArgumentException] {
+        new SecurityManager(conf).getSecretKey()
+      }
+      intercept[IllegalArgumentException] {
+        new SecurityManager(conf).initializeAuth()
+      }
+    }
+  }
+
+  // How is the secret expected to be generated and stored.
+  object SecretTestType extends Enumeration {
+    val MANUAL, AUTO, UGI, FILE = Value
+  }
+
+  import SecretTestType._
+
+  Seq(
+    ("yarn", UGI),
+    ("local", UGI),
+    ("local[*]", UGI),
+    ("local[1, 2]", UGI),
+    ("k8s://127.0.0.1", AUTO),
+    ("k8s://127.0.1.1", FILE),
+    ("local-cluster[2, 1, 1024]", MANUAL),
+    ("invalid", MANUAL)
+  ).foreach { case (master, secretType) =>
+    test(s"secret key generation: master '$master'") {
       val conf = new SparkConf()
         .set(NETWORK_AUTH_ENABLED, true)
         .set(SparkLauncher.SPARK_MASTER, master)
@@ -412,19 +468,32 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
       UserGroupInformation.createUserForTesting("authTest", Array()).doAs(
         new PrivilegedExceptionAction[Unit]() {
           override def run(): Unit = {
-            if (shouldGenerateSecret) {
-              mgr.initializeAuth()
-              val creds = UserGroupInformation.getCurrentUser().getCredentials()
-              val secret = creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY)
-              assert(secret != null)
-              assert(new String(secret, UTF_8) === mgr.getSecretKey())
-            } else {
-              intercept[IllegalArgumentException] {
+            secretType match {
+              case UGI =>
                 mgr.initializeAuth()
-              }
-              intercept[IllegalArgumentException] {
-                mgr.getSecretKey()
-              }
+                val creds = UserGroupInformation.getCurrentUser().getCredentials()
+                val secret = creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY)
+                assert(secret != null)
+                assert(new String(secret, UTF_8) === mgr.getSecretKey())
+
+              case AUTO =>
+                mgr.initializeAuth()
+                val creds = UserGroupInformation.getCurrentUser().getCredentials()
+                assert(creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY) === null)
+
+              case MANUAL =>
+                intercept[IllegalArgumentException] {
+                  mgr.initializeAuth()
+                }
+                intercept[IllegalArgumentException] {
+                  mgr.getSecretKey()
+                }
+
+              case FILE =>
+                val secretFile = createTempSecretFile()
+                conf.set(AUTH_SECRET_FILE, secretFile.getAbsolutePath)
+                mgr.initializeAuth()
+                assert(encodeFileAsBase64(secretFile) === mgr.getSecretKey())
             }
           }
         }
@@ -432,5 +501,15 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     }
   }
 
+  private def encodeFileAsBase64(secretFile: File) = {
+    Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
+  }
+
+  private def createTempSecretFile(contents: String = "test-secret"): File = {
+    val secretDir = Utils.createTempDir("temp-secrets")
+    val secretFile = new File(secretDir, "temp-secret.txt")
+    Files.write(secretFile.toPath, contents.getBytes(UTF_8))
+    secretFile
+  }
 }
 

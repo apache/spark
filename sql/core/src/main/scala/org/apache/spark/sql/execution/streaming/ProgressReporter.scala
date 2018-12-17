@@ -115,7 +115,6 @@ trait ProgressReporter extends Logging {
     logDebug("Starting Trigger Calculation")
     lastTriggerStartTimestamp = currentTriggerStartTimestamp
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
-    currentStatus = currentStatus.copy(isTriggerActive = true)
     currentTriggerStartOffsets = null
     currentTriggerEndOffsets = null
     currentDurationsMs.clear()

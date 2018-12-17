@@ -28,7 +28,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer}
+import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
@@ -70,7 +70,9 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
   private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
     val resolver = ResolveTimeZone(new SQLConf)
-    resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
+    val expr = resolver.resolveTimeZones(expression)
+    assert(expr.resolved)
+    serializer.deserialize(serializer.serialize(expr))
   }
 
   protected def checkEvaluation(
@@ -296,9 +298,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation())
-    // We should analyze the plan first, otherwise we possibly optimize an unresolved plan.
-    val analyzedPlan = SimpleAnalyzer.execute(plan)
-    val optimizedPlan = SimpleTestOptimizer.execute(analyzedPlan)
+    val optimizedPlan = SimpleTestOptimizer.execute(plan)
     checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)
   }
 
@@ -321,8 +321,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
     plan.initialize(0)
-    actual = FromUnsafeProjection(expression.dataType :: Nil)(
-      plan(inputRow)).get(0, expression.dataType)
+    val ref = new BoundReference(0, expression.dataType, nullable = true)
+    actual = GenerateSafeProjection.generate(ref :: Nil)(plan(inputRow)).get(0, expression.dataType)
     assert(checkResult(actual, expected, expression))
   }
 

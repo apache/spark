@@ -63,6 +63,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
+  private val badAfterGoodFile = "test-data/bad_after_good.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -586,6 +587,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val results = spark.read
       .format("csv")
       .options(Map("comment" -> "~", "header" -> "false", "inferSchema" -> "true"))
+      .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
       .load(testFile(commentsFile))
       .collect()
 
@@ -622,10 +624,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val options = Map(
       "header" -> "true",
       "inferSchema" -> "false",
-      "dateFormat" -> "dd/MM/yyyy hh:mm")
+      "dateFormat" -> "dd/MM/yyyy HH:mm")
     val results = spark.read
       .format("csv")
       .options(options)
+      .option("timeZone", "UTC")
       .schema(customSchema)
       .load(testFile(datesFile))
       .select("date")
@@ -893,36 +896,38 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("Write dates correctly in ISO8601 format by default") {
-    withTempDir { dir =>
-      val customSchema = new StructType(Array(StructField("date", DateType, true)))
-      val iso8601datesPath = s"${dir.getCanonicalPath}/iso8601dates.csv"
-      val dates = spark.read
-        .format("csv")
-        .schema(customSchema)
-        .option("header", "true")
-        .option("inferSchema", "false")
-        .option("dateFormat", "dd/MM/yyyy HH:mm")
-        .load(testFile(datesFile))
-      dates.write
-        .format("csv")
-        .option("header", "true")
-        .save(iso8601datesPath)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTempDir { dir =>
+        val customSchema = new StructType(Array(StructField("date", DateType, true)))
+        val iso8601datesPath = s"${dir.getCanonicalPath}/iso8601dates.csv"
+        val dates = spark.read
+          .format("csv")
+          .schema(customSchema)
+          .option("header", "true")
+          .option("inferSchema", "false")
+          .option("dateFormat", "dd/MM/yyyy HH:mm")
+          .load(testFile(datesFile))
+        dates.write
+          .format("csv")
+          .option("header", "true")
+          .save(iso8601datesPath)
 
-      // This will load back the dates as string.
-      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
-      val iso8601dates = spark.read
-        .format("csv")
-        .schema(stringSchema)
-        .option("header", "true")
-        .load(iso8601datesPath)
+        // This will load back the dates as string.
+        val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
+        val iso8601dates = spark.read
+          .format("csv")
+          .schema(stringSchema)
+          .option("header", "true")
+          .load(iso8601datesPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd", Locale.US)
-      val expectedDates = dates.collect().map { r =>
-        // This should be ISO8601 formatted string.
-        Row(iso8501.format(r.toSeq.head))
+        val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd", Locale.US)
+        val expectedDates = dates.collect().map { r =>
+          // This should be ISO8601 formatted string.
+          Row(iso8501.format(r.toSeq.head))
+        }
+
+        checkAnswer(iso8601dates, expectedDates)
       }
-
-      checkAnswer(iso8601dates, expectedDates)
     }
   }
 
@@ -1107,7 +1112,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
     Seq(false, true).foreach { multiLine =>
-      val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+      val schema = new StructType().add("a", IntegerType).add("b", DateType)
       // We use `PERMISSIVE` mode by default if invalid string is given.
       val df1 = spark
         .read
@@ -1139,7 +1144,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       val schemaWithCorrField2 = new StructType()
         .add("a", IntegerType)
         .add(columnNameOfCorruptRecord, StringType)
-        .add("b", TimestampType)
+        .add("b", DateType)
       val df3 = spark
         .read
         .option("mode", "permissive")
@@ -1325,7 +1330,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val columnNameOfCorruptRecord = "_corrupt_record"
     val schema = new StructType()
       .add("a", IntegerType)
-      .add("b", TimestampType)
+      .add("b", DateType)
       .add(columnNameOfCorruptRecord, StringType)
     // negative cases
     val msg = intercept[AnalysisException] {
@@ -2007,5 +2012,23 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       val files = new File(path).listFiles()
       assert(!files.exists(_.getName.endsWith("csv")))
     }
+  }
+
+  test("Do not reuse last good value for bad input field") {
+    val schema = StructType(
+      StructField("col1", StringType) ::
+      StructField("col2", DateType) ::
+      Nil
+    )
+    val rows = spark.read
+      .schema(schema)
+      .format("csv")
+      .load(testFile(badAfterGoodFile))
+
+    val expectedRows = Seq(
+      Row("good record", java.sql.Date.valueOf("1999-08-01")),
+      Row("bad record", null))
+
+    checkAnswer(rows, expectedRows)
   }
 }

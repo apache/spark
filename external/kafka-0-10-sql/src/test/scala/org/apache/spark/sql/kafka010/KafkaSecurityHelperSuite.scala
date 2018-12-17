@@ -26,12 +26,8 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.security.KafkaTokenUtil
 import org.apache.spark.deploy.security.KafkaTokenUtil.KafkaDelegationTokenIdentifier
-import org.apache.spark.internal.config._
 
 class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
-  private val keytab = "/path/to/keytab"
-  private val kerberosServiceName = "kafka"
-  private val principal = "user@domain.com"
   private val tokenId = "tokenId" + UUID.randomUUID().toString
   private val tokenPassword = "tokenPassword" + UUID.randomUUID().toString
 
@@ -76,19 +72,8 @@ class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(KafkaSecurityHelper.isTokenAvailable())
   }
 
-  test("getTokenJaasParams with token no service should throw exception") {
-    addTokenToUGI()
-
-    val thrown = intercept[IllegalArgumentException] {
-      KafkaSecurityHelper.getTokenJaasParams(sparkConf)
-    }
-
-    assert(thrown.getMessage contains "Kerberos service name must be defined")
-  }
-
   test("getTokenJaasParams with token should return scram module") {
     addTokenToUGI()
-    sparkConf.set(Kafka.KERBEROS_SERVICE_NAME, kerberosServiceName)
 
     val jaasParams = KafkaSecurityHelper.getTokenJaasParams(sparkConf)
 
