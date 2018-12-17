@@ -552,10 +552,9 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       val df0 = spark.read.table("parquetTable")
       df0.collect()
       val metrics0 = df0.queryExecution.executedPlan.collectLeaves().head.metrics
-      // Check file listing duration and timestamp change.
+      // Check file listing timestamp change.
       assert(metrics0("fileListingStart").value > 0)
       assert(metrics0("fileListingEnd").value > 0)
-      assert(metrics0("fileListingTime").value > 0)
       // Insert 10 rows into the table, this will trigger file index refresh.
       spark.range(10).selectExpr("id", "id + 1").write.insertInto("parquetTable")
       // For the second time read, file listing metrics will change.
@@ -565,10 +564,9 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       // Check deterministic metrics.
       assert(metrics1("numFiles").value == 2)
       assert(metrics1("numOutputRows").value == 10)
-      // Check file listing duration and timestamp.
+      // Check file listing timestamp change.
       assert(metrics1("fileListingStart").value > metrics0("fileListingStart").value)
       assert(metrics1("fileListingEnd").value > metrics0("fileListingEnd").value)
-      assert(metrics1("fileListingTime").value > 0)
 
       val df2 = spark.read.table("parquetTable")
       df2.collect()
