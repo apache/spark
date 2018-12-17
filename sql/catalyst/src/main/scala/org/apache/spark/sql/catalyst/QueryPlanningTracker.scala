@@ -87,6 +87,15 @@ object QueryPlanningTracker {
     localTracker.set(tracker)
     try f finally { localTracker.set(originalTracker) }
   }
+
+  /** Record the phase by the passing in record function. */
+  def recordPhase[T](record: PhaseSummary => Unit)(f: => T): T = {
+    val startTime = System.currentTimeMillis()
+    val ret = f
+    val endTime = System.currentTimeMillis
+    record(new PhaseSummary(startTime, endTime))
+    ret
+  }
 }
 
 

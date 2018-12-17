@@ -34,9 +34,6 @@ case class PartitionDirectory(values: InternalRow, files: Seq[FileStatus])
  * partitions of a relation subject to some pruning expressions.
  */
 trait FileIndex {
-  import QueryPlanningTracker._
-
-  private var _fileListingPhase: Option[PhaseSummary] = None
 
   /**
    * Returns the list of root input paths from which the catalog will get files. There may be a
@@ -76,15 +73,6 @@ trait FileIndex {
   /** Schema of the partitioning columns, or the empty schema if the table is not partitioned. */
   def partitionSchema: StructType
 
-  /** Measure the start and end time of file listing phase and memorize result. */
-  protected def measureFileListingPhase[T](f: => T): T = {
-    val startTime = System.currentTimeMillis()
-    val ret = f
-    val endTime = System.currentTimeMillis
-    _fileListingPhase = Some(new PhaseSummary(startTime, endTime))
-    ret
-  }
-
   /**
    * Returns an optional file listing phase summary.
    *
@@ -92,5 +80,5 @@ trait FileIndex {
    * metrics. If partition pruning happened in query planning, the phase also contains this
    * part of the cost, otherwise, it only contains file listing time of FileIndex initialize.
    */
-  final def fileListingPhase: Option[PhaseSummary] = _fileListingPhase
+  def fileListingPhase: Option[QueryPlanningTracker.PhaseSummary] = None
 }

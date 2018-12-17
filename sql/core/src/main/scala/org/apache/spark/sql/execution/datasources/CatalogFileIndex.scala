@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
@@ -39,11 +40,14 @@ class CatalogFileIndex(
     sparkSession: SparkSession,
     val table: CatalogTable,
     override val sizeInBytes: Long) extends FileIndex {
+  import QueryPlanningTracker._
 
   protected val hadoopConf: Configuration = sparkSession.sessionState.newHadoopConf()
 
   /** Globally shared (not exclusive to this table) cache for file statuses to speed up listing. */
   private val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+
+  private var _fileListingPhase: Option[PhaseSummary] = None
 
   assert(table.identifier.database.isDefined,
     "The table identifier must be qualified in CatalogFileIndex")
@@ -61,31 +65,34 @@ class CatalogFileIndex(
 
   override def refresh(): Unit = fileStatusCache.invalidateAll()
 
+  override def fileListingPhase: Option[PhaseSummary] = _fileListingPhase
+
   /**
    * Returns a [[InMemoryFileIndex]] for this table restricted to the subset of partitions
    * specified by the given partition-pruning filters.
    *
    * @param filters partition-pruning filters
    */
-  def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = measureFileListingPhase {
-    if (table.partitionColumnNames.nonEmpty) {
-      val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
-        table.identifier, filters)
-      val partitions = selectedPartitions.map { p =>
-        val path = new Path(p.location)
-        val fs = path.getFileSystem(hadoopConf)
-        PartitionPath(
-          p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
-          path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+  def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex =
+    recordPhase(phase => _fileListingPhase = Some(phase)) {
+      if (table.partitionColumnNames.nonEmpty) {
+        val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
+          table.identifier, filters)
+        val partitions = selectedPartitions.map { p =>
+          val path = new Path(p.location)
+          val fs = path.getFileSystem(hadoopConf)
+          PartitionPath(
+            p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+            path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+        }
+        val partitionSpec = PartitionSpec(partitionSchema, partitions)
+        new PrunedInMemoryFileIndex(
+          sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
+      } else {
+        new InMemoryFileIndex(
+          sparkSession, rootPaths, table.storage.properties, userSpecifiedSchema = None)
       }
-      val partitionSpec = PartitionSpec(partitionSchema, partitions)
-      new PrunedInMemoryFileIndex(
-        sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
-    } else {
-      new InMemoryFileIndex(
-        sparkSession, rootPaths, table.storage.properties, userSpecifiedSchema = None)
     }
-  }
 
   override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
 

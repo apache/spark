@@ -29,6 +29,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.execution.streaming.FileStreamSink
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -52,6 +53,7 @@ class InMemoryFileIndex(
     fileStatusCache: FileStatusCache = NoopCache)
   extends PartitioningAwareFileIndex(
     sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
+  import QueryPlanningTracker._
 
   // Filter out streaming metadata dirs or files such as "/.../_spark_metadata" (the metadata dir)
   // or "/.../_spark_metadata/0" (a file in the metadata dir). `rootPathsSpecified` might contain
@@ -63,6 +65,8 @@ class InMemoryFileIndex(
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
+
+  private var _fileListingPhase: Option[PhaseSummary] = None
 
   refresh0()
 
@@ -87,7 +91,7 @@ class InMemoryFileIndex(
     refresh0()
   }
 
-  private def refresh0(): Unit = measureFileListingPhase {
+  private def refresh0(): Unit = recordPhase(phase => _fileListingPhase = Some(phase)) {
     val files = listLeafFiles(rootPaths)
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
@@ -101,6 +105,8 @@ class InMemoryFileIndex(
   }
 
   override def hashCode(): Int = rootPaths.toSet.hashCode()
+
+  override def fileListingPhase: Option[PhaseSummary] = _fileListingPhase
 
   /**
    * List leaf files of given paths. This method will submit a Spark job to do parallel
