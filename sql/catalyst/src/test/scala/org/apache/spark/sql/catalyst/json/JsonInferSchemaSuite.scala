@@ -52,7 +52,7 @@ class JsonInferSchemaSuite extends SparkFunSuite {
       """{"a": "2018-12-02T21:04:00.123567+01:00"}""")
   }
 
-  test("inferring decimals and timestamps") {
+  test("prefer decimals over timestamps") {
     checkType(
       options = Map(
         "prefersDecimal" -> "true",
@@ -61,6 +61,9 @@ class JsonInferSchemaSuite extends SparkFunSuite {
       json = """{"a": "20181202.210400123"}""",
       dt = DecimalType(17, 9)
     )
+  }
+
+  test("skip decimal type inferring") {
     checkType(
       options = Map(
         "prefersDecimal" -> "false",
@@ -68,6 +71,14 @@ class JsonInferSchemaSuite extends SparkFunSuite {
       ),
       json = """{"a": "20181202.210400123"}""",
       dt = TimestampType
+    )
+  }
+
+  test("fallback to string type") {
+    checkType(
+      options = Map("timestampFormat" -> "yyyy,MM,dd.HHmmssSSS"),
+      json = """{"a": "20181202.210400123"}""",
+      dt = StringType
     )
   }
 }
