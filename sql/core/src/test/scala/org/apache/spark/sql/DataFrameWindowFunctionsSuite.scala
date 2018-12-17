@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import org.scalatest.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
+import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -668,17 +670,29 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       ("S2", "P2", 300)
     ).toDF("sno", "pno", "qty")
 
-    val w1 = Window.partitionBy("sno")
-    val w2 = Window.partitionBy("sno", "pno")
+    Seq(true, false).foreach { transposeWindowEnabled =>
+      val excludedRules = if (transposeWindowEnabled) "" else TransposeWindow.ruleName
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules) {
+        val w1 = Window.partitionBy("sno")
+        val w2 = Window.partitionBy("sno", "pno")
 
-    checkAnswer(
-      df.select($"sno", $"pno", $"qty", sum($"qty").over(w2).alias("sum_qty_2"))
-        .select($"sno", $"pno", $"qty", col("sum_qty_2"), sum("qty").over(w1).alias("sum_qty_1")),
-      Seq(
-        Row("S1", "P1", 100, 800, 800),
-        Row("S1", "P1", 700, 800, 800),
-        Row("S2", "P1", 200, 200, 500),
-        Row("S2", "P2", 300, 300, 500)))
+        val select = df.select($"sno", $"pno", $"qty", sum($"qty").over(w2).alias("sum_qty_2"))
+          .select($"sno", $"pno", $"qty", col("sum_qty_2"), sum("qty").over(w1).alias("sum_qty_1"))
 
+        val expectedNumExchanges = if (transposeWindowEnabled) 1 else 2
+        val actualNumExchanges = select.queryExecution.executedPlan.collect {
+          case e: Exchange => e
+        }.length
+        assert(actualNumExchanges == expectedNumExchanges)
+
+        checkAnswer(
+          select,
+          Seq(
+            Row("S1", "P1", 100, 800, 800),
+            Row("S1", "P1", 700, 800, 800),
+            Row("S2", "P1", 200, 200, 500),
+            Row("S2", "P2", 300, 300, 500)))
+      }
+    }
   }
 }
