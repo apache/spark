@@ -300,13 +300,28 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     val optimized = Optimize.execute(analyzed)
     val expected = groundTruthBestPlan.analyze
 
-    assert(analyzed.sameOutput(expected)) // if this fails, the expected plan itself is incorrect
-    assert(analyzed.sameOutput(optimized))
+    assert(sameOutput(analyzed, expected)) // if this fails, the expected plan itself is incorrect
+    assert(sameOutput(analyzed, optimized))
 
     compareJoinOrder(optimized, expected)
   }
 
   private def outputsOf(plans: LogicalPlan*): Seq[Attribute] = {
     plans.map(_.output).reduce(_ ++ _)
+  }
+
+  /**
+   * Returns true iff output of both plans are semantically the same, ie.:
+   *  - they contain the same number of `Attribute`s;
+   *  - references are the same;
+   *  - the order is equal too.
+   * NOTE: this is copied over from SPARK-25691 from master.
+   */
+  def sameOutput(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
+    val output1 = plan1.output
+    val output2 = plan2.output
+    output1.length == output2.length && output1.zip(output2).forall {
+      case (a1, a2) => a1.semanticEquals(a2)
+    }
   }
 }
