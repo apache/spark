@@ -168,7 +168,6 @@ private[spark] abstract class YarnSchedulerBackend(
       filterName != null && filterName.nonEmpty &&
       filterParams != null && filterParams.nonEmpty
     if (hasFilter) {
-      logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
       scheduler.sc.ui.foreach { ui =>
         ui.getHandlers.foreach { h =>
           JettyUtils.addFilter(h, filterName, filterParams)

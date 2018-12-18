@@ -102,16 +102,19 @@ class JoinOptimizationSuite extends PlanTest {
         x.join(y).join(z).where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr)),
         x.join(z, condition = Some("x.b".attr === "z.b".attr))
           .join(y, condition = Some("y.d".attr === "z.a".attr))
+          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
       ),
       (
         x.join(y, Cross).join(z, Cross)
           .where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr)),
         x.join(z, Cross, Some("x.b".attr === "z.b".attr))
           .join(y, Cross, Some("y.d".attr === "z.a".attr))
+          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
       ),
       (
         x.join(y, Inner).join(z, Cross).where("x.b".attr === "z.a".attr),
         x.join(z, Cross, Some("x.b".attr === "z.a".attr)).join(y, Inner)
+          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
       )
     )
 
