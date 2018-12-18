@@ -22,15 +22,15 @@ import org.apache.spark.metrics.source.{DoubleAccumulatorSource, LongAccumulator
 import org.apache.spark.sql.SparkSession
 
 /**
- * Usage: AccumulatorMetricsTest [numElem] 
+ * Usage: AccumulatorMetricsTest [numElem]
  *
  * This example shows how to register accumulators against the accumulator source.
  * A simple RDD is created, and during the map, the accumulators are incremented.
- * 
- * The only argument, numElem, sets the number elements in the collection to parallize. 
- * 
+ *
+ * The only argument, numElem, sets the number elements in the collection to parallize.
+ *
  * The result is output to stdout in the driver with the values of the accumulators.
- * For the long accumulator, it should equal numElem the double accumulator should be 
+ * For the long accumulator, it should equal numElem the double accumulator should be
  * roughly 1.1 x numElem (within double precision.)
  */
 object AccumulatorMetricsTest {
@@ -38,7 +38,7 @@ object AccumulatorMetricsTest {
 
     val spark = SparkSession
       .builder()
-      .config("spark.metrics.conf.*.sink.console.class", 
+      .config("spark.metrics.conf.*.sink.console.class",
               "org.apache.spark.metrics.sink.ConsoleSink")
       .getOrCreate()
 
