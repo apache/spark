@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import java.math.BigDecimal
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.QueryExecution
@@ -439,7 +437,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val df1 = spark.createDataFrame(
       sparkContext.parallelize(Seq(Row(Array(new BigDecimal("2011000000000002456556"))))),
       StructType(Seq(StructField("col1", ArrayType(DecimalType(30, 0))))))
-    val udf1 = org.apache.spark.sql.functions.udf((arr: mutable.WrappedArray[BigDecimal]) => {
+    val udf1 = org.apache.spark.sql.functions.udf((arr: Seq[BigDecimal]) => {
       arr.map(value => if (value == null) null else value.toBigInteger.toString)
     })
     checkAnswer(df1.select(udf1(df1.col("col1"))), Seq(Row(Array("2011000000000002456556"))))

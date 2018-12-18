@@ -879,14 +879,15 @@ object TypeCoercion {
           }
         }
         e.withNewChildren(children)
+
       case udf: ScalaUDF if udf.inputTypes.nonEmpty =>
         val children = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
-          implicitCast(in, scalaUDFExpectedTypes(in.dataType, expected)).getOrElse(in)
+          implicitCast(in, udfInputToCastType(in.dataType, expected)).getOrElse(in)
         }
         udf.withNewChildren(children)
     }
 
-    private def scalaUDFExpectedTypes(input: DataType, expectedType: DataType): DataType = {
+    private def udfInputToCastType(input: DataType, expectedType: DataType): DataType = {
       (input, expectedType) match {
         // SPARK-26308: avoid casting to an arbitrary precision and scale for decimals. Please note
         // that precision and scale cannot be inferred properly for a ScalaUDF because, when it is
@@ -894,15 +895,15 @@ object TypeCoercion {
         // column is used.
         case (in: DecimalType, _: DecimalType) => in
         case (ArrayType(dtIn, _), ArrayType(dtExp, nullableExp)) =>
-          ArrayType(scalaUDFExpectedTypes(dtIn, dtExp), nullableExp)
+          ArrayType(udfInputToCastType(dtIn, dtExp), nullableExp)
         case (MapType(keyDtIn, valueDtIn, _), MapType(keyDtExp, valueDtExp, nullableExp)) =>
-          MapType(scalaUDFExpectedTypes(keyDtIn, keyDtExp),
-            scalaUDFExpectedTypes(valueDtIn, valueDtExp),
+          MapType(udfInputToCastType(keyDtIn, keyDtExp),
+            udfInputToCastType(valueDtIn, valueDtExp),
             nullableExp)
         case (StructType(fieldsIn), StructType(fieldsExp)) =>
           val fieldTypes =
             fieldsIn.map(_.dataType).zip(fieldsExp.map(_.dataType)).map { case (dtIn, dtExp) =>
-              scalaUDFExpectedTypes(dtIn, dtExp)
+              udfInputToCastType(dtIn, dtExp)
             }
           StructType(fieldsExp.zip(fieldTypes).map { case (field, newDt) =>
             field.copy(dataType = newDt)
