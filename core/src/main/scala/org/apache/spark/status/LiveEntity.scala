@@ -326,7 +326,7 @@ private class LiveExecutorStageSummary(
   var metrics = createMetrics(default = 0L)
 
   // peak values for executor level metrics
-  var peakExecutorMetrics = new ExecutorMetrics()
+  val peakExecutorMetrics = new ExecutorMetrics()
 
   override protected def doUpdate(): Any = {
     val info = new v1.ExecutorStageSummary(

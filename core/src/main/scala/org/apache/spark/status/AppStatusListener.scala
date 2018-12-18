@@ -795,7 +795,9 @@ private[spark] class AppStatusListener(
       val activeStages = liveStages.values().asScala
         .filter(_.status == v1.StageStatus.ACTIVE)
       activeStages.foreach { stage =>
-        stage.peakExecutorMetrics.compareAndUpdatePeakValues(updates)
+        if (stage.peakExecutorMetrics.compareAndUpdatePeakValues(updates)) {
+          maybeUpdate(stage, now)
+        }
         val executorSummary = stage.executorSummary(event.execId)
         if (executorSummary.peakExecutorMetrics.compareAndUpdatePeakValues(updates)) {
           maybeUpdate(executorSummary, now)
@@ -815,21 +817,24 @@ private[spark] class AppStatusListener(
     }
   }
 
-  override def onStageExecutorMetrics(executorMetrics: SparkListenerStageExecutorMetrics): Unit = {
+  override def onStageExecutorMetrics(event: SparkListenerStageExecutorMetrics): Unit = {
     val now = System.nanoTime()
-    Option(liveStages.get((executorMetrics.stageId, executorMetrics.stageAttemptId)))
+    Option(liveStages.get((event.stageId, event.stageAttemptId)))
       .foreach { stage =>
-      stage.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics.executorMetrics)
-      stage.executorSummary(executorMetrics.execId).peakExecutorMetrics
-        .compareAndUpdatePeakValues(executorMetrics.executorMetrics)
-      update(stage, now)
+      if (stage.peakExecutorMetrics.compareAndUpdatePeakValues(event.executorMetrics)) {
+        update(stage, now)
+      }
+      val esummary = stage.executorSummary(event.execId)
+      if (esummary.peakExecutorMetrics.compareAndUpdatePeakValues(event.executorMetrics)) {
+        update(esummary, now)
+      }
     }
     // check if there is a new peak value for any of the executor level memory metrics,
     // while reading from the log. SparkListenerStageExecutorMetrics are only processed
     // when reading logs.
-    liveExecutors.get(executorMetrics.execId)
-      .orElse(deadExecutors.get(executorMetrics.execId)).foreach { exec =>
-      if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(executorMetrics.executorMetrics)) {
+    liveExecutors.get(event.execId)
+      .orElse(deadExecutors.get(event.execId)).foreach { exec =>
+      if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(event.executorMetrics)) {
         update(exec, now)
       }
     }
