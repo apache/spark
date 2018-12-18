@@ -232,7 +232,7 @@ class UISuite extends SparkFunSuite {
   test("add and remove handlers with custom user filter") {
     val (conf, securityMgr, sslOptions) = sslDisabledConf()
     conf.set("spark.ui.filters", classOf[TestFilter].getName())
-    conf.set(s"spark.${classOf[TestFilter].getName()}.param.test.filter.responseCode",
+    conf.set(s"spark.${classOf[TestFilter].getName()}.param.responseCode",
       HttpServletResponse.SC_NOT_ACCEPTABLE.toString)
 
     val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
@@ -249,7 +249,7 @@ class UISuite extends SparkFunSuite {
       // Try a request with bad content in a parameter to make sure the security filter
       // is being added to new handlers.
       val invalidRequest = new URL(
-        s"http://localhost:${serverInfo.boundPort}$path/root?bypassTestFilter&invalid<=foo")
+        s"http://localhost:${serverInfo.boundPort}$path/root?bypass&invalid<=foo")
       assert(TestUtils.httpResponseCode(invalidRequest) === HttpServletResponse.SC_BAD_REQUEST)
 
       serverInfo.removeHandler(ctx)
@@ -343,16 +343,18 @@ class UISuite extends SparkFunSuite {
 // Filter for testing; returns a configurable code for every request.
 private[spark] class TestFilter extends Filter {
 
-  private var rc: Int = _
+  private var rc: Int = HttpServletResponse.SC_OK
 
   override def destroy(): Unit = { }
 
   override def init(config: FilterConfig): Unit = {
-    rc = config.getInitParameter("test.filter.responseCode").toInt
+    if (config.getInitParameter("responseCode") != null) {
+      rc = config.getInitParameter("responseCode").toInt
+    }
   }
 
   override def doFilter(req: ServletRequest, res: ServletResponse, chain: FilterChain): Unit = {
-    if (req.getParameter("bypassTestFilter") == null) {
+    if (req.getParameter("bypass") == null) {
       res.asInstanceOf[HttpServletResponse].sendError(rc, "Test.")
     } else {
       chain.doFilter(req, res)

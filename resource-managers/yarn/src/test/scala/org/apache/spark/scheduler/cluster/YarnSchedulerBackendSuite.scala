@@ -16,14 +16,18 @@
  */
 package org.apache.spark.scheduler.cluster
 
+import java.net.URL
+import javax.servlet.http.HttpServletResponse
+
 import scala.language.reflectiveCalls
 
 import org.mockito.Mockito.when
 import org.scalatest.mockito.MockitoSugar
 
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.ui.TestFilter
 
 class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with LocalSparkContext {
 
@@ -54,7 +58,38 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       // Serialize to make sure serialization doesn't throw an error
       ser.serialize(req)
     }
-    sc.stop()
+  }
+
+  test("Respect user filters when adding AM IP filter") {
+    val conf = new SparkConf(false)
+      .set("spark.ui.filters", classOf[TestFilter].getName())
+      .set(s"spark.${classOf[TestFilter].getName()}.param.responseCode",
+        HttpServletResponse.SC_NOT_FOUND.toString)
+
+    sc = new SparkContext("local", "YarnSchedulerBackendSuite", conf)
+    val sched = mock[TaskSchedulerImpl]
+    when(sched.sc).thenReturn(sc)
+
+    val url = new URL(sc.uiWebUrl.get)
+    // Before adding the filter, should get SC_NOT_FOUND from the filter in SparkConf.
+    assert(TestUtils.httpResponseCode(url) === HttpServletResponse.SC_NOT_FOUND)
+
+    val backend = new YarnSchedulerBackend(sched, sc) { }
+
+    backend.addWebUIFilter(classOf[TestFilter2].getName(),
+      Map("responseCode" -> HttpServletResponse.SC_NOT_ACCEPTABLE.toString), "")
+
+    sc.ui.get.getHandlers.foreach { h =>
+      // Two filters above + security filter.
+      assert(h.getServletHandler().getFilters().length === 3)
+    }
+
+    // The filter should have been added first in the chain, so we should get SC_NOT_ACCEPTABLE
+    // instead of SC_OK.
+    assert(TestUtils.httpResponseCode(url) === HttpServletResponse.SC_NOT_ACCEPTABLE)
   }
 
 }
+
+// Just extend the test filter so we can configure two of them.
+class TestFilter2 extends TestFilter
