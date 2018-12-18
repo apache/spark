@@ -22,16 +22,24 @@ import org.apache.spark.metrics.source.{DoubleAccumulatorSource, LongAccumulator
 import org.apache.spark.sql.SparkSession
 
 /**
- * Usage: AccumulatorMetricsTest [partitions] [numElem] [blockSize]
+ * Usage: AccumulatorMetricsTest [numElem] 
+ *
+ * This example shows how to register accumulators against the accumulator source.
+ * A simple RDD is created, and during the map, the accumulators are incremented.
+ * 
+ * The only argument, numElem, sets the number elements in the collection to parallize. 
+ * 
+ * The result is output to stdout in the driver with the values of the accumulators.
+ * For the long accumulator, it should equal numElem the double accumulator should be 
+ * roughly 1.1 x numElem (within double precision.)
  */
 object AccumulatorMetricsTest {
   def main(args: Array[String]) {
 
-    val blockSize = if (args.length > 2) args(2) else "4096"
-
     val spark = SparkSession
       .builder()
-      .config("spark.broadcast.blockSize", blockSize)
+      .config("spark.metrics.conf.*.sink.console.class", 
+              "org.apache.spark.metrics.sink.ConsoleSink")
       .getOrCreate()
 
     val sc = spark.sparkContext
@@ -42,25 +50,20 @@ object AccumulatorMetricsTest {
     val acc2 = sc.doubleAccumulator("my-double-metric")
     DoubleAccumulatorSource.register(sc, List(("my-double-metric" -> acc2)).toMap)
 
-    val slices = if (args.length > 0) args(0).toInt else 2
-    val num = if (args.length > 1) args(1).toInt else 1000000
+    val num = if (args.length > 0) args(0).toInt else 1000000
 
-    val arr1 = (0 until num).toArray
+    val startTime = System.nanoTime
 
-    for (i <- 0 until 3) {
-      println(s"Iteration $i")
-      println("===========")
-      val startTime = System.nanoTime
-      val barr1 = sc.broadcast(arr1)
-      val observedSizes = sc.parallelize(1 to 10, slices).map(_ => {
-        acc.add(1)
-        acc2.add(1.1)
-        barr1.value.length
-      })
-      // Collect the small RDD so we can print the observed sizes locally.
-      observedSizes.repartition(100).collect().foreach(i => println(i))
-      println("Iteration %d took %.0f milliseconds".format(i, (System.nanoTime - startTime) / 1E6))
-    }
+    val accumulatorTest = sc.parallelize(1 to num).foreach(_ => {
+      acc.add(1)
+      acc2.add(1.1)
+    })
+
+    // Print a footer with test time and accumulator values
+    println("Test took %.0f milliseconds".format((System.nanoTime - startTime) / 1E6))
+    println("Accumulator values:")
+    println("*** Long accumulator (my-long-metric): " + acc.value)
+    println("*** Double accumulator (my-double-metric): " + acc2.value)
 
     spark.stop()
   }
