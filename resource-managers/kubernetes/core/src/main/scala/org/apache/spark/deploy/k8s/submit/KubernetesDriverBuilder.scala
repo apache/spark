@@ -46,6 +46,7 @@ private[spark] class KubernetesDriverBuilder {
       new LocalDirsFeatureStep(conf),
       new MountVolumesFeatureStep(conf),
       new DriverCommandFeatureStep(conf),
+      new HadoopConfDriverFeatureStep(conf),
       new KerberosConfDriverFeatureStep(conf),
       new PodTemplateConfigMapStep(conf))
 
