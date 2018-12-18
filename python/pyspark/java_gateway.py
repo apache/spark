@@ -41,7 +41,7 @@ def launch_gateway(conf=None):
     """
     launch jvm gateway
     :param conf: spark configuration passed to spark-submit
-    :return:
+    :return: a JVM gateway
     """
     return _launch_gateway(conf)
 
@@ -50,7 +50,7 @@ def _launch_gateway(conf=None, insecure=False):
     """
     launch jvm gateway
     :param conf: spark configuration passed to spark-submit
-    :return:
+    :return: a JVM gateway
     """
     if insecure and not os.environ.get("SPARK_TESTING", "0") == "1":
         raise Exception("creating insecure gateways is only for testing")

@@ -51,7 +51,7 @@ private[spark] object PythonGatewayServer extends Logging {
       builder.authToken(secret)
     } else {
       assert(sys.env.getOrElse("SPARK_TESTING", "0") == "1",
-        "Creating insecure java gateways only allowed for testing")
+        "Creating insecure Java gateways only allowed for testing")
     }
     val gatewayServer: GatewayServer = builder.build()
 

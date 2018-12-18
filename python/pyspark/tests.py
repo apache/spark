@@ -2388,9 +2388,9 @@ class ContextTests(unittest.TestCase):
         gateway = _launch_gateway(insecure=True)
         with self.assertRaises(Exception) as context:
             SparkContext(gateway=gateway)
-        self.assertIn("insecure py4j gateway", context.exception.message)
-        self.assertIn("spark.python.allowInsecurePy4j", context.exception.message)
-        self.assertIn("removed in Spark 3.0", context.exception.message)
+        self.assertIn("insecure Py4j gateway", str(context.exception))
+        self.assertIn("spark.python.allowInsecurePy4j", str(context.exception))
+        self.assertIn("removed in Spark 3.0", str(context.exception))
 
     def test_allow_insecure_gateway_with_conf(self):
         with SparkContext._lock:
@@ -2399,18 +2399,12 @@ class ContextTests(unittest.TestCase):
         gateway = _launch_gateway(insecure=True)
         conf = SparkConf()
         conf.set("spark.python.allowInsecurePy4j", "true")
-        print("entering allow insecure test")
         with SparkContext(conf=conf, gateway=gateway) as sc:
             print("sc created, about to create accum")
             a = sc.accumulator(1)
             rdd = sc.parallelize([1, 2, 3])
-
-            def f(x):
-                a.add(x)
-
-            rdd.foreach(f)
+            rdd.foreach(lambda x: a.add(x))
             self.assertEqual(7, a.value)
-        print("exiting allow insecure test")
 
 
 class ConfTests(unittest.TestCase):
