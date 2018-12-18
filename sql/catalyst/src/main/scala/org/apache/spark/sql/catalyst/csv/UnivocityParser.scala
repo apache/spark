@@ -82,12 +82,7 @@ class UnivocityParser(
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
-    val currentParsedContent = tokenizer.getContext.currentParsedContent()
-    if (currentParsedContent == null) {
-      UTF8String.fromString("")
-    } else {
-      UTF8String.fromString(currentParsedContent.stripLineEnd)
-    }
+    UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
   }
 
   // This parser first picks some tokens from the input tokens, according to the required schema,

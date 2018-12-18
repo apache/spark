@@ -33,6 +33,7 @@ class FailureSafeParser[IN](
   private val corruptFieldIndex = schema.getFieldIndex(columnNameOfCorruptRecord)
   private val actualSchema = StructType(schema.filterNot(_.name == columnNameOfCorruptRecord))
   private val resultRow = new GenericInternalRow(schema.length)
+  private val nullResult = new GenericInternalRow(schema.length)
 
   // This function takes 2 parameters: an optional partial result, and the bad record. If the given
   // schema doesn't contain a field for corrupted record, we just return the partial result or a
@@ -40,19 +41,17 @@ class FailureSafeParser[IN](
   // set the bad record to this field, and set other fields according to the partial result or null.
   private val toResultRow: (Option[InternalRow], () => UTF8String) => InternalRow = {
     (row, badRecord) => {
-      // save the value. Some implementations of badRecord do not like to be called twice
-      val badRec = badRecord()
-      if (badRec != null || corruptFieldIndex.isDefined) {
+      if (corruptFieldIndex.isDefined) {
         var i = 0
         while (i < actualSchema.length) {
           val from = actualSchema(i)
           resultRow(schema.fieldIndex(from.name)) = row.map(_.get(i, from.dataType)).orNull
           i += 1
         }
-        corruptFieldIndex.foreach(index => resultRow(index) = badRec)
+        corruptFieldIndex.foreach(index => resultRow(index) = badRecord())
         resultRow
       } else {
-        row.get
+        row.getOrElse(nullResult)
       }
     }
   }
