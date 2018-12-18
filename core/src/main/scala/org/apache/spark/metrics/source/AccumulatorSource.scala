@@ -20,6 +20,7 @@ package org.apache.spark.metrics.source
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.util.{AccumulatorV2, DoubleAccumulator, LongAccumulator}
 
 /**
@@ -31,7 +32,7 @@ import org.apache.spark.util.{AccumulatorV2, DoubleAccumulator, LongAccumulator}
  * the CollectionAccumulator, as that is a List of values (hard to report,
  * to a metrics system)
  */
-class AccumulatorSource extends Source {
+private[spark] class AccumulatorSource extends Source {
   private val registry = new MetricRegistry
   protected def register[T](accumulators: Map[String, AccumulatorV2[_, T]]): Unit = {
     accumulators.foreach {
@@ -47,9 +48,19 @@ class AccumulatorSource extends Source {
   override def metricRegistry: MetricRegistry = registry
 }
 
+@Experimental
 class LongAccumulatorSource extends AccumulatorSource
+
+@Experimental
 class DoubleAccumulatorSource extends AccumulatorSource
 
+/**
+ * :: Experimental ::
+ * Metrics source specifically for LongAccumulators.
+ * Register LongAccumulators using:
+ *    LongAccumulatorSource.register(sc, {"name" -> longAccumulator})
+ */
+@Experimental
 object LongAccumulatorSource {
   def register(sc: SparkContext, accumulators: Map[String, LongAccumulator]): Unit = {
     val source = new LongAccumulatorSource
@@ -58,6 +69,13 @@ object LongAccumulatorSource {
   }
 }
 
+/**
+ * :: Experimental ::
+ * Metrics source specifically for DoubleAccumulators.
+ * Register DoubleAccumulators using:
+ *    DoubleAccumulatorSource.register(sc, {"name" -> doubleAccumulator})
+ */
+@Experimental
 object DoubleAccumulatorSource {
   def register(sc: SparkContext, accumulators: Map[String, DoubleAccumulator]): Unit = {
     val source = new DoubleAccumulatorSource
