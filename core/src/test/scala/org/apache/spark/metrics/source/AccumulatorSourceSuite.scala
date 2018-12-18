@@ -18,7 +18,6 @@
 package org.apache.spark.metrics.source
 
 import com.codahale.metrics.MetricRegistry
-
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 
@@ -47,7 +46,7 @@ class AccumulatorSourceSuite extends SparkFunSuite {
     assert (gauges.lastKey == "my-accumulator-2")
   }
 
-  test("the accumulators value property is checked when the gauge's value is requested"){
+  test("the accumulators value property is checked when the gauge's value is requested") {
     val acc1 = new LongAccumulator()
     acc1.add(123)
     val acc2 = new LongAccumulator()
@@ -68,7 +67,7 @@ class AccumulatorSourceSuite extends SparkFunSuite {
     assert(gauges.get("my-accumulator-2").getValue() == 456)
   }
 
-  test("the double accumulators value propety is checked when the gauge's value is requested"){
+  test("the double accumulators value propety is checked when the gauge's value is requested") {
     val acc1 = new DoubleAccumulator()
     acc1.add(123.123)
     val acc2 = new DoubleAccumulator()
