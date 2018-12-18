@@ -100,7 +100,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val cp = env("CLASSPATH").split(":|;|<CPS>")
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
       val uri = new URI(entry)
-      if (LOCAL_SCHEME.equals(uri.getScheme())) {
+      if (Utils.LOCAL_SCHEME.equals(uri.getScheme())) {
         cp should contain (uri.getPath())
       } else {
         cp should not contain (uri.getPath())
@@ -136,7 +136,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       val expected = ADDED.split(",")
         .map(p => {
           val uri = new URI(p)
-          if (LOCAL_SCHEME == uri.getScheme()) {
+          if (Utils.LOCAL_SCHEME == uri.getScheme()) {
             p
           } else {
             Option(uri.getFragment()).getOrElse(new File(p).getName())
@@ -249,7 +249,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
-    sparkConf.set(SPARK_ARCHIVE, LOCAL_SCHEME + ":" + archive.getPath())
+    sparkConf.set(SPARK_ARCHIVE, Utils.LOCAL_SCHEME + ":" + archive.getPath())
     intercept[IllegalArgumentException] {
       client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
     }
