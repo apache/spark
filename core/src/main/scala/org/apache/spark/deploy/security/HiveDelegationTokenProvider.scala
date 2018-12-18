@@ -67,11 +67,11 @@ private[spark] class HiveDelegationTokenProvider
     // Other modes (such as client with or without keytab, or cluster mode with keytab) do not need
     // a delegation token, since there's a valid kerberos TGT for the right user available to the
     // driver, which is the only process that connects to the HMS.
-    val deployMode = sparkConf.get("spark.submit.deployMode", "client")
-    UserGroupInformation.isSecurityEnabled &&
+    val currentToken = UserGroupInformation.getCurrentUser().getCredentials().getToken(tokenAlias)
+    currentToken == null && UserGroupInformation.isSecurityEnabled &&
       hiveConf(hadoopConf).getTrimmed("hive.metastore.uris", "").nonEmpty &&
       (SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser()) ||
-        (deployMode == "cluster" && !sparkConf.contains(KEYTAB)))
+        (!Utils.isClientMode(sparkConf) && !sparkConf.contains(KEYTAB)))
   }
 
   override def obtainDelegationTokens(
@@ -98,7 +98,7 @@ private[spark] class HiveDelegationTokenProvider
         val hive2Token = new Token[DelegationTokenIdentifier]()
         hive2Token.decodeFromUrlString(tokenStr)
         logDebug(s"Get Token from hive metastore: ${hive2Token.toString}")
-        creds.addToken(new Text("hive.server2.delegation.token"), hive2Token)
+        creds.addToken(tokenAlias, hive2Token)
       }
 
       None
@@ -134,4 +134,6 @@ private[spark] class HiveDelegationTokenProvider
       case e: UndeclaredThrowableException => throw Option(e.getCause()).getOrElse(e)
     }
   }
+
+  private def tokenAlias: Text = new Text("hive.server2.delegation.token")
 }
