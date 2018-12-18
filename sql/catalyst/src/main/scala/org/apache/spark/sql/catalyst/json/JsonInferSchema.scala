@@ -28,7 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
-import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -36,6 +36,12 @@ import org.apache.spark.util.Utils
 private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
+
+  @transient
+  private lazy val timestampFormatter = TimestampFormatter(
+    options.timestampFormat,
+    options.timeZone,
+    options.locale)
 
   /**
    * Infer the type of a collection of json records in three stages:
@@ -115,13 +121,19 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         // record fields' types have been combined.
         NullType
 
-      case VALUE_STRING if options.prefersDecimal =>
+      case VALUE_STRING =>
+        val field = parser.getText
         val decimalTry = allCatch opt {
-          val bigDecimal = decimalParser(parser.getText)
+          val bigDecimal = decimalParser(field)
             DecimalType(bigDecimal.precision, bigDecimal.scale)
         }
-        decimalTry.getOrElse(StringType)
-      case VALUE_STRING => StringType
+        if (options.prefersDecimal && decimalTry.isDefined) {
+          decimalTry.get
+        } else if ((allCatch opt timestampFormatter.parse(field)).isDefined) {
+          TimestampType
+        } else {
+          StringType
+        }
 
       case START_OBJECT =>
         val builder = Array.newBuilder[StructField]
