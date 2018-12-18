@@ -24,11 +24,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
-import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.deploy.security.KafkaTokenUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
@@ -265,8 +262,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // We convert the options argument from V2 -> Java map -> scala mutable -> scala immutable.
     val producerParams = kafkaParamsForProducer(options.asMap.asScala.toMap)
 
-    KafkaWriter.validateQuery(schema.toAttributes, producerParams, topic)
-
     new KafkaStreamingWriteSupport(topic, producerParams, schema)
   }
 
@@ -484,7 +479,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   }
 
   def kafkaParamsForDriver(specifiedKafkaParams: Map[String, String]): ju.Map[String, Object] =
-    ConfigUpdater("source", specifiedKafkaParams)
+    KafkaConfigUpdater("source", specifiedKafkaParams)
       .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
       .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
 
@@ -501,13 +496,13 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       // If buffer config is not set, set it to reasonable value to work around
       // buffer issues (see KAFKA-3135)
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
-      .setTokenJaasConfigIfNeeded()
+      .setAuthenticationConfigIfNeeded()
       .build()
 
   def kafkaParamsForExecutors(
       specifiedKafkaParams: Map[String, String],
       uniqueGroupId: String): ju.Map[String, Object] =
-    ConfigUpdater("executor", specifiedKafkaParams)
+    KafkaConfigUpdater("executor", specifiedKafkaParams)
       .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
       .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
 
@@ -523,7 +518,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       // If buffer config is not set, set it to reasonable value to work around
       // buffer issues (see KAFKA-3135)
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
-      .setTokenJaasConfigIfNeeded()
+      .setAuthenticationConfigIfNeeded()
       .build()
 
   /**
@@ -536,48 +531,6 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     val groupIdPrefix = parameters
       .getOrElse("groupIdPrefix", "spark-kafka-source")
     s"${groupIdPrefix}-${UUID.randomUUID}-${metadataPath.hashCode}"
-  }
-
-  /** Class to conveniently update Kafka config params, while logging the changes */
-  private case class ConfigUpdater(module: String, kafkaParams: Map[String, String]) {
-    private val map = new ju.HashMap[String, Object](kafkaParams.asJava)
-
-    def set(key: String, value: Object): this.type = {
-      map.put(key, value)
-      logDebug(s"$module: Set $key to $value, earlier value: ${kafkaParams.getOrElse(key, "")}")
-      this
-    }
-
-    def setIfUnset(key: String, value: Object): ConfigUpdater = {
-      if (!map.containsKey(key)) {
-        map.put(key, value)
-        logDebug(s"$module: Set $key to $value")
-      }
-      this
-    }
-
-    def setTokenJaasConfigIfNeeded(): ConfigUpdater = {
-      // There are multiple possibilities to log in and applied in the following order:
-      // - JVM global security provided -> try to log in with JVM global security configuration
-      //   which can be configured for example with 'java.security.auth.login.config'.
-      //   For this no additional parameter needed.
-      // - Token is provided -> try to log in with scram module using kafka's dynamic JAAS
-      //   configuration.
-      if (KafkaTokenUtil.isGlobalJaasConfigurationProvided) {
-        logDebug("JVM global security configuration detected, using it for login.")
-      } else if (KafkaSecurityHelper.isTokenAvailable()) {
-        logDebug("Delegation token detected, using it for login.")
-        val jaasParams = KafkaSecurityHelper.getTokenJaasParams(SparkEnv.get.conf)
-        val mechanism = kafkaParams
-          .getOrElse(SaslConfigs.SASL_MECHANISM, SaslConfigs.DEFAULT_SASL_MECHANISM)
-        require(mechanism.startsWith("SCRAM"),
-          "Delegation token works only with SCRAM mechanism.")
-        set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
-      }
-      this
-    }
-
-    def build(): ju.Map[String, Object] = map
   }
 
   private[kafka010] def kafkaParamsForProducer(
@@ -597,10 +550,10 @@ private[kafka010] object KafkaSourceProvider extends Logging {
 
     val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
-    ConfigUpdater("executor", specifiedKafkaParams)
+    KafkaConfigUpdater("executor", specifiedKafkaParams)
       .set(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, serClassName)
       .set(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, serClassName)
-      .setTokenJaasConfigIfNeeded()
+      .setAuthenticationConfigIfNeeded()
       .build()
   }
 
