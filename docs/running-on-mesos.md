@@ -108,6 +108,19 @@ Please note that if you specify multiple ways to obtain the credentials then the
 
 An equivalent order applies for the secret.  Essentially we prefer the configuration to be specified directly rather than indirectly by files, and we prefer that configuration settings are used over environment variables.
 
+### Deploy to a Mesos running on Secure Sockets
+
+If you want to deploy a Spark Application into a Mesos cluster that is running in a secure mode there are some environment's variables that need to be set.
+
+- `LIBPROCESS_SSL_ENABLED=true` enables SSL communication
+- `LIBPROCESS_SSL_VERIFY_CERT=false` verifies the ssl certificate 
+- `LIBPROCESS_SSL_KEY_FILE=pathToKeyFile.key` path to key 
+- `LIBPROCESS_SSL_CERT_FILE=pathToCRTFile.crt` the certificate file to be used
+
+all options can be found at http://mesos.apache.org/documentation/latest/ssl/
+
+Then submit as usual or as described below
+
 ## Uploading Spark Package
 
 When Mesos runs a task on a Mesos slave for the first time, that slave must have a Spark binary
