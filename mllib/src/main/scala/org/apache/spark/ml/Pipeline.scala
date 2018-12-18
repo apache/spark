@@ -150,7 +150,7 @@ class Pipeline @Since("1.4.0") (
       if (index <= indexOfLastEstimator) {
         val transformer = stage match {
           case estimator: Estimator[_] =>
-            estimator.fit(curDataset)
+            MLEvents.withFitEvent(estimator, curDataset)(estimator.fit(curDataset))
           case t: Transformer =>
             t
           case _ =>
@@ -158,7 +158,8 @@ class Pipeline @Since("1.4.0") (
               s"Does not support stage $stage of type ${stage.getClass}")
         }
         if (index < indexOfLastEstimator) {
-          curDataset = transformer.transform(curDataset)
+          curDataset = MLEvents.withTransformEvent(
+            transformer, curDataset)(transformer.transform(curDataset))
         }
         transformers += transformer
       } else {
@@ -201,10 +202,10 @@ object Pipeline extends MLReadable[Pipeline] {
 
     SharedReadWrite.validateStages(instance.getStages)
 
-    override protected def saveImpl(path: String): Unit = MLEvents.withSaveInstanceEvent(
-        this, path) {
+    override def save(path: String): Unit =
+      MLEvents.withSaveInstanceEvent(this, path)(super.save(path))
+    override protected def saveImpl(path: String): Unit =
       SharedReadWrite.saveImpl(instance, instance.getStages, sc, path)
-    }
   }
 
   private class PipelineReader extends MLReader[Pipeline] {
@@ -253,8 +254,11 @@ object Pipeline extends MLReadable[Pipeline] {
       // Save stages
       val stagesDir = new Path(path, "stages").toString
       stages.zipWithIndex.foreach { case (stage, idx) =>
-        stage.asInstanceOf[MLWritable].write.save(
-          getStagePath(stage.uid, idx, stages.length, stagesDir))
+        val mlWriter = stage.asInstanceOf[MLWritable].write
+        val stagePath = getStagePath(stage.uid, idx, stages.length, stagesDir)
+        MLEvents.withSaveInstanceEvent(mlWriter, stagePath) {
+          mlWriter.save(stagePath)
+        }
       }
     }
 
@@ -273,7 +277,8 @@ object Pipeline extends MLReadable[Pipeline] {
       val stageUids: Array[String] = (metadata.params \ "stageUids").extract[Seq[String]].toArray
       val stages: Array[PipelineStage] = stageUids.zipWithIndex.map { case (stageUid, idx) =>
         val stagePath = SharedReadWrite.getStagePath(stageUid, idx, stageUids.length, stagesDir)
-        DefaultParamsReader.loadParamsInstance[PipelineStage](stagePath, sc)
+        val reader = DefaultParamsReader.loadParamsInstanceReader[PipelineStage](stagePath, sc)
+        MLEvents.withLoadInstanceEvent(reader, stagePath)(reader.load(stagePath))
       }
       (metadata.uid, stages)
     }
@@ -306,7 +311,8 @@ class PipelineModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = MLEvents.withTransformEvent(
       this, dataset) {
     transformSchema(dataset.schema, logging = true)
-    stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
+    stages.foldLeft(dataset.toDF)((cur, transformer) =>
+      MLEvents.withTransformEvent(transformer, cur)(transformer.transform(cur)))
   }
 
   @Since("1.2.0")
@@ -338,11 +344,10 @@ object PipelineModel extends MLReadable[PipelineModel] {
 
     SharedReadWrite.validateStages(instance.stages.asInstanceOf[Array[PipelineStage]])
 
-    override protected def saveImpl(path: String): Unit = MLEvents.withSaveInstanceEvent(
-        this, path) {
-      SharedReadWrite.saveImpl(instance,
-        instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
-    }
+    override def save(path: String): Unit =
+      MLEvents.withSaveInstanceEvent(this, path)(super.save(path))
+    override protected def saveImpl(path: String): Unit = SharedReadWrite.saveImpl(instance,
+      instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
   }
 
   private class PipelineModelReader extends MLReader[PipelineModel] {

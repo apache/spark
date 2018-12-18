@@ -27,7 +27,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
  * Event emitted by ML operations. Events are either fired before and/or
  * after each operation (the event should document this).
  *
- * @note This is currently only supported in [[Pipeline]] and [[PipelineModel]].
+ * @note This is supported via [[Pipeline]] and [[PipelineModel]].
  */
 @Unstable
 sealed trait MLEvent extends SparkListenerEvent
