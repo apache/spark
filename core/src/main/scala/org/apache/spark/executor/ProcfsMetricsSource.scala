@@ -25,15 +25,18 @@ import org.apache.spark.metrics.source.Source
 
 private[executor] class ProcfsMetricsSource extends Source {
   override val sourceName = "procfs"
-  // We use numMetrics for tracking to only call computAllMetrics once per set of metrics
-  var numMetrics: Int = 0
+  // We use the following var to only call computAllMetrics once per
+  // the set of procfs metrics. This is because Metrics system gauge that
+  // return a set of metrics can't be used without significant changes to
+  // ProcfsMetricGetter
+  var numOfRequestsToGetProcfs: Int = 0
   override val metricRegistry = new MetricRegistry()
   var metrics: Map[String, Long] = Map.empty
   val shouldAddProcessTreeMetricsToMetricsSet =
     SparkEnv.get.conf.get(config.METRICS_PROCESS_TREE_METRICS)
 
   private def getProcfsMetrics: Map[String, Long] = {
-    if (numMetrics == 0) {
+    if (numOfRequestsToGetProcfs == 0) {
       metrics = Map.empty
       val p = ProcfsMetricsGetter.pTreeInfo.computeAllMetrics()
       metrics = Map(
@@ -44,10 +47,10 @@ private[executor] class ProcfsMetricsSource extends Source {
         "OtherVMemory" -> p.otherVmemTotal,
         "OtherRSSMemory" -> p.otherRSSTotal)
     }
-    numMetrics = numMetrics + 1
-    if (numMetrics == 6) {
-      numMetrics = 0
-    }
+    // We have 6 metrics in Procfs. So we just need to call computeAllMetrics
+    // every 6 times not every time that Metrics system needs the value of
+    // a metric
+    numOfRequestsToGetProcfs = (numOfRequestsToGetProcfs + 1) % 6
     metrics
   }
 

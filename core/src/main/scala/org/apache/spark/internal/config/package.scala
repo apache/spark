@@ -99,7 +99,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val METRICS_PROCESS_TREE_METRICS =
-    ConfigBuilder("spark.metrics.AddProcessTreeMetricsToMetricsSet.enabled")
+    ConfigBuilder("spark.metrics.addProcessTreeMetricsToMetricsSet.enabled")
       .booleanConf
       .createWithDefault(false)
 

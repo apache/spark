@@ -57,7 +57,6 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
   }
 
 
-
   private lazy val isProcfsAvailable: Boolean = {
     if (testing) {
        true
@@ -68,17 +67,7 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
           logWarning("Exception checking for procfs dir", ioe)
           false
       }
-      val shouldLogStageExecutorMetrics =
-        SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
-      val shouldLogStageExecutorProcessTreeMetrics =
-        SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
-      val shouldAddProcessTreeMetricsToMetricsSet =
-        SparkEnv.get.conf.get(config.METRICS_PROCESS_TREE_METRICS)
-      val pickAnyOfUIOrMetricsSet = shouldLogStageExecutorProcessTreeMetrics ||
-        shouldAddProcessTreeMetricsToMetricsSet
-
-      (procDirExists.get && shouldLogStageExecutorMetrics && pickAnyOfUIOrMetricsSet) ||
-        (procDirExists.get && shouldAddProcessTreeMetricsToMetricsSet)
+      procDirExists.get
     }
   }
 

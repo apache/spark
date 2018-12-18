@@ -88,11 +88,13 @@ case object ProcessTreeMetrics extends ExecutorMetricType {
     "ProcessTreePythonRSSMemory",
     "ProcessTreeOtherVMemory",
     "ProcessTreeOtherRSSMemory")
+  val shouldLogStageExecutorMetrics =
+    SparkEnv.get.conf.get(config.EVENT_LOG_STAGE_EXECUTOR_METRICS)
   val shouldLogStageExecutorProcessTreeMetrics =
     SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     val processTreeMetrics = new Array[Long](names.length)
-    if (shouldLogStageExecutorProcessTreeMetrics) {
+    if (shouldLogStageExecutorMetrics && shouldLogStageExecutorProcessTreeMetrics) {
       val allMetrics = ProcfsMetricsGetter.pTreeInfo.computeAllMetrics()
       processTreeMetrics(0) = allMetrics.jvmVmemTotal
       processTreeMetrics(1) = allMetrics.jvmRSSTotal
