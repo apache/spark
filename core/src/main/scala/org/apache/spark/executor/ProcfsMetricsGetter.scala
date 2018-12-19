@@ -37,8 +37,7 @@ private[spark] case class ProcfsMetrics(
     pythonVmemTotal: Long,
     pythonRSSTotal: Long,
     otherVmemTotal: Long,
-    otherRSSTotal: Long,
-    timeStamp: Long)
+    otherRSSTotal: Long)
 
 
 // Some of the ideas here are taken from the ProcfsBasedProcessTree class in hadoop
@@ -49,7 +48,8 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
   private val pageSize = computePageSize()
   private var isAvailable: Boolean = isProcfsAvailable
   private val pid = computePid()
-  var cachedAllMetric = ProcfsMetrics(0, 0, 0, 0, 0, 0, 0)
+  var cachedAllMetric = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+  var lastimeMetricsComputed = 0L
   private val HEARTBEAT_INTERVAL_MS = if (testing) {
     0
   } else {
@@ -186,22 +186,19 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
         if (procInfoSplit(1).toLowerCase(Locale.US).contains("java")) {
           allMetrics.copy(
             jvmVmemTotal = allMetrics.jvmVmemTotal + vmem,
-            jvmRSSTotal = allMetrics.jvmRSSTotal + (rssMem),
-            timeStamp = System.currentTimeMillis
+            jvmRSSTotal = allMetrics.jvmRSSTotal + (rssMem)
           )
         }
         else if (procInfoSplit(1).toLowerCase(Locale.US).contains("python")) {
           allMetrics.copy(
             pythonVmemTotal = allMetrics.pythonVmemTotal + vmem,
-            pythonRSSTotal = allMetrics.pythonRSSTotal + (rssMem),
-            timeStamp = System.currentTimeMillis
+            pythonRSSTotal = allMetrics.pythonRSSTotal + (rssMem)
           )
         }
         else {
           allMetrics.copy(
             otherVmemTotal = allMetrics.otherVmemTotal + vmem,
-            otherRSSTotal = allMetrics.otherRSSTotal + (rssMem),
-            timeStamp = System.currentTimeMillis
+            otherRSSTotal = allMetrics.otherRSSTotal + (rssMem)
           )
         }
       }
@@ -209,31 +206,44 @@ private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends L
       case f: IOException =>
         logWarning("There was a problem with reading" +
           " the stat file of the process. ", f)
-        ProcfsMetrics(0, 0, 0, 0, 0, 0, System.currentTimeMillis)
+        ProcfsMetrics(0, 0, 0, 0, 0, 0)
     }
+  }
+
+  private[spark] def isCacheValid(): Boolean = {
+    val lastMetricComputation = System.currentTimeMillis() - lastimeMetricsComputed
+    // ToDo: Should we make this configurable?
+    return  Math.min(1000, HEARTBEAT_INTERVAL_MS) > lastMetricComputation
   }
 
   private[spark] def computeAllMetrics(): ProcfsMetrics = {
     if (!isAvailable) {
-      return ProcfsMetrics(0, 0, 0, 0, 0, 0, System.currentTimeMillis)
+      lastimeMetricsComputed = System.currentTimeMillis
+      cachedAllMetric = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+      return ProcfsMetrics(0, 0, 0, 0, 0, 0)
     }
-    val lastMetricComputation = System.currentTimeMillis() - cachedAllMetric.timeStamp
-    // Check whether we have computed the metrics in the past 1s
-    // ToDo: Should we make this configurable?
-    if(lastMetricComputation > Math.min(1000, HEARTBEAT_INTERVAL_MS)) {
-      val pids = computeProcessTree
-      var allMetrics = ProcfsMetrics(0, 0, 0, 0, 0, 0, System.currentTimeMillis)
-      for (p <- pids) {
-        allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
-        // if we had an error getting any of the metrics, we don't
-        // want to report partial metrics, as that would be misleading.
-        if (!isAvailable) {
-          cachedAllMetric = ProcfsMetrics(0, 0, 0, 0, 0, 0, System.currentTimeMillis)
+
+    if (!isCacheValid) {
+      this.synchronized {
+        if (isCacheValid) {
           return cachedAllMetric
         }
+        val pids = computeProcessTree
+        var allMetrics = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+        for (p <- pids) {
+          allMetrics = addProcfsMetricsFromOneProcess(allMetrics, p)
+          // if we had an error getting any of the metrics, we don't
+          // want to report partial metrics, as that would be misleading.
+          if (!isAvailable) {
+            lastimeMetricsComputed = System.currentTimeMillis
+            cachedAllMetric = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+            return cachedAllMetric
+          }
+        }
+        lastimeMetricsComputed = System.currentTimeMillis
+        cachedAllMetric = allMetrics
+        allMetrics
       }
-      cachedAllMetric = allMetrics
-      allMetrics
     }
     else {
       cachedAllMetric
