@@ -610,6 +610,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, _: LeafNode) => p
 
     // for all other logical plans that inherits the output from it's children
+    // Project over project is handled by the first case, skip it here.
     case p @ Project(_, child) if !child.isInstanceOf[Project] =>
       val required = child.references ++ p.references
       if (!child.inputSet.subsetOf(required)) {
