@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker.PhaseSummary
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -33,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -167,30 +168,32 @@ case class FileSourceScanExec(
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf)
 
+  val driverMetrics: HashMap[String, Long] = HashMap.empty
+
   /**
    * Send the driver-side metrics. Before calling this function, selectedPartitions has
    * been initialized. See SPARK-26327 for more details.
    */
   private def sendDriverMetrics(): Unit = {
-    val driverMetrics: HashMap[String, Long] = HashMap.empty
-
-    driverMetrics("numFiles") = selectedPartitions.map(_.files.size.toLong).sum
-    val fileListingPhase = relation.location.fileListingPhase
-    if (fileListingPhase.isDefined) {
-      val phase = fileListingPhase.get
-      driverMetrics("metadataTime") = phase.durationMs
-      driverMetrics("fileListingStart") = phase.startTimeMs
-      driverMetrics("fileListingEnd") = phase.endTimeMs
-    }
-
     driverMetrics.foreach(e => metrics(e._1).add(e._2))
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
       metrics.filter(e => driverMetrics.contains(e._1)).values.toSeq)
   }
 
-  @transient private lazy val selectedPartitions: Seq[PartitionDirectory] =
-    relation.location.listFiles(partitionFilters, dataFilters)
+  /** Phase summary for file listing in FileIndex. Visible for testing. */
+  @transient private[sql] lazy val fileListingPhaseSummary: Option[PhaseSummary] =
+    relation.location.fileListingPhaseSummary
+
+  @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
+    val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
+    val ret = relation.location.listFiles(partitionFilters, dataFilters)
+    driverMetrics("numFiles") = ret.map(_.files.size.toLong).sum
+    val timeTakenMs = fileListingPhaseSummary.map(_.durationMs).getOrElse(0L) +
+      optimizerMetadataTimeNs / 1000 / 1000
+    driverMetrics("metadataTime") = timeTakenMs
+    ret
+  }
 
   override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
@@ -296,7 +299,12 @@ case class FileSourceScanExec(
       withOptPartitionCount
     }
 
-    withSelectedBucketsCount
+    val withFileListingPhaseSummary =
+      fileListingPhaseSummary.map { phase =>
+        withSelectedBucketsCount + ("FileListingPhaseSummary" -> phase.toFormatString)
+      }.getOrElse(withSelectedBucketsCount)
+
+    withFileListingPhaseSummary
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
@@ -327,10 +335,8 @@ case class FileSourceScanExec(
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
-      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"),
       "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time (ms)"),
-      "fileListingStart" -> SQLMetrics.createTimestampMetric(sparkContext, "file listing start"),
-      "fileListingEnd" -> SQLMetrics.createTimestampMetric(sparkContext, "file listing end"))
+      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {

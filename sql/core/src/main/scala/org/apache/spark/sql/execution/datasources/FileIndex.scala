@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs._
 
-import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.QueryPlanningTracker.PhaseSummary
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
 
@@ -74,11 +75,15 @@ trait FileIndex {
   def partitionSchema: StructType
 
   /**
-   * Returns an optional file listing phase summary.
+   * Returns an optional metadata operation time, in nanoseconds, for listing files.
    *
-   * We call this in physical execution while we want to account for the file listing time as
-   * metrics. If partition pruning happened in query planning, the phase also contains this
-   * part of the cost, otherwise, it only contains file listing time of FileIndex initialize.
+   * We do file listing in query optimization (in order to get the proper statistics) and we want
+   * to account for file listing time in physical execution (as metrics). To do that, we save the
+   * file listing time in some implementations and physical execution calls it in this method
+   * to update the metrics.
    */
-  def fileListingPhase: Option[QueryPlanningTracker.PhaseSummary] = None
+  def metadataOpsTimeNs: Option[Long] = None
+
+  /** Returns an optional phase summary to record the start and end timestamp for listing file. */
+  def fileListingPhaseSummary: Option[PhaseSummary] = None
 }

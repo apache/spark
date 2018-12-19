@@ -66,7 +66,7 @@ class InMemoryFileIndex(
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
 
-  private var _fileListingPhase: Option[PhaseSummary] = None
+  private var _fileListingPhaseSummary: Option[PhaseSummary] = None
 
   refresh0()
 
@@ -91,12 +91,15 @@ class InMemoryFileIndex(
     refresh0()
   }
 
-  private def refresh0(): Unit = recordPhase(phase => _fileListingPhase = Some(phase)) {
-    val files = listLeafFiles(rootPaths)
-    cachedLeafFiles =
-      new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
-    cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
-    cachedPartitionSpec = null
+  private def refresh0(): Unit = {
+    val (_, phase) = createPhaseSummary {
+      val files = listLeafFiles(rootPaths)
+      cachedLeafFiles =
+        new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
+      cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
+      cachedPartitionSpec = null
+    }
+    _fileListingPhaseSummary = Some(phase)
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -106,7 +109,7 @@ class InMemoryFileIndex(
 
   override def hashCode(): Int = rootPaths.toSet.hashCode()
 
-  override def fileListingPhase: Option[PhaseSummary] = _fileListingPhase
+  override def fileListingPhaseSummary: Option[PhaseSummary] = _fileListingPhaseSummary
 
   /**
    * List leaf files of given paths. This method will submit a Spark job to do parallel

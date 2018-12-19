@@ -24,9 +24,10 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.QueryPlanningTracker.PhaseSummary
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -545,35 +546,44 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     }
   }
 
+  private def getScanNodeMetricsAndPhaseSummary(df: DataFrame)
+    : (Map[String, SQLMetric], PhaseSummary) = {
+    val scanNode =
+      df.queryExecution.executedPlan.collectLeaves().head.asInstanceOf[FileSourceScanExec]
+    assert(scanNode.fileListingPhaseSummary.nonEmpty)
+    (scanNode.metrics, scanNode.fileListingPhaseSummary.get)
+  }
+
   test("File listing timestamp metrics") {
     withTable("parquetTable") {
       sql("CREATE TABLE parquetTable (key INT, value STRING) using parquet")
       // First time read.
       val df0 = spark.read.table("parquetTable")
       df0.collect()
-      val metrics0 = df0.queryExecution.executedPlan.collectLeaves().head.metrics
+      val (_, phase0) = getScanNodeMetricsAndPhaseSummary(df0)
       // Check file listing timestamp change.
-      assert(metrics0("fileListingStart").value > 0)
-      assert(metrics0("fileListingEnd").value > 0)
+      assert(phase0.startTimeMs > 0)
+      assert(phase0.endTimeMs > 0)
+
       // Insert 10 rows into the table, this will trigger file index refresh.
       spark.range(10).selectExpr("id", "id + 1").write.insertInto("parquetTable")
       // For the second time read, file listing metrics will change.
       val df1 = spark.read.table("parquetTable")
       df1.collect()
-      val metrics1 = df1.queryExecution.executedPlan.collectLeaves().head.metrics
+      val (metrics1, phase1) = getScanNodeMetricsAndPhaseSummary(df1)
       // Check deterministic metrics.
       assert(metrics1("numFiles").value == 2)
       assert(metrics1("numOutputRows").value == 10)
       // Check file listing timestamp change.
-      assert(metrics1("fileListingStart").value > metrics0("fileListingStart").value)
-      assert(metrics1("fileListingEnd").value > metrics0("fileListingEnd").value)
+      assert(phase1.startTimeMs > phase0.startTimeMs)
+      assert(phase1.endTimeMs > phase0.endTimeMs)
 
       val df2 = spark.read.table("parquetTable")
       df2.collect()
-      val metrics2 = df2.queryExecution.executedPlan.collectLeaves().head.metrics
+      val (metrics2, phase2) = getScanNodeMetricsAndPhaseSummary(df2)
       // Check file listing duration and timestamp not change.
-      assert(metrics2("fileListingStart").value == metrics1("fileListingStart").value)
-      assert(metrics2("fileListingEnd").value == metrics1("fileListingEnd").value)
+      assert(phase2.startTimeMs == phase1.startTimeMs)
+      assert(phase2.endTimeMs == phase1.endTimeMs)
       assert(metrics2("metadataTime").value == metrics1("metadataTime").value)
     }
   }
@@ -586,13 +596,13 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       val df = spark.sql(
         "SELECT * FROM testDataForScan WHERE p = 1")
       df.collect()
-      val metrics = df.queryExecution.executedPlan.collectLeaves().head.metrics
+      val (metrics, phase) = getScanNodeMetricsAndPhaseSummary(df)
       // Check deterministic metrics.
       assert(metrics("numFiles").value == 2)
       assert(metrics("numOutputRows").value == 3)
       // Check file listing duration and timestamp changed.
-      assert(metrics("fileListingStart").value > 0)
-      assert(metrics("fileListingEnd").value > 0)
+      assert(phase.startTimeMs > 0)
+      assert(phase.endTimeMs > 0)
     }
   }
 }
