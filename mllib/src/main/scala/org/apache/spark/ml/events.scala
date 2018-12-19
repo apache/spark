@@ -19,6 +19,7 @@ package org.apache.spark.ml
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Unstable
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.util.{MLReader, MLWriter}
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -77,35 +78,56 @@ case class SaveInstanceStart(writer: MLWriter, path: String) extends MLEvent
 case class SaveInstanceEnd(writer: MLWriter, path: String) extends MLEvent
 
 
-private[ml] object MLEvents {
+private[ml] object MLEvents extends Logging {
   private def listenerBus = SparkContext.getOrCreate().listenerBus
 
   def withFitEvent[M <: Model[M]](
-      estimator: Estimator[M], dataset: Dataset[_])(func: => M): M = {
-    listenerBus.post(FitStart(estimator, dataset))
+      estimator: Estimator[M], dataset: Dataset[_], logging: Boolean = false)(func: => M): M = {
+    val startEvent = FitStart(estimator, dataset)
+    if (logging) logDebug(s"Sending an MLEvent: $startEvent")
+    listenerBus.post(startEvent)
     val model: M = func
-    listenerBus.post(FitEnd(estimator, model))
+    val endEvent = FitEnd(estimator, model)
+    if (logging) logDebug(s"Sending an MLEvent: $endEvent")
+    listenerBus.post(endEvent)
     model
   }
 
   def withTransformEvent(
-      transformer: Transformer, input: Dataset[_])(func: => DataFrame): DataFrame = {
-    listenerBus.post(TransformStart(transformer, input))
+      transformer: Transformer,
+      input: Dataset[_],
+      logging: Boolean = false)(func: => DataFrame): DataFrame = {
+    val startEvent = TransformStart(transformer, input)
+    if (logging) logDebug(s"Sending an MLEvent: $startEvent")
+    listenerBus.post(startEvent)
     val output: DataFrame = func
-    listenerBus.post(TransformEnd(transformer, output))
+    val endEvent = TransformEnd(transformer, output)
+    if (logging) logDebug(s"Sending an MLEvent: $endEvent")
+    listenerBus.post(endEvent)
     output
   }
 
-  def withLoadInstanceEvent[T](reader: MLReader[T], path: String)(func: => T): T = {
-    listenerBus.post(LoadInstanceStart(reader, path))
+  def withLoadInstanceEvent[T](
+      reader: MLReader[T], path: String, logging: Boolean = false)(func: => T): T = {
+    val startEvent = LoadInstanceStart(reader, path)
+    if (logging) logDebug(s"Sending an MLEvent: $startEvent")
+    listenerBus.post(startEvent)
     val instance: T = func
-    listenerBus.post(LoadInstanceEnd(reader, instance))
+    val endEvent = LoadInstanceEnd(reader, instance)
+    if (logging) logDebug(s"Sending an MLEvent: $endEvent")
+    listenerBus.post(endEvent)
     instance
   }
 
-  def withSaveInstanceEvent(writer: MLWriter, path: String)(func: => Unit): Unit = {
-    listenerBus.post(SaveInstanceStart(writer, path))
-    func
+  def withSaveInstanceEvent(
+      writer: MLWriter, path: String, logging: Boolean = false)(func: => Unit): Unit = {
     listenerBus.post(SaveInstanceEnd(writer, path))
+    val startEvent = SaveInstanceStart(writer, path)
+    if (logging) logDebug(s"Sending an MLEvent: $startEvent")
+    listenerBus.post(startEvent)
+    func
+    val endEvent = SaveInstanceEnd(writer, path)
+    if (logging) logDebug(s"Sending an MLEvent: $endEvent")
+    listenerBus.post(endEvent)
   }
 }
