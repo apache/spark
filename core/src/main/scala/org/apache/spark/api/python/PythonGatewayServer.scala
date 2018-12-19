@@ -47,7 +47,7 @@ private[spark] object PythonGatewayServer extends Logging {
       .javaPort(0)
       .javaAddress(localhost)
       .callbackClient(GatewayServer.DEFAULT_PYTHON_PORT, localhost, secret)
-    if (sys.env.getOrElse("_PYSPARK_INSECURE_GATEWAY", "0") != "1") {
+    if (sys.env.getOrElse("_PYSPARK_CREATE_INSECURE_GATEWAY", "0") != "1") {
       builder.authToken(secret)
     } else {
       assert(sys.env.getOrElse("SPARK_TESTING", "0") == "1",

@@ -2389,7 +2389,7 @@ class ContextTests(unittest.TestCase):
         with self.assertRaises(Exception) as context:
             SparkContext(gateway=gateway)
         self.assertIn("insecure Py4j gateway", str(context.exception))
-        self.assertIn("spark.python.allowInsecurePy4j", str(context.exception))
+        self.assertIn("PYSPARK_ALLOW_INSECURE_GATEWAY", str(context.exception))
         self.assertIn("removed in Spark 3.0", str(context.exception))
 
     def test_allow_insecure_gateway_with_conf(self):
@@ -2397,14 +2397,16 @@ class ContextTests(unittest.TestCase):
             SparkContext._gateway = None
             SparkContext._jvm = None
         gateway = _launch_gateway(insecure=True)
-        conf = SparkConf()
-        conf.set("spark.python.allowInsecurePy4j", "true")
-        with SparkContext(conf=conf, gateway=gateway) as sc:
-            print("sc created, about to create accum")
-            a = sc.accumulator(1)
-            rdd = sc.parallelize([1, 2, 3])
-            rdd.foreach(lambda x: a.add(x))
-            self.assertEqual(7, a.value)
+        try:
+            os.environ["PYSPARK_ALLOW_INSECURE_GATEWAY"] = "1"
+            with SparkContext(gateway=gateway) as sc:
+                print("sc created, about to create accum")
+                a = sc.accumulator(1)
+                rdd = sc.parallelize([1, 2, 3])
+                rdd.foreach(lambda x: a.add(x))
+                self.assertEqual(7, a.value)
+        finally:
+            os.environ.pop("PYSPARK_ALLOW_INSECURE_GATEWAY", None)
 
 
 class ConfTests(unittest.TestCase):

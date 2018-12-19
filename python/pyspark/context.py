@@ -113,7 +113,8 @@ class SparkContext(object):
         """
         self._callsite = first_spark_call() or CallSite(None, None, None)
         if gateway is not None and gateway.gateway_parameters.auth_token is None:
-            if conf and conf.get("spark.python.allowInsecurePy4j", "false") == "true":
+            allow_insecure_env = os.environ.get("PYSPARK_ALLOW_INSECURE_GATEWAY", "0")
+            if allow_insecure_env == "1" or allow_insecure_env.lower() == "true":
                 warnings.warn(
                     "You are passing in an insecure Py4j gateway.  This "
                     "presents a security risk, and will be completely forbidden in Spark 3.0")
@@ -121,7 +122,8 @@ class SparkContext(object):
                 raise Exception(
                     "You are trying to pass an insecure Py4j gateway to Spark. This"
                     " presents a security risk.  If you are sure you understand and accept this"
-                    " risk, you can add the conf 'spark.python.allowInsecurePy4j=true', but"
+                    " risk, you can set the environment variable"
+                    " 'PYSPARK_ALLOW_INSECURE_GATEWAY=1', but"
                     " note this option will be removed in Spark 3.0")
 
         SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
