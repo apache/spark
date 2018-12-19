@@ -69,7 +69,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
   def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group setParam */
-  @Since("2.4.0")
+  @Since("3.0.0")
   def setMinWeightFractionPerNode(value: Double): this.type = set(minWeightFractionPerNode, value)
 
   @Since("1.4.0")
@@ -110,7 +110,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
    *
    * @group setParam
    */
-  @Since("2.4.0")
+  @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   override protected def train(
@@ -126,15 +126,12 @@ class DecisionTreeClassifier @Since("1.4.0") (
         ".train() called with non-matching numClasses and thresholds.length." +
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
-    require(numClasses > 0, s"DecisionTreeClassifier (in extractLabeledPoints) found numClasses =" +
-      s" $numClasses, but requires numClasses > 0.")
+    validateNumClasses(numClasses)
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances =
       dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
         case Row(label: Double, weight: Double, features: Vector) =>
-          require(label % 1 == 0 && label >= 0 && label < numClasses, s"Classifier was given" +
-            s" dataset with invalid label $label.  Labels must be integers in range" +
-            s" [0, $numClasses).")
+          validateLabel(label, numClasses)
           Instance(label, weight, features)
       }
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
@@ -152,7 +149,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeClassificationModel = instrumented { instr =>
-    val instances = data.map(_.toInstance(1.0))
+    val instances = data.map(_.toInstance)
     instr.logPipelineStage(this)
     instr.logDataset(instances)
     instr.logParams(this, maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,

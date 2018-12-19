@@ -74,7 +74,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
 
   test("copied model must have the same parent") {
     val categoricalFeatures = Map(0 -> 2, 1 -> 2)
-    val df = TreeTests.setMetadata(categoricalDataPointsRDD.map(_.toInstance(1.0)),
+    val df = TreeTests.setMetadata(categoricalDataPointsRDD.map(_.toInstance),
       categoricalFeatures, numClasses = 0)
     val dtr = new DecisionTreeRegressor()
       .setImpurity("variance")
@@ -93,7 +93,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setVarianceCol("variance")
     val categoricalFeatures = Map(0 -> 2, 1 -> 2)
 
-    val df = TreeTests.setMetadata(categoricalDataPointsRDD.map(_.toInstance(1.0)),
+    val df = TreeTests.setMetadata(categoricalDataPointsRDD.map(_.toInstance),
       categoricalFeatures, numClasses = 0)
     val model = dt.fit(df)
 
@@ -104,7 +104,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
           s"Expected variance $expectedVariance but got $variance.")
     }
 
-    val varianceData: RDD[Instance] = TreeTests.varianceData(sc).map(_.toInstance(1.0))
+    val varianceData: RDD[Instance] = TreeTests.varianceData(sc).map(_.toInstance)
     val varianceDF = TreeTests.setMetadata(varianceData, Map.empty[Int, Int], 0)
     dt.setMaxDepth(1)
       .setMaxBins(6)
@@ -132,7 +132,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setSeed(123)
 
     // In this data, feature 1 is very important.
-    val data: RDD[Instance] = TreeTests.featureImportanceData(sc).map(_.toInstance(1.0))
+    val data: RDD[Instance] = TreeTests.featureImportanceData(sc).map(_.toInstance)
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
 
@@ -155,7 +155,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame =
-      TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, 0)
+      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, 0)
 
     val model = dt.fit(df)
     testPredictionModelSinglePrediction(model, df)
@@ -204,7 +204,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     }
 
     val dt = new DecisionTreeRegressor()
-    val rdd = TreeTests.getTreeReadWriteData(sc).map(_.toInstance(1.0))
+    val rdd = TreeTests.getTreeReadWriteData(sc).map(_.toInstance)
 
     // Categorical splits with tree depth 2
     val categoricalData: DataFrame =
@@ -239,7 +239,7 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
     val oldStrategy = dt.getOldStrategy(categoricalFeatures)
     val oldTree = OldDecisionTree.train(data.map(OldLabeledPoint.fromML), oldStrategy)
     val newData: DataFrame =
-      TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, numClasses = 0)
+      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, numClasses = 0)
     val newTree = dt.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldTreeAsNew = DecisionTreeRegressionModel.fromOld(

@@ -127,7 +127,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("predictRaw and predictProbability") {
-    val rdd = orderedLabeledPoints5_20.map(_.toInstance(1.0))
+    val rdd = orderedLabeledPoints5_20.map(_.toInstance)
     val rf = new RandomForestClassifier()
       .setImpurity("Gini")
       .setMaxDepth(3)
@@ -166,7 +166,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     val numClasses = 2
 
     val df: DataFrame =
-      TreeTests.setMetadata(rdd.map(_.toInstance(1.0)), categoricalFeatures, numClasses)
+      TreeTests.setMetadata(rdd.map(_.toInstance), categoricalFeatures, numClasses)
     val model = rf.fit(df)
 
     testPredictionModelSinglePrediction(model, df)
@@ -192,7 +192,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
       .setSeed(123)
 
     // In this data, feature 1 is very important.
-    val data: RDD[Instance] = TreeTests.featureImportanceData(sc).map(_.toInstance(1.0))
+    val data: RDD[Instance] = TreeTests.featureImportanceData(sc).map(_.toInstance)
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
 
@@ -225,7 +225,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     }
 
     val rf = new RandomForestClassifier().setNumTrees(2)
-    val rdd = TreeTests.getTreeReadWriteData(sc).map(_.toInstance(1.0))
+    val rdd = TreeTests.getTreeReadWriteData(sc).map(_.toInstance)
 
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
 
@@ -254,7 +254,7 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
       data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
       rf.getSeed.toInt)
     val newData: DataFrame =
-      TreeTests.setMetadata(data.map(_.toInstance(1.0)), categoricalFeatures, numClasses)
+      TreeTests.setMetadata(data.map(_.toInstance), categoricalFeatures, numClasses)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = RandomForestClassificationModel.fromOld(

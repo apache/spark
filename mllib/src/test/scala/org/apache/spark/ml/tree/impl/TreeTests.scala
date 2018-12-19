@@ -77,7 +77,7 @@ private[ml] object TreeTests extends SparkFunSuite {
       data: JavaRDD[LabeledPoint],
       categoricalFeatures: java.util.Map[java.lang.Integer, java.lang.Integer],
       numClasses: Int): DataFrame = {
-    setMetadata(data.rdd.map(_.toInstance(1.0)),
+    setMetadata(data.rdd.map(_.toInstance),
       categoricalFeatures.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numClasses)
   }

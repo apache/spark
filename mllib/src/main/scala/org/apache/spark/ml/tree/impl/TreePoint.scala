@@ -127,7 +127,7 @@ private[spark] object TreePoint {
           s"DecisionTree given invalid data:" +
             s" Feature $featureIndex is categorical with values in {0,...,${featureArity - 1}," +
             s" but a data point gives it value $featureValue.\n" +
-            "  Bad data point: " + instance.toString)
+            s"  Bad data point: $instance")
       }
       featureValue.toInt
     }

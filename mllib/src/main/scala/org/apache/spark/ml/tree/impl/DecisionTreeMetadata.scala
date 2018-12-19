@@ -123,8 +123,12 @@ private[spark] object DecisionTreeMetadata extends Logging {
     require(numFeatures > 0, s"DecisionTree requires number of features > 0, " +
       s"but was given an empty features vector")
     val (numExamples, weightSum) = input.aggregate((0L, 0.0))(
-      (acc, x) => (acc._1 + 1L, acc._2 + x.weight),
-      (acc1, acc2) => (acc1._1 + acc2._1, acc1._2 + acc2._2))
+      (acc, x) => (acc, x) match {
+        case ((count, weight), instance) => (count + 1L, weight + instance.weight)
+      },
+      (acc1, acc2) => (acc1, acc2) match {
+        case ((count1, weight1), (count2, weight2)) => (count1 + count2, weight1 + weight2)
+      })
 
     val numClasses = strategy.algo match {
       case Classification => strategy.numClasses

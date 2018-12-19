@@ -131,7 +131,7 @@ class RandomForestClassifier @Since("1.4.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val instances: RDD[Instance] = extractLabeledPoints(dataset, numClasses).map(_.toInstance(1.0))
+    val instances: RDD[Instance] = extractLabeledPoints(dataset, numClasses).map(_.toInstance)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
 

@@ -42,4 +42,8 @@ case class LabeledPoint(@Since("2.0.0") label: Double, @Since("2.0.0") features:
     Instance(label, weight, features)
   }
 
+  private[spark] def toInstance: Instance = {
+    Instance(label, 1.0, features)
+  }
+
 }

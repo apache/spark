@@ -37,7 +37,6 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeMo
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.types.DoubleType
 
 
@@ -68,7 +67,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group setParam */
-  @Since("2.4.0")
+  @Since("3.0.0")
   def setMinWeightFractionPerNode(value: Double): this.type = set(minWeightFractionPerNode, value)
 
   @Since("1.4.0")
@@ -113,7 +112,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
    *
    * @group setParam
    */
-  @Since("2.4.0")
+  @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   override protected def train(
@@ -147,7 +146,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     instr.logDataset(data)
     instr.logParams(this, params: _*)
 
-    val instances = data.map(_.toInstance(1.0))
+    val instances = data.map(_.toInstance)
     val trees = RandomForest.run(instances, oldStrategy, numTrees = 1,
       featureSubsetStrategy, seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
