@@ -20,10 +20,11 @@ import java.io.File
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
-import io.fabric8.kubernetes.client.Config.autoConfigure
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient, KubernetesClient}
+import io.fabric8.kubernetes.client.Config.autoConfigure
 import io.fabric8.kubernetes.client.utils.HttpClientUtils
 import okhttp3.Dispatcher
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.internal.Logging
@@ -68,7 +69,8 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
     // Allow for specifying a context used to auto-configure from the users K8S config file
     val kubeContext = sparkConf.get(KUBERNETES_CONTEXT).filter(_.nonEmpty)
     logInfo(s"Auto-configuring K8S client using " +
-      s"${if (kubeContext.isDefined) s"context ${kubeContext.getOrElse("?")}" else "current context"}" +
+      s"${if (kubeContext.isDefined) s"context ${kubeContext.getOrElse("?")}"
+      else "current context"}" +
       s" from users K8S config file")
 
     // Start from an auto-configured config with the desired context
