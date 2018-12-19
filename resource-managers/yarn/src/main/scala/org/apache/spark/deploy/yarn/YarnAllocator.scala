@@ -375,16 +375,7 @@ private[yarn] class YarnAllocator(
       logInfo(s"Canceling requests for $numToCancel executor container(s) to have a new desired " +
         s"total $targetNumExecutors executors.")
       // cancel pending allocate requests by taking locality preference into account
-      val cancelRequests = {
-        if (staleRequests.size >= numToCancel) {
-          staleRequests.take(numToCancel)
-        } else if (staleRequests.size + anyHostRequests.size >= numToCancel) {
-          staleRequests ++ anyHostRequests.take(numToCancel - staleRequests.size)
-        } else {
-          staleRequests ++ anyHostRequests ++
-            localRequests.take(numToCancel - staleRequests.size - anyHostRequests.size)
-        }
-      }
+      val cancelRequests = (staleRequests ++ anyHostRequests ++ localRequests).take(numToCancel)
       cancelRequests.foreach(amClient.removeContainerRequest)
     }
   }
