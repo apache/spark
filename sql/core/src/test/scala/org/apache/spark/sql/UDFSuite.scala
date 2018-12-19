@@ -440,7 +440,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val udf1 = org.apache.spark.sql.functions.udf((arr: Seq[BigDecimal]) => {
       arr.map(value => if (value == null) null else value.toBigInteger.toString)
     })
-    checkAnswer(df1.select(udf1(df1.col("col1"))), Seq(Row(Array("2011000000000002456556"))))
+    checkAnswer(df1.select(udf1($"col1")), Seq(Row(Array("2011000000000002456556"))))
 
     val df2 = spark.createDataFrame(
       sparkContext.parallelize(Seq(Row(Map("a" -> new BigDecimal("2011000000000002456556"))))),
@@ -448,6 +448,6 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val udf2 = org.apache.spark.sql.functions.udf((map: Map[String, BigDecimal]) => {
       map.mapValues(value => if (value == null) null else value.toBigInteger.toString)
     })
-    checkAnswer(df2.select(udf2(df2.col("col1"))), Seq(Row(Map("a" -> "2011000000000002456556"))))
+    checkAnswer(df2.select(udf2($"col1")), Seq(Row(Map("a" -> "2011000000000002456556"))))
   }
 }
