@@ -209,7 +209,7 @@ case class RelationConversions(
       // CTAS
       case CreateTable(tableDesc, mode, Some(query))
           if DDLUtils.isHiveTable(tableDesc) && tableDesc.partitionColumnNames.isEmpty &&
-            isConvertible(tableDesc) =>
+            isConvertible(tableDesc) && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
         DDLUtils.checkDataColNames(tableDesc)
         OptimizedCreateHiveTableAsSelectCommand(
           tableDesc, query, query.output.map(_.name), mode)

@@ -2285,26 +2285,30 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           withSQLConf(
             HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
             HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted") {
+            Seq(true, false).foreach { isConvertedCtas =>
+              withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> s"$isConvertedCtas") {
 
-            val targetTable = "targetTable"
-            withTable(targetTable) {
-              val df = sql(s"CREATE TABLE $targetTable STORED AS $format AS SELECT id FROM p")
-              checkAnswer(sql(s"SELECT id FROM $targetTable"),
-                Row(1) :: Row(2) :: Row(3) :: Nil)
+                val targetTable = "targetTable"
+                withTable(targetTable) {
+                  val df = sql(s"CREATE TABLE $targetTable STORED AS $format AS SELECT id FROM p")
+                  checkAnswer(sql(s"SELECT id FROM $targetTable"),
+                    Row(1) :: Row(2) :: Row(3) :: Nil)
 
-              val ctasDSCommand = df.queryExecution.analyzed.collect {
-                case _: OptimizedCreateHiveTableAsSelectCommand => true
-              }.headOption
-              val ctasCommand = df.queryExecution.analyzed.collect {
-                case _: CreateHiveTableAsSelectCommand => true
-              }.headOption
+                  val ctasDSCommand = df.queryExecution.analyzed.collect {
+                    case _: OptimizedCreateHiveTableAsSelectCommand => true
+                  }.headOption
+                  val ctasCommand = df.queryExecution.analyzed.collect {
+                    case _: CreateHiveTableAsSelectCommand => true
+                  }.headOption
 
-              if (isConverted) {
-                assert(ctasDSCommand.nonEmpty)
-                assert(ctasCommand.isEmpty)
-              } else {
-                assert(ctasDSCommand.isEmpty)
-                assert(ctasCommand.nonEmpty)
+                  if (isConverted && isConvertedCtas) {
+                    assert(ctasDSCommand.nonEmpty)
+                    assert(ctasCommand.isEmpty)
+                  } else {
+                    assert(ctasDSCommand.isEmpty)
+                    assert(ctasCommand.nonEmpty)
+                  }
+                }
               }
             }
           }
