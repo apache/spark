@@ -40,19 +40,19 @@ class FailureSafeParser[IN](
   // row with all fields null. If the given schema contains a field for corrupted record, we will
   // set the bad record to this field, and set other fields according to the partial result or null.
   private val toResultRow: (Option[InternalRow], () => UTF8String) => InternalRow = {
-    (row, badRecord) => {
-      if (corruptFieldIndex.isDefined) {
+    if (corruptFieldIndex.isDefined) {
+      (row, badRecord) => {
         var i = 0
         while (i < actualSchema.length) {
           val from = actualSchema(i)
           resultRow(schema.fieldIndex(from.name)) = row.map(_.get(i, from.dataType)).orNull
           i += 1
         }
-        corruptFieldIndex.foreach(index => resultRow(index) = badRecord())
+        resultRow(corruptFieldIndex.get) = badRecord()
         resultRow
-      } else {
-        row.getOrElse(nullResult)
       }
+    } else {
+      (row, _) => row.getOrElse(nullResult)
     }
   }
 
