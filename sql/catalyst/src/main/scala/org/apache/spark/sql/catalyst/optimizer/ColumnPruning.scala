@@ -62,7 +62,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
     case s @ ScriptTransformation(_, _, _, child, _)
-      if !child.outputSet.subsetOf(s.references) =>
+        if !child.outputSet.subsetOf(s.references) =>
       s.copy(child = prunedChild(child, s.references))
 
     // prune unrequired references
@@ -133,7 +133,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
    */
   private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
-      if p2.outputSet.subsetOf(child.outputSet) =>
+        if p2.outputSet.subsetOf(child.outputSet) =>
       p1.copy(child = f.copy(child = child))
   }
 }
