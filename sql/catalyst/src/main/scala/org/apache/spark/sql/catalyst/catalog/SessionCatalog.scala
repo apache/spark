@@ -1210,9 +1210,9 @@ class SessionCatalog(
   }
 
   protected def failFunctionLookup(
-      name: FunctionIdentifier, rootCause: Option[String] = None): Nothing = {
+      name: FunctionIdentifier, cause: Option[Throwable] = None): Nothing = {
     throw new NoSuchFunctionException(
-      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName, rootCause)
+      db = name.database.getOrElse(getCurrentDatabase), func = name.funcName, cause)
   }
 
   /**

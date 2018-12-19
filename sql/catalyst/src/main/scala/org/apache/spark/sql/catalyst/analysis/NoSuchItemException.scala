@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.util.Utils
 
 
 /**
@@ -40,11 +41,12 @@ class NoSuchPartitionException(
 class NoSuchPermanentFunctionException(db: String, func: String)
   extends AnalysisException(s"Function '$func' not found in database '$db'")
 
-class NoSuchFunctionException(db: String, func: String, rootCause: Option[String] = None)
+class NoSuchFunctionException(db: String, func: String, cause: Option[Throwable] = None)
   extends AnalysisException(
-    s"Undefined function: '$func'. This function is neither a registered temporary function nor " +
-    s"a permanent function registered in the database '$db'." +
-    s"Exception thrown during look up: ${rootCause.getOrElse("None")}")
+     s"Undefined function: '$func'. This function is neither a registered temporary function nor " +
+      s"a permanent function registered in the database '$db'." +
+      s"${cause.map(th => s"Exception thrown during look up:" +
+        s" ${Utils.exceptionString(th)}").getOrElse("")}")
 
 class NoSuchPartitionsException(db: String, table: String, specs: Seq[TablePartitionSpec])
   extends AnalysisException(
