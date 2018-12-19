@@ -51,7 +51,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
         return Seq.empty
       }
 
-      val command = writingCommandForExistingTable(catalog, tableDesc)
+      val command = getWritingCommand(catalog, tableDesc, tableExists = true)
       command.run(sparkSession, child)
     } else {
       // TODO ideally, we should get the output data ready first and then
@@ -64,7 +64,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
       try {
         // Read back the metadata of the table which was created just now.
         val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
-        val command = writingCommandForNewTable(catalog, createdTableMeta)
+        val command = getWritingCommand(catalog, createdTableMeta, tableExists = false)
         command.run(sparkSession, child)
       } catch {
         case NonFatal(e) =>
@@ -77,15 +77,11 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
     Seq.empty[Row]
   }
 
-  // Returns `DataWritingCommand` used to write data when the table exists.
-  def writingCommandForExistingTable(
+  // Returns `DataWritingCommand` which actually writes data into the table.
+  def getWritingCommand(
     catalog: SessionCatalog,
-    tableDesc: CatalogTable): DataWritingCommand
-
-  // Returns `DataWritingCommand` used to write data when the table doesn't exist.
-  def writingCommandForNewTable(
-    catalog: SessionCatalog,
-    tableDesc: CatalogTable): DataWritingCommand
+    tableDesc: CatalogTable,
+    tableExists: Boolean): DataWritingCommand
 
   override def argString: String = {
     s"[Database:${tableDesc.database}, " +
@@ -108,30 +104,17 @@ case class CreateHiveTableAsSelectCommand(
     mode: SaveMode)
   extends CreateHiveTableAsSelectBase {
 
-  override def writingCommandForExistingTable(
+  override def getWritingCommand(
       catalog: SessionCatalog,
-      tableDesc: CatalogTable): DataWritingCommand = {
+      tableDesc: CatalogTable,
+      tableExists: Boolean): DataWritingCommand = {
     // For CTAS, there is no static partition values to insert.
     val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
     InsertIntoHiveTable(
       tableDesc,
       partition,
       query,
-      overwrite = false,
-      ifPartitionNotExists = false,
-      outputColumnNames = outputColumnNames)
-  }
-
-  override def writingCommandForNewTable(
-      catalog: SessionCatalog,
-      tableDesc: CatalogTable): DataWritingCommand = {
-    // For CTAS, there is no static partition values to insert.
-    val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
-    InsertIntoHiveTable(
-      tableDesc,
-      partition,
-      query,
-      overwrite = true,
+      overwrite = if (tableExists) false else true,
       ifPartitionNotExists = false,
       outputColumnNames = outputColumnNames)
   }
@@ -152,7 +135,7 @@ case class OptimizedCreateHiveTableAsSelectCommand(
     mode: SaveMode)
   extends CreateHiveTableAsSelectBase {
 
-  private def getWritingCommand(
+  override def getWritingCommand(
       catalog: SessionCatalog,
       tableDesc: CatalogTable,
       tableExists: Boolean): DataWritingCommand = {
@@ -178,17 +161,5 @@ case class OptimizedCreateHiveTableAsSelectCommand(
       Some(tableDesc),
       Some(hadoopRelation.location),
       query.output.map(_.name))
-  }
-
-  override def writingCommandForExistingTable(
-      catalog: SessionCatalog,
-      tableDesc: CatalogTable): DataWritingCommand = {
-    getWritingCommand(catalog, tableDesc, tableExists = true)
-  }
-
-  override def writingCommandForNewTable(
-      catalog: SessionCatalog,
-      tableDesc: CatalogTable): DataWritingCommand = {
-    getWritingCommand(catalog, tableDesc, tableExists = false)
   }
 }
