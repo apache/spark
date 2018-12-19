@@ -92,6 +92,22 @@ object CSVBenchmark extends SqlBasedBenchmark {
         ds.count()
       }
 
+      val schemaErr1 = StructType(StructField("col0", DateType) +:
+        (1 until colsNum).map(i => StructField(s"col$i", IntegerType)))
+      val dsErr1 = spark.read.schema(schemaErr1).csv(path.getAbsolutePath)
+      benchmark.addCase(s"Select 100 columns, one bad input field per row", 3) { _ =>
+        dsErr1.select(cols100: _*).filter((row: Row) => true).count()
+      }
+
+      val badRecColName = "badRecord"
+      val schemaErr2 = schemaErr1.add(StructField(badRecColName, StringType))
+      val dsErr2 = spark.read.schema(schemaErr2)
+        .option("columnNameOfCorruptRecord", badRecColName)
+        .csv(path.getAbsolutePath)
+      benchmark.addCase(s"Select 100 columns, corrupt record field", 3) { _ =>
+        dsErr2.select((Column(badRecColName) +: cols100): _*).filter((row: Row) => true).count()
+      }
+
       benchmark.run()
     }
   }
