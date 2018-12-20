@@ -60,7 +60,7 @@ class CanonicalizeSuite extends SparkFunSuite with ExpressionEvalHelper with Pla
     assert(!range.where(arrays1).sameResult(range.where(arrays3)))
   }
 
-  test("SPARK-26402: GetStructField with different optional names are semantically equal") {
+  test("SPARK-26402: GetStructField with different names are semantically equal") {
     val expId = NamedExpression.newExprId
     val qualifier = Seq.empty[String]
     val structType = StructType(
@@ -86,7 +86,6 @@ class CanonicalizeSuite extends SparkFunSuite with ExpressionEvalHelper with Pla
       0, Some("b2"))
     assert(fieldA1.semanticEquals(fieldA2))
 
-    // End-to-end test case
     val testRelation = LocalRelation('a.int)
 
     val originalQuery =
