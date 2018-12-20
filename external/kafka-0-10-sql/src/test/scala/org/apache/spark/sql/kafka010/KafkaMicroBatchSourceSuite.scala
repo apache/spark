@@ -33,7 +33,7 @@ import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.{ForeachWriter, SparkSession}
+import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
@@ -900,7 +900,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     }
     testUtils.waitUntilOffsetAppears(topicPartition, 5)
 
-    val q = ds.writeStream.foreachBatch { (ds, epochId) =>
+    val q = ds.writeStream.foreachBatch { (ds: Dataset[String], epochId: Long) =>
       if (epochId == 0) {
         // Send more message before the tasks of the current batch start reading the current batch
         // data, so that the executors will prefetch messages in the next batch and drop them. In

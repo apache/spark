@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 
-class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
+class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -68,6 +68,14 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     val plan = testRelation.where(input).analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = testRelation.where(expected).analyze
+    comparePlans(actual, correctAnswer)
+  }
+
+  private def checkConditionInNotNullableRelation(
+      input: Expression, expected: Expression): Unit = {
+    val plan = testNotNullableRelationWithData.where(input).analyze
+    val actual = Optimize.execute(plan)
+    val correctAnswer = testNotNullableRelationWithData.where(expected).analyze
     comparePlans(actual, correctAnswer)
   }
 
@@ -119,42 +127,55 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       'a === 'b || 'b > 3 && 'a > 3 && 'a < 5)
   }
 
-  test("e && (!e || f)") {
-    checkCondition('e && (!'e || 'f ), 'e && 'f)
+  test("e && (!e || f) - not nullable") {
+    checkConditionInNotNullableRelation('e && (!'e || 'f ), 'e && 'f)
 
-    checkCondition('e && ('f || !'e ), 'e && 'f)
+    checkConditionInNotNullableRelation('e && ('f || !'e ), 'e && 'f)
 
-    checkCondition((!'e || 'f ) && 'e, 'f && 'e)
+    checkConditionInNotNullableRelation((!'e || 'f ) && 'e, 'f && 'e)
 
-    checkCondition(('f || !'e ) && 'e, 'f && 'e)
+    checkConditionInNotNullableRelation(('f || !'e ) && 'e, 'f && 'e)
   }
 
-  test("a < 1 && (!(a < 1) || f)") {
-    checkCondition('a < 1 && (!('a < 1) || 'f), ('a < 1) && 'f)
-    checkCondition('a < 1 && ('f || !('a < 1)), ('a < 1) && 'f)
-
-    checkCondition('a <= 1 && (!('a <= 1) || 'f), ('a <= 1) && 'f)
-    checkCondition('a <= 1 && ('f || !('a <= 1)), ('a <= 1) && 'f)
-
-    checkCondition('a > 1 && (!('a > 1) || 'f), ('a > 1) && 'f)
-    checkCondition('a > 1 && ('f || !('a > 1)), ('a > 1) && 'f)
-
-    checkCondition('a >= 1 && (!('a >= 1) || 'f), ('a >= 1) && 'f)
-    checkCondition('a >= 1 && ('f || !('a >= 1)), ('a >= 1) && 'f)
+  test("e && (!e || f) - nullable") {
+    Seq ('e && (!'e || 'f ),
+        'e && ('f || !'e ),
+        (!'e || 'f ) && 'e,
+        ('f || !'e ) && 'e,
+        'e || (!'e && 'f),
+        'e || ('f && !'e),
+        ('e && 'f) || !'e,
+        ('f && 'e) || !'e).foreach { expr =>
+      checkCondition(expr, expr)
+    }
   }
 
-  test("a < 1 && ((a >= 1) || f)") {
-    checkCondition('a < 1 && ('a >= 1 || 'f ), ('a < 1) && 'f)
-    checkCondition('a < 1 && ('f || 'a >= 1), ('a < 1) && 'f)
+  test("a < 1 && (!(a < 1) || f) - not nullable") {
+    checkConditionInNotNullableRelation('a < 1 && (!('a < 1) || 'f), ('a < 1) && 'f)
+    checkConditionInNotNullableRelation('a < 1 && ('f || !('a < 1)), ('a < 1) && 'f)
 
-    checkCondition('a <= 1 && ('a > 1 || 'f ), ('a <= 1) && 'f)
-    checkCondition('a <= 1 && ('f || 'a > 1), ('a <= 1) && 'f)
+    checkConditionInNotNullableRelation('a <= 1 && (!('a <= 1) || 'f), ('a <= 1) && 'f)
+    checkConditionInNotNullableRelation('a <= 1 && ('f || !('a <= 1)), ('a <= 1) && 'f)
 
-    checkCondition('a > 1 && (('a <= 1) || 'f), ('a > 1) && 'f)
-    checkCondition('a > 1 && ('f || ('a <= 1)), ('a > 1) && 'f)
+    checkConditionInNotNullableRelation('a > 1 && (!('a > 1) || 'f), ('a > 1) && 'f)
+    checkConditionInNotNullableRelation('a > 1 && ('f || !('a > 1)), ('a > 1) && 'f)
 
-    checkCondition('a >= 1 && (('a < 1) || 'f), ('a >= 1) && 'f)
-    checkCondition('a >= 1 && ('f || ('a < 1)), ('a >= 1) && 'f)
+    checkConditionInNotNullableRelation('a >= 1 && (!('a >= 1) || 'f), ('a >= 1) && 'f)
+    checkConditionInNotNullableRelation('a >= 1 && ('f || !('a >= 1)), ('a >= 1) && 'f)
+  }
+
+  test("a < 1 && ((a >= 1) || f) - not nullable") {
+    checkConditionInNotNullableRelation('a < 1 && ('a >= 1 || 'f ), ('a < 1) && 'f)
+    checkConditionInNotNullableRelation('a < 1 && ('f || 'a >= 1), ('a < 1) && 'f)
+
+    checkConditionInNotNullableRelation('a <= 1 && ('a > 1 || 'f ), ('a <= 1) && 'f)
+    checkConditionInNotNullableRelation('a <= 1 && ('f || 'a > 1), ('a <= 1) && 'f)
+
+    checkConditionInNotNullableRelation('a > 1 && (('a <= 1) || 'f), ('a > 1) && 'f)
+    checkConditionInNotNullableRelation('a > 1 && ('f || ('a <= 1)), ('a > 1) && 'f)
+
+    checkConditionInNotNullableRelation('a >= 1 && (('a < 1) || 'f), ('a >= 1) && 'f)
+    checkConditionInNotNullableRelation('a >= 1 && ('f || ('a < 1)), ('a >= 1) && 'f)
   }
 
   test("DeMorgan's law") {
@@ -216,5 +237,47 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
     checkCondition('e || !'f, testRelationWithData.where('e || !'f).analyze)
     checkCondition(!'f || 'e, testRelationWithData.where(!'f || 'e).analyze)
+  }
+
+  protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
+    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
+    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
+    comparePlans(actual, correctAnswer)
+  }
+
+  test("filter reduction - positive cases") {
+    val fields = Seq(
+      'col1NotNULL.boolean.notNull,
+      'col2NotNULL.boolean.notNull
+    )
+    val Seq(col1NotNULL, col2NotNULL) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
+
+    val exprs = Seq(
+      // actual expressions of the transformations: original -> transformed
+      (col1NotNULL && (!col1NotNULL || col2NotNULL)) -> (col1NotNULL && col2NotNULL),
+      (col1NotNULL && (col2NotNULL || !col1NotNULL)) -> (col1NotNULL && col2NotNULL),
+      ((!col1NotNULL || col2NotNULL) && col1NotNULL) -> (col2NotNULL && col1NotNULL),
+      ((col2NotNULL || !col1NotNULL) && col1NotNULL) -> (col2NotNULL && col1NotNULL),
+
+      (col1NotNULL || (!col1NotNULL && col2NotNULL)) -> (col1NotNULL || col2NotNULL),
+      (col1NotNULL || (col2NotNULL && !col1NotNULL)) -> (col1NotNULL || col2NotNULL),
+      ((!col1NotNULL && col2NotNULL) || col1NotNULL) -> (col2NotNULL || col1NotNULL),
+      ((col2NotNULL && !col1NotNULL) || col1NotNULL) -> (col2NotNULL || col1NotNULL)
+    )
+
+    // check plans
+    for ((originalExpr, expectedExpr) <- exprs) {
+      assertEquivalent(originalExpr, expectedExpr)
+    }
+
+    // check evaluation
+    val binaryBooleanValues = Seq(true, false)
+    for (col1NotNULLVal <- binaryBooleanValues;
+        col2NotNULLVal <- binaryBooleanValues;
+        (originalExpr, expectedExpr) <- exprs) {
+      val inputRow = create_row(col1NotNULLVal, col2NotNULLVal)
+      val optimizedVal = evaluateWithoutCodegen(expectedExpr, inputRow)
+      checkEvaluation(originalExpr, optimizedVal, inputRow)
+    }
   }
 }

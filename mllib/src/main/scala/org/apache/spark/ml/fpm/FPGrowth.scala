@@ -118,10 +118,10 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
 /**
  * :: Experimental ::
  * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
- * <a href="http://dx.doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
+ * <a href="https://doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
  * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
  * independent group of mining tasks. The FP-Growth algorithm is described in
- * <a href="http://dx.doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
+ * <a href="https://doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
  * candidate generation</a>. Note null values in the itemsCol column are ignored during fit().
  *
  * @see <a href="http://en.wikipedia.org/wiki/Association_rule_learning">

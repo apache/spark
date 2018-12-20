@@ -265,3 +265,44 @@ Refer to the [R API docs](api/R/spark.gaussianMixture.html) for more details.
 </div>
 
 </div>
+
+## Power Iteration Clustering (PIC)
+
+Power Iteration Clustering (PIC) is  a scalable graph clustering algorithm
+developed by [Lin and Cohen](http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf).
+From the abstract: PIC finds a very low-dimensional embedding of a dataset
+using truncated power iteration on a normalized pair-wise similarity matrix of the data.
+
+`spark.ml`'s PowerIterationClustering implementation takes the following parameters:
+
+* `k`: the number of clusters to create
+* `initMode`: param for the initialization algorithm
+* `maxIter`: param for maximum number of iterations
+* `srcCol`: param for the name of the input column for source vertex IDs
+* `dstCol`: name of the input column for destination vertex IDs
+* `weightCol`: Param for weight column name
+
+**Examples**
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.PowerIterationClustering) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/PowerIterationClusteringExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/PowerIterationClustering.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaPowerIterationClusteringExample.java %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.powerIterationClustering.html) for more details.
+
+{% include_example r/ml/powerIterationClustering.R %}
+</div>
+
+</div>

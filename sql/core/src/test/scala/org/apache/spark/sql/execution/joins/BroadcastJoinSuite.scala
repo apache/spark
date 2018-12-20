@@ -228,7 +228,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   test("join key rewritten") {
     val l = Literal(1L)
     val i = Literal(2)
-    val s = Literal.create(3, ShortType)
+    val s = Literal.create(3.toShort, ShortType)
     val ss = Literal("hello")
 
     assert(HashJoin.rewriteKeyExpr(l :: Nil) === l :: Nil)

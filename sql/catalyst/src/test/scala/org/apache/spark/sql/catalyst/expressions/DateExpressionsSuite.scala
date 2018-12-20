@@ -273,9 +273,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     for (tz <- Seq(TimeZoneGMT, TimeZonePST, TimeZoneJST)) {
       val timeZoneId = Option(tz.getID)
       c.setTimeZone(tz)
-      (0 to 24).foreach { h =>
-        (0 to 60 by 15).foreach { m =>
-          (0 to 60 by 15).foreach { s =>
+      (0 to 24 by 6).foreach { h =>
+        (0 to 60 by 30).foreach { m =>
+          (0 to 60 by 30).foreach { s =>
             c.set(2015, 18, 3, h, m, s)
             checkEvaluation(
               Hour(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
