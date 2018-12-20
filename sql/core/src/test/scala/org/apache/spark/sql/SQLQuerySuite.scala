@@ -2937,6 +2937,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-26402: GetStructField with different names are semantically equal") {
+    withTable("t") {
+      sql("create table t (s struct<i: Int>) using json")
+      sql("select s.I from t group by s.i")
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

@@ -2330,8 +2330,4 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-26402: GetStructField with different names are semantically equal") {
-    sql("create table t (s struct<i: Int>) using json")
-    sql("select s.I from t group by s.i")
-  }
 }
