@@ -535,24 +535,6 @@ private[spark] class AppStatusStore(
     store.close()
   }
 
-  def constructTaskData(taskDataWrapper: TaskDataWrapper) : v1.TaskData = {
-    val taskDataOld: v1.TaskData = taskDataWrapper.toApi
-    val executorLogs: Option[Map[String, String]] = try {
-      Some(executorSummary(taskDataOld.executorId).executorLogs)
-    } catch {
-      case e: NoSuchElementException => e.getMessage
-        None
-    }
-    new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
-      taskDataOld.attempt, taskDataOld.launchTime, taskDataOld.resultFetchStart,
-      taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
-      taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
-      taskDataOld.errorMessage, taskDataOld.taskMetrics,
-      executorLogs.getOrElse(Map[String, String]()),
-      AppStatusUtils.schedulerDelay(taskDataOld),
-      AppStatusUtils.gettingResultTime(taskDataOld))
-  }
-
   def constructTaskDataList(taskDataWrapperIter: Iterable[TaskDataWrapper]): Seq[v1.TaskData] = {
     val executorIdToLogs = new HashMap[String, Map[String, String]]()
     taskDataWrapperIter.map { taskDataWrapper =>
