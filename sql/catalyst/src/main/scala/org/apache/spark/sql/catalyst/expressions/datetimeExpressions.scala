@@ -665,7 +665,6 @@ abstract class UnixTime
   override def nullable: Boolean = true
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
-  @transient
   private lazy val formatter: TimestampFormatter =
     try {
       TimestampFormatter(constFormat.toString, timeZone, Locale.US)
@@ -814,7 +813,6 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     copy(timeZoneId = Option(timeZoneId))
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
-  @transient
   private lazy val formatter: TimestampFormatter =
     try {
       TimestampFormatter(constFormat.toString, timeZone, Locale.US)

@@ -29,7 +29,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.internal.SQLConf
 
-sealed trait TimestampFormatter {
+sealed trait TimestampFormatter extends Serializable {
   /**
    * Parses a timestamp in a string and converts it to microseconds.
    *
@@ -48,7 +48,8 @@ class Iso8601TimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
     locale: Locale) extends TimestampFormatter with DateTimeFormatterHelper {
-  private val formatter = buildFormatter(pattern, locale)
+  @transient
+  private lazy val formatter = buildFormatter(pattern, locale)
 
   private def toInstant(s: String): Instant = {
     val temporalAccessor = formatter.parse(s)
@@ -80,7 +81,8 @@ class LegacyTimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
     locale: Locale) extends TimestampFormatter {
-  private val format = FastDateFormat.getInstance(pattern, timeZone, locale)
+  @transient
+  private lazy val format = FastDateFormat.getInstance(pattern, timeZone, locale)
 
   protected def toMillis(s: String): Long = format.parse(s).getTime
 
