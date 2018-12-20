@@ -111,8 +111,8 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault(true)
 
   val CONVERT_METASTORE_CTAS = buildConf("spark.sql.hive.convertMetastoreCtas")
-    .doc("When set to true, the built-in datasource writer is used to write query results " +
-      "into the created table, instead of Hive serde. This flag is effective only if " +
+    .doc("When set to true,  Spark will try to use built-in data source writer " +
+      "instead of Hive serde in CTAS. This flag is effective only if " +
       "`spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is " +
       "enabled respectively for Parquet and ORC formats")
     .booleanConf
