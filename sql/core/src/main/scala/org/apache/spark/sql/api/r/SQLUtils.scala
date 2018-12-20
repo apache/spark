@@ -49,9 +49,10 @@ private[sql] object SQLUtils extends Logging {
       sparkConfigMap: JMap[Object, Object],
       enableHiveSupport: Boolean): SparkSession = {
     val spark =
-      if (SparkSession.hiveClassesArePresent && enableHiveSupport &&
+      if (enableHiveSupport &&
           jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
-            "hive") {
+            "hive" &&
+          SparkSession.hiveClassesArePresent) {
         SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
       } else {
         if (enableHiveSupport) {
