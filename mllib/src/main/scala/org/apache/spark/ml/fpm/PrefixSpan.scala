@@ -20,6 +20,7 @@ package org.apache.spark.ml.fpm
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.fpm.{PrefixSpan => mllibPrefixSpan}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.col
@@ -135,7 +136,10 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
    *          - `freq: Long`
    */
   @Since("2.4.0")
-  def findFrequentSequentialPatterns(dataset: Dataset[_]): DataFrame = {
+  def findFrequentSequentialPatterns(dataset: Dataset[_]): DataFrame = instrumented { instr =>
+    instr.logDataset(dataset)
+    instr.logParams(this, params: _*)
+
     val sequenceColParam = $(sequenceCol)
     val inputType = dataset.schema(sequenceColParam).dataType
     require(inputType.isInstanceOf[ArrayType] &&
