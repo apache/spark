@@ -590,14 +590,14 @@ private[yarn] class YarnAllocator(
             // oop-yarn-project/hadoop-yarn/hadoop-yarn-common/src/main/java/org/ap
             // ache/hadoop/yarn/util/Apps.java#L273 for details)
             if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status)) {
-              (true, s"Container marked as failed: $containerId$onHostStr" +
-                s". Exit status:  ${completedContainer.getExitStatus}" +
+              (false, s"Container marked as failed: $containerId$onHostStr" +
+                s". Exit status: ${completedContainer.getExitStatus}" +
                 s". Diagnostics: ${completedContainer.getDiagnostics}.")
             } else {
               // completed container from a bad node
               allocatorBlacklistTracker.handleResourceAllocationFailure(hostOpt)
               (true, s"Container from a bad node: $containerId$onHostStr" +
-                s". Exit status:  ${completedContainer.getExitStatus}" +
+                s". Exit status: ${completedContainer.getExitStatus}" +
                 s". Diagnostics: ${completedContainer.getDiagnostics}.")
             }
 
