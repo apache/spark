@@ -348,9 +348,9 @@ $(document).ready(function () {
 
             // prepare data for executor summary table
             stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
-            var executorDetailsMap = {};
             $.getJSON(createRESTEndPointForExecutorsPage(appId),
               function(executorSummaryResponse, status, jqXHR) {
+                var executorDetailsMap = {};
                 executorSummaryResponse.forEach(function (executorDetail) {
                     executorDetailsMap[executorDetail.id] = executorDetail;
                 });
@@ -664,17 +664,7 @@ $(document).ready(function () {
                         {data : "taskLocality", name: "Locality Level"},
                         {data : "executorId", name: "Executor ID"},
                         {data : "host", name: "Host"},
-                        {
-                            data : function (row, type) {
-                                if(executorDetailsMap[row.executorId] && executorDetailsMap[row.executorId]["executorLogs"]) {
-                                    return executorDetailsMap[row.executorId]["executorLogs"];
-                                } else {
-                                    return "";
-                                }
-                            },
-                            name: "Logs",
-                            render: formatLogsCells
-                        },
+                        {data : "executorLogs", name: "Logs", render: formatLogsCells},
                         {data : "launchTime", name: "Launch Time", render: formatDate},
                         {
                             data : function (row, type) {
