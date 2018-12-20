@@ -273,7 +273,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * during parsing.
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
-   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To
+   *     field configured by `columnNameOfCorruptRecord`, and sets malformed fields to `null`. To
    *     keep corrupt records, an user can set a string type field named
    *     `columnNameOfCorruptRecord` in an user-defined schema. If a schema does not have the
    *     field, it drops corrupt records during parsing. When inferring a schema, it implicitly
@@ -360,13 +360,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
-   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To keep
-   *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
-   *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
-   *     during parsing. A record with less/more tokens than schema is not a corrupted record to
-   *     CSV. When it meets a record having fewer tokens than the length of the schema, sets
-   *     `null` to extra fields. When the record has more tokens than the length of the schema,
-   *     it drops extra tokens.</li>
+   *     field configured by `columnNameOfCorruptRecord`, and sets malformed fields to `null`.
+   *     To keep corrupt records, an user can set a string type field named
+   *     `columnNameOfCorruptRecord` in an user-defined schema. If a schema does not have
+   *     the field, it drops corrupt records during parsing. A record with less/more tokens
+   *     than schema is not a corrupted record to CSV. When it meets a record having fewer
+   *     tokens than the length of the schema, sets `null` to extra fields. When the record
+   *     has more tokens than the length of the schema, it drops extra tokens.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
@@ -377,6 +377,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines.</li>
    * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
    * For instance, this is used while parsing dates and timestamps.</li>
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing. Maximum length is 1 character.</li>
    * </ul>
    *
    * @since 2.0.0

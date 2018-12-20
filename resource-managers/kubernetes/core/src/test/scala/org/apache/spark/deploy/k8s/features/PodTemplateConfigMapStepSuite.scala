@@ -20,43 +20,32 @@ import java.io.{File, PrintWriter}
 import java.nio.file.Files
 
 import io.fabric8.kubernetes.api.model.ConfigMap
-import org.mockito.Mockito
-import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 
-class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
-  private var sparkConf: SparkConf = _
-  private var kubernetesConf : KubernetesConf[_ <: KubernetesRoleSpecificConf] = _
-  private var templateFile: File = _
+class PodTemplateConfigMapStepSuite extends SparkFunSuite {
 
-  before {
-    sparkConf = Mockito.mock(classOf[SparkConf])
-    kubernetesConf = KubernetesConf(
-      sparkConf,
-      KubernetesDriverSpecificConf(
-        JavaMainAppResource(None),
-        "app-name",
-        "main",
-        Seq.empty),
-      "resource",
-      "app-id",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Option.empty)
-    templateFile = Files.createTempFile("pod-template", "yml").toFile
-    templateFile.deleteOnExit()
-    Mockito.doReturn(Option(templateFile.getAbsolutePath)).when(sparkConf)
-      .get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
+  test("Do nothing when executor template is not specified") {
+    val conf = KubernetesTestConf.createDriverConf()
+    val step = new PodTemplateConfigMapStep(conf)
+
+    val initialPod = SparkPod.initialPod()
+    val configuredPod = step.configurePod(initialPod)
+    assert(configuredPod === initialPod)
+
+    assert(step.getAdditionalKubernetesResources().isEmpty)
+    assert(step.getAdditionalPodSystemProperties().isEmpty)
   }
 
   test("Mounts executor template volume if config specified") {
+    val templateFile = Files.createTempFile("pod-template", "yml").toFile
+    templateFile.deleteOnExit()
+
+    val sparkConf = new SparkConf(false)
+      .set(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE, templateFile.getAbsolutePath)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+
     val writer = new PrintWriter(templateFile)
     writer.write("pod-template-contents")
     writer.close()

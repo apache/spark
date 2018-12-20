@@ -180,7 +180,6 @@ class GBTClassifier @Since("1.4.0") (
       (convert2LabeledPoint(dataset), null)
     }
 
-    val numFeatures = trainDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
 
     val numClasses = 2
@@ -195,8 +194,7 @@ class GBTClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, featuresCol, predictionCol, impurity, lossType,
       maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
       seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy,
-      validationIndicatorCol)
-    instr.logNumFeatures(numFeatures)
+      validationIndicatorCol, validationTol)
     instr.logNumClasses(numClasses)
 
     val (baseLearners, learnerWeights) = if (withValidation) {
@@ -205,6 +203,9 @@ class GBTClassifier @Since("1.4.0") (
     } else {
       GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy))
     }
+
+    val numFeatures = baseLearners.head.numFeatures
+    instr.logNumFeatures(numFeatures)
 
     new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }

@@ -232,8 +232,8 @@ object SparkEnv extends Logging {
     if (isDriver) {
       assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
     }
-
-    val securityManager = new SecurityManager(conf, ioEncryptionKey)
+    val authSecretFileConf = if (isDriver) AUTH_SECRET_FILE_DRIVER else AUTH_SECRET_FILE_EXECUTOR
+    val securityManager = new SecurityManager(conf, ioEncryptionKey, authSecretFileConf)
     if (isDriver) {
       securityManager.initializeAuth()
     }

@@ -22,18 +22,20 @@ import java.util.Arrays;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.sources.v2.*;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
+import org.apache.spark.sql.sources.v2.Table;
+import org.apache.spark.sql.sources.v2.TableProvider;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.sources.v2.reader.partitioning.ClusteredDistribution;
 import org.apache.spark.sql.sources.v2.reader.partitioning.Distribution;
 import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
 
-public class JavaPartitionAwareDataSource implements DataSourceV2, BatchReadSupportProvider {
+public class JavaPartitionAwareDataSource implements TableProvider {
 
-  class ReadSupport extends JavaSimpleReadSupport implements SupportsReportPartitioning {
+  class MyScanBuilder extends JavaSimpleScanBuilder implements SupportsReportPartitioning {
 
     @Override
-    public InputPartition[] planInputPartitions(ScanConfig config) {
+    public InputPartition[] planInputPartitions() {
       InputPartition[] partitions = new InputPartition[2];
       partitions[0] = new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 4, 6});
       partitions[1] = new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 2, 2});
@@ -41,14 +43,24 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, BatchReadSupp
     }
 
     @Override
-    public PartitionReaderFactory createReaderFactory(ScanConfig config) {
+    public PartitionReaderFactory createReaderFactory() {
       return new SpecificReaderFactory();
     }
 
     @Override
-    public Partitioning outputPartitioning(ScanConfig config) {
+    public Partitioning outputPartitioning() {
       return new MyPartitioning();
     }
+  }
+
+  @Override
+  public Table getTable(DataSourceOptions options) {
+    return new JavaSimpleBatchTable() {
+      @Override
+      public ScanBuilder newScanBuilder(DataSourceOptions options) {
+        return new MyScanBuilder();
+      }
+    };
   }
 
   static class MyPartitioning implements Partitioning {
@@ -105,10 +117,5 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, BatchReadSupp
         }
       };
     }
-  }
-
-  @Override
-  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
-    return new ReadSupport();
   }
 }

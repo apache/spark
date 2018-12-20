@@ -92,4 +92,18 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
       }
     }
   }
+
+  test("SPARK-25271: write empty map into hive parquet table") {
+    import testImplicits._
+
+    Seq(Map(1 -> "a"), Map.empty[Int, String]).toDF("m").createOrReplaceTempView("p")
+    withTempView("p") {
+      val targetTable = "targetTable"
+      withTable(targetTable) {
+        sql(s"CREATE TABLE $targetTable STORED AS PARQUET AS SELECT m FROM p")
+        checkAnswer(sql(s"SELECT m FROM $targetTable"),
+          Row(Map(1 -> "a")) :: Row(Map.empty[Int, String]) :: Nil)
+      }
+    }
+  }
 }

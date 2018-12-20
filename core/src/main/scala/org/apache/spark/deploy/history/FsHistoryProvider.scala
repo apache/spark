@@ -461,6 +461,28 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               if (info.appId.isDefined && fastInProgressParsing) {
                 // When fast in-progress parsing is on, we don't need to re-parse when the
                 // size changes, but we do need to invalidate any existing UIs.
+                // Also, we need to update the `lastUpdated time` to display the updated time in
+                // the HistoryUI and to avoid cleaning the inprogress app while running.
+                val appInfo = listing.read(classOf[ApplicationInfoWrapper], info.appId.get)
+
+                val attemptList = appInfo.attempts.map { attempt =>
+                  if (attempt.info.attemptId == info.attemptId) {
+                    new AttemptInfoWrapper(
+                      attempt.info.copy(lastUpdated = new Date(newLastScanTime)),
+                      attempt.logPath,
+                      attempt.fileSize,
+                      attempt.adminAcls,
+                      attempt.viewAcls,
+                      attempt.adminAclsGroups,
+                      attempt.viewAclsGroups)
+                  } else {
+                    attempt
+                  }
+                }
+
+                val updatedAppInfo = new ApplicationInfoWrapper(appInfo.info, attemptList)
+                listing.write(updatedAppInfo)
+
                 invalidateUI(info.appId.get, info.attemptId)
                 false
               } else {

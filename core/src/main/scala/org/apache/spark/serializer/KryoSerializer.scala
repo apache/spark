@@ -42,7 +42,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, ByteBufferInputStream, SerializableConfiguration, SerializableJobConf, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -62,14 +62,14 @@ class KryoSerializer(conf: SparkConf)
 
   if (bufferSizeKb >= ByteUnit.GiB.toKiB(2)) {
     throw new IllegalArgumentException("spark.kryoserializer.buffer must be less than " +
-      s"2048 mb, got: + ${ByteUnit.KiB.toMiB(bufferSizeKb)} mb.")
+      s"2048 MiB, got: + ${ByteUnit.KiB.toMiB(bufferSizeKb)} MiB.")
   }
   private val bufferSize = ByteUnit.KiB.toBytes(bufferSizeKb).toInt
 
   val maxBufferSizeMb = conf.getSizeAsMb("spark.kryoserializer.buffer.max", "64m").toInt
   if (maxBufferSizeMb >= ByteUnit.GiB.toMiB(2)) {
     throw new IllegalArgumentException("spark.kryoserializer.buffer.max must be less than " +
-      s"2048 mb, got: + $maxBufferSizeMb mb.")
+      s"2048 MiB, got: + $maxBufferSizeMb MiB.")
   }
   private val maxBufferSize = ByteUnit.MiB.toBytes(maxBufferSizeMb).toInt
 
@@ -417,7 +417,12 @@ private[spark] class KryoSerializerInstance(
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     val kryo = borrowKryo()
     try {
-      input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      if (bytes.hasArray) {
+        input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      } else {
+        input.setBuffer(new Array[Byte](4096))
+        input.setInputStream(new ByteBufferInputStream(bytes))
+      }
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       releaseKryo(kryo)
@@ -429,7 +434,12 @@ private[spark] class KryoSerializerInstance(
     val oldClassLoader = kryo.getClassLoader
     try {
       kryo.setClassLoader(loader)
-      input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      if (bytes.hasArray) {
+        input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
+      } else {
+        input.setBuffer(new Array[Byte](4096))
+        input.setInputStream(new ByteBufferInputStream(bytes))
+      }
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       kryo.setClassLoader(oldClassLoader)

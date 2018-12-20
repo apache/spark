@@ -252,7 +252,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           val options = sessionOptions ++ extraOptions
 
           if (mode == SaveMode.Append) {
-            val relation = DataSourceV2Relation.create(source, options)
+            val relation = DataSourceV2Relation.createRelationForWrite(source, options)
             runCommand(df.sparkSession, "save") {
               AppendData.byName(relation, df.logicalPlan)
             }
@@ -658,6 +658,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * whitespaces from values being written should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `true`): a flag indicating defines whether or not
    * trailing whitespaces from values being written should be skipped.</li>
+   * <li>`lineSep` (default `\n`): defines the line separator that should be used for writing.
+   * Maximum length is 1 character.</li>
    * </ul>
    *
    * @since 2.0.0

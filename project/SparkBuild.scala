@@ -494,7 +494,13 @@ object KubernetesIntegrationTests {
     dockerBuild := {
       if (shouldBuildImage) {
         val dockerTool = s"$sparkHome/bin/docker-image-tool.sh"
-        val cmd = Seq(dockerTool, "-m", "-t", imageTag.value, "build")
+        val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
+        val cmd = Seq(dockerTool, "-m",
+          "-t", imageTag.value,
+          "-p", s"$bindingsDir/python/Dockerfile",
+          "-R", s"$bindingsDir/R/Dockerfile",
+          "build"
+        )
         val ec = Process(cmd).!
         if (ec != 0) {
           throw new IllegalStateException(s"Process '${cmd.mkString(" ")}' exited with $ec.")
@@ -516,7 +522,8 @@ object KubernetesIntegrationTests {
       s"-Dspark.kubernetes.test.unpackSparkDir=$sparkHome"
     ),
     // Force packaging before building images, so that the latest code is tested.
-    dockerBuild := dockerBuild.dependsOn(packageBin in Compile in assembly).value
+    dockerBuild := dockerBuild.dependsOn(packageBin in Compile in assembly)
+      .dependsOn(packageBin in Compile in examples).value
   )
 }
 

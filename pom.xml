@@ -114,7 +114,7 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.5.4</maven.version>
+    <maven.version>3.6.0</maven.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
@@ -128,6 +128,8 @@
     <hive.version>1.2.1.spark2</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
+    <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
+    <kafka.version>2.1.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.0</parquet.version>
     <orc.version>1.5.3</orc.version>
@@ -154,8 +156,11 @@
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.12.7</scala.version>
+    <scala.version>2.12.8</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
+    <scalafmt.parameters>--diff --test</scalafmt.parameters>
+    <!-- for now, not running scalafmt as part of default verify pipeline -->
+    <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.9.6</fasterxml.jackson.version>
     <snappy.version>1.1.7.1</snappy.version>
@@ -168,7 +173,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.8.1</commons-lang3.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
-    <janino.version>3.0.10</janino.version>
+    <janino.version>3.0.11</janino.version>
     <jersey.version>2.22.2</jersey.version>
     <joda.version>2.9.3</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -2597,6 +2602,24 @@
                 <exclude>log4j.properties</exclude>
               </excludes>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.antipathy</groupId>
+        <artifactId>mvn-scalafmt_2.12</artifactId>
+        <version>0.9_1.5.1</version>
+        <configuration>
+          <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
+          <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
+          <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config locataion -->
+        </configuration>
+        <executions>
+          <execution>
+            <phase>validate</phase>
+            <goals>
+              <goal>format</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>

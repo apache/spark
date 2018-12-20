@@ -93,6 +93,11 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_PROCESS_TREE_METRICS =
+    ConfigBuilder("spark.eventLog.logStageExecutorProcessTreeMetrics.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
 
@@ -281,7 +286,7 @@ package object config {
   private[spark] val LISTENER_BUS_EVENT_QUEUE_CAPACITY =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.capacity")
       .intConf
-      .checkValue(_ > 0, "The capacity of listener bus event queue must not be negative")
+      .checkValue(_ > 0, "The capacity of listener bus event queue must be positive")
       .createWithDefault(10000)
 
   private[spark] val LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED =
@@ -419,6 +424,37 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val AUTH_SECRET_FILE =
+    ConfigBuilder("spark.authenticate.secret.file")
+      .doc("Path to a file that contains the authentication secret to use. The secret key is " +
+        "loaded from this path on both the driver and the executors if overrides are not set for " +
+        "either entity (see below). File-based secret keys are only allowed when using " +
+        "Kubernetes.")
+      .stringConf
+      .createOptional
+
+  private[spark] val AUTH_SECRET_FILE_DRIVER =
+    ConfigBuilder("spark.authenticate.secret.driver.file")
+      .doc("Path to a file that contains the authentication secret to use. Loaded by the " +
+        "driver. In Kubernetes client mode it is often useful to set a different secret " +
+        "path for the driver vs. the executors, since the driver may not be running in " +
+        "a pod unlike the executors. If this is set, an accompanying secret file must " +
+        "be specified for the executors. The fallback configuration allows the same path to be " +
+        "used for both the driver and the executors when running in cluster mode. File-based " +
+        "secret keys are only allowed when using Kubernetes.")
+      .fallbackConf(AUTH_SECRET_FILE)
+
+  private[spark] val AUTH_SECRET_FILE_EXECUTOR =
+    ConfigBuilder("spark.authenticate.secret.executor.file")
+      .doc("Path to a file that contains the authentication secret to use. Loaded by the " +
+        "executors only. In Kubernetes client mode it is often useful to set a different " +
+        "secret path for the driver vs. the executors, since the driver may not be running " +
+        "in a pod unlike the executors. If this is set, an accompanying secret file must be " +
+        "specified for the executors. The fallback configuration allows the same path to be " +
+        "used for both the driver and the executors when running in cluster mode. File-based " +
+        "secret keys are only allowed when using Kubernetes.")
+      .fallbackConf(AUTH_SECRET_FILE)
+
   private[spark] val NETWORK_ENCRYPTION_ENABLED =
     ConfigBuilder("spark.network.crypto.enabled")
       .booleanConf
@@ -430,8 +466,8 @@ package object config {
       .doc("The chunk size in bytes during writing out the bytes of ChunkedByteBuffer.")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
-        "The chunk size during writing out the bytes of" +
-        " ChunkedByteBuffer should not larger than Int.MaxValue - 15.")
+        "The chunk size during writing out the bytes of ChunkedByteBuffer should" +
+          s" be less than or equal to ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefault(64 * 1024 * 1024)
 
   private[spark] val CHECKPOINT_COMPRESS =
@@ -503,7 +539,7 @@ package object config {
         "made in creating intermediate shuffle files.")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
-        s"The file buffer size must be greater than 0 and less than" +
+        s"The file buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
@@ -513,7 +549,7 @@ package object config {
         "is written in unsafe shuffle writer. In KiB unless otherwise specified.")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
-        s"The buffer size must be greater than 0 and less than" +
+        s"The buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 

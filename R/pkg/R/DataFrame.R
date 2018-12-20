@@ -766,7 +766,6 @@ setMethod("repartition",
 #'  \item{2.} {Return a new SparkDataFrame range partitioned by the given column(s),
 #'                      using \code{spark.sql.shuffle.partitions} as number of partitions.}
 #'}
-#'
 #' At least one partition-by expression must be specified.
 #' When no explicit sort order is specified, "ascending nulls first" is assumed.
 #'
@@ -828,7 +827,6 @@ setMethod("repartitionByRange",
 #' toJSON
 #'
 #' Converts a SparkDataFrame into a SparkDataFrame of JSON string.
-#'
 #' Each row is turned into a JSON document with columns as different fields.
 #' The returned SparkDataFrame has a single character column with the name \code{value}
 #'
@@ -2730,6 +2728,32 @@ setMethod("union",
           function(x, y) {
             unioned <- callJMethod(x@sdf, "union", y@sdf)
             dataFrame(unioned)
+          })
+
+#' Return a new SparkDataFrame containing the union of rows.
+#'
+#' This is an alias for \code{union}.
+#'
+#' @param x a SparkDataFrame.
+#' @param y a SparkDataFrame.
+#' @return A SparkDataFrame containing the result of the unionAll operation.
+#' @family SparkDataFrame functions
+#' @aliases unionAll,SparkDataFrame,SparkDataFrame-method
+#' @rdname unionAll
+#' @name unionAll
+#' @seealso \link{union}
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- read.json(path)
+#' df2 <- read.json(path2)
+#' unionAllDF <- unionAll(df1, df2)
+#' }
+#' @note unionAll since 1.4.0
+setMethod("unionAll",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            union(x, y)
           })
 
 #' Return a new SparkDataFrame containing the union of rows, matched by column names
