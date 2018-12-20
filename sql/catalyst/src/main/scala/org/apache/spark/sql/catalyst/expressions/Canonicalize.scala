@@ -37,7 +37,7 @@ object Canonicalize {
     expressionReorder(ignoreNamesTypes(e))
   }
 
-  /** Remove names and nullability from types. */
+  /** Remove names and/or nullability from types. */
   private[expressions] def ignoreNamesTypes(e: Expression): Expression = e match {
     case a: AttributeReference =>
       AttributeReference("none", a.dataType.asNullable)(exprId = a.exprId)
