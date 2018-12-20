@@ -110,6 +110,14 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val CONVERT_METASTORE_CTAS = buildConf("spark.sql.hive.convertMetastoreCtas")
+    .doc("When set to true,  Spark will try to use built-in data source writer " +
+      "instead of Hive serde in CTAS. This flag is effective only if " +
+      "`spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is " +
+      "enabled respectively for Parquet and ORC formats")
+    .booleanConf
+    .createWithDefault(true)
+
   val HIVE_METASTORE_SHARED_PREFIXES = buildConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
