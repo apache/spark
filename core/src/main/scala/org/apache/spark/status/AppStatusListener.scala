@@ -818,6 +818,11 @@ private[spark] class AppStatusListener(
   }
 
   override def onStageExecutorMetrics(event: SparkListenerStageExecutorMetrics): Unit = {
+    // SparkListenerStageExecutorMetrics are only processed when reading logs, and contain
+    // the peak executor metrics per executor and stage. For live applications, executor
+    // metrics are sent as part of SparkListenerExecutorMetricsUpdate.
+
+    // Update stage level peak executor metric values
     val now = System.nanoTime()
     Option(liveStages.get((event.stageId, event.stageAttemptId)))
       .foreach { stage =>
@@ -829,9 +834,7 @@ private[spark] class AppStatusListener(
         update(esummary, now)
       }
     }
-    // check if there is a new peak value for any of the executor level memory metrics,
-    // while reading from the log. SparkListenerStageExecutorMetrics are only processed
-    // when reading logs.
+    // Update peak values for the executor
     liveExecutors.get(event.execId)
       .orElse(deadExecutors.get(event.execId)).foreach { exec =>
       if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(event.executorMetrics)) {
