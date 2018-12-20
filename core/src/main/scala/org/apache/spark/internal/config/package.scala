@@ -186,7 +186,7 @@ package object config {
     ConfigBuilder("spark.shuffle.service.db.enabled")
       .doc("Whether use db in ExternalShuffleService.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").intConf.createWithDefault(7337)
