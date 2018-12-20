@@ -31,7 +31,7 @@ private[spark] class YarnClusterSchedulerBackend(
   extends YarnSchedulerBackend(scheduler, sc) {
 
   override def start() {
-    val attemptId = ApplicationMaster.getAttemptId(sc.conf)
+    val attemptId = ApplicationMaster.getAttemptId
     bindToYarn(attemptId.getApplicationId(), Some(attemptId))
     super.start()
     totalExpectedExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(sc.conf)
@@ -41,7 +41,7 @@ private[spark] class YarnClusterSchedulerBackend(
     var driverLogs: Option[Map[String, String]] = None
     try {
       val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
-      val containerId = YarnSparkHadoopUtil.getContainerId(sc.conf)
+      val containerId = YarnSparkHadoopUtil.getContainerId
 
       val httpAddress = System.getenv(Environment.NM_HOST.name()) +
         ":" + System.getenv(Environment.NM_HTTP_PORT.name())

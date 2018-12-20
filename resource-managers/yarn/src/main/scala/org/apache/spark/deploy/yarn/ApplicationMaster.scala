@@ -218,26 +218,20 @@ private[spark] class ApplicationMaster(
     resources.toMap
   }
 
-  def getAttemptId(sparkConf: SparkConf): ApplicationAttemptId = {
-    client.getAttemptId(sparkConf)
+  def getAttemptId(): ApplicationAttemptId = {
+    client.getAttemptId()
   }
 
   final def run(): Int = {
     doAsUser {
-      runImpl(
-        if (isClusterMode) {
-          runDriver()
-        } else {
-          runExecutorLauncher()
-        }
-      )
+      runImpl()
     }
     exitCode
   }
 
-  private def runImpl(opBlock: => Unit): Unit = {
+  private def runImpl(): Unit = {
     try {
-      val appAttemptId = client.getAttemptId(sparkConf)
+      val appAttemptId = client.getAttemptId()
 
       var attemptID: Option[String] = None
 
@@ -267,7 +261,7 @@ private[spark] class ApplicationMaster(
       val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
       ShutdownHookManager.addShutdownHook(priority) { () =>
         val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
-        val isLastAttempt = client.getAttemptId(sparkConf).getAttemptId() >= maxAppAttempts
+        val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
         if (!finished) {
           // The default state of ApplicationMaster is failed if it is invoked by shut down hook.
@@ -284,13 +278,16 @@ private[spark] class ApplicationMaster(
           // we only want to unregister if we don't want the RM to retry
           if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
             unregister(finalStatus, finalMsg)
-            cleanupStagingDir()
+            cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
           }
         }
       }
 
-      opBlock
-
+      if (isClusterMode) {
+        runDriver()
+      } else {
+        runExecutorLauncher()
+      }
     } catch {
       case e: Exception =>
         // catch everything else if not specifically handled
@@ -311,20 +308,56 @@ private[spark] class ApplicationMaster(
     }
   }
 
-  def runUnmanaged(clientRpcEnv: RpcEnv): Unit = {
-    runImpl {
+  def runUnmanaged(clientRpcEnv: RpcEnv,
+      appAttemptId: ApplicationAttemptId,
+      stagingDir: Path): Unit = {
+    try {
+      new CallerContext(
+        "APPMASTER", sparkConf.get(APP_CALLER_CONTEXT),
+        Option(appAttemptId.getApplicationId.toString), None).setCurrentContext()
+
+      // This shutdown hook should run *after* the SparkContext is shut down.
+      val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
+      ShutdownHookManager.addShutdownHook(priority) { () =>
+        if (!finished) {
+          finish(finalStatus, ApplicationMaster.EXIT_EARLY,
+            "Shutdown hook called before final status was reported.")
+        }
+
+        if (!unregistered) {
+            unregister(finalStatus, finalMsg)
+            cleanupStagingDir(stagingDir)
+        }
+      }
+
       val driverRef = clientRpcEnv.setupEndpointRef(
         RpcAddress(sparkConf.get("spark.driver.host"),
           sparkConf.get("spark.driver.port").toInt),
         YarnSchedulerBackend.ENDPOINT_NAME)
       // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
-      registerAM(
-        Utils.localHostName, -1, sparkConf, sparkConf.getOption("spark.driver.appUIAddress"))
-      addAmIpFilter(Some(driverRef))
-      createAllocator(driverRef, sparkConf, clientRpcEnv)
-
-      // In client mode the actor will stop the reporter thread.
+      registerAM(Utils.localHostName, -1, sparkConf,
+        sparkConf.getOption("spark.driver.appUIAddress"), appAttemptId)
+      addAmIpFilter(Some(driverRef), ProxyUriUtils.getPath(appAttemptId.getApplicationId))
+      createAllocator(driverRef, sparkConf, clientRpcEnv, appAttemptId)
       reporterThread.join()
+
+    } catch {
+      case e: Exception =>
+        // catch everything else if not specifically handled
+        logError("Uncaught exception: ", e)
+        finish(FinalApplicationStatus.FAILED,
+          ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
+          "Uncaught exception: " + StringUtils.stringifyException(e))
+    } finally {
+      try {
+        metricsSystem.foreach { ms =>
+          ms.report()
+          ms.stop()
+        }
+      } catch {
+        case e: Exception =>
+          logWarning("Exception during stopping of the metric system: ", e)
+      }
     }
   }
 
@@ -408,8 +441,8 @@ private[spark] class ApplicationMaster(
       host: String,
       port: Int,
       _sparkConf: SparkConf,
-      uiAddress: Option[String]): Unit = {
-    val appAttempt = client.getAttemptId(_sparkConf)
+      uiAddress: Option[String],
+      appAttempt: ApplicationAttemptId): Unit = {
     val appId = appAttempt.getApplicationId().toString()
     val attemptId = appAttempt.getAttemptId().toString()
     val historyAddress = ApplicationMaster
@@ -422,8 +455,9 @@ private[spark] class ApplicationMaster(
   private def createAllocator(
       driverRef: RpcEndpointRef,
       _sparkConf: SparkConf,
-      rpcEnv: RpcEnv): Unit = {
-    val appId = client.getAttemptId(_sparkConf).getApplicationId().toString()
+      rpcEnv: RpcEnv,
+      appAttemptId: ApplicationAttemptId): Unit = {
+    val appId = appAttemptId.getApplicationId().toString()
     val driverUrl = RpcEndpointAddress(driverRef.address.host, driverRef.address.port,
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
 
@@ -444,7 +478,8 @@ private[spark] class ApplicationMaster(
       driverUrl,
       driverRef,
       securityMgr,
-      localResources)
+      localResources,
+      appAttemptId)
 
     tokenManager.foreach(_.setDriverRef(driverRef))
 
@@ -463,7 +498,7 @@ private[spark] class ApplicationMaster(
   }
 
   private def runDriver(): Unit = {
-    addAmIpFilter(None)
+    addAmIpFilter(None, System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV))
     userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
@@ -479,12 +514,12 @@ private[spark] class ApplicationMaster(
         val userConf = sc.getConf
         val host = userConf.get("spark.driver.host")
         val port = userConf.get("spark.driver.port").toInt
-        registerAM(host, port, userConf, sc.ui.map(_.webUrl))
+        registerAM(host, port, userConf, sc.ui.map(_.webUrl), client.getAttemptId())
 
         val driverRef = rpcEnv.setupEndpointRef(
           RpcAddress(host, port),
           YarnSchedulerBackend.ENDPOINT_NAME)
-        createAllocator(driverRef, userConf, rpcEnv)
+        createAllocator(driverRef, userConf, rpcEnv, client.getAttemptId())
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
         // if the user app did not create a SparkContext.
@@ -512,7 +547,8 @@ private[spark] class ApplicationMaster(
       amCores, true)
 
     // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
-    registerAM(hostname, -1, sparkConf, sparkConf.getOption("spark.driver.appUIAddress"))
+    registerAM(hostname, -1, sparkConf, sparkConf.getOption("spark.driver.appUIAddress"),
+      client.getAttemptId())
 
     // The driver should be up and listening, so unlike cluster mode, just try to connect to it
     // with no waiting or retrying.
@@ -520,8 +556,9 @@ private[spark] class ApplicationMaster(
     val driverRef = rpcEnv.setupEndpointRef(
       RpcAddress(driverHost, driverPort),
       YarnSchedulerBackend.ENDPOINT_NAME)
-    addAmIpFilter(Some(driverRef))
-    createAllocator(driverRef, sparkConf, rpcEnv)
+    addAmIpFilter(Some(driverRef),
+      System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV))
+    createAllocator(driverRef, sparkConf, rpcEnv, client.getAttemptId())
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
@@ -620,19 +657,10 @@ private[spark] class ApplicationMaster(
   /**
    * Clean up the staging directory.
    */
-  private def cleanupStagingDir(): Unit = {
-    var stagingDirPath: Path = null
+  private def cleanupStagingDir(stagingDirPath: Path): Unit = {
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
       if (!preserveFiles) {
-        var stagingDir = System.getenv("SPARK_YARN_STAGING_DIR")
-        if (stagingDir == null) {
-          val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
-            .getOrElse(FileSystem.get(yarnConf).getHomeDirectory())
-          stagingDir = appStagingBaseDir.toString + Path.SEPARATOR +
-            getAttemptId(sparkConf).getApplicationId.toString
-        }
-        stagingDirPath = new Path(stagingDir)
         logInfo("Deleting staging directory " + stagingDirPath)
         val fs = stagingDirPath.getFileSystem(yarnConf)
         fs.delete(stagingDirPath, true)
@@ -644,8 +672,7 @@ private[spark] class ApplicationMaster(
   }
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
-  private def addAmIpFilter(driver: Option[RpcEndpointRef]) = {
-    val proxyBase = getProxyBase
+  private def addAmIpFilter(driver: Option[RpcEndpointRef], proxyBase: String) = {
     val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
     val params = client.getAmIpFilterParams(yarnConf, proxyBase)
     driver match {
@@ -656,14 +683,6 @@ private[spark] class ApplicationMaster(
         System.setProperty("spark.ui.filters", amFilter)
         params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     }
-  }
-
-  private def getProxyBase: String = {
-    var proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
-    if (proxyBase == null) {
-      proxyBase = ProxyUriUtils.getPath(getAttemptId(sparkConf).getApplicationId)
-    }
-    proxyBase
   }
 
   /**
@@ -838,8 +857,8 @@ object ApplicationMaster extends Logging {
     master.sparkContextInitialized(sc)
   }
 
-  private[spark] def getAttemptId(sparkConf: SparkConf): ApplicationAttemptId = {
-    master.getAttemptId(sparkConf)
+  private[spark] def getAttemptId(): ApplicationAttemptId = {
+    master.getAttemptId
   }
 
   private[spark] def getHistoryServerAddress(

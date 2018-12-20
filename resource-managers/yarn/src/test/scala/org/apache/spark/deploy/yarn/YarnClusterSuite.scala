@@ -455,7 +455,7 @@ private object YarnClusterDriver extends Logging with Matchers {
             s"Driver logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
           )
         }
-        val containerId = YarnSparkHadoopUtil.getContainerId(sc.conf)
+        val containerId = YarnSparkHadoopUtil.getContainerId
         val user = Utils.getCurrentUserName()
         assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=-4096"))
       }

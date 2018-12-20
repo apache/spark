@@ -180,11 +180,9 @@ object YarnSparkHadoopUtil {
     )
   }
 
-  def getContainerId(sparkConf: SparkConf): ContainerId = {
-    val containerIdString = sparkConf.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
-    ConverterUtils.toContainerId(
-      if (containerIdString != null) containerIdString else sparkConf.get("spark.yarn.containerId")
-    )
+  def getContainerId: ContainerId = {
+    val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
+    ConverterUtils.toContainerId(containerIdString)
   }
 
   /** The filesystems for which YARN should fetch delegation tokens. */

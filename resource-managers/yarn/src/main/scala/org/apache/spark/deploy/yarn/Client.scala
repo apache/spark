@@ -303,10 +303,7 @@ private[spark] class Client(
             "does not support it", e)
       }
     }
-    if (isClientUnmanagedAMEnabled) {
-      // Set Unmanaged AM to true in Application Submission Context
-      appContext.setUnmanagedAM(true)
-    }
+    appContext.setUnmanagedAM(isClientUnmanagedAMEnabled)
     appContext
   }
 
@@ -1109,8 +1106,8 @@ private[spark] class Client(
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
         return createAppReport(report)
       }
-      if (state == YarnApplicationState.ACCEPTED && isClientUnmanagedAMEnabled
-        && !amServiceStarted && report.getAMRMToken != null) {
+      if (state == YarnApplicationState.ACCEPTED && isClientUnmanagedAMEnabled &&
+          !amServiceStarted && report.getAMRMToken != null) {
         amServiceStarted = true
         startApplicationMasterService(report)
       }
@@ -1131,12 +1128,14 @@ private[spark] class Client(
     val currentUGI = UserGroupInformation.getCurrentUser
     currentUGI.addToken(amRMToken)
 
-    sparkConf.set("spark.yarn.containerId",
-      ContainerId.newContainerId(report.getCurrentApplicationAttemptId, 1).toString)
     // Start Application Service in a separate thread and continue with application monitoring
     val amService = new Thread("Unmanaged Application Master Service") {
-      override def run(): Unit = new ApplicationMaster(new ApplicationMasterArguments(Array.empty),
-        sparkConf, hadoopConf).runUnmanaged(rpcEnv)
+      override def run(): Unit = {
+        val appMaster = new ApplicationMaster(
+          new ApplicationMasterArguments(Array.empty), sparkConf, hadoopConf)
+        appMaster.runUnmanaged(rpcEnv, report.getCurrentApplicationAttemptId,
+          new Path(appStagingBaseDir, getAppStagingDir(report.getApplicationId)))
+      }
     }
     amService.setDaemon(true)
     amService.start()
