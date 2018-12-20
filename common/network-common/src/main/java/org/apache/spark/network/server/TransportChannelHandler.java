@@ -181,13 +181,15 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   }
 
   @Override
-  public void channelRegistered(ChannelHandlerContext ctx) {
+  public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
     transportContext.getRegisteredConnections().inc();
+    super.channelRegistered(ctx);
   }
 
   @Override
-  public void channelUnregistered(ChannelHandlerContext ctx) {
+  public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
     transportContext.getRegisteredConnections().dec();
+    super.channelUnregistered(ctx);
   }
 
 }

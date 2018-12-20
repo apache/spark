@@ -255,11 +255,13 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   @Override
   public void channelActive(TransportClient client) {
     metrics.activeConnections.inc();
+    super.channelActive(client);
   }
 
   @Override
   public void channelInactive(TransportClient client) {
     metrics.activeConnections.dec();
+    super.channelInactive(client);
   }
 
 }

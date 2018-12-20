@@ -194,13 +194,13 @@ public class YarnShuffleService extends AuxiliaryService {
 
       // register metrics on the block handler into the Node Manager's metrics system.
       blockHandler.getAllMetrics().getMetrics().put("numRegisteredConnections",
-              shuffleServer.getRegisteredConnections());
+          shuffleServer.getRegisteredConnections());
       YarnShuffleServiceMetrics serviceMetrics =
-              new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
+          new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
 
       MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
       metricsSystem.register(
-              "sparkShuffleService", "Metrics on the Spark Shuffle Service", serviceMetrics);
+          "sparkShuffleService", "Metrics on the Spark Shuffle Service", serviceMetrics);
       logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
 
       logger.info("Started YARN shuffle service for Spark on port {}. " +
