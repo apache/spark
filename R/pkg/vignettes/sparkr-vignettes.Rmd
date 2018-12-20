@@ -549,6 +549,8 @@ SparkR supports the following machine learning models and algorithms.
 
 * Latent Dirichlet Allocation (LDA)
 
+* Power Iteration Clustering (PIC)
+
 #### Collaborative Filtering
 
 * Alternating Least Squares (ALS)
@@ -982,6 +984,18 @@ predicted <- predict(model, df)
 head(predicted)
 ```
 
+#### Power Iteration Clustering
+
+Power Iteration Clustering (PIC) is a scalable graph clustering algorithm. `spark.assignClusters` method runs the PIC algorithm and returns a cluster assignment for each input vertex.
+
+```{r}
+df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
+                           list(1L, 2L, 1.0), list(3L, 4L, 1.0),
+                           list(4L, 0L, 0.1)),
+                      schema = c("src", "dst", "weight"))
+head(spark.assignClusters(df, initMode = "degree", weightCol = "weight"))
+```
+
 #### FP-growth
 
 `spark.fpGrowth` executes FP-growth algorithm to mine frequent itemsets on a `SparkDataFrame`. `itemsCol` should be an array of values.
@@ -1019,9 +1033,10 @@ head(predict(fpm, df))
 
 ```{r}
 df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
-                      list(list(list(1L), list(3L, 2L), list(1L, 2L))),
-                      list(list(list(1L, 2L), list(5L))),
-                      list(list(list(6L)))), schema = c("sequence"))
+                           list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+                           list(list(list(1L, 2L), list(5L))),
+                           list(list(list(6L)))),
+                      schema = c("sequence"))
 head(spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L))
 ```
 
