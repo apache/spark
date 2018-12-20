@@ -727,6 +727,8 @@ abstract class UnixTime
             if (!${ev.isNull}) {
               try {
                 ${ev.value} = $formatterName.parse(${eval1.value}.toString()) / 1000000L;
+              } catch (java.lang.IllegalArgumentException e) {
+                ${ev.isNull} = true;
               } catch (java.text.ParseException e) {
                 ${ev.isNull} = true;
               } catch (java.time.format.DateTimeParseException e) {
