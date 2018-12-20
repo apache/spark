@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.text.ParseException
 import java.time._
+import java.time.format.DateTimeParseException
 import java.time.temporal.TemporalQueries
 import java.util.{Locale, TimeZone}
 
@@ -28,6 +30,16 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.internal.SQLConf
 
 sealed trait TimestampFormatter {
+  /**
+   * Parses a timestamp in a string and converts it to microseconds.
+   *
+   * @param s - string with timestamp to parse
+   * @return microseconds since epoch.
+   * @throws ParseException can be thrown by legacy parser
+   * @throws DateTimeParseException can be thrown by new parser
+   */
+  @throws(classOf[ParseException])
+  @throws(classOf[DateTimeParseException])
   def parse(s: String): Long // returns microseconds since epoch
   def format(us: Long): String
 }
