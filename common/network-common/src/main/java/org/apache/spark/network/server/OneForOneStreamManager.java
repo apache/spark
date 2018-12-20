@@ -23,6 +23,7 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.netty.channel.Channel;
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -202,4 +203,8 @@ public class OneForOneStreamManager extends StreamManager {
     return myStreamId;
   }
 
+  @VisibleForTesting
+  public long getStreamsSize() {
+    return streams.size();
+  }
 }

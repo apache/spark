@@ -92,6 +92,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         checkAuth(client, msg.appId);
         long streamId = streamManager.registerStream(client.getClientId(),
           new ManagedBufferIterator(msg.appId, msg.execId, msg.blockIds));
+        streamManager.registerChannel(client.getChannel(), streamId);
         if (logger.isTraceEnabled()) {
           logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
                        streamId,
