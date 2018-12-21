@@ -204,7 +204,7 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   @VisibleForTesting
-  public long getStreamsSize() {
+  public long getStreamCount() {
     return streams.size();
   }
 }

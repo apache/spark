@@ -17,7 +17,15 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.nio.ByteBuffer;
+
 import io.netty.channel.Channel;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -26,12 +34,6 @@ import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
-import org.junit.Test;
-
-import java.nio.ByteBuffer;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 public class StreamStatesCleanupSuite {
 
@@ -60,7 +62,7 @@ public class StreamStatesCleanupSuite {
     // Connection closed before any FetchChunk request received
     streamManager.connectionTerminated(reverseClient.getChannel());
 
-    assert streamManager.getStreamsSize() == 0;
+    assertEquals(0, streamManager.getStreamCount());
   }
 
 }
