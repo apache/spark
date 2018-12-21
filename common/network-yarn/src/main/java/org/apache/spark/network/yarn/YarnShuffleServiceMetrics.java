@@ -111,7 +111,7 @@ class YarnShuffleServiceMetrics implements MetricsSource {
       Counter c = (Counter) metric;
       long counterValue = c.getCount();
       metricsRecordBuilder.addGauge(new ShuffleServiceMetricsInfo(name, "Number of " +
-              "connections to shuffle service " + name), counterValue);
+          "connections to shuffle service " + name), counterValue);
     }
   }
 
