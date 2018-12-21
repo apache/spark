@@ -52,6 +52,13 @@ private[sql] object SQLUtils extends Logging {
       if (enableHiveSupport &&
           jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
             "hive" &&
+          // Note that the order of conditions here are on purpose.
+          // `SparkSession.hiveClassesArePresent` checks if Hive's `HiveConf` is loadable or not;
+          // however, `HiveConf` itself has some static logic to check if Hadoop version is
+          // supported or not, which throws an `IllegalArgumentException` if unsupported.
+          // If this is checked first, there's no way to disable Hive support in the case above.
+          // So, we intentionally check if Hive classes are loadable or not only when
+          // Hive support is explicitly enabled by short-circuiting. See also SPARK-26422.
           SparkSession.hiveClassesArePresent) {
         SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
       } else {
