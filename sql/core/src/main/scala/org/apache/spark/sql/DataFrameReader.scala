@@ -235,6 +235,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Construct a `DataFrame` representing the database table accessible via JDBC URL
    * url named table and connection properties.
    *
+   * The `table` parameter can be based on a derived table, which is generated within the scope of
+   * a query FROM clause. For example, you could use this subquery as `table:
+   * {{{
+   *    "(SELECT * FROM customers WHERE ...) AS tmp"
+   * }}}
+   *
+   * @param url JDBC database url of the form `jdbc:subprotocol:subname`.
+   * @param table Name of the table in the external database.
+   * @param properties JDBC database connection arguments, a list of arbitrary string
+   *                             tag/value. Normally at least a "user" and "password" property
+   *                             should be included. "fetchsize" can be used to control the
+   *                             number of rows per fetch and "queryTimeout" can be used to wait
+   *                             for a Statement object to execute to the given number of seconds.
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, properties: Properties): DataFrame = {
@@ -250,6 +263,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Construct a `DataFrame` representing the database table accessible via JDBC URL
    * url named table. Partitions of the table will be retrieved in parallel based on the parameters
    * passed to this function.
+   *
+   * The `table` parameter can be based on a derived table, which is generated within the scope of
+   * a query FROM clause. For example, you could use this subquery as `table:
+   * {{{
+   *    "(SELECT * FROM customers WHERE ...) AS tmp"
+   * }}}
+   *
    *
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
