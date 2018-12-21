@@ -79,7 +79,8 @@ public class ExpressionInfo {
         assert name != null;
         assert arguments != null;
         assert examples != null;
-        assert examples.isEmpty() || examples.startsWith("\n    Examples:");
+        assert examples.isEmpty() || examples.startsWith("\n    Examples:")
+                || examples.startsWith("\r\n    Examples:");
         assert note != null;
         assert since != null;
 
