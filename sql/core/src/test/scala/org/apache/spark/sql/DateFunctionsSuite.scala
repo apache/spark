@@ -566,7 +566,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     // february
     val y1 = "2016-02-29"
-    val y2 = "2017-02-32"
+    val y2 = "2017-02-29"
     val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
     val df2 = Seq(y1, y2).toDF("y")
     checkAnswer(df2.select(unix_timestamp(col("y"), "yyyy-MM-dd")), Seq(
@@ -611,7 +611,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
 
     // february
     val y1 = "2016-02-29"
-    val y2 = "2017-02-32"
+    val y2 = "2017-02-29"
     val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
     val df2 = Seq(y1, y2).toDF("y")
     checkAnswer(df2.select(unix_timestamp(col("y"), "yyyy-MM-dd")), Seq(

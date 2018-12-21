@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.time._
-import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder}
-import java.time.temporal.{TemporalAccessor, TemporalQueries}
+import java.time.chrono.IsoChronology
+import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
+import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.Locale
 
 trait DateTimeFormatterHelper {
@@ -28,7 +29,10 @@ trait DateTimeFormatterHelper {
     new DateTimeFormatterBuilder()
       .parseCaseInsensitive()
       .appendPattern(pattern)
+      .parseDefaulting(ChronoField.ERA, 1)
       .toFormatter(locale)
+      .withChronology(IsoChronology.INSTANCE)
+      .withResolverStyle(ResolverStyle.STRICT)
   }
 
   protected def toInstantWithZoneId(temporalAccessor: TemporalAccessor, zoneId: ZoneId): Instant = {
