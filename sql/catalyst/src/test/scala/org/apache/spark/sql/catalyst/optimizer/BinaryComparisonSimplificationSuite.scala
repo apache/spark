@@ -118,7 +118,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
         .analyze
 
     val optimized = Optimize.execute(originalQuery)
-    val correctAnswer = nonNullableRelation.where(Literal.TrueLiteral).analyze
+    val correctAnswer = nonNullableRelation.analyze
 
     comparePlans(optimized, correctAnswer)
   }
