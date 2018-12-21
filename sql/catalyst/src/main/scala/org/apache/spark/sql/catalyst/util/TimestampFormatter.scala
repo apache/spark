@@ -37,9 +37,11 @@ sealed trait TimestampFormatter extends Serializable {
    * @return microseconds since epoch.
    * @throws ParseException can be thrown by legacy parser
    * @throws DateTimeParseException can be thrown by new parser
+   * @throws DateTimeException unable to obtain local date or time
    */
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
+  @throws(classOf[DateTimeException])
   def parse(s: String): Long // returns microseconds since epoch
   def format(us: Long): String
 }

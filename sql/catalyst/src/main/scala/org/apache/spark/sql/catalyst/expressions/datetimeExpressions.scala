@@ -733,6 +733,8 @@ abstract class UnixTime
                 ${ev.isNull} = true;
               } catch (java.time.format.DateTimeParseException e) {
                 ${ev.isNull} = true;
+              } catch (java.time.DateTimeException e) {
+                ${ev.isNull} = true;
               }
             }""")
         }
@@ -750,6 +752,8 @@ abstract class UnixTime
             } catch (java.text.ParseException e) {
               ${ev.isNull} = true;
             } catch (java.time.format.DateTimeParseException e) {
+              ${ev.isNull} = true;
+            } catch (java.time.DateTimeException e) {
               ${ev.isNull} = true;
             }
           """
