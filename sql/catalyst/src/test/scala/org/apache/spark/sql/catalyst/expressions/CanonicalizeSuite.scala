@@ -18,19 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.optimizer._
-import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-class CanonicalizeSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTest {
-
-  object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("SimplifyBinaryComparison", Once, SimplifyBinaryComparison) :: Nil
-  }
+class CanonicalizeSuite extends SparkFunSuite {
 
   test("SPARK-24276: IN expression with different order are semantically equal") {
     val range = Range(1, 1, 1, 1)
@@ -60,12 +52,13 @@ class CanonicalizeSuite extends SparkFunSuite with ExpressionEvalHelper with Pla
     assert(!range.where(arrays1).sameResult(range.where(arrays3)))
   }
 
-  test("SPARK-26402: GetStructField with different names are semantically equal") {
+  test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
     val expId = NamedExpression.newExprId
     val qualifier = Seq.empty[String]
     val structType = StructType(
       StructField("a", StructType(StructField("b", IntegerType, false) :: Nil), false) :: Nil)
 
+    // GetStructField with different names are semantically equal
     val fieldB1 = GetStructField(
       AttributeReference("data1", structType, false)(expId, qualifier),
       0, Some("b1"))
@@ -85,17 +78,5 @@ class CanonicalizeSuite extends SparkFunSuite with ExpressionEvalHelper with Pla
         0, Some("a2")),
       0, Some("b2"))
     assert(fieldA1.semanticEquals(fieldA2))
-
-    val testRelation = LocalRelation('a.int)
-
-    val originalQuery =
-      LocalRelation('a.int)
-        .where(EqualTo(fieldA1, fieldA2))
-        .analyze
-
-    val optimized = Optimize.execute(originalQuery)
-    val correctAnswer = testRelation.where(Literal.TrueLiteral).analyze
-
-    comparePlans(optimized, correctAnswer)
   }
 }

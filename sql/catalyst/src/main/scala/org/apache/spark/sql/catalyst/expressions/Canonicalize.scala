@@ -26,7 +26,7 @@ package org.apache.spark.sql.catalyst.expressions
  *
  * The following rules are applied:
  *  - Names and nullability hints for [[org.apache.spark.sql.types.DataType]]s are stripped.
- *  - Names for [[org.apache.spark.sql.catalyst.expressions.GetStructField]] are stripped.
+ *  - Names for [[GetStructField]] are stripped.
  *  - Commutative and associative operations ([[Add]] and [[Multiply]]) have their children ordered
  *    by `hashCode`.
  *  - [[EqualTo]] and [[EqualNullSafe]] are reordered by `hashCode`.
