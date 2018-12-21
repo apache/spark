@@ -340,6 +340,11 @@ class StringIndexerModel (
     val conditions: Seq[Column] = (0 until inputColNames.length).map { i =>
       val inputColName = inputColNames(i)
       val labelToIndex = labelsToIndexArray(i)
+      // We have this additional lookup at `labelToIndex` when `handleInvalid` is set to
+      // `StringIndexer.SKIP_INVALID`. Another idea is to do this lookup natively by SQL
+      // expression, however, lookup for a key in a map is not efficient in SparkSQL now.
+      // See `ElementAt` and `GetMapValue` expressions. If SQL's map lookup is improved,
+      // we can consider to change this.
       val filter = udf { label: String =>
         labelToIndex.contains(label)
       }
