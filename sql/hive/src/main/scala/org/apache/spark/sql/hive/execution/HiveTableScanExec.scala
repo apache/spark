@@ -82,11 +82,9 @@ case class HiveTableScanExec(
     }
   }
 
-  override def simpleString: String = {
-    if (relation.isPartitioned) rawPartitions
+  override def simpleString: String =
     super.simpleString + ", MetastoreOperationPhaseSummary: " +
       relation.tableMeta.phaseSummaries.map(_.toFormatString).mkString("[", ", ", "]")
-  }
 
   override def producedAttributes: AttributeSet = outputSet ++
     AttributeSet(partitionPruningPred.flatMap(_.references))

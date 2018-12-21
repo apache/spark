@@ -54,6 +54,12 @@ case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
 
   // The exception object that caused this execution to fail. None if the execution doesn't fail.
   @JsonIgnore private[sql] var executionFailure: Option[Exception] = None
+
+  // The latest physical plan description that updated in query execution.
+  @JsonIgnore private[sql] var planDescUpdate: Option[String] = None
+
+  // The latest SparkPlanInfo that updated in query execution.
+  @JsonIgnore private[sql] var planInfoUpdate: Option[SparkPlanInfo] = None
 }
 
 /**

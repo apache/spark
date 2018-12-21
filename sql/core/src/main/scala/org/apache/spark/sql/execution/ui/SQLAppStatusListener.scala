@@ -26,7 +26,7 @@ import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
@@ -227,9 +227,9 @@ class SQLAppStatusListener(
     }
   }
 
-  private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
-    val SparkListenerSQLExecutionStart(executionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time) = event
+  private def createAndStorePlanGraph(
+    executionId: Long,
+    planInfo: SparkPlanInfo): SparkPlanGraph = {
 
     def toStoredNodes(nodes: Seq[SparkPlanGraphNode]): Seq[SparkPlanGraphNodeWrapper] = {
       nodes.map {
@@ -247,16 +247,24 @@ class SQLAppStatusListener(
       }
     }
 
-    val planGraph = SparkPlanGraph(sparkPlanInfo)
-    val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
-      node.metrics.map { metric => (metric.accumulatorId, metric) }
-    }.toMap.values.toList
-
+    val planGraph = SparkPlanGraph(planInfo)
     val graphToStore = new SparkPlanGraphWrapper(
       executionId,
       toStoredNodes(planGraph.nodes),
       planGraph.edges)
     kvstore.write(graphToStore)
+
+    planGraph
+  }
+
+  private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
+    val SparkListenerSQLExecutionStart(executionId, description, details,
+      physicalPlanDescription, sparkPlanInfo, time) = event
+
+    val planGraph = createAndStorePlanGraph(executionId, sparkPlanInfo)
+    val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
+      node.metrics.map { metric => (metric.accumulatorId, metric) }
+    }.toMap.values.toList
 
     val exec = getOrCreateExecution(executionId)
     exec.description = description
@@ -273,6 +281,11 @@ class SQLAppStatusListener(
       exec.metricsValues = aggregateMetrics(exec)
       exec.completionTime = Some(new Date(time))
       exec.endEvents += 1
+      if (event.planDescUpdate.isDefined) {
+        exec.physicalPlanDescription = event.planDescUpdate.get
+        kvstore.delete(classOf[SparkPlanGraphWrapper], executionId)
+        createAndStorePlanGraph(executionId, event.planInfoUpdate.get)
+      }
       update(exec)
 
       // Remove stale LiveStageMetrics objects for stages that are not active anymore.

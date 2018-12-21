@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.QueryPlanningTracker.PhaseSummary
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetricsTestUtils}
+import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 
@@ -35,23 +33,18 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton {
     }
   }
 
-  private def getTableScanNodeMetricsAndPhaseSummary(df: DataFrame)
-    : (Map[String, SQLMetric], Seq[PhaseSummary]) = {
-    val scanNode =
-      df.queryExecution.executedPlan.collectLeaves().head.asInstanceOf[HiveTableScanExec]
-    assert(scanNode.relation.tableMeta.phaseSummaries.nonEmpty)
-    (scanNode.metrics, scanNode.relation.tableMeta.phaseSummaries)
-  }
-
   test("metastore operations of initialize rawPartitions in HiveTableScanExec") {
     val df = sql("SELECT key FROM srcpart WHERE ds = '2008-04-08' LIMIT 3")
     df.collect()
-    val (metrics, phaseSummary) = getTableScanNodeMetricsAndPhaseSummary(df)
-    assert(metrics("metastoreOpsTime").value > 0)
+    val scanNode =
+      df.queryExecution.executedPlan.collectLeaves().head.asInstanceOf[HiveTableScanExec]
+    assert(scanNode.metrics("metastoreOpsTime").value > 0)
+    val phaseSummary = scanNode.relation.tableMeta.phaseSummaries
+    assert(phaseSummary.nonEmpty)
     assert(phaseSummary(0).name == "LookUpRelation")
     assert(phaseSummary(1).name == "GetAllPartitions")
     assert(df.queryExecution.executedPlan.collectLeaves().head.simpleString
-      .contains("MetastoreOperationPhaseSummary"))
+      .contains("GetAllPartitions"))
   }
 
   test("metastore operations of RelationConversions rule") {

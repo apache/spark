@@ -74,12 +74,13 @@ object SQLExecution {
       withSQLConfPropagated(sparkSession) {
         var ex: Option[Exception] = None
         val startTime = System.nanoTime()
+        val planDescStr = queryExecution.toString
         try {
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
             description = callSite.shortForm,
             details = callSite.longForm,
-            physicalPlanDescription = queryExecution.toString,
+            physicalPlanDescription = planDescStr,
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
             sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
@@ -100,6 +101,14 @@ object SQLExecution {
           event.duration = endTime - startTime
           event.qe = queryExecution
           event.executionFailure = ex
+
+          // Check for the physicalPlanDescription changed or not, update the UI if it changed.
+          val newPlanDescStr = queryExecution.toString
+          if (newPlanDescStr.length != planDescStr.length) {
+            event.planDescUpdate = Some(newPlanDescStr)
+            event.planInfoUpdate = Some(SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan))
+          }
+
           sc.listenerBus.post(event)
         }
       }
