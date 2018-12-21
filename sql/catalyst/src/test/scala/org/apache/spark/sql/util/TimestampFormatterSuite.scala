@@ -106,4 +106,13 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper {
       }
     }
   }
+
+  test(" case insensitive parsing of am and pm") {
+    val formatter = TimestampFormatter(
+      "yyyy MMM dd hh:mm:ss a",
+      TimeZone.getTimeZone("UTC"),
+      Locale.US)
+    val micros = formatter.parse("2009 Mar 20 11:30:01 am")
+    assert(micros == 1237548601000000L)
+  }
 }
