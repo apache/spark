@@ -31,7 +31,9 @@ import org.apache.spark.sql.SparkSession
  *
  * The result is output to stdout in the driver with the values of the accumulators.
  * For the long accumulator, it should equal numElem the double accumulator should be
- * roughly 1.1 x numElem (within double precision.)
+ * roughly 1.1 x numElem (within double precision.) This example also sets up a
+ * ConsoleSink (metrics) instance, and so registered codahale metrics (like the
+ * accumulator source) are reported to stdout as well.
  */
 object AccumulatorMetricsTest {
   def main(args: Array[String]) {
@@ -45,9 +47,13 @@ object AccumulatorMetricsTest {
     val sc = spark.sparkContext
 
     val acc = sc.longAccumulator("my-long-metric")
+    // register the accumulator, the metric system will report as
+    // [spark.metrics.namespace].[execId|driver].AccumulatorSource.my-long-metric
     LongAccumulatorSource.register(sc, List(("my-long-metric" -> acc)).toMap)
 
     val acc2 = sc.doubleAccumulator("my-double-metric")
+    // register the accumulator, the metric system will report as
+    // [spark.metrics.namespace].[execId|driver].AccumulatorSource.my-double-metric
     DoubleAccumulatorSource.register(sc, List(("my-double-metric" -> acc2)).toMap)
 
     val num = if (args.length > 0) args(0).toInt else 1000000

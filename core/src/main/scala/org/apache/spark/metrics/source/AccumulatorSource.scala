@@ -56,7 +56,9 @@ class DoubleAccumulatorSource extends AccumulatorSource
 
 /**
  * :: Experimental ::
- * Metrics source specifically for LongAccumulators.
+ * Metrics source specifically for LongAccumulators. Accumulators
+ * are only valid on the driver side, so these metrics are reported
+ * only by the driver.
  * Register LongAccumulators using:
  *    LongAccumulatorSource.register(sc, {"name" -> longAccumulator})
  */
@@ -71,7 +73,9 @@ object LongAccumulatorSource {
 
 /**
  * :: Experimental ::
- * Metrics source specifically for DoubleAccumulators.
+ * Metrics source specifically for DoubleAccumulators. Accumulators
+ * are only valid on the driver side, so these metrics are reported
+ * only by the driver.
  * Register DoubleAccumulators using:
  *    DoubleAccumulatorSource.register(sc, {"name" -> doubleAccumulator})
  */
