@@ -230,7 +230,7 @@ class ReplaceOperatorSuite extends PlanTest {
   test("SPARK-26366: ReplaceExceptWithFilter should handle properly NULL") {
     val basePlan = LocalRelation(Seq('a.int, 'b.int))
     val otherPlan = basePlan.where('a.in(1, 2) || 'b.in())
-    val except = Except(basePlan, otherPlan, false)
+    val except = Except(basePlan, otherPlan)
     val result = OptimizeIn(Optimize.execute(except.analyze))
     val correctAnswer = Aggregate(basePlan.output, basePlan.output,
       Filter(!Coalesce(Seq(
@@ -243,7 +243,7 @@ class ReplaceOperatorSuite extends PlanTest {
   test("SPARK-26366: ReplaceExceptWithFilter should not transform non-detrministic") {
     val basePlan = LocalRelation(Seq('a.int, 'b.int))
     val otherPlan = basePlan.where('a > rand(1L))
-    val except = Except(basePlan, otherPlan, false)
+    val except = Except(basePlan, otherPlan)
     val result = Optimize.execute(except.analyze)
     val condition = basePlan.output.zip(otherPlan.output).map { case (a1, a2) =>
       a1 <=> a2 }.reduce( _ && _)
