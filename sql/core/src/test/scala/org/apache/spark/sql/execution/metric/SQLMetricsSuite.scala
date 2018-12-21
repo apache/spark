@@ -26,7 +26,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -557,6 +557,23 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
           "number of output rows" -> 3L,
           "number of files" -> 2L))))
       )
+    }
+  }
+
+  test("Metadata operations - partition pruning in CatalogFileIndex") {
+    withTable("testDataForScan") {
+      spark.range(10).selectExpr("id", "id % 3 as p")
+        .write.partitionBy("p").saveAsTable("testDataForScan")
+      // The execution plan only has 1 FileScan node.
+      val df = spark.sql(
+        "SELECT * FROM testDataForScan WHERE p = 1")
+      df.collect()
+      val (metrics, phaseSummary) = getFileScanNodeMetricsAndPhaseSummary(df)
+      assert(metrics("metadataTime").value > 0)
+      assert(phaseSummary(0).name == "LookUpRelation")
+      assert(phaseSummary(1).name == "PartitionPruningInCatalogFileIndex")
+      assert(df.queryExecution.executedPlan.collectLeaves().head.simpleString
+        .contains("MetastoreOperationPhaseSummary"))
     }
   }
 }

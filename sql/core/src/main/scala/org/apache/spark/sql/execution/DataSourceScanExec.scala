@@ -51,11 +51,17 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
 
   // Metadata that describes more details of this scan.
   protected def metadata: Map[String, String]
+  // Metadata that should not be abbreviate.
+  protected val needExpandMetadataKey: Set[String] = Set.empty
 
   override def simpleString: String = {
     val metadataEntries = metadata.toSeq.sorted.map {
       case (key, value) =>
-        key + ": " + StringUtils.abbreviate(redact(value), 100)
+        if (needExpandMetadataKey.contains(key)) {
+          key + ": " + redact(value)
+        } else {
+          key + ": " + StringUtils.abbreviate(redact(value), 100)
+        }
     }
     val metadataStr = truncatedString(metadataEntries, " ", ", ", "")
     s"$nodeNamePrefix$nodeName${truncatedString(output, "[", ",", "]")}$metadataStr"
@@ -180,12 +186,20 @@ case class FileSourceScanExec(
       metrics.filter(e => driverMetrics.contains(e._1)).values.toSeq)
   }
 
+  @transient private[sql] lazy val metastoreOpsPhaseSummary = relation.location match {
+    case fileIndex: CatalogFileIndex if fileIndex.table.phaseSummaries.nonEmpty =>
+      fileIndex.table.phaseSummaries.toSeq
+    case fileIndex: InMemoryFileIndex if fileIndex.metastoreOpsPhaseSummary.nonEmpty =>
+      fileIndex.metastoreOpsPhaseSummary
+    case _ => Seq.empty
+  }
+
   @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
     val startTime = System.nanoTime()
     val ret = relation.location.listFiles(partitionFilters, dataFilters)
     driverMetrics("numFiles") = ret.map(_.files.size.toLong).sum
     val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
-    driverMetrics("metadataTime") = timeTakenMs
+    driverMetrics("metadataTime") = timeTakenMs + metastoreOpsPhaseSummary.map(_.durationMs).sum
     ret
   }
 
@@ -260,6 +274,8 @@ case class FileSourceScanExec(
   private val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
   logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
 
+  override val needExpandMetadataKey: Set[String] = Set("MetastoreOperationPhaseSummary")
+
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
     val location = relation.location
@@ -293,7 +309,14 @@ case class FileSourceScanExec(
       withOptPartitionCount
     }
 
-    withSelectedBucketsCount
+    val withMetastoreOpsPhase = if (metastoreOpsPhaseSummary.nonEmpty) {
+      withSelectedBucketsCount + ("MetastoreOperationPhaseSummary" ->
+        seqToString(metastoreOpsPhaseSummary.map(_.toFormatString)))
+    } else {
+      withSelectedBucketsCount
+    }
+
+    withMetastoreOpsPhase
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
@@ -324,7 +347,7 @@ case class FileSourceScanExec(
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
-      "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time"),
+      "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time (ms)"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {

@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{QualifiedTableName, QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources._
@@ -177,9 +177,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // Partitioned tables without partitions use the location of the table's base path.
         // Partitioned tables with partitions use the locations of those partitions' data
         // locations,_omitting_ the table's base path.
-        val paths = sparkSession.sharedState.externalCatalog
-          .listPartitions(tableIdentifier.database, tableIdentifier.name)
-          .map(p => new Path(p.storage.locationUri.get))
+        val (paths, phase) =
+          QueryPlanningTracker.createPhaseSummary({
+            sparkSession.sharedState.externalCatalog
+            .listPartitions(tableIdentifier.database, tableIdentifier.name)
+            .map(p => new Path(p.storage.locationUri.get))
+          }, phaseName = "PartitionPruningInRelationConversions")
+        relation.tableMeta.phaseSummaries.append(phase)
 
         if (paths.isEmpty) {
           Seq(tablePath)

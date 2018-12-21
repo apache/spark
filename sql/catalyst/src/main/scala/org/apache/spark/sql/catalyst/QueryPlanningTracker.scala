@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.sql.Timestamp
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.util.BoundedPriorityQueue
@@ -61,12 +63,22 @@ object QueryPlanningTracker {
   /**
    * Summary of a phase, with start time and end time so we can construct a timeline.
    */
-  class PhaseSummary(val startTimeMs: Long, val endTimeMs: Long) {
+  class PhaseSummary(
+      val startTimeMs: Long,
+      val endTimeMs: Long,
+      val name: String = "")
+    extends Serializable {
 
     def durationMs: Long = endTimeMs - startTimeMs
 
     override def toString: String = {
       s"PhaseSummary($startTimeMs, $endTimeMs)"
+    }
+
+    def toFormatString: String = {
+      def dataTimeString(timeMs: Long): String = new Timestamp(timeMs).toLocalDateTime.toString
+      s"$name(Start: ${dataTimeString(startTimeMs)}, " +
+        s"End: ${dataTimeString(endTimeMs)}, DurationMs: $durationMs)"
     }
   }
 
@@ -88,13 +100,12 @@ object QueryPlanningTracker {
     try f finally { localTracker.set(originalTracker) }
   }
 
-  /** Record the phase by the passing in record function. */
-  def recordPhase[T](record: PhaseSummary => Unit)(f: => T): T = {
+  /** Create a phase summary for the passed in function execution and name string. */
+  def createPhaseSummary[T](f: => T, phaseName: String = ""): (T, PhaseSummary) = {
     val startTime = System.currentTimeMillis()
     val ret = f
     val endTime = System.currentTimeMillis
-    record(new PhaseSummary(startTime, endTime))
-    ret
+    (ret, new PhaseSummary(startTime, endTime, phaseName))
   }
 }
 

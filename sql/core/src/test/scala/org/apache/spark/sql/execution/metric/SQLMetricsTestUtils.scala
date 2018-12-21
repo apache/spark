@@ -24,8 +24,9 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.TestUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.QueryPlanningTracker.PhaseSummary
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.SparkPlanInfo
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlanInfo}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -197,6 +198,14 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
         }
       }
     }
+  }
+
+  protected def getFileScanNodeMetricsAndPhaseSummary(df: DataFrame)
+    : (Map[String, SQLMetric], Seq[PhaseSummary]) = {
+    val scanNode =
+      df.queryExecution.executedPlan.collectLeaves().head.asInstanceOf[FileSourceScanExec]
+    assert(scanNode.metastoreOpsPhaseSummary.nonEmpty)
+    (scanNode.metrics, scanNode.metastoreOpsPhaseSummary)
   }
 }
 

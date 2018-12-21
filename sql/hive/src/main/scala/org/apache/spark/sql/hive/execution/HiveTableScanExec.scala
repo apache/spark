@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
@@ -65,7 +65,28 @@ case class HiveTableScanExec(
   override def nodeName: String = s"Scan hive ${relation.tableMeta.qualifiedName}"
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "metastoreOpsTime" -> SQLMetrics.createMetric(sparkContext, "metastore operation time (ms)"))
+
+  /**
+   * Send the driver-side metrics. Before calling this function, rawPartitions
+   * has been initialized.
+   */
+  private def sendDriverMetrics(): Unit = {
+    val phase = relation.tableMeta.phaseSummaries
+    if (phase.nonEmpty) {
+      metrics("metastoreOpsTime").add(phase.map(_.durationMs).sum)
+      val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+      SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
+        Seq(metrics("metastoreOpsTime")))
+    }
+  }
+
+  override def simpleString: String = {
+    if (relation.isPartitioned) rawPartitions
+    super.simpleString + ", MetastoreOperationPhaseSummary: " +
+      relation.tableMeta.phaseSummaries.map(_.toFormatString).mkString("[", ", ", "]")
+  }
 
   override def producedAttributes: AttributeSet = outputSet ++
     AttributeSet(partitionPruningPred.flatMap(_.references))
@@ -164,20 +185,24 @@ case class HiveTableScanExec(
 
   // exposed for tests
   @transient lazy val rawPartitions = {
-    val prunedPartitions =
-      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
+    val (partitions, phase) = QueryPlanningTracker.createPhaseSummary ({
+      val prunedPartitions =
+        if (sparkSession.sessionState.conf.metastorePartitionPruning &&
           partitionPruningPred.size > 0) {
-        // Retrieve the original attributes based on expression ID so that capitalization matches.
-        val normalizedFilters = partitionPruningPred.map(_.transform {
-          case a: AttributeReference => originalAttributes(a)
-        })
-        sparkSession.sessionState.catalog.listPartitionsByFilter(
-          relation.tableMeta.identifier,
-          normalizedFilters)
-      } else {
-        sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
-      }
-    prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+          // Retrieve the original attributes based on expression ID so that capitalization matches.
+          val normalizedFilters = partitionPruningPred.map(_.transform {
+            case a: AttributeReference => originalAttributes(a)
+          })
+          sparkSession.sessionState.catalog.listPartitionsByFilter(
+            relation.tableMeta.identifier,
+            normalizedFilters)
+        } else {
+          sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
+        }
+      prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
+    }, phaseName = "GetAllPartitions")
+    relation.tableMeta.phaseSummaries.append(phase)
+    partitions
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -192,6 +217,8 @@ case class HiveTableScanExec(
         hadoopReader.makeRDDForPartitionedTable(prunePartitions(rawPartitions))
       }
     }
+    // Update driver side metrics.
+    sendDriverMetrics()
     val numOutputRows = longMetric("numOutputRows")
     // Avoid to serialize MetastoreRelation because schema is lazy. (see SPARK-15649)
     val outputSchema = schema

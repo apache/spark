@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.QueryPlanningTracker.PhaseSummary
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetricsTestUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton {
 
@@ -29,6 +32,66 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton {
   test("writing data out metrics dynamic partition: hive") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
       testMetricsDynamicPartition("hive", "hive", "t1")
+    }
+  }
+
+  private def getTableScanNodeMetricsAndPhaseSummary(df: DataFrame)
+    : (Map[String, SQLMetric], Seq[PhaseSummary]) = {
+    val scanNode =
+      df.queryExecution.executedPlan.collectLeaves().head.asInstanceOf[HiveTableScanExec]
+    assert(scanNode.relation.tableMeta.phaseSummaries.nonEmpty)
+    (scanNode.metrics, scanNode.relation.tableMeta.phaseSummaries)
+  }
+
+  test("metastore operations of initialize rawPartitions in HiveTableScanExec") {
+    val df = sql("SELECT key FROM srcpart WHERE ds = '2008-04-08' LIMIT 3")
+    df.collect()
+    val (metrics, phaseSummary) = getTableScanNodeMetricsAndPhaseSummary(df)
+    assert(metrics("metastoreOpsTime").value > 0)
+    assert(phaseSummary(0).name == "LookUpRelation")
+    assert(phaseSummary(1).name == "GetAllPartitions")
+    assert(df.queryExecution.executedPlan.collectLeaves().head.simpleString
+      .contains("MetastoreOperationPhaseSummary"))
+  }
+
+  test("metastore operations of RelationConversions rule") {
+    withTable("parquetHiveTable") {
+      sql(
+        s"""
+         |CREATE TABLE parquetHiveTable
+         |(
+         |  key INT,
+         |  value STRING
+         |)
+         |PARTITIONED BY (ds STRING, hr STRING)
+         |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+         | STORED AS
+         | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+         | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        """.stripMargin)
+      sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+      sql("INSERT INTO TABLE parquetHiveTable SELECT * FROM srcpart")
+
+      withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+        val df = sql("SELECT key FROM parquetHiveTable WHERE ds = '2008-04-08' LIMIT 3")
+        df.collect()
+        val (metrics, phaseSummary) = getFileScanNodeMetricsAndPhaseSummary(df)
+        assert(metrics("metadataTime").value > 0)
+        assert(phaseSummary.size == 2)
+        assert(phaseSummary(0).name == "LookUpRelation")
+        assert(phaseSummary(1).name == "PartitionPruningInCatalogFileIndex")
+      }
+
+      withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
+        val df = sql("SELECT key FROM parquetHiveTable WHERE ds = '2008-04-08' LIMIT 3")
+        df.collect()
+        val (metrics, phaseSummary) = getFileScanNodeMetricsAndPhaseSummary(df)
+        assert(metrics("metadataTime").value > 0)
+        assert(phaseSummary.size == 3)
+        assert(phaseSummary(0).name == "LookUpRelation")
+        assert(phaseSummary(1).name == "PartitionPruningInRelationConversions")
+        assert(phaseSummary(2).name == "PartitionPruningInCatalogFileIndex")
+      }
     }
   }
 }

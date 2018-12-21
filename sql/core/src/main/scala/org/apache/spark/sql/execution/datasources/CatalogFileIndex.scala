@@ -23,6 +23,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.QueryPlanningTracker.PhaseSummary
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
@@ -69,21 +71,28 @@ class CatalogFileIndex(
    */
   def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = {
     if (table.partitionColumnNames.nonEmpty) {
-      val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
-        table.identifier, filters)
-      val partitions = selectedPartitions.map { p =>
-        val path = new Path(p.location)
-        val fs = path.getFileSystem(hadoopConf)
-        PartitionPath(
-          p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
-          path.makeQualified(fs.getUri, fs.getWorkingDirectory))
-      }
-      val partitionSpec = PartitionSpec(partitionSchema, partitions)
+      val (partitionSpec, phase) = QueryPlanningTracker.createPhaseSummary({
+        val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
+          table.identifier, filters)
+        val partitions = selectedPartitions.map { p =>
+          val path = new Path(p.location)
+          val fs = path.getFileSystem(hadoopConf)
+          PartitionPath(
+            p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+            path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+        }
+        PartitionSpec(partitionSchema, partitions)
+      }, phaseName = "PartitionPruningInCatalogFileIndex")
+      table.phaseSummaries.append(phase)
       new PrunedInMemoryFileIndex(
-        sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
+        sparkSession, new Path(baseLocation.get),
+        fileStatusCache, partitionSpec, table.phaseSummaries.toSeq)
     } else {
       new InMemoryFileIndex(
-        sparkSession, rootPaths, table.storage.properties, userSpecifiedSchema = None)
+        sparkSession, rootPaths,
+        table.storage.properties,
+        userSpecifiedSchema = None,
+        metastoreOpsPhaseSummary = table.phaseSummaries.toSeq)
     }
   }
 
@@ -111,10 +120,12 @@ private class PrunedInMemoryFileIndex(
     sparkSession: SparkSession,
     tableBasePath: Path,
     fileStatusCache: FileStatusCache,
-    override val partitionSpec: PartitionSpec)
+    override val partitionSpec: PartitionSpec,
+    override val metastoreOpsPhaseSummary: Seq[PhaseSummary])
   extends InMemoryFileIndex(
     sparkSession,
     partitionSpec.partitions.map(_.path),
     Map.empty,
     Some(partitionSpec.partitionColumns),
-    fileStatusCache)
+    fileStatusCache,
+    metastoreOpsPhaseSummary)
