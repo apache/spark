@@ -70,13 +70,13 @@ class CanonicalizeSuite extends SparkFunSuite {
     val fieldA1 = GetStructField(
       GetStructField(
         AttributeReference("data1", structType, false)(expId, qualifier),
-        0, Some("a1")),
-      0, Some("b1"))
+        0, Some("b1")),
+      0, Some("a1"))
     val fieldA2 = GetStructField(
       GetStructField(
         AttributeReference("data2", structType, false)(expId, qualifier),
-        0, Some("a2")),
-      0, Some("b2"))
+        0, Some("b2")),
+      0, Some("a2"))
     assert(fieldA1.semanticEquals(fieldA2))
   }
 }
