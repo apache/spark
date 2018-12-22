@@ -34,13 +34,13 @@ class ResolvedDataSourceSuite extends SparkFunSuite with SharedSQLContext {
   test("jdbc") {
     assert(
       getProvidingClass("jdbc") ===
-      classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+      classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcSourceProvider])
     assert(
       getProvidingClass("org.apache.spark.sql.execution.datasources.jdbc") ===
-      classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+      classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcSourceProvider])
     assert(
       getProvidingClass("org.apache.spark.sql.jdbc") ===
-        classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider])
+        classOf[org.apache.spark.sql.execution.datasources.jdbc.JdbcSourceProvider])
   }
 
   test("json") {

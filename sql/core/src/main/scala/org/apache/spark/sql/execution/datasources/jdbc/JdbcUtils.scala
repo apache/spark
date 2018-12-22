@@ -178,7 +178,7 @@ object JdbcUtils extends Logging {
     }
   }
 
-  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
+  private[jdbc] def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }
@@ -515,7 +515,7 @@ object JdbcUtils extends Logging {
   // in the SQL statement and also used for the value in `Row`.
   private type JDBCValueSetter = (PreparedStatement, Row, Int) => Unit
 
-  private def makeSetter(
+  private[jdbc] def makeSetter(
       conn: Connection,
       dialect: JdbcDialect,
       dataType: DataType): JDBCValueSetter = dataType match {

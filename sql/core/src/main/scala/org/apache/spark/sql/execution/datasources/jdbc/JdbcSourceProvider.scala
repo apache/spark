@@ -17,12 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamingWriteSupportProvider}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
+import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
 
-class JdbcRelationProvider extends CreatableRelationProvider
-  with RelationProvider with DataSourceRegister {
+class JdbcSourceProvider extends CreatableRelationProvider
+  with RelationProvider
+  with DataSourceRegister
+  with StreamingWriteSupportProvider {
 
   override def shortName(): String = "jdbc"
 
@@ -86,5 +94,16 @@ class JdbcRelationProvider extends CreatableRelationProvider
     }
 
     createRelation(sqlContext, parameters)
+  }
+
+  override def createStreamingWriteSupport(
+    queryId: String,
+    schema: StructType,
+    mode: OutputMode,
+    options: DataSourceOptions): StreamingWriteSupport = {
+    val optionMap = options.asMap().asScala.toMap
+    // add this for parameter check.
+    new JDBCOptions(optionMap)
+    new JdbcStreamingWriteSupport(schema, optionMap)
   }
 }

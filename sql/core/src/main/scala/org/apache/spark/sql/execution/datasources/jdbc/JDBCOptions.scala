@@ -190,6 +190,12 @@ class JDBCOptions(
 
   // An option to allow/disallow pushing down predicate into JDBC data source
   val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
+
+  // An option for setting max retry JDBC connection times.
+  val maxRetryNumber = parameters.getOrElse(JDBC_MAX_RETRY_NUMBER, "4").toInt
+
+  // An option for setting timeout for checking connction validation
+  val checkValidTimeoutSeconds = parameters.getOrElse(JDBC_CHECK_VALID_TIMEOUT_SECONDS, "10").toInt
 }
 
 class JdbcOptionsInWrite(
@@ -242,4 +248,6 @@ object JDBCOptions {
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
+  val JDBC_MAX_RETRY_NUMBER = newOption("maxRetryNumber")
+  val JDBC_CHECK_VALID_TIMEOUT_SECONDS = newOption("checkValidTimeoutSeconds")
 }
