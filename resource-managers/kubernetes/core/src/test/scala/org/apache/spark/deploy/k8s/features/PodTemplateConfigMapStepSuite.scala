@@ -20,25 +20,32 @@ import java.io.{File, PrintWriter}
 import java.nio.file.Files
 
 import io.fabric8.kubernetes.api.model.ConfigMap
-import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 
-class PodTemplateConfigMapStepSuite extends SparkFunSuite with BeforeAndAfter {
-  private var kubernetesConf : KubernetesConf = _
-  private var templateFile: File = _
+class PodTemplateConfigMapStepSuite extends SparkFunSuite {
 
-  before {
-    templateFile = Files.createTempFile("pod-template", "yml").toFile
+  test("Do nothing when executor template is not specified") {
+    val conf = KubernetesTestConf.createDriverConf()
+    val step = new PodTemplateConfigMapStep(conf)
+
+    val initialPod = SparkPod.initialPod()
+    val configuredPod = step.configurePod(initialPod)
+    assert(configuredPod === initialPod)
+
+    assert(step.getAdditionalKubernetesResources().isEmpty)
+    assert(step.getAdditionalPodSystemProperties().isEmpty)
+  }
+
+  test("Mounts executor template volume if config specified") {
+    val templateFile = Files.createTempFile("pod-template", "yml").toFile
     templateFile.deleteOnExit()
 
     val sparkConf = new SparkConf(false)
       .set(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE, templateFile.getAbsolutePath)
-    kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
-  }
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
 
-  test("Mounts executor template volume if config specified") {
     val writer = new PrintWriter(templateFile)
     writer.write("pod-template-contents")
     writer.close()

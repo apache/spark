@@ -14,20 +14,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.features.hadooputils
 
-import io.fabric8.kubernetes.api.model.Secret
+package org.apache.spark.executor
 
-/**
- * Represents a given configuration of the Kerberos Configuration logic
- * <p>
- * - The secret containing a DT, either previously specified or built on the fly
- * - The name of the secret where the DT will be stored
- * - The data item-key on the secret which correlates with where the current DT data is stored
- * - The Job User's username
- */
-private[spark] case class KerberosConfigSpec(
-    dtSecret: Option[Secret],
-    dtSecretName: String,
-    dtSecretItemKey: String,
-    jobUserName: String)
+import org.apache.spark.SparkFunSuite
+
+
+class ProcfsMetricsGetterSuite extends SparkFunSuite {
+
+  val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
+
+  test("testGetProcessInfo") {
+    var r = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+    r = p.addProcfsMetricsFromOneProcess(r, 26109)
+    assert(r.jvmVmemTotal == 4769947648L)
+    assert(r.jvmRSSTotal == 262610944)
+    assert(r.pythonVmemTotal == 0)
+    assert(r.pythonRSSTotal == 0)
+
+    r = p.addProcfsMetricsFromOneProcess(r, 22763)
+    assert(r.pythonVmemTotal == 360595456)
+    assert(r.pythonRSSTotal == 7831552)
+    assert(r.jvmVmemTotal == 4769947648L)
+    assert(r.jvmRSSTotal == 262610944)
+  }
+}

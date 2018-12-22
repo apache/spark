@@ -16,6 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model._
@@ -158,6 +162,25 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     checkEnv(executor, conf, Map(SecurityManager.ENV_AUTH_SECRET -> secMgr.getSecretKey()))
   }
 
+  test("Auth secret shouldn't propagate if files are loaded.") {
+    val secretDir = Utils.createTempDir("temp-secret")
+    val secretFile = new File(secretDir, "secret-file.txt")
+    Files.write(secretFile.toPath, "some-secret".getBytes(StandardCharsets.UTF_8))
+    val conf = baseConf.clone()
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(AUTH_SECRET_FILE, secretFile.getAbsolutePath)
+      .set("spark.master", "k8s://127.0.0.1")
+    val secMgr = new SecurityManager(conf)
+    secMgr.initializeAuth()
+
+    val step = new BasicExecutorFeatureStep(KubernetesTestConf.createExecutorConf(sparkConf = conf),
+      secMgr)
+
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(!KubernetesFeaturesTestUtils.containerHasEnvVar(
+      executor.container, SecurityManager.ENV_AUTH_SECRET))
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)
@@ -177,7 +200,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_EXECUTOR_MEMORY -> "1g",
       ENV_APPLICATION_ID -> KubernetesTestConf.APP_ID,
       ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
-      ENV_EXECUTOR_POD_IP -> null) ++ additionalEnvVars
+      ENV_EXECUTOR_POD_IP -> null,
+      ENV_SPARK_USER -> Utils.getCurrentUserName())
 
     val extraJavaOptsStart = additionalEnvVars.keys.count(_.startsWith(ENV_JAVA_OPT_PREFIX))
     val extraJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
@@ -185,9 +209,11 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       s"$ENV_JAVA_OPT_PREFIX${ind + extraJavaOptsStart}" -> opt
     }.toMap
 
-    val mapEnvs = executorPod.container.getEnv.asScala.map {
+    val containerEnvs = executorPod.container.getEnv.asScala.map {
       x => (x.getName, x.getValue)
     }.toMap
-    assert((defaultEnvs ++ extraJavaOptsEnvs) === mapEnvs)
+
+    val expectedEnvs = defaultEnvs ++ additionalEnvVars ++ extraJavaOptsEnvs
+    assert(containerEnvs === expectedEnvs)
   }
 }
