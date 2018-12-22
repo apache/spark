@@ -701,7 +701,7 @@ class SessionCatalog(
         val (metadata, phaseSummary) =
           QueryPlanningTracker.createPhaseSummary(
             externalCatalog.getTable(db, table), phaseName = "LookUpRelation")
-        metadata.metastoreOpsPhaseSummaries.append(phaseSummary)
+        metadata.recordMetastoreOpsPhaseSummary(phaseSummary)
         if (metadata.tableType == CatalogTableType.VIEW) {
           val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
           logDebug(s"'$viewText' will be used for the view($table).")

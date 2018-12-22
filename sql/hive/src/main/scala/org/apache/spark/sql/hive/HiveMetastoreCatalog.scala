@@ -183,7 +183,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             .listPartitions(tableIdentifier.database, tableIdentifier.name)
             .map(p => new Path(p.storage.locationUri.get))
           }, phaseName = "PartitionPruningInRelationConversions")
-        relation.tableMeta.metastoreOpsPhaseSummaries.append(phaseSummary)
+        relation.tableMeta.recordMetastoreOpsPhaseSummary(phaseSummary)
 
         if (paths.isEmpty) {
           Seq(tablePath)

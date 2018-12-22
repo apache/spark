@@ -133,6 +133,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       }
 
       val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+      withStats.recordMetastoreOpsPhaseSummary(table.metastoreOpsPhaseSummaries: _*)
       relation.copy(tableMeta = withStats)
   }
 }

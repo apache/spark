@@ -83,16 +83,16 @@ class CatalogFileIndex(
         }
         PartitionSpec(partitionSchema, partitions)
       }, phaseName = "PartitionPruningInCatalogFileIndex")
-      table.metastoreOpsPhaseSummaries.append(phaseSummary)
+      table.recordMetastoreOpsPhaseSummary(phaseSummary)
       new PrunedInMemoryFileIndex(
         sparkSession, new Path(baseLocation.get),
-        fileStatusCache, partitionSpec, table.metastoreOpsPhaseSummaries.toSeq)
+        fileStatusCache, partitionSpec, table.metastoreOpsPhaseSummaries)
     } else {
       new InMemoryFileIndex(
         sparkSession, rootPaths,
         table.storage.properties,
         userSpecifiedSchema = None,
-        metastoreOpsPhaseSummaries = table.metastoreOpsPhaseSummaries.toSeq)
+        metastoreOpsPhaseSummaries = table.metastoreOpsPhaseSummaries)
     }
   }
 

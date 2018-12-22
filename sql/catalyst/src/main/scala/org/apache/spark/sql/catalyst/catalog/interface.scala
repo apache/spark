@@ -226,8 +226,6 @@ case class BucketSpec(
  * @param createVersion records the version of Spark that created this table metadata. The default
  *                      is an empty string. We expect it will be read from the catalog or filled by
  *                      ExternalCatalog.createTable. For temporary views, the value will be empty.
- * @param metastoreOpsPhaseSummaries is an ArrayBuffer that record all timeline between the table
- *                                   and the metastore, which belongs to scan node operations.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -249,10 +247,17 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None,
-    metastoreOpsPhaseSummaries: ArrayBuffer[PhaseSummary] = ArrayBuffer.empty) {
+    viewOriginalText: Option[String] = None) {
 
   import CatalogTable._
+
+  /** Record all timeline between the table and the metastore. */
+  private val _metastoreOpsPhaseSummaries: ArrayBuffer[PhaseSummary] = ArrayBuffer.empty
+
+  def metastoreOpsPhaseSummaries: Seq[PhaseSummary] = _metastoreOpsPhaseSummaries.toSeq
+
+  def recordMetastoreOpsPhaseSummary(elems: PhaseSummary*): Unit =
+    _metastoreOpsPhaseSummaries.append(elems: _*)
 
   /**
    * schema of this table's partition columns
@@ -609,8 +614,7 @@ case class HiveTableRelation(
   override def doCanonicalize(): HiveTableRelation = copy(
     tableMeta = tableMeta.copy(
       storage = CatalogStorageFormat.empty,
-      createTime = -1,
-      metastoreOpsPhaseSummaries = ArrayBuffer.empty
+      createTime = -1
     ),
     dataCols = dataCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index))

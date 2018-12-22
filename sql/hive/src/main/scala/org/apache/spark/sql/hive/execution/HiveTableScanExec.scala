@@ -199,7 +199,7 @@ case class HiveTableScanExec(
         }
       prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
     }, phaseName = "GetAllPartitions")
-    relation.tableMeta.metastoreOpsPhaseSummaries.append(phaseSummary)
+    relation.tableMeta.recordMetastoreOpsPhaseSummary(phaseSummary)
     partitions
   }
 
