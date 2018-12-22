@@ -257,7 +257,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     var lastProgressBeforeStop: StreamingQueryProgress = null
 
     testStream(mapped, OutputMode.Complete)(
-      StartStream(ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
       AssertStreamExecThreadIsWaitingForTime(1000),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),
@@ -370,7 +370,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.status.message === "Stopped"),
 
       // Test status and progress after query terminated with error
-      StartStream(ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
       AdvanceManualClock(1000), // ensure initial trigger completes before AddData
       AddData(inputData, 0),
       AdvanceManualClock(1000), // allow another trigger

@@ -82,7 +82,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       testStream(df, OutputMode.Append)(
 
         // Start event generated when query started
-        StartStream(ProcessingTime(100), triggerClock = clock),
+        StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
         AssertOnQuery { query =>
           assert(listener.startEvent !== null)
           assert(listener.startEvent.id === query.id)
@@ -124,7 +124,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         },
 
         // Termination event generated with exception message when stopped with error
-        StartStream(ProcessingTime(100), triggerClock = clock),
+        StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
         AssertStreamExecThreadToWaitForClock(),
         AddData(inputData, 0),
         AdvanceManualClock(100), // process bad data
@@ -306,7 +306,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         }
         val clock = new StreamManualClock()
         val actions = mutable.ArrayBuffer[StreamAction]()
-        actions += StartStream(trigger = ProcessingTime(10), triggerClock = clock)
+        actions += StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock)
         for (_ <- 1 to 100) {
           actions += AdvanceManualClock(10)
         }

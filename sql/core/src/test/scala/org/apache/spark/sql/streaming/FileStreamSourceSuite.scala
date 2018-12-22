@@ -1360,7 +1360,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       options = srcOptions)
     val clock = new StreamManualClock()
     testStream(fileStream)(
-      StartStream(trigger = ProcessingTime(10), triggerClock = clock),
+      StartStream(trigger = Trigger.ProcessingTime(10), triggerClock = clock),
       AssertOnQuery { _ =>
         // Block until the first batch finishes.
         eventually(timeout(streamingTimeout)) {

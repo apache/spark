@@ -312,7 +312,7 @@ class StreamSuite extends StreamTest {
 
     val inputData = MemoryStream[Int]
     testStream(inputData.toDS())(
-      StartStream(ProcessingTime("10 seconds"), new StreamManualClock),
+      StartStream(Trigger.ProcessingTime("10 seconds"), new StreamManualClock),
 
       /* -- batch 0 ----------------------- */
       // Add some data in batch 0
@@ -353,7 +353,7 @@ class StreamSuite extends StreamTest {
 
       /* Stop then restart the Stream  */
       StopStream,
-      StartStream(ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
+      StartStream(Trigger.ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
 
       /* -- batch 1 no rerun ----------------- */
       // batch 1 would not re-run because the latest batch id logged in commit log is 1
