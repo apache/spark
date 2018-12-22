@@ -229,8 +229,9 @@ class DataFrameReader(OptionUtils):
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.time.format.DateTimeFormatter``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
@@ -409,8 +410,9 @@ class DataFrameReader(OptionUtils):
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.time.format.DateTimeFormatter``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
@@ -806,8 +808,9 @@ class DataFrameWriter(OptionUtils):
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.time.format.DateTimeFormatter``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param encoding: specifies encoding (charset) of saved json files. If None is set,
@@ -907,8 +910,9 @@ class DataFrameWriter(OptionUtils):
                            follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.time.format.DateTimeFormatter``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
