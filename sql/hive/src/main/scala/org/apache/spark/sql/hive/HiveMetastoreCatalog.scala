@@ -177,13 +177,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // Partitioned tables without partitions use the location of the table's base path.
         // Partitioned tables with partitions use the locations of those partitions' data
         // locations,_omitting_ the table's base path.
-        val (paths, phase) =
+        val (paths, phaseSummary) =
           QueryPlanningTracker.createPhaseSummary({
             sparkSession.sharedState.externalCatalog
             .listPartitions(tableIdentifier.database, tableIdentifier.name)
             .map(p => new Path(p.storage.locationUri.get))
           }, phaseName = "PartitionPruningInRelationConversions")
-        relation.tableMeta.phaseSummaries.append(phase)
+        relation.tableMeta.metastoreOpsPhaseSummaries.append(phaseSummary)
 
         if (paths.isEmpty) {
           Seq(tablePath)

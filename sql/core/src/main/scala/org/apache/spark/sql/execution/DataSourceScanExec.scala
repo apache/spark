@@ -187,10 +187,10 @@ case class FileSourceScanExec(
   }
 
   @transient private[sql] lazy val metastoreOpsPhaseSummary = relation.location match {
-    case fileIndex: CatalogFileIndex if fileIndex.table.phaseSummaries.nonEmpty =>
-      fileIndex.table.phaseSummaries.toSeq
-    case fileIndex: InMemoryFileIndex if fileIndex.metastoreOpsPhaseSummary.nonEmpty =>
-      fileIndex.metastoreOpsPhaseSummary
+    case fileIndex: CatalogFileIndex if fileIndex.table.metastoreOpsPhaseSummaries.nonEmpty =>
+      fileIndex.table.metastoreOpsPhaseSummaries.toSeq
+    case fileIndex: InMemoryFileIndex if fileIndex.metastoreOpsPhaseSummaries.nonEmpty =>
+      fileIndex.metastoreOpsPhaseSummaries
     case _ => Seq.empty
   }
 
@@ -289,7 +289,9 @@ case class FileSourceScanExec(
         "PartitionFilters" -> seqToString(partitionFilters),
         "PushedFilters" -> seqToString(pushedDownFilters),
         "DataFilters" -> seqToString(dataFilters),
-        "Location" -> locationDesc)
+        "Location" -> locationDesc,
+        "MetastoreOperationPhaseSummary" ->
+          seqToString(metastoreOpsPhaseSummary.map(_.toFormatString)))
     val withOptPartitionCount =
       relation.partitionSchemaOption.map { _ =>
         metadata + ("PartitionCount" -> selectedPartitions.size.toString)
@@ -309,14 +311,7 @@ case class FileSourceScanExec(
       withOptPartitionCount
     }
 
-    val withMetastoreOpsPhase = if (metastoreOpsPhaseSummary.nonEmpty) {
-      withSelectedBucketsCount + ("MetastoreOperationPhaseSummary" ->
-        seqToString(metastoreOpsPhaseSummary.map(_.toFormatString)))
-    } else {
-      withSelectedBucketsCount
-    }
-
-    withMetastoreOpsPhase
+    withSelectedBucketsCount
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {

@@ -39,7 +39,7 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton {
     val scanNode =
       df.queryExecution.executedPlan.collectLeaves().head.asInstanceOf[HiveTableScanExec]
     assert(scanNode.metrics("metastoreOpsTime").value > 0)
-    val phaseSummary = scanNode.relation.tableMeta.phaseSummaries
+    val phaseSummary = scanNode.relation.tableMeta.metastoreOpsPhaseSummaries
     assert(phaseSummary.nonEmpty)
     assert(phaseSummary(0).name == "LookUpRelation")
     assert(phaseSummary(1).name == "GetAllPartitions")

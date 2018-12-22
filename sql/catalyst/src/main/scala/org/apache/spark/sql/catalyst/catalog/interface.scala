@@ -26,7 +26,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, QueryPlanningTracker, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker.PhaseSummary
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -225,6 +226,8 @@ case class BucketSpec(
  * @param createVersion records the version of Spark that created this table metadata. The default
  *                      is an empty string. We expect it will be read from the catalog or filled by
  *                      ExternalCatalog.createTable. For temporary views, the value will be empty.
+ * @param metastoreOpsPhaseSummaries is an ArrayBuffer that record all timeline between the table
+ *                                   and the metastore, which belongs to scan node operations.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -247,7 +250,7 @@ case class CatalogTable(
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
     viewOriginalText: Option[String] = None,
-    phaseSummaries: ArrayBuffer[QueryPlanningTracker.PhaseSummary] = ArrayBuffer.empty) {
+    metastoreOpsPhaseSummaries: ArrayBuffer[PhaseSummary] = ArrayBuffer.empty) {
 
   import CatalogTable._
 

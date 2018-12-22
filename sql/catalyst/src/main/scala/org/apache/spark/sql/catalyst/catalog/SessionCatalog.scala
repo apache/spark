@@ -698,10 +698,10 @@ class SessionCatalog(
           SubqueryAlias(table, db, viewDef)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
-        val (metadata, phase) =
+        val (metadata, phaseSummary) =
           QueryPlanningTracker.createPhaseSummary(
             externalCatalog.getTable(db, table), phaseName = "LookUpRelation")
-        metadata.phaseSummaries.append(phase)
+        metadata.metastoreOpsPhaseSummaries.append(phaseSummary)
         if (metadata.tableType == CatalogTableType.VIEW) {
           val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
           logDebug(s"'$viewText' will be used for the view($table).")

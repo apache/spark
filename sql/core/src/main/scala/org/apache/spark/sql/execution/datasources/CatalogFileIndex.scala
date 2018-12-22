@@ -71,7 +71,7 @@ class CatalogFileIndex(
    */
   def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = {
     if (table.partitionColumnNames.nonEmpty) {
-      val (partitionSpec, phase) = QueryPlanningTracker.createPhaseSummary({
+      val (partitionSpec, phaseSummary) = QueryPlanningTracker.createPhaseSummary({
         val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
           table.identifier, filters)
         val partitions = selectedPartitions.map { p =>
@@ -83,16 +83,16 @@ class CatalogFileIndex(
         }
         PartitionSpec(partitionSchema, partitions)
       }, phaseName = "PartitionPruningInCatalogFileIndex")
-      table.phaseSummaries.append(phase)
+      table.metastoreOpsPhaseSummaries.append(phaseSummary)
       new PrunedInMemoryFileIndex(
         sparkSession, new Path(baseLocation.get),
-        fileStatusCache, partitionSpec, table.phaseSummaries.toSeq)
+        fileStatusCache, partitionSpec, table.metastoreOpsPhaseSummaries.toSeq)
     } else {
       new InMemoryFileIndex(
         sparkSession, rootPaths,
         table.storage.properties,
         userSpecifiedSchema = None,
-        metastoreOpsPhaseSummary = table.phaseSummaries.toSeq)
+        metastoreOpsPhaseSummaries = table.metastoreOpsPhaseSummaries.toSeq)
     }
   }
 
@@ -121,11 +121,11 @@ private class PrunedInMemoryFileIndex(
     tableBasePath: Path,
     fileStatusCache: FileStatusCache,
     override val partitionSpec: PartitionSpec,
-    override val metastoreOpsPhaseSummary: Seq[PhaseSummary])
+    metastoreOpsPhaseSummaries: Seq[PhaseSummary])
   extends InMemoryFileIndex(
     sparkSession,
     partitionSpec.partitions.map(_.path),
     Map.empty,
     Some(partitionSpec.partitionColumns),
     fileStatusCache,
-    metastoreOpsPhaseSummary)
+    metastoreOpsPhaseSummaries)

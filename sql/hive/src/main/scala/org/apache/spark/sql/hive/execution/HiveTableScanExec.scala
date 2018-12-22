@@ -73,7 +73,7 @@ case class HiveTableScanExec(
    * has been initialized.
    */
   private def sendDriverMetrics(): Unit = {
-    val phase = relation.tableMeta.phaseSummaries
+    val phase = relation.tableMeta.metastoreOpsPhaseSummaries
     if (phase.nonEmpty) {
       metrics("metastoreOpsTime").add(phase.map(_.durationMs).sum)
       val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -84,7 +84,7 @@ case class HiveTableScanExec(
 
   override def simpleString: String =
     super.simpleString + ", MetastoreOperationPhaseSummary: " +
-      relation.tableMeta.phaseSummaries.map(_.toFormatString).mkString("[", ", ", "]")
+      relation.tableMeta.metastoreOpsPhaseSummaries.map(_.toFormatString).mkString("[", ", ", "]")
 
   override def producedAttributes: AttributeSet = outputSet ++
     AttributeSet(partitionPruningPred.flatMap(_.references))
@@ -183,7 +183,7 @@ case class HiveTableScanExec(
 
   // exposed for tests
   @transient lazy val rawPartitions = {
-    val (partitions, phase) = QueryPlanningTracker.createPhaseSummary ({
+    val (partitions, phaseSummary) = QueryPlanningTracker.createPhaseSummary({
       val prunedPartitions =
         if (sparkSession.sessionState.conf.metastorePartitionPruning &&
           partitionPruningPred.size > 0) {
@@ -199,7 +199,7 @@ case class HiveTableScanExec(
         }
       prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
     }, phaseName = "GetAllPartitions")
-    relation.tableMeta.phaseSummaries.append(phase)
+    relation.tableMeta.metastoreOpsPhaseSummaries.append(phaseSummary)
     partitions
   }
 

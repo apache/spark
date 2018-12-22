@@ -51,7 +51,7 @@ class InMemoryFileIndex(
     parameters: Map[String, String],
     userSpecifiedSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache,
-    val metastoreOpsPhaseSummary: Seq[PhaseSummary] = Seq.empty)
+    val metastoreOpsPhaseSummaries: Seq[PhaseSummary] = Seq.empty)
   extends PartitioningAwareFileIndex(
     sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
 

@@ -281,6 +281,7 @@ class SQLAppStatusListener(
       exec.metricsValues = aggregateMetrics(exec)
       exec.completionTime = Some(new Date(time))
       exec.endEvents += 1
+      // Update both physicalPlanDescription and planGraph while the description changed.
       if (event.planDescUpdate.isDefined) {
         exec.physicalPlanDescription = event.planDescUpdate.get
         kvstore.delete(classOf[SparkPlanGraphWrapper], executionId)
