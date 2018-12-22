@@ -199,14 +199,14 @@ class StringIndexer @Since("1.4.0") (
     // alphabetically.
     val labelsArray = $(stringOrderType) match {
       case StringIndexer.frequencyDesc =>
+        val sortFunc = StringIndexer.getSortFunc(ascending = false)
         countByValue(filteredDF, inputCols).map { counts =>
-          val func = StringIndexer.getSortFunc(ascending = false)
-          counts.toSeq.sortWith(func).map(_._1).toArray
+          counts.toSeq.sortWith(sortFunc).map(_._1).toArray
         }
       case StringIndexer.frequencyAsc =>
-        val func = StringIndexer.getSortFunc(ascending = true)
+        val sortFunc = StringIndexer.getSortFunc(ascending = true)
         countByValue(filteredDF, inputCols).map { counts =>
-          counts.toSeq.sortWith(func).map(_._1).toArray
+          counts.toSeq.sortWith(sortFunc).map(_._1).toArray
         }
       case StringIndexer.alphabetDesc =>
         import dataset.sparkSession.implicits._
@@ -260,11 +260,21 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
   // In case of equal frequency, it sorts strings by alphabet (ascending).
   private[feature] def getSortFunc(
       ascending: Boolean): ((String, Long), (String, Long)) => Boolean = {
-    (a: (String, Long), b: (String, Long)) => {
-      if (a._2 == b._2) {
-        a._1 < b._1
-      } else {
-        if (ascending) a._2 < b._2 else a._2 > b._2
+    if (ascending) {
+     (a: (String, Long), b: (String, Long)) => {
+       if (a._2 == b._2) {
+         a._1 < b._1
+       } else {
+         a._2 < b._2
+       }
+     }
+    } else {
+      (a: (String, Long), b: (String, Long)) => {
+        if (a._2 == b._2) {
+          a._1 < b._1
+        } else {
+          a._2 > b._2
+        }
       }
     }
   }
@@ -412,7 +422,6 @@ class StringIndexerModel (
           .withName(outputColName)
           .withValues(filteredLabels)
           .toMetadata()
-        val keepInvalid = (getHandleInvalid == StringIndexer.KEEP_INVALID)
 
         val indexer = getIndexer(labels, labelToIndex)
 
@@ -471,7 +480,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
 
-      // We support to load old `StringIndexerModel` saved by previous Spark versions.
+      // We support loading old `StringIndexerModel` saved by previous Spark versions.
       // Previous model has `labels`, but new model has `labelsArray`.
       val (majorVersion, minorVersion) = majorMinorVersion(metadata.sparkVersion)
       val labelsArray = if (majorVersion < 3) {
