@@ -157,7 +157,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val size = rmClient.getMatchingRequests(container.getPriority, "host1", containerResource).size
     size should be (0)
   }
-  
+
   test("container should not be created if requested number if met") {
     // request a single container and receive it
     val handler = createAllocator(1)
