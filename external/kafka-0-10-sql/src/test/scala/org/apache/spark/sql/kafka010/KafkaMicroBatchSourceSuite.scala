@@ -42,7 +42,7 @@ import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
+import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -236,7 +236,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     }
 
     testStream(mapped)(
-      StartStream(ProcessingTime(100), clock),
+      StartStream(Trigger.ProcessingTime(100), clock),
       waitUntilBatchProcessed,
       // 1 from smallest, 1 from middle, 8 from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107),
@@ -247,7 +247,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         11, 108, 109, 110, 111, 112, 113, 114, 115, 116
       ),
       StopStream,
-      StartStream(ProcessingTime(100), clock),
+      StartStream(Trigger.ProcessingTime(100), clock),
       waitUntilBatchProcessed,
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
@@ -282,7 +282,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val mapped = kafka.map(kv => kv._2.toInt + 1)
     testStream(mapped)(
-      StartStream(trigger = ProcessingTime(1)),
+      StartStream(trigger = Trigger.ProcessingTime(1)),
       makeSureGetOffsetCalled,
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
@@ -605,7 +605,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     }
 
     testStream(kafka)(
-      StartStream(ProcessingTime(100), clock),
+      StartStream(Trigger.ProcessingTime(100), clock),
       waitUntilBatchProcessed,
       // 5 from smaller topic, 5 from bigger one
       CheckLastBatch((0 to 4) ++ (100 to 104): _*),
@@ -618,7 +618,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       // smaller topic empty, 5 from bigger one
       CheckLastBatch(110 to 114: _*),
       StopStream,
-      StartStream(ProcessingTime(100), clock),
+      StartStream(Trigger.ProcessingTime(100), clock),
       waitUntilBatchProcessed,
       // smallest now empty, 5 from bigger one
       CheckLastBatch(115 to 119: _*),
@@ -727,7 +727,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     // The message values are the same as their offsets to make the test easy to follow
     testUtils.withTranscationalProducer { producer =>
       testStream(mapped)(
-        StartStream(ProcessingTime(100), clock),
+        StartStream(Trigger.ProcessingTime(100), clock),
         waitUntilBatchProcessed,
         CheckAnswer(),
         WithOffsetSync(topicPartition, expectedOffset = 5) { () =>
@@ -850,7 +850,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     // The message values are the same as their offsets to make the test easy to follow
     testUtils.withTranscationalProducer { producer =>
       testStream(mapped)(
-        StartStream(ProcessingTime(100), clock),
+        StartStream(Trigger.ProcessingTime(100), clock),
         waitUntilBatchProcessed,
         CheckNewAnswer(),
         WithOffsetSync(topicPartition, expectedOffset = 5) { () =>
