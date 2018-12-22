@@ -90,7 +90,7 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("parsing date with locale") {
+  test("parsing date without explicit day") {
     val formatter = DateFormatter("yyyy MMM", Locale.US)
     val daysSinceEpoch = formatter.parse("2018 Dec")
     assert(daysSinceEpoch === 17866)
