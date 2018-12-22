@@ -85,7 +85,7 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
       (2, 1.0),
       (3, 0.0),
       (4, 0.0),
-       (5, 1.0)
+      (5, 1.0)
     ).toDF("id", "labelIndex")
 
     testTransformerByGlobalCheckFunc[(Int, String)](df, indexerModel, "id", "labelIndex") { rows =>
@@ -380,9 +380,9 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
 
   test("SPARK-22446: StringIndexerModel's indexer UDF should not apply on filtered data") {
     val df = List(
-         ("A", "London", "StrA"),
-         ("B", "Bristol", null),
-         ("C", "New York", "StrC")).toDF("ID", "CITY", "CONTENT")
+      ("A", "London", "StrA"),
+      ("B", "Bristol", null),
+      ("C", "New York", "StrC")).toDF("ID", "CITY", "CONTENT")
 
     val dfNoBristol = df.filter($"CONTENT".isNotNull)
 
@@ -409,10 +409,10 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
       Row("c", 1.0, "f", 0.0))
 
     val schema = StructType(Array(
-        StructField("label1", StringType),
-        StructField("expected1", DoubleType),
-        StructField("label2", StringType),
-        StructField("expected2", DoubleType)))
+      StructField("label1", StringType),
+      StructField("expected1", DoubleType),
+      StructField("label2", StringType),
+      StructField("expected2", DoubleType)))
 
     val df = spark.createDataFrame(sc.parallelize(data), schema)
 
@@ -434,15 +434,27 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
     assert(attr2.values.get === Array("f", "e"))
 
     transformed.select("labelIndex1", "expected1").rdd.map { r =>
-     (r.getDouble(0), r.getDouble(1))
+      (r.getDouble(0), r.getDouble(1))
     }.collect().foreach { case (index, expected) =>
       assert(index == expected)
     }
 
     transformed.select("labelIndex2", "expected2").rdd.map { r =>
-     (r.getDouble(0), r.getDouble(1))
+      (r.getDouble(0), r.getDouble(1))
     }.collect().foreach { case (index, expected) =>
       assert(index == expected)
     }
+  }
+
+  test("Correctly skipping NULL and NaN values") {
+    val df = Seq(("a", Double.NaN), (null, 1.0), ("b", 2.0), (null, 3.0)).toDF("str", "double")
+
+    val indexer = new StringIndexer()
+      .setInputCols(Array("str", "double"))
+      .setOutputCols(Array("strIndex", "doubleIndex"))
+
+    val model = indexer.fit(df)
+    assert(model.labelsArray(0) === Array("a", "b"))
+    assert(model.labelsArray(1) === Array("1.0", "2.0", "3.0"))
   }
 }

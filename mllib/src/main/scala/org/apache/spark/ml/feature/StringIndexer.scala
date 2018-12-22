@@ -177,7 +177,8 @@ class StringIndexer @Since("1.4.0") (
       dataset: Dataset[_],
       inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
 
-    val aggregator = new StringIndexerAggregator(inputCols.length)
+    val inputColTypes = inputCols.map(dataset.col(_).expr.dataType)
+    val aggregator = new StringIndexerAggregator(inputCols.length, inputColTypes)
     implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
 
     dataset.select(inputCols.map(col(_).cast(StringType)): _*)
@@ -193,38 +194,36 @@ class StringIndexer @Since("1.4.0") (
 
     val (inputCols, _) = getInOutCols()
 
-    val filteredDF = dataset.na.drop(inputCols)
-
     // In case of equal frequency when frequencyDesc/Asc, the strings are further sorted
     // alphabetically.
     val labelsArray = $(stringOrderType) match {
       case StringIndexer.frequencyDesc =>
         val sortFunc = StringIndexer.getSortFunc(ascending = false)
-        countByValue(filteredDF, inputCols).map { counts =>
+        countByValue(dataset, inputCols).map { counts =>
           counts.toSeq.sortWith(sortFunc).map(_._1).toArray
         }
       case StringIndexer.frequencyAsc =>
         val sortFunc = StringIndexer.getSortFunc(ascending = true)
-        countByValue(filteredDF, inputCols).map { counts =>
+        countByValue(dataset, inputCols).map { counts =>
           counts.toSeq.sortWith(sortFunc).map(_._1).toArray
         }
       case StringIndexer.alphabetDesc =>
         import dataset.sparkSession.implicits._
-        filteredDF.persist()
+        dataset.persist()
         val labels = inputCols.map { inputCol =>
-          filteredDF.select(inputCol).distinct().sort(dataset(s"$inputCol").desc)
+          dataset.select(inputCol).na.drop().distinct().sort(dataset(s"$inputCol").desc)
             .as[String].collect()
         }
-        filteredDF.unpersist()
+        dataset.unpersist()
         labels
       case StringIndexer.alphabetAsc =>
         import dataset.sparkSession.implicits._
-        filteredDF.persist()
+        dataset.persist()
         val labels = inputCols.map { inputCol =>
-          filteredDF.select(inputCol).distinct().sort(dataset(s"$inputCol").asc)
+          dataset.select(inputCol).na.drop().distinct().sort(dataset(s"$inputCol").asc)
             .as[String].collect()
         }
-        filteredDF.unpersist()
+        dataset.unpersist()
         labels
      }
     copyValues(new StringIndexerModel(uid, labelsArray).setParent(this))
@@ -608,7 +607,7 @@ object IndexToString extends DefaultParamsReadable[IndexToString] {
 /**
  * A SQL `Aggregator` used by `StringIndexer` to count labels in string columns during fitting.
  */
-private class StringIndexerAggregator(numColumns: Int)
+private class StringIndexerAggregator(numColumns: Int, inputColTypes: Seq[DataType])
   extends Aggregator[Row, Array[OpenHashMap[String, Long]], Array[OpenHashMap[String, Long]]] {
 
   override def zero: Array[OpenHashMap[String, Long]] =
@@ -618,7 +617,13 @@ private class StringIndexerAggregator(numColumns: Int)
       array: Array[OpenHashMap[String, Long]],
       row: Row): Array[OpenHashMap[String, Long]] = {
     for (i <- 0 until numColumns) {
-      array(i).changeValue(row.getString(i), 1L, _ + 1)
+      val stringValue = row.getString(i)
+      // We don't count for null and NaN values.
+      // For NaN values, because the values in the row are converted to string before aggregation,
+      // we skip for `NaN` string if the original column type is not string type.
+      if (stringValue != null && (inputColTypes(i) == StringType || stringValue != "NaN")) {
+        array(i).changeValue(stringValue, 1L, _ + 1)
+      }
     }
     array
   }
