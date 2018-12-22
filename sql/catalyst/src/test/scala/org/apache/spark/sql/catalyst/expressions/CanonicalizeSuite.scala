@@ -59,24 +59,24 @@ class CanonicalizeSuite extends SparkFunSuite {
       StructField("a", StructType(StructField("b", IntegerType, false) :: Nil), false) :: Nil)
 
     // GetStructField with different names are semantically equal
-    val fieldB1 = GetStructField(
-      AttributeReference("data1", structType, false)(expId, qualifier),
-      0, Some("b1"))
-    val fieldB2 = GetStructField(
-      AttributeReference("data2", structType, false)(expId, qualifier),
-      0, Some("b2"))
-    assert(fieldB1.semanticEquals(fieldB2))
-
     val fieldA1 = GetStructField(
-      GetStructField(
-        AttributeReference("data1", structType, false)(expId, qualifier),
-        0, Some("b1")),
+      AttributeReference("data1", structType, false)(expId, qualifier),
       0, Some("a1"))
     val fieldA2 = GetStructField(
+      AttributeReference("data2", structType, false)(expId, qualifier),
+      0, Some("a2"))
+    assert(fieldB1.semanticEquals(fieldB2))
+
+    val fieldB1 = GetStructField(
+      GetStructField(
+        AttributeReference("data1", structType, false)(expId, qualifier),
+        0, Some("a1")),
+      0, Some("b1"))
+    val fieldB2 = GetStructField(
       GetStructField(
         AttributeReference("data2", structType, false)(expId, qualifier),
-        0, Some("b2")),
-      0, Some("a2"))
+        0, Some("a2")),
+      0, Some("b2"))
     assert(fieldA1.semanticEquals(fieldA2))
   }
 }
