@@ -289,7 +289,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       table.dataSchema.asNullable.toAttributes,
       table.partitionSchema.asNullable.toAttributes)
   }
-
+  
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, child, _, _)
         if DDLUtils.isStreamingTable(tableMeta) && sqlConf.sqlStreamQueryEnable =>
@@ -300,13 +300,13 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       i.copy(table = readDataSourceTable(tableMeta))
 
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
-      i.copy(table = readHiveTable(tableMeta))
+      i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
       readDataSourceTable(tableMeta)
 
     case UnresolvedCatalogRelation(tableMeta) =>
-      readHiveTable(tableMeta)
+      DDLUtils.readHiveTable(tableMeta)
   }
 }
 

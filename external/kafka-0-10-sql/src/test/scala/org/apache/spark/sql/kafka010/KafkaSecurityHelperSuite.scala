@@ -17,51 +17,9 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.util.UUID
-
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.Token
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.security.KafkaTokenUtil
-import org.apache.spark.deploy.security.KafkaTokenUtil.KafkaDelegationTokenIdentifier
 
-class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
-  private val tokenId = "tokenId" + UUID.randomUUID().toString
-  private val tokenPassword = "tokenPassword" + UUID.randomUUID().toString
-
-  private var sparkConf: SparkConf = null
-
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    sparkConf = new SparkConf()
-  }
-
-  override def afterEach(): Unit = {
-    try {
-      resetUGI
-    } finally {
-      super.afterEach()
-    }
-  }
-
-  private def addTokenToUGI(): Unit = {
-    val token = new Token[KafkaDelegationTokenIdentifier](
-      tokenId.getBytes,
-      tokenPassword.getBytes,
-      KafkaTokenUtil.TOKEN_KIND,
-      KafkaTokenUtil.TOKEN_SERVICE
-    )
-    val creds = new Credentials()
-    creds.addToken(KafkaTokenUtil.TOKEN_SERVICE, token)
-    UserGroupInformation.getCurrentUser.addCredentials(creds)
-  }
-
-  private def resetUGI: Unit = {
-    UserGroupInformation.setLoginUser(null)
-  }
-
+class KafkaSecurityHelperSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   test("isTokenAvailable without token should return false") {
     assert(!KafkaSecurityHelper.isTokenAvailable())
   }
@@ -75,7 +33,7 @@ class KafkaSecurityHelperSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("getTokenJaasParams with token should return scram module") {
     addTokenToUGI()
 
-    val jaasParams = KafkaSecurityHelper.getTokenJaasParams(sparkConf)
+    val jaasParams = KafkaSecurityHelper.getTokenJaasParams(new SparkConf())
 
     assert(jaasParams.contains("ScramLoginModule required"))
     assert(jaasParams.contains("tokenauth=true"))

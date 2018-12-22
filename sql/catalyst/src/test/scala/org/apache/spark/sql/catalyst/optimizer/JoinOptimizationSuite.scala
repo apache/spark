@@ -39,6 +39,7 @@ class JoinOptimizationSuite extends PlanTest {
         ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
+        RemoveNoopOperators,
         CollapseProject) :: Nil
 
   }

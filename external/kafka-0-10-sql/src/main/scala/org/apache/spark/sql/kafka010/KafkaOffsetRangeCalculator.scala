@@ -37,6 +37,8 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
    * the read tasks of the skewed partitions to multiple Spark tasks.
    * The number of Spark tasks will be *approximately* `numPartitions`. It can be less or more
    * depending on rounding errors or Kafka partitions that didn't receive any new data.
+   *
+   * Empty ranges (`KafkaOffsetRange.size <= 0`) will be dropped.
    */
   def getRanges(
       fromOffsets: PartitionOffsetMap,
