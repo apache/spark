@@ -65,7 +65,7 @@ class CanonicalizeSuite extends SparkFunSuite {
     val fieldA2 = GetStructField(
       AttributeReference("data2", structType, false)(expId, qualifier),
       0, Some("a2"))
-    assert(fieldB1.semanticEquals(fieldB2))
+    assert(fieldA1.semanticEquals(fieldA2))
 
     val fieldB1 = GetStructField(
       GetStructField(
@@ -77,6 +77,6 @@ class CanonicalizeSuite extends SparkFunSuite {
         AttributeReference("data2", structType, false)(expId, qualifier),
         0, Some("a2")),
       0, Some("b2"))
-    assert(fieldA1.semanticEquals(fieldA2))
+    assert(fieldB1.semanticEquals(fieldB2))
   }
 }
