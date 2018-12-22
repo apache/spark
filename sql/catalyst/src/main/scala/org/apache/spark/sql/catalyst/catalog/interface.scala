@@ -609,7 +609,8 @@ case class HiveTableRelation(
   override def doCanonicalize(): HiveTableRelation = copy(
     tableMeta = tableMeta.copy(
       storage = CatalogStorageFormat.empty,
-      createTime = -1
+      createTime = -1,
+      metastoreOpsPhaseSummaries = ArrayBuffer.empty
     ),
     dataCols = dataCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index))

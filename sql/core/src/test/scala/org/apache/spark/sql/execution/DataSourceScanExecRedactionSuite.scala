@@ -96,6 +96,7 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
       assert(isIncluded(df.queryExecution, "PushedFilters"))
       assert(isIncluded(df.queryExecution, "DataFilters"))
       assert(isIncluded(df.queryExecution, "Location"))
+      assert(isIncluded(df.queryExecution, "MetastoreOperationPhaseSummary"))
     }
   }
 
