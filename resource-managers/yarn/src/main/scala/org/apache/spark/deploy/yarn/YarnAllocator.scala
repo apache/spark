@@ -578,12 +578,6 @@ private[yarn] class YarnAllocator(
             (true, memLimitExceededLogMessage(
               completedContainer.getDiagnostics,
               PMEM_EXCEEDED_PATTERN))
-            val pmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX physical memory used".r
-            val diag = pmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
-              .map(_.concat(".")).getOrElse("")
-            val message = "Container killed by YARN for exceeding physical memory limits. " +
-              s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
-            (true, message)
           case other_exit_status =>
             // SPARK-26269: follow YARN's blacklisting behaviour(see https://github
             // .com/apache/hadoop/blob/228156cfd1b474988bc4fedfbf7edddc87db41e3/had
