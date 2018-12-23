@@ -569,7 +569,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
         "SELECT * FROM testDataForScan WHERE p = 1")
       df.collect()
       val (metrics, phaseSummary) = getFileScanNodeMetricsAndPhaseSummary(df)
-      assert(metrics("metadataTime").value > 0)
+      assert(metrics.contains("metadataTime"))
       assert(phaseSummary(0).name == "LookUpRelation")
       assert(phaseSummary(1).name == "PartitionPruningInCatalogFileIndex")
       assert(df.queryExecution.executedPlan.collectLeaves().head.simpleString
