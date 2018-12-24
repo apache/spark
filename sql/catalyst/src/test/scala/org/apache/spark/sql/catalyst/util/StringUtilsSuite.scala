@@ -49,9 +49,9 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(StringUtils.split(statement) === Array("select * from tmp.dada"))
 
     // blanks will be omitted
-    val statements = " select * from tmp.dada;;select * from tmp.ada;"
+    val statements = " select * from tmp.data;;select * from tmp.ata;"
     assert(StringUtils.split(statements) ===
-      Array("select * from tmp.dada", "select * from tmp.ada"))
+      Array("select * from tmp.data", "select * from tmp.ata"))
 
     val escapedSingleQuote =
       raw"""
@@ -86,6 +86,19 @@ class StringUtilsSuite extends SparkFunSuite {
         |select "---"
       """.stripMargin.trim
     assert(StringUtils.split(inlineComments) === Array(select1, selectComments))
+
+    val bracketedComment1 = "select 1 /*;*/" // Good
+    assert(StringUtils.split(bracketedComment1) === Array())
+    val bracketedComment2 = "select 1 /* /* ; */" // Good
+    val bracketedComment3 = "select 1 /* */ ; */" // Bad
+    val bracketedComment4 = "select 1 /**/ ; */" // Good
+    val bracketedComment5 = "select 1 /**/ ; /**/" // Good
+    val bracketedComment6 = "select 1 /**/  ; /* */" // Good
+    val bracketedComment7 = "select 1 /* */ ; /* */" // Bad
+
+    val qQuote1 = "select 1 as `;`" // Good
+    val qQuote2 = "select 1 as ```;`" // Good
+    val qQuote3 = "select 1 as ``;`" // Bad
   }
 
   test("string concatenation") {

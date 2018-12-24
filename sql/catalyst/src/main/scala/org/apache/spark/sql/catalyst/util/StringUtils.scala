@@ -94,25 +94,31 @@ object StringUtils {
   }
 
   /**
-   * Split the text into one or more SQL
+   * Split the text into one or more SQLs with comments reserved
    *
    * Highlighted Corner Cases: semicolon in double quotes, single quotes or inline comments.
    * Expected Behavior: The blanks will be trimed and a blank line will be omitted.
    *
-   * @param text One or more SQL separated by semicolons
+   * @param text One or more SQLs separated by semicolons
    * @return the trimmed SQL array (Array is for Java introp)
    */
   def split(text: String): Array[String] = {
     val D_QUOTE: Char = '"'
     val S_QUOTE: Char = '\''
+    val Q_QUOTE: Char = '`'
     val SEMICOLON: Char = ';'
     val ESCAPE: Char = '\\'
     val DOT = '.'
-    val INLINE_COMMENT = "--"
+    val SINGLE_COMMENT = "--"
+    val BRACKETED_COMMENT_START = "/*"
+    val BRACKETED_COMMENT_END = "*/"
+    val FORWARD_SLASH = "/"
 
     // quoteFlag acts as an enum of D_QUOTE, S_QUOTE, DOT
     // * D_QUOTE: the cursor stands on a doulbe quoted string
     // * S_QUOTE: the cursor stands on a single quoted string
+    // * DASH: the cursor stands in the SINGLE_COMMENT
+    // * FORWARD_SLASH: the cursor stands in the BRACKETED_COMMENT
     // * DOT: default value for other cases
     var quoteFlag: Char = DOT
     var cursor: Int = 0
@@ -123,8 +129,13 @@ object StringUtils {
       val current: Char = text(cursor)
 
       text.substring(cursor) match {
-        // if it stands on the openning of inline comment, move cursor at the end of this line
-        case remaining if quoteFlag == DOT && remaining.startsWith(INLINE_COMMENT) =>
+        // if it stands on the opening of a bracketed comment, consume 2 characters
+        case remaining if remaining.startsWith(BRACKETED_COMMENT_START) =>
+          ret += currentSQL.toString.trim
+          cursor += 2
+
+        // if it stands on the opening of inline comment, move cursor at the end of this line
+        case remaining if quoteFlag == DOT && remaining.startsWith(SINGLE_COMMENT) =>
           cursor += remaining.takeWhile(x => x != '\n').length
 
         // if it stands on a normal semicolon, stage the current sql and move the cursor on
@@ -134,7 +145,8 @@ object StringUtils {
           cursor += 1
 
         // if it stands on the openning of quotes, mark the flag and move on
-        case remaining if quoteFlag == DOT && (List(D_QUOTE, S_QUOTE) contains current) =>
+        case remaining if quoteFlag == DOT
+                          && List(D_QUOTE, S_QUOTE, Q_QUOTE).contains(current) =>
           quoteFlag = current
           currentSQL += current
           cursor += 1
@@ -143,7 +155,8 @@ object StringUtils {
           currentSQL.append(remaining.take(2))
           cursor += 2
         // if it stands on the ending of quotes, clear the flag and move on
-        case remaining if (quoteFlag == D_QUOTE || quoteFlag == S_QUOTE) && current == quoteFlag =>
+        case remaining if List(D_QUOTE, S_QUOTE, Q_QUOTE).contains(quoteFlag)
+                          && current == quoteFlag =>
           quoteFlag = DOT
           currentSQL += current
           cursor += 1
