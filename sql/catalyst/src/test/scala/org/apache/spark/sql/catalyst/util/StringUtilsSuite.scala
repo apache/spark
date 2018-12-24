@@ -88,17 +88,26 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(StringUtils.split(inlineComments) === Array(select1, selectComments))
 
     val bracketedComment1 = "select 1 /*;*/" // Good
-    assert(StringUtils.split(bracketedComment1) === Array())
+    assert(StringUtils.split(bracketedComment1) === Array(bracketedComment1))
     val bracketedComment2 = "select 1 /* /* ; */" // Good
+    assert(StringUtils.split(bracketedComment2) === Array(bracketedComment2))
     val bracketedComment3 = "select 1 /* */ ; */" // Bad
-    val bracketedComment4 = "select 1 /**/ ; */" // Good
+    assert(StringUtils.split(bracketedComment3).head === "select 1 /* */")
+    val bracketedComment4 = "select 1 /**/  ; /* */" // Good
+    assert(StringUtils.split(bracketedComment4).head === "select 1 /**/")
     val bracketedComment5 = "select 1 /**/ ; /**/" // Good
-    val bracketedComment6 = "select 1 /**/  ; /* */" // Good
-    val bracketedComment7 = "select 1 /* */ ; /* */" // Bad
+    assert(StringUtils.split(bracketedComment5).head === "select 1 /**/")
 
     val qQuote1 = "select 1 as `;`" // Good
-    val qQuote2 = "select 1 as ```;`" // Good
-    val qQuote3 = "select 1 as ``;`" // Bad
+    assert(StringUtils.split(qQuote1) === Array(qQuote1))
+    val qQuote2 = "select 1 as ``;`" // Bad
+    assert(StringUtils.split(qQuote2) === Array("select 1 as ``", "`"))
+
+    // The splitter rule of the following two cases does not match the actual antlr4 rule
+    // We should not make the splitter two complicated
+    // val bracketedComment6 = "select 1 /**/ ; */" // Good
+    // val bracketedComment7 = "select 1 /* */ ; /* */" // Bad
+    // val qQuote3 = "select 1 as ```;`" // Good
   }
 
   test("string concatenation") {

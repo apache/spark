@@ -53,11 +53,11 @@ class SparkSQLCLIDriverSuite extends SparkFunSuite {
     // normal statements
     val statements =
       """
-        |select d from dada;
-        |select a from dada
+        |select d from data;
+        |select a from data
       """.stripMargin
-    val dStatement = "select d from dada"
-    val aStatement = "select a from dada"
+    val dStatement = "select d from data"
+    val aStatement = "select a from data"
     matchSQL(statements, dStatement, aStatement)
   }
 }

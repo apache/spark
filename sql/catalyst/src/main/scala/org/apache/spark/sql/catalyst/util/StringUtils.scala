@@ -94,7 +94,7 @@ object StringUtils {
   }
 
   /**
-   * Split the text into one or more SQLs with comments reserved
+   * Split the text into one or more SQLs with bracketed comments reserved
    *
    * Highlighted Corner Cases: semicolon in double quotes, single quotes or inline comments.
    * Expected Behavior: The blanks will be trimed and a blank line will be omitted.
@@ -112,7 +112,7 @@ object StringUtils {
     val SINGLE_COMMENT = "--"
     val BRACKETED_COMMENT_START = "/*"
     val BRACKETED_COMMENT_END = "*/"
-    val FORWARD_SLASH = "/"
+    val FORWARD_SLASH = '/'
 
     // quoteFlag acts as an enum of D_QUOTE, S_QUOTE, DOT
     // * D_QUOTE: the cursor stands on a doulbe quoted string
@@ -130,8 +130,18 @@ object StringUtils {
 
       text.substring(cursor) match {
         // if it stands on the opening of a bracketed comment, consume 2 characters
-        case remaining if remaining.startsWith(BRACKETED_COMMENT_START) =>
-          ret += currentSQL.toString.trim
+        case remaining if quoteFlag == DOT
+                          && current == '/'
+                          && remaining.startsWith(BRACKETED_COMMENT_START) =>
+          quoteFlag = current
+          currentSQL.append("/*")
+          cursor += 2
+        // if it stands on the ending of a bracketed comment, consume 2 characters
+        case remaining if quoteFlag == FORWARD_SLASH
+                          && current == '*'
+                          && remaining.startsWith(BRACKETED_COMMENT_END) =>
+          quoteFlag = DOT
+          currentSQL.append("*/")
           cursor += 2
 
         // if it stands on the opening of inline comment, move cursor at the end of this line
