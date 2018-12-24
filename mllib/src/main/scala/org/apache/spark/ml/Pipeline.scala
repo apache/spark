@@ -134,7 +134,7 @@ class Pipeline @Since("1.4.0") (
    */
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): PipelineModel = instrumented(
-      instr => instr.withFitEvent(this, dataset) {
+      instr => instr.withFitEvent(this, dataset, logging = true) {
     transformSchema(dataset.schema, logging = true)
     val theStages = $(stages)
     // Search for the last estimator.
