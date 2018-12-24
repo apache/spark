@@ -236,7 +236,8 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       val data = rows.select("index", "size", "center", "norm", "cost", "height", "children")
       val nodes = data.rdd.map(Data.apply).collect().map(d => (d.index, d)).toMap
       val rootNode = buildTree(rootId, nodes)
-      new BisectingKMeansModel(rootNode, distanceMeasure, 0.0)
+      val totalCost = rootNode.leafNodes.map(_.cost).sum
+      new BisectingKMeansModel(rootNode, distanceMeasure, totalCost)
     }
   }
 

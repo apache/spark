@@ -307,8 +307,8 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
  * @param numIter  Number of iterations.
- * @param trainingCost Sum of squared distances to the nearest centroid for all points in the
- *                     training dataset. This is equivalent to sklearn's inertia.
+ * @param trainingCost Sum of the cost to the nearest centroid for all points in the training
+ *                     dataset. This is equivalent to sklearn's inertia.
  */
 @Since("2.1.0")
 @Experimental
