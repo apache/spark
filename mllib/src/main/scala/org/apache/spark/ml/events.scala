@@ -78,7 +78,8 @@ case class SaveInstanceStart(writer: MLWriter, path: String) extends MLEvent
 case class SaveInstanceEnd(writer: MLWriter, path: String) extends MLEvent
 
 
-private[ml] object MLEvents extends Logging {
+private[ml] trait MLEvents extends Logging {
+
   private def listenerBus = SparkContext.getOrCreate().listenerBus
 
   def withFitEvent[M <: Model[M]](
