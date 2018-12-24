@@ -286,11 +286,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
-   * date type.</li>
+   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * This applies to date type.</li>
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
@@ -347,11 +347,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
    * value.</li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
-   * date type.</li>
+   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * This applies to date type.</li>
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
