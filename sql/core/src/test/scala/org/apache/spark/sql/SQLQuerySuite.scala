@@ -2937,6 +2937,25 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val msg = intercept[AnalysisException] {
+        withTable("t") {
+          sql("create table t (s struct<i: Int>) using json")
+          checkAnswer(sql("select s.I from t group by s.i"), Nil)
+        }
+      }.message
+      assert(msg.contains("No such struct field I in i"))
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTable("t") {
+        sql("create table t (s struct<i: Int>) using json")
+        checkAnswer(sql("select s.I from t group by s.i"), Nil)
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
