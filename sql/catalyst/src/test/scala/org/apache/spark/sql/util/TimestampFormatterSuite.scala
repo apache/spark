@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.util
 
+import java.time.{LocalDateTime, ZoneOffset}
 import java.util.{Locale, TimeZone}
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -113,6 +115,7 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper {
       TimeZone.getTimeZone("UTC"),
       Locale.US)
     val micros = formatter.parse("2009 Mar 20 11:30:01 am")
-    assert(micros == 1237548601000000L)
+    assert(micros === TimeUnit.SECONDS.toMicros(
+      LocalDateTime.of(2009, 3, 20, 11, 30, 1).toEpochSecond(ZoneOffset.UTC)))
   }
 }

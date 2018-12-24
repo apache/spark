@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.util
 
+import java.time.LocalDate
 import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
@@ -93,6 +94,6 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
   test("parsing date without explicit day") {
     val formatter = DateFormatter("yyyy MMM", Locale.US)
     val daysSinceEpoch = formatter.parse("2018 Dec")
-    assert(daysSinceEpoch === 17866)
+    assert(daysSinceEpoch === LocalDate.of(2018, 12, 1).toEpochDay)
   }
 }
