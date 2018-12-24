@@ -103,7 +103,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
-    if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED)) {
+    if (sparkConf.get(config.SHUFFLE_SERVICE_DB_ENABLED) && enabled) {
       new ExternalShuffleBlockHandler(conf, initRegisteredExecutorsDB(registeredExecutorsDB))
     }
     else {
