@@ -269,7 +269,7 @@ object Pipeline extends MLReadable[Pipeline] {
     def load(
         expectedClassName: String,
         sc: SparkContext,
-        path: String): (String, Array[PipelineStage]) =  instrumented { instr =>
+        path: String): (String, Array[PipelineStage]) = instrumented { instr =>
       val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
 
       implicit val format = DefaultFormats
