@@ -26,17 +26,17 @@ class StructTypeSuite extends SparkFunSuite {
 
   test("lookup a single missing field should output existing fields") {
     val e = intercept[IllegalArgumentException](s("c")).getMessage
-    assert(e.contains("Available: \"a\", \"b\""))
+    assert(e.contains("Available: a, b"))
   }
 
   test("lookup a set of missing fields should output existing fields") {
     val e = intercept[IllegalArgumentException](s(Set("a", "c"))).getMessage
-    assert(e.contains("Available: \"a\", \"b\""))
+    assert(e.contains("Available: a, b"))
   }
 
   test("lookup fieldIndex for missing field should output existing fields") {
     val e = intercept[IllegalArgumentException](s.fieldIndex("c")).getMessage
-    assert(e.contains("Available: \"a\", \"b\""))
+    assert(e.contains("Available: a, b"))
   }
 
   test("SPARK-24849: toDDL - simple struct") {
