@@ -122,7 +122,7 @@ class MLEventsSuite
       FitEnd(estimator2, model2) ::
       FitEnd(pipeline, pipelineModel) :: Nil
     eventually(timeout(10 seconds), interval(1 second)) {
-      assert(expected === events)
+      assert(events === expected)
     }
   }
 
@@ -157,7 +157,7 @@ class MLEventsSuite
       TransformEnd(transformer2, dataset4) ::
       TransformEnd(newPipelineModel, output) :: Nil
     eventually(timeout(10 seconds), interval(1 second)) {
-      assert(expected === events)
+      assert(events === expected)
     }
   }
 

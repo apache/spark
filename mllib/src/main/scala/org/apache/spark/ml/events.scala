@@ -77,7 +77,9 @@ case class SaveInstanceStart(writer: MLWriter, path: String) extends MLEvent
 @Unstable
 case class SaveInstanceEnd(writer: MLWriter, path: String) extends MLEvent
 
-
+/**
+ * A small trait that defines some methods to send [[org.apache.spark.ml.MLEvent]].
+ */
 private[ml] trait MLEvents extends Logging {
 
   private def listenerBus = SparkContext.getOrCreate().listenerBus

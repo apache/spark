@@ -133,7 +133,8 @@ class Pipeline @Since("1.4.0") (
    * @return fitted pipeline
    */
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): PipelineModel = instrumented { instr =>
+  override def fit(dataset: Dataset[_]): PipelineModel = instrumented(
+      instr => instr.withFitEvent(this, dataset) {
     transformSchema(dataset.schema, logging = true)
     val theStages = $(stages)
     // Search for the last estimator.
@@ -169,7 +170,7 @@ class Pipeline @Since("1.4.0") (
     }
 
     new PipelineModel(uid, transformers.toArray).setParent(this)
-  }
+  })
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): Pipeline = {
@@ -308,13 +309,12 @@ class PipelineModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = instrumented { instr =>
-    instr.withTransformEvent(this, dataset, logging = true) {
-      transformSchema(dataset.schema, logging = true)
-      stages.foldLeft(dataset.toDF)((cur, transformer) =>
-        instr.withTransformEvent(transformer, cur)(transformer.transform(cur)))
-    }
-  }
+  override def transform(dataset: Dataset[_]): DataFrame = instrumented(instr =>
+      instr.withTransformEvent(this, dataset, logging = true) {
+    transformSchema(dataset.schema, logging = true)
+    stages.foldLeft(dataset.toDF)((cur, transformer) =>
+      instr.withTransformEvent(transformer, cur)(transformer.transform(cur)))
+  })
 
   @Since("1.2.0")
   override def transformSchema(schema: StructType): StructType = {
