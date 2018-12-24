@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
-import java.util.Date
 
 import scala.language.existentials
 
@@ -33,6 +32,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
@@ -2368,6 +2368,59 @@ class HiveDDLSuite
           Row("View Original Text", "SELECT * FROM (SELECT 1) T", "")
         )
       ))
+    }
+  }
+
+  test("Hive CTAS can't create partitioned table by specifying schema") {
+    val err1 = intercept[ParseException] {
+      spark.sql(
+        s"""
+           |CREATE TABLE t (a int)
+           |PARTITIONED BY (b string)
+           |STORED AS parquet
+           |AS SELECT 1 as a, "a" as b
+                 """.stripMargin)
+    }.getMessage
+    assert(err1.contains("A Create Table As Select (CTAS) statement is not allowed " +
+      "to create a partitioned table using Hive's file formats by specifying table schema"))
+
+    val err2 = intercept[ParseException] {
+      spark.sql(
+        s"""
+           |CREATE TABLE t
+           |PARTITIONED BY (b string)
+           |STORED AS parquet
+           |AS SELECT 1 as a, "a" as b
+                 """.stripMargin)
+    }.getMessage
+    assert(err2.contains("A Create Table As Select (CTAS) statement is not allowed " +
+      "to create a partitioned table using Hive's file formats by specifying table schema"))
+  }
+
+  test("Hive CTAS with dynamic partition") {
+    Seq("orc", "parquet").foreach { format =>
+      withTable("t") {
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          spark.sql(
+            s"""
+               |CREATE TABLE t
+               |PARTITIONED BY (b)
+               |STORED AS $format
+               |AS SELECT 1 as a, "a" as b
+               """.stripMargin)
+          checkAnswer(spark.table("t"), Row(1, "a"))
+
+          assert(sql("DESC t").collect().containsSlice(
+            Seq(
+              Row("a", "int", null),
+              Row("b", "string", null),
+              Row("# Partition Information", "", ""),
+              Row("# col_name", "data_type", "comment"),
+              Row("b", "string", null)
+            )
+          ))
+        }
+      }
     }
   }
 }
