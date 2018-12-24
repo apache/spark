@@ -14,21 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.features
 
-import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
-import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.features.hadooputils.HadoopBootstrapUtil
+package org.apache.spark.ml.r
 
-/**
- * This step is responsible for setting ENV_SPARK_USER when HADOOP_FILES are detected
- * however, this step would not be run if Kerberos is enabled, as Kerberos sets SPARK_USER
- */
-private[spark] class HadoopSparkUserExecutorFeatureStep(conf: KubernetesExecutorConf)
-  extends KubernetesFeatureConfigStep {
+import org.apache.spark.ml.clustering.PowerIterationClustering
 
-  override def configurePod(pod: SparkPod): SparkPod = {
-    val sparkUserName = conf.get(KERBEROS_SPARK_USER_NAME)
-    HadoopBootstrapUtil.bootstrapSparkUserPod(sparkUserName, pod)
+private[r] object PowerIterationClusteringWrapper {
+  def getPowerIterationClustering(
+      k: Int,
+      initMode: String,
+      maxIter: Int,
+      srcCol: String,
+      dstCol: String,
+      weightCol: String): PowerIterationClustering = {
+    val pic = new PowerIterationClustering()
+      .setK(k)
+      .setInitMode(initMode)
+      .setMaxIter(maxIter)
+      .setSrcCol(srcCol)
+      .setDstCol(dstCol)
+    if (weightCol != null) pic.setWeightCol(weightCol)
+    pic
   }
 }

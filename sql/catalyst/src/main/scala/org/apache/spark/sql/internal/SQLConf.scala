@@ -263,7 +263,9 @@ object SQLConf {
       .createWithDefault(true)
 
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
-    .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
+    .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
+      "Note: For structured streaming, this configuration cannot be changed between query " +
+      "restarts from the same checkpoint location.")
     .intConf
     .createWithDefault(200)
 
@@ -882,7 +884,9 @@ object SQLConf {
       .internal()
       .doc(
         "The class used to manage state data in stateful streaming queries. This class must " +
-          "be a subclass of StateStoreProvider, and must have a zero-arg constructor.")
+          "be a subclass of StateStoreProvider, and must have a zero-arg constructor. " +
+          "Note: For structured streaming, this configuration cannot be changed between query " +
+          "restarts from the same checkpoint location.")
       .stringConf
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
@@ -1396,6 +1400,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val VALIDATE_PARTITION_COLUMNS =
+    buildConf("spark.sql.sources.validatePartitionColumns")
+      .internal()
+      .doc("When this option is set to true, partition column values will be validated with " +
+        "user-specified schema. If the validation fails, a runtime exception is thrown." +
+        "When this option is set to false, the partition column value will be converted to null " +
+        "if it can not be casted to corresponding user-specified schema.")
+      .booleanConf
+      .createWithDefault(true)
+
   val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.executorQueueSize")
     .internal()
@@ -1611,8 +1625,8 @@ object SQLConf {
     .intConf
     .createWithDefault(25)
 
-  val SET_COMMAND_REJECTS_SPARK_CONFS =
-    buildConf("spark.sql.legacy.execution.setCommandRejectsSparkConfs")
+  val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
+    buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
       .internal()
       .doc("If it is set to true, SET command will fail when the key is registered as " +
         "a SparkConf entry.")
@@ -2014,6 +2028,8 @@ class SQLConf extends Serializable with Logging {
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
+  def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
+
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
@@ -2045,7 +2061,8 @@ class SQLConf extends Serializable with Logging {
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
-  def setCommandRejectsSparkConfs: Boolean = getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CONFS)
+  def setCommandRejectsSparkCoreConfs: Boolean =
+    getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
 
   def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
 
