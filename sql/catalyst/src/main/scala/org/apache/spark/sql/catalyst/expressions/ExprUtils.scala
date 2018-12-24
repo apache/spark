@@ -17,16 +17,44 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
+import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
-import org.apache.spark.sql.types.{MapType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils {
 
-  def evalSchemaExpr(exp: Expression): StructType = exp match {
-    case Literal(s, StringType) => StructType.fromDDL(s.toString)
+  def evalSchemaExpr(exp: Expression): StructType = {
+    // Use `DataType.fromDDL` since the type string can be struct<...>.
+    val dataType = exp match {
+      case Literal(s, StringType) =>
+        DataType.fromDDL(s.toString)
+      case e @ SchemaOfCsv(_: Literal, _) =>
+        val ddlSchema = e.eval(EmptyRow).asInstanceOf[UTF8String]
+        DataType.fromDDL(ddlSchema.toString)
+      case e => throw new AnalysisException(
+        "Schema should be specified in DDL format as a string literal or output of " +
+          s"the schema_of_csv function instead of ${e.sql}")
+    }
+
+    if (!dataType.isInstanceOf[StructType]) {
+      throw new AnalysisException(
+        s"Schema should be struct type but got ${dataType.sql}.")
+    }
+    dataType.asInstanceOf[StructType]
+  }
+
+  def evalTypeExpr(exp: Expression): DataType = exp match {
+    case Literal(s, StringType) => DataType.fromDDL(s.toString)
+    case e @ SchemaOfJson(_: Literal, _) =>
+      val ddlSchema = e.eval(EmptyRow).asInstanceOf[UTF8String]
+      DataType.fromDDL(ddlSchema.toString)
     case e => throw new AnalysisException(
-      s"Schema should be specified in DDL format as a string literal instead of ${e.sql}")
+      "Schema should be specified in DDL format as a string literal or output of " +
+        s"the schema_of_json function instead of ${e.sql}")
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
@@ -41,5 +69,39 @@ object ExprUtils {
         s"A type of keys and values in map() must be string, but got ${m.dataType.catalogString}")
     case _ =>
       throw new AnalysisException("Must use a map() function for options")
+  }
+
+  /**
+   * A convenient function for schema validation in datasources supporting
+   * `columnNameOfCorruptRecord` as an option.
+   */
+  def verifyColumnNameOfCorruptRecord(
+      schema: StructType,
+      columnNameOfCorruptRecord: String): Unit = {
+    schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
+      val f = schema(corruptFieldIndex)
+      if (f.dataType != StringType || !f.nullable) {
+        throw new AnalysisException(
+          "The field for corrupt records must be string type and nullable")
+      }
+    }
+  }
+
+  def getDecimalParser(locale: Locale): String => java.math.BigDecimal = {
+    if (locale == Locale.US) { // Special handling the default locale for backward compatibility
+      (s: String) => new java.math.BigDecimal(s.replaceAll(",", ""))
+    } else {
+      val decimalFormat = new DecimalFormat("", new DecimalFormatSymbols(locale))
+      decimalFormat.setParseBigDecimal(true)
+      (s: String) => {
+        val pos = new ParsePosition(0)
+        val result = decimalFormat.parse(s, pos).asInstanceOf[java.math.BigDecimal]
+        if (pos.getIndex() != s.length() || pos.getErrorIndex() != -1) {
+          throw new IllegalArgumentException("Cannot parse any decimal");
+        } else {
+          result
+        }
+      }
+    }
   }
 }

@@ -102,20 +102,14 @@ case class AvroDataToCatalyst(
         case FailFastMode =>
           throw new SparkException("Malformed records are detected in record parsing. " +
             s"Current parse Mode: ${FailFastMode.name}. To process malformed records as null " +
-            "result, try setting the option 'mode' as 'PERMISSIVE'.", e.getCause)
+            "result, try setting the option 'mode' as 'PERMISSIVE'.", e)
         case _ =>
           throw new AnalysisException(unacceptableModeMessage(parseMode.name))
       }
     }
   }
 
-  override def simpleString: String = {
-    s"from_avro(${child.sql}, ${dataType.simpleString}, ${options.toString()})"
-  }
-
-  override def sql: String = {
-    s"from_avro(${child.sql}, ${dataType.catalogString}, ${options.toString()})"
-  }
+  override def prettyName: String = "from_avro"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)

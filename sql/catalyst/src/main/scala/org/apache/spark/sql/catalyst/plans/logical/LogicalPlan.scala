@@ -93,7 +93,7 @@ abstract class LogicalPlan
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
    * nodes of this LogicalPlan. The attribute is expressed as
-   * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
+   * string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
   def resolveChildren(
       nameParts: Seq[String],
@@ -130,6 +130,20 @@ abstract class LogicalPlan
    * Returns the output ordering that this plan generates.
    */
   def outputOrdering: Seq[SortOrder] = Nil
+
+  /**
+   * Returns true iff `other`'s output is semantically the same, ie.:
+   *  - it contains the same number of `Attribute`s;
+   *  - references are the same;
+   *  - the order is equal too.
+   */
+  def sameOutput(other: LogicalPlan): Boolean = {
+    val thisOutput = this.output
+    val otherOutput = other.output
+    thisOutput.length == otherOutput.length && thisOutput.zip(otherOutput).forall {
+      case (a1, a2) => a1.semanticEquals(a2)
+    }
+  }
 }
 
 /**

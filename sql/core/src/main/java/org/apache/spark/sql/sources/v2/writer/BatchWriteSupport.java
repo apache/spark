@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.writer;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * An interface that defines how to write the data to data source for batch processing.
@@ -37,7 +37,7 @@ import org.apache.spark.annotation.InterfaceStability;
  *
  * Please refer to the documentation of commit/abort methods for detailed specifications.
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface BatchWriteSupport {
 
   /**

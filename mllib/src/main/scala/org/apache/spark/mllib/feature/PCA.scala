@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 
 /**
@@ -44,12 +45,21 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
     require(k <= numFeatures,
       s"source vector size $numFeatures must be no less than k=$k")
 
-    require(PCAUtil.memoryCost(k, numFeatures) < Int.MaxValue,
-      "The param k and numFeatures is too large for SVD computation. " +
-      "Try reducing the parameter k for PCA, or reduce the input feature " +
-      "vector dimension to make this tractable.")
+    val mat = if (numFeatures > 65535) {
+      val meanVector = Statistics.colStats(sources).mean.asBreeze
+      val meanCentredRdd = sources.map { rowVector =>
+        Vectors.fromBreeze(rowVector.asBreeze - meanVector)
+      }
+      new RowMatrix(meanCentredRdd)
+    } else {
+      require(PCAUtil.memoryCost(k, numFeatures) < Int.MaxValue,
+        "The param k and numFeatures is too large for SVD computation. " +
+          "Try reducing the parameter k for PCA, or reduce the input feature " +
+          "vector dimension to make this tractable.")
 
-    val mat = new RowMatrix(sources)
+      new RowMatrix(sources)
+    }
+
     val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
     val densePC = pc match {
       case dm: DenseMatrix =>

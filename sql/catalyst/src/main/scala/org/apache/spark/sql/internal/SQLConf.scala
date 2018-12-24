@@ -27,7 +27,6 @@ import scala.collection.immutable
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
-import org.tukaani.xz.LZMA2Options
 
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
@@ -36,6 +35,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
 
 object SQLConf {
 
-  private val sqlConfEntries = java.util.Collections.synchronizedMap(
+  private[sql] val sqlConfEntries = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, ConfigEntry[_]]())
 
   val staticConfKeys: java.util.Set[String] =
@@ -263,7 +263,9 @@ object SQLConf {
       .createWithDefault(true)
 
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
-    .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
+    .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
+      "Note: For structured streaming, this configuration cannot be changed between query " +
+      "restarts from the same checkpoint location.")
     .intConf
     .createWithDefault(200)
 
@@ -326,7 +328,7 @@ object SQLConf {
       "factor as the estimated data size, in case the data is compressed in the file and lead to" +
       " a heavily underestimated result.")
     .doubleConf
-    .checkValue(_ > 0, "the value of fileDataSizeFactor must be larger than 0")
+    .checkValue(_ > 0, "the value of fileDataSizeFactor must be greater than 0")
     .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
@@ -408,7 +410,8 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_DATE_ENABLED = buildConf("spark.sql.parquet.filterPushdown.date")
     .doc("If true, enables Parquet filter push-down optimization for Date. " +
-      "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+      s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
+      "enabled.")
     .internal()
     .booleanConf
     .createWithDefault(true)
@@ -416,7 +419,7 @@ object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.timestamp")
       .doc("If true, enables Parquet filter push-down optimization for Timestamp. " +
-        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is " +
+        s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled and Timestamp stored as TIMESTAMP_MICROS or TIMESTAMP_MILLIS type.")
     .internal()
     .booleanConf
@@ -425,7 +428,8 @@ object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.decimal")
       .doc("If true, enables Parquet filter push-down optimization for Decimal. " +
-        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+        s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
+        "enabled.")
       .internal()
       .booleanConf
       .createWithDefault(true)
@@ -433,7 +437,8 @@ object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED =
     buildConf("spark.sql.parquet.filterPushdown.string.startsWith")
     .doc("If true, enables Parquet filter push-down optimization for string startsWith function. " +
-      "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+      s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
+      "enabled.")
     .internal()
     .booleanConf
     .createWithDefault(true)
@@ -444,7 +449,8 @@ object SQLConf {
         "Large threshold won't necessarily provide much better performance. " +
         "The experiment argued that 300 is the limit threshold. " +
         "By setting this value to 0 this feature can be disabled. " +
-        "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+        s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
+        "enabled.")
       .internal()
       .intConf
       .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
@@ -456,13 +462,6 @@ object SQLConf {
       "systems such as Apache Hive and Apache Impala use. If false, the newer format in Parquet " +
       "will be used. For example, decimals will be written in int-based format. If Parquet " +
       "output is intended for use with systems that do not support this newer format, set to true.")
-    .booleanConf
-    .createWithDefault(false)
-
-  val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
-    .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
-      "filters. This configuration only has an effect when 'spark.sql.parquet.filterPushdown' " +
-      "is enabled.")
     .booleanConf
     .createWithDefault(false)
 
@@ -480,6 +479,15 @@ object SQLConf {
       .doc("Enables vectorized parquet decoding.")
       .booleanConf
       .createWithDefault(true)
+
+  val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
+    .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
+      "filters. " +
+      s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' " +
+      "is enabled and the vectorized reader is not used. You can ensure the vectorized reader " +
+      s"is not used by setting '${PARQUET_VECTORIZED_READER_ENABLED.key}' to false.")
+    .booleanConf
+    .createWithDefault(false)
 
   val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.columnarReaderBatchSize")
     .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
@@ -641,7 +649,7 @@ object SQLConf {
     .internal()
     .doc("When true, a table created by a Hive CTAS statement (no USING clause) " +
       "without specifying any storage property will be converted to a data source table, " +
-      "using the data source set by spark.sql.sources.default.")
+      s"using the data source set by ${DEFAULT_DATA_SOURCE_NAME.key}.")
     .booleanConf
     .createWithDefault(false)
 
@@ -667,7 +675,7 @@ object SQLConf {
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed. Defaults to 100000")
     .intConf
-    .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be larger than 0")
+    .checkValue(_ > 0, "the value of spark.sql.sources.bucketing.maxBuckets must be greater than 0")
     .createWithDefault(100000)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
@@ -812,6 +820,18 @@ object SQLConf {
     .intConf
     .createWithDefault(65535)
 
+  val CODEGEN_METHOD_SPLIT_THRESHOLD = buildConf("spark.sql.codegen.methodSplitThreshold")
+    .internal()
+    .doc("The threshold of source-code splitting in the codegen. When the number of characters " +
+      "in a single Java function (without comment) exceeds the threshold, the function will be " +
+      "automatically split to multiple smaller ones. We cannot know how many bytecode will be " +
+      "generated, so use the code length as metric. When running on HotSpot, a function's " +
+      "bytecode should not go beyond 8KB, otherwise it will not be JITted; it also should not " +
+      "be too small, otherwise there will be many function calls.")
+    .intConf
+    .checkValue(threshold => threshold > 0, "The threshold must be a positive integer.")
+    .createWithDefault(1024)
+
   val WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR =
     buildConf("spark.sql.codegen.splitConsumeFuncByOperator")
       .internal()
@@ -864,7 +884,9 @@ object SQLConf {
       .internal()
       .doc(
         "The class used to manage state data in stateful streaming queries. This class must " +
-          "be a subclass of StateStoreProvider, and must have a zero-arg constructor.")
+          "be a subclass of StateStoreProvider, and must have a zero-arg constructor. " +
+          "Note: For structured streaming, this configuration cannot be changed between query " +
+          "restarts from the same checkpoint location.")
       .stringConf
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
@@ -1107,7 +1129,7 @@ object SQLConf {
   val DEFAULT_SIZE_IN_BYTES = buildConf("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
-      "which is larger than `spark.sql.autoBroadcastJoinThreshold` to be more conservative. " +
+      s"which is larger than `${AUTO_BROADCASTJOIN_THRESHOLD.key}` to be more conservative. " +
       "That is to say by default the optimizer will not choose to broadcast a table unless it " +
       "knows for sure its size is small enough.")
     .longConf
@@ -1136,7 +1158,7 @@ object SQLConf {
       .internal()
       .doc("The number of bins when generating histograms.")
       .intConf
-      .checkValue(num => num > 1, "The number of bins must be larger than 1.")
+      .checkValue(num => num > 1, "The number of bins must be greater than 1.")
       .createWithDefault(254)
 
   val PERCENTILE_ACCURACY =
@@ -1228,7 +1250,7 @@ object SQLConf {
       .doc("Threshold for number of rows guaranteed to be held in memory by the sort merge " +
         "join operator")
       .intConf
-      .createWithDefault(Int.MaxValue)
+      .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.spill.threshold")
@@ -1278,7 +1300,7 @@ object SQLConf {
 
   val ARROW_FALLBACK_ENABLED =
     buildConf("spark.sql.execution.arrow.fallback.enabled")
-      .doc("When true, optimizations enabled by 'spark.sql.execution.arrow.enabled' will " +
+      .doc(s"When true, optimizations enabled by '${ARROW_EXECUTION_ENABLED.key}' will " +
         "fallback automatically to non-optimized implementations if an error occurs.")
       .booleanConf
       .createWithDefault(true)
@@ -1378,6 +1400,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val VALIDATE_PARTITION_COLUMNS =
+    buildConf("spark.sql.sources.validatePartitionColumns")
+      .internal()
+      .doc("When this option is set to true, partition column values will be validated with " +
+        "user-specified schema. If the validation fails, a runtime exception is thrown." +
+        "When this option is set to false, the partition column value will be converted to null " +
+        "if it can not be casted to corresponding user-specified schema.")
+      .booleanConf
+      .createWithDefault(true)
+
   val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.executorQueueSize")
     .internal()
@@ -1462,7 +1494,7 @@ object SQLConf {
           "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
           " in memory, otherwise do a global sort which spills to disk if necessary.")
       .intConf
-      .createWithDefault(Int.MaxValue)
+      .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1491,7 +1523,7 @@ object SQLConf {
 
   val REPL_EAGER_EVAL_MAX_NUM_ROWS = buildConf("spark.sql.repl.eagerEval.maxNumRows")
     .doc("The max number of rows that are returned by eager evaluation. This only takes " +
-      "effect when spark.sql.repl.eagerEval.enabled is set to true. The valid range of this " +
+      s"effect when ${REPL_EAGER_EVAL_ENABLED.key} is set to true. The valid range of this " +
       "config is from 0 to (Int.MaxValue - 1), so the invalid config like negative and " +
       "greater than (Int.MaxValue - 1) will be normalized to 0 and (Int.MaxValue - 1).")
     .intConf
@@ -1499,7 +1531,7 @@ object SQLConf {
 
   val REPL_EAGER_EVAL_TRUNCATE = buildConf("spark.sql.repl.eagerEval.truncate")
     .doc("The max number of characters for each cell that is returned by eager evaluation. " +
-      "This only takes effect when spark.sql.repl.eagerEval.enabled is set to true.")
+      s"This only takes effect when ${REPL_EAGER_EVAL_ENABLED.key} is set to true.")
     .intConf
     .createWithDefault(20)
 
@@ -1576,6 +1608,37 @@ object SQLConf {
         "WHERE, which does not follow SQL standard.")
       .booleanConf
       .createWithDefault(false)
+
+  val NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE =
+    buildConf("spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue")
+      .internal()
+      .doc("When set to true, the key attribute resulted from running `Dataset.groupByKey` " +
+        "for non-struct key type, will be named as `value`, following the behavior of Spark " +
+        "version 2.4 and earlier.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val MAX_TO_STRING_FIELDS = buildConf("spark.sql.debug.maxToStringFields")
+    .doc("Maximum number of fields of sequence-like entries can be converted to strings " +
+      "in debug output. Any elements beyond the limit will be dropped and replaced by a" +
+      """ "... N more fields" placeholder.""")
+    .intConf
+    .createWithDefault(25)
+
+  val SET_COMMAND_REJECTS_SPARK_CORE_CONFS =
+    buildConf("spark.sql.legacy.setCommandRejectsSparkCoreConfs")
+      .internal()
+      .doc("If it is set to true, SET command will fail when the key is registered as " +
+        "a SparkConf entry.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val LEGACY_TIME_PARSER_ENABLED = buildConf("spark.sql.legacy.timeParser.enabled")
+    .doc("When set to true, java.text.SimpleDateFormat is used for formatting and parsing " +
+      " dates/timestamps in a locale-sensitive manner. When set to false, classes from " +
+      "java.time.* packages are used for the same purpose.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
@@ -1732,6 +1795,8 @@ class SQLConf extends Serializable with Logging {
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
+
+  def methodSplitThreshold: Int = getConf(CODEGEN_METHOD_SPLIT_THRESHOLD)
 
   def wholeStageSplitConsumeFuncByOperator: Boolean =
     getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
@@ -1963,6 +2028,8 @@ class SQLConf extends Serializable with Logging {
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
+  def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
+
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
@@ -1988,6 +2055,16 @@ class SQLConf extends Serializable with Logging {
   def setOpsPrecedenceEnforced: Boolean = getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
 
   def integralDivideReturnLong: Boolean = getConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG)
+
+  def nameNonStructGroupingKeyAsValue: Boolean =
+    getConf(SQLConf.NAME_NON_STRUCT_GROUPING_KEY_AS_VALUE)
+
+  def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
+
+  def setCommandRejectsSparkCoreConfs: Boolean =
+    getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)
+
+  def legacyTimeParserEnabled: Boolean = getConf(SQLConf.LEGACY_TIME_PARSER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

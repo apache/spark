@@ -324,4 +324,4 @@ CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 `partitionBy` creates a directory structure as described in the [Partition Discovery](sql-data-sources-parquet.html#partition-discovery) section.
 Thus, it has limited applicability to columns with high cardinality. In contrast
  `bucketBy` distributes
-data across a fixed number of buckets and can be used when a number of unique values is unbounded.
+data across a fixed number of buckets and can be used when the number of unique values is unbounded.

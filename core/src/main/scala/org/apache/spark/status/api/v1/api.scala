@@ -133,9 +133,9 @@ private[spark] class ExecutorMetricsJsonSerializer
       jsonGenerator: JsonGenerator,
       serializerProvider: SerializerProvider): Unit = {
     metrics.foreach { m: ExecutorMetrics =>
-      val metricsMap = ExecutorMetricType.values.map { metricType =>
-            metricType.name -> m.getMetricValue(metricType)
-      }.toMap
+      val metricsMap = ExecutorMetricType.metricToOffset.map { case (metric, _) =>
+        metric -> m.getMetricValue(metric)
+      }
       jsonGenerator.writeObject(metricsMap)
     }
   }
@@ -253,7 +253,10 @@ class TaskData private[spark](
     val speculative: Boolean,
     val accumulatorUpdates: Seq[AccumulableInfo],
     val errorMessage: Option[String] = None,
-    val taskMetrics: Option[TaskMetrics] = None)
+    val taskMetrics: Option[TaskMetrics] = None,
+    val executorLogs: Map[String, String],
+    val schedulerDelay: Long,
+    val gettingResultTime: Long)
 
 class TaskMetrics private[spark](
     val executorDeserializeTime: Long,

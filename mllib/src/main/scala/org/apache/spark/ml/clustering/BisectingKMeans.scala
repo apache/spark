@@ -87,8 +87,9 @@ private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
 @Since("2.0.0")
 class BisectingKMeansModel private[ml] (
     @Since("2.0.0") override val uid: String,
-    private val parentModel: MLlibBisectingKMeansModel
-  ) extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable {
+    private val parentModel: MLlibBisectingKMeansModel)
+  extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable
+  with HasTrainingSummary[BisectingKMeansSummary] {
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
@@ -125,8 +126,15 @@ class BisectingKMeansModel private[ml] (
   /**
    * Computes the sum of squared distances between the input points and their corresponding cluster
    * centers.
+   *
+   * @deprecated This method is deprecated and will be removed in future versions. Use
+   *             ClusteringEvaluator instead. You can also get the cost on the training dataset in
+   *             the summary.
    */
   @Since("2.0.0")
+  @deprecated("This method is deprecated and will be removed in future versions. Use " +
+    "ClusteringEvaluator instead. You can also get the cost on the training dataset in the " +
+    "summary.", "3.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
     val data = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
@@ -136,28 +144,12 @@ class BisectingKMeansModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter = new BisectingKMeansModel.BisectingKMeansModelWriter(this)
 
-  private var trainingSummary: Option[BisectingKMeansSummary] = None
-
-  private[clustering] def setSummary(summary: Option[BisectingKMeansSummary]): this.type = {
-    this.trainingSummary = summary
-    this
-  }
-
-  /**
-   * Return true if there exists summary of model.
-   */
-  @Since("2.1.0")
-  def hasSummary: Boolean = trainingSummary.nonEmpty
-
   /**
    * Gets summary of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
+   * thrown if `hasSummary` is false.
    */
   @Since("2.1.0")
-  def summary: BisectingKMeansSummary = trainingSummary.getOrElse {
-    throw new SparkException(
-      s"No training summary available for the ${this.getClass.getSimpleName}")
-  }
+  override def summary: BisectingKMeansSummary = super.summary
 }
 
 object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {

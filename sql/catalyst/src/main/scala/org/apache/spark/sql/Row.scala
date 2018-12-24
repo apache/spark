@@ -20,14 +20,14 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 import scala.util.hashing.MurmurHash3
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object Row {
   /**
    * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
@@ -57,6 +57,7 @@ object Row {
   /**
    * Merge multiple rows into a single row, one after another.
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.0.0")
   def merge(rows: Row*): Row = {
     // TODO: Improve the performance of this if used in performance critical part.
     new GenericRow(rows.flatMap(_.toSeq).toArray)
@@ -124,7 +125,7 @@ object Row {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 trait Row extends Serializable {
   /** Number of elements in the Row. */
   def size: Int = length
