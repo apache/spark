@@ -554,13 +554,9 @@ case class DataSource(
 
       // Sufficient to check head of the globPath seq for non-glob scenario
       // Don't need to check once again if files exist in streaming mode
-      if (checkFilesExist) {
-        val firstPath = globPath.head
-        if (!fs.exists(firstPath)) {
-          throw new AnalysisException(s"Path does not exist: ${firstPath}")
-        } else if (InMemoryFileIndex.shouldFilterOut(firstPath.getName)) {
-          throw new AnalysisException(s"Path exists but is ignored: ${firstPath}")
-        }
+      if (checkFilesExist &&
+          (!fs.exists(globPath.head) || InMemoryFileIndex.shouldFilterOut(globPath.head.getName))) {
+        throw new AnalysisException(s"Path does not exist: ${globPath.head}")
       }
       globPath
     }.toSeq
