@@ -1203,9 +1203,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
             "create a partitioned table using Hive's file formats by specifying table schema. " +
             "Please use the syntax of \"CREATE TABLE tableName USING dataSource " +
             "OPTIONS (...) PARTITIONED BY ...\" to create a partitioned table through a " +
-            "CTAS statement. Since Spark 3.0, you can specify partition column names " +
-            "in CTAS statement like \"PARTITIONED BY (col_name, col_name, ...)\" when using " +
-            "Hive's file formats to create a partitioned table too."
+            "CTAS statement. You can specify partition column names in CTAS statement like " +
+            "\"PARTITIONED BY (col_name, col_name, ...)\" when using Hive's file formats to " +
+            "create a partitioned table too."
           operationNotAllowed(errorMessage, ctx)
         }
 
