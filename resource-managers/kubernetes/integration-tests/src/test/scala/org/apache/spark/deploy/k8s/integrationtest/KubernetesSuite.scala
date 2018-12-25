@@ -280,6 +280,7 @@ class KubernetesSuite extends SparkFunSuite
               // If testing decomissioning delete the node 5 seconds after it starts running
               if (decomissioningTest) {
                 // Wait for all the containers in the pod to be running
+                println("Waiting for pod to become OK then delete.")
                 Eventually.eventually(TIMEOUT, INTERVAL) {
                   resource.getStatus.getConditions().asScala
                     .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
@@ -290,6 +291,7 @@ class KubernetesSuite extends SparkFunSuite
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
+                println(s"Pod: $name deleted")
               }
             case Action.DELETED | Action.ERROR =>
               execPods.remove(name)
@@ -301,6 +303,7 @@ class KubernetesSuite extends SparkFunSuite
       execPods.values.nonEmpty || decomissioningTest should be (true) }
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
+    println(s"Exec pods are $execPods")
     Eventually.eventually(TIMEOUT, INTERVAL) {
       expectedLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
