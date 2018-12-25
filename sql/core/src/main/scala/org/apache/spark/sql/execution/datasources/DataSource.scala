@@ -24,6 +24,7 @@ import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -542,7 +543,7 @@ case class DataSource(
       checkFilesExist: Boolean): Seq[Path] = {
     val allPaths = caseInsensitiveOptions.get("path") ++ paths
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
-    allPaths.flatMap { path =>
+    val allGlobPath = allPaths.flatMap { path =>
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(hadoopConf)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
@@ -559,6 +560,31 @@ case class DataSource(
       }
       globPath
     }.toSeq
+
+    if (checkFilesExist) {
+      val (allLeafPath, ignoredPath) = {
+        val pathFilter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
+        val discovered = InMemoryFileIndex.bulkListLeafFiles(
+          allGlobPath, hadoopConf, pathFilter, sparkSession)
+        val paths = discovered.map { case (_, leaf, ignored) =>
+          (leaf.map(_.getPath), ignored.map(_.getPath))
+        }
+        (paths.flatMap(_._1), paths.flatMap(_._2))
+      }
+      if (ignoredPath.nonEmpty) {
+        if (allLeafPath.isEmpty) {
+          throw new AnalysisException(
+            "All files were ignored. The following files were ignored during file scan:\n" +
+              s"${ignoredPath.mkString("\n  ")}")
+        } else {
+          logDebug(
+            "The following files were ignored during file scan:\n" +
+              s"${ignoredPath.mkString("\n  ")}")
+        }
+      }
+    }
+
+    allGlobPath
   }
 }
 

@@ -30,7 +30,7 @@ import scala.util.Properties
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
-import org.apache.log4j.{AppenderSkeleton, LogManager}
+import org.apache.log4j.{AppenderSkeleton, Level, LogManager}
 import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.{SparkException, TestUtils}
@@ -53,6 +53,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val carsEmptyValueFile = "test-data/cars-empty-value.csv"
   private val carsBlankColName = "test-data/cars-blank-column-name.csv"
   private val carsCrlf = "test-data/cars-crlf.csv"
+  private val carsFilteredOutFile = "test-data/_cars.csv"
   private val emptyFile = "test-data/empty.csv"
   private val commentsFile = "test-data/comments.csv"
   private val disableCommentsFile = "test-data/disable_comments.csv"
@@ -343,6 +344,48 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
     assert(result.collect.size === 0)
     assert(result.schema.fieldNames.size === 1)
+  }
+
+  test("SPARK-26339 Debug statement if some of the files are filtered out") {
+    class TestAppender extends AppenderSkeleton {
+      var events = new java.util.ArrayList[LoggingEvent]
+      override def close(): Unit = {}
+      override def requiresLayout: Boolean = false
+      protected def append(event: LoggingEvent): Unit = events.add(event)
+    }
+
+    val testAppender1 = new TestAppender
+    val rootLogger = LogManager.getRootLogger
+    val origLevel = rootLogger.getLevel
+    rootLogger.setLevel(Level.DEBUG)
+    rootLogger.addAppender(testAppender1)
+    try {
+      val cars = spark
+        .read
+        .format("csv")
+        .option("header", "false")
+        .load(testFile(carsFile), testFile(carsFilteredOutFile))
+
+      verifyCars(cars, withHeader = false, checkTypes = false)
+    } finally {
+      rootLogger.setLevel(origLevel)
+      rootLogger.removeAppender(testAppender1)
+    }
+    assert(testAppender1.events.asScala
+      .exists(msg => msg.getRenderedMessage.contains(
+        "The following files were ignored during file scan:")))
+  }
+
+  test("SPARK-26339 Throw an exception only if all of the files are filtered out") {
+    val e = intercept[AnalysisException] {
+      val cars = spark
+        .read
+        .format("csv")
+        .option("header", "false")
+        .load(testFile(carsFilteredOutFile))
+    }.getMessage
+    assert(e.contains("All files were ignored. " +
+      "The following files were ignored during file scan:"))
   }
 
   test("DDL test with empty file") {
