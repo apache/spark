@@ -335,9 +335,9 @@ private[spark] class TaskSchedulerImpl(
     barrierTaskSets: ArrayBuffer[TaskSetManager])
     : Array[Int] = {
     val execIdToReadyTaskNum = barrierTaskSets.map { ts =>
-      val execIdToTaskNum = ts.getReadyTaskToReservedWorkOffer.map {
-        case (_, (_, reservedWorkOffer)) =>
-          (reservedWorkOffer.execId, 1)
+      val execIdToTaskNum = ts.getReadyTaskToReservedWorkerOffer.map {
+        case (_, (_, reservedWorkerOffer)) =>
+          (reservedWorkerOffer.execId, 1)
       }.groupBy { case (execId, _) =>
         execId
       }.map { case (execId, taskList) =>
@@ -357,23 +357,23 @@ private[spark] class TaskSchedulerImpl(
     }.toArray
   }
 
-  private def releaseReservedWorkOfferIfNecessary(alreadyReleased: Int): Unit = {
+  private def releaseReservedWorkerOfferIfNecessary(alreadyReleased: Int): Unit = {
     val barrierTaskSets = getSortedBarrierTaskSets
     val needed =
-      barrierTaskSets.map(ts => ts.numTasks - ts.getReadyTaskToReservedWorkOffer.size).sum
+      barrierTaskSets.map(ts => ts.numTasks - ts.getReadyTaskToReservedWorkerOffer.size).sum
     // take a half by taking waiting time into account roughly
     val canBeReleased = runningTasksByExecutors.values.sum / 2
     var extraNeeded = math.max(needed - alreadyReleased - canBeReleased, 0)
-    // start to force release reserved WorkOffer from the last barrier in the sorted queue
+    // start to force release reserved WorkerOffer from the last barrier in the sorted queue
     var index = barrierTaskSets.size
     while (extraNeeded > 0 && index > 0) {
       index -= 1
       val bts = barrierTaskSets(index)
-      val readyTaskNum = bts.getReadyTaskToReservedWorkOffer.size
+      val readyTaskNum = bts.getReadyTaskToReservedWorkerOffer.size
       if (readyTaskNum <= extraNeeded) {
-        bts.releaseReservedWorkOffer()
+        bts.releaseReservedWorkerOffer()
       } else {
-        bts.releaseReservedWorkOfferByLocality(extraNeeded)
+        bts.releaseReservedWorkerOfferByLocality(extraNeeded)
       }
       extraNeeded -= readyTaskNum
     }
@@ -409,7 +409,7 @@ private[spark] class TaskSchedulerImpl(
                   val replacedExecId = task.executorId
                   val offerIndex = execIdToOfferIndex(replacedExecId)
                   if (offerIndex < i) {
-                    // given the WorkOffer a second chance to offer the resource for the taskSet,
+                    // given the WorkerOffer a second chance to offer the resource for the taskSet,
                     // which reclaims the resource just now
                     addedReviveOffersPerRound += shuffledOffers(offerIndex)
                   }
@@ -417,7 +417,7 @@ private[spark] class TaskSchedulerImpl(
                 // don't do another resourceOffer round if we've already archived the goal, even if
                 // we have new added reviveOffers in this round, which may provide better locality
                 // preference, but that's not guaranteed.
-                if (taskSet.getReadyTaskToReservedWorkOffer.size == taskSet.numTasks) {
+                if (taskSet.getReadyTaskToReservedWorkerOffer.size == taskSet.numTasks) {
                   return launchedTask
                 }
               } else {
@@ -435,7 +435,7 @@ private[spark] class TaskSchedulerImpl(
         }
       }
       if (replaced) {
-        // update WorkOffers' free cores since some reserved WorkOffers are
+        // update WorkerOffers'free cores since some reserved WorkerOffers are
         // released during resourceOffer()
         dynamicAvailableCpus = excludeReservedCpus(shuffledOffers)
       }
@@ -560,8 +560,8 @@ private[spark] class TaskSchedulerImpl(
       }
 
       if (taskSet.isBarrier &&
-        taskSet.getReadyTaskToReservedWorkOffer.size == taskSet.numTasks) {
-          val readyTasks = taskSet.getReadyTaskToReservedWorkOffer
+        taskSet.getReadyTaskToReservedWorkerOffer.size == taskSet.numTasks) {
+          val readyTasks = taskSet.getReadyTaskToReservedWorkerOffer
           val curTime = clock.getTimeMillis()
           // Record all the executor IDs assigned barrier tasks on.
           val addressesWithDescs = readyTasks.map { case (index, (speculative, reservedOffer)) =>
@@ -586,9 +586,9 @@ private[spark] class TaskSchedulerImpl(
             .map(_._1)
             .mkString(",")
           addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
-          // clear reserved WorkOffer, so that we do not exclude its reserved Cpus
+          // clear reserved WorkerOffer, so that we do not exclude its reserved Cpus
           // in next resourceOffer round.
-          taskSet.releaseReservedWorkOffer()
+          taskSet.releaseReservedWorkerOffer()
           launchedAnyBarrierTaskSet = true
           logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for barrier " +
             s"stage ${taskSet.stageId}.")
@@ -602,7 +602,7 @@ private[spark] class TaskSchedulerImpl(
         val timeoutTaskSets = barrierTaskSetByTimeout.filter(_._2._2 < curTime)
         // given a second chance for barrier TaskSets who timeout for the first time,
         // since we've successfully launched some barrier TaskSets in this resourceOffer
-        // round and hopefully to get released WorkOffer in latter round.
+        // round and hopefully to get released WorkerOffer in latter round.
         val (firsts, seconds) = timeoutTaskSets.partition(_._2._1 == 0)
         firsts.keySet.foreach { ts =>
           barrierTaskSetByTimeout(ts) = (1, curTime + barrierTaskSetNoSufficientResourceTimeoutMs)
@@ -616,8 +616,8 @@ private[spark] class TaskSchedulerImpl(
 
     val released = {
       abortBarrierTaskSets.map { case (ts, times) =>
-        val reserved = ts.getReadyTaskToReservedWorkOffer.size
-        ts.releaseReservedWorkOffer()
+        val reserved = ts.getReadyTaskToReservedWorkerOffer.size
+        ts.releaseReservedWorkerOffer()
         val waitTime = 1.0 * (times + 1) * barrierTaskSetNoSufficientResourceTimeoutMs / 60 / 1000
         ts.abort(
           s"Barrier TaskSet ${ts.taskSet.id} abort due to " +
@@ -629,9 +629,9 @@ private[spark] class TaskSchedulerImpl(
     if (abortBarrierTaskSets.nonEmpty ||
       (getSortedBarrierTaskSets.nonEmpty && !launchedAnyBarrierTaskSet &&
       noBarrierTaskSetLaunchCounter >= MAX_CONSECUTIVE_NO_BARRIER_TASKSET_LAUNCH_TIMES)) {
-      // to force release reserved WorkOffer in case of some barrier TaskSets holds the resource
+      // to force release reserved WorkerOffer in case of some barrier TaskSets holds the resource
       // for a long time and cause deadlock problem on the resource in the end.
-      releaseReservedWorkOfferIfNecessary(released)
+      releaseReservedWorkerOfferIfNecessary(released)
     }
 
     // TODO SPARK-24823 Cancel a job that contains barrier stage(s) if the barrier tasks don't get

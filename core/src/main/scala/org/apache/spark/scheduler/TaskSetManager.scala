@@ -32,7 +32,7 @@ import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
-case class ReservedWorkOffer(execId: String, host: String, locality: TaskLocality.Value)
+case class ReservedWorkerOffer(execId: String, host: String, locality: TaskLocality.Value)
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -177,7 +177,7 @@ private[spark] class TaskSetManager(
   // was printed. This should ideally be an LRU map that can drop old exceptions automatically.
   private val recentExceptions = HashMap[String, (Int, Long)]()
 
-  private val readyTaskToReservedWorkOffer = HashMap[Int, (Boolean, ReservedWorkOffer)]()
+  private val readyTaskToReservedWorkerOffer = HashMap[Int, (Boolean, ReservedWorkerOffer)]()
 
   private val execIdToReadyTasks = HashMap[String, HashSet[Int]]()
 
@@ -274,8 +274,8 @@ private[spark] class TaskSetManager(
     pendingTasksForRack.getOrElse(rack, ArrayBuffer())
   }
 
-  def getReadyTaskToReservedWorkOffer: HashMap[Int, (Boolean, ReservedWorkOffer)] = {
-    readyTaskToReservedWorkOffer
+  def getReadyTaskToReservedWorkerOffer: HashMap[Int, (Boolean, ReservedWorkerOffer)] = {
+    readyTaskToReservedWorkerOffer
   }
 
   /**
@@ -498,27 +498,27 @@ private[spark] class TaskSetManager(
       serializedTask)
   }
 
-  def releaseReservedWorkOfferByLocality(num: Int): Unit = {
-    val sortedReservedWorkOffer = readyTaskToReservedWorkOffer.toArray.sortBy {
+  def releaseReservedWorkerOfferByLocality(num: Int): Unit = {
+    val sortedReservedWorkerOffer = readyTaskToReservedWorkerOffer.toArray.sortBy {
       case (_, (_, reservedOffer)) =>
         reservedOffer.locality
     }
 
-    val toRelease = sortedReservedWorkOffer.takeRight(num)
+    val toRelease = sortedReservedWorkerOffer.takeRight(num)
     toRelease.foreach {
       case (index, (_, _)) =>
-        releaseReservedWorkOffer(index)
+        releaseReservedWorkerOffer(index)
     }
   }
 
-  def releaseReservedWorkOffer(): Unit = {
+  def releaseReservedWorkerOffer(): Unit = {
     execIdToReadyTasks.foreach { case (_, tasks) =>
-      tasks.foreach(releaseReservedWorkOffer)
+      tasks.foreach(releaseReservedWorkerOffer)
     }
   }
 
-  private def releaseReservedWorkOffer(index: Int): Unit = {
-    readyTaskToReservedWorkOffer.remove(index) match {
+  private def releaseReservedWorkerOffer(index: Int): Unit = {
+    readyTaskToReservedWorkerOffer.remove(index) match {
       case Some((_, reservedOffer)) =>
         val execId = reservedOffer.execId
         execIdToReadyTasks(execId) -= index
@@ -528,9 +528,9 @@ private[spark] class TaskSetManager(
         // TODO hui bu hui chongfu ?
         addPendingTask(index)
         logInfo(s"ready task $index in barrier TaskSet ${taskSet.id} release " +
-          s"reserved WorkOffer(executor ${reservedOffer.execId}, host ${reservedOffer.host}).")
+          s"reserved WorkerOffer(executor ${reservedOffer.execId}, host ${reservedOffer.host}).")
       case None =>
-        logWarning(s"Trying to release reserved WorkOffer for an unknown ready task.")
+        logWarning(s"Trying to release reserved WorkerOffer for an unknown ready task.")
     }
   }
 
@@ -581,19 +581,19 @@ private[spark] class TaskSetManager(
 
         if (isBarrier) {
           var replacedExecId = execId
-          if (readyTaskToReservedWorkOffer.contains(index)) {
-            val currentReservedResourceOffer = readyTaskToReservedWorkOffer(index)._2
-            if (taskLocality < currentReservedResourceOffer.locality) {
-              replacedExecId = currentReservedResourceOffer.execId
-              readyTaskToReservedWorkOffer(index) =
-                (speculative, ReservedWorkOffer(execId, host, taskLocality))
+          if (readyTaskToReservedWorkerOffer.contains(index)) {
+            val currentReservedWorkerOffer = readyTaskToReservedWorkerOffer(index)._2
+            if (taskLocality < currentReservedWorkerOffer.locality) {
+              replacedExecId = currentReservedWorkerOffer.execId
+              readyTaskToReservedWorkerOffer(index) =
+                (speculative, ReservedWorkerOffer(execId, host, taskLocality))
               val readyTasks = execIdToReadyTasks.getOrElse(execId, HashSet[Int]())
               readyTasks.add(index)
               execIdToReadyTasks(execId) = readyTasks
             }
           } else {
-            readyTaskToReservedWorkOffer(index) =
-              (speculative, ReservedWorkOffer(execId, host, taskLocality))
+            readyTaskToReservedWorkerOffer(index) =
+              (speculative, ReservedWorkerOffer(execId, host, taskLocality))
             val readyTasks = execIdToReadyTasks.getOrElse(execId, HashSet[Int]())
             readyTasks.add(index)
             execIdToReadyTasks(execId) = readyTasks
@@ -642,7 +642,7 @@ private[spark] class TaskSetManager(
         val index = pendingTaskIds(indexOffset)
         if (copiesRunning(index) == 0 && !successful(index)) {
           return true
-        } else if (isBarrier && !getReadyTaskToReservedWorkOffer.contains(index)) {
+        } else if (isBarrier && !getReadyTaskToReservedWorkerOffer.contains(index)) {
           return true
         } else {
           pendingTaskIds.remove(indexOffset)
@@ -1096,7 +1096,7 @@ private[spark] class TaskSetManager(
     execIdToReadyTasks.get(execId) match {
       case Some(taskIndexes) =>
         taskIndexes.foreach { index =>
-          releaseReservedWorkOffer(index)
+          releaseReservedWorkerOffer(index)
         }
       case _ => // not a barrier TaskSet or no ready tasks reserve it
     }
