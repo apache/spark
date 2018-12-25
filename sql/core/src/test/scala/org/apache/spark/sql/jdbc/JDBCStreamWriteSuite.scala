@@ -60,10 +60,10 @@ class JDBCStreamWriteSuite extends StreamTest with BeforeAndAfter {
 
   test("Basic Write") {
     withTempDir { checkpointDir => {
-        val input = MemoryStream[Int]
+        val input = MemoryStream[Long]
         val query = input.toDF().map { row =>
-          val value = row.getInt(0)
-          TestData(s"name_$value", value.toLong)
+          val value = row.getLong(0)
+          TestData(s"name_$value", value)
         }.writeStream
           .format("jdbc")
           .option(JDBCOptions.JDBC_URL, url)
@@ -88,24 +88,24 @@ class JDBCStreamWriteSuite extends StreamTest with BeforeAndAfter {
 
   test("Write sub columns") {
     withTempDir { checkpointDir => {
-      val input = MemoryStream[Int]
-      val query = input.toDF().map { row =>
-        val value = row.getInt(0)
-        TestData(s"name_$value", value.toLong)
-      }.select("name").writeStream // write just one `name` column
-        .format("jdbc")
-        .option(JDBCOptions.JDBC_URL, url)
-        .option(JDBCOptions.JDBC_TABLE_NAME, jdbcTableName)
-        .option(JDBCOptions.JDBC_DRIVER_CLASS, driverClassName)
-        .option("checkpointLocation", checkpointDir.getCanonicalPath)
-        .start()
-      try {
-        input.addData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-        query.processAllAvailable()
-      } finally {
-        query.stop()
+        val input = MemoryStream[Long]
+        val query = input.toDF().map { row =>
+          val value = row.getLong(0)
+          TestData(s"name_$value", value)
+        }.select("name").writeStream // write just one `name` column
+          .format("jdbc")
+          .option(JDBCOptions.JDBC_URL, url)
+          .option(JDBCOptions.JDBC_TABLE_NAME, jdbcTableName)
+          .option(JDBCOptions.JDBC_DRIVER_CLASS, driverClassName)
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start()
+        try {
+          input.addData(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
       }
-    }
     }
     val result = conn
       .prepareStatement(s"select count(*) as count from $jdbcTableName")
@@ -116,24 +116,24 @@ class JDBCStreamWriteSuite extends StreamTest with BeforeAndAfter {
 
   test("Write same data") {
     withTempDir { checkpointDir => {
-      val input = MemoryStream[Int]
-      val query = input.toDF().map { row =>
-        val value = row.getInt(0)
-        TestData(s"name_$value", value.toLong)
-      }.writeStream
-        .format("jdbc")
-        .option(JDBCOptions.JDBC_URL, url)
-        .option(JDBCOptions.JDBC_TABLE_NAME, jdbcTableName)
-        .option(JDBCOptions.JDBC_DRIVER_CLASS, driverClassName)
-        .option("checkpointLocation", checkpointDir.getCanonicalPath)
-        .start()
-      try {
-        input.addData(1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
-        query.processAllAvailable()
-      } finally {
-        query.stop()
+        val input = MemoryStream[Long]
+        val query = input.toDF().map { row =>
+          val value = row.getLong(0)
+          TestData(s"name_$value", value)
+        }.writeStream
+          .format("jdbc")
+          .option(JDBCOptions.JDBC_URL, url)
+          .option(JDBCOptions.JDBC_TABLE_NAME, jdbcTableName)
+          .option(JDBCOptions.JDBC_DRIVER_CLASS, driverClassName)
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start()
+        try {
+          input.addData(1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
       }
-    }
     }
     val result = conn
       .prepareStatement(s"select count(*) as count from $jdbcTableName")
@@ -146,10 +146,10 @@ class JDBCStreamWriteSuite extends StreamTest with BeforeAndAfter {
     // without jdbc url
     val thrown = intercept[StreamingQueryException] {
       withTempDir { checkpointDir => {
-          val input = MemoryStream[Int]
+          val input = MemoryStream[Long]
           val query = input.toDF().map { row =>
-            val value = row.getInt(0)
-            TestData(s"name_$value", value.toLong)
+            val value = row.getLong(0)
+            TestData(s"name_$value", value)
           }.writeStream
             .format("jdbc")
             .option(JDBCOptions.JDBC_TABLE_NAME, jdbcTableName)
@@ -169,10 +169,10 @@ class JDBCStreamWriteSuite extends StreamTest with BeforeAndAfter {
     // without table name
     val thrown2 = intercept[StreamingQueryException] {
       withTempDir { checkpointDir => {
-          val input = MemoryStream[Int]
+          val input = MemoryStream[Long]
           val query = input.toDF().map { row =>
-            val value = row.getInt(0)
-            TestData(s"name_$value", value.toLong)
+            val value = row.getLong(0)
+            TestData(s"name_$value", value)
           }.writeStream
             .format("jdbc")
             .option(JDBCOptions.JDBC_URL, url)
