@@ -241,6 +241,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         context.reply(true)
 
       case DecomissionExecutor(executorId) =>
+        logInfo(s"Decommissioning executor ${executorId}")
         decommissionExecutor(executorId)
         context.reply(true)
 
