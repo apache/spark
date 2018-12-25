@@ -208,7 +208,8 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   }
 
   private def stringToBytes(str: String): (Float, String) = {
-    val matcher = Pattern.compile("([0-9]+(\\.[0-9]+)?) (EB|PB|TB|GB|MB|KB|B)").matcher(str)
+    val matcher =
+      Pattern.compile("([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)").matcher(str)
     if (matcher.matches()) {
       (matcher.group(1).toFloat, matcher.group(3))
     } else {
