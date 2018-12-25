@@ -31,7 +31,7 @@ if __name__ == "__main__":
         .builder \
         .appName("PyMemoryTest") \
         .getOrCreate()
-    sc = spark.SparkContext
+    sc = spark._sc
     rdd = sc.parallelize(range(10))
     rdd.collect()
     time.sleep(15)
