@@ -97,10 +97,10 @@ class JdbcSourceProvider extends CreatableRelationProvider
   }
 
   override def createStreamingWriteSupport(
-    queryId: String,
-    schema: StructType,
-    mode: OutputMode,
-    options: DataSourceOptions): StreamingWriteSupport = {
+      queryId: String,
+      schema: StructType,
+      mode: OutputMode,
+      options: DataSourceOptions): StreamingWriteSupport = {
     val optionMap = options.asMap().asScala.toMap
     // add this for parameter check.
     new JDBCOptions(optionMap)

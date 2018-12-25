@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 
 private case class TestData(name: String, value: Long)
 
-class JDBCStreamWriteSuite extends StreamTest with BeforeAndAfter{
+class JDBCStreamWriteSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb"

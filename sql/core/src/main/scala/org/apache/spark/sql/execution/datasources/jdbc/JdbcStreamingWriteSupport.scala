@@ -68,9 +68,9 @@ case class JdbcStreamWriterFactory(
   ) extends StreamingDataWriterFactory {
 
   override def createWriter(
-    partitionId: Int,
-    taskId: Long,
-    epochId: Long): DataWriter[InternalRow] = {
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = {
     JdbcStreamDataWriter(schema, options)
   }
 }
@@ -106,7 +106,7 @@ case class JdbcStreamDataWriter(
   private val sql: String = s"REPLACE INTO ${jdbcOptions.tableOrQuery}" +
     s" ( ${sqlPart._1} ) values ( ${sqlPart._2} )"
 
-  logInfo(s"Sql string for jdbc writing is ${sql}")
+  logTrace(s"Sql string for jdbc writing is ${sql}")
 
   private val dialect = JdbcDialects.get(jdbcOptions.url)
 
