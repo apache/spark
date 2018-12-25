@@ -153,8 +153,12 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       <div>
         <ul class="unstyled">
           <li>
-            <strong>Total Time Across All Tasks: </strong>
+            <strong>Total Run Time Across All Tasks: </strong>
             {UIUtils.formatDuration(stageData.executorRunTime)}
+          </li>
+          <li>
+            <strong>Total CPU Time Across All Tasks: </strong>
+            {UIUtils.formatDuration(stageData.executorCpuTime / 1000000)}
           </li>
           <li>
             <strong>Locality Level Summary: </strong>
