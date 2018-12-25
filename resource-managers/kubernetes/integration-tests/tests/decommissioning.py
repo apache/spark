@@ -34,5 +34,5 @@ if __name__ == "__main__":
     sc = spark._sc
     rdd = sc.parallelize(range(10))
     rdd.collect()
-    time.sleep(15)
+    time.sleep(30)
     sys.exit(0)
