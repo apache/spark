@@ -1240,6 +1240,43 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(3 === taskDescriptions.length)
   }
 
+  test("barrier taskSet can launch all tasks after multiple resourceOffers round" +
+    "until it accumulate sufficient resource") {
+    val taskCpus = 2
+    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
+
+    val numFreeCores = 3
+    val workerOffers1 = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")))
+
+    val workerOffers2 = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")),
+      new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629")))
+
+
+    // submit barrier taskSet 1, offer some resources, since the available Cpus are not
+    // sufficient, so scheduler won't launch any tasks.
+    val ts1 = FakeTask.createBarrierTaskSet(3)
+    taskScheduler.submitTasks(ts1)
+    val taskDescriptions1 = taskScheduler.resourceOffers(workerOffers1).flatten
+    assert(0 === taskDescriptions1.length)
+
+    // submit non-barrier taskSet 2, offer the same resources, since ts1 has
+    // already reserved resources, so there're no more available Cpus for ts2
+    // to launch any tasks.
+    val ts2 = FakeTask.createTaskSet(3)
+    taskScheduler.submitTasks(ts2)
+    val taskDescriptions2 = taskScheduler.resourceOffers(workerOffers1).flatten
+    assert(0 === taskDescriptions2.length)
+
+    // offer a new resource, thus, ts1 could accumulate sufficient resource to
+    // launch its tasks at the same time. But for ts2, still no resources for it.
+    val taskDescription3 = taskScheduler.resourceOffers(workerOffers2).flatten
+    assert(3 === taskDescription3.length)
+  }
+
   test("cancelTasks shall kill all the running tasks and fail the stage") {
     val taskScheduler = setupScheduler()
 

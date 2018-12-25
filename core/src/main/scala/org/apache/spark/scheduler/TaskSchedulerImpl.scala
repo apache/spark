@@ -91,6 +91,15 @@ private[spark] class TaskSchedulerImpl(
   // on this class.
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
+  private val MAX_CONSECUTIVE_NO_BARRIER_TASKSET_LAUNCH_TIMES =
+    conf.get(config.BARRIER_MAX_CONSECUTIVE_NO_BARRIER_TASKSET_LAUNCH_TIMES)
+
+  private val barrierTaskSetNoSufficientResourceTimeoutMs =
+    conf.get(config.BARRIER_NO_SUFFICIENT_RESOURCE_TIMEOUT) * 60 * 1000
+
+  private var noBarrierTaskSetLaunchCounter = 0
+  private val barrierTaskSetByTimeout = new HashMap[TaskSetManager, (Int, Long)]
+
   // Protected by `this`
   private[scheduler] val taskIdToTaskSetManager = new ConcurrentHashMap[Long, TaskSetManager]
   val taskIdToExecutorId = new HashMap[Long, String]
@@ -213,6 +222,10 @@ private[spark] class TaskSchedulerImpl(
         throw new IllegalStateException(s"more than one active taskSet for stage $stage:" +
           s" ${stageTaskSets.toSeq.map{_._2.taskSet.id}.mkString(",")}")
       }
+      if (manager.isBarrier) {
+        barrierTaskSetByTimeout(manager) =
+          (0, clock.getTimeMillis() + barrierTaskSetNoSufficientResourceTimeoutMs)
+      }
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       if (!isLocal && !hasReceivedTask) {
@@ -303,45 +316,134 @@ private[spark] class TaskSchedulerImpl(
       s" ${manager.parent.name}")
   }
 
+  private def addRunningTask(tid: Long, taskSet: TaskSetManager, execId: String): Unit = {
+    taskIdToTaskSetManager.put(tid, taskSet)
+    taskIdToExecutorId(tid) = execId
+    executorIdToRunningTaskIds(execId).add(tid)
+  }
+
+  private def getSortedBarrierTaskSets: ArrayBuffer[TaskSetManager] = {
+    rootPool.getSortedTaskSetQueue.filter(_.isBarrier)
+  }
+
+  private def excludeReservedCpus(offers: Seq[WorkerOffer]): Array[Int] = {
+    excludeReservedCpus(offers.toIndexedSeq, getSortedBarrierTaskSets)
+  }
+
+  private def excludeReservedCpus(
+    offers: IndexedSeq[WorkerOffer],
+    barrierTaskSets: ArrayBuffer[TaskSetManager])
+    : Array[Int] = {
+    val execIdToReadyTaskNum = barrierTaskSets.map { ts =>
+      val execIdToTaskNum = ts.getReadyTaskToReservedWorkOffer.map {
+        case (_, (_, reservedWorkOffer)) =>
+          (reservedWorkOffer.execId, 1)
+      }.groupBy { case (execId, _) =>
+        execId
+      }.map { case (execId, taskList) =>
+        val sum = taskList.map {case (_, num) => num }.sum
+        (execId, sum)
+      }
+      execIdToTaskNum
+    }.foldLeft(HashMap[String, Int]()) { case (resMap, execIdToTaskNum) =>
+      execIdToTaskNum.foreach { case (execId, num) =>
+        resMap += (execId -> (num + resMap.getOrElse(execId, 0)))
+      }
+      resMap
+    }
+    offers.map { o =>
+      val reservedCpus = execIdToReadyTaskNum.getOrElse(o.executorId, 0) * CPUS_PER_TASK
+      o.cores - reservedCpus
+    }.toArray
+  }
+
+  private def releaseReservedWorkOfferIfNecessary(alreadyReleased: Int): Unit = {
+    val barrierTaskSets = getSortedBarrierTaskSets
+    val needed =
+      barrierTaskSets.map(ts => ts.numTasks - ts.getReadyTaskToReservedWorkOffer.size).sum
+    // take a half by taking waiting time into account roughly
+    val canBeReleased = runningTasksByExecutors.values.sum / 2
+    var extraNeeded = math.max(needed - alreadyReleased - canBeReleased, 0)
+    // start to force release reserved WorkOffer from the last barrier in the sorted queue
+    var index = barrierTaskSets.size
+    while (extraNeeded > 0 && index > 0) {
+      index -= 1
+      val bts = barrierTaskSets(index)
+      val readyTaskNum = bts.getReadyTaskToReservedWorkOffer.size
+      if (readyTaskNum <= extraNeeded) {
+        bts.releaseReservedWorkOffer()
+      } else {
+        bts.releaseReservedWorkOfferByLocality(extraNeeded)
+      }
+      extraNeeded -= readyTaskNum
+    }
+  }
+
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
       maxLocality: TaskLocality,
       shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
-      tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
-      addressesWithDescs: ArrayBuffer[(String, TaskDescription)]) : Boolean = {
+      execIdToOfferIndex: Map[String, Int],
+      tasks: IndexedSeq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
+    val reviveOffers = new ArrayBuffer[WorkerOffer] ++ shuffledOffers
+    var dynamicAvailableCpus = availableCpus
     // nodes and executors that are blacklisted for the entire application have already been
     // filtered out by this point
-    for (i <- 0 until shuffledOffers.size) {
-      val execId = shuffledOffers(i).executorId
-      val host = shuffledOffers(i).host
-      if (availableCpus(i) >= CPUS_PER_TASK) {
-        try {
-          for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
-            tasks(i) += task
-            val tid = task.taskId
-            taskIdToTaskSetManager.put(tid, taskSet)
-            taskIdToExecutorId(tid) = execId
-            executorIdToRunningTaskIds(execId).add(tid)
-            availableCpus(i) -= CPUS_PER_TASK
-            assert(availableCpus(i) >= 0)
-            // Only update hosts for a barrier task.
-            if (taskSet.isBarrier) {
-              // The executor address is expected to be non empty.
-              addressesWithDescs += (shuffledOffers(i).address.get -> task)
+    while (reviveOffers.nonEmpty) {
+      val addedReviveOffersPerRound = new ArrayBuffer[WorkerOffer]()
+      var replaced = false
+      for (i <- 0 until shuffledOffers.size if reviveOffers.contains(shuffledOffers(i))) {
+        val execId = shuffledOffers(i).executorId
+        val host = shuffledOffers(i).host
+        if (dynamicAvailableCpus(i) >= CPUS_PER_TASK) {
+          try {
+            for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
+              dynamicAvailableCpus(i) -= CPUS_PER_TASK
+              launchedTask = true
+              // Only update hosts for a barrier task.
+              if (taskSet.isBarrier) {
+                if (task.executorId != execId) {
+                  replaced = true
+                  val replacedExecId = task.executorId
+                  val offerIndex = execIdToOfferIndex(replacedExecId)
+                  if (offerIndex < i) {
+                    // given the WorkOffer a second chance to offer the resource for the taskSet,
+                    // which reclaims the resource just now
+                    addedReviveOffersPerRound += shuffledOffers(offerIndex)
+                  }
+                }
+                // don't do another resourceOffer round if we've already archived the goal, even if
+                // we have new added reviveOffers in this round, which may provide better locality
+                // preference, but that's not guaranteed.
+                if (taskSet.getReadyTaskToReservedWorkOffer.size == taskSet.numTasks) {
+                  return launchedTask
+                }
+              } else {
+                tasks(i) += task
+                addRunningTask(task.taskId, taskSet, execId)
+              }
             }
-            launchedTask = true
+          } catch {
+            case e: TaskNotSerializableException =>
+              logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
+              // Do not offer resources for this task, but don't throw an error to allow other
+              // task sets to be submitted.
+              return launchedTask
           }
-        } catch {
-          case e: TaskNotSerializableException =>
-            logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
-            // Do not offer resources for this task, but don't throw an error to allow other
-            // task sets to be submitted.
-            return launchedTask
         }
       }
+      if (replaced) {
+        // update WorkOffers' free cores since some reserved WorkOffers are
+        // released during resourceOffer()
+        dynamicAvailableCpus = excludeReservedCpus(shuffledOffers)
+      }
+      reviveOffers.clear()
+      reviveOffers ++= addedReviveOffersPerRound
+      addedReviveOffersPerRound.clear()
     }
+
     return launchedTask
   }
 
@@ -382,12 +484,13 @@ private[spark] class TaskSchedulerImpl(
       }
     }.getOrElse(offers)
 
+    val sortedTaskSets = rootPool.getSortedTaskSetQueue
     val shuffledOffers = shuffleOffers(filteredOffers)
+    val availableCpus = excludeReservedCpus(shuffledOffers, sortedTaskSets)
+    val execIdToOfferIndex =
+      shuffledOffers.zipWithIndex.map { case (o, i) => (o.executorId, i)}.toMap
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
-    val availableCpus = shuffledOffers.map(o => o.cores).toArray
-    val availableSlots = shuffledOffers.map(o => o.cores / CPUS_PER_TASK).sum
-    val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
@@ -395,87 +498,83 @@ private[spark] class TaskSchedulerImpl(
         taskSet.executorAdded()
       }
     }
-
+    var launchedAnyBarrierTaskSet = false
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     for (taskSet <- sortedTaskSets) {
-      // Skip the barrier taskSet if the available slots are less than the number of pending tasks.
-      if (taskSet.isBarrier && availableSlots < taskSet.numTasks) {
-        // Skip the launch process.
-        // TODO SPARK-24819 If the job requires more slots than available (both busy and free
-        // slots), fail the job on submit.
-        logInfo(s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
-          s"because the barrier taskSet requires ${taskSet.numTasks} slots, while the total " +
-          s"number of available slots is $availableSlots.")
+      var launchedAnyTask = false
+      for (currentMaxLocality <- taskSet.myLocalityLevels) {
+        var launchedTaskAtCurrentMaxLocality = false
+        do {
+          launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(taskSet,
+            currentMaxLocality, shuffledOffers, availableCpus, execIdToOfferIndex, tasks)
+          launchedAnyTask |= launchedTaskAtCurrentMaxLocality
+        } while (launchedTaskAtCurrentMaxLocality)
+      }
+
+      if (!launchedAnyTask) {
+        taskSet.getCompletelyBlacklistedTaskIfAny(hostToExecutors).foreach { taskIndex =>
+            // If the taskSet is unschedulable we try to find an existing idle blacklisted
+            // executor. If we cannot find one, we abort immediately. Else we kill the idle
+            // executor and kick off an abortTimer which if it doesn't schedule a task within the
+            // the timeout will abort the taskSet if we were unable to schedule any task from the
+            // taskSet.
+            // Note 1: We keep track of schedulability on a per taskSet basis rather than on a per
+            // task basis.
+            // Note 2: The taskSet can still be aborted when there are more than one idle
+            // blacklisted executors and dynamic allocation is on. This can happen when a killed
+            // idle executor isn't replaced in time by ExecutorAllocationManager as it relies on
+            // pending tasks and doesn't kill executors on idle timeouts, resulting in the abort
+            // timer to expire and abort the taskSet.
+            executorIdToRunningTaskIds.find(x => !isExecutorBusy(x._1)) match {
+              case Some ((executorId, _)) =>
+                if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
+                  blacklistTrackerOpt.foreach(blt => blt.killBlacklistedIdleExecutor(executorId))
+
+                  val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
+                  unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
+                  logInfo(s"Waiting for $timeout ms for completely "
+                    + s"blacklisted task to be schedulable again before aborting $taskSet.")
+                  abortTimer.schedule(
+                    createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
+                }
+              case None => // Abort Immediately
+                logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
+                  s" executors can be found to kill. Aborting $taskSet." )
+                taskSet.abortSinceCompletelyBlacklisted(taskIndex)
+            }
+        }
       } else {
-        var launchedAnyTask = false
-        // Record all the executor IDs assigned barrier tasks on.
-        val addressesWithDescs = ArrayBuffer[(String, TaskDescription)]()
-        for (currentMaxLocality <- taskSet.myLocalityLevels) {
-          var launchedTaskAtCurrentMaxLocality = false
-          do {
-            launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(taskSet,
-              currentMaxLocality, shuffledOffers, availableCpus, tasks, addressesWithDescs)
-            launchedAnyTask |= launchedTaskAtCurrentMaxLocality
-          } while (launchedTaskAtCurrentMaxLocality)
+        // We want to defer killing any taskSets as long as we have a non blacklisted executor
+        // which can be used to schedule a task from any active taskSets. This ensures that the
+        // job can make progress.
+        // Note: It is theoretically possible that a taskSet never gets scheduled on a
+        // non-blacklisted executor and the abort timer doesn't kick in because of a constant
+        // submission of new TaskSets. See the PR for more details.
+        if (unschedulableTaskSetToExpiryTime.nonEmpty) {
+          logInfo("Clearing the expiry times for all unschedulable taskSets as a task was " +
+            "recently scheduled.")
+          unschedulableTaskSetToExpiryTime.clear()
         }
+      }
 
-        if (!launchedAnyTask) {
-          taskSet.getCompletelyBlacklistedTaskIfAny(hostToExecutors).foreach { taskIndex =>
-              // If the taskSet is unschedulable we try to find an existing idle blacklisted
-              // executor. If we cannot find one, we abort immediately. Else we kill the idle
-              // executor and kick off an abortTimer which if it doesn't schedule a task within the
-              // the timeout will abort the taskSet if we were unable to schedule any task from the
-              // taskSet.
-              // Note 1: We keep track of schedulability on a per taskSet basis rather than on a per
-              // task basis.
-              // Note 2: The taskSet can still be aborted when there are more than one idle
-              // blacklisted executors and dynamic allocation is on. This can happen when a killed
-              // idle executor isn't replaced in time by ExecutorAllocationManager as it relies on
-              // pending tasks and doesn't kill executors on idle timeouts, resulting in the abort
-              // timer to expire and abort the taskSet.
-              executorIdToRunningTaskIds.find(x => !isExecutorBusy(x._1)) match {
-                case Some ((executorId, _)) =>
-                  if (!unschedulableTaskSetToExpiryTime.contains(taskSet)) {
-                    blacklistTrackerOpt.foreach(blt => blt.killBlacklistedIdleExecutor(executorId))
-
-                    val timeout = conf.get(config.UNSCHEDULABLE_TASKSET_TIMEOUT) * 1000
-                    unschedulableTaskSetToExpiryTime(taskSet) = clock.getTimeMillis() + timeout
-                    logInfo(s"Waiting for $timeout ms for completely "
-                      + s"blacklisted task to be schedulable again before aborting $taskSet.")
-                    abortTimer.schedule(
-                      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
-                  }
-                case None => // Abort Immediately
-                  logInfo("Cannot schedule any task because of complete blacklisting. No idle" +
-                    s" executors can be found to kill. Aborting $taskSet." )
-                  taskSet.abortSinceCompletelyBlacklisted(taskIndex)
-              }
-          }
-        } else {
-          // We want to defer killing any taskSets as long as we have a non blacklisted executor
-          // which can be used to schedule a task from any active taskSets. This ensures that the
-          // job can make progress.
-          // Note: It is theoretically possible that a taskSet never gets scheduled on a
-          // non-blacklisted executor and the abort timer doesn't kick in because of a constant
-          // submission of new TaskSets. See the PR for more details.
-          if (unschedulableTaskSetToExpiryTime.nonEmpty) {
-            logInfo("Clearing the expiry times for all unschedulable taskSets as a task was " +
-              "recently scheduled.")
-            unschedulableTaskSetToExpiryTime.clear()
-          }
-        }
-
-        if (launchedAnyTask && taskSet.isBarrier) {
-          // Check whether the barrier tasks are partially launched.
-          // TODO SPARK-24818 handle the assert failure case (that can happen when some locality
-          // requirements are not fulfilled, and we should revert the launched tasks).
-          require(addressesWithDescs.size == taskSet.numTasks,
-            s"Skip current round of resource offers for barrier stage ${taskSet.stageId} " +
-              s"because only ${addressesWithDescs.size} out of a total number of " +
-              s"${taskSet.numTasks} tasks got resource offers. The resource offers may have " +
-              "been blacklisted or cannot fulfill task locality requirements.")
+      if (taskSet.isBarrier &&
+        taskSet.getReadyTaskToReservedWorkOffer.size == taskSet.numTasks) {
+          val readyTasks = taskSet.getReadyTaskToReservedWorkOffer
+          val curTime = clock.getTimeMillis()
+          // Record all the executor IDs assigned barrier tasks on.
+          val addressesWithDescs = readyTasks.map { case (index, (speculative, reservedOffer)) =>
+            val execId = reservedOffer.execId
+            val host = reservedOffer.host
+            val locality = reservedOffer.locality
+            val taskDesc = taskSet.setupTask(index, execId, host, locality, curTime, speculative)
+            val offerIndex = execIdToOfferIndex(execId)
+            tasks(offerIndex) += taskDesc
+            addRunningTask(taskDesc.taskId, taskSet, execId)
+            // The executor address is expected to be non empty.
+            (shuffledOffers(offerIndex).address, taskDesc)
+          }.toArray
 
           // materialize the barrier coordinator.
           maybeInitBarrierCoordinator()
@@ -487,11 +586,52 @@ private[spark] class TaskSchedulerImpl(
             .map(_._1)
             .mkString(",")
           addressesWithDescs.foreach(_._2.properties.setProperty("addresses", addressesStr))
-
+          // clear reserved WorkOffer, so that we do not exclude its reserved Cpus
+          // in next resourceOffer round.
+          taskSet.releaseReservedWorkOffer()
+          launchedAnyBarrierTaskSet = true
           logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for barrier " +
             s"stage ${taskSet.stageId}.")
-        }
       }
+    }
+
+    val curTime = clock.getTimeMillis()
+    val abortBarrierTaskSets = {
+      if (launchedAnyBarrierTaskSet) {
+        noBarrierTaskSetLaunchCounter = 0
+        val timeoutTaskSets = barrierTaskSetByTimeout.filter(_._2._2 < curTime)
+        // given a second chance for barrier TaskSets who timeout for the first time,
+        // since we've successfully launched some barrier TaskSets in this resourceOffer
+        // round and hopefully to get released WorkOffer in latter round.
+        val (firsts, seconds) = timeoutTaskSets.partition(_._2._1 == 0)
+        firsts.keySet.foreach { ts =>
+          barrierTaskSetByTimeout(ts) = (1, curTime + barrierTaskSetNoSufficientResourceTimeoutMs)
+        }
+        seconds.map { case (k, v) => (k, v._1.toInt) }
+      } else {
+        noBarrierTaskSetLaunchCounter += 1
+        barrierTaskSetByTimeout.filter(_._2._2 < curTime).map { case (k, v) => (k, v._1.toInt) }
+      }
+    }
+
+    val released = {
+      abortBarrierTaskSets.map { case (ts, times) =>
+        val reserved = ts.getReadyTaskToReservedWorkOffer.size
+        ts.releaseReservedWorkOffer()
+        val waitTime = 1.0 * (times + 1) * barrierTaskSetNoSufficientResourceTimeoutMs / 60 / 1000
+        ts.abort(
+          s"Barrier TaskSet ${ts.taskSet.id} abort due to " +
+          s"insufficient resource after waiting $waitTime min.")
+        reserved
+      }.sum
+    }
+
+    if (abortBarrierTaskSets.nonEmpty ||
+      (getSortedBarrierTaskSets.nonEmpty && !launchedAnyBarrierTaskSet &&
+      noBarrierTaskSetLaunchCounter >= MAX_CONSECUTIVE_NO_BARRIER_TASKSET_LAUNCH_TIMES)) {
+      // to force release reserved WorkOffer in case of some barrier TaskSets holds the resource
+      // for a long time and cause deadlock problem on the resource in the end.
+      releaseReservedWorkOfferIfNecessary(released)
     }
 
     // TODO SPARK-24823 Cancel a job that contains barrier stage(s) if the barrier tasks don't get

@@ -715,6 +715,24 @@ package object config {
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
 
+  private[spark] val BARRIER_NO_SUFFICIENT_RESOURCE_TIMEOUT =
+    ConfigBuilder("spark.scheduler.barrier.noSufficientResource.timeout")
+      .doc("Time in minutes to wait before a barrier TaskSet get sufficient resource " +
+        "to launch tasks. Abort the barrier TaskSet once it expires to avoid job " +
+        "hanging indefinitely.")
+      .timeConf(TimeUnit.MINUTES)
+      .checkValue(v => v > 0, "Time value should be a positive value.")
+      .createWithDefault(5)
+
+  private[spark] val BARRIER_MAX_CONSECUTIVE_NO_BARRIER_TASKSET_LAUNCH_TIMES =
+    ConfigBuilder("spark.scheduler.barrier.maxConsecutiveNoBarrierTaskSetLaunchTimes")
+      .doc("Number of max consecutive times of no any barrier taskSet launched in each " +
+        "resourceOffers round. TaskScheduler will ask barrier taskSets to release reserved" +
+        "WorkOffers if it reach this point.")
+      .intConf
+      .checkValue(v => v > 0, "The maxConsecutiveNoTaskSetLaunchTimes should be a positive value.")
+      .createWithDefault(5)
+
   private[spark] val EXECUTOR_PLUGINS =
     ConfigBuilder("spark.executor.plugins")
       .doc("Comma-separated list of class names for \"plugins\" implementing " +
