@@ -248,11 +248,6 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
     val operationCheckEnabled = sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled
 
-    if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
-      logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
-          "is not supported in streaming DataFrames/Datasets and will be disabled.")
-    }
-
     (sink, trigger) match {
       case (v2Sink: StreamingWriteSupportProvider, trigger: ContinuousTrigger) =>
         if (operationCheckEnabled) {

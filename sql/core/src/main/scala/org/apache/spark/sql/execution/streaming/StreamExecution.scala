@@ -273,9 +273,18 @@ abstract class StreamExecution(
       // Isolated spark session to run the batches with.
       val sparkSessionForStream = sparkSession.cloneSession()
       // Adaptive execution can change num shuffle partitions, disallow
-      sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+      if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
+        logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
+          "is not supported in streaming DataFrames/Datasets and will be disabled.")
+        sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+      }
       // Disable cost-based join optimization as we do not want stateful operations to be rearranged
-      sparkSessionForStream.conf.set(SQLConf.CBO_ENABLED.key, "false")
+      if (sparkSession.sessionState.conf.cboEnabled) {
+        logWarning(s"${SQLConf.CBO_ENABLED.key} " +
+          "is not supported in streaming DataFrames/Datasets and will be disabled.")
+        sparkSessionForStream.conf.set(SQLConf.CBO_ENABLED.key, "false")
+      }
+      
       offsetSeqMetadata = OffsetSeqMetadata(
         batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
 
