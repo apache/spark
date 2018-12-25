@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.metric
 
 import java.io.File
+import java.util.regex.Pattern
 
 import scala.collection.mutable.HashMap
 
@@ -197,6 +198,51 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
         }
       }
     }
+  }
+
+  private def metricStats(metricStr: String): Seq[String] = {
+    val sum = metricStr.substring(0, metricStr.indexOf("(")).stripPrefix("\n").stripSuffix(" ")
+    val minMedMax = metricStr.substring(metricStr.indexOf("(") + 1, metricStr.indexOf(")"))
+      .split(", ").toSeq
+    (sum +: minMedMax)
+  }
+
+  private def stringToBytes(str: String): (Float, String) = {
+    val matcher = Pattern.compile("([0-9]+(\\.[0-9]+)?) (EB|PB|TB|GB|MB|KB|B)").matcher(str)
+    if (matcher.matches()) {
+      (matcher.group(1).toFloat, matcher.group(3))
+    } else {
+      throw new NumberFormatException("Failed to parse byte string: " + str)
+    }
+  }
+
+  private def stringToDuration(str: String): (Float, String) = {
+    val matcher = Pattern.compile("([0-9]+(\\.[0-9]+)?) (ms|s|m|h)").matcher(str)
+    if (matcher.matches()) {
+      (matcher.group(1).toFloat, matcher.group(3))
+    } else {
+      throw new NumberFormatException("Failed to parse time string: " + str)
+    }
+  }
+
+  /**
+   * Convert a size metric string to a sequence of stats, including sum, min, med and max in order,
+   * each a tuple of (value, unit).
+   * @param metricStr size metric string, e.g. "\n96.2 MB (32.1 MB, 32.1 MB, 32.1 MB)"
+   * @return A sequence of stats, e.g. ((96.2,MB), (32.1,MB), (32.1,MB), (32.1,MB))
+   */
+  protected def sizeMetricStats(metricStr: String): Seq[(Float, String)] = {
+    metricStats(metricStr).map(stringToBytes)
+  }
+
+  /**
+   * Convert a timing metric string to a sequence of stats, including sum, min, med and max in
+   * order, each a tuple of (value, unit).
+   * @param metricStr timing metric string, e.g. "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)"
+   * @return A sequence of stats, e.g. ((2.0,ms), (1.0,ms), (1.0,ms), (1.0,ms))
+   */
+  protected def timingMetricStats(metricStr: String): Seq[(Float, String)] = {
+    metricStats(metricStr).map(stringToDuration)
   }
 }
 

@@ -197,10 +197,23 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     // Assume the execution plan with node id is
     // Sort(nodeId = 0)
     //   Exchange(nodeId = 1)
-    //     LocalTableScan(nodeId = 2)
+    //     Project(nodeId = 2)
+    //       LocalTableScan(nodeId = 3)
+    // Because of SPARK-25267, ConvertToLocalRelation is disabled in the test cases of sql/core,
+    // so Project here is not collapsed into LocalTableScan.
     val df = Seq(1, 3, 2).toDF("id").sort('id)
-    testSparkPlanMetrics(df, 2, Map.empty)
-    assert(df.queryExecution.executedPlan.find(_.isInstanceOf[SortExec]).isDefined)
+    val metrics = getSparkPlanMetrics(df, 2, Set(0))
+    val sortMetrics = metrics.get.get(0).get
+    // Check node 0 is Sort node
+    val operatorName = sortMetrics._1
+    assert(operatorName == "Sort")
+    // Check metrics values
+    val sortTimeStr = sortMetrics._2.get("sort time total (min, med, max)").get.toString
+    timingMetricStats(sortTimeStr).foreach { case (sortTime, _) => assert(sortTime >= 0) }
+    val peakMemoryStr = sortMetrics._2.get("peak memory total (min, med, max)").get.toString
+    sizeMetricStats(peakMemoryStr).foreach { case (peakMemory, _) => assert(peakMemory > 0) }
+    val spillSizeStr = sortMetrics._2.get("spill size total (min, med, max)").get.toString
+    sizeMetricStats(spillSizeStr).foreach { case (spillSize, _) => assert(spillSize >= 0) }
   }
 
   test("SortMergeJoin metrics") {
