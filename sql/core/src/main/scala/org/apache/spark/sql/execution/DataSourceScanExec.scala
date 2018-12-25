@@ -298,7 +298,7 @@ case class FileSourceScanExec(
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
-    val readFile: (PartitionedFile) => Iterator[InternalRow] =
+    val readFunc: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
         dataSchema = relation.dataSchema,
@@ -307,6 +307,15 @@ case class FileSourceScanExec(
         filters = pushedDownFilters,
         options = relation.options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
+
+    // Wrap the function by calculating the time cost of records decode.
+    val readFile: (PartitionedFile) => Iterator[InternalRow] = file => {
+      val startTime = System.nanoTime()
+      val rowIter = readFunc.apply(file)
+      val timeNs = System.nanoTime() - startTime
+      longMetric("recordDecodingTime").add(timeNs)
+      rowIter
+    }
 
     val readRDD = relation.bucketSpec match {
       case Some(bucketing) if relation.sparkSession.sessionState.conf.bucketingEnabled =>
@@ -326,7 +335,9 @@ case class FileSourceScanExec(
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
       "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time"),
-      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
+      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"),
+      "recordDecodingTime" ->
+        SQLMetrics.createNanoTimingMetric(sparkContext, "record decoding time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {
