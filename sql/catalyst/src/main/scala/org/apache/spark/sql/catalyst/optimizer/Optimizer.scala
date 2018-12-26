@@ -180,7 +180,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       CollapseProject,
       RemoveNoopOperators) :+
     Batch("UpdateAttributeReferences", Once,
-      UpdateNullabilityInAttributeReferences)
+      UpdateNullabilityInAttributeReferences) :+
+    // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
+    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
   }
 
   /**

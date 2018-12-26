@@ -134,7 +134,7 @@ abstract class QueryTest extends PlanTest {
       a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
     case (a: Product, b: Product) =>
       compare(a.productIterator.toSeq, b.productIterator.toSeq)
-    // 0.0 == -0.0, turn float/double to binary before comparison, to distinguish 0.0 and -0.0.
+    // 0.0 == -0.0, turn float/double to bits before comparison, to distinguish 0.0 and -0.0.
     case (a: Double, b: Double) =>
       java.lang.Double.doubleToRawLongBits(a) == java.lang.Double.doubleToRawLongBits(b)
     case (a: Float, b: Float) =>
@@ -282,18 +282,18 @@ object QueryTest {
   }
 
 
-  def prepareAnswer(answer: Seq[Row], isSorted: Boolean): Seq[Row] = {
+  def prepareAnswer(answer: Seq[Row], isSorted: Boolean, forPrint: Boolean = false): Seq[Row] = {
     // Converts data to types that we can do equality comparison using Scala collections.
     // For BigDecimal type, the Scala type has a better definition of equality test (similar to
     // Java's java.math.BigDecimal.compareTo).
     // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
     // equality test.
-    val converted: Seq[Row] = answer.map(prepareRow)
+    val converted: Seq[Row] = answer.map(prepareRow(_, forPrint))
     if (!isSorted) converted.sortBy(_.toString()) else converted
   }
 
   // We need to call prepareRow recursively to handle schemas with struct types.
-  def prepareRow(row: Row): Row = {
+  def prepareRow(row: Row, forPrint: Boolean): Row = {
     Row.fromSeq(row.toSeq.map {
       case null => null
       case bd: java.math.BigDecimal => BigDecimal(bd)
@@ -309,10 +309,10 @@ object QueryTest {
       }
       // Convert array to Seq for easy equality check.
       case b: Array[_] => b.toSeq
-      case r: Row => prepareRow(r)
-      // spark treats -0.0 as 0.0
-      case d: Double if d == -0.0d => 0.0d
-      case f: Float if f == -0.0f => 0.0f
+      case r: Row => prepareRow(r, forPrint)
+      // 0.0 == -0.0, turn float/double to bits before comparison, to distinguish 0.0 and -0.0.
+      case f: Float if !forPrint => java.lang.Float.floatToRawIntBits(f)
+      case d: Double if !forPrint => java.lang.Double.doubleToLongBits(d)
       case o => o
     })
   }
@@ -335,10 +335,10 @@ object QueryTest {
       sideBySide(
         s"== Correct Answer - ${expectedAnswer.size} ==" +:
           getRowType(expectedAnswer.headOption) +:
-          prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
+          prepareAnswer(expectedAnswer, isSorted, forPrint = true).map(_.toString()),
         s"== Spark Answer - ${sparkAnswer.size} ==" +:
           getRowType(sparkAnswer.headOption) +:
-          prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")
+          prepareAnswer(sparkAnswer, isSorted, forPrint = true).map(_.toString())).mkString("\n")
     }
     """.stripMargin
   }

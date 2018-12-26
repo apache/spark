@@ -397,27 +397,42 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
   test("special floating point values") {
     import org.scalatest.exceptions.TestFailedException
 
-    // Spark treats -0.0 as 0.0
+    // Spark distinguishes -0.0 and 0.0
     intercept[TestFailedException] {
-      checkDataset(Seq(-0.0d).toDS(), -0.0d)
+      checkDataset(Seq(-0.0d).toDS(), 0.0d)
     }
     intercept[TestFailedException] {
-      checkDataset(Seq(-0.0f).toDS(), -0.0f)
+      checkAnswer(Seq(-0.0d).toDF(), Row(0.0d))
     }
     intercept[TestFailedException] {
-      checkDataset(Seq(Tuple1(-0.0)).toDS(), Tuple1(-0.0))
+      checkDataset(Seq(-0.0f).toDS(), 0.0f)
+    }
+    intercept[TestFailedException] {
+      checkAnswer(Seq(-0.0f).toDF(), Row(0.0f))
+    }
+    intercept[TestFailedException] {
+      checkDataset(Seq(Tuple1(-0.0)).toDS(), Tuple1(0.0))
+    }
+    intercept[TestFailedException] {
+      checkAnswer(Seq(Tuple1(-0.0)).toDF(), Row(Row(0.0)))
     }
 
-    val floats = Seq[Float](-0.0f, 0.0f, Float.NaN).toDS()
-    checkDataset(floats, 0.0f, 0.0f, Float.NaN)
+    val floats = Seq[Float](-0.0f, 0.0f, Float.NaN)
+    checkDataset(floats.toDS(), floats: _*)
 
-    val doubles = Seq[Double](-0.0d, 0.0d, Double.NaN).toDS()
-    checkDataset(doubles, 0.0, 0.0, Double.NaN)
+    val arrayOfFloats = Seq[Array[Float]](Array(0.0f, -0.0f), Array(-0.0f, Float.NaN))
+    checkDataset(arrayOfFloats.toDS(), arrayOfFloats: _*)
 
-    checkDataset(Seq(Tuple1(Float.NaN)).toDS(), Tuple1(Float.NaN))
-    checkDataset(Seq(Tuple1(-0.0f)).toDS(), Tuple1(0.0f))
-    checkDataset(Seq(Tuple1(Double.NaN)).toDS(), Tuple1(Double.NaN))
-    checkDataset(Seq(Tuple1(-0.0)).toDS(), Tuple1(0.0))
+    val doubles = Seq[Double](-0.0d, 0.0d, Double.NaN)
+    checkDataset(doubles.toDS(), doubles: _*)
+
+    val arrayOfDoubles = Seq[Array[Double]](Array(0.0d, -0.0d), Array(-0.0d, Double.NaN))
+    checkDataset(arrayOfDoubles.toDS(), arrayOfDoubles: _*)
+
+    val tuples = Seq[(Float, Float, Double, Double)](
+      (0.0f, -0.0f, 0.0d, -0.0d),
+      (-0.0f, Float.NaN, -0.0d, Double.NaN))
+    checkDataset(tuples.toDS(), tuples: _*)
 
     val complex = Map(Array(Seq(Tuple1(Double.NaN))) -> Map(Tuple2(Float.NaN, null)))
     checkDataset(Seq(complex).toDS(), complex)
