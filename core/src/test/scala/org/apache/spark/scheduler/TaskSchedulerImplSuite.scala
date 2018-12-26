@@ -1277,6 +1277,69 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(3 === taskDescription3.length)
   }
 
+  test("barrier taskSet should force to release reserved WorkerOffer if there's a long" +
+    "time without any launched barrier taskSet to avoid deadlock problem on resource") {
+    val taskCpus = 2
+    val taskScheduler = setupScheduler(
+      "spark.task.cpus" -> taskCpus.toString,
+      config.BARRIER_MAX_CONSECUTIVE_NO_BARRIER_TASKSET_LAUNCH_TIMES.key -> "3")
+
+    val numFreeCores = 3
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")))
+
+    val ts1 = FakeTask.createBarrierTaskSet(2, 0, 0,
+      Seq(TaskLocation("host0", "executor0")),
+      Seq(TaskLocation("host1", "executor0")))
+    val ts2 = FakeTask.createBarrierTaskSet(2, 1, 0,
+      Seq(TaskLocation("host1", "executor1")),
+      Seq(TaskLocation("host0", "executor1")))
+    taskScheduler.submitTasks(ts1)
+    taskScheduler.submitTasks(ts2)
+    assert(taskScheduler.barrierTaskSetByTimeout.size === 2)
+    // 1st resourceOffers round
+    var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+
+    // after 1st resourceOffers round, ts1 reserved WorkerOffer(executor0, host0), and do not
+    // reserve WorkerOffer(executor1, host1) due to task locality delay scheduling
+    val manager1 = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    val reserveOffer1 = manager1.getReadyTaskToReservedWorkerOffer.values
+    assert(reserveOffer1.size === 1)
+    assert(reserveOffer1.head._2.execId === "executor0")
+
+    // after ts1 resourceOffer finish, ts2 only has WorkerOffer(executor1, host1) to be reserved.
+    val manager2 = taskScheduler.taskSetManagerForAttempt(1, 0).get
+    val reserveOffer2 = manager2.getReadyTaskToReservedWorkerOffer.values
+    assert(reserveOffer2.size === 1)
+    assert(reserveOffer2.head._2.execId === "executor1")
+
+    // Now, ts1 and ts2 fall into a deadlock situation if no more WorkerOffer will get in and
+    // could not launch any barrier taskSets in the latter resourceOffers round before we reach
+    // the BARRIER_MAX_CONSECUTIVE_NO_BARRIER_TASKSET_LAUNCH_TIMES.
+
+    // 2nd resourceOffers round
+    taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+    // 3rd resourceOffers round, reach the BARRIER_MAX_CONSECUTIVE_NO_BARRIER_TASKSET_LAUNCH_TIMES,
+    // trigger a fore reserved WorkerOffer release for barrier taskSet.
+    taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(0 === taskDescriptions.length)
+
+    // wait for localityWaits timeout, so that we could move to NODE_LOCAL level
+    Thread.sleep(3100)
+
+    // since ts2 has released its reserved WorkerOffer, ts1 gets a chance to accumulate sufficient
+    // resource to launch tasks finally.
+    taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(2 === taskDescriptions.length)
+    assert(taskScheduler.barrierTaskSetByTimeout.size === 1)
+    val unLaunchedBarrierTaskSet = taskScheduler.barrierTaskSetByTimeout.head._1
+    assert(unLaunchedBarrierTaskSet.taskSet.stageId === 1)
+    assert(unLaunchedBarrierTaskSet.getReadyTaskToReservedWorkerOffer.size === 0)
+  }
+
   test("cancelTasks shall kill all the running tasks and fail the stage") {
     val taskScheduler = setupScheduler()
 

@@ -525,7 +525,7 @@ private[spark] class TaskSetManager(
         if (execIdToReadyTasks(execId).isEmpty) {
           execIdToReadyTasks.remove(execId)
         }
-        // TODO hui bu hui chongfu ?
+        // NOTE: this may add duplicate task into a single pending queue
         addPendingTask(index)
         logInfo(s"ready task $index in barrier TaskSet ${taskSet.id} release " +
           s"reserved WorkerOffer(executor ${reservedOffer.execId}, host ${reservedOffer.host}).")
@@ -587,9 +587,8 @@ private[spark] class TaskSetManager(
               replacedExecId = currentReservedWorkerOffer.execId
               readyTaskToReservedWorkerOffer(index) =
                 (speculative, ReservedWorkerOffer(execId, host, taskLocality))
-              val readyTasks = execIdToReadyTasks.getOrElse(execId, HashSet[Int]())
-              readyTasks.add(index)
-              execIdToReadyTasks(execId) = readyTasks
+            } else {
+              return None
             }
           } else {
             readyTaskToReservedWorkerOffer(index) =

@@ -1526,6 +1526,67 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
   }
 
+  test("barrier taskSet could replace high level locality reserved WorkerOffer with " +
+    "new low level locality WorkerOffer") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host1"), ("exec3", "host1"))
+    val taskSet = FakeTask.createBarrierTaskSet(3,
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(),
+      Seq()
+    )
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    // offer WorkerOffer(exec2, host1) with PROCESS_LOCAL locality, got None
+    assert(manager.resourceOffer("exec2", "host1", PROCESS_LOCAL) === None)
+    clock.advance(LOCALITY_WAIT_MS)
+    // move to NODE_LOCAL locality, and offer WokerOffer(exec2, host1) again, got task 0
+    assert(manager.resourceOffer("exec2", "host1", NODE_LOCAL).get.index === 0)
+    var reservedOffer = manager.getReadyTaskToReservedWorkerOffer.head._2._2
+    assert(reservedOffer.execId === "exec2")
+    assert(reservedOffer.locality === NODE_LOCAL)
+
+    // offer WorkerOffer(exec1, host1) which has low level locality for task 0 compares to its
+    // reserved WorkerOffer(exec2, host1). Since task 0 is ready rather than be truely launched,
+    // so, replaces its reserved WorkerOffer(exec2, host1) with WorkerOffer(exec1, host1)
+    assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL).get.index === 0)
+    reservedOffer = manager.getReadyTaskToReservedWorkerOffer.head._2._2
+    assert(reservedOffer.execId === "exec1")
+    assert(reservedOffer.locality === PROCESS_LOCAL)
+
+    // offer WorkerOffer(exec3, host1) which do not have better locality for task 0 compares to its
+    // reserved WorkerOffer(exec1, host1). So, don't do replace.
+    assert(manager.resourceOffer("exec3", "host1", NODE_LOCAL) === None)
+    reservedOffer = manager.getReadyTaskToReservedWorkerOffer.head._2._2
+    assert(reservedOffer.execId === "exec1")
+    assert(reservedOffer.locality === PROCESS_LOCAL)
+  }
+
+  test("barrier taskSet should release reserved WorkerOffer on executor loss") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createBarrierTaskSet(2,
+      Seq(TaskLocation("host1", "exec1")),
+      Seq()
+    )
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    // offer WorkerOffer(exec1, host1) with PROCESS_LOCAL locality, got task 0,
+    // and reserved the offer
+    assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL).get.index === 0)
+    assert(manager.getReadyTaskToReservedWorkerOffer.size === 1)
+    val reservedOffer = manager.getReadyTaskToReservedWorkerOffer.head._2._2
+    assert(reservedOffer.execId === "exec1")
+
+    // exec2 lost(unrelated executor), no need to release reserved offer
+    manager.executorLost("exec2", "host2", SlaveLost())
+    assert(manager.getReadyTaskToReservedWorkerOffer.size === 1)
+
+    // exec1 lost, release the reserved WorkerOffer(exec1, host1)
+    manager.executorLost("exec1", "host1", SlaveLost())
+    assert(manager.getReadyTaskToReservedWorkerOffer.size === 0)
+  }
+
   private def createTaskResult(
       id: Int,
       accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty): DirectTaskResult[Int] = {

@@ -98,7 +98,7 @@ private[spark] class TaskSchedulerImpl(
     conf.get(config.BARRIER_NO_SUFFICIENT_RESOURCE_TIMEOUT) * 60 * 1000
 
   private var noBarrierTaskSetLaunchCounter = 0
-  private val barrierTaskSetByTimeout = new HashMap[TaskSetManager, (Int, Long)]
+  private[scheduler] val barrierTaskSetByTimeout = new HashMap[TaskSetManager, (Int, Long)]
 
   // Protected by `this`
   private[scheduler] val taskIdToTaskSetManager = new ConcurrentHashMap[Long, TaskSetManager]
@@ -364,9 +364,11 @@ private[spark] class TaskSchedulerImpl(
     // take a half by taking waiting time into account roughly
     val canBeReleased = runningTasksByExecutors.values.sum / 2
     var extraNeeded = math.max(needed - alreadyReleased - canBeReleased, 0)
-    // start to force release reserved WorkerOffer from the last barrier in the sorted queue
+    // start to force release reserved WorkerOffer from the last barrier taskSet
+    // in the sorted queue
     var index = barrierTaskSets.size
-    while (extraNeeded > 0 && index > 0) {
+    // no need to release reserved WorkerOffer for the first barrier taskSet
+    while (extraNeeded > 0 && index > 1) {
       index -= 1
       val bts = barrierTaskSets(index)
       val readyTaskNum = bts.getReadyTaskToReservedWorkerOffer.size
@@ -589,6 +591,7 @@ private[spark] class TaskSchedulerImpl(
           // clear reserved WorkerOffer, so that we do not exclude its reserved Cpus
           // in next resourceOffer round.
           taskSet.releaseReservedWorkerOffer()
+          barrierTaskSetByTimeout.remove(taskSet)
           launchedAnyBarrierTaskSet = true
           logInfo(s"Successfully scheduled all the ${addressesWithDescs.size} tasks for barrier " +
             s"stage ${taskSet.stageId}.")
@@ -627,7 +630,7 @@ private[spark] class TaskSchedulerImpl(
     }
 
     if (abortBarrierTaskSets.nonEmpty ||
-      (getSortedBarrierTaskSets.nonEmpty && !launchedAnyBarrierTaskSet &&
+      (getSortedBarrierTaskSets.length > 1 && !launchedAnyBarrierTaskSet &&
       noBarrierTaskSetLaunchCounter >= MAX_CONSECUTIVE_NO_BARRIER_TASKSET_LAUNCH_TIMES)) {
       // to force release reserved WorkerOffer in case of some barrier TaskSets holds the resource
       // for a long time and cause deadlock problem on the resource in the end.
