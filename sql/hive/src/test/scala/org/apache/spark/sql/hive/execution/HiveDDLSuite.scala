@@ -2381,8 +2381,8 @@ class HiveDDLSuite
            |AS SELECT 1 as a, "a" as b
                  """.stripMargin)
     }.getMessage
-    assert(err1.contains("A Create Table As Select (CTAS) statement is not allowed " +
-      "to create a partitioned table using Hive's file formats by specifying table schema"))
+    assert(err1.contains("Create Partitioned Table As Select cannot specify data type for " +
+      "the partition columns of the target table"))
 
     val err2 = intercept[ParseException] {
       spark.sql(
@@ -2393,8 +2393,8 @@ class HiveDDLSuite
            |AS SELECT 1 as a, "a" as b
                  """.stripMargin)
     }.getMessage
-    assert(err2.contains("A Create Table As Select (CTAS) statement is not allowed " +
-      "to create a partitioned table using Hive's file formats by specifying table schema"))
+    assert(err2.contains("Create Partitioned Table As Select cannot specify data type for " +
+      "the partition columns of the target table"))
   }
 
   test("Hive CTAS with dynamic partition") {
@@ -2410,15 +2410,8 @@ class HiveDDLSuite
                """.stripMargin)
           checkAnswer(spark.table("t"), Row(1, "a"))
 
-          assert(sql("DESC t").collect().containsSlice(
-            Seq(
-              Row("a", "int", null),
-              Row("b", "string", null),
-              Row("# Partition Information", "", ""),
-              Row("# col_name", "data_type", "comment"),
-              Row("b", "string", null)
-            )
-          ))
+          assert(spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            .partitionColumnNames === Seq("b"))
         }
       }
     }
