@@ -22,21 +22,22 @@ import java.nio.charset.StandardCharsets._
 import com.google.common.io.Files
 
 import org.apache.spark._
+import org.apache.spark.internal.config.History._
 import org.apache.spark.util.Utils
 
 class HistoryServerArgumentsSuite extends SparkFunSuite {
 
   private val logDir = new File("src/test/resources/spark-events")
   private val conf = new SparkConf()
-    .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
-    .set("spark.history.fs.updateInterval", "1")
+    .set(EVENT_LOG_DIR, logDir.getAbsolutePath)
+    .set(UPDATE_INTERVAL_S, 1L)
     .set("spark.testing", "true")
 
   test("No Arguments Parsing") {
     val argStrings = Array.empty[String]
     val hsa = new HistoryServerArguments(conf, argStrings)
-    assert(conf.get("spark.history.fs.logDirectory") === logDir.getAbsolutePath)
-    assert(conf.get("spark.history.fs.updateInterval") === "1")
+    assert(conf.get(EVENT_LOG_DIR) === logDir.getAbsolutePath)
+    assert(conf.get(UPDATE_INTERVAL_S) === 1L)
     assert(conf.get("spark.testing") === "true")
   }
 
