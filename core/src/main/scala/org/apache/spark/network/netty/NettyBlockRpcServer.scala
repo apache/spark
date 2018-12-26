@@ -20,6 +20,7 @@ package org.apache.spark.network.netty
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -30,7 +31,7 @@ import org.apache.spark.network.client.{RpcResponseCallback, StreamCallbackWithI
 import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.protocol._
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.storage._
 
 /**
  * Serves requests to open blocks by simply registering one chunk per block requested.
@@ -47,6 +48,37 @@ class NettyBlockRpcServer(
 
   private val streamManager = new OneForOneStreamManager()
 
+  private def mergeContiguousShuffleBlocks(blockIds: Array[String]) = {
+    logDebug(s"blockIds: ${blockIds.mkString(" ")}")
+    val shuffleBlockIds = blockIds.map(id => BlockId(id).asInstanceOf[ShuffleBlockId])
+    var continuousShuffleBlockIds = ArrayBuffer.empty[ContinuousShuffleBlockId]
+    var sizeArray = ArrayBuffer.empty[Int]
+
+    def sameMapFile(index: Int) = {
+      shuffleBlockIds(index).shuffleId == shuffleBlockIds(index - 1).shuffleId &&
+        shuffleBlockIds(index).mapId == shuffleBlockIds(index - 1).mapId
+    }
+
+    if (shuffleBlockIds.nonEmpty) {
+      var prev = 0
+      (0 until shuffleBlockIds.length + 1).foreach { idx =>
+        if (idx != 0) {
+          if (idx == shuffleBlockIds.length || !sameMapFile(idx)) {
+            continuousShuffleBlockIds += ContinuousShuffleBlockId(
+              shuffleBlockIds(prev).shuffleId,
+              shuffleBlockIds(prev).mapId,
+              shuffleBlockIds(prev).reduceId,
+              shuffleBlockIds(idx - 1).reduceId - shuffleBlockIds(prev).reduceId + 1
+            )
+            sizeArray += (idx - prev)
+            prev = idx
+          }
+        }
+      }
+    }
+    (continuousShuffleBlockIds.toArray, sizeArray.toArray)
+  }
+
   override def receive(
       client: TransportClient,
       rpcMessage: ByteBuffer,
@@ -56,12 +88,20 @@ class NettyBlockRpcServer(
 
     message match {
       case openBlocks: OpenBlocks =>
-        val blocksNum = openBlocks.blockIds.length
+        val (blocksIds, sizes) =
+          if (openBlocks.continuousBlockBatchFetch
+            && BlockId(openBlocks.blockIds(0)).isInstanceOf[ShuffleBlockIdBase]) {
+            mergeContiguousShuffleBlocks(openBlocks.blockIds)
+          } else {
+            (openBlocks.blockIds.map(BlockId.apply), Array.fill[Int](openBlocks.blockIds.length)(1))
+          }
+
+        val blocksNum = blocksIds.length
         val blocks = for (i <- (0 until blocksNum).view)
-          yield blockManager.getBlockData(BlockId.apply(openBlocks.blockIds(i)))
+          yield blockManager.getBlockData(blocksIds(i))
         val streamId = streamManager.registerStream(appId, blocks.iterator.asJava)
         logTrace(s"Registered streamId $streamId with $blocksNum buffers")
-        responseContext.onSuccess(new StreamHandle(streamId, blocksNum).toByteBuffer)
+        responseContext.onSuccess(new StreamHandle(streamId, blocksNum, sizes).toByteBuffer)
 
       case uploadBlock: UploadBlock =>
         // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.

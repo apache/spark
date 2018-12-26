@@ -27,7 +27,7 @@ public interface BlockFetchingListener extends EventListener {
    * automatically. If the data will be passed to another thread, the receiver should retain()
    * and release() the buffer on their own, or copy the data to a new buffer.
    */
-  void onBlockFetchSuccess(String blockId, ManagedBuffer data);
+  void onBlockFetchSuccess(String[] blockIds, ManagedBuffer data);
 
   /**
    * Called at least once per block upon failures.

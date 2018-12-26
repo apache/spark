@@ -19,8 +19,11 @@ package org.apache.spark.network.shuffle.protocol;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+import org.apache.spark.network.protocol.Encoders;
 
 // Needed by ScalaDoc. See SPARK-7726
+import java.util.Arrays;
+
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 /**
@@ -30,10 +33,12 @@ import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Typ
 public class StreamHandle extends BlockTransferMessage {
   public final long streamId;
   public final int numChunks;
+  public final int[] chunkSizes;
 
-  public StreamHandle(long streamId, int numChunks) {
+  public StreamHandle(long streamId, int numChunks, int[] chunkSizes) {
     this.streamId = streamId;
     this.numChunks = numChunks;
+    this.chunkSizes = chunkSizes;
   }
 
   @Override
@@ -41,7 +46,7 @@ public class StreamHandle extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamId, numChunks);
+    return Objects.hashCode(streamId, numChunks) * 41 + Arrays.hashCode(chunkSizes);
   }
 
   @Override
@@ -49,6 +54,7 @@ public class StreamHandle extends BlockTransferMessage {
     return Objects.toStringHelper(this)
       .add("streamId", streamId)
       .add("numChunks", numChunks)
+      .add("blockIds", Arrays.toString(chunkSizes))
       .toString();
   }
 
@@ -57,25 +63,28 @@ public class StreamHandle extends BlockTransferMessage {
     if (other != null && other instanceof StreamHandle) {
       StreamHandle o = (StreamHandle) other;
       return Objects.equal(streamId, o.streamId)
-        && Objects.equal(numChunks, o.numChunks);
+        && Objects.equal(numChunks, o.numChunks)
+        && Arrays.equals(chunkSizes, o.chunkSizes);
     }
     return false;
   }
 
   @Override
   public int encodedLength() {
-    return 8 + 4;
+    return 8 + 4 + Encoders.IntArrays.encodedLength(chunkSizes);
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(streamId);
     buf.writeInt(numChunks);
+    Encoders.IntArrays.encode(buf, chunkSizes);
   }
 
   public static StreamHandle decode(ByteBuf buf) {
     long streamId = buf.readLong();
     int numChunks = buf.readInt();
-    return new StreamHandle(streamId, numChunks);
+    int[] chunkSizes = Encoders.IntArrays.decode(buf);
+    return new StreamHandle(streamId, numChunks, chunkSizes);
   }
 }

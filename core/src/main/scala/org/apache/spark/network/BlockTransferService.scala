@@ -100,7 +100,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
         override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
           result.failure(exception)
         }
-        override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
+        override def onBlockFetchSuccess(blockId: Array[String], data: ManagedBuffer): Unit = {
           data match {
             case f: FileSegmentManagedBuffer =>
               result.success(f)

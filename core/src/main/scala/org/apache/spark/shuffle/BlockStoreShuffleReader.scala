@@ -48,7 +48,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
       blockManager,
       mapOutputTracker.getMapSizesByExecutorId(
         handle.shuffleId, startPartition, endPartition,
-        dep.serializer.supportsRelocationOfSerializedObjects),
+        serializerRelocatable = false),
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,

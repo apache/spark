@@ -32,11 +32,17 @@ public class OpenBlocks extends BlockTransferMessage {
   public final String appId;
   public final String execId;
   public final String[] blockIds;
+  public final boolean continuousBlockBatchFetch;
 
-  public OpenBlocks(String appId, String execId, String[] blockIds) {
+  public OpenBlocks(
+      String appId,
+      String execId,
+      String[] blockIds,
+      boolean continuousBlockBatchFetch) {
     this.appId = appId;
     this.execId = execId;
     this.blockIds = blockIds;
+    this.continuousBlockBatchFetch = continuousBlockBatchFetch;
   }
 
   @Override
@@ -44,7 +50,8 @@ public class OpenBlocks extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, execId) * 41 + Arrays.hashCode(blockIds);
+    return Objects.hashCode(appId, execId, continuousBlockBatchFetch) * 41
+        + Arrays.hashCode(blockIds);
   }
 
   @Override
@@ -53,6 +60,7 @@ public class OpenBlocks extends BlockTransferMessage {
       .add("appId", appId)
       .add("execId", execId)
       .add("blockIds", Arrays.toString(blockIds))
+      .add("continuousBlockBatchFetch", continuousBlockBatchFetch)
       .toString();
   }
 
@@ -62,7 +70,8 @@ public class OpenBlocks extends BlockTransferMessage {
       OpenBlocks o = (OpenBlocks) other;
       return Objects.equal(appId, o.appId)
         && Objects.equal(execId, o.execId)
-        && Arrays.equals(blockIds, o.blockIds);
+        && Arrays.equals(blockIds, o.blockIds)
+        && continuousBlockBatchFetch == o.continuousBlockBatchFetch;
     }
     return false;
   }
@@ -71,7 +80,8 @@ public class OpenBlocks extends BlockTransferMessage {
   public int encodedLength() {
     return Encoders.Strings.encodedLength(appId)
       + Encoders.Strings.encodedLength(execId)
-      + Encoders.StringArrays.encodedLength(blockIds);
+      + Encoders.StringArrays.encodedLength(blockIds)
+      + Encoders.Boolean.encodedLength(continuousBlockBatchFetch);
   }
 
   @Override
@@ -79,12 +89,17 @@ public class OpenBlocks extends BlockTransferMessage {
     Encoders.Strings.encode(buf, appId);
     Encoders.Strings.encode(buf, execId);
     Encoders.StringArrays.encode(buf, blockIds);
+    Encoders.Boolean.encode(buf, continuousBlockBatchFetch);
   }
 
   public static OpenBlocks decode(ByteBuf buf) {
     String appId = Encoders.Strings.decode(buf);
     String execId = Encoders.Strings.decode(buf);
     String[] blockIds = Encoders.StringArrays.decode(buf);
-    return new OpenBlocks(appId, execId, blockIds);
+    boolean continuousBlockBatchFetch = false;
+    if (buf.readableBytes() != 0) {
+      continuousBlockBatchFetch = Encoders.Boolean.decode(buf);
+    }
+    return new OpenBlocks(appId, execId, blockIds, continuousBlockBatchFetch);
   }
 }

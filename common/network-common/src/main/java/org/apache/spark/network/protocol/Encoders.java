@@ -89,4 +89,41 @@ public class Encoders {
       return strings;
     }
   }
+
+  public static class Boolean {
+    public static int encodedLength(boolean b) {
+      return 1;
+    }
+
+    public static void encode(ByteBuf buf, boolean b) {
+      buf.writeBoolean(b);
+    }
+
+    public static boolean decode(ByteBuf buf) {
+      return buf.readBoolean();
+    }
+  }
+
+  /** Byte arrays are encoded with their length followed by bytes. */
+  public static class IntArrays {
+    public static int encodedLength(int[] arr) {
+      return 4 + arr.length * 4;
+    }
+
+    public static void encode(ByteBuf buf, int[] arr) {
+      buf.writeInt(arr.length);
+      for (int i : arr) {
+        buf.writeInt(i);
+      }
+    }
+
+    public static int[] decode(ByteBuf buf) {
+      int n = buf.readInt();
+      int[] arr = new int[n];
+      for (int i = 0; i < arr.length; i ++) {
+        arr[i] = buf.readInt();
+      }
+      return arr;
+    }
+  }
 }
