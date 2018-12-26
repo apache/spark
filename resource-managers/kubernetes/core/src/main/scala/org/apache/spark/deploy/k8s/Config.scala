@@ -289,6 +289,19 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val KUBERNETES_DRIVER_POD_KIND =
+    ConfigBuilder("spark.kubernetes.driver.pod.kind")
+      .doc("Specify the kind of driver's pod on Kubernetes.")
+      .stringConf
+      .checkValues(Set("Pod", "Job", "Deployment"))
+      .createWithDefault("Pod")
+
+  val KUBERNETES_JOB_BACKOFFLIMIT =
+    ConfigBuilder("spark.kubernetes.job.backofflimit")
+      .doc("Specify backoffLimit of job.")
+      .intConf
+      .createWithDefault(3)
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
