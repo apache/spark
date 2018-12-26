@@ -1196,19 +1196,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     selectQuery match {
       case Some(q) =>
-        // When creating partitioned table with CTAS statement, we can't specify data type for the
-        // partition columns.
-        if (tableDesc.partitionColumnNames.nonEmpty) {
-          val errorMessage = "Create Partitioned Table As Select cannot specify data type for " +
-            "the partition columns of the target table."
-          operationNotAllowed(errorMessage, ctx)
-        }
-
         // Don't allow explicit specification of schema for CTAS.
-        if (schema.nonEmpty) {
+        if (dataCols.nonEmpty) {
           operationNotAllowed(
             "Schema may not be specified in a Create Table As Select (CTAS) statement",
             ctx)
+        }
+
+        // When creating partitioned table with CTAS statement, we can't specify data type for the
+        // partition columns.
+        if (partitionCols.nonEmpty) {
+          val errorMessage = "Create Partitioned Table As Select cannot specify data type for " +
+            "the partition columns of the target table."
+          operationNotAllowed(errorMessage, ctx)
         }
 
         // Hive CTAS supports dynamic partition by specifying partition column names.

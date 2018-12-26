@@ -2381,8 +2381,8 @@ class HiveDDLSuite
            |AS SELECT 1 as a, "a" as b
                  """.stripMargin)
     }.getMessage
-    assert(err1.contains("Create Partitioned Table As Select cannot specify data type for " +
-      "the partition columns of the target table"))
+    assert(err1.contains("Schema may not be specified in a Create Table As Select " +
+      "(CTAS) statement"))
 
     val err2 = intercept[ParseException] {
       spark.sql(
