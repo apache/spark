@@ -295,16 +295,4 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
     }
   }
-
-  test("NaN and -0.0 in join keys") {
-    val df1 = Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d")
-    val df2 = Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d")
-    val joined = df1.join(df2, Seq("f", "d"))
-    checkAnswer(joined, Seq(
-      Row(Float.NaN, Double.NaN),
-      Row(0.0f, 0.0),
-      Row(0.0f, 0.0),
-      Row(0.0f, 0.0),
-      Row(0.0f, 0.0)))
-  }
 }
