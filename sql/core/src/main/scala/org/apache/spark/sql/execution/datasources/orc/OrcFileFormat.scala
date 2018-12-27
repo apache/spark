@@ -186,9 +186,8 @@ class OrcFileFormat
       if (requestedColIdsOrEmptyFile.isEmpty) {
         Iterator.empty
       } else {
-        val requestedColIds =
-          requestedColIdsOrEmptyFile.get ++ Array.fill(partitionSchema.length)(-1)
-        assert(requestedColIds.length == resultSchema.length,
+        val requestedColIds = requestedColIdsOrEmptyFile.get
+        assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)
         taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
@@ -207,13 +206,14 @@ class OrcFileFormat
           // after opening a file.
           val iter = new RecordReaderIterator(batchReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
+          val requestedDataColIds = requestedColIds ++ Array.fill(partitionSchema.length)(-1)
           val requestedPartitionColIds =
             Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
             reader.getSchema,
             resultSchema.fields,
-            requestedColIds,
+            requestedDataColIds,
             requestedPartitionColIds,
             file.partitionValues)
 

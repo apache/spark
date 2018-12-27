@@ -59,14 +59,12 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   /**
    * The column IDs of the physical ORC file schema which are required by this reader.
    * -1 means this required column is partition column, or it doesn't exist in the ORC file.
+   * Ideally partition column should never appear in the physical file, and should only appear
+   * in the directory name. However, Spark allows partition columns inside physical file,
+   * but Spark will discard the values from the file, and use the partition value got from
+   * directory name. The column order will be reserved though.
    */
-  private int[] requestedColIds;
-
-  /**
-   * The column IDs of the ORC file partition schema which are required by this reader.
-   * -1 means this required column doesn't exist in the ORC partition columns.
-   */
-  private int[] requestedPartitionColIds;
+  private int[] requestedDataColIds;
 
   // Record reader from ORC row batch.
   private org.apache.orc.RecordReader recordReader;
@@ -152,29 +150,28 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
    *
    * @param orcSchema Schema from ORC file reader.
    * @param requiredFields All the fields that are required to return, including partition fields.
-   * @param requestedColIds Requested column ids from orcSchema. -1 if not existed.
+   * @param requestedDataColIds Requested column ids from orcSchema. -1 if not existed.
    * @param requestedPartitionColIds Requested column ids from partition schema. -1 if not existed.
    * @param partitionValues Values of partition columns.
    */
   public void initBatch(
       TypeDescription orcSchema,
       StructField[] requiredFields,
-      int[] requestedColIds,
+      int[] requestedDataColIds,
       int[] requestedPartitionColIds,
       InternalRow partitionValues) {
     batch = orcSchema.createRowBatch(capacity);
     assert(!batch.selectedInUse); // `selectedInUse` should be initialized with `false`.
-    assert(requiredFields.length == requestedColIds.length);
+    assert(requiredFields.length == requestedDataColIds.length);
     assert(requiredFields.length == requestedPartitionColIds.length);
     // If a required column is also partition column, use partition value and don't read from file.
     for (int i = 0; i < requiredFields.length; i++) {
       if (requestedPartitionColIds[i] != -1) {
-        requestedColIds[i] = -1;
+        requestedDataColIds[i] = -1;
       }
     }
-    this.requestedPartitionColIds =  requestedPartitionColIds;
     this.requiredFields = requiredFields;
-    this.requestedColIds = requestedColIds;
+    this.requestedDataColIds = requestedDataColIds;
 
     StructType resultSchema = new StructType(requiredFields);
     if (copyToSpark) {
@@ -190,7 +187,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
           ColumnVectorUtils.populate(columnVectors[i],
             partitionValues, requestedPartitionColIds[i]);
           columnVectors[i].setIsConstant();
-        } else if (requestedColIds[i] == -1) {
+        } else if (requestedDataColIds[i] == -1) {
           columnVectors[i].putNulls(0, capacity);
           columnVectors[i].setIsConstant();
         }
@@ -209,7 +206,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
           partitionCol.setIsConstant();
           orcVectorWrappers[i] = partitionCol;
         } else {
-          int colId = requestedColIds[i];
+          int colId = requestedDataColIds[i];
           // Initialize the missing columns once.
           if (colId == -1) {
             OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
@@ -240,7 +237,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
     if (!copyToSpark) {
       for (int i = 0; i < requiredFields.length; i++) {
-        if (requestedColIds[i] != -1) {
+        if (requestedDataColIds[i] != -1) {
           ((OrcColumnVector) orcVectorWrappers[i]).setBatchSize(batchSize);
         }
       }
@@ -255,8 +252,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       StructField field = requiredFields[i];
       WritableColumnVector toColumn = columnVectors[i];
 
-      if (requestedColIds[i] >= 0) {
-        ColumnVector fromColumn = batch.cols[requestedColIds[i]];
+      if (requestedDataColIds[i] >= 0) {
+        ColumnVector fromColumn = batch.cols[requestedDataColIds[i]];
 
         if (fromColumn.isRepeating) {
           putRepeatingValues(batchSize, field, fromColumn, toColumn);
