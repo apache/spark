@@ -25,7 +25,7 @@ import scala.concurrent.Future
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
@@ -69,8 +69,8 @@ private[spark] class StandaloneSchedulerBackend(
 
     // The endpoint for executors to talk to us
     val driverUrl = RpcEndpointAddress(
-      sc.conf.get("spark.driver.host"),
-      sc.conf.get("spark.driver.port").toInt,
+      sc.conf.get(config.DRIVER_HOST_ADDRESS),
+      sc.conf.get(config.DRIVER_PORT),
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     val args = Seq(
       "--driver-url", driverUrl,

@@ -18,6 +18,7 @@
 package org.apache.spark.memory
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config
 import org.apache.spark.storage.BlockId
 
 /**
@@ -216,7 +217,7 @@ object UnifiedMemoryManager {
     if (systemMemory < minSystemMemory) {
       throw new IllegalArgumentException(s"System memory $systemMemory must " +
         s"be at least $minSystemMemory. Please increase heap size using the --driver-memory " +
-        s"option or spark.driver.memory in Spark configuration.")
+        s"option or ${config.DRIVER_MEMORY.key} in Spark configuration.")
     }
     // SPARK-12759 Check executor memory to fail fast if memory is insufficient
     if (conf.contains("spark.executor.memory")) {

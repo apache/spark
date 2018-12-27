@@ -38,7 +38,12 @@ package object config {
   private[spark] val DRIVER_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.driver.userClassPathFirst").booleanConf.createWithDefault(false)
 
-  private[spark] val DRIVER_MEMORY = ConfigBuilder("spark.driver.memory")
+  private[spark] val DRIVER_CORES = ConfigBuilder("spark.driver.cores")
+    .doc("Number of cores to use for the driver process, only in cluster mode.")
+    .intConf
+    .createWithDefault(1)
+
+  private[spark] val DRIVER_MEMORY = ConfigBuilder(SparkLauncher.DRIVER_MEMORY)
     .doc("Amount of memory to use for the driver process, in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
@@ -341,6 +346,17 @@ package object config {
     .doc("Address of driver endpoints.")
     .stringConf
     .createWithDefault(Utils.localCanonicalHostName())
+
+  private[spark] val DRIVER_PORT = ConfigBuilder("spark.driver.port")
+    .doc("Port of driver endpoints.")
+    .intConf
+    .createWithDefault(0)
+
+  private[spark] val DRIVER_SUPERVISE = ConfigBuilder("spark.driver.supervise")
+    .doc("If true, restarts the driver automatically if it fails with a non-zero exit status. " +
+      "Only has effect in Spark standalone mode or Mesos cluster deploy mode.")
+    .booleanConf
+    .createWithDefault(false)
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")

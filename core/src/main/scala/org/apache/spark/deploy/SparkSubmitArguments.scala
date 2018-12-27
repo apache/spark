@@ -31,7 +31,7 @@ import scala.util.Try
 
 import org.apache.spark.{SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkSubmitAction._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
@@ -155,20 +155,20 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orElse(env.get("MASTER"))
       .orNull
     driverExtraClassPath = Option(driverExtraClassPath)
-      .orElse(sparkProperties.get("spark.driver.extraClassPath"))
+      .orElse(sparkProperties.get(config.DRIVER_CLASS_PATH.key))
       .orNull
     driverExtraJavaOptions = Option(driverExtraJavaOptions)
-      .orElse(sparkProperties.get("spark.driver.extraJavaOptions"))
+      .orElse(sparkProperties.get(config.DRIVER_JAVA_OPTIONS.key))
       .orNull
     driverExtraLibraryPath = Option(driverExtraLibraryPath)
-      .orElse(sparkProperties.get("spark.driver.extraLibraryPath"))
+      .orElse(sparkProperties.get(config.DRIVER_LIBRARY_PATH.key))
       .orNull
     driverMemory = Option(driverMemory)
-      .orElse(sparkProperties.get("spark.driver.memory"))
+      .orElse(sparkProperties.get(config.DRIVER_MEMORY.key))
       .orElse(env.get("SPARK_DRIVER_MEMORY"))
       .orNull
     driverCores = Option(driverCores)
-      .orElse(sparkProperties.get("spark.driver.cores"))
+      .orElse(sparkProperties.get(config.DRIVER_CORES.key))
       .orNull
     executorMemory = Option(executorMemory)
       .orElse(sparkProperties.get("spark.executor.memory"))

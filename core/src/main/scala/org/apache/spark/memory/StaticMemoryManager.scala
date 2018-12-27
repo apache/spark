@@ -18,6 +18,7 @@
 package org.apache.spark.memory
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config
 import org.apache.spark.storage.BlockId
 
 /**
@@ -127,7 +128,7 @@ private[spark] object StaticMemoryManager {
     if (systemMaxMemory < MIN_MEMORY_BYTES) {
       throw new IllegalArgumentException(s"System memory $systemMaxMemory must " +
         s"be at least $MIN_MEMORY_BYTES. Please increase heap size using the --driver-memory " +
-        s"option or spark.driver.memory in Spark configuration.")
+        s"option or ${config.DRIVER_MEMORY.key} in Spark configuration.")
     }
     if (conf.contains("spark.executor.memory")) {
       val executorMemory = conf.getSizeAsBytes("spark.executor.memory")

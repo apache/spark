@@ -33,7 +33,6 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkExceptio
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
@@ -304,8 +303,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       "driverURL"
     } else {
       RpcEndpointAddress(
-        conf.get("spark.driver.host"),
-        conf.get("spark.driver.port").toInt,
+        conf.get(config.DRIVER_HOST_ADDRESS),
+        conf.get(config.DRIVER_PORT),
         CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
     }
   }
@@ -633,7 +632,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             externalShufflePort,
             sc.conf.getTimeAsMs("spark.storage.blockManagerSlaveTimeoutMs",
               s"${sc.conf.getTimeAsSeconds("spark.network.timeout", "120s")}s"),
-            sc.conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
+            sc.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL))
         slave.shuffleRegistered = true
       }
 

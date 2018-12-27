@@ -224,9 +224,9 @@ package object config {
 
   /* Driver configuration. */
 
-  private[spark] val DRIVER_CORES = ConfigBuilder("spark.driver.cores")
-    .intConf
-    .createWithDefault(1)
+  private[spark] val DRIVER_APP_UI_ADDRESS = ConfigBuilder("spark.driver.appUIAddress")
+    .stringConf
+    .createOptional
 
   /* Executor configuration. */
 

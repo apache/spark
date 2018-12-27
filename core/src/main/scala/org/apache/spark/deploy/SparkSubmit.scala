@@ -514,13 +514,13 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, confKey = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
-        confKey = "spark.driver.memory"),
+        confKey = DRIVER_MEMORY.key),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = "spark.driver.extraClassPath"),
+        confKey = DRIVER_CLASS_PATH.key),
       OptionAssigner(args.driverExtraJavaOptions, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = "spark.driver.extraJavaOptions"),
+        confKey = DRIVER_JAVA_OPTIONS.key),
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
-        confKey = "spark.driver.extraLibraryPath"),
+        confKey = DRIVER_LIBRARY_PATH.key),
       OptionAssigner(args.principal, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = PRINCIPAL.key),
       OptionAssigner(args.keytab, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
@@ -556,11 +556,11 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.jars"),
       OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
-        confKey = "spark.driver.memory"),
+        confKey = DRIVER_MEMORY.key),
       OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN | KUBERNETES, CLUSTER,
-        confKey = "spark.driver.cores"),
+        confKey = DRIVER_CORES.key),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
-        confKey = "spark.driver.supervise"),
+        confKey = DRIVER_SUPERVISE.key),
       OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, confKey = "spark.jars.ivy"),
 
       // An internal option used only for spark-shell to add user jars to repl's classloader,
@@ -727,7 +727,7 @@ private[spark] class SparkSubmit extends Logging {
 
     // Ignore invalid spark.driver.host in cluster modes.
     if (deployMode == CLUSTER) {
-      sparkConf.remove("spark.driver.host")
+      sparkConf.remove(DRIVER_HOST_ADDRESS)
     }
 
     // Resolve paths in certain spark properties

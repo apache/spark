@@ -505,9 +505,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
     val executorOptsKey = "spark.executor.extraJavaOptions"
     val executorClasspathKey = "spark.executor.extraClassPath"
-    val driverOptsKey = "spark.driver.extraJavaOptions"
-    val driverClassPathKey = "spark.driver.extraClassPath"
-    val driverLibraryPathKey = "spark.driver.extraLibraryPath"
+    val driverOptsKey = DRIVER_JAVA_OPTIONS.key
+    val driverClassPathKey = DRIVER_CLASS_PATH.key
+    val driverLibraryPathKey = DRIVER_LIBRARY_PATH.key
     val sparkExecutorInstances = "spark.executor.instances"
 
     // Used by Yarn in 1.1 and before

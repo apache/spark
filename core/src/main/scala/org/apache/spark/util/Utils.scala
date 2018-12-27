@@ -2231,7 +2231,7 @@ private[spark] object Utils extends Logging {
               s"${e.getMessage}: Service$serviceString failed after " +
                 s"$maxRetries retries (on a random free port)! " +
                 s"Consider explicitly setting the appropriate binding address for " +
-                s"the service$serviceString (for example spark.driver.bindAddress " +
+                s"the service$serviceString (for example ${DRIVER_BIND_ADDRESS.key} " +
                 s"for SparkDriver) to the correct binding address."
             } else {
               s"${e.getMessage}: Service$serviceString failed after " +
