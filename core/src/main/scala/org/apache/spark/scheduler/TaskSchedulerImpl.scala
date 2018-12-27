@@ -326,10 +326,6 @@ private[spark] class TaskSchedulerImpl(
     rootPool.getSortedTaskSetQueue.filter(_.isBarrier)
   }
 
-  private def excludeReservedCpus(offers: Seq[WorkerOffer]): Array[Int] = {
-    excludeReservedCpus(offers.toIndexedSeq, getSortedBarrierTaskSets)
-  }
-
   private def excludeReservedCpus(
     offers: IndexedSeq[WorkerOffer],
     barrierTaskSets: ArrayBuffer[TaskSetManager])
@@ -390,29 +386,27 @@ private[spark] class TaskSchedulerImpl(
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
     val reviveOffers = new ArrayBuffer[WorkerOffer] ++ shuffledOffers
-    var dynamicAvailableCpus = availableCpus
+    val addedReviveOffersPerRound = new ArrayBuffer[WorkerOffer]()
     // nodes and executors that are blacklisted for the entire application have already been
     // filtered out by this point
     while (reviveOffers.nonEmpty) {
-      val addedReviveOffersPerRound = new ArrayBuffer[WorkerOffer]()
-      var replaced = false
       for (i <- 0 until shuffledOffers.size if reviveOffers.contains(shuffledOffers(i))) {
         val execId = shuffledOffers(i).executorId
         val host = shuffledOffers(i).host
-        if (dynamicAvailableCpus(i) >= CPUS_PER_TASK) {
+        if (availableCpus(i) >= CPUS_PER_TASK) {
           try {
             for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
-              dynamicAvailableCpus(i) -= CPUS_PER_TASK
+              availableCpus(i) -= CPUS_PER_TASK
               launchedTask = true
               // Only update hosts for a barrier task.
               if (taskSet.isBarrier) {
                 if (task.executorId != execId) {
-                  replaced = true
                   val replacedExecId = task.executorId
                   val offerIndex = execIdToOfferIndex(replacedExecId)
+                  availableCpus(offerIndex) += CPUS_PER_TASK
                   if (offerIndex < i) {
-                    // given the WorkerOffer a second chance to offer the resource for the taskSet,
-                    // which reclaims the resource just now
+                    // given the WorkerOffer, which reclaims the resource just now,
+                    // a second chance to offer the resource for the taskSet
                     addedReviveOffersPerRound += shuffledOffers(offerIndex)
                   }
                 }
@@ -435,11 +429,6 @@ private[spark] class TaskSchedulerImpl(
               return launchedTask
           }
         }
-      }
-      if (replaced) {
-        // update WorkerOffers'free cores since some reserved WorkerOffers are
-        // released during resourceOffer()
-        dynamicAvailableCpus = excludeReservedCpus(shuffledOffers)
       }
       reviveOffers.clear()
       reviveOffers ++= addedReviveOffersPerRound
