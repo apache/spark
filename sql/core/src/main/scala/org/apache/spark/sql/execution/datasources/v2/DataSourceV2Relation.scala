@@ -52,8 +52,8 @@ case class DataSourceV2Relation(
 
   override def name: String = table.name()
 
-  override def simpleString: String = {
-    s"RelationV2${truncatedString(output, "[", ", ", "]")} $name"
+  override def simpleString(maxFields: Int): String = {
+    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
   def newWriteSupport(): BatchWriteSupport = source.createWriteSupport(options, schema)
@@ -96,7 +96,9 @@ case class StreamingDataSourceV2Relation(
 
   override def isStreaming: Boolean = true
 
-  override def simpleString: String = "Streaming RelationV2 " + metadataString
+  override def simpleString(maxFields: Int): String = {
+    "Streaming RelationV2 " + metadataString(maxFields)
+  }
 
   override def pushedFilters: Seq[Expression] = Nil
 
