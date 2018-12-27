@@ -199,10 +199,16 @@ public abstract class UnsafeWriter {
   }
 
   protected final void writeFloat(long offset, float value) {
+    if (Float.isNaN(value)) {
+      value = Float.NaN;
+    }
     Platform.putFloat(getBuffer(), offset, value);
   }
 
   protected final void writeDouble(long offset, double value) {
+    if (Double.isNaN(value)) {
+      value = Double.NaN;
+    }
     Platform.putDouble(getBuffer(), offset, value);
   }
 }
