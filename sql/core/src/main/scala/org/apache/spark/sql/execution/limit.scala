@@ -198,9 +198,9 @@ case class TakeOrderedAndProjectExec(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  override def simpleString: String = {
-    val orderByString = truncatedString(sortOrder, "[", ",", "]")
-    val outputString = truncatedString(output, "[", ",", "]")
+  override def simpleString(maxFields: Int): String = {
+    val orderByString = truncatedString(sortOrder, "[", ",", "]", maxFields)
+    val outputString = truncatedString(output, "[", ",", "]", maxFields)
 
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
   }

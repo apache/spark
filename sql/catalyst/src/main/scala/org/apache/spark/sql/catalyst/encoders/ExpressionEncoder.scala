@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, InitializeJavaBean, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LocalRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -323,8 +324,8 @@ case class ExpressionEncoder[T](
     extractProjection(inputRow)
   } catch {
     case e: Exception =>
-      throw new RuntimeException(
-        s"Error while encoding: $e\n${serializer.map(_.simpleString).mkString("\n")}", e)
+      throw new RuntimeException(s"Error while encoding: $e\n" +
+          s"${serializer.map(_.simpleString(SQLConf.get.maxToStringFields)).mkString("\n")}", e)
   }
 
   /**
@@ -336,7 +337,8 @@ case class ExpressionEncoder[T](
     constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
   } catch {
     case e: Exception =>
-      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.simpleString}", e)
+      throw new RuntimeException(s"Error while decoding: $e\n" +
+        s"${deserializer.simpleString(SQLConf.get.maxToStringFields)}", e)
   }
 
   /**

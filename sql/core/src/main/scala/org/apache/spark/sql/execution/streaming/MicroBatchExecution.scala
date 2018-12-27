@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWritSupport, RateControlMicroBatchReadSupport}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
@@ -482,9 +483,10 @@ class MicroBatchExecution(
     val newBatchesPlan = logicalPlan transform {
       case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { dataPlan =>
+          val maxFields = SQLConf.get.maxToStringFields
           assert(output.size == dataPlan.output.size,
-            s"Invalid batch: ${truncatedString(output, ",")} != " +
-              s"${truncatedString(dataPlan.output, ",")}")
+            s"Invalid batch: ${truncatedString(output, ",", maxFields)} != " +
+              s"${truncatedString(dataPlan.output, ",", maxFields)}")
 
           val aliases = output.zip(dataPlan.output).map { case (to, from) =>
             Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))

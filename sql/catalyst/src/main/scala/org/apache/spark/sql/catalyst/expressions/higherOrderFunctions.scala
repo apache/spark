@@ -76,7 +76,9 @@ case class NamedLambdaVariable(
 
   override def toString: String = s"lambda $name#${exprId.id}$typeSuffix"
 
-  override def simpleString: String = s"lambda $name#${exprId.id}: ${dataType.simpleString}"
+  override def simpleString(maxFields: Int): String = {
+    s"lambda $name#${exprId.id}: ${dataType.simpleString(maxFields)}"
+  }
 }
 
 /**

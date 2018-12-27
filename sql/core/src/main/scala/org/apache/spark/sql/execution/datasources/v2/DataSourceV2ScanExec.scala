@@ -35,8 +35,8 @@ case class DataSourceV2ScanExec(
     @transient batch: Batch)
   extends LeafExecNode with ColumnarBatchScan {
 
-  override def simpleString: String = {
-    s"ScanV2${truncatedString(output, "[", ", ", "]")} $scanDesc"
+  override def simpleString(maxFields: Int): String = {
+    s"ScanV2${truncatedString(output, "[", ", ", "]", maxFields)} $scanDesc"
   }
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.

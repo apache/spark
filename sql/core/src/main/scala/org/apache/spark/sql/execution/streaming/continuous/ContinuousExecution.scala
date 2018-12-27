@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2StreamingScanExec, StreamingDataSourceV2Relation}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, StreamingWriteSupportProvider}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReadSupport, PartitionOffset}
@@ -166,10 +167,10 @@ class ContinuousExecution(
         val readSupport = continuousSources(insertedSourceId)
         insertedSourceId += 1
         val newOutput = readSupport.fullSchema().toAttributes
-
+        val maxFields = SQLConf.get.maxToStringFields
         assert(output.size == newOutput.size,
-          s"Invalid reader: ${truncatedString(output, ",")} != " +
-            s"${truncatedString(newOutput, ",")}")
+          s"Invalid reader: ${truncatedString(output, ",", maxFields)} != " +
+            s"${truncatedString(newOutput, ",", maxFields)}")
         replacements ++= output.zip(newOutput)
 
         val loggedOffset = offsets.offsets(0)
