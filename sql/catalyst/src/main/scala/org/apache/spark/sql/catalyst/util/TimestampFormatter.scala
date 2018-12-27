@@ -42,11 +42,12 @@ sealed trait TimestampFormatter extends Serializable {
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
   @throws(classOf[DateTimeException])
-  def parse(s: String): Long // returns microseconds since epoch
+  def parse(s: String): Long
   def format(us: Long): String
+  def withTimeZone(tz: TimeZone): TimestampFormatter
 }
 
-class Iso8601TimestampFormatter(
+case class Iso8601TimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
     locale: Locale) extends TimestampFormatter with DateTimeFormatterHelper {
@@ -77,6 +78,10 @@ class Iso8601TimestampFormatter(
 
     formatter.withZone(timeZone.toZoneId).format(instant)
   }
+
+  override def withTimeZone(tz: TimeZone): TimestampFormatter = {
+    this.copy(timeZone = tz)
+  }
 }
 
 class LegacyTimestampFormatter(
@@ -93,14 +98,22 @@ class LegacyTimestampFormatter(
   override def format(us: Long): String = {
     format.format(DateTimeUtils.toJavaTimestamp(us))
   }
+
+  override def withTimeZone(tz: TimeZone): TimestampFormatter = {
+    new LegacyTimestampFormatter(pattern, tz, locale)
+  }
 }
 
-class LegacyFallbackTimestampFormatter(
+case class LegacyFallbackTimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
     locale: Locale) extends LegacyTimestampFormatter(pattern, timeZone, locale) {
   override def toMillis(s: String): Long = {
     Try {super.toMillis(s)}.getOrElse(DateTimeUtils.stringToTime(s).getTime)
+  }
+
+  override def withTimeZone(tz: TimeZone): TimestampFormatter = {
+    this.copy(timeZone = tz)
   }
 }
 

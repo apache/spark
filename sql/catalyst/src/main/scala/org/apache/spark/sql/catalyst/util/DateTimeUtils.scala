@@ -77,16 +77,15 @@ object DateTimeUtils {
   }
 
   // `SimpleDateFormat` is not thread-safe.
-  private val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
-    override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+  private val threadLocalTimestampFormat = new ThreadLocal[TimestampFormatter] {
+    override def initialValue(): TimestampFormatter = {
+      TimestampFormatter("yyyy-MM-dd HH:mm:ss", TimeZoneUTC, Locale.US)
     }
   }
 
-  def getThreadLocalTimestampFormat(timeZone: TimeZone): DateFormat = {
-    val sdf = threadLocalTimestampFormat.get()
-    sdf.setTimeZone(timeZone)
-    sdf
+  def getThreadLocalTimestampFormat(timeZone: TimeZone): TimestampFormatter = {
+    val timestampFormatter = threadLocalTimestampFormat.get()
+    timestampFormatter.withTimeZone(timeZone)
   }
 
   // `SimpleDateFormat` is not thread-safe.
@@ -150,7 +149,7 @@ object DateTimeUtils {
     val ts = toJavaTimestamp(us)
     val timestampString = ts.toString
     val timestampFormat = getThreadLocalTimestampFormat(timeZone)
-    val formatted = timestampFormat.format(ts)
+    val formatted = timestampFormat.format(us)
 
     if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
       formatted + timestampString.substring(19)
