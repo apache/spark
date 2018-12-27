@@ -22,6 +22,8 @@ import java.util.{Map => JMap}
 import scala.collection.mutable.HashMap
 import scala.util.matching.Regex
 
+import org.apache.commons.lang3.SerializationUtils
+
 private object ConfigReader {
 
   private val REF_RE = "\\$\\{(?:(\\w+?):)?(\\S+?)\\}".r
@@ -56,6 +58,17 @@ private[spark] class ConfigReader(conf: ConfigProvider) {
   bindEnv(new EnvProvider())
   bindSystem(new SystemProvider())
 
+  protected[spark] val localProperties =
+    new InheritableThreadLocal[java.util.HashMap[String, String]] {
+      override protected def childValue(parent: java.util.HashMap[String, String]):
+      java.util.HashMap[String, String] = {
+        // Note: make a clone such that changes in the parent properties aren't reflected in
+        // the those of the children threads, which has confusing semantics (SPARK-10563).
+        SerializationUtils.clone(parent)
+      }
+      override protected def initialValue(): java.util.HashMap[String, String] =
+        new java.util.HashMap[String, String]()
+    }
   /**
    * Binds a prefix to a provider. This method is not thread-safe and should be called
    * before the instance is used to expand values.
@@ -76,7 +89,9 @@ private[spark] class ConfigReader(conf: ConfigProvider) {
   /**
    * Reads a configuration key from the default provider, and apply variable substitution.
    */
-  def get(key: String): Option[String] = conf.get(key).map(substitute)
+  def get(key: String): Option[String] = {
+    Option(localProperties.get().get(key)).orElse(conf.get(key)).map(substitute)
+  }
 
   /**
    * Perform variable substitution on the given input string.
