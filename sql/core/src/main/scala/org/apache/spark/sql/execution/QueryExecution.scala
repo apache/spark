@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
 import org.apache.spark.util.Utils
 
@@ -208,27 +209,27 @@ class QueryExecution(
     }
   }
 
-  private def writePlans(writer: Writer): Unit = {
+  private def writePlans(writer: Writer, maxFields: Int): Unit = {
     val (verbose, addSuffix) = (true, false)
 
     writer.write("== Parsed Logical Plan ==\n")
-    writeOrError(writer)(logical.treeString(_, verbose, addSuffix))
+    writeOrError(writer)(logical.treeString(_, verbose, addSuffix, maxFields))
     writer.write("\n== Analyzed Logical Plan ==\n")
     val analyzedOutput = stringOrError(truncatedString(
-      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", "))
+      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields))
     writer.write(analyzedOutput)
     writer.write("\n")
-    writeOrError(writer)(analyzed.treeString(_, verbose, addSuffix))
+    writeOrError(writer)(analyzed.treeString(_, verbose, addSuffix, maxFields))
     writer.write("\n== Optimized Logical Plan ==\n")
-    writeOrError(writer)(optimizedPlan.treeString(_, verbose, addSuffix))
+    writeOrError(writer)(optimizedPlan.treeString(_, verbose, addSuffix, maxFields))
     writer.write("\n== Physical Plan ==\n")
-    writeOrError(writer)(executedPlan.treeString(_, verbose, addSuffix))
+    writeOrError(writer)(executedPlan.treeString(_, verbose, addSuffix, maxFields))
   }
 
   override def toString: String = withRedaction {
     val writer = new StringBuilderWriter()
     try {
-      writePlans(writer)
+      writePlans(writer, SQLConf.get.maxToStringFields)
       writer.toString
     } finally {
       writer.close()
@@ -280,14 +281,16 @@ class QueryExecution(
 
     /**
      * Dumps debug information about query execution into the specified file.
+     *
+     * @param maxFields maximim number of fields converted to string representation.
      */
-    def toFile(path: String): Unit = {
+    def toFile(path: String, maxFields: Int = Int.MaxValue): Unit = {
       val filePath = new Path(path)
       val fs = filePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
 
       try {
-        writePlans(writer)
+        writePlans(writer, maxFields)
         writer.write("\n== Whole Stage Codegen ==\n")
         org.apache.spark.sql.execution.debug.writeCodegen(writer, executedPlan)
       } finally {
