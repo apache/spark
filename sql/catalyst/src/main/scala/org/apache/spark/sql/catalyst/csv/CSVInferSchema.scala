@@ -27,8 +27,7 @@ import org.apache.spark.sql.types._
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
-  @transient
-  private lazy val timestampParser = TimestampFormatter(
+  private val timestampParser = TimestampFormatter(
     options.timestampFormat,
     options.timeZone,
     options.locale)

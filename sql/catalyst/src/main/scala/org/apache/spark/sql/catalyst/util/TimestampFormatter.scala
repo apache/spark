@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.text.ParseException
 import java.time._
+import java.time.format.DateTimeParseException
 import java.time.temporal.TemporalQueries
 import java.util.{Locale, TimeZone}
 
@@ -27,7 +29,19 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.sql.internal.SQLConf
 
-sealed trait TimestampFormatter {
+sealed trait TimestampFormatter extends Serializable {
+  /**
+   * Parses a timestamp in a string and converts it to microseconds.
+   *
+   * @param s - string with timestamp to parse
+   * @return microseconds since epoch.
+   * @throws ParseException can be thrown by legacy parser
+   * @throws DateTimeParseException can be thrown by new parser
+   * @throws DateTimeException unable to obtain local date or time
+   */
+  @throws(classOf[ParseException])
+  @throws(classOf[DateTimeParseException])
+  @throws(classOf[DateTimeException])
   def parse(s: String): Long // returns microseconds since epoch
   def format(us: Long): String
 }
@@ -36,7 +50,8 @@ class Iso8601TimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
     locale: Locale) extends TimestampFormatter with DateTimeFormatterHelper {
-  private val formatter = buildFormatter(pattern, locale)
+  @transient
+  private lazy val formatter = buildFormatter(pattern, locale)
 
   private def toInstant(s: String): Instant = {
     val temporalAccessor = formatter.parse(s)
@@ -68,7 +83,8 @@ class LegacyTimestampFormatter(
     pattern: String,
     timeZone: TimeZone,
     locale: Locale) extends TimestampFormatter {
-  private val format = FastDateFormat.getInstance(pattern, timeZone, locale)
+  @transient
+  private lazy val format = FastDateFormat.getInstance(pattern, timeZone, locale)
 
   protected def toMillis(s: String): Long = format.parse(s).getTime
 
