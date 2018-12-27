@@ -41,6 +41,10 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
 
   protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
 
+  protected val bytesPattern = Pattern.compile("([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)")
+
+  protected val durationPattern = Pattern.compile("([0-9]+(\\.[0-9]+)?) (ms|s|m|h)")
+
   /**
    * Get execution metrics for the SQL execution and verify metrics values.
    *
@@ -208,8 +212,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   }
 
   private def stringToBytes(str: String): (Float, String) = {
-    val matcher =
-      Pattern.compile("([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)").matcher(str)
+    val matcher = bytesPattern.matcher(str)
     if (matcher.matches()) {
       (matcher.group(1).toFloat, matcher.group(3))
     } else {
@@ -218,7 +221,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   }
 
   private def stringToDuration(str: String): (Float, String) = {
-    val matcher = Pattern.compile("([0-9]+(\\.[0-9]+)?) (ms|s|m|h)").matcher(str)
+    val matcher = durationPattern.matcher(str)
     if (matcher.matches()) {
       (matcher.group(1).toFloat, matcher.group(3))
     } else {

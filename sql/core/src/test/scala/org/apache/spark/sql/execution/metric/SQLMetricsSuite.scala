@@ -203,17 +203,18 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     // so Project here is not collapsed into LocalTableScan.
     val df = Seq(1, 3, 2).toDF("id").sort('id)
     val metrics = getSparkPlanMetrics(df, 2, Set(0))
+    assert(metrics.isDefined)
     val sortMetrics = metrics.get.get(0).get
     // Check node 0 is Sort node
     val operatorName = sortMetrics._1
     assert(operatorName == "Sort")
     // Check metrics values
     val sortTimeStr = sortMetrics._2.get("sort time total (min, med, max)").get.toString
-    timingMetricStats(sortTimeStr).foreach { case (sortTime, _) => assert(sortTime >= 0) }
+    assert(timingMetricStats(sortTimeStr).forall { case (sortTime, _) => sortTime >= 0 })
     val peakMemoryStr = sortMetrics._2.get("peak memory total (min, med, max)").get.toString
-    sizeMetricStats(peakMemoryStr).foreach { case (peakMemory, _) => assert(peakMemory > 0) }
+    assert(sizeMetricStats(peakMemoryStr).forall { case (peakMemory, _) => peakMemory > 0 })
     val spillSizeStr = sortMetrics._2.get("spill size total (min, med, max)").get.toString
-    sizeMetricStats(spillSizeStr).foreach { case (spillSize, _) => assert(spillSize >= 0) }
+    assert(sizeMetricStats(spillSizeStr).forall { case (spillSize, _) => spillSize >= 0 })
   }
 
   test("SortMergeJoin metrics") {
