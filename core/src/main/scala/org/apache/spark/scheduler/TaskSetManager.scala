@@ -1094,6 +1094,7 @@ private[spark] class TaskSetManager(
 
   def markPartitionIdAsCompletedForTaskAttempt(index: Int): Unit = {
     successful(index) = true
+    maybeFinishTaskSet()
   }
 }
 

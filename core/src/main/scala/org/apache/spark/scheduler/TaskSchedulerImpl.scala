@@ -281,6 +281,11 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  /**
+    * SPARK-25250: Whenever any Result Task gets successfully completed, we simply mark the
+    * corresponding partition id as completed in all attempts for that particular stage. As a
+    * result, we do not see any Killed tasks due to TaskCommitDenied Exceptions showing up in the UI.
+    */
   override def markPartitionIdAsCompletedAndKillCorrespondingTaskAttempts(
       partitionId: Int, stageId: Int): Unit = {
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
