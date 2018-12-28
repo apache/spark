@@ -76,25 +76,14 @@ object DateTimeUtils {
     }
   }
 
-  private val threadLocalTimestampFormatter = new ThreadLocal[TimestampFormatter] {
+  private val threadLocalTimestampFormat = new ThreadLocal[TimestampFormatter] {
     override def initialValue(): TimestampFormatter = {
       TimestampFormatter("yyyy-MM-dd HH:mm:ss", TimeZoneUTC, Locale.US)
     }
   }
 
-  def getThreadLocalTimestampParser(timeZone: TimeZone): TimestampFormatter = {
-    val timestampFormatter = threadLocalTimestampParser.get()
-    timestampFormatter.withTimeZone(timeZone)
-  }
-
-  private val threadLocalTimestampParser = new ThreadLocal[TimestampFormatter] {
-    override def initialValue(): TimestampFormatter = {
-      TimestampFormatter("yyyy-MM-dd HH:mm:ss[.S]", TimeZoneUTC, Locale.US)
-    }
-  }
-
-  def getThreadLocalTimestampFormatter(timeZone: TimeZone): TimestampFormatter = {
-    val timestampFormatter = threadLocalTimestampFormatter.get()
+  def getThreadLocalTimestampFormat(timeZone: TimeZone): TimestampFormatter = {
+    val timestampFormatter = threadLocalTimestampFormat.get()
     timestampFormatter.withTimeZone(timeZone)
   }
 
@@ -149,7 +138,7 @@ object DateTimeUtils {
   def timestampToString(us: SQLTimestamp, timeZone: TimeZone): String = {
     val ts = toJavaTimestamp(us)
     val timestampString = ts.toString
-    val timestampFormat = getThreadLocalTimestampFormatter(timeZone)
+    val timestampFormat = getThreadLocalTimestampFormat(timeZone)
     val formatted = timestampFormat.format(us)
 
     if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
@@ -1134,7 +1123,7 @@ object DateTimeUtils {
    */
   private[util] def resetThreadLocals(): Unit = {
     threadLocalGmtCalendar.remove()
-    threadLocalTimestampFormatter.remove()
+    threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
   }
 }
