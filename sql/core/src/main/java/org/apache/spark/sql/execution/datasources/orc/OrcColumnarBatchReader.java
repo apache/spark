@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc;
 import java.io.IOException;
 import java.util.stream.IntStream;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
@@ -64,7 +65,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
    * but Spark will discard the values from the file, and use the partition value got from
    * directory name. The column order will be reserved though.
    */
-  private int[] requestedDataColIds;
+  @VisibleForTesting
+  public int[] requestedDataColIds;
 
   // Record reader from ORC row batch.
   private org.apache.orc.RecordReader recordReader;
@@ -72,7 +74,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   private StructField[] requiredFields;
 
   // The result columnar batch for vectorized execution by whole-stage codegen.
-  private ColumnarBatch columnarBatch;
+  @VisibleForTesting
+  public ColumnarBatch columnarBatch;
 
   // Writable column vectors of the result columnar batch.
   private WritableColumnVector[] columnVectors;
