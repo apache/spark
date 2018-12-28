@@ -102,7 +102,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // Number of threads used to replay event logs.
   private val NUM_PROCESSING_THREADS = conf.get(History.NUM_REPLAY_THREADS)
 
-  private val logDir = conf.get(History.EVENT_LOG_DIR)
+  private val logDir = conf.get(History.HISTORY_LOG_DIR)
 
   private val HISTORY_UI_ACLS_ENABLE = conf.get(History.UI_ACLS_ENABLE)
   private val HISTORY_UI_ADMIN_ACLS = conf.get(History.UI_ADMIN_ACLS)

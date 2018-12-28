@@ -25,7 +25,7 @@ private[spark] object History {
 
   val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
 
-  val EVENT_LOG_DIR = ConfigBuilder("spark.history.fs.logDirectory")
+  val HISTORY_LOG_DIR = ConfigBuilder("spark.history.fs.logDirectory")
     .stringConf
     .createWithDefault(DEFAULT_LOG_DIR)
 

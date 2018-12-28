@@ -29,14 +29,14 @@ class HistoryServerArgumentsSuite extends SparkFunSuite {
 
   private val logDir = new File("src/test/resources/spark-events")
   private val conf = new SparkConf()
-    .set(EVENT_LOG_DIR, logDir.getAbsolutePath)
+    .set(HISTORY_LOG_DIR, logDir.getAbsolutePath)
     .set(UPDATE_INTERVAL_S, 1L)
     .set("spark.testing", "true")
 
   test("No Arguments Parsing") {
     val argStrings = Array.empty[String]
     val hsa = new HistoryServerArguments(conf, argStrings)
-    assert(conf.get(EVENT_LOG_DIR) === logDir.getAbsolutePath)
+    assert(conf.get(HISTORY_LOG_DIR) === logDir.getAbsolutePath)
     assert(conf.get(UPDATE_INTERVAL_S) === 1L)
     assert(conf.get("spark.testing") === "true")
   }
