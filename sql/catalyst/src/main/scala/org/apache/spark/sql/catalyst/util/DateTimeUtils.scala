@@ -130,24 +130,6 @@ object DateTimeUtils {
     getThreadLocalDateFormat().format(days)
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
-  def timestampToString(us: SQLTimestamp): String = {
-    timestampToString(us, defaultTimeZone())
-  }
-
-  // Converts Timestamp to string according to Hive TimestampWritable convention.
-  def timestampToString(us: SQLTimestamp, timeZone: TimeZone): String = {
-    val ts = toJavaTimestamp(us)
-    val timestampString = ts.toString
-    val timestampFormat = getThreadLocalTimestampFormat(timeZone)
-    val formatted = timestampFormat.format(us)
-
-    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
-      formatted + timestampString.substring(19)
-    } else {
-      formatted
-    }
-  }
-
   def timestampToString(tf: TimestampFormatter, us: SQLTimestamp): String = {
     val ts = toJavaTimestamp(us)
     val timestampString = ts.toString
