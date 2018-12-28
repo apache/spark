@@ -416,6 +416,12 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     intercept[TestFailedException] {
       checkAnswer(Seq(Tuple1(-0.0)).toDF(), Row(Row(0.0)))
     }
+    intercept[TestFailedException] {
+      checkDataset(Seq(Seq(-0.0)).toDS(), Seq(0.0))
+    }
+    intercept[TestFailedException] {
+      checkAnswer(Seq(Seq(-0.0)).toDF(), Row(Seq(0.0)))
+    }
 
     val floats = Seq[Float](-0.0f, 0.0f, Float.NaN)
     checkDataset(floats.toDS(), floats: _*)

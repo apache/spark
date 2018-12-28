@@ -1757,7 +1757,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("insert into tbl values ('3', '2.3')")
       checkAnswer(
         sql("select (cast (99 as decimal(19,6)) + cast('3' as decimal)) * cast('2.3' as decimal)"),
-        Row(BigDecimal(204.0))
+        Row(204.0)
       )
       checkAnswer(
         sql("select (cast(99 as decimal(19,6)) + '3') *'2.3' from tbl"),

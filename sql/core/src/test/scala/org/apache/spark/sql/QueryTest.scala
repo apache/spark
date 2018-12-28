@@ -64,7 +64,7 @@ abstract class QueryTest extends PlanTest {
       expectedAnswer: T*): Unit = {
     val result = getResult(ds)
 
-    if (!compare(result.toSeq, expectedAnswer)) {
+    if (!QueryTest.compare(result.toSeq, expectedAnswer)) {
       fail(
         s"""
            |Decoded objects do not match expected objects:
@@ -84,7 +84,7 @@ abstract class QueryTest extends PlanTest {
       expectedAnswer: T*): Unit = {
     val result = getResult(ds)
 
-    if (!compare(result.toSeq.sorted, expectedAnswer.sorted)) {
+    if (!QueryTest.compare(result.toSeq.sorted, expectedAnswer.sorted)) {
       fail(
         s"""
            |Decoded objects do not match expected objects:
@@ -122,24 +122,6 @@ abstract class QueryTest extends PlanTest {
              |${ds.queryExecution}
            """.stripMargin, e)
     }
-  }
-
-  private def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
-    case (null, null) => true
-    case (null, _) => false
-    case (_, null) => false
-    case (a: Array[_], b: Array[_]) =>
-      a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
-    case (a: Iterable[_], b: Iterable[_]) =>
-      a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
-    case (a: Product, b: Product) =>
-      compare(a.productIterator.toSeq, b.productIterator.toSeq)
-    // 0.0 == -0.0, turn float/double to bits before comparison, to distinguish 0.0 and -0.0.
-    case (a: Double, b: Double) =>
-      java.lang.Double.doubleToRawLongBits(a) == java.lang.Double.doubleToRawLongBits(b)
-    case (a: Float, b: Float) =>
-      java.lang.Float.floatToRawIntBits(a) == java.lang.Float.floatToRawIntBits(b)
-    case (a, b) => a == b
   }
 
   /**
@@ -282,18 +264,18 @@ object QueryTest {
   }
 
 
-  def prepareAnswer(answer: Seq[Row], isSorted: Boolean, forPrint: Boolean = false): Seq[Row] = {
+  def prepareAnswer(answer: Seq[Row], isSorted: Boolean): Seq[Row] = {
     // Converts data to types that we can do equality comparison using Scala collections.
     // For BigDecimal type, the Scala type has a better definition of equality test (similar to
     // Java's java.math.BigDecimal.compareTo).
     // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
     // equality test.
-    val converted: Seq[Row] = answer.map(prepareRow(_, forPrint))
+    val converted: Seq[Row] = answer.map(prepareRow)
     if (!isSorted) converted.sortBy(_.toString()) else converted
   }
 
   // We need to call prepareRow recursively to handle schemas with struct types.
-  def prepareRow(row: Row, forPrint: Boolean): Row = {
+  def prepareRow(row: Row): Row = {
     Row.fromSeq(row.toSeq.map {
       case null => null
       case bd: java.math.BigDecimal => BigDecimal(bd)
@@ -309,10 +291,7 @@ object QueryTest {
       }
       // Convert array to Seq for easy equality check.
       case b: Array[_] => b.toSeq
-      case r: Row => prepareRow(r, forPrint)
-      // 0.0 == -0.0, turn float/double to bits before comparison, to distinguish 0.0 and -0.0.
-      case f: Float if !forPrint => java.lang.Float.floatToRawIntBits(f)
-      case d: Double if !forPrint => java.lang.Double.doubleToLongBits(d)
+      case r: Row => prepareRow(r)
       case o => o
     })
   }
@@ -335,10 +314,10 @@ object QueryTest {
       sideBySide(
         s"== Correct Answer - ${expectedAnswer.size} ==" +:
           getRowType(expectedAnswer.headOption) +:
-          prepareAnswer(expectedAnswer, isSorted, forPrint = true).map(_.toString()),
+          prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
         s"== Spark Answer - ${sparkAnswer.size} ==" +:
           getRowType(sparkAnswer.headOption) +:
-          prepareAnswer(sparkAnswer, isSorted, forPrint = true).map(_.toString())).mkString("\n")
+          prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")
     }
     """.stripMargin
   }
@@ -352,11 +331,31 @@ object QueryTest {
     None
   }
 
+  private def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
+    case (null, null) => true
+    case (null, _) => false
+    case (_, null) => false
+    case (a: Array[_], b: Array[_]) =>
+      a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
+    case (a: Iterable[_], b: Iterable[_]) =>
+      a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
+    case (a: Product, b: Product) =>
+      compare(a.productIterator.toSeq, b.productIterator.toSeq)
+    case (a: Row, b: Row) =>
+      compare(a.toSeq, b.toSeq)
+    // 0.0 == -0.0, turn float/double to bits before comparison, to distinguish 0.0 and -0.0.
+    case (a: Double, b: Double) =>
+      java.lang.Double.doubleToRawLongBits(a) == java.lang.Double.doubleToRawLongBits(b)
+    case (a: Float, b: Float) =>
+      java.lang.Float.floatToRawIntBits(a) == java.lang.Float.floatToRawIntBits(b)
+    case (a, b) => a == b
+  }
+
   def sameRows(
       expectedAnswer: Seq[Row],
       sparkAnswer: Seq[Row],
       isSorted: Boolean = false): Option[String] = {
-    if (prepareAnswer(expectedAnswer, isSorted) != prepareAnswer(sparkAnswer, isSorted)) {
+    if (!compare(prepareAnswer(expectedAnswer, isSorted), prepareAnswer(sparkAnswer, isSorted))) {
       return Some(genError(expectedAnswer, sparkAnswer, isSorted))
     }
     None
