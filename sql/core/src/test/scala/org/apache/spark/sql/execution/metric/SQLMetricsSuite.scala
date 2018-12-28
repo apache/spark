@@ -202,19 +202,14 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     // Because of SPARK-25267, ConvertToLocalRelation is disabled in the test cases of sql/core,
     // so Project here is not collapsed into LocalTableScan.
     val df = Seq(1, 3, 2).toDF("id").sort('id)
-    val metrics = getSparkPlanMetrics(df, 2, Set(0))
-    assert(metrics.isDefined)
-    val sortMetrics = metrics.get.get(0).get
-    // Check node 0 is Sort node
-    val operatorName = sortMetrics._1
-    assert(operatorName == "Sort")
-    // Check metrics values
-    val sortTimeStr = sortMetrics._2.get("sort time total (min, med, max)").get.toString
-    assert(timingMetricStats(sortTimeStr).forall { case (sortTime, _) => sortTime >= 0 })
-    val peakMemoryStr = sortMetrics._2.get("peak memory total (min, med, max)").get.toString
-    assert(sizeMetricStats(peakMemoryStr).forall { case (peakMemory, _) => peakMemory > 0 })
-    val spillSizeStr = sortMetrics._2.get("spill size total (min, med, max)").get.toString
-    assert(sizeMetricStats(spillSizeStr).forall { case (spillSize, _) => spillSize >= 0 })
+    testSparkPlanMetricsWithPredicates(df, 2, Map(
+      0L -> (("Sort", Map(
+        // In SortExec, sort time is collected as nanoseconds, but it is converted and stored as
+        // milliseconds. So sort time may be 0 if sort is executed very fast.
+        "sort time total (min, med, max)" -> timingMetricAllStatsShould(_ >= 0),
+        "peak memory total (min, med, max)" -> sizeMetricAllStatsShould(_ > 0),
+        "spill size total (min, med, max)" -> sizeMetricAllStatsShould(_ >= 0))))
+    ))
   }
 
   test("SortMergeJoin metrics") {

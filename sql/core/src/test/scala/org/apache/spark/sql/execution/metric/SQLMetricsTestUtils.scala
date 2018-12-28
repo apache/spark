@@ -190,15 +190,34 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       df: DataFrame,
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
-    val optActualMetrics = getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetrics.keySet)
+    val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
+      (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
+        (actualMetricValue: Any) => expectedMetricValue.toString === actualMetricValue)
+    )}
+    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates)
+  }
+
+  /**
+   * Call `df.collect()` and verify if the collected metrics satisfy the specified predicates.
+   * @param df `DataFrame` to run
+   * @param expectedNumOfJobs number of jobs that will run
+   * @param expectedMetricsPredicates the expected metrics predicates. The format is
+   *                        `nodeId -> (operatorName, metric name -> metric value predicate)`.
+   */
+  protected def testSparkPlanMetricsWithPredicates(
+      df: DataFrame,
+      expectedNumOfJobs: Int,
+      expectedMetricsPredicates: Map[Long, (String, Map[String, Any => Boolean])]): Unit = {
+    val optActualMetrics =
+      getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetricsPredicates.keySet)
     optActualMetrics.foreach { actualMetrics =>
-      assert(expectedMetrics.keySet === actualMetrics.keySet)
-      for (nodeId <- expectedMetrics.keySet) {
-        val (expectedNodeName, expectedMetricsMap) = expectedMetrics(nodeId)
+      assert(expectedMetricsPredicates.keySet === actualMetrics.keySet)
+      for (nodeId <- expectedMetricsPredicates.keySet) {
+        val (expectedNodeName, expectedMetricsPredicatesMap) = expectedMetricsPredicates(nodeId)
         val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
         assert(expectedNodeName === actualNodeName)
-        for (metricName <- expectedMetricsMap.keySet) {
-          assert(expectedMetricsMap(metricName).toString === actualMetricsMap(metricName))
+        for (metricName <- expectedMetricsPredicatesMap.keySet) {
+          assert(expectedMetricsPredicatesMap(metricName)(actualMetricsMap(metricName)))
         }
       }
     }
@@ -247,6 +266,28 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
    */
   protected def timingMetricStats(metricStr: String): Seq[(Float, String)] = {
     metricStats(metricStr).map(stringToDuration)
+  }
+
+  /**
+   * Returns a function to check whether all stats (sum, min, med and max) of a timing metric
+   * satisfy the specified predicate.
+   * @param predicate predicate to check stats
+   * @return function to check all stats of a timing metric
+   */
+  protected def timingMetricAllStatsShould(predicate: Float => Boolean): Any => Boolean = {
+    (timingMetric: Any) =>
+      timingMetricStats(timingMetric.toString).forall { case (duration, _) => predicate(duration) }
+  }
+
+  /**
+   * Returns a function to check whether all stats (sum, min, med and max) of a size metric satisfy
+   * the specified predicate.
+   * @param predicate predicate to check stats
+   * @return function to check all stats of a size metric
+   */
+  protected def sizeMetricAllStatsShould(predicate: Float => Boolean): Any => Boolean = {
+    (sizeMetric: Any) =>
+      sizeMetricStats(sizeMetric.toString).forall { case (bytes, _) => predicate(bytes)}
   }
 }
 
