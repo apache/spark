@@ -76,17 +76,6 @@ object DateTimeUtils {
     }
   }
 
-  private val threadLocalTimestampFormat = new ThreadLocal[TimestampFormatter] {
-    override def initialValue(): TimestampFormatter = {
-      TimestampFormatter("yyyy-MM-dd HH:mm:ss", TimeZoneUTC, Locale.US)
-    }
-  }
-
-  def getThreadLocalTimestampFormat(timeZone: TimeZone): TimestampFormatter = {
-    val timestampFormatter = threadLocalTimestampFormat.get()
-    timestampFormatter.withTimeZone(timeZone)
-  }
-
   private val computedTimeZones = new ConcurrentHashMap[String, TimeZone]
   private val computeTimeZone = new JFunction[String, TimeZone] {
     override def apply(timeZoneId: String): TimeZone = TimeZone.getTimeZone(timeZoneId)
@@ -1106,6 +1095,5 @@ object DateTimeUtils {
    */
   private[util] def resetThreadLocals(): Unit = {
     threadLocalGmtCalendar.remove()
-    threadLocalTimestampFormat.remove()
   }
 }
