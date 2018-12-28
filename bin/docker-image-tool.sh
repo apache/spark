@@ -208,8 +208,12 @@ Options:
   -f file               Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
   -p file               (Optional) Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
                         Skips building PySpark docker image if not specified.
+                        A sample PySpark Dockerfile is at:
+                        resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings/python/Dockerfile
   -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
                         Skips building SparkR docker image if not specified.
+			 A sample SparkR Dockerfile is at:
+                        resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings/R/Dockerfile
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
@@ -232,7 +236,7 @@ Examples:
     $0 -m -t testing build
 
   - Build PySpark docker image
-    $0 -r docker.io/myrepo -t v2.3.0 -p kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
+    $0 -r docker.io/myrepo -t v2.3.0 -p resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings/python/Dockerfile
 
   - Build and push image with tag "v2.3.0" to docker.io/myrepo
     $0 -r docker.io/myrepo -t v2.3.0 build
