@@ -64,7 +64,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private val maxCoresOption = conf.getOption("spark.cores.max").map(_.toInt)
 
-  private val executorCoresOption = conf.getOption("spark.executor.cores").map(_.toInt)
+  private val executorCoresOption = conf.getOption(config.EXECUTOR_CORES.key).map(_.toInt)
 
   private val minCoresPerExecutor = executorCoresOption.getOrElse(1)
 
@@ -219,18 +219,18 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   def createCommand(offer: Offer, numCores: Int, taskId: String): CommandInfo = {
     val environment = Environment.newBuilder()
-    val extraClassPath = conf.getOption("spark.executor.extraClassPath")
+    val extraClassPath = conf.get(config.EXECUTOR_CLASS_PATH)
     extraClassPath.foreach { cp =>
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_EXECUTOR_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.getOption("spark.executor.extraJavaOptions").map {
+    val extraJavaOpts = conf.get(config.EXECUTOR_JAVA_OPTIONS).map {
       Utils.substituteAppNExecIds(_, appId, taskId)
     }.getOrElse("")
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
-    val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
+    val prefixEnv = conf.get(config.EXECUTOR_LIBRARY_PATH).map { p =>
       Utils.libraryPathEnvPrefix(Seq(p))
     }.getOrElse("")
 
@@ -260,8 +260,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
 
-    val uri = conf.getOption("spark.executor.uri")
-      .orElse(Option(System.getenv("SPARK_EXECUTOR_URI")))
+    val uri = conf.get(EXECUTOR_URI).orElse(Option(System.getenv("SPARK_EXECUTOR_URI")))
 
     if (uri.isEmpty) {
       val executorSparkHome = conf.getOption("spark.mesos.executor.home")

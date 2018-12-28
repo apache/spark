@@ -109,6 +109,9 @@ package object config {
   private[spark] val EVENT_LOG_CALLSITE_LONG_FORM =
     ConfigBuilder("spark.eventLog.longForm.enabled").booleanConf.createWithDefault(false)
 
+  private[spark] val EXECUTOR_ID =
+    ConfigBuilder("spark.executor.id").stringConf.createOptional
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.createOptional
 
@@ -135,7 +138,11 @@ package object config {
   private[spark] val EXECUTOR_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.executor.userClassPathFirst").booleanConf.createWithDefault(false)
 
-  private[spark] val EXECUTOR_MEMORY = ConfigBuilder("spark.executor.memory")
+  private[spark] val EXECUTOR_CORES = ConfigBuilder(SparkLauncher.EXECUTOR_CORES)
+    .intConf
+    .createWithDefault(1)
+
+  private[spark] val EXECUTOR_MEMORY = ConfigBuilder(SparkLauncher.EXECUTOR_MEMORY)
     .doc("Amount of memory to use per executor process, in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
@@ -740,4 +747,23 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
+    ConfigBuilder("spark.executor.logs.rolling.strategy").stringConf.createWithDefault("")
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_TIME_INTERVAL =
+    ConfigBuilder("spark.executor.logs.rolling.time.interval").stringConf.createWithDefault("daily")
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_MAX_SIZE =
+    ConfigBuilder("spark.executor.logs.rolling.maxSize")
+      .stringConf
+      .createWithDefault((1024 * 1024).toString)
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_MAX_RETAINED_FILES =
+    ConfigBuilder("spark.executor.logs.rolling.maxRetainedFiles").intConf.createWithDefault(-1)
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_ENABLE_COMPRESSION =
+    ConfigBuilder("spark.executor.logs.rolling.enableCompression")
+      .booleanConf
+      .createWithDefault(false)
 }

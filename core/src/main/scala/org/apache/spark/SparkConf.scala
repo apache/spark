@@ -503,12 +503,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       logWarning(msg)
     }
 
-    val executorOptsKey = "spark.executor.extraJavaOptions"
-    val executorClasspathKey = "spark.executor.extraClassPath"
+    val executorOptsKey = EXECUTOR_JAVA_OPTIONS.key
+    val executorClasspathKey = EXECUTOR_CLASS_PATH.key
     val driverOptsKey = DRIVER_JAVA_OPTIONS.key
     val driverClassPathKey = DRIVER_CLASS_PATH.key
     val driverLibraryPathKey = DRIVER_LIBRARY_PATH.key
-    val sparkExecutorInstances = "spark.executor.instances"
+    val sparkExecutorInstances = EXECUTOR_INSTANCES.key
 
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
@@ -594,9 +594,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains("spark.cores.max") && contains("spark.executor.cores")) {
+    if (contains("spark.cores.max") && contains(EXECUTOR_CORES)) {
       val totalCores = getInt("spark.cores.max", 1)
-      val executorCores = getInt("spark.executor.cores", 1)
+      val executorCores = get(EXECUTOR_CORES)
       val leftCores = totalCores % executorCores
       if (leftCores != 0) {
         logWarning(s"Total executor cores: ${totalCores} is not " +
@@ -605,12 +605,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains("spark.executor.cores") && contains("spark.task.cpus")) {
-      val executorCores = getInt("spark.executor.cores", 1)
+    if (contains(EXECUTOR_CORES) && contains("spark.task.cpus")) {
+      val executorCores = get(EXECUTOR_CORES)
       val taskCpus = getInt("spark.task.cpus", 1)
 
       if (executorCores < taskCpus) {
-        throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.")
+        throw new SparkException(s"${EXECUTOR_CORES.key} must not be less than spark.task.cpus.")
       }
     }
 
@@ -680,7 +680,7 @@ private[spark] object SparkConf extends Logging {
    * TODO: consolidate it with `ConfigBuilder.withAlternative`.
    */
   private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
-    "spark.executor.userClassPathFirst" -> Seq(
+    EXECUTOR_USER_CLASS_PATH_FIRST.key -> Seq(
       AlternateConfig("spark.files.userClassPathFirst", "1.3")),
     UPDATE_INTERVAL_S.key -> Seq(
       AlternateConfig("spark.history.fs.update.interval.seconds", "1.4"),
@@ -703,7 +703,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
     "spark.shuffle.file.buffer" -> Seq(
       AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
-    "spark.executor.logs.rolling.maxSize" -> Seq(
+    EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
     "spark.io.compression.snappy.blockSize" -> Seq(
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),

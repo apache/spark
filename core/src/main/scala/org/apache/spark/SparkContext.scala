@@ -388,7 +388,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
     _conf.setIfMissing(DRIVER_PORT, 0)
 
-    _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
+    _conf.set(EXECUTOR_ID, SparkContext.DRIVER_IDENTIFIER)
 
     _jars = Utils.getUserJars(_conf)
     _files = _conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.nonEmpty))
@@ -462,7 +462,7 @@ class SparkContext(config: SparkConf) extends Logging {
       files.foreach(addFile)
     }
 
-    _executorMemory = _conf.getOption("spark.executor.memory")
+    _executorMemory = _conf.getOption(EXECUTOR_MEMORY.key)
       .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
       .orElse(Option(System.getenv("SPARK_MEM"))
       .map(warnSparkMem))

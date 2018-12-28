@@ -66,7 +66,7 @@ private[spark] class BasicExecutorFeatureStep(
       executorMemoryWithOverhead
     }
 
-  private val executorCores = kubernetesConf.sparkConf.getInt("spark.executor.cores", 1)
+  private val executorCores = kubernetesConf.sparkConf.get(EXECUTOR_CORES)
   private val executorCoresRequest =
     if (kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
       kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get

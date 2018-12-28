@@ -220,12 +220,12 @@ object UnifiedMemoryManager {
         s"option or ${config.DRIVER_MEMORY.key} in Spark configuration.")
     }
     // SPARK-12759 Check executor memory to fail fast if memory is insufficient
-    if (conf.contains("spark.executor.memory")) {
-      val executorMemory = conf.getSizeAsBytes("spark.executor.memory")
+    if (conf.contains(config.EXECUTOR_MEMORY)) {
+      val executorMemory = conf.getSizeAsBytes(config.EXECUTOR_MEMORY.key)
       if (executorMemory < minSystemMemory) {
         throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
           s"$minSystemMemory. Please increase executor memory using the " +
-          s"--executor-memory option or spark.executor.memory in Spark configuration.")
+          s"--executor-memory option or ${config.EXECUTOR_MEMORY.key} in Spark configuration.")
       }
     }
     val usableMemory = systemMemory - reservedMemory

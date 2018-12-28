@@ -171,11 +171,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orElse(sparkProperties.get(config.DRIVER_CORES.key))
       .orNull
     executorMemory = Option(executorMemory)
-      .orElse(sparkProperties.get("spark.executor.memory"))
+      .orElse(sparkProperties.get(config.EXECUTOR_MEMORY.key))
       .orElse(env.get("SPARK_EXECUTOR_MEMORY"))
       .orNull
     executorCores = Option(executorCores)
-      .orElse(sparkProperties.get("spark.executor.cores"))
+      .orElse(sparkProperties.get(config.EXECUTOR_CORES.key))
       .orElse(env.get("SPARK_EXECUTOR_CORES"))
       .orNull
     totalExecutorCores = Option(totalExecutorCores)
@@ -197,7 +197,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orElse(env.get("DEPLOY_MODE"))
       .orNull
     numExecutors = Option(numExecutors)
-      .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
+      .getOrElse(sparkProperties.get(config.EXECUTOR_INSTANCES.key).orNull)
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
     keytab = Option(keytab)
       .orElse(sparkProperties.get("spark.kerberos.keytab"))

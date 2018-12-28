@@ -54,7 +54,7 @@ private[rest] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
     assertPropertyIsNumeric(config.DRIVER_CORES.key)
     assertPropertyIsNumeric("spark.cores.max")
     assertPropertyIsMemory(config.DRIVER_MEMORY.key)
-    assertPropertyIsMemory("spark.executor.memory")
+    assertPropertyIsMemory(config.EXECUTOR_MEMORY.key)
   }
 
   private def assertPropertyIsSet(key: String): Unit =

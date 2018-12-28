@@ -79,11 +79,11 @@ private[spark] class StandaloneSchedulerBackend(
       "--cores", "{{CORES}}",
       "--app-id", "{{APP_ID}}",
       "--worker-url", "{{WORKER_URL}}")
-    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+    val extraJavaOpts = sc.conf.get(config.EXECUTOR_JAVA_OPTIONS)
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
-    val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath")
+    val classPathEntries = sc.conf.get(config.EXECUTOR_CLASS_PATH)
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
-    val libraryPathEntries = sc.conf.getOption("spark.executor.extraLibraryPath")
+    val libraryPathEntries = sc.conf.get(config.EXECUTOR_LIBRARY_PATH)
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
 
     // When testing, expose the parent class path to the child. This is processed by
@@ -102,7 +102,7 @@ private[spark] class StandaloneSchedulerBackend(
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val webUrl = sc.ui.map(_.webUrl).getOrElse("")
-    val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
+    val coresPerExecutor = conf.getOption(config.EXECUTOR_CORES.key).map(_.toInt)
     // If we're using dynamic allocation, set our initial executor limit to 0 for now.
     // ExecutorAllocationManager will send the real initial limit to the Master later.
     val initialExecutorLimit =

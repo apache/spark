@@ -230,10 +230,6 @@ package object config {
 
   /* Executor configuration. */
 
-  private[spark] val EXECUTOR_CORES = ConfigBuilder("spark.executor.cores")
-    .intConf
-    .createWithDefault(1)
-
   private[spark] val EXECUTOR_NODE_LABEL_EXPRESSION =
     ConfigBuilder("spark.yarn.executor.nodeLabelExpression")
       .doc("Node label expression for executors.")

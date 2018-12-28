@@ -537,7 +537,7 @@ private[spark] class SparkSubmit extends Logging {
       // Yarn only
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
-        confKey = "spark.executor.instances"),
+        confKey = EXECUTOR_INSTANCES.key),
       OptionAssigner(args.pyFiles, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.pyFiles"),
       OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.jars"),
       OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.dist.files"),
@@ -545,9 +545,9 @@ private[spark] class SparkSubmit extends Logging {
 
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.executor.cores"),
+        confKey = EXECUTOR_CORES.key),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN | KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.executor.memory"),
+        confKey = EXECUTOR_MEMORY.key),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
