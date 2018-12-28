@@ -79,7 +79,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       |
       |  spark.history.fs.logDirectory      Directory where app logs are stored
       |                                     (default: file:/tmp/spark-events)
-      |  spark.history.fs.update.interval   How often to reload log data from storage
+      |  spark.history.fs.updateInterval    How often to reload log data from storage
       |                                     (in seconds, default: 10)
       |""".stripMargin)
     // scalastyle:on println
