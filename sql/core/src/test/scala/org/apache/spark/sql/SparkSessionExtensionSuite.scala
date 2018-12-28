@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
  */
 class SparkSessionExtensionSuite extends SparkFunSuite {
   type ExtensionsBuilder = SparkSessionExtensions => Unit
-  private def create(builder: ExtensionsBuilder): ExtensionsBuilder = builder
+  private def create(builder: ExtensionsBuilder): Seq[ExtensionsBuilder] = Seq(builder)
 
   private def stop(spark: SparkSession): Unit = {
     spark.stop()
@@ -38,33 +38,35 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     SparkSession.clearDefaultSession()
   }
 
-  private def withSession(builder: ExtensionsBuilder)(f: SparkSession => Unit): Unit = {
-    val spark = SparkSession.builder().master("local[1]").withExtensions(builder).getOrCreate()
+  private def withSession(builders: Seq[ExtensionsBuilder])(f: SparkSession => Unit): Unit = {
+    val builder = SparkSession.builder().master("local[1]")
+    builders.foreach(builder.withExtensions)
+    val spark = builder.getOrCreate()
     try f(spark) finally {
       stop(spark)
     }
   }
 
   test("inject analyzer rule") {
-    withSession(_.injectResolutionRule(MyRule)) { session =>
+    withSession(Seq(_.injectResolutionRule(MyRule))) { session =>
       assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
     }
   }
 
   test("inject check analysis rule") {
-    withSession(_.injectCheckRule(MyCheckRule)) { session =>
+    withSession(Seq(_.injectCheckRule(MyCheckRule))) { session =>
       assert(session.sessionState.analyzer.extendedCheckRules.contains(MyCheckRule(session)))
     }
   }
 
   test("inject optimizer rule") {
-    withSession(_.injectOptimizerRule(MyRule)) { session =>
+    withSession(Seq(_.injectOptimizerRule(MyRule))) { session =>
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
     }
   }
 
   test("inject spark planner strategy") {
-    withSession(_.injectPlannerStrategy(MySparkStrategy)) { session =>
+    withSession(Seq(_.injectPlannerStrategy(MySparkStrategy))) { session =>
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
     }
   }
@@ -75,6 +77,14 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
     withSession(extension) { session =>
       assert(session.sessionState.sqlParser == CatalystSqlParser)
+    }
+  }
+
+  test("inject multiple rules") {
+    withSession(Seq(_.injectOptimizerRule(MyRule),
+      _.injectPlannerStrategy(MySparkStrategy))) { session =>
+      assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
+      assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
     }
   }
 
@@ -110,6 +120,25 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
       assert(session.sessionState.functionRegistry
         .lookupFunction(MyExtensions.myFunction._1).isDefined)
+    } finally {
+      stop(session)
+    }
+  }
+
+  test("use multiple custom class for extensions") {
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config("spark.sql.extensions", Seq(
+        classOf[MyExtensions].getCanonicalName,
+        classOf[MyExtensions2].getCanonicalName).mkString(","))
+      .getOrCreate()
+    try {
+      assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
+      assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
+      assert(session.sessionState.functionRegistry
+        .lookupFunction(MyExtensions.myFunction._1).isDefined)
+      assert(session.sessionState.functionRegistry
+        .lookupFunction(MyExtensions2.myFunction._1).isDefined)
     } finally {
       stop(session)
     }
@@ -151,8 +180,9 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 object MyExtensions {
 
   val myFunction = (FunctionIdentifier("myFunction"),
-    new ExpressionInfo("noClass", "myDb", "myFunction", "usage", "extended usage" ),
+    new ExpressionInfo("noClass", "myDb", "myFunction", "usage", "extended usage"),
     (myArgs: Seq[Expression]) => Literal(5, IntegerType))
+
 }
 
 class MyExtensions extends (SparkSessionExtensions => Unit) {
@@ -160,5 +190,18 @@ class MyExtensions extends (SparkSessionExtensions => Unit) {
     e.injectPlannerStrategy(MySparkStrategy)
     e.injectResolutionRule(MyRule)
     e.injectFunction(MyExtensions.myFunction)
+  }
+}
+
+object MyExtensions2 {
+
+  val myFunction = (FunctionIdentifier("myFunction2"),
+    new ExpressionInfo("noClass", "myDb", "myFunction2", "usage", "extended usage" ),
+    (myArgs: Seq[Expression]) => Literal(5, IntegerType))
+}
+
+class MyExtensions2 extends (SparkSessionExtensions => Unit) {
+  def apply(e: SparkSessionExtensions): Unit = {
+    e.injectFunction(MyExtensions2.myFunction)
   }
 }

@@ -99,9 +99,10 @@ object StaticSQLConf {
       .createWithDefault(false)
 
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
-    .doc("Name of the class used to configure Spark Session extensions. The class should " +
+    .doc("List of the class names used to configure Spark Session extensions. The classes should " +
       "implement Function1[SparkSessionExtension, Unit], and must have a no-args constructor.")
     .stringConf
+    .toSequence
     .createOptional
 
   val QUERY_EXECUTION_LISTENERS = buildStaticConf("spark.sql.queryExecutionListeners")
