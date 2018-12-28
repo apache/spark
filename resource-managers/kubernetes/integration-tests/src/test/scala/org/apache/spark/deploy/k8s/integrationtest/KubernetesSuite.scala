@@ -40,7 +40,7 @@ import org.apache.spark.internal.config._
 
 class KubernetesSuite extends SparkFunSuite
     with BeforeAndAfterAll with BeforeAndAfter
-    with BasicTestsSuite //with SecretsTestsSuite
+    // with BasicTestsSuite with SecretsTestsSuite
     // with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
     with DecommissionSuite
   with Logging with Eventually with Matchers {
@@ -265,8 +265,11 @@ class KubernetesSuite extends SparkFunSuite
       .list()
       .getItems
       .get(0)
+    println("Doing driver pod check")
     driverPodChecker(driverPod)
+    println("Done driver pod check")
     val execPods = scala.collection.mutable.Map[String, Pod]()
+    println("Creating watched...")
     val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
       .withLabel("spark-app-locator", appLocator)
@@ -280,10 +283,10 @@ class KubernetesSuite extends SparkFunSuite
           val name = resource.getMetadata.getName
           action match {
             case Action.ADDED | Action.MODIFIED =>
-              println("Add or modification event received.")
+              println(s"Add or modification event received for $name.")
               execPods(name) = resource
               // If testing decomissioning delete the node 5 seconds after it starts running
-              if (decomissioningTest) {
+              if (decomissioningTest && false) {
                 // Wait for all the containers in the pod to be running
                 println("Waiting for pod to become OK then delete.")
                 Eventually.eventually(TIMEOUT, INTERVAL) {
@@ -297,19 +300,22 @@ class KubernetesSuite extends SparkFunSuite
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
                 println(s"Pod: $name deleted")
+              } else {
+                println(s"Resource $name added")
               }
             case Action.DELETED | Action.ERROR =>
               println("Deleted or error event received.")
               execPods.remove(name)
+              println("Resrouce $name removed")
           }
         }
       })
-    // If we're testing decomissioning we delete all the executors
-    Eventually.eventually(TIMEOUT, INTERVAL) {
-      execPods.values.nonEmpty || decomissioningTest should be (true) }
+    // If we're testing decomissioning we delete all the executors, but we should have
+    // an executor at some point.
+    Eventually.eventually(TIMEOUT, INTERVAL) { execPods.values.nonEmpty }
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
-    println(s"Exec pods are $execPods")
+    println(s"Close to the end exec pods are $execPods")
     Eventually.eventually(TIMEOUT, INTERVAL) {
       expectedLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
@@ -319,6 +325,7 @@ class KubernetesSuite extends SparkFunSuite
           .contains(e), "The application did not complete.")
       }
     }
+    println(s"end exec pods are $execPods")
   }
   protected def doBasicDriverPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
