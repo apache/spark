@@ -83,7 +83,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
     tableDesc: CatalogTable,
     tableExists: Boolean): DataWritingCommand
 
-  override def argString: String = {
+  override def argString(maxFields: Int): String = {
     s"[Database:${tableDesc.database}, " +
     s"TableName: ${tableDesc.identifier.table}, " +
     s"InsertIntoHiveTable]"
