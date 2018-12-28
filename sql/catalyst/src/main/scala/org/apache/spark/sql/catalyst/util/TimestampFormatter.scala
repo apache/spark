@@ -105,7 +105,8 @@ class LegacyFallbackTimestampFormatter(
 }
 
 object TimestampFormatter {
-  val defaultPattern = "yyyy-MM-dd HH:mm:ss"
+  val defaultPattern: String = "yyyy-MM-dd HH:mm:ss"
+  val defaultLocale: Locale = Locale.US
 
   def apply(format: String, timeZone: TimeZone, locale: Locale): TimestampFormatter = {
     if (SQLConf.get.legacyTimeParserEnabled) {
@@ -115,5 +116,11 @@ object TimestampFormatter {
     }
   }
 
-  def apply(timeZone: TimeZone): TimestampFormatter = apply(defaultPattern, timeZone, Locale.US)
+  def apply(format: String, timeZone: TimeZone): TimestampFormatter = {
+    apply(format, timeZone, defaultLocale)
+  }
+
+  def apply(timeZone: TimeZone): TimestampFormatter = {
+    apply(defaultPattern, timeZone, defaultLocale)
+  }
 }
