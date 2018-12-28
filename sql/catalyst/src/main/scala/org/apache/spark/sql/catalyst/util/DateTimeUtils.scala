@@ -1107,6 +1107,5 @@ object DateTimeUtils {
   private[util] def resetThreadLocals(): Unit = {
     threadLocalGmtCalendar.remove()
     threadLocalTimestampFormat.remove()
-    threadLocalDateFormat.remove()
   }
 }
