@@ -199,10 +199,11 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
 
   /**
    * Call `df.collect()` and verify if the collected metrics satisfy the specified predicates.
+   *
    * @param df `DataFrame` to run
    * @param expectedNumOfJobs number of jobs that will run
    * @param expectedMetricsPredicates the expected metrics predicates. The format is
-   *                        `nodeId -> (operatorName, metric name -> metric value predicate)`.
+   * `nodeId -> (operatorName, metric name -> metric value predicate)`.
    */
   protected def testSparkPlanMetricsWithPredicates(
       df: DataFrame,
