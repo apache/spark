@@ -23,69 +23,58 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String.fromString
 
 class OrcColumnarBatchReaderSuite extends QueryTest with SQLTestUtils with SharedSQLContext {
-
-  private val orcFileSchema = TypeDescription.fromString(s"struct<col1:int,col2:int>")
-  private val requiredSchema = StructType.fromDDL("col1 int, col3 int")
-  private val partitionSchema = StructType.fromDDL("partCol1 string, partCol2 string")
+  private val dataSchema = StructType.fromDDL("col1 int, col2 int")
+  private val partitionSchema = StructType.fromDDL("p1 string, p2 string")
   private val partitionValues = InternalRow(fromString("partValue1"), fromString("partValue2"))
-  private val resultSchema = StructType(requiredSchema.fields ++ partitionSchema.fields)
+  private val orcFileSchemaList = Seq(
+    "struct<col1:int,col2:int>", "struct<col1:int,col2:int,p1:string,p2:string>",
+    "struct<col1:int,col2:int,p1:string>", "struct<col1:int,col2:int,p2:string>")
+  orcFileSchemaList.foreach { case schema =>
+    val orcFileSchema = TypeDescription.fromString(schema)
 
-  private val isConstant = classOf[WritableColumnVector].getDeclaredField("isConstant")
-  isConstant.setAccessible(true)
+    val isConstant = classOf[WritableColumnVector].getDeclaredField("isConstant")
+    isConstant.setAccessible(true)
 
-  private def getReader(requestedDataColIds: Array[Int], requestedPartitionColIds: Array[Int]) = {
-    val reader = new OrcColumnarBatchReader(false, false, 4096)
-    reader.initBatch(
-      orcFileSchema,
-      resultSchema.fields,
-      requestedDataColIds,
-      requestedPartitionColIds,
-      partitionValues)
-    reader
-  }
-
-  test("requestedPartitionColIds resets requestedDataColIds - all partitions are requested") {
-    val requestedDataColIds = Array(0, 1, 0, 0)
-    val requestedPartitionColIds = Array(-1, -1, 0, 1)
-    val reader = getReader(requestedDataColIds, requestedPartitionColIds)
-    assert(reader.requestedDataColIds === Array(0, 1, -1, -1))
-  }
-
-  test("requestedPartitionColIds resets requestedDataColIds - one partition is requested") {
-    Seq((Array(-1, -1, 0, -1), Array(0, 1, -1, 0)),
-      (Array(-1, -1, -1, 0), Array(0, 1, 0, -1))).foreach {
-      case (requestedPartitionColIds, answer) =>
-        val requestedDataColIds = Array(0, 1, 0, 0)
-        val reader = getReader(requestedDataColIds, requestedPartitionColIds)
-        assert(reader.requestedDataColIds === answer)
+    def getReader(
+        requestedDataColIds: Array[Int],
+        requestedPartitionColIds: Array[Int],
+        resultFields: Array[StructField]): OrcColumnarBatchReader = {
+      val reader = new OrcColumnarBatchReader(false, false, 4096)
+      reader.initBatch(
+        orcFileSchema,
+        resultFields,
+        requestedDataColIds,
+        requestedPartitionColIds,
+        partitionValues)
+      reader
     }
-  }
 
-  test("initBatch should initialize requested partition columns only") {
-    val requestedDataColIds = Array(0, -1, -1, -1) // only `col1` is requested, `col3` doesn't exist
-    val requestedPartitionColIds = Array(-1, -1, 0, -1) // only `partCol1` is requested
-    val reader = getReader(requestedDataColIds, requestedPartitionColIds)
-    val batch = reader.columnarBatch
-    assert(batch.numCols() === 4)
+    test(s"all partitions are requested: $schema") {
+      val requestedDataColIds = Array(0, 1, 0, 0)
+      val requestedPartitionColIds = Array(-1, -1, 0, 1)
+      val reader = getReader(requestedDataColIds, requestedPartitionColIds,
+        dataSchema.fields ++ partitionSchema.fields)
+      assert(reader.requestedDataColIds === Array(0, 1, -1, -1))
+    }
 
-    assert(batch.column(0).isInstanceOf[OrcColumnVector])
-    assert(batch.column(1).isInstanceOf[OnHeapColumnVector])
-    assert(batch.column(2).isInstanceOf[OnHeapColumnVector])
-    assert(batch.column(3).isInstanceOf[OnHeapColumnVector])
+    test(s"initBatch should initialize requested partition columns only: $schema") {
+      val requestedDataColIds = Array(0, -1) // only `col1` is requested, `col2` doesn't exist
+      val requestedPartitionColIds = Array(-1, 0) // only `p1` is requested
+      val reader = getReader(requestedDataColIds, requestedPartitionColIds,
+        Array(dataSchema.fields(0), partitionSchema.fields(0)))
+      val batch = reader.columnarBatch
+      assert(batch.numCols() === 2)
 
-    val col3 = batch.column(1).asInstanceOf[OnHeapColumnVector]
-    val partCol1 = batch.column(2).asInstanceOf[OnHeapColumnVector]
-    val partCol2 = batch.column(3).asInstanceOf[OnHeapColumnVector]
+      assert(batch.column(0).isInstanceOf[OrcColumnVector])
+      assert(batch.column(1).isInstanceOf[OnHeapColumnVector])
 
-    assert(isConstant.get(col3).asInstanceOf[Boolean]) // `col3` is NULL.
-    assert(isConstant.get(partCol1).asInstanceOf[Boolean]) // Partition column is constant.
-    assert(isConstant.get(partCol2).asInstanceOf[Boolean]) // Null column is constant.
-
-    assert(partCol1.getUTF8String(0) === partitionValues.getUTF8String(0))
-    assert(partCol2.isNullAt(0)) // This is NULL because it's not requested.
+      val p1 = batch.column(1).asInstanceOf[OnHeapColumnVector]
+      assert(isConstant.get(p1).asInstanceOf[Boolean]) // Partition column is constant.
+      assert(p1.getUTF8String(0) === partitionValues.getUTF8String(0))
+    }
   }
 }
