@@ -2357,7 +2357,7 @@ setMethod("schema_of_json", signature(x = "characterOrColumn"),
 setMethod("from_csv", signature(x = "Column", schema = "characterOrstructTypeOrColumn"),
           function(x, schema, ...) {
             if (class(schema) == "structType") {
-              schema <- callJMethod(schema$job, "toDDL")
+              schema <- callJMethod(schema$jobj, "toDDL")
             }
 
             if (is.character(schema)) {
