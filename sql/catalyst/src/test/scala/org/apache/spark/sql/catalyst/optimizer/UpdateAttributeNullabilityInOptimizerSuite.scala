@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.UpdateNullability
+import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{CreateArray, GetArrayItem}
@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 
-class UpdateNullabilityInOptimizerSuite extends PlanTest {
+class UpdateAttributeNullabilityInOptimizerSuite extends PlanTest {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -38,7 +38,7 @@ class UpdateNullabilityInOptimizerSuite extends PlanTest {
           SimplifyBinaryComparison,
           SimplifyExtractValueOps) ::
       Batch("UpdateNullability", Once,
-        UpdateNullability) :: Nil
+        UpdateAttributeNullability) :: Nil
   }
 
   test("update nullability in AttributeReference")  {
