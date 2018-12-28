@@ -32,7 +32,7 @@ import org.apache.mesos.Protos.TaskStatus.Reason
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.{config, MesosDriverDescription}
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
-import org.apache.spark.internal.config.{EXECUTOR_LIBRARY_PATH, EXECUTOR_MEMORY}
+import org.apache.spark.internal.config.{CORES_MAX, EXECUTOR_LIBRARY_PATH, EXECUTOR_MEMORY}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
 
@@ -531,7 +531,7 @@ private[spark] class MesosClusterScheduler(
     desc.conf.getOption(EXECUTOR_MEMORY.key).foreach { v =>
       options ++= Seq("--executor-memory", v)
     }
-    desc.conf.getOption("spark.cores.max").foreach { v =>
+    desc.conf.get(CORES_MAX).foreach { v =>
       options ++= Seq("--total-executor-cores", v)
     }
     desc.conf.getOption("spark.submit.pyFiles").foreach { pyFiles =>

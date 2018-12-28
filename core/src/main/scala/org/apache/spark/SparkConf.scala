@@ -594,8 +594,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains("spark.cores.max") && contains(EXECUTOR_CORES)) {
-      val totalCores = getInt("spark.cores.max", 1)
+    if (contains(CORES_MAX) && contains(EXECUTOR_CORES)) {
+      val totalCores = getInt(CORES_MAX.key, 1)
       val executorCores = get(EXECUTOR_CORES)
       val leftCores = totalCores % executorCores
       if (leftCores != 0) {

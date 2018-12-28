@@ -153,6 +153,8 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
+  private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max").intConf.createOptional
+
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
       "If off-heap memory use is enabled, then spark.memory.offHeap.size must be positive.")

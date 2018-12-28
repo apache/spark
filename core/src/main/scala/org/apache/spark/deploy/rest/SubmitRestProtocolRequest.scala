@@ -52,7 +52,7 @@ private[rest] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
     assertPropertyIsSet("spark.app.name")
     assertPropertyIsBoolean(config.DRIVER_SUPERVISE.key)
     assertPropertyIsNumeric(config.DRIVER_CORES.key)
-    assertPropertyIsNumeric("spark.cores.max")
+    assertPropertyIsNumeric(config.CORES_MAX.key)
     assertPropertyIsMemory(config.DRIVER_MEMORY.key)
     assertPropertyIsMemory(config.EXECUTOR_MEMORY.key)
   }
