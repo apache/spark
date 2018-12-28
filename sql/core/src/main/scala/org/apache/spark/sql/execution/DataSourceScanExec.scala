@@ -167,26 +167,22 @@ case class FileSourceScanExec(
       partitionSchema = relation.partitionSchema,
       relation.sparkSession.sessionState.conf)
 
-  val driverMetrics: HashMap[String, Long] = HashMap.empty
-
   /**
    * Send the driver-side metrics. Before calling this function, selectedPartitions has
    * been initialized. See SPARK-26327 for more details.
    */
   private def sendDriverMetrics(): Unit = {
-    driverMetrics.foreach(e => metrics(e._1).add(e._2))
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      metrics.filter(e => driverMetrics.contains(e._1)).values.toSeq)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverMetrics.values.toSeq)
   }
 
   @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
     val startTime = System.nanoTime()
     val ret = relation.location.listFiles(partitionFilters, dataFilters)
-    driverMetrics("numFiles") = ret.map(_.files.size.toLong).sum
+    driverMetrics("numFiles").add(ret.map(_.files.size.toLong).sum)
     val timeTakenMs = ((System.nanoTime() - startTime) + optimizerMetadataTimeNs) / 1000 / 1000
-    driverMetrics("metadataTime") = timeTakenMs
+    driverMetrics("metadataTime").add(timeTakenMs)
     ret
   }
 
@@ -324,9 +320,11 @@ case class FileSourceScanExec(
 
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
-      "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
+
+  @transient override lazy val driverMetrics =
+    Map("numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
+      "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time (ms)"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {

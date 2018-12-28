@@ -53,7 +53,7 @@ private[execution] object SparkPlanInfo {
       case ReusedExchangeExec(_, child) => child :: Nil
       case _ => plan.children ++ plan.subqueries
     }
-    val metrics = plan.metrics.toSeq.map { case (key, metric) =>
+    val metrics = plan.allMetrics.toSeq.map { case (key, metric) =>
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
     }
 
