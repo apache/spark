@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution
 
+import java.sql.{Date, Timestamp}
+
 import scala.io.Source
 
 import org.apache.spark.sql.AnalysisException
@@ -104,6 +106,18 @@ class QueryExecutionSuite extends SharedSQLContext {
     withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "27") {
       assert(!relationPlans.contains("more fields"))
     }
+  }
+
+  test("date formatting in hive result") {
+    val date = "2018-12-28"
+    val result = Seq(Date.valueOf(date)).toDS().queryExecution.hiveResultString()
+    assert(result.head == date)
+  }
+
+  test("timestamp formatting in hive result") {
+    val timestamp = "2018-12-28 01:02:03"
+    val result = Seq(Timestamp.valueOf(timestamp)).toDS().queryExecution.hiveResultString()
+    assert(result.head == timestamp)
   }
 
   test("toString() exception/error handling") {
