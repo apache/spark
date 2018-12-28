@@ -571,7 +571,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     val tz = ctx.addReferenceObj("timeZone", timeZone)
     val locale = ctx.addReferenceObj("locale", Locale.US)
     defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""UTF8String.fromString($tf.apply($format.toString(), $tz, $locale)
+      s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $tz, $locale)
           .format($timestamp))"""
     })
   }
@@ -741,11 +741,11 @@ abstract class UnixTime
       case StringType =>
         val tz = ctx.addReferenceObj("timeZone", timeZone)
         val locale = ctx.addReferenceObj("locale", Locale.US)
-        val dtu = TimestampFormatter.getClass.getName.stripSuffix("$")
+        val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
-              ${ev.value} = $dtu.apply($format.toString(), $tz, $locale)
+              ${ev.value} = $tf$$.MODULE$$.apply($format.toString(), $tz, $locale)
                 .parse($string.toString()) / 1000000L;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
