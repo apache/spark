@@ -208,7 +208,7 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
     deleteTmpFiles()
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
 
     runBenchmarkWithDeleteTmpFiles("parsing large select expressions") {
       parsingLargeSelectExpressions()

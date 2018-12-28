@@ -221,7 +221,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with KafkaM
       .as[(String, String)]
     val query = startStream(kafka.map(kv => kv._2.toInt))
 
-    val testTime = 1.minutes
+    val testTime = 20.seconds
     val startTime = System.currentTimeMillis()
     // Track the current existing topics
     val topics = mutable.ArrayBuffer[String]()
@@ -252,7 +252,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with KafkaM
           testUtils.createTopic(topic, partitions = 1, overwrite = true)
           logInfo(s"Create topic $topic")
         case 3 =>
-          Thread.sleep(1000)
+          Thread.sleep(100)
         case _ => // Push random messages
           for (topic <- topics) {
             val size = Random.nextInt(10)

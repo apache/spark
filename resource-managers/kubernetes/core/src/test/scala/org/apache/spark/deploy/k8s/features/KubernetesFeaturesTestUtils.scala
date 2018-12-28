@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 import io.fabric8.kubernetes.api.model.{Container, HasMetadata, PodBuilder, SecretBuilder}
 import org.mockito.Matchers
@@ -62,5 +63,10 @@ object KubernetesFeaturesTestUtils {
 
   def containerHasEnvVar(container: Container, envVarName: String): Boolean = {
     container.getEnv.asScala.exists(envVar => envVar.getName == envVarName)
+  }
+
+  def filter[T: ClassTag](list: Seq[HasMetadata]): Seq[T] = {
+    val desired = implicitly[ClassTag[T]].runtimeClass
+    list.filter(_.getClass() == desired).map(_.asInstanceOf[T]).toSeq
   }
 }

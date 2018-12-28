@@ -49,9 +49,17 @@ private[sql] object SQLUtils extends Logging {
       sparkConfigMap: JMap[Object, Object],
       enableHiveSupport: Boolean): SparkSession = {
     val spark =
-      if (SparkSession.hiveClassesArePresent && enableHiveSupport &&
+      if (enableHiveSupport &&
           jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
-            "hive") {
+            "hive" &&
+          // Note that the order of conditions here are on purpose.
+          // `SparkSession.hiveClassesArePresent` checks if Hive's `HiveConf` is loadable or not;
+          // however, `HiveConf` itself has some static logic to check if Hadoop version is
+          // supported or not, which throws an `IllegalArgumentException` if unsupported.
+          // If this is checked first, there's no way to disable Hive support in the case above.
+          // So, we intentionally check if Hive classes are loadable or not only when
+          // Hive support is explicitly enabled by short-circuiting. See also SPARK-26422.
+          SparkSession.hiveClassesArePresent) {
         SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
       } else {
         if (enableHiveSupport) {
@@ -111,7 +119,7 @@ private[sql] object SQLUtils extends Logging {
   private[this] def doConversion(data: Object, dataType: DataType): Object = {
     data match {
       case d: java.lang.Double if dataType == FloatType =>
-        new java.lang.Float(d)
+        java.lang.Float.valueOf(d.toFloat)
       // Scala Map is the only allowed external type of map type in Row.
       case m: java.util.Map[_, _] => m.asScala
       case _ => data

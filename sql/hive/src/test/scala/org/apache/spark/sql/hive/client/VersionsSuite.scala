@@ -56,15 +56,6 @@ class VersionsSuite extends SparkFunSuite with Logging {
   import HiveClientBuilder.buildClient
 
   /**
-   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
-   * returns.
-   */
-  protected def withTempDir(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
-  }
-
-  /**
    * Drops table `tableName` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {

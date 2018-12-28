@@ -239,7 +239,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val encoder = RowEncoder(schema)
     val e = intercept[RuntimeException](encoder.toRow(null))
     assert(e.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getMessage.contains("top level row object"))
+    assert(e.getMessage.contains("top level Product or row object"))
   }
 
   test("RowEncoder should validate external type") {

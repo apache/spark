@@ -58,7 +58,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     }
 
     // test generated SafeProjection
-    val safeProj = FromUnsafeProjection(nestedSchema)
+    val safeProj = SafeProjection.create(nestedSchema)
     val result = safeProj(unsafe)
     // Can't compare GenericInternalRow with JoinedRow directly
     (0 until N).foreach { i =>
@@ -109,7 +109,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     }
 
     // test generated SafeProjection
-    val safeProj = FromUnsafeProjection(nestedSchema)
+    val safeProj = SafeProjection.create(nestedSchema)
     val result = safeProj(unsafe)
     // Can't compare GenericInternalRow with JoinedRow directly
     (0 until N).foreach { i =>
@@ -147,7 +147,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     assert(unsafeRow.getArray(1).getBinary(1) === null)
     assert(java.util.Arrays.equals(unsafeRow.getArray(1).getBinary(2), Array[Byte](3, 4)))
 
-    val safeProj = FromUnsafeProjection(fields)
+    val safeProj = SafeProjection.create(fields)
     val row2 = safeProj(unsafeRow)
     assert(row2 === row)
   }
@@ -233,7 +233,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     val nestedSchema = StructType(
       Seq(StructField("", joinedSchema), StructField("", joinedSchema)) ++ joinedSchema)
 
-    val safeProj = FromUnsafeProjection(nestedSchema)
+    val safeProj = SafeProjection.create(nestedSchema)
     val result = safeProj(nested)
 
     // test generated MutableProjection

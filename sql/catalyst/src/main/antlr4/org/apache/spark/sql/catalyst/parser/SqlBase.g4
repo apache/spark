@@ -88,7 +88,8 @@ statement
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
         ((COMMENT comment=STRING) |
-        (PARTITIONED BY '(' partitionColumns=colTypeList ')') |
+        (PARTITIONED BY '(' partitionColumns=colTypeList ')' |
+        PARTITIONED BY partitionColumnNames=identifierList) |
         bucketSpec |
         skewSpec |
         rowFormat |
@@ -691,6 +692,7 @@ namedWindow
 
 windowSpec
     : name=identifier  #windowRef
+    | '('name=identifier')'  #windowRef
     | '('
       ( CLUSTER BY partition+=expression (',' partition+=expression)*
       | ((PARTITION | DISTRIBUTE) BY partition+=expression (',' partition+=expression)*)?

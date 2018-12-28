@@ -73,6 +73,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         CombineLimits,
         CombineUnions,
         // Constant folding and strength reduction
+        TransposeWindow,
         NullPropagation,
         ConstantPropagation,
         FoldablePropagation,
@@ -84,6 +85,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         SimplifyConditionals,
         RemoveDispensableExpressions,
         SimplifyBinaryComparison,
+        ReplaceNullWithFalseInPredicate,
         PruneFilters,
         EliminateSorts,
         SimplifyCasts,
@@ -91,7 +93,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         RewriteCorrelatedScalarSubquery,
         EliminateSerialization,
         RemoveRedundantAliases,
-        RemoveRedundantProject,
+        RemoveNoopOperators,
         SimplifyExtractValueOps,
         CombineConcats) ++
         extendedOperatorOptimizationRules
@@ -130,11 +132,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
-    // run this once earlier. this might simplify the plan and reduce cost of optimizer.
-    // for example, a query such as Filter(LocalRelation) would go through all the heavy
+    // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
+    // For example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
-    // (e.g. InferFiltersFromConstraints). if we run this batch earlier, the query becomes just
-    // LocalRelation and does not trigger many rules
+    // (e.g. InferFiltersFromConstraints). If we run this batch earlier, the query becomes just
+    // LocalRelation and does not trigger many rules.
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
@@ -175,7 +177,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RewritePredicateSubquery,
       ColumnPruning,
       CollapseProject,
-      RemoveRedundantProject) :+
+      RemoveNoopOperators) :+
     Batch("UpdateAttributeReferences", Once,
       UpdateNullabilityInAttributeReferences)
   }
@@ -401,11 +403,15 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 }
 
 /**
- * Remove projections from the query plan that do not make any modifications.
+ * Remove no-op operators from the query plan that do not make any modifications.
  */
-object RemoveRedundantProject extends Rule[LogicalPlan] {
+object RemoveNoopOperators extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p @ Project(_, child) if p.output == child.output => child
+    // Eliminate no-op Projects
+    case p @ Project(_, child) if child.sameOutput(p) => child
+
+    // Eliminate no-op Window
+    case w: Window if w.windowExpressions.isEmpty => w.child
   }
 }
 
@@ -530,9 +536,6 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
  * p2 is usually inserted by this rule and useless, p1 could prune the columns anyway.
  */
 object ColumnPruning extends Rule[LogicalPlan] {
-  private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
-    output1.size == output2.size &&
-      output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
 
   def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
@@ -603,17 +606,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
       p.copy(child = w.copy(
         windowExpressions = w.windowExpressions.filter(p.references.contains)))
 
-    // Eliminate no-op Window
-    case w: Window if w.windowExpressions.isEmpty => w.child
-
-    // Eliminate no-op Projects
-    case p @ Project(_, child) if sameOutput(child.output, p.output) => child
-
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
     // for all other logical plans that inherits the output from it's children
-    case p @ Project(_, child) =>
+    // Project over project is handled by the first case, skip it here.
+    case p @ Project(_, child) if !child.isInstanceOf[Project] =>
       val required = child.references ++ p.references
       if (!child.inputSet.subsetOf(required)) {
         val newChildren = child.children.map(c => prunedChild(c, required))
@@ -1372,10 +1370,8 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 }
 
 /**
- * Converts local operations (i.e. ones that don't require data exchange) on LocalRelation to
- * another LocalRelation.
- *
- * This is relatively simple as it currently handles only 2 single case: Project and Limit.
+ * Converts local operations (i.e. ones that don't require data exchange) on `LocalRelation` to
+ * another `LocalRelation`.
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
