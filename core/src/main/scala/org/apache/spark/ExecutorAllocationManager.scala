@@ -57,7 +57,8 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * a long time to ramp up under heavy workloads.
  *
  * The remove policy is simpler: If an executor has been idle for K seconds, meaning it has not
- * been scheduled to run any tasks, then it is removed.
+ * been scheduled to run any tasks, then it is removed. Note that an executor caching any data
+ * blocks will be removed if it has been idle for more than L seconds.
  *
  * There is no retry logic in either case because we make the assumption that the cluster manager
  * will eventually fulfill all requests it receives asynchronously.
@@ -81,7 +82,12 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  *     This is used only after the initial backlog timeout is exceeded
  *
  *   spark.dynamicAllocation.executorIdleTimeout (K) -
- *     If an executor has been idle for this duration, remove it
+ *     If an executor without caching any data blocks has been idle for this duration, remove it
+ *
+ *   spark.dynamicAllocation.cachedExecutorIdleTimeout (L) -
+ *     If an executor with caching data blocks has been idle for more than this duration,
+ *     the executor will be removed
+ *
  */
 private[spark] class ExecutorAllocationManager(
     client: ExecutorAllocationClient,
