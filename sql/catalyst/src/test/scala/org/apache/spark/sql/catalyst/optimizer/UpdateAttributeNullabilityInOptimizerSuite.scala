@@ -47,7 +47,7 @@ class UpdateAttributeNullabilityInOptimizerSuite extends PlanTest {
     // nullable AttributeReference to `b`, because both array indexing and map lookup are
     // nullable expressions. After optimization, the same attribute is now non-nullable,
     // but the AttributeReference is not updated to reflect this. So, we need to update nullability
-    // by the `UpdateNullabilityInAttributeReferences` rule.
+    // by the `UpdateAttributeNullability` rule.
     val original = rel
       .select(GetArrayItem(CreateArray(Seq('a, 'a + 1L)), 0) as "b")
       .groupBy($"b")("1")
