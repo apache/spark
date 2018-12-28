@@ -321,6 +321,16 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
+  /**ForTesting**/
+  public void closeForTest() {
+    close();
+  }
+
+  /**ForTesting**/
+  public static File getFileForTest(String[] localDirs, int subDirsPerLocalDir, String filename) {
+    return getFile(localDirs, subDirsPerLocalDir, filename);
+  }
+
   /**
    * This method is needed to avoid the situation when multiple File instances for the
    * same pathname "foo/bar" are created, each with a separate copy of the "foo/bar" String.
