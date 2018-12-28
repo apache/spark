@@ -148,6 +148,18 @@ object DateTimeUtils {
     }
   }
 
+  def timestampToString(tf: TimestampFormatter, us: SQLTimestamp): String = {
+    val ts = toJavaTimestamp(us)
+    val timestampString = ts.toString
+    val formatted = tf.format(us)
+
+    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
+      formatted + timestampString.substring(19)
+    } else {
+      formatted
+    }
+  }
+
   @tailrec
   def stringToTime(s: String): java.util.Date = {
     val indexOfGMT = s.indexOf("GMT")

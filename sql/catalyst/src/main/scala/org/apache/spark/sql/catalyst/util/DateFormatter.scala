@@ -88,6 +88,8 @@ class LegacyFallbackDateFormatter(
 }
 
 object DateFormatter {
+  val defaultPattern = "yyyy-MM-dd"
+
   def apply(format: String, locale: Locale): DateFormatter = {
     if (SQLConf.get.legacyTimeParserEnabled) {
       new LegacyFallbackDateFormatter(format, locale)
@@ -95,4 +97,6 @@ object DateFormatter {
       new Iso8601DateFormatter(format, locale)
     }
   }
+
+  def apply(): DateFormatter = apply(defaultPattern, Locale.US)
 }
