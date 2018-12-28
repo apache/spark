@@ -539,6 +539,25 @@ object PartitioningUtils {
     }).asNullable
   }
 
+  def requestedPartitionColumnIds(
+      requiredSchema: StructType,
+      partitionSchema: StructType,
+      caseSensitive: Boolean): Array[Int] = {
+    val columnNameMap =
+      partitionSchema.fields.map(getColName(_, caseSensitive)).zipWithIndex.toMap
+    requiredSchema.fields.map { field =>
+      columnNameMap.getOrElse(getColName(field, caseSensitive), -1)
+    }
+  }
+
+  private def getColName(f: StructField, caseSensitive: Boolean): String = {
+    if (caseSensitive) {
+      f.name
+    } else {
+      f.name.toLowerCase(Locale.ROOT)
+    }
+  }
+
   private def columnNameEquality(caseSensitive: Boolean): (String, String) => Boolean = {
     if (caseSensitive) {
       org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
