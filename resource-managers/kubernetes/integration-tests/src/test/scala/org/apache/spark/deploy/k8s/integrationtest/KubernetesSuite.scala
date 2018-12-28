@@ -257,6 +257,7 @@ class KubernetesSuite extends SparkFunSuite
       isJVM,
       pyFiles)
 
+    println("Running spark job.")
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
       .withLabel("spark-app-locator", appLocator)
@@ -275,9 +276,11 @@ class KubernetesSuite extends SparkFunSuite
         override def onClose(cause: KubernetesClientException): Unit =
           logInfo("Ending watch of executors")
         override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
+          println("Event received.")
           val name = resource.getMetadata.getName
           action match {
             case Action.ADDED | Action.MODIFIED =>
+              println("Add or modification event received.")
               execPods(name) = resource
               // If testing decomissioning delete the node 5 seconds after it starts running
               if (decomissioningTest) {
@@ -296,6 +299,7 @@ class KubernetesSuite extends SparkFunSuite
                 println(s"Pod: $name deleted")
               }
             case Action.DELETED | Action.ERROR =>
+              println("Deleted or error event received.")
               execPods.remove(name)
           }
         }

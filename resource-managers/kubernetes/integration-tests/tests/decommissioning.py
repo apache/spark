@@ -27,6 +27,7 @@ if __name__ == "__main__":
     """
         Usage: decomissioning_water
     """
+    print("Starting decom test")
     spark = SparkSession \
         .builder \
         .appName("PyMemoryTest") \
@@ -34,5 +35,7 @@ if __name__ == "__main__":
     sc = spark._sc
     rdd = sc.parallelize(range(10))
     rdd.collect()
-    time.sleep(30)
+    print("Waiting to give nodes time to finish.")
+    time.sleep(50)
+    spark.stop()
     sys.exit(0)
