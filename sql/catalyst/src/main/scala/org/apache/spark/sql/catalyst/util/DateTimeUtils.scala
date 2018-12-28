@@ -87,14 +87,6 @@ object DateTimeUtils {
     timestampFormatter.withTimeZone(timeZone)
   }
 
-  private val threadLocalDateFormat = new ThreadLocal[DateFormatter] {
-    override def initialValue(): DateFormatter = {
-      DateFormatter("yyyy-MM-dd", Locale.US)
-    }
-  }
-
-  def getThreadLocalDateFormat(): DateFormatter = threadLocalDateFormat.get()
-
   private val computedTimeZones = new ConcurrentHashMap[String, TimeZone]
   private val computeTimeZone = new JFunction[String, TimeZone] {
     override def apply(timeZoneId: String): TimeZone = TimeZone.getTimeZone(timeZoneId)
@@ -125,9 +117,6 @@ object DateTimeUtils {
     val millisLocal = days.toLong * MILLIS_PER_DAY
     millisLocal - getOffsetFromLocalMillis(millisLocal, timeZone)
   }
-
-  def dateToString(days: SQLDate): String =
-    getThreadLocalDateFormat().format(days)
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
   def timestampToString(tf: TimestampFormatter, us: SQLTimestamp): String = {
