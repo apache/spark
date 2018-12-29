@@ -108,10 +108,6 @@ class QueryExecution(
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
 
-  protected def stringOrError[A](f: => A): String =
-    try f.toString catch { case e: AnalysisException => e.toString }
-
-
   /**
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
    * `SparkSQLDriver` for CLI applications.
@@ -197,9 +193,14 @@ class QueryExecution(
   }
 
   def simpleString: String = withRedaction {
-    s"""== Physical Plan ==
-       |${stringOrError(executedPlan.treeString(verbose = false))}
-      """.stripMargin.trim
+    val rope = new StringRope()
+
+    rope.append("== Physical Plan ==\n")
+    appendOrError(rope.append)(
+      executedPlan.treeString(_, false, false, SQLConf.get.maxToStringFields))
+    rope.append("\n")
+
+    rope.toString
   }
 
   private def appendOrError(append: String => Unit)(f: (String => Unit) => Unit): Unit = {
@@ -210,6 +211,9 @@ class QueryExecution(
   }
 
   private def writePlans(append: String => Unit, maxFields: Int): Unit = {
+    def stringOrError[A](f: => A): String = {
+      try f.toString catch { case e: AnalysisException => e.toString }
+    }
     val (verbose, addSuffix) = (true, false)
 
     append("== Parsed Logical Plan ==\n")
@@ -234,15 +238,20 @@ class QueryExecution(
   }
 
   def stringWithStats: String = withRedaction {
+    val rope = new StringRope()
+    val maxFields = SQLConf.get.maxToStringFields
+
     // trigger to compute stats for logical plans
     optimizedPlan.stats
 
     // only show optimized logical plan and physical plan
-    s"""== Optimized Logical Plan ==
-        |${stringOrError(optimizedPlan.treeString(verbose = true, addSuffix = true))}
-        |== Physical Plan ==
-        |${stringOrError(executedPlan.treeString(verbose = true))}
-    """.stripMargin.trim
+    rope.append("== Optimized Logical Plan ==\n")
+    appendOrError(rope.append)(optimizedPlan.treeString(_, true, true, maxFields))
+    rope.append("\n== Physical Plan ==\n")
+    appendOrError(rope.append)(executedPlan.treeString(_, true, false, maxFields))
+    rope.append("\n")
+
+    rope.toString
   }
 
   /**
