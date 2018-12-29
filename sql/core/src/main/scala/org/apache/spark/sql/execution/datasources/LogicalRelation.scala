@@ -63,7 +63,9 @@ case class LogicalRelation(
     case _ =>  // Do nothing.
   }
 
-  override def simpleString: String = s"Relation[${truncatedString(output, ",")}] $relation"
+  override def simpleString(maxFields: Int): String = {
+    s"Relation[${truncatedString(output, ",", maxFields)}] $relation"
+  }
 }
 
 object LogicalRelation {

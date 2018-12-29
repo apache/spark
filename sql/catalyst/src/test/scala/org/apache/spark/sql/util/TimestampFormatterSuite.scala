@@ -17,23 +17,15 @@
 
 package org.apache.spark.sql.util
 
+import java.time.{LocalDateTime, ZoneOffset}
 import java.util.{Locale, TimeZone}
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, TimestampFormatter}
 
-class DateTimestampFormatterSuite extends SparkFunSuite with SQLHelper {
-  test("parsing dates") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
-        val daysSinceEpoch = formatter.parse("2018-12-02")
-        assert(daysSinceEpoch === 17867)
-      }
-    }
-  }
+class TimestampFormatterSuite extends SparkFunSuite with SQLHelper {
 
   test("parsing timestamps using time zones") {
     val localDate = "2018-12-02T10:11:12.001234"
@@ -53,16 +45,6 @@ class DateTimestampFormatterSuite extends SparkFunSuite with SQLHelper {
         Locale.US)
       val microsSinceEpoch = formatter.parse(localDate)
       assert(microsSinceEpoch === expectedMicros(timeZone))
-    }
-  }
-
-  test("format dates") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-        val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
-        val date = formatter.format(17867)
-        assert(date === "2018-12-02")
-      }
     }
   }
 
@@ -87,7 +69,7 @@ class DateTimestampFormatterSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("roundtrip timestamp -> micros -> timestamp using timezones") {
+  test("roundtrip micros -> timestamp -> micros using timezones") {
     Seq(
       -58710115316212000L,
       -18926315945345679L,
@@ -107,7 +89,7 @@ class DateTimestampFormatterSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("roundtrip micros -> timestamp -> micros using timezones") {
+  test("roundtrip timestamp -> micros -> timestamp using timezones") {
     Seq(
       "0109-07-20T18:38:03.788000",
       "1370-04-01T10:00:54.654321",
@@ -127,48 +109,13 @@ class DateTimestampFormatterSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("roundtrip date -> days -> date") {
-    Seq(
-      "0050-01-01",
-      "0953-02-02",
-      "1423-03-08",
-      "1969-12-31",
-      "1972-08-25",
-      "1975-09-26",
-      "2018-12-12",
-      "2038-01-01",
-      "5010-11-17").foreach { date =>
-      DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-          val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
-          val days = formatter.parse(date)
-          val formatted = formatter.format(days)
-          assert(date === formatted)
-        }
-      }
-    }
-  }
-
-  test("roundtrip days -> date -> days") {
-    Seq(
-      -701265,
-      -371419,
-      -199722,
-      -1,
-      0,
-      967,
-      2094,
-      17877,
-      24837,
-      1110657).foreach { days =>
-      DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
-          val formatter = DateFormatter("yyyy-MM-dd", Locale.US)
-          val date = formatter.format(days)
-          val parsed = formatter.parse(date)
-          assert(days === parsed)
-        }
-      }
-    }
+  test(" case insensitive parsing of am and pm") {
+    val formatter = TimestampFormatter(
+      "yyyy MMM dd hh:mm:ss a",
+      TimeZone.getTimeZone("UTC"),
+      Locale.US)
+    val micros = formatter.parse("2009 Mar 20 11:30:01 am")
+    assert(micros === TimeUnit.SECONDS.toMicros(
+      LocalDateTime.of(2009, 3, 20, 11, 30, 1).toEpochSecond(ZoneOffset.UTC)))
   }
 }

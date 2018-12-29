@@ -51,7 +51,7 @@ case class ScalarSubquery(
   override def dataType: DataType = plan.schema.fields.head.dataType
   override def children: Seq[Expression] = Nil
   override def nullable: Boolean = true
-  override def toString: String = plan.simpleString
+  override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
   override def withNewPlan(query: SubqueryExec): ScalarSubquery = copy(plan = query)
 
   override def semanticEquals(other: Expression): Boolean = other match {
