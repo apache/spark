@@ -30,7 +30,7 @@ import scala.util.Properties
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
-import org.apache.log4j.{AppenderSkeleton, Level, LogManager}
+import org.apache.log4j.{AppenderSkeleton, LogManager}
 import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.{SparkException, TestUtils}
@@ -346,33 +346,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(result.schema.fieldNames.size === 1)
   }
 
-  test("SPARK-26339 Debug statement if some of specified paths are filtered out") {
-    class TestAppender extends AppenderSkeleton {
-      var events = new java.util.ArrayList[LoggingEvent]
-      override def close(): Unit = {}
-      override def requiresLayout: Boolean = false
-      protected def append(event: LoggingEvent): Unit = events.add(event)
-    }
+  test("SPARK-26339 Not throw an exception if some of specified paths are filtered out") {
+    val cars = spark
+      .read
+      .option("header", "false")
+      .csv(testFile(carsFile), testFile(carsFilteredOutFile))
 
-    val testAppender1 = new TestAppender
-    val rootLogger = LogManager.getRootLogger
-    val origLevel = rootLogger.getLevel
-    rootLogger.setLevel(Level.DEBUG)
-    rootLogger.addAppender(testAppender1)
-    try {
-      val cars = spark
-        .read
-        .option("header", "false")
-        .csv(testFile(carsFile), testFile(carsFilteredOutFile))
-
-      verifyCars(cars, withHeader = false, checkTypes = false)
-    } finally {
-      rootLogger.setLevel(origLevel)
-      rootLogger.removeAppender(testAppender1)
-    }
-    assert(testAppender1.events.asScala
-      .exists(msg => msg.getRenderedMessage.contains(
-        "Some paths were ignored:")))
+    verifyCars(cars, withHeader = false, checkTypes = false)
   }
 
   test("SPARK-26339 Throw an exception only if all of the specified paths are filtered out") {
