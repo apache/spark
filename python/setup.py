@@ -105,6 +105,9 @@ if (in_spark):
 _minimum_pandas_version = "0.19.2"
 _minimum_pyarrow_version = "0.8.0"
 
+# used to provided consistent hash accros python interpreter
+_minimum_mmh3_version = "2.5.1"
+
 try:
     # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
     # find it where expected. The rest of the files aren't copied because they are accessed
