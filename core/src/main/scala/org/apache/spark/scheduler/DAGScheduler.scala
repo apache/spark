@@ -188,6 +188,8 @@ private[spark] class DAGScheduler(
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
 
+  private val localityIgnore = sc.conf.getBoolean("spark.locality.ignore", false)
+
   /**
    * Whether to unregister all the outputs on the host in condition that we receive a FetchFailure,
    * this is set default to false, which means, we only unregister the outputs related to the exact
@@ -1105,24 +1107,29 @@ private[spark] class DAGScheduler(
         outputCommitCoordinator.stageStart(
           stage = s.id, maxPartitionId = s.rdd.partitions.length - 1)
     }
-    val taskIdToLocations: Map[Int, Seq[TaskLocation]] = try {
-      stage match {
-        case s: ShuffleMapStage =>
-          partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id))}.toMap
-        case s: ResultStage =>
-          partitionsToCompute.map { id =>
-            val p = s.partitions(id)
-            (id, getPreferredLocs(stage.rdd, p))
-          }.toMap
+    val taskIdToLocations: Map[Int, Seq[TaskLocation]] =
+      if (localityIgnore) {
+        Map.empty
+      } else {
+        try {
+          stage match {
+            case s: ShuffleMapStage =>
+              partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id)) }.toMap
+            case s: ResultStage =>
+              partitionsToCompute.map { id =>
+                val p = s.partitions(id)
+                (id, getPreferredLocs(stage.rdd, p))
+              }.toMap
+          }
+        } catch {
+          case NonFatal(e) =>
+            stage.makeNewStageAttempt(partitionsToCompute.size)
+            listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
+            abortStage(stage, s"Task creation failed: $e\n${Utils.exceptionString(e)}", Some(e))
+            runningStages -= stage
+            return
+        }
       }
-    } catch {
-      case NonFatal(e) =>
-        stage.makeNewStageAttempt(partitionsToCompute.size)
-        listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
-        abortStage(stage, s"Task creation failed: $e\n${Utils.exceptionString(e)}", Some(e))
-        runningStages -= stage
-        return
-    }
 
     stage.makeNewStageAttempt(partitionsToCompute.size, taskIdToLocations.values.toSeq)
 
