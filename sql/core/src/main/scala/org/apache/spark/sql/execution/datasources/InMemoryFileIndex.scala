@@ -125,7 +125,7 @@ class InMemoryFileIndex(
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
       pathsToFetch, hadoopConf, filter, sparkSession)
-    discovered.foreach { case (path, leafFiles, _) =>
+    discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
       output ++= leafFiles
@@ -160,20 +160,18 @@ object InMemoryFileIndex extends Logging {
    *
    * This may only be called on the driver.
    *
-   * @return for each input path, the set of discovered files and ignored
-   *         files/directories for the path
+   * @return for each input path, the set of discovered files for the path
    */
   private[sql] def bulkListLeafFiles(
       paths: Seq[Path],
       hadoopConf: Configuration,
       filter: PathFilter,
-      sparkSession: SparkSession): Seq[(Path, Seq[FileStatus], Seq[FileStatus])] = {
+      sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       return paths.map { path =>
-        val listed = listLeafFiles(path, hadoopConf, filter, Some(sparkSession))
-        (path, listed._1, listed._2)
+        (path, listLeafFiles(path, hadoopConf, filter, Some(sparkSession)))
       }
     }
 
@@ -206,10 +204,9 @@ object InMemoryFileIndex extends Logging {
         .mapPartitions { pathStrings =>
           val hadoopConf = serializableConfiguration.value
           pathStrings.map(new Path(_)).toSeq.map { path =>
-            val listed = listLeafFiles(path, hadoopConf, filter, None)
-            (path, listed._1, listed._2)
+            (path, listLeafFiles(path, hadoopConf, filter, None))
           }.iterator
-        }.map { case (path, statuses, ignoredStatuses) =>
+        }.map { case (path, statuses) =>
         val serializableStatuses = statuses.map { status =>
           // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
           val blockLocations = status match {
@@ -236,14 +233,14 @@ object InMemoryFileIndex extends Logging {
             status.getAccessTime,
             blockLocations)
         }
-        (path.toString, serializableStatuses, ignoredStatuses)
+        (path.toString, serializableStatuses)
       }.collect()
     } finally {
       sparkContext.setJobDescription(previousJobDescription)
     }
 
     // turn SerializableFileStatus back to Status
-    statusMap.map { case (path, serializableStatuses, ignoredStatuses) =>
+    statusMap.map { case (path, serializableStatuses) =>
       val statuses = serializableStatuses.map { f =>
         val blockLocations = f.blockLocations.map { loc =>
           new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
@@ -254,7 +251,7 @@ object InMemoryFileIndex extends Logging {
             new Path(f.path)),
           blockLocations)
       }
-      (new Path(path), statuses, ignoredStatuses)
+      (new Path(path), statuses)
     }
   }
 
@@ -270,7 +267,7 @@ object InMemoryFileIndex extends Logging {
       path: Path,
       hadoopConf: Configuration,
       filter: PathFilter,
-      sessionOpt: Option[SparkSession]): (Seq[FileStatus], Seq[FileStatus]) = {
+      sessionOpt: Option[SparkSession]): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
 
@@ -283,32 +280,23 @@ object InMemoryFileIndex extends Logging {
         Array.empty[FileStatus]
     }
 
-    val (filteredStatuses, ignoredStatuses) = statuses.partition(
-      status => !shouldFilterOut(status.getPath.getName))
+    val filteredStatuses = statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
 
-    val (allLeafStatuses, allIgnoredStatuses) = {
+    val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
-      val nested: (Seq[FileStatus], Seq[FileStatus]) = sessionOpt match {
+      val nestedFiles: Seq[FileStatus] = sessionOpt match {
         case Some(session) =>
-          val listed = bulkListLeafFiles(dirs.map(_.getPath), hadoopConf, filter, session)
-          (listed.flatMap(_._2), listed.flatMap(_._3))
+          bulkListLeafFiles(dirs.map(_.getPath), hadoopConf, filter, session).flatMap(_._2)
         case _ =>
-          val listed = dirs.map(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
-          (listed.flatMap(_._1), listed.flatMap(_._2))
+          dirs.flatMap(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
       }
-      val allFiles = topLevelFiles ++ nested._1
-      val ignoredFiles = ignoredStatuses ++ nested._2
-      if (filter != null) {
-        val (filtered, ignored) = allFiles.partition(f => filter.accept(f.getPath))
-        (filtered, ignoredFiles ++ ignored)
-      } else {
-        (allFiles, ignoredFiles)
-      }
+      val allFiles = topLevelFiles ++ nestedFiles
+      if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
     }
-    val missingFiles = mutable.ArrayBuffer.empty[String]
-    val (filteredLeafStatuses, ignoredLeafStatuses) = allLeafStatuses.partition(
-      status => !shouldFilterOut(status.getPath.getName))
 
+    val missingFiles = mutable.ArrayBuffer.empty[String]
+    val filteredLeafStatuses = allLeafStatuses.filterNot(
+      status => shouldFilterOut(status.getPath.getName))
     val resolvedLeafStatuses = filteredLeafStatuses.flatMap {
       case f: LocatedFileStatus =>
         Some(f)
@@ -353,7 +341,7 @@ object InMemoryFileIndex extends Logging {
         s"the following files were missing during file scan:\n  ${missingFiles.mkString("\n  ")}")
     }
 
-    (resolvedLeafStatuses, allIgnoredStatuses ++ ignoredLeafStatuses)
+    resolvedLeafStatuses
   }
 
   /** Checks if we should filter out this path name. */

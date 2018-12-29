@@ -24,7 +24,6 @@ import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -562,24 +561,18 @@ case class DataSource(
     }.toSeq
 
     if (checkFilesExist) {
-      val (allLeafPath, ignoredPath) = {
-        val pathFilter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
-        val discovered = InMemoryFileIndex.bulkListLeafFiles(
-          allGlobPath, hadoopConf, pathFilter, sparkSession)
-        val paths = discovered.map { case (_, leaf, ignored) =>
-          (leaf.map(_.getPath), ignored.map(_.getPath))
-        }
-        (paths.flatMap(_._1), paths.flatMap(_._2))
+      val (filtered, filteredOut) = allGlobPath.partition { path =>
+        !InMemoryFileIndex.shouldFilterOut(path.getName)
       }
-      if (ignoredPath.nonEmpty) {
-        if (allLeafPath.isEmpty) {
+      if (filteredOut.nonEmpty) {
+        if (filtered.isEmpty) {
           throw new AnalysisException(
-            "All files were ignored. The following files were ignored during file scan:\n" +
-              s"${ignoredPath.mkString("\n  ")}")
+            "All path were ignored. The following path were ignored:\n" +
+              s"${filteredOut.mkString("\n  ")}")
         } else {
           logDebug(
-            "The following files were ignored during file scan:\n" +
-              s"${ignoredPath.mkString("\n  ")}")
+            "The following path were ignored:\n" +
+              s"${filteredOut.mkString("\n  ")}")
         }
       }
     }

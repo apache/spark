@@ -346,7 +346,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(result.schema.fieldNames.size === 1)
   }
 
-  test("SPARK-26339 Debug statement if some of the files are filtered out") {
+  test("SPARK-26339 Debug statement if some of specified paths are filtered out") {
     class TestAppender extends AppenderSkeleton {
       var events = new java.util.ArrayList[LoggingEvent]
       override def close(): Unit = {}
@@ -373,10 +373,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
     assert(testAppender1.events.asScala
       .exists(msg => msg.getRenderedMessage.contains(
-        "The following files were ignored during file scan:")))
+        "The following path were ignored:")))
   }
 
-  test("SPARK-26339 Throw an exception only if all of the files are filtered out") {
+  test("SPARK-26339 Throw an exception only if all of the specified paths are filtered out") {
     val e = intercept[AnalysisException] {
       val cars = spark
         .read
@@ -384,8 +384,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .option("header", "false")
         .load(testFile(carsFilteredOutFile))
     }.getMessage
-    assert(e.contains("All files were ignored. " +
-      "The following files were ignored during file scan:"))
+    assert(e.contains("All path were ignored. The following path were ignored:"))
   }
 
   test("DDL test with empty file") {
