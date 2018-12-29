@@ -269,7 +269,7 @@ class KubernetesSuite extends SparkFunSuite
     driverPodChecker(driverPod)
     println("Done driver pod check")
     val execPods = scala.collection.mutable.Map[String, Pod]()
-    println("Creating watched...")
+    println("Creating watcher...")
     val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
       .withLabel("spark-app-locator", appLocator)
