@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -298,7 +297,7 @@ private[hive] class TestHiveSparkSession(
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
-      () => hiveResultString(new TestHiveQueryExecution(sql)): Unit
+      () => new TestHiveQueryExecution(sql).executedPlan.executeCollect(): Unit
     }
   }
 
