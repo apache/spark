@@ -560,20 +560,18 @@ case class DataSource(
       globPath
     }.toSeq
 
-    if (checkFilesExist) {
-      val (filtered, filteredOut) = allGlobPath.partition { path =>
-        !InMemoryFileIndex.shouldFilterOut(path.getName)
-      }
-      if (filteredOut.nonEmpty) {
-        if (filtered.isEmpty) {
-          throw new AnalysisException(
-            "All path were ignored. The following path were ignored:\n" +
-              s"${filteredOut.mkString("\n  ")}")
-        } else {
-          logDebug(
-            "The following path were ignored:\n" +
-              s"${filteredOut.mkString("\n  ")}")
-        }
+    val (filtered, filteredOut) = allGlobPath.partition { path =>
+      !InMemoryFileIndex.shouldFilterOut(path.getName)
+    }
+    if (filteredOut.nonEmpty) {
+      if (filtered.isEmpty) {
+        throw new AnalysisException(
+          "All path were ignored. The following path were ignored:\n" +
+            s"${filteredOut.mkString("\n  ")}")
+      } else {
+        logDebug(
+          "The following path were ignored:\n" +
+            s"${filteredOut.mkString("\n  ")}")
       }
     }
 
