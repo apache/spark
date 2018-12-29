@@ -72,26 +72,32 @@ trait TestPrematureExit {
     mainObject.printStream = printStream
 
     @volatile var exitedCleanly = false
-    mainObject.exitFn = (_) => exitedCleanly = true
-
-    @volatile var exception: Exception = null
-    val thread = new Thread {
-      override def run() = try {
-        mainObject.main(input)
-      } catch {
-        // Capture the exception to check whether the exception contains searchString or not
-        case e: Exception => exception = e
-      }
+    def withFakeExit(body: => Unit): Unit = {
+      val original = mainObject.exitFn
+      mainObject.exitFn = (_) => exitedCleanly = true
+      body
+      mainObject.exitFn = original
     }
-    thread.start()
-    thread.join()
-    if (exitedCleanly) {
-      val joined = printStream.lineBuffer.mkString("\n")
-      assert(joined.contains(searchString))
-    } else {
-      assert(exception != null)
-      if (!exception.getMessage.contains(searchString)) {
-        throw exception
+    withFakeExit {
+      @volatile var exception: Exception = null
+      val thread = new Thread {
+        override def run() = try {
+          mainObject.main(input)
+        } catch {
+          // Capture the exception to check whether the exception contains searchString or not
+          case e: Exception => exception = e
+        }
+      }
+      thread.start()
+      thread.join()
+      if (exitedCleanly) {
+        val joined = printStream.lineBuffer.mkString("\n")
+        assert(joined.contains(searchString))
+      } else {
+        assert(exception != null)
+        if (!exception.getMessage.contains(searchString)) {
+          throw exception
+        }
       }
     }
   }
