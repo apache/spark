@@ -22,11 +22,11 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeTableCommand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -287,7 +287,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val schema = df.schema
       val notIncludedMsg = "[not included in comparison]"
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-      val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x")
+      val answer = hiveResultString(df.queryExecution).map(_.replaceAll("#\\d+", "#x")
         .replaceAll("Location.*/sql/core/", s"Location ${notIncludedMsg}sql/core/")
         .replaceAll("Created By.*", s"Created By $notIncludedMsg")
         .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
