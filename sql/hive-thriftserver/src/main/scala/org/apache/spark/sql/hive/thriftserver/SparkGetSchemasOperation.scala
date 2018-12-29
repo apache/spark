@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.UUID
-
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetSchemasOperation
@@ -51,16 +49,7 @@ private[hive] class SparkGetSchemasOperation(
 
   private val rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
 
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    logInfo(s"Close get schemas with $statementId")
-    setState(OperationState.CLOSED)
-  }
-
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
-    logInfo(s"Getting schemas with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
@@ -83,18 +72,13 @@ private[hive] class SparkGetSchemasOperation(
     }
   }
 
-  override def getNextRowSet(order: FetchOrientation, maxRows: Long): RowSet = {
-    validateDefaultFetchOrientation(order)
+  override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
     assertState(OperationState.FINISHED)
+    validateDefaultFetchOrientation(orientation)
     setHasResultSet(true)
-    if (order.equals(FetchOrientation.FETCH_FIRST)) {
+    if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
       rowSet.setStartOffset(0)
     }
     rowSet.extractSubset(maxRows.toInt)
-  }
-
-  override def cancel(): Unit = {
-    logInfo(s"Cancel get schemas with $statementId")
-    setState(OperationState.CANCELED)
   }
 }
