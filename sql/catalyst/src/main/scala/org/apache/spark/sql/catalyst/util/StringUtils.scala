@@ -87,4 +87,26 @@ object StringUtils {
     }
     funcNames.toSeq
   }
+
+  class StringRope {
+    private var list = List.empty[String]
+    private var length: Int = 0
+
+    def append(s: String): Unit = {
+      list = s :: list
+      length += s.length
+    }
+
+    override def toString: String = {
+      val buffer = new StringBuffer(length)
+      var reversed = list.reverse
+
+      while (!reversed.isEmpty) {
+        buffer.append(reversed.head)
+        reversed = reversed.tail
+      }
+
+      buffer.toString
+    }
+  }
 }
