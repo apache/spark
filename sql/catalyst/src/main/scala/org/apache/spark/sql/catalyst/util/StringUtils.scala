@@ -93,8 +93,10 @@ object StringUtils {
     private var length: Int = 0
 
     def append(s: String): Unit = {
-      list = s :: list
-      length += s.length
+      if (s != null) {
+        list = s :: list
+        length += s.length
+      }
     }
 
     override def toString: String = {

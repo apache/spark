@@ -43,4 +43,17 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(filterPattern(names, " a. ") === Seq("a1", "a2"))
     assert(filterPattern(names, " d* ") === Nil)
   }
+
+  test("string rope") {
+    def toRope(seq: String*): String = {
+      seq.foldLeft(new StringRope())((rope, s) => {rope.append(s); rope}).toString
+    }
+
+    assert(new StringRope().toString == "")
+    assert(toRope("") == "")
+    assert(toRope(null) == "")
+    assert(toRope("a") == "a")
+    assert(toRope("1", "2") == "12")
+    assert(toRope("abc", "\n", "123") == "abc\n123")
+  }
 }
