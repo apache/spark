@@ -80,7 +80,8 @@ while (( "$#" )); do
       shift
       ;;
     *)
-      break
+      echo "Unexpected propert $2 $1 breaking parsing"
+      exit 1
       ;;
   esac
   shift
