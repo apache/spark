@@ -315,7 +315,10 @@ class KubernetesSuite extends SparkFunSuite
     println("Done driver pod check")
     // If we're testing decomissioning we delete all the executors, but we should have
     // an executor at some point.
-    Eventually.eventually(TIMEOUT, INTERVAL) { execPods.values.nonEmpty }
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      println(s"This iteration is ${execPods.values.nonEmpty} with ${execPods}")
+      execPods.values.nonEmpty
+    }
     println(s"Closing watcher with execPods $execPods nonEmpty: ${execPods.values.nonEmpty}")
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
