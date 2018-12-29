@@ -370,6 +370,8 @@ private[spark] class Executor(
       val threadMXBean = ManagementFactory.getThreadMXBean
       val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
       val deserializeStartTime = System.currentTimeMillis()
+      val idleGCEnabled = conf.getBoolean("spark.executor.memory.idleGCEnabled", false)
+      val idleGCThreshold = conf.getDouble("spark.executor.memory.idleGCThreshold", 0.70)
       val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
         threadMXBean.getCurrentThreadCpuTime
       } else 0L
@@ -628,6 +630,22 @@ private[spark] class Executor(
           }
       } finally {
         runningTasks.remove(taskId)
+        if(idleGCEnabled) {
+          if (runningTasks.isEmpty) {
+            triggerGCOnIdle(idleGCThreshold)
+          }
+        }
+      }
+    }
+
+    /**
+     * Trigger GC on executor wait for remaining tasks to finish.
+     */
+    private def triggerGCOnIdle(threshold: Double): Unit = {
+      val memoryMXBean = ManagementFactory.getMemoryMXBean
+      if (memoryMXBean.getHeapMemoryUsage.getUsed >
+        threshold * memoryMXBean.getHeapMemoryUsage.getMax) {
+        memoryMXBean.gc()
       }
     }
 
