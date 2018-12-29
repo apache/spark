@@ -362,9 +362,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     try {
       val cars = spark
         .read
-        .format("csv")
         .option("header", "false")
-        .load(testFile(carsFile), testFile(carsFilteredOutFile))
+        .csv(testFile(carsFile), testFile(carsFilteredOutFile))
 
       verifyCars(cars, withHeader = false, checkTypes = false)
     } finally {
@@ -373,18 +372,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
     assert(testAppender1.events.asScala
       .exists(msg => msg.getRenderedMessage.contains(
-        "The following path were ignored:")))
+        "Some paths were ignored:")))
   }
 
   test("SPARK-26339 Throw an exception only if all of the specified paths are filtered out") {
     val e = intercept[AnalysisException] {
       val cars = spark
         .read
-        .format("csv")
         .option("header", "false")
-        .load(testFile(carsFilteredOutFile))
+        .csv(testFile(carsFilteredOutFile))
     }.getMessage
-    assert(e.contains("All path were ignored. The following path were ignored:"))
+    assert(e.contains("All paths were ignored:"))
   }
 
   test("DDL test with empty file") {
