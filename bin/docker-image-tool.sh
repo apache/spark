@@ -209,11 +209,15 @@ Options:
   -p file               (Optional) Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
                         Skips building PySpark docker image if not specified.
                         A sample PySpark Dockerfile is at:
-                        resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings/python/Dockerfile
+                        kubernetes/dockerfiles/spark/bindings/python/Dockerfile
+			File must be relative the build path, in dev this is copied from:
+			resource-managers/kubernetes/docker/src/main/dockerfiles
   -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
                         Skips building SparkR docker image if not specified.
 			 A sample SparkR Dockerfile is at:
-                        resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings/R/Dockerfile
+                        kubernetes/dockerfiles/spark/bindings/R/Dockerfile
+			File must be relative the build path, in dev this is copied from:
+			resource-managers/kubernetes/docker/src/main/dockerfiles
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
@@ -222,6 +226,8 @@ Options:
                         resulting container
   -b arg                Build arg to build or push the image. For multiple build args, this option needs to
                         be used separately for each build arg.
+
+In dev the build enviroment copies in resource-managers/kubernetes/docker/src/main/dockerfiles
 
 Using minikube when building images will do so directly into minikube's Docker daemon.
 There is no need to push the images into minikube in that case, they'll be automatically
@@ -236,7 +242,7 @@ Examples:
     $0 -m -t testing build
 
   - Build PySpark docker image
-    $0 -r docker.io/myrepo -t v2.3.0 -p resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings/python/Dockerfile
+    $0 -r docker.io/myrepo -t v2.3.0 -p kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
 
   - Build and push image with tag "v2.3.0" to docker.io/myrepo
     $0 -r docker.io/myrepo -t v2.3.0 build
