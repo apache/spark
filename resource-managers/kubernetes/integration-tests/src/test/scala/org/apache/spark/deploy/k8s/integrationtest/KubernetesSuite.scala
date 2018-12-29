@@ -249,25 +249,7 @@ class KubernetesSuite extends SparkFunSuite
       mainAppResource = appResource,
       mainClass = mainClass,
       appArgs = appArgs)
-    SparkAppLauncher.launch(
-      appArguments,
-      sparkAppConf,
-      TIMEOUT.value.toSeconds.toInt,
-      sparkHomeDir,
-      isJVM,
-      pyFiles)
 
-    println("Running spark job.")
-    val driverPod = kubernetesTestComponents.kubernetesClient
-      .pods()
-      .withLabel("spark-app-locator", appLocator)
-      .withLabel("spark-role", "driver")
-      .list()
-      .getItems
-      .get(0)
-    println("Doing driver pod check")
-    driverPodChecker(driverPod)
-    println("Done driver pod check")
     val execPods = scala.collection.mutable.Map[String, Pod]()
     println("Creating watcher...")
     val execWatcher = kubernetesTestComponents.kubernetesClient
@@ -286,6 +268,7 @@ class KubernetesSuite extends SparkFunSuite
               println(s"Add or modification event received for $name.")
               execPods(name) = resource
               // If testing decomissioning delete the node 5 seconds after it starts running
+              // Open question: could we put this in the checker
               if (decomissioningTest && false) {
                 // Wait for all the containers in the pod to be running
                 println("Waiting for pod to become OK then delete.")
@@ -310,9 +293,30 @@ class KubernetesSuite extends SparkFunSuite
           }
         }
       })
+
+    println("Running spark job.")
+    SparkAppLauncher.launch(
+      appArguments,
+      sparkAppConf,
+      TIMEOUT.value.toSeconds.toInt,
+      sparkHomeDir,
+      isJVM,
+      pyFiles)
+
+    val driverPod = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .withLabel("spark-app-locator", appLocator)
+      .withLabel("spark-role", "driver")
+      .list()
+      .getItems
+      .get(0)
+    println("Doing driver pod check")
+    driverPodChecker(driverPod)
+    println("Done driver pod check")
     // If we're testing decomissioning we delete all the executors, but we should have
     // an executor at some point.
     Eventually.eventually(TIMEOUT, INTERVAL) { execPods.values.nonEmpty }
+    println(s"Closing watcher with execPods $execPods nonEmpty: ${execPods.values.nonEmpty}")
     execWatcher.close()
     execPods.values.foreach(executorPodChecker(_))
     println(s"Close to the end exec pods are $execPods")
