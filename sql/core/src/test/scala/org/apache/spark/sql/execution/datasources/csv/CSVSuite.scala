@@ -346,7 +346,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(result.schema.fieldNames.size === 1)
   }
 
-  test("SPARK-26339 Not throw an exception if some of specified paths are filtered out") {
+  test("SPARK-26339 Not throw an exception if some of specified paths are filtered in") {
     val cars = spark
       .read
       .option("header", "false")
