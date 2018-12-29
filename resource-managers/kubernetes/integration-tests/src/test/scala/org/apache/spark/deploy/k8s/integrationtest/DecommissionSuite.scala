@@ -24,23 +24,11 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
   test("Test basic decommissioning", k8sTestTag) {
     sparkAppConf
       .set("spark.worker.decommission.enabled", "true")
-      .set("spark.kubernetes.pyspark.pythonVersion", "3")
-      .set("spark.kubernetes.container.image", pyImage)
 
     runSparkApplicationAndVerifyCompletion(
-      appResource = PYSPARK_DECOMISSIONING,
-      mainClass = "",
+      SPARK_PI_MAIN_CLASS,
       expectedLogOnCompletion = Seq("Decommissioning executor"),
-      appArgs = Array.empty[String],
-      driverPodChecker = doBasicDriverPyPodCheck,
-      executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
-      isJVM = false,
+      appArgs = Array("100"), // Give it some time to run
       decomissioningTest = true)
   }
-}
-
-private[spark] object DecommissionSuite {
-  val TEST_LOCAL_PYSPARK: String = "local:///opt/spark/tests/"
-  val PYSPARK_DECOMISSIONING: String = TEST_LOCAL_PYSPARK + "decommissioning.py"
 }
