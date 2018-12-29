@@ -25,6 +25,7 @@ import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -87,7 +88,7 @@ trait FunctionRegistry {
   override def clone(): FunctionRegistry = throw new CloneNotSupportedException()
 }
 
-class SimpleFunctionRegistry extends FunctionRegistry {
+class SimpleFunctionRegistry extends FunctionRegistry with Logging {
 
   @GuardedBy("this")
   private val functionBuilders =
@@ -103,7 +104,10 @@ class SimpleFunctionRegistry extends FunctionRegistry {
       name: FunctionIdentifier,
       info: ExpressionInfo,
       builder: FunctionBuilder): Unit = synchronized {
-    functionBuilders.put(normalizeFuncName(name), (info, builder))
+    val normalizedName = normalizeFuncName(name)
+    if (functionBuilders.put(normalizedName, (info, builder)).isDefined) {
+      logWarning(s"The function $normalizedName replaced a previously registered function.")
+    }
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
