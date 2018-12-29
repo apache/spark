@@ -483,7 +483,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       maxFields: Int = SQLConf.get.maxToStringFields): String = {
     val writer = new StringBuilderWriter()
     try {
-      treeString(writer, verbose, addSuffix, maxFields)
+      treeString(writer.write, verbose, addSuffix, maxFields)
       writer.toString
     } finally {
       writer.close()
@@ -491,11 +491,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   def treeString(
-      writer: Writer,
+      append: String => Unit,
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int): Unit = {
-    generateTreeString(0, Nil, writer, verbose, "", addSuffix, maxFields)
+    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields)
   }
 
   /**
@@ -558,7 +558,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      writer: Writer,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
@@ -566,9 +566,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
-        writer.write(if (isLast) "   " else ":  ")
+        append(if (isLast) "   " else ":  ")
       }
-      writer.write(if (lastChildren.last) "+- " else ":- ")
+      append(if (lastChildren.last) "+- " else ":- ")
     }
 
     val str = if (verbose) {
@@ -576,24 +576,24 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     } else {
       simpleString(maxFields)
     }
-    writer.write(prefix)
-    writer.write(str)
-    writer.write("\n")
+    append(prefix)
+    append(str)
+    append("\n")
 
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ false, writer, verbose,
+        depth + 2, lastChildren :+ children.isEmpty :+ false, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields))
       innerChildren.last.generateTreeString(
-        depth + 2, lastChildren :+ children.isEmpty :+ true, writer, verbose,
+        depth + 2, lastChildren :+ children.isEmpty :+ true, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields)
     }
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(
-        depth + 1, lastChildren :+ false, writer, verbose, prefix, addSuffix, maxFields))
+        depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix, maxFields))
       children.last.generateTreeString(
-        depth + 1, lastChildren :+ true, writer, verbose, prefix, addSuffix, maxFields)
+        depth + 1, lastChildren :+ true, append, verbose, prefix, addSuffix, maxFields)
     }
   }
 
