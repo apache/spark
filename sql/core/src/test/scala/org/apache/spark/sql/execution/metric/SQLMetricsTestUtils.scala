@@ -41,9 +41,21 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
 
   protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
 
-  protected val bytesPattern = Pattern.compile("([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)")
+  protected object ExpectedMetricsType extends Enumeration {
+    type ExpectedMetricsType = Value
+    val VALUE, PATTERN, PATTERN_STRING = Value
+  }
 
-  protected val durationPattern = Pattern.compile("([0-9]+(\\.[0-9]+)?) (ms|s|m|h)")
+  protected val bytes = "([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)"
+
+  protected val duration = "([0-9]+(\\.[0-9]+)?) (ms|s|m|h)"
+
+  // "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB)"
+  protected val sizeMetricPattern = Pattern.compile(s"\\n$bytes \\($bytes, $bytes, $bytes\\)")
+
+  // "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)"
+  protected val timingMetricPattern =
+    Pattern.compile(s"\\n$duration \\($duration, $duration, $duration\\)")
 
   /**
    * Get execution metrics for the SQL execution and verify metrics values.
@@ -179,6 +191,45 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   }
 
   /**
+   * Call `df.collect()` and verify if the collected metrics match "expectedMetrics". By
+   * "expectedMetrics", you can either specify exact metric value or metric value pattern. A pattern
+   * can be a regex string or a compiled `Pattern` object.
+   *
+   * @param df `DataFrame` to run
+   * @param expectedNumOfJobs number of jobs that will run
+   * @param expectedMetrics the expected metrics. The format is
+   *                        `nodeId -> (operatorName, metric name -> metric value or pattern)`.
+   * @param expectedMetricsType the type of the expected metrics.
+   */
+  protected def testSparkPlanMetrics(
+      df: DataFrame,
+      expectedNumOfJobs: Int,
+      expectedMetrics: Map[Long, (String, Map[String, Any])],
+      expectedMetricsType: ExpectedMetricsType.Value): Unit = {
+    val optActualMetrics = getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetrics.keySet)
+    optActualMetrics.foreach { actualMetrics =>
+      assert(expectedMetrics.keySet === actualMetrics.keySet)
+      for (nodeId <- expectedMetrics.keySet) {
+        val (expectedNodeName, expectedMetricsMap) = expectedMetrics(nodeId)
+        val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
+        assert(expectedNodeName === actualNodeName)
+        for (metricName <- expectedMetricsMap.keySet) {
+          expectedMetricsType match {
+            case ExpectedMetricsType.VALUE =>
+              assert(expectedMetricsMap(metricName).toString === actualMetricsMap(metricName))
+            case ExpectedMetricsType.PATTERN =>
+              assert(expectedMetricsMap(metricName).asInstanceOf[Pattern].matcher(
+                actualMetricsMap(metricName).toString).matches())
+            case ExpectedMetricsType.PATTERN_STRING =>
+              assert(Pattern.compile(expectedMetricsMap(metricName).toString).matcher(
+                actualMetricsMap(metricName).toString).matches())
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Call `df.collect()` and verify if the collected metrics are same as "expectedMetrics".
    *
    * @param df `DataFrame` to run
@@ -190,105 +241,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       df: DataFrame,
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
-    val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
-      (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
-        (actualMetricValue: Any) => expectedMetricValue.toString === actualMetricValue)
-    )}
-    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates)
-  }
-
-  /**
-   * Call `df.collect()` and verify if the collected metrics satisfy the specified predicates.
-   *
-   * @param df `DataFrame` to run
-   * @param expectedNumOfJobs number of jobs that will run
-   * @param expectedMetricsPredicates the expected metrics predicates. The format is
-   * `nodeId -> (operatorName, metric name -> metric value predicate)`.
-   */
-  protected def testSparkPlanMetricsWithPredicates(
-      df: DataFrame,
-      expectedNumOfJobs: Int,
-      expectedMetricsPredicates: Map[Long, (String, Map[String, Any => Boolean])]): Unit = {
-    val optActualMetrics =
-      getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetricsPredicates.keySet)
-    optActualMetrics.foreach { actualMetrics =>
-      assert(expectedMetricsPredicates.keySet === actualMetrics.keySet)
-      for (nodeId <- expectedMetricsPredicates.keySet) {
-        val (expectedNodeName, expectedMetricsPredicatesMap) = expectedMetricsPredicates(nodeId)
-        val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
-        assert(expectedNodeName === actualNodeName)
-        for (metricName <- expectedMetricsPredicatesMap.keySet) {
-          assert(expectedMetricsPredicatesMap(metricName)(actualMetricsMap(metricName)))
-        }
-      }
-    }
-  }
-
-  private def metricStats(metricStr: String): Seq[String] = {
-    val sum = metricStr.substring(0, metricStr.indexOf("(")).stripPrefix("\n").stripSuffix(" ")
-    val minMedMax = metricStr.substring(metricStr.indexOf("(") + 1, metricStr.indexOf(")"))
-      .split(", ").toSeq
-    (sum +: minMedMax)
-  }
-
-  private def stringToBytes(str: String): (Float, String) = {
-    val matcher = bytesPattern.matcher(str)
-    if (matcher.matches()) {
-      (matcher.group(1).toFloat, matcher.group(3))
-    } else {
-      throw new NumberFormatException("Failed to parse byte string: " + str)
-    }
-  }
-
-  private def stringToDuration(str: String): (Float, String) = {
-    val matcher = durationPattern.matcher(str)
-    if (matcher.matches()) {
-      (matcher.group(1).toFloat, matcher.group(3))
-    } else {
-      throw new NumberFormatException("Failed to parse time string: " + str)
-    }
-  }
-
-  /**
-   * Convert a size metric string to a sequence of stats, including sum, min, med and max in order,
-   * each a tuple of (value, unit).
-   * @param metricStr size metric string, e.g. "\n96.2 MB (32.1 MB, 32.1 MB, 32.1 MB)"
-   * @return A sequence of stats, e.g. ((96.2,MB), (32.1,MB), (32.1,MB), (32.1,MB))
-   */
-  protected def sizeMetricStats(metricStr: String): Seq[(Float, String)] = {
-    metricStats(metricStr).map(stringToBytes)
-  }
-
-  /**
-   * Convert a timing metric string to a sequence of stats, including sum, min, med and max in
-   * order, each a tuple of (value, unit).
-   * @param metricStr timing metric string, e.g. "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)"
-   * @return A sequence of stats, e.g. ((2.0,ms), (1.0,ms), (1.0,ms), (1.0,ms))
-   */
-  protected def timingMetricStats(metricStr: String): Seq[(Float, String)] = {
-    metricStats(metricStr).map(stringToDuration)
-  }
-
-  /**
-   * Returns a function to check whether all stats (sum, min, med and max) of a timing metric
-   * satisfy the specified predicate.
-   * @param predicate predicate to check stats
-   * @return function to check all stats of a timing metric
-   */
-  protected def timingMetricAllStatsShould(predicate: Float => Boolean): Any => Boolean = {
-    (timingMetric: Any) =>
-      timingMetricStats(timingMetric.toString).forall { case (duration, _) => predicate(duration) }
-  }
-
-  /**
-   * Returns a function to check whether all stats (sum, min, med and max) of a size metric satisfy
-   * the specified predicate.
-   * @param predicate predicate to check stats
-   * @return function to check all stats of a size metric
-   */
-  protected def sizeMetricAllStatsShould(predicate: Float => Boolean): Any => Boolean = {
-    (sizeMetric: Any) =>
-      sizeMetricStats(sizeMetric.toString).forall { case (bytes, _) => predicate(bytes)}
+    testSparkPlanMetrics(df, expectedNumOfJobs, expectedMetrics, ExpectedMetricsType.VALUE)
   }
 }
 
