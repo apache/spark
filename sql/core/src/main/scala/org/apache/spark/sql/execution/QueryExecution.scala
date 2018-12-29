@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{BufferedWriter, OutputStreamWriter, Writer}
+import java.io.{BufferedWriter, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import org.apache.commons.io.output.StringBuilderWriter
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
@@ -31,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.StringUtils.StringRope
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
@@ -227,13 +227,10 @@ class QueryExecution(
   }
 
   override def toString: String = withRedaction {
-    val writer = new StringBuilderWriter()
-    try {
-      writePlans(writer.write, SQLConf.get.maxToStringFields)
-      writer.toString
-    } finally {
-      writer.close()
-    }
+    val rope = new StringRope()
+
+    writePlans(rope.append, SQLConf.get.maxToStringFields)
+    rope.toString
   }
 
   def stringWithStats: String = withRedaction {
@@ -292,7 +289,7 @@ class QueryExecution(
       try {
         writePlans(writer.write, maxFields)
         writer.write("\n== Whole Stage Codegen ==\n")
-        org.apache.spark.sql.execution.debug.writeCodegen(writer, executedPlan)
+        org.apache.spark.sql.execution.debug.writeCodegen(writer.write, executedPlan)
       } finally {
         writer.close()
       }
