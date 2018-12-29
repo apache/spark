@@ -239,7 +239,7 @@ object JdbcUtils extends Logging {
       case java.sql.Types.TIMESTAMP     => TimestampType
       case java.sql.Types.TIMESTAMP_WITH_TIMEZONE
                                         => null
-      case java.sql.Types.TINYINT       => IntegerType
+      case java.sql.Types.TINYINT       => ByteType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
       case _                            =>
@@ -455,6 +455,10 @@ object JdbcUtils extends Logging {
     case BinaryType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.update(pos, rs.getBytes(pos + 1))
+
+    case ByteType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos, rs.getByte(pos + 1))
 
     case ArrayType(et, _) =>
       val elementConversion = et match {
