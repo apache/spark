@@ -282,7 +282,7 @@ class QueryExecution(
     /**
      * Dumps debug information about query execution into the specified file.
      *
-     * @param maxFields maximim number of fields converted to string representation.
+     * @param maxFields maximum number of fields converted to string representation.
      */
     def toFile(path: String, maxFields: Int = Int.MaxValue): Unit = {
       val filePath = new Path(path)
