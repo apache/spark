@@ -527,15 +527,15 @@ object EventLoggingListenerSuite {
   /** Get a SparkConf with event logging enabled. */
   def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None): SparkConf = {
     val conf = new SparkConf
-    conf.set(EVENT_LOG_ENABLED.key, "true")
-    conf.set(EVENT_LOG_BLOCK_UPDATES.key, "true")
-    conf.set(EVENT_LOG_TESTING.key, "true")
-    conf.set(EVENT_LOG_DIR.key, logDir.toString)
+    conf.set(EVENT_LOG_ENABLED, true)
+    conf.set(EVENT_LOG_BLOCK_UPDATES, true)
+    conf.set(EVENT_LOG_TESTING, true)
+    conf.set(EVENT_LOG_DIR, logDir.toString)
     compressionCodec.foreach { codec =>
-      conf.set(EVENT_LOG_COMPRESS.key, "true")
+      conf.set(EVENT_LOG_COMPRESS, true)
       conf.set("spark.io.compression.codec", codec)
     }
-    conf.set(EVENT_LOG_STAGE_EXECUTOR_METRICS.key, "true")
+    conf.set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
     conf
   }
 
