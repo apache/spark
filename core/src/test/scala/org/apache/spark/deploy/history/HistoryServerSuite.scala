@@ -46,7 +46,7 @@ import org.scalatest.selenium.WebBrowser
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.History.LOCAL_STORE_DIR
+import org.apache.spark.internal.config.History._
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.ui.SparkUI
@@ -79,8 +79,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     Utils.deleteRecursively(storeDir)
     assert(storeDir.mkdir())
     val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", logDir)
-      .set("spark.history.fs.update.interval", "0")
+      .set(HISTORY_LOG_DIR, logDir)
+      .set(UPDATE_INTERVAL_S.key, "0")
       .set("spark.testing", "true")
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
@@ -417,11 +417,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // allowed refresh rate (1Hz)
     stop()
     val myConf = new SparkConf()
-      .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
+      .set(HISTORY_LOG_DIR, logDir.getAbsolutePath)
       .set(EVENT_LOG_DIR, logDir.getAbsolutePath)
-      .set("spark.history.fs.update.interval", "1s")
+      .set(UPDATE_INTERVAL_S.key, "1s")
       .set(EVENT_LOG_ENABLED, true)
-      .set("spark.history.cache.window", "250ms")
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
@@ -614,8 +613,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     stop()
     init(
       "spark.ui.filters" -> classOf[FakeAuthFilter].getName(),
-      "spark.history.ui.acls.enable" -> "true",
-      "spark.history.ui.admin.acls" -> admin)
+      UI_ACLS_ENABLE.key -> "true",
+      UI_ADMIN_ACLS.key -> admin)
 
     val tests = Seq(
       (owner, HttpServletResponse.SC_OK),
