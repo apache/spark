@@ -43,6 +43,11 @@ import org.apache.spark.sql.types._
  *
  * This rule normalizes NaN and -0.0 in Window partition keys, Join keys and Aggregate grouping
  * expressions.
+ *
+ * Note that, this rule should be an analyzer rule, as it must be applied to make the query result
+ * corrected. Currently it's executed as an optimizer rule, because the optimizer may create new
+ * joins(for subquery) and reorder joins(may change the join condition), and this rule needs to be
+ * executed at the end.
  */
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
