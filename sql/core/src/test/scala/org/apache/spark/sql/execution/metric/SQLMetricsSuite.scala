@@ -204,9 +204,9 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df = Seq(1, 3, 2).toDF("id").sort('id)
     testSparkPlanMetricsWithPredicates(df, 2, Map(
       0L -> (("Sort", Map(
-        "sort time total (min, med, max)" -> checkPattern(timingMetricPattern),
-        "peak memory total (min, med, max)" -> checkPattern(sizeMetricPattern),
-        "spill size total (min, med, max)" -> checkPattern(sizeMetricPattern))))
+        "sort time total (min, med, max)" -> {_.toString.matches(timingMetricPattern)},
+        "peak memory total (min, med, max)" -> {_.toString.matches(sizeMetricPattern)},
+        "spill size total (min, med, max)" -> {_.toString.matches(sizeMetricPattern)})))
     ))
   }
 

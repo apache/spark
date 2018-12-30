@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.metric
 
 import java.io.File
-import java.util.regex.Pattern
 
 import scala.collection.mutable.HashMap
 
@@ -41,24 +40,16 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
 
   protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
 
-  protected val bytes = "([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)"
+  // Pattern of size SQLMetric value, e.g. "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB)"
+  protected val sizeMetricPattern = {
+    val bytes = "([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)"
+    s"\\n$bytes \\($bytes, $bytes, $bytes\\)"
+  }
 
-  protected val duration = "([0-9]+(\\.[0-9]+)?) (ms|s|m|h)"
-
-  // "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB)"
-  protected val sizeMetricPattern = Pattern.compile(s"\\n$bytes \\($bytes, $bytes, $bytes\\)")
-
-  // "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)"
-  protected val timingMetricPattern =
-    Pattern.compile(s"\\n$duration \\($duration, $duration, $duration\\)")
-
-  /** Generate a function to check the specified pattern.
-   *
-   * @param pattern a pattern
-   * @return a function to check the specified pattern
-   */
-  protected def checkPattern(pattern: Pattern): (Any => Boolean) = {
-    (in: Any) => pattern.matcher(in.toString).matches()
+  // Pattern of timing SQLMetric value, e.g. "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)"
+  protected val timingMetricPattern = {
+    val duration = "([0-9]+(\\.[0-9]+)?) (ms|s|m|h)"
+    s"\\n$duration \\($duration, $duration, $duration\\)"
   }
 
   /**
@@ -206,18 +197,11 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       df: DataFrame,
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
-    val optActualMetrics = getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetrics.keySet)
-    optActualMetrics.foreach { actualMetrics =>
-      assert(expectedMetrics.keySet === actualMetrics.keySet)
-      for (nodeId <- expectedMetrics.keySet) {
-        val (expectedNodeName, expectedMetricsMap) = expectedMetrics(nodeId)
-        val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
-        assert(expectedNodeName === actualNodeName)
-        for (metricName <- expectedMetricsMap.keySet) {
-          assert(expectedMetricsMap(metricName).toString === actualMetricsMap(metricName))
-        }
-      }
+    val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
+      (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
+        (actualMetricValue: Any) => expectedMetricValue.toString === actualMetricValue))
     }
+    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates)
   }
 
   /**
@@ -225,7 +209,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
    * @param df `DataFrame` to run
    * @param expectedNumOfJobs number of jobs that will run
    * @param expectedMetricsPredicates the expected metrics predicates. The format is
-   * `nodeId -> (operatorName, metric name -> metric value predicate)`.
+   *                                  `nodeId -> (operatorName, metric name -> metric predicate)`.
    */
   protected def testSparkPlanMetricsWithPredicates(
       df: DataFrame,
@@ -235,8 +219,8 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetricsPredicates.keySet)
     optActualMetrics.foreach { actualMetrics =>
       assert(expectedMetricsPredicates.keySet === actualMetrics.keySet)
-      for (nodeId <- expectedMetricsPredicates.keySet) {
-        val (expectedNodeName, expectedMetricsPredicatesMap) = expectedMetricsPredicates(nodeId)
+      for ((nodeId, (expectedNodeName, expectedMetricsPredicatesMap))
+          <- expectedMetricsPredicates) {
         val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
         assert(expectedNodeName === actualNodeName)
         for (metricName <- expectedMetricsPredicatesMap.keySet) {
