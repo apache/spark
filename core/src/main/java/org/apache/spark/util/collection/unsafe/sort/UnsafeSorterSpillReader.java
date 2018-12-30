@@ -21,6 +21,7 @@ import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.io.ReadAheadInputStream;
 import org.apache.spark.serializer.SerializerManager;
@@ -37,7 +38,7 @@ import java.io.*;
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
   private static final Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
-  private static final int DEFAULT_BUFFER_SIZE_BYTES = 1024 * 1024; // 1 MB
+  public static final int DEFAULT_BUFFER_SIZE_BYTES = 1024 * 1024; // 1 MB
   private static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;
@@ -61,19 +62,19 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     assert (file.length() > 0);
     long bufferSizeBytes =
         SparkEnv.get() == null ?
-            DEFAULT_BUFFER_SIZE_BYTES:
-            SparkEnv.get().conf().getSizeAsBytes("spark.unsafe.sorter.spill.reader.buffer.size",
-                                                 DEFAULT_BUFFER_SIZE_BYTES);
+            DEFAULT_BUFFER_SIZE_BYTES:(long)SparkEnv.get().conf().get(
+                package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE());
     if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
       // fall back to a sane default value
-      logger.warn("Value of config \"spark.unsafe.sorter.spill.reader.buffer.size\" = {} not in " +
+      String key = package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE().key();
+      logger.warn("Value of config \"" + key + "\" = {} not in " +
         "allowed range [{}, {}). Falling back to default value : {} bytes", bufferSizeBytes,
         DEFAULT_BUFFER_SIZE_BYTES, MAX_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES);
       bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
     }
 
-    final boolean readAheadEnabled = SparkEnv.get() != null &&
-        SparkEnv.get().conf().getBoolean("spark.unsafe.sorter.spill.read.ahead.enabled", true);
+    final boolean readAheadEnabled = SparkEnv.get() != null && (boolean)SparkEnv.get().conf().get(
+        package$.MODULE$.UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED());
 
     final InputStream bs =
         new NioBufferedFileInputStream(file, (int) bufferSizeBytes);

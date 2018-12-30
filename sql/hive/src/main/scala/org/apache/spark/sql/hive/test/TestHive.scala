@@ -61,7 +61,7 @@ object TestHive
         .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
         .set(UI_ENABLED, false)
-        .set("spark.unsafe.exceptionOnMemoryLeak", "true")
+        .set(UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
         // Disable ConvertToLocalRelation for better test coverage. Test cases built on
         // LocalRelation will exercise the optimization rules better by disabling it as
         // this rule may potentially block testing of other optimization rules such as

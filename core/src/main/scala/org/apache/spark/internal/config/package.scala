@@ -24,6 +24,7 @@ import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader
 
 package object config {
 
@@ -731,6 +732,26 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
+
+  private[spark] val UNSAFE_EXCEPTION_ON_MEMORY_LEAK =
+    ConfigBuilder("spark.unsafe.exceptionOnMemoryLeak")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val UNSAFE_OFFHEAP =
+    ConfigBuilder("spark.unsafe.offHeap")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED =
+    ConfigBuilder("spark.unsafe.sorter.spill.read.ahead.enabled")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE =
+    ConfigBuilder("spark.unsafe.sorter.spill.reader.buffer.size")
+      .intConf
+      .createWithDefault(UnsafeSorterSpillReader.DEFAULT_BUFFER_SIZE_BYTES)
 
   private[spark] val EXECUTOR_PLUGINS =
     ConfigBuilder("spark.executor.plugins")
