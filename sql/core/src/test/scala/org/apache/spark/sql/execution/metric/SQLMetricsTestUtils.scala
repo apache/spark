@@ -41,11 +41,6 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
 
   protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
 
-  protected object ExpectedMetricsType extends Enumeration {
-    type ExpectedMetricsType = Value
-    val VALUE, PATTERN, PATTERN_STRING = Value
-  }
-
   protected val bytes = "([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)"
 
   protected val duration = "([0-9]+(\\.[0-9]+)?) (ms|s|m|h)"
@@ -56,6 +51,15 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   // "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)"
   protected val timingMetricPattern =
     Pattern.compile(s"\\n$duration \\($duration, $duration, $duration\\)")
+
+  /** Generate a function to check the specified pattern.
+   *
+   * @param pattern a pattern
+   * @return a function to check the specified pattern
+   */
+  protected def checkPattern(pattern: Pattern): (Any => Boolean) = {
+    (in: Any) => pattern.matcher(in.toString).matches()
+  }
 
   /**
    * Get execution metrics for the SQL execution and verify metrics values.
@@ -191,45 +195,6 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   }
 
   /**
-   * Call `df.collect()` and verify if the collected metrics match "expectedMetrics". By
-   * "expectedMetrics", you can either specify exact metric value or metric value pattern. A pattern
-   * can be a regex string or a compiled `Pattern` object.
-   *
-   * @param df `DataFrame` to run
-   * @param expectedNumOfJobs number of jobs that will run
-   * @param expectedMetrics the expected metrics. The format is
-   *                        `nodeId -> (operatorName, metric name -> metric value or pattern)`.
-   * @param expectedMetricsType the type of the expected metrics.
-   */
-  protected def testSparkPlanMetrics(
-      df: DataFrame,
-      expectedNumOfJobs: Int,
-      expectedMetrics: Map[Long, (String, Map[String, Any])],
-      expectedMetricsType: ExpectedMetricsType.Value): Unit = {
-    val optActualMetrics = getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetrics.keySet)
-    optActualMetrics.foreach { actualMetrics =>
-      assert(expectedMetrics.keySet === actualMetrics.keySet)
-      for (nodeId <- expectedMetrics.keySet) {
-        val (expectedNodeName, expectedMetricsMap) = expectedMetrics(nodeId)
-        val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
-        assert(expectedNodeName === actualNodeName)
-        for (metricName <- expectedMetricsMap.keySet) {
-          expectedMetricsType match {
-            case ExpectedMetricsType.VALUE =>
-              assert(expectedMetricsMap(metricName).toString === actualMetricsMap(metricName))
-            case ExpectedMetricsType.PATTERN =>
-              assert(expectedMetricsMap(metricName).asInstanceOf[Pattern].matcher(
-                actualMetricsMap(metricName).toString).matches())
-            case ExpectedMetricsType.PATTERN_STRING =>
-              assert(Pattern.compile(expectedMetricsMap(metricName).toString).matcher(
-                actualMetricsMap(metricName).toString).matches())
-          }
-        }
-      }
-    }
-  }
-
-  /**
    * Call `df.collect()` and verify if the collected metrics are same as "expectedMetrics".
    *
    * @param df `DataFrame` to run
@@ -241,7 +206,44 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       df: DataFrame,
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
-    testSparkPlanMetrics(df, expectedNumOfJobs, expectedMetrics, ExpectedMetricsType.VALUE)
+    val optActualMetrics = getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetrics.keySet)
+    optActualMetrics.foreach { actualMetrics =>
+      assert(expectedMetrics.keySet === actualMetrics.keySet)
+      for (nodeId <- expectedMetrics.keySet) {
+        val (expectedNodeName, expectedMetricsMap) = expectedMetrics(nodeId)
+        val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
+        assert(expectedNodeName === actualNodeName)
+        for (metricName <- expectedMetricsMap.keySet) {
+          assert(expectedMetricsMap(metricName).toString === actualMetricsMap(metricName))
+        }
+      }
+    }
+  }
+
+  /**
+   * Call `df.collect()` and verify if the collected metrics satisfy the specified predicates.
+   * @param df `DataFrame` to run
+   * @param expectedNumOfJobs number of jobs that will run
+   * @param expectedMetricsPredicates the expected metrics predicates. The format is
+   * `nodeId -> (operatorName, metric name -> metric value predicate)`.
+   */
+  protected def testSparkPlanMetricsWithPredicates(
+      df: DataFrame,
+      expectedNumOfJobs: Int,
+      expectedMetricsPredicates: Map[Long, (String, Map[String, Any => Boolean])]): Unit = {
+    val optActualMetrics =
+      getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetricsPredicates.keySet)
+    optActualMetrics.foreach { actualMetrics =>
+      assert(expectedMetricsPredicates.keySet === actualMetrics.keySet)
+      for (nodeId <- expectedMetricsPredicates.keySet) {
+        val (expectedNodeName, expectedMetricsPredicatesMap) = expectedMetricsPredicates(nodeId)
+        val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
+        assert(expectedNodeName === actualNodeName)
+        for (metricName <- expectedMetricsPredicatesMap.keySet) {
+          assert(expectedMetricsPredicatesMap(metricName)(actualMetricsMap(metricName)))
+        }
+      }
+    }
   }
 }
 

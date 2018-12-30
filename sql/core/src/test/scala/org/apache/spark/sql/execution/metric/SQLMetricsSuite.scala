@@ -202,12 +202,12 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     // Because of SPARK-25267, ConvertToLocalRelation is disabled in the test cases of sql/core,
     // so Project here is not collapsed into LocalTableScan.
     val df = Seq(1, 3, 2).toDF("id").sort('id)
-    testSparkPlanMetrics(df, 2, Map(
+    testSparkPlanMetricsWithPredicates(df, 2, Map(
       0L -> (("Sort", Map(
-        "sort time total (min, med, max)" -> timingMetricPattern,
-        "peak memory total (min, med, max)" -> sizeMetricPattern,
-        "spill size total (min, med, max)" -> sizeMetricPattern)))),
-      ExpectedMetricsType.PATTERN)
+        "sort time total (min, med, max)" -> checkPattern(timingMetricPattern),
+        "peak memory total (min, med, max)" -> checkPattern(sizeMetricPattern),
+        "spill size total (min, med, max)" -> checkPattern(sizeMetricPattern))))
+    ))
   }
 
   test("SortMergeJoin metrics") {
