@@ -58,7 +58,6 @@ object PartitionSpec {
 
 object PartitioningUtils {
 
-  val datePartitionPattern = "yyyy-MM-dd"
   val timestampPartitionPattern = "yyyy-MM-dd HH:mm:ss[.S]"
 
   private[datasources] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal])
@@ -124,7 +123,7 @@ object PartitioningUtils {
       Map.empty[String, DataType]
     }
 
-    val dateFormatter = DateFormatter(datePartitionPattern)
+    val dateFormatter = DateFormatter()
     val timestampFormatter = TimestampFormatter(timestampPartitionPattern, timeZone)
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>

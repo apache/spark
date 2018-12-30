@@ -56,7 +56,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
   val timeZone = TimeZone.getDefault()
   val timeZoneId = timeZone.getID
-  val df = DateFormatter(datePartitionPattern)
+  val df = DateFormatter()
   val tf = TimestampFormatter(timestampPartitionPattern, timeZone)
 
   protected override def beforeAll(): Unit = {
