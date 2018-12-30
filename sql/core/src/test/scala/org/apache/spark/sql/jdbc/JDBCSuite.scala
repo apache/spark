@@ -23,7 +23,6 @@ import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -54,6 +53,17 @@ class JDBCSuite extends QueryTest
     override def getCatalystType(
         sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
       Some(StringType)
+  }
+
+  val testH2DialectTinyInt = new JdbcDialect {
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+    override def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder) :
+    Option[DataType] = {
+      sqlType match {
+        case java.sql.Types.TINYINT => Some(ByteType)
+        case _ => None
+      }
+    }
   }
 
   before {
@@ -572,7 +582,7 @@ class JDBCSuite extends QueryTest
     assert(rows.length === 1)
     assert(rows(0).getInt(0) === 1)
     assert(rows(0).getBoolean(1) === false)
-    assert(rows(0).getByte(2) === 3)
+    assert(rows(0).getInt(2) === 3)
     assert(rows(0).getInt(3) === 4)
     assert(rows(0).getLong(4) === 1234567890123L)
   }
@@ -691,6 +701,17 @@ class JDBCSuite extends QueryTest
     assert(rows(0).get(0).isInstanceOf[String])
     assert(rows(0).get(1).isInstanceOf[String])
     JdbcDialects.unregisterDialect(testH2Dialect)
+  }
+
+  test("Map TINYINT to ByteType via JdbcDialects") {
+    JdbcDialects.registerDialect(testH2DialectTinyInt)
+    val df = spark.read.jdbc(urlWithUserAndPass, "test.inttypes", new Properties())
+    val rows = df.collect()
+    assert(rows.length === 2)
+    assert(rows(0).get(2).isInstanceOf[Byte])
+    assert(rows(0).getByte(2) === 3)
+    assert(rows(1).isNullAt(2))
+    JdbcDialects.unregisterDialect(testH2DialectTinyInt)
   }
 
   test("Default jdbc dialect registration") {
