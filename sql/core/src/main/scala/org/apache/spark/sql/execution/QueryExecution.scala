@@ -27,6 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -194,27 +195,16 @@ class QueryExecution(
 
   def simpleString: String = withRedaction {
     val rope = new StringRope()
-
     rope.append("== Physical Plan ==\n")
-    appendOrError(rope.append)(
-      executedPlan.treeString(_, false, false, SQLConf.get.maxToStringFields))
+    QueryPlan.append(executedPlan, rope.append, verbose = false, addSuffix = false)
     rope.append("\n")
-
     rope.toString
-  }
-
-  private def appendOrError(append: String => Unit)(f: (String => Unit) => Unit): Unit = {
-    try f(append)
-    catch {
-      case e: AnalysisException => append(e.toString)
-    }
   }
 
   private def writePlans(append: String => Unit, maxFields: Int): Unit = {
     val (verbose, addSuffix) = (true, false)
-
     append("== Parsed Logical Plan ==\n")
-    appendOrError(append)(logical.treeString(_, verbose, addSuffix, maxFields))
+    QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
     append("\n== Analyzed Logical Plan ==\n")
     val analyzedOutput = try {
       truncatedString(
@@ -224,16 +214,15 @@ class QueryExecution(
     }
     append(analyzedOutput)
     append("\n")
-    appendOrError(append)(analyzed.treeString(_, verbose, addSuffix, maxFields))
+    QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
     append("\n== Optimized Logical Plan ==\n")
-    appendOrError(append)(optimizedPlan.treeString(_, verbose, addSuffix, maxFields))
+    QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
     append("\n== Physical Plan ==\n")
-    appendOrError(append)(executedPlan.treeString(_, verbose, addSuffix, maxFields))
+    QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
   }
 
   override def toString: String = withRedaction {
     val rope = new StringRope()
-
     writePlans(rope.append, SQLConf.get.maxToStringFields)
     rope.toString
   }
@@ -247,11 +236,10 @@ class QueryExecution(
 
     // only show optimized logical plan and physical plan
     rope.append("== Optimized Logical Plan ==\n")
-    appendOrError(rope.append)(optimizedPlan.treeString(_, true, true, maxFields))
+    QueryPlan.append(optimizedPlan, rope.append, verbose = true, addSuffix = true, maxFields)
     rope.append("\n== Physical Plan ==\n")
-    appendOrError(rope.append)(executedPlan.treeString(_, true, false, maxFields))
+    QueryPlan.append(executedPlan, rope.append, verbose = true, addSuffix = false, maxFields)
     rope.append("\n")
-
     rope.toString
   }
 
