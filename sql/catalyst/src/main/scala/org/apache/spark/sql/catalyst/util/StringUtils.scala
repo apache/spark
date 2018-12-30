@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.{Pattern, PatternSyntaxException}
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -93,7 +95,7 @@ object StringUtils {
    * and one memory allocation for the final string.
    */
   class StringRope {
-    private var list = List.empty[String]
+    private val rope = new ArrayBuffer[String]
     private var length: Int = 0
 
     /**
@@ -102,7 +104,7 @@ object StringUtils {
      */
     def append(s: String): Unit = {
       if (s != null) {
-        list = s :: list
+        rope.append(s)
         length += s.length
       }
     }
@@ -113,13 +115,8 @@ object StringUtils {
      */
     override def toString: String = {
       val buffer = new StringBuffer(length)
-      var reversed = list.reverse
 
-      while (!reversed.isEmpty) {
-        buffer.append(reversed.head)
-        reversed = reversed.tail
-      }
-
+      rope.foreach(buffer.append)
       buffer.toString
     }
   }
