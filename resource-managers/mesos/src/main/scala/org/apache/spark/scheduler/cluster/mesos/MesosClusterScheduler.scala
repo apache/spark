@@ -531,7 +531,7 @@ private[spark] class MesosClusterScheduler(
     desc.conf.getOption(EXECUTOR_MEMORY.key).foreach { v =>
       options ++= Seq("--executor-memory", v)
     }
-    desc.conf.get(CORES_MAX).foreach { v =>
+    desc.conf.getOption(CORES_MAX.key).foreach { v =>
       options ++= Seq("--total-executor-cores", v)
     }
     desc.conf.getOption("spark.submit.pyFiles").foreach { pyFiles =>
