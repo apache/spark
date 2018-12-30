@@ -47,7 +47,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     ExecutionContext.fromExecutorService(requestExecutorsService)
 
   protected override val minRegisteredRatio =
-    if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
+    if (conf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).isEmpty) {
       0.8
     } else {
       super.minRegisteredRatio

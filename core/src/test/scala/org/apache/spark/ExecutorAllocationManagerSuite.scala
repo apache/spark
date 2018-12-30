@@ -25,6 +25,7 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ExternalClusterManager
@@ -63,19 +64,19 @@ class ExecutorAllocationManagerSuite
     val conf = new SparkConf()
       .setMaster("myDummyLocalExternalClusterManager")
       .setAppName("test-executor-allocation-manager")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_TESTING, true)
     val sc0 = new SparkContext(conf)
     contexts += sc0
     assert(sc0.executorAllocationManager.isDefined)
     sc0.stop()
 
     // Min < 0
-    val conf1 = conf.clone().set("spark.dynamicAllocation.minExecutors", "-1")
+    val conf1 = conf.clone().set(DYN_ALLOCATION_MIN_EXECUTORS, -1)
     intercept[SparkException] { contexts += new SparkContext(conf1) }
 
     // Max < 0
-    val conf2 = conf.clone().set("spark.dynamicAllocation.maxExecutors", "-1")
+    val conf2 = conf.clone().set(DYN_ALLOCATION_MAX_EXECUTORS, -1)
     intercept[SparkException] { contexts += new SparkContext(conf2) }
 
     // Both min and max, but min > max
@@ -151,11 +152,11 @@ class ExecutorAllocationManagerSuite
     val conf = new SparkConf()
       .setMaster("myDummyLocalExternalClusterManager")
       .setAppName("test-executor-allocation-manager")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
-      .set("spark.dynamicAllocation.maxExecutors", "15")
-      .set("spark.dynamicAllocation.minExecutors", "3")
-      .set("spark.dynamicAllocation.executorAllocationRatio", divisor.toString)
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_TESTING, true)
+      .set(DYN_ALLOCATION_MAX_EXECUTORS, 15)
+      .set(DYN_ALLOCATION_MIN_EXECUTORS, 3)
+      .set(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO, divisor)
       .set(config.EXECUTOR_CORES, cores)
     val sc = new SparkContext(conf)
     contexts += sc
@@ -1093,14 +1094,14 @@ class ExecutorAllocationManagerSuite
     val initialExecutors = 1
     val maxExecutors = 2
     val conf = new SparkConf()
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
-      .set("spark.dynamicAllocation.minExecutors", minExecutors.toString)
-      .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
-      .set("spark.dynamicAllocation.initialExecutors", initialExecutors.toString)
-      .set("spark.dynamicAllocation.schedulerBacklogTimeout", "1000ms")
-      .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout", "1000ms")
-      .set("spark.dynamicAllocation.executorIdleTimeout", s"3000ms")
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(DYN_ALLOCATION_MIN_EXECUTORS, minExecutors)
+      .set(DYN_ALLOCATION_MAX_EXECUTORS, maxExecutors)
+      .set(DYN_ALLOCATION_INITIAL_EXECUTORS, initialExecutors)
+      .set(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT.key, "1000ms")
+      .set(DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key, "1000ms")
+      .set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "3000ms")
     val mockAllocationClient = mock(classOf[ExecutorAllocationClient])
     val mockBMM = mock(classOf[BlockManagerMaster])
     val manager = new ExecutorAllocationManager(
@@ -1155,16 +1156,15 @@ class ExecutorAllocationManagerSuite
     val conf = new SparkConf()
       .setMaster("myDummyLocalExternalClusterManager")
       .setAppName("test-executor-allocation-manager")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.minExecutors", minExecutors.toString)
-      .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
-      .set("spark.dynamicAllocation.initialExecutors", initialExecutors.toString)
-      .set("spark.dynamicAllocation.schedulerBacklogTimeout",
-          s"${schedulerBacklogTimeout.toString}s")
-      .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout",
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_MIN_EXECUTORS, minExecutors)
+      .set(DYN_ALLOCATION_MAX_EXECUTORS, maxExecutors)
+      .set(DYN_ALLOCATION_INITIAL_EXECUTORS, initialExecutors)
+      .set(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT.key, s"${schedulerBacklogTimeout.toString}s")
+      .set(DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key,
         s"${sustainedSchedulerBacklogTimeout.toString}s")
-      .set("spark.dynamicAllocation.executorIdleTimeout", s"${executorIdleTimeout.toString}s")
-      .set("spark.dynamicAllocation.testing", "true")
+      .set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, s"${executorIdleTimeout.toString}s")
+      .set(DYN_ALLOCATION_TESTING, true)
       // SPARK-22864: effectively disable the allocation schedule by setting the period to a
       // really long value.
       .set(TEST_SCHEDULE_INTERVAL, 10000L)

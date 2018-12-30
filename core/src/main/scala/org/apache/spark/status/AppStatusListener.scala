@@ -434,7 +434,7 @@ private[spark] class AppStatusListener(
     val stage = getOrCreateStage(event.stageInfo)
     stage.status = v1.StageStatus.ACTIVE
     stage.schedulingPool = Option(event.properties).flatMap { p =>
-      Option(p.getProperty("spark.scheduler.pool"))
+      Option(p.getProperty(SparkContext.SPARK_SCHEDULER_POOL))
     }.getOrElse(SparkUI.DEFAULT_POOL_NAME)
 
     // Look at all active jobs to find the ones that mention this stage.

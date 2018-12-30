@@ -226,7 +226,7 @@ private[hive] class SparkExecuteStatementOperation(
     sqlContext.sparkContext.setJobGroup(statementId, statement)
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
     if (pool != null) {
-      sqlContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
+      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
     }
     try {
       result = sqlContext.sql(statement)
@@ -234,7 +234,8 @@ private[hive] class SparkExecuteStatementOperation(
       result.queryExecution.logical match {
         case SetCommand(Some((SQLConf.THRIFTSERVER_POOL.key, Some(value)))) =>
           sessionToActivePool.put(parentSession.getSessionHandle, value)
-          logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
+          logInfo(s"Setting ${SparkContext.SPARK_SCHEDULER_POOL}=$value for future statements " +
+            "in this session.")
         case _ =>
       }
       HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())

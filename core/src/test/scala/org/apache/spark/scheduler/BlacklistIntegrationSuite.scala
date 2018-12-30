@@ -21,6 +21,7 @@ import scala.concurrent.duration._
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests._
+import org.apache.spark.internal.config.UNSCHEDULABLE_TASKSET_TIMEOUT
 
 class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend]{
 
@@ -102,11 +103,10 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
-      config.BLACKLIST_ENABLED.key -> "true",
       TEST_N_HOSTS.key -> "2",
       TEST_N_EXECUTORS_HOST.key -> "1",
       TEST_N_CORES_EXECUTOR.key -> "1",
-      "spark.scheduler.blacklist.unschedulableTaskSetTimeout" -> "0s"
+      UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0s"
     )
   ) {
     def runBackend(): Unit = {

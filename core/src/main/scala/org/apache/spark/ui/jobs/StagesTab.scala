@@ -19,6 +19,7 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.StageStatus
@@ -40,7 +41,7 @@ private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
     store
       .environmentInfo()
       .sparkProperties
-      .contains(("spark.scheduler.mode", SchedulingMode.FAIR.toString))
+      .contains((SCHEDULER_MODE, SchedulingMode.FAIR.toString))
   }
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
