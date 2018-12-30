@@ -44,16 +44,16 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(filterPattern(names, " d* ") === Nil)
   }
 
-  test("string rope") {
-    def toRope(seq: String*): String = {
-      seq.foldLeft(new StringConcat())((rope, s) => {rope.append(s); rope}).toString
+  test("string concatenation") {
+    def concat(seq: String*): String = {
+      seq.foldLeft(new StringConcat())((acc, s) => {acc.append(s); acc}).toString
     }
 
     assert(new StringConcat().toString == "")
-    assert(toRope("") == "")
-    assert(toRope(null) == "")
-    assert(toRope("a") == "a")
-    assert(toRope("1", "2") == "12")
-    assert(toRope("abc", "\n", "123") == "abc\n123")
+    assert(concat("") == "")
+    assert(concat(null) == "")
+    assert(concat("a") == "a")
+    assert(concat("1", "2") == "12")
+    assert(concat("abc", "\n", "123") == "abc\n123")
   }
 }
