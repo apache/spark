@@ -139,13 +139,13 @@ class Catalog(object):
         return columns
 
     @ignore_unicode_prefix
-    @since(2.4)
+    @since(3.0)
     def databaseExists(self, dbName):
         """Check if the database with the specified name exists."""
         return self._jcatalog.databaseExists(dbName)
 
     @ignore_unicode_prefix
-    @since(2.4)
+    @since(3.0)
     def functionExists(self, functionName, dbName=None):
         """Check if the function with the specified name exists.
 
@@ -156,7 +156,7 @@ class Catalog(object):
         return self._jcatalog.functionExists(dbName, functionName)
 
     @ignore_unicode_prefix
-    @since(2.4)
+    @since(3.0)
     def tableExists(self, tableName, dbName=None):
         """Check if the table or view with the specified name exists.
 
@@ -167,7 +167,7 @@ class Catalog(object):
         return self._jcatalog.tableExists(dbName, tableName)
 
     @ignore_unicode_prefix
-    @since(2.4)
+    @since(3.0)
     def getDatabase(self, dbName):
         """Get the database with the specified name."""
         database = self._jcatalog.getDatabase(dbName)
@@ -177,7 +177,7 @@ class Catalog(object):
             locationUri=database.locationUri())
 
     @ignore_unicode_prefix
-    @since(2.4)
+    @since(3.0)
     def getTable(self, tableName, dbName=None):
         """Get the table or view with the specified name.
 
@@ -194,7 +194,7 @@ class Catalog(object):
             isTemporary=table.isTemporary())
 
     @ignore_unicode_prefix
-    @since(2.4)
+    @since(3.0)
     def getFunction(self, functionName, dbName=None):
         """Get the function with the specified name.
 

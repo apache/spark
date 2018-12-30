@@ -187,6 +187,84 @@ class CatalogTests(ReusedSQLTestCase):
                     "does_not_exist",
                     lambda: spark.catalog.listColumns("does_not_exist"))
 
+    def test_database_exists(self):
+        spark = self.spark
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            self.assertTrue(spark.catalog.databaseExists('some_db'))
+            self.assertFalse(spark.catalog.databaseExists('some_other_db'))
+
+    def test_function_exists(self):
+        spark = self.spark
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            with self.function("func1", "some_db.func2"):
+                spark.catalog.registerFunction("temp_func", lambda x: str(x))
+                spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
+                spark.sql(
+                    "CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'")
+                self.assertTrue(spark.catalog.functionExists('func1'))
+                self.assertTrue(spark.catalog.functionExists('func2', 'some_db'))
+                self.assertFalse(spark.catalog.functionExists('func2'))
+                self.assertFalse(spark.catalog.functionExists('does_not_exist'))
+
+    def test_table_exists(self):
+        spark = self.spark
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")
+            with self.table("tab1", "some_db.tab2"):
+                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+                spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
+                self.assertTrue(spark.catalog.tableExists('tab1'))
+                self.assertTrue(spark.catalog.tableExists('tab2', 'some_db'))
+                self.assertFalse(spark.catalog.tableExists('tab2'))
+                self.assertFalse(spark.catalog.tableExists('does_not_exist'))
+
+    def test_get_database(self):
+        spark = self.spark
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            table = spark.catalog.getDatabase('some_db')
+            self.assertEqual(table.name, 'some_db')
+            self.assertEqual(table.description, '')
+            self.assertRaisesRegexp(
+                AnalysisException,
+                "does_not_exist",
+                lambda: spark.catalog.getDatabase("does_not_exist"))
+
+    def test_get_table(self):
+        from pyspark.sql.catalog import Table
+        spark = self.spark
+        with self.table("tab1"):
+            spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+            self.assertEquals(spark.catalog.getTable('tab1'), Table(
+                name="tab1",
+                database="default",
+                description=None,
+                tableType="MANAGED",
+                isTemporary=False))
+            self.assertRaisesRegexp(
+                AnalysisException,
+                "does_not_exist",
+                lambda: spark.catalog.getTable("does_not_exist"))
+
+    def test_get_function(self):
+        from pyspark.sql.catalog import Function
+        spark = self.spark
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            with self.function("some_db.func2"):
+                spark.sql("CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'")
+                self.assertEquals(spark.catalog.getFunction('func2', 'some_db'), Function(
+                    name="func2",
+                    description=None,
+                    className="org.apache.spark.data.bricks",
+                    isTemporary=False))
+                self.assertRaisesRegexp(
+                    AnalysisException,
+                    "does_not_exist",
+                    lambda: spark.catalog.getFunction("does_not_exist"))
 
 if __name__ == "__main__":
     import unittest
