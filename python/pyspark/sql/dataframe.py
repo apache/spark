@@ -2045,7 +2045,46 @@ class DataFrame(object):
         """
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
+    
+    @since(2.5)
+    def transform(self, func, *args, **kwargs):
+        """Returns a new class:`DataFrame` according to a user-defined custom transform method.
+        This allows chaining transformations rather than using nested or temporary variables.
+        
+        :param func: a user-defined custom transform function
+        :param *args: optional positional arguments to pass to `func`
+        :param **kwargs: optional keywarded arguments to pass to `func`
+        
+        A more concrete example::
 
+            def with_greeting(df):
+               return df.withColumn("greeting", lit("hi"))
+            def with_something(df, something):
+                return df.withColumn("something", lit(something))
+
+            data = [("jose", 1), ("li", 2), ("liz", 3)]
+            source_df = spark.createDataFrame(data, ["name", "age"])
+
+            actual_df = (source_df
+                .transform(with_greeting)
+                .transform(with_something, "crazy"))
+            print(actual_df.show())
+            +----+---+--------+---------+
+            |name|age|greeting|something|
+            +----+---+--------+---------+
+            |jose|  1|      hi|    crazy|
+            |  li|  2|      hi|    crazy|
+            | liz|  3|      hi|    crazy|
+            +----+---+--------+---------+
+        
+        This is equiavalent to a nested:
+            actual_df = with_something(with_greeting(source_df), "crazy"))
+
+            
+        credit to: https://medium.com/@mrpowers/chaining-custom-pyspark-transformations-4f38a8c7ae55
+        """
+        return func(self, *args, **kwargs)
+    
     @since(1.3)
     def toPandas(self):
         """
