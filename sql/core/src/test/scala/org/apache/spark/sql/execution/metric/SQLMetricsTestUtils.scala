@@ -223,8 +223,8 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
           <- expectedMetricsPredicates) {
         val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
         assert(expectedNodeName === actualNodeName)
-        for (metricName <- expectedMetricsPredicatesMap.keySet) {
-          assert(expectedMetricsPredicatesMap(metricName)(actualMetricsMap(metricName)))
+        for ((metricName, metricPredicate) <- expectedMetricsPredicatesMap) {
+          assert(metricPredicate(actualMetricsMap(metricName)))
         }
       }
     }
