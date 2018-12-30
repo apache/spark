@@ -37,6 +37,7 @@ import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
@@ -103,7 +104,7 @@ private[deploy] class Worker(
   private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
     conf.getBoolean("spark.storage.cleanupFilesAfterExecutorExit", true)
 
-  private val testing: Boolean = sys.props.contains("spark.testing")
+  private val testing: Boolean = sys.props.contains(IS_TESTING.key)
   private var master: Option[RpcEndpointRef] = None
 
   /**

@@ -26,6 +26,7 @@ import scala.reflect.ClassTag
 import org.scalatest._
 
 import org.apache.spark._
+import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS
 import org.apache.spark.memory.{MemoryMode, StaticMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
@@ -39,7 +40,7 @@ class MemoryStoreSuite
   with ResetSystemProperties {
 
   var conf: SparkConf = new SparkConf(false)
-    .set("spark.test.useCompressedOops", "true")
+    .set(TEST_USE_COMPRESSED_OOPS, true)
     .set("spark.storage.unrollFraction", "0.4")
     .set("spark.storage.unrollMemoryThreshold", "512")
 

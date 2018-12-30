@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS
 
 class DummyClass1 {}
 
@@ -76,7 +77,7 @@ class SizeEstimatorSuite
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     super.beforeEach()
     System.setProperty("os.arch", "amd64")
-    System.setProperty("spark.test.useCompressedOops", "true")
+    System.setProperty(TEST_USE_COMPRESSED_OOPS.key, "true")
   }
 
   override def afterEach(): Unit = {
@@ -192,7 +193,7 @@ class SizeEstimatorSuite
   // (Sun vs IBM). Use a DummyString class to make tests deterministic.
   test("64-bit arch with no compressed oops") {
     System.setProperty("os.arch", "amd64")
-    System.setProperty("spark.test.useCompressedOops", "false")
+    System.setProperty(TEST_USE_COMPRESSED_OOPS.key, "false")
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
 
