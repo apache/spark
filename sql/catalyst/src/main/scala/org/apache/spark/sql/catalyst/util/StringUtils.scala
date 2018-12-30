@@ -88,10 +88,18 @@ object StringUtils {
     funcNames.toSeq
   }
 
+  /**
+   * Concatenation of sequence of strings to final string with cheap append method
+   * and one memory allocation for the final string.
+   */
   class StringRope {
     private var list = List.empty[String]
     private var length: Int = 0
 
+    /**
+     * Appends a string and accumulates its length to allocate a string buffer for all
+     * appended strings once in the toString method.
+     */
     def append(s: String): Unit = {
       if (s != null) {
         list = s :: list
@@ -99,6 +107,10 @@ object StringUtils {
       }
     }
 
+    /**
+     * The method allocates memory for all appended strings, writes them to the memory and
+     * returns concatenated string.
+     */
     override def toString: String = {
       val buffer = new StringBuffer(length)
       var reversed = list.reverse
