@@ -29,6 +29,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, Encoders, Row}
+import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -177,11 +178,21 @@ class StringIndexer @Since("1.4.0") (
       dataset: Dataset[_],
       inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
 
-    val inputColTypes = inputCols.map(dataset.col(_).expr.dataType)
-    val aggregator = new StringIndexerAggregator(inputCols.length, inputColTypes)
+    val aggregator = new StringIndexerAggregator(inputCols.length)
     implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
 
-    dataset.select(inputCols.map(col(_).cast(StringType)): _*)
+    val selectedCols = inputCols.map { colName =>
+      val col = dataset.col(colName)
+      if (col.expr.dataType == StringType) {
+        col
+      } else {
+        // We don't count for NaN values. Because `StringIndexerAggregator` only processes strings,
+        // we replace NaNs with null in advance.
+        new Column(If(col.isNaN.expr, Literal(null), col.expr)).cast(StringType)
+      }
+    }
+
+    dataset.select(selectedCols: _*)
       .toDF
       .groupBy().agg(aggregator.toColumn)
       .as[Array[OpenHashMap[String, Long]]]
@@ -607,7 +618,7 @@ object IndexToString extends DefaultParamsReadable[IndexToString] {
 /**
  * A SQL `Aggregator` used by `StringIndexer` to count labels in string columns during fitting.
  */
-private class StringIndexerAggregator(numColumns: Int, inputColTypes: Seq[DataType])
+private class StringIndexerAggregator(numColumns: Int)
   extends Aggregator[Row, Array[OpenHashMap[String, Long]], Array[OpenHashMap[String, Long]]] {
 
   override def zero: Array[OpenHashMap[String, Long]] =
@@ -618,10 +629,8 @@ private class StringIndexerAggregator(numColumns: Int, inputColTypes: Seq[DataTy
       row: Row): Array[OpenHashMap[String, Long]] = {
     for (i <- 0 until numColumns) {
       val stringValue = row.getString(i)
-      // We don't count for null and NaN values.
-      // For NaN values, because the values in the row are converted to string before aggregation,
-      // we skip for `NaN` string if the original column type is not string type.
-      if (stringValue != null && (inputColTypes(i) == StringType || stringValue != "NaN")) {
+      // We don't count for null values.
+      if (stringValue != null) {
         array(i).changeValue(stringValue, 1L, _ + 1)
       }
     }
