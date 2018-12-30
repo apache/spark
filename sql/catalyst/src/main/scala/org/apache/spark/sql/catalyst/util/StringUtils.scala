@@ -94,8 +94,8 @@ object StringUtils {
    * Concatenation of sequence of strings to final string with cheap append method
    * and one memory allocation for the final string.
    */
-  class StringRope {
-    private val rope = new ArrayBuffer[String]
+  class StringConcat {
+    private val strings = new ArrayBuffer[String]
     private var length: Int = 0
 
     /**
@@ -104,7 +104,7 @@ object StringUtils {
      */
     def append(s: String): Unit = {
       if (s != null) {
-        rope.append(s)
+        strings.append(s)
         length += s.length
       }
     }
@@ -114,10 +114,9 @@ object StringUtils {
      * returns concatenated string.
      */
     override def toString: String = {
-      val buffer = new StringBuffer(length)
-
-      rope.foreach(buffer.append)
-      buffer.toString
+      val result = new StringBuffer(length)
+      strings.foreach(result.append)
+      result.toString
     }
   }
 }

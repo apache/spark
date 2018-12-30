@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.StringUtils.StringRope
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
@@ -71,10 +71,9 @@ package object debug {
    * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
   def codegenString(plan: SparkPlan): String = {
-    val rope = new StringRope()
-
-    writeCodegen(rope.append, plan)
-    rope.toString
+    val concat = new StringConcat()
+    writeCodegen(concat.append, plan)
+    concat.toString
   }
 
   def writeCodegen(append: String => Unit, plan: SparkPlan): Unit = {

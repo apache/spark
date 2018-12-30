@@ -46,10 +46,10 @@ class StringUtilsSuite extends SparkFunSuite {
 
   test("string rope") {
     def toRope(seq: String*): String = {
-      seq.foldLeft(new StringRope())((rope, s) => {rope.append(s); rope}).toString
+      seq.foldLeft(new StringConcat())((rope, s) => {rope.append(s); rope}).toString
     }
 
-    assert(new StringRope().toString == "")
+    assert(new StringConcat().toString == "")
     assert(toRope("") == "")
     assert(toRope(null) == "")
     assert(toRope("a") == "a")

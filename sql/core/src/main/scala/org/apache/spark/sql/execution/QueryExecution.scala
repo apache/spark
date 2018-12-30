@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.StringUtils.StringRope
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
@@ -194,11 +194,11 @@ class QueryExecution(
   }
 
   def simpleString: String = withRedaction {
-    val rope = new StringRope()
-    rope.append("== Physical Plan ==\n")
-    QueryPlan.append(executedPlan, rope.append, verbose = false, addSuffix = false)
-    rope.append("\n")
-    rope.toString
+    val concat = new StringConcat()
+    concat.append("== Physical Plan ==\n")
+    QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
+    concat.append("\n")
+    concat.toString
   }
 
   private def writePlans(append: String => Unit, maxFields: Int): Unit = {
@@ -222,25 +222,25 @@ class QueryExecution(
   }
 
   override def toString: String = withRedaction {
-    val rope = new StringRope()
-    writePlans(rope.append, SQLConf.get.maxToStringFields)
-    rope.toString
+    val concat = new StringConcat()
+    writePlans(concat.append, SQLConf.get.maxToStringFields)
+    concat.toString
   }
 
   def stringWithStats: String = withRedaction {
-    val rope = new StringRope()
+    val concat = new StringConcat()
     val maxFields = SQLConf.get.maxToStringFields
 
     // trigger to compute stats for logical plans
     optimizedPlan.stats
 
     // only show optimized logical plan and physical plan
-    rope.append("== Optimized Logical Plan ==\n")
-    QueryPlan.append(optimizedPlan, rope.append, verbose = true, addSuffix = true, maxFields)
-    rope.append("\n== Physical Plan ==\n")
-    QueryPlan.append(executedPlan, rope.append, verbose = true, addSuffix = false, maxFields)
-    rope.append("\n")
-    rope.toString
+    concat.append("== Optimized Logical Plan ==\n")
+    QueryPlan.append(optimizedPlan, concat.append, verbose = true, addSuffix = true, maxFields)
+    concat.append("\n== Physical Plan ==\n")
+    QueryPlan.append(executedPlan, concat.append, verbose = true, addSuffix = false, maxFields)
+    concat.append("\n")
+    concat.toString
   }
 
   /**
