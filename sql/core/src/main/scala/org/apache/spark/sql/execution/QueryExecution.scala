@@ -211,16 +211,17 @@ class QueryExecution(
   }
 
   private def writePlans(append: String => Unit, maxFields: Int): Unit = {
-    def stringOrError[A](f: => A): String = {
-      try f.toString catch { case e: AnalysisException => e.toString }
-    }
     val (verbose, addSuffix) = (true, false)
 
     append("== Parsed Logical Plan ==\n")
     appendOrError(append)(logical.treeString(_, verbose, addSuffix, maxFields))
     append("\n== Analyzed Logical Plan ==\n")
-    val analyzedOutput = stringOrError(truncatedString(
-      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields))
+    val analyzedOutput = try {
+      truncatedString(
+        analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+    } catch {
+      case e: AnalysisException => e.toString
+    }
     append(analyzedOutput)
     append("\n")
     appendOrError(append)(analyzed.treeString(_, verbose, addSuffix, maxFields))
