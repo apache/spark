@@ -422,10 +422,14 @@ class RelationalGroupedDataset protected[sql](
   def pivot(pivotColumn: Column, values: Seq[Any]): RelationalGroupedDataset = {
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
-        val valueExprs = values.map(_ match {
+        val valueExprs = values.map {
           case c: Column => c.expr
+          // ArrayType returns a `WrappedArray` but currently `Literal.apply`
+          // does not support this type although it supports a normal array.
+          // Here manually unwrap to make it an array. See also SPARK-26403.
+          case v: collection.mutable.WrappedArray[_] => Literal.apply(v.array)
           case v => Literal.apply(v)
-        })
+        }
         new RelationalGroupedDataset(
           df,
           groupingExprs,
