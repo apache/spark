@@ -2641,20 +2641,4 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       }
     }
   }
-
-  test("roundtrip for timestamps before 1582") {
-    withTempDir { dir =>
-      val path = dir.getCanonicalPath
-
-      val rdd = spark.sparkContext.parallelize(Seq(Row(-53244249607L)))
-      val schema = new StructType().add("col", LongType)
-      val ts = spark.createDataFrame(rdd, schema)
-      val df = ts.select($"col".cast(TimestampType).as("col"))
-
-      df.write.json(path)
-      val readback = spark.read.schema(df.schema).json(path)
-
-      checkAnswer(df, readback)
-    }
-  }
 }
