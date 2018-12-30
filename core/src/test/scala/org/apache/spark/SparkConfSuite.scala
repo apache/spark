@@ -232,7 +232,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("deprecated configs") {
     val conf = new SparkConf()
-    val newName = "spark.history.fs.update.interval"
+    val newName = UPDATE_INTERVAL_S.key
 
     assert(!conf.contains(newName))
 
