@@ -22,6 +22,7 @@ import java.util.{Locale, NoSuchElementException, Properties}
 
 import scala.util.control.NonFatal
 import scala.xml.{Node, XML}
+
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SCHEDULER_ALLOCATION_FILE
