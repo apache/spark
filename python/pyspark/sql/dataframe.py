@@ -2078,7 +2078,7 @@ class DataFrame(object):
         +----+---+--------+---------+
         <BLANKLINE>
         """
-        return func(self, *args, **kwargs)
+        return func(self)
 
     @since(1.3)
     def toPandas(self):
