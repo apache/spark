@@ -2047,13 +2047,11 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     @since(3.0)
-    def transform(self, func, *args, **kwargs):
+    def transform(self, func):
         """Returns a new class:`DataFrame` according to a user-defined custom transform method.
         This allows chaining transformations rather than using nested or temporary variables.
 
         :param func: a user-defined custom transform function
-        :param *args: optional positional arguments to pass to `func`
-        :param **kwargs: optional keywarded arguments to pass to `func`
         This is equiavalent to a nested call:
             actual_df = with_something(with_greeting(source_df), "crazy"))
 
@@ -2069,7 +2067,7 @@ class DataFrame(object):
         ...     return df.withColumn("something", lit(something))
         >>> data = [("jose", 1), ("li", 2), ("liz", 3)]
         >>> source_df = spark.createDataFrame(data, ["name", "age"])
-        >>> actual_df = source_df.transform(with_greeting).transform(with_something, "crazy")
+        >>> actual_df = source_df.transform(with_greeting).transform(lambda x: with_something(x, "crazy"))
         >>> actual_df.show()
         +----+---+--------+---------+
         |name|age|greeting|something|
