@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
  */
 class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
-    this(expressions.map(BindReferences.bindReference(_, inputSchema)))
+    this(toBoundExprs(expressions, inputSchema))
 
   override def initialize(partitionIndex: Int): Unit = {
     expressions.foreach(_.foreach {

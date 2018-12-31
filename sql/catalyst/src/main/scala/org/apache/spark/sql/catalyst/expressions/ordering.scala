@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
 class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
-    this(ordering.map(BindReferences.bindReference(_, inputSchema)))
+    this(toBoundExprs(ordering, inputSchema))
 
   def compare(a: InternalRow, b: InternalRow): Int = {
     var i = 0

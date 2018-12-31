@@ -316,9 +316,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
 
-  protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] = {
+  protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
     toBoundExprs(in, inputSchema)
-  }
 
   def generate(
       expressions: Seq[Expression],
