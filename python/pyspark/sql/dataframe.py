@@ -2045,7 +2045,7 @@ class DataFrame(object):
         """
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
-    
+
     @since(3.0)
     def transform(self, func, *args, **kwargs):
         """Returns a new class:`DataFrame` according to a user-defined custom transform method.
