@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.{Pattern, PatternSyntaxException}
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -86,5 +88,35 @@ object StringUtils {
       }
     }
     funcNames.toSeq
+  }
+
+  /**
+   * Concatenation of sequence of strings to final string with cheap append method
+   * and one memory allocation for the final string.
+   */
+  class StringConcat {
+    private val strings = new ArrayBuffer[String]
+    private var length: Int = 0
+
+    /**
+     * Appends a string and accumulates its length to allocate a string buffer for all
+     * appended strings once in the toString method.
+     */
+    def append(s: String): Unit = {
+      if (s != null) {
+        strings.append(s)
+        length += s.length
+      }
+    }
+
+    /**
+     * The method allocates memory for all appended strings, writes them to the memory and
+     * returns concatenated string.
+     */
+    override def toString: String = {
+      val result = new java.lang.StringBuilder(length)
+      strings.foreach(result.append)
+      result.toString
+    }
   }
 }
