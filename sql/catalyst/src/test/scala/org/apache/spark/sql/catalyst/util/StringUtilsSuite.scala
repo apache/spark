@@ -43,4 +43,17 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(filterPattern(names, " a. ") === Seq("a1", "a2"))
     assert(filterPattern(names, " d* ") === Nil)
   }
+
+  test("string concatenation") {
+    def concat(seq: String*): String = {
+      seq.foldLeft(new StringConcat())((acc, s) => {acc.append(s); acc}).toString
+    }
+
+    assert(new StringConcat().toString == "")
+    assert(concat("") == "")
+    assert(concat(null) == "")
+    assert(concat("a") == "a")
+    assert(concat("1", "2") == "12")
+    assert(concat("abc", "\n", "123") == "abc\n123")
+  }
 }
