@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.CPUS_PER_TASK
 
 class RuntimeConfigSuite extends SparkFunSuite {
 
@@ -63,7 +64,7 @@ class RuntimeConfigSuite extends SparkFunSuite {
     assert(!conf.isModifiable("spark.sql.sources.schemaStringLengthThreshold"))
     assert(conf.isModifiable("spark.sql.streaming.checkpointLocation"))
     // Core configs
-    assert(!conf.isModifiable("spark.task.cpus"))
+    assert(!conf.isModifiable(CPUS_PER_TASK.key))
     assert(!conf.isModifiable("spark.executor.cores"))
     // Invalid config parameters
     assert(!conf.isModifiable(""))

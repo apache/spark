@@ -338,10 +338,35 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val MAX_TASK_MAX_DIRECT_RESULT_SIZE =
+    ConfigBuilder("spark.task.maxDirectResultSize")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(1L << 20)
+
   private[spark] val MAX_TASK_FAILURES =
     ConfigBuilder("spark.task.maxFailures")
       .intConf
       .createWithDefault(4)
+
+  private[spark] val TASK_REAPER_ENABLED =
+    ConfigBuilder("spark.task.reaper.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val TASK_REAPER_KILL_TIMEOUT =
+    ConfigBuilder("spark.task.reaper.killTimeout")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(-1)
+
+  private[spark] val TASK_REAPER_POLLING_INTERVAL =
+    ConfigBuilder("spark.task.reaper.pollingInterval")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10s")
+
+  private[spark] val TASK_REAPER_THREAD_DUMP =
+    ConfigBuilder("spark.task.reaper.threadDump")
+      .booleanConf
+      .createWithDefault(true)
 
   // Blacklist confs
   private[spark] val BLACKLIST_ENABLED =

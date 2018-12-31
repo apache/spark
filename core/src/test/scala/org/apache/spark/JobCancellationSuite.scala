@@ -28,7 +28,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 
 import org.apache.spark.internal.config.Deploy._
-import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE}
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.ThreadUtils
 
@@ -218,8 +218,8 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
   test("task reaper kills JVM if killed tasks keep running for too long") {
     val conf = new SparkConf()
-      .set("spark.task.reaper.enabled", "true")
-      .set("spark.task.reaper.killTimeout", "5s")
+      .set(TASK_REAPER_ENABLED, true)
+      .set(TASK_REAPER_KILL_TIMEOUT.key, "5s")
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 
     // Add a listener to release the semaphore once any tasks are launched.
@@ -255,9 +255,9 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
   test("task reaper will not kill JVM if spark.task.killTimeout == -1") {
     val conf = new SparkConf()
-      .set("spark.task.reaper.enabled", "true")
-      .set("spark.task.reaper.killTimeout", "-1")
-      .set("spark.task.reaper.PollingInterval", "1s")
+      .set(TASK_REAPER_ENABLED, true)
+      .set(TASK_REAPER_KILL_TIMEOUT.key, "-1")
+      .set(TASK_REAPER_POLLING_INTERVAL.key, "1s")
       .set(MAX_EXECUTOR_RETRIES, 1)
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 

@@ -142,7 +142,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   test("creating SparkContext with cpus per tasks bigger than cores per executors") {
     val conf = new SparkConf(false)
       .set(EXECUTOR_CORES, 1)
-      .set("spark.task.cpus", "2")
+      .set(CPUS_PER_TASK, 2)
     intercept[SparkException] { sc = new SparkContext(conf) }
   }
 

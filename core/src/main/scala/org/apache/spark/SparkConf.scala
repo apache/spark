@@ -576,12 +576,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains(EXECUTOR_CORES) && contains("spark.task.cpus")) {
+    if (contains(EXECUTOR_CORES) && contains(CPUS_PER_TASK)) {
       val executorCores = get(EXECUTOR_CORES)
-      val taskCpus = getInt("spark.task.cpus", 1)
+      val taskCpus = get(CPUS_PER_TASK)
 
       if (executorCores < taskCpus) {
-        throw new SparkException(s"${EXECUTOR_CORES.key} must not be less than spark.task.cpus.")
+        throw new SparkException(
+          s"${EXECUTOR_CORES.key} must not be less than ${CPUS_PER_TASK.key}.")
       }
     }
 

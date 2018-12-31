@@ -125,7 +125,7 @@ private[spark] class ExecutorAllocationManager(
   // allocation is only supported for YARN and the default number of cores per executor in YARN is
   // 1, but it might need to be attained differently for different cluster managers
   private val tasksPerExecutorForFullParallelism =
-    conf.get(EXECUTOR_CORES) / conf.getInt("spark.task.cpus", 1)
+    conf.get(EXECUTOR_CORES) / conf.get(CPUS_PER_TASK)
 
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
@@ -223,7 +223,7 @@ private[spark] class ExecutorAllocationManager(
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
     if (tasksPerExecutorForFullParallelism == 0) {
-      throw new SparkException(s"${EXECUTOR_CORES.key} must not be < spark.task.cpus.")
+      throw new SparkException(s"${EXECUTOR_CORES.key} must not be < ${CPUS_PER_TASK.key}.")
     }
 
     if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {

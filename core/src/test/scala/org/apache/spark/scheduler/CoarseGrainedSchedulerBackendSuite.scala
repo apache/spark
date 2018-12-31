@@ -24,7 +24,7 @@ import scala.concurrent.duration._
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
-import org.apache.spark.internal.config.RPC_MESSAGE_MAX_SIZE
+import org.apache.spark.internal.config.{CPUS_PER_TASK, RPC_MESSAGE_MAX_SIZE}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{RpcUtils, SerializableBuffer}
 
@@ -63,7 +63,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   test("compute max number of concurrent tasks can be launched when spark.task.cpus > 1") {
     val conf = new SparkConf()
-      .set("spark.task.cpus", "2")
+      .set(CPUS_PER_TASK, 2)
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)
@@ -77,7 +77,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   test("compute max number of concurrent tasks can be launched when some executors are busy") {
     val conf = new SparkConf()
-      .set("spark.task.cpus", "2")
+      .set(CPUS_PER_TASK, 2)
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)

@@ -25,8 +25,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CPUS_PER_TASK
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
@@ -151,7 +152,7 @@ private[spark] class AppStatusListener(
       details.getOrElse("System Properties", Nil),
       details.getOrElse("Classpath Entries", Nil))
 
-    coresPerTask = envInfo.sparkProperties.toMap.get("spark.task.cpus").map(_.toInt)
+    coresPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).map(_.toInt)
       .getOrElse(coresPerTask)
 
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
