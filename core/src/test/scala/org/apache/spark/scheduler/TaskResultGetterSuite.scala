@@ -35,6 +35,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
 import org.apache.spark.TestUtils.JavaSourceFromString
+import org.apache.spark.internal.config.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.storage.TaskResultBlockId
 import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, Utils}
 
@@ -110,7 +111,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
 
   // Set the RPC message size to be as small as possible (it must be an integer, so 1 is as small
   // as we can make it) so the tests don't take too long.
-  def conf: SparkConf = new SparkConf().set("spark.rpc.message.maxSize", "1")
+  def conf: SparkConf = new SparkConf().set(RPC_MESSAGE_MAX_SIZE, 1)
 
   test("handling results smaller than max RPC message size") {
     sc = new SparkContext("local", "test", conf)

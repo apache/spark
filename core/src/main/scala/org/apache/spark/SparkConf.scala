@@ -680,13 +680,13 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
     IO_COMPRESSION_LZ4_BLOCKSIZE.key -> Seq(
       AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
-    "spark.rpc.numRetries" -> Seq(
+    RPC_NUM_RETRIES.key -> Seq(
       AlternateConfig("spark.akka.num.retries", "1.4")),
-    "spark.rpc.retry.wait" -> Seq(
+    RPC_RETRY_WAIT.key -> Seq(
       AlternateConfig("spark.akka.retry.wait", "1.4")),
-    "spark.rpc.askTimeout" -> Seq(
+    RPC_ASK_TIMEOUT.key -> Seq(
       AlternateConfig("spark.akka.askTimeout", "1.4")),
-    "spark.rpc.lookupTimeout" -> Seq(
+    RPC_LOOKUP_TIMEOUT.key -> Seq(
       AlternateConfig("spark.akka.lookupTimeout", "1.4")),
     "spark.streaming.fileStream.minRememberDuration" -> Seq(
       AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
@@ -694,7 +694,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.max.worker.failures", "1.5")),
     MEMORY_OFFHEAP_ENABLED.key -> Seq(
       AlternateConfig("spark.unsafe.offHeap", "1.6")),
-    "spark.rpc.message.maxSize" -> Seq(
+    RPC_MESSAGE_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),

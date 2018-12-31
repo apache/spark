@@ -268,10 +268,10 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   test("akka deprecated configs") {
     val conf = new SparkConf()
 
-    assert(!conf.contains("spark.rpc.numRetries"))
-    assert(!conf.contains("spark.rpc.retry.wait"))
-    assert(!conf.contains("spark.rpc.askTimeout"))
-    assert(!conf.contains("spark.rpc.lookupTimeout"))
+    assert(!conf.contains(RPC_NUM_RETRIES))
+    assert(!conf.contains(RPC_RETRY_WAIT))
+    assert(!conf.contains(RPC_ASK_TIMEOUT))
+    assert(!conf.contains(RPC_LOOKUP_TIMEOUT))
 
     conf.set("spark.akka.num.retries", "1")
     assert(RpcUtils.numRetries(conf) === 1)

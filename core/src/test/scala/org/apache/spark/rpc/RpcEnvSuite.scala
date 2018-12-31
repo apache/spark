@@ -35,6 +35,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, SparkFunSuite}
+import org.apache.spark.internal.config._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.config._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -172,8 +173,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val conf = new SparkConf()
     val shortProp = "spark.rpc.short.timeout"
-    conf.set("spark.rpc.retry.wait", "0")
-    conf.set("spark.rpc.numRetries", "1")
+    conf.set(RPC_RETRY_WAIT, 0L)
+    conf.set(RPC_NUM_RETRIES, 1)
     val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-timeout")

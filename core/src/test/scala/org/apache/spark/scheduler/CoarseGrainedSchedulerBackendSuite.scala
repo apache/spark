@@ -24,6 +24,7 @@ import scala.concurrent.duration._
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.internal.config.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{RpcUtils, SerializableBuffer}
 
@@ -34,7 +35,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   test("serialized task larger than max RPC message size") {
     val conf = new SparkConf
-    conf.set("spark.rpc.message.maxSize", "1")
+    conf.set(RPC_MESSAGE_MAX_SIZE, 1)
     conf.set("spark.default.parallelism", "1")
     sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
     val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
