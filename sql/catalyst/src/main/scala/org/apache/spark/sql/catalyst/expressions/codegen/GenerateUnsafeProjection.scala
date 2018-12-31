@@ -317,8 +317,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     in.map(ExpressionCanonicalizer.execute)
 
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] = {
-    lazy val inputSchemaAttrSeq: AttributeSeq = inputSchema
-    in.map(BindReferences.bindReference(_, inputSchemaAttrSeq))
+    toBoundExprs(in, inputSchema)
   }
 
   def generate(

@@ -86,11 +86,4 @@ object BindReferences extends Logging {
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
   }
-
-  def bindReferences[A <: Expression](
-    in: Seq[A],
-    inputSchema: Seq[Attribute]): Seq[A] = {
-    lazy val inputSchemaAttrSeq: AttributeSeq = inputSchema
-    in.map(BindReferences.bindReference(_, inputSchemaAttrSeq))
-  }
 }

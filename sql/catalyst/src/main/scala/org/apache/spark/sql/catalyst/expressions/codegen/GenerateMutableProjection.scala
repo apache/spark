@@ -41,7 +41,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute],
       useSubexprElimination: Boolean): MutableProjection = {
-    create(canonicalize(bind(expressions, inputSchema)), useSubexprElimination)
+    create(canonicalize(toBoundExprs(expressions, inputSchema)), useSubexprElimination)
   }
 
   def generate(expressions: Seq[Expression], useSubexprElimination: Boolean): MutableProjection = {

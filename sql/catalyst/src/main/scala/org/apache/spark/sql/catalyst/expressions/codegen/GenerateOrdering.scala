@@ -46,7 +46,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
 
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] = {
-    BindReferences.bindReferences(in, inputSchema)
+    toBoundExprs(in, inputSchema)
   }
 
   /**
