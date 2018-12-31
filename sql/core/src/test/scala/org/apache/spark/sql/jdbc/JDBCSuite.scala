@@ -58,8 +58,11 @@ class JDBCSuite extends QueryTest
 
   val testH2DialectTinyInt = new JdbcDialect {
     override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
-    override def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder) :
-    Option[DataType] = {
+    override def getCatalystType(
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder): Option[DataType] = {
       sqlType match {
         case java.sql.Types.TINYINT => Some(ByteType)
         case _ => None
