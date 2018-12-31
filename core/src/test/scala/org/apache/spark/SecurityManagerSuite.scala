@@ -26,6 +26,7 @@ import java.util.Base64
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.security.GroupMappingServiceProvider
 import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
@@ -43,11 +44,11 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security with conf") {
     val conf = new SparkConf
-    conf.set("spark.authenticate", "true")
-    conf.set("spark.authenticate.secret", "good")
-    conf.set("spark.ui.acls.enable", "true")
-    conf.set("spark.ui.view.acls", "user1,user2")
-    val securityManager = new SecurityManager(conf);
+    conf.set(NETWORK_AUTH_ENABLED, true)
+    conf.set(AUTH_SECRET, "good")
+    conf.set(ACLS_ENABLE, true)
+    conf.set(UI_VIEW_ACLS, "user1,user2")
+    val securityManager = new SecurityManager(conf)
     assert(securityManager.isAuthenticationEnabled() === true)
     assert(securityManager.aclsEnabled() === true)
     assert(securityManager.checkUIViewPermissions("user1") === true)
@@ -57,10 +58,10 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security with conf for groups") {
     val conf = new SparkConf
-    conf.set("spark.authenticate", "true")
-    conf.set("spark.authenticate.secret", "good")
-    conf.set("spark.ui.acls.enable", "true")
-    conf.set("spark.ui.view.acls.groups", "group1,group2")
+    conf.set(NETWORK_AUTH_ENABLED, true)
+    conf.set(AUTH_SECRET, "good")
+    conf.set(ACLS_ENABLE, true)
+    conf.set(UI_VIEW_ACLS_GROUPS, "group1,group2")
     // default ShellBasedGroupsMappingProvider is used to resolve user groups
     val securityManager = new SecurityManager(conf);
     // assuming executing user does not belong to group1,group2
@@ -68,27 +69,27 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.checkUIViewPermissions("user2") === false)
 
     val conf2 = new SparkConf
-    conf2.set("spark.authenticate", "true")
-    conf2.set("spark.authenticate.secret", "good")
-    conf2.set("spark.ui.acls.enable", "true")
-    conf2.set("spark.ui.view.acls.groups", "group1,group2")
+    conf2.set(NETWORK_AUTH_ENABLED, true)
+    conf2.set(AUTH_SECRET, "good")
+    conf2.set(ACLS_ENABLE, true)
+    conf2.set(UI_VIEW_ACLS_GROUPS, "group1,group2")
     // explicitly specify a custom GroupsMappingServiceProvider
-    conf2.set("spark.user.groups.mapping", "org.apache.spark.DummyGroupMappingServiceProvider")
+    conf2.set(USER_GROUPS_MAPPING, "org.apache.spark.DummyGroupMappingServiceProvider")
 
-    val securityManager2 = new SecurityManager(conf2);
+    val securityManager2 = new SecurityManager(conf2)
     // group4,group5 do not match
     assert(securityManager2.checkUIViewPermissions("user1") === true)
     assert(securityManager2.checkUIViewPermissions("user2") === true)
 
     val conf3 = new SparkConf
-    conf3.set("spark.authenticate", "true")
-    conf3.set("spark.authenticate.secret", "good")
-    conf3.set("spark.ui.acls.enable", "true")
-    conf3.set("spark.ui.view.acls.groups", "group4,group5")
+    conf3.set(NETWORK_AUTH_ENABLED, true)
+    conf3.set(AUTH_SECRET, "good")
+    conf3.set(ACLS_ENABLE, true)
+    conf3.set(UI_VIEW_ACLS_GROUPS, "group4,group5")
     // explicitly specify a bogus GroupsMappingServiceProvider
-    conf3.set("spark.user.groups.mapping", "BogusServiceProvider")
+    conf3.set(USER_GROUPS_MAPPING, "BogusServiceProvider")
 
-    val securityManager3 = new SecurityManager(conf3);
+    val securityManager3 = new SecurityManager(conf3)
     // BogusServiceProvider cannot be loaded and an error is logged returning an empty group set
     assert(securityManager3.checkUIViewPermissions("user1") === false)
     assert(securityManager3.checkUIViewPermissions("user2") === false)
@@ -96,7 +97,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security with api") {
     val conf = new SparkConf
-    conf.set("spark.ui.view.acls", "user1,user2")
+    conf.set(UI_VIEW_ACLS, "user1,user2")
     val securityManager = new SecurityManager(conf);
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled() === true)
@@ -119,9 +120,9 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security with api for groups") {
     val conf = new SparkConf
-    conf.set("spark.user.groups.mapping", "org.apache.spark.DummyGroupMappingServiceProvider")
+    conf.set(USER_GROUPS_MAPPING, "org.apache.spark.DummyGroupMappingServiceProvider")
 
-    val securityManager = new SecurityManager(conf);
+    val securityManager = new SecurityManager(conf)
     securityManager.setAcls(true)
     securityManager.setViewAclsGroups("group1,group2")
 
@@ -135,7 +136,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.checkUIViewPermissions("user2") === false)
 
     val conf2 = new SparkConf
-    conf.set("spark.user.groups.mapping", "BogusServiceProvider")
+    conf.set(USER_GROUPS_MAPPING, "BogusServiceProvider")
 
     val securityManager2 = new SecurityManager(conf2)
     securityManager2.setAcls(true)
@@ -153,7 +154,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security modify acls") {
     val conf = new SparkConf
-    conf.set("spark.modify.acls", "user1,user2")
+    conf.set(MODIFY_ACLS, "user1,user2")
 
     val securityManager = new SecurityManager(conf);
     securityManager.setAcls(true)
@@ -177,7 +178,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security modify acls for groups") {
     val conf = new SparkConf
-    conf.set("spark.user.groups.mapping", "org.apache.spark.DummyGroupMappingServiceProvider")
+    conf.set(USER_GROUPS_MAPPING, "org.apache.spark.DummyGroupMappingServiceProvider")
 
     val securityManager = new SecurityManager(conf);
     securityManager.setAcls(true)
@@ -200,11 +201,11 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security admin acls") {
     val conf = new SparkConf
-    conf.set("spark.admin.acls", "user1,user2")
-    conf.set("spark.ui.view.acls", "user3")
-    conf.set("spark.modify.acls", "user4")
+    conf.set(ADMIN_ACLS, "user1,user2")
+    conf.set(UI_VIEW_ACLS, "user3")
+    conf.set(MODIFY_ACLS, "user4")
 
-    val securityManager = new SecurityManager(conf);
+    val securityManager = new SecurityManager(conf)
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled() === true)
 
@@ -240,12 +241,12 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security admin acls for groups") {
     val conf = new SparkConf
-    conf.set("spark.admin.acls.groups", "group1")
-    conf.set("spark.ui.view.acls.groups", "group2")
-    conf.set("spark.modify.acls.groups", "group3")
-    conf.set("spark.user.groups.mapping", "org.apache.spark.DummyGroupMappingServiceProvider")
+    conf.set(ADMIN_ACLS_GROUPS, "group1")
+    conf.set(UI_VIEW_ACLS_GROUPS, "group2")
+    conf.set(MODIFY_ACLS_GROUPS, "group3")
+    conf.set(USER_GROUPS_MAPPING, "org.apache.spark.DummyGroupMappingServiceProvider")
 
-    val securityManager = new SecurityManager(conf);
+    val securityManager = new SecurityManager(conf)
     securityManager.setAcls(true)
     assert(securityManager.aclsEnabled() === true)
 
@@ -282,10 +283,10 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security with * in acls") {
     val conf = new SparkConf
-    conf.set("spark.ui.acls.enable", "true")
-    conf.set("spark.admin.acls", "user1,user2")
-    conf.set("spark.ui.view.acls", "*")
-    conf.set("spark.modify.acls", "user4")
+    conf.set(ACLS_ENABLE.key, "true")
+    conf.set(ADMIN_ACLS, "user1,user2")
+    conf.set(UI_VIEW_ACLS, "*")
+    conf.set(MODIFY_ACLS, "user4")
 
     val securityManager = new SecurityManager(conf)
     assert(securityManager.aclsEnabled() === true)
@@ -323,10 +324,10 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security with * in acls for groups") {
     val conf = new SparkConf
-    conf.set("spark.ui.acls.enable", "true")
-    conf.set("spark.admin.acls.groups", "group4,group5")
-    conf.set("spark.ui.view.acls.groups", "*")
-    conf.set("spark.modify.acls.groups", "group6")
+    conf.set(ACLS_ENABLE, true)
+    conf.set(ADMIN_ACLS_GROUPS, "group4,group5")
+    conf.set(UI_VIEW_ACLS_GROUPS, "*")
+    conf.set(MODIFY_ACLS_GROUPS, "group6")
 
     val securityManager = new SecurityManager(conf)
     assert(securityManager.aclsEnabled() === true)
@@ -373,7 +374,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("missing secret authentication key") {
-    val conf = new SparkConf().set("spark.authenticate", "true")
+    val conf = new SparkConf().set(NETWORK_AUTH_ENABLED, true)
     val mgr = new SecurityManager(conf)
     intercept[IllegalArgumentException] {
       mgr.getSecretKey()

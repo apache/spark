@@ -42,10 +42,11 @@ import org.fusesource.leveldbjni.internal.NativeDB
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, History}
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
@@ -105,9 +106,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val logDir = conf.get(History.HISTORY_LOG_DIR)
 
-  private val HISTORY_UI_ACLS_ENABLE = conf.get(History.UI_ACLS_ENABLE)
-  private val HISTORY_UI_ADMIN_ACLS = conf.get(History.UI_ADMIN_ACLS)
-  private val HISTORY_UI_ADMIN_ACLS_GROUPS = conf.get(History.UI_ADMIN_ACLS_GROUPS)
+  private val HISTORY_UI_ACLS_ENABLE = conf.get(History.HISTORY_SERVER_UI_ACLS_ENABLE)
+  private val HISTORY_UI_ADMIN_ACLS = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS)
+  private val HISTORY_UI_ADMIN_ACLS_GROUPS = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS)
   logInfo(s"History server ui acls " + (if (HISTORY_UI_ACLS_ENABLE) "enabled" else "disabled") +
     "; users with admin permissions: " + HISTORY_UI_ADMIN_ACLS.toString +
     "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
@@ -1187,11 +1188,16 @@ private[history] class AppListingListener(
     // Only parse the first env update, since any future changes don't have any effect on
     // the ACLs set for the UI.
     if (!gotEnvUpdate) {
+      def emptyStringToNone(strOption: Option[String]): Option[String] = strOption match {
+        case Some("") => None
+        case _ => strOption
+      }
+
       val allProperties = event.environmentDetails("Spark Properties").toMap
-      attempt.viewAcls = allProperties.get("spark.ui.view.acls")
-      attempt.adminAcls = allProperties.get("spark.admin.acls")
-      attempt.viewAclsGroups = allProperties.get("spark.ui.view.acls.groups")
-      attempt.adminAclsGroups = allProperties.get("spark.admin.acls.groups")
+      attempt.viewAcls = emptyStringToNone(allProperties.get(UI_VIEW_ACLS.key))
+      attempt.adminAcls = emptyStringToNone(allProperties.get(ADMIN_ACLS.key))
+      attempt.viewAclsGroups = emptyStringToNone(allProperties.get(UI_VIEW_ACLS_GROUPS.key))
+      attempt.adminAclsGroups = emptyStringToNone(allProperties.get(ADMIN_ACLS_GROUPS.key))
 
       gotEnvUpdate = true
       checkProgress()

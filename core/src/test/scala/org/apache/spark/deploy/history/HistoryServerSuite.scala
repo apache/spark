@@ -48,6 +48,7 @@ import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.ui.SparkUI
@@ -613,9 +614,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     stop()
     init(
-      "spark.ui.filters" -> classOf[FakeAuthFilter].getName(),
-      UI_ACLS_ENABLE.key -> "true",
-      UI_ADMIN_ACLS.key -> admin)
+      UI_FILTERS.key -> classOf[FakeAuthFilter].getName(),
+      HISTORY_SERVER_UI_ACLS_ENABLE.key -> "true",
+      HISTORY_SERVER_UI_ADMIN_ACLS.key -> admin)
 
     val tests = Seq(
       (owner, HttpServletResponse.SC_OK),

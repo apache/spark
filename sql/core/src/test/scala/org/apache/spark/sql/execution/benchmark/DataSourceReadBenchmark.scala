@@ -23,6 +23,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -50,7 +51,7 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
     .set("spark.master", "local[1]")
     .setIfMissing("spark.driver.memory", "3g")
     .setIfMissing("spark.executor.memory", "3g")
-    .setIfMissing("spark.ui.enabled", "false")
+    .setIfMissing(UI_ENABLED, false)
 
   val spark = SparkSession.builder.config(conf).getOrCreate()
 

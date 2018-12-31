@@ -40,7 +40,7 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.Utils
 
 /**
@@ -500,7 +500,7 @@ private[spark] case class ServerInfo(
    * of the chain to perform security-related functions.
    */
   private def addFilters(handler: ServletContextHandler, securityMgr: SecurityManager): Unit = {
-    conf.getOption("spark.ui.filters").toSeq.flatMap(Utils.stringToSeq).foreach { filter =>
+    conf.get(UI_FILTERS).toSeq.flatMap(Utils.stringToSeq).foreach { filter =>
       logInfo(s"Adding filter to ${handler.getContextPath()}: $filter")
       val oldParams = conf.getOption(s"spark.$filter.params").toSeq
         .flatMap(Utils.stringToSeq)

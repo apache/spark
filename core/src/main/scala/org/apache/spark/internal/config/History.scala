@@ -88,15 +88,15 @@ private[spark] object History {
   val MAX_DRIVER_LOG_AGE_S = ConfigBuilder("spark.history.fs.driverlog.cleaner.maxAge")
     .fallbackConf(MAX_LOG_AGE_S)
 
-  val UI_ACLS_ENABLE = ConfigBuilder("spark.history.ui.acls.enable")
+  val HISTORY_SERVER_UI_ACLS_ENABLE = ConfigBuilder("spark.history.ui.acls.enable")
     .booleanConf
     .createWithDefault(false)
 
-  val UI_ADMIN_ACLS = ConfigBuilder("spark.history.ui.admin.acls")
+  val HISTORY_SERVER_UI_ADMIN_ACLS = ConfigBuilder("spark.history.ui.admin.acls")
     .stringConf
     .createWithDefault("")
 
-  val UI_ADMIN_ACLS_GROUPS = ConfigBuilder("spark.history.ui.admin.acls.groups")
+  val HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS = ConfigBuilder("spark.history.ui.admin.acls.groups")
     .stringConf
     .createWithDefault("")
 

@@ -33,6 +33,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -175,7 +176,7 @@ private[spark] abstract class YarnSchedulerBackend(
       filterParams != null && filterParams.nonEmpty
     if (hasFilter) {
       // SPARK-26255: Append user provided filters(spark.ui.filters) with yarn filter.
-      val allFilters = filterName + "," + conf.get("spark.ui.filters", "")
+      val allFilters = filterName + "," + conf.get(UI_FILTERS).orElse(Some("")).get
       logInfo(s"Add WebUI Filter. $filterName, $filterParams, $proxyBase")
 
       // For already installed handlers, prepend the filter.
@@ -186,7 +187,7 @@ private[spark] abstract class YarnSchedulerBackend(
           filterParams.foreach { case (k, v) =>
             conf.set(s"spark.$filterName.param.$k", v)
           }
-          conf.set("spark.ui.filters", allFilters)
+          conf.set(UI_FILTERS, allFilters)
 
           ui.getHandlers.map(_.getServletHandler()).foreach { h =>
             val holder = new FilterHolder()
