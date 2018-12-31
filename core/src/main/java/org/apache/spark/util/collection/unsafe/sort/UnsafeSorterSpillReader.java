@@ -22,6 +22,7 @@ import com.google.common.io.Closeables;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.internal.config.package$;
+import org.apache.spark.internal.config.ConfigEntry;
 import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.io.ReadAheadInputStream;
 import org.apache.spark.serializer.SerializerManager;
@@ -60,14 +61,13 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
+    ConfigEntry<Object> configEntry = package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE();
     long bufferSizeBytes =
         SparkEnv.get() == null ?
-            DEFAULT_BUFFER_SIZE_BYTES:(long)SparkEnv.get().conf().get(
-                package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE());
+            DEFAULT_BUFFER_SIZE_BYTES:(long)SparkEnv.get().conf().get(configEntry);
     if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
       // fall back to a sane default value
-      String key = package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE().key();
-      logger.warn("Value of config \"" + key + "\" = {} not in " +
+      logger.warn("Value of config \"" + configEntry.key() + "\" = {} not in " +
         "allowed range [{}, {}). Falling back to default value : {} bytes", bufferSizeBytes,
         DEFAULT_BUFFER_SIZE_BYTES, MAX_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES);
       bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;

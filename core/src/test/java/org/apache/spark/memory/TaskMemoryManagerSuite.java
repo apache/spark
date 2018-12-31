@@ -199,7 +199,7 @@ public class TaskMemoryManagerSuite {
     // Tests backwards-compatibility with the old `spark.unsafe.offHeap` configuration, which
     // was deprecated in Spark 1.6 and replaced by `spark.memory.offHeap.enabled` (see SPARK-12251).
     final SparkConf conf = new SparkConf()
-      .set(package$.MODULE$.UNSAFE_OFFHEAP(), true)
+      .set("spark.unsafe.offHeap", "true")
       .set("spark.memory.offHeap.size", "1000");
     final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     Assert.assertSame(MemoryMode.OFF_HEAP, manager.tungstenMemoryMode);

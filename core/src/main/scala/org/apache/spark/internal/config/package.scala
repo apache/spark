@@ -738,11 +738,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val UNSAFE_OFFHEAP =
-    ConfigBuilder("spark.unsafe.offHeap")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val UNSAFE_SORTER_SPILL_READ_AHEAD_ENABLED =
     ConfigBuilder("spark.unsafe.sorter.spill.read.ahead.enabled")
       .booleanConf
@@ -750,7 +745,7 @@ package object config {
 
   private[spark] val UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE =
     ConfigBuilder("spark.unsafe.sorter.spill.reader.buffer.size")
-      .intConf
+      .longConf
       .createWithDefault(UnsafeSorterSpillReader.DEFAULT_BUFFER_SIZE_BYTES)
 
   private[spark] val EXECUTOR_PLUGINS =
