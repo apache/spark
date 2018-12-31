@@ -2054,33 +2054,31 @@ class DataFrame(object):
         :param func: a user-defined custom transform function
         :param *args: optional positional arguments to pass to `func`
         :param **kwargs: optional keywarded arguments to pass to `func`
-
-        A more concrete example::
-
-        def with_greeting(df):
-               return df.withColumn("greeting", lit("hi"))
-            def with_something(df, something):
-                return df.withColumn("something", lit(something))
-            
-            data = [("jose", 1), ("li", 2), ("liz", 3)]
-            source_df = spark.createDataFrame(data, ["name", "age"])
-
-            actual_df = (source_df
-                .transform(with_greeting)
-                .transform(with_something, "crazy"))
-            print(actual_df.show())
-            +----+---+--------+---------+
-            |name|age|greeting|something|
-            +----+---+--------+---------+
-            |jose|  1|      hi|    crazy|
-            |  li|  2|      hi|    crazy|
-            | liz|  3|      hi|    crazy|
-            +----+---+--------+---------+
-
-        This is equiavalent to a nested:
+        This is equiavalent to a nested call:
             actual_df = with_something(with_greeting(source_df), "crazy"))
 
         credit to: https://medium.com/@mrpowers/chaining-custom-pyspark-transformations-4f38a8c7ae55
+
+        A more concrete example::
+        >>> sc = pyspark.SparkContext(master='local')
+        >>> spark = pyspark.sql.SparkSession(sparkContext=sc)
+        >>> from pyspark.sql.functions import lit
+        >>> def with_greeting(df):
+        ...     return df.withColumn("greeting", lit("hi"))
+        >>> def with_something(df, something):
+        ...     return df.withColumn("something", lit(something))
+        >>> data = [("jose", 1), ("li", 2), ("liz", 3)]
+        >>> source_df = spark.createDataFrame(data, ["name", "age"])
+        >>> actual_df = source_df.transform(with_greeting).transform(with_something, "crazy")
+        >>> actual_df.show()
+        +----+---+--------+---------+
+        |name|age|greeting|something|
+        +----+---+--------+---------+
+        |jose|  1|      hi|    crazy|
+        |  li|  2|      hi|    crazy|
+        | liz|  3|      hi|    crazy|
+        +----+---+--------+---------+
+        <BLANKLINE>
         """
         return func(self, *args, **kwargs)
 
