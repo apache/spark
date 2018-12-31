@@ -114,7 +114,7 @@ object StringUtils {
      * returns concatenated string.
      */
     override def toString: String = {
-      val result = new StringBuffer(length)
+      val result = new java.lang.StringBuilder(length)
       strings.foreach(result.append)
       result.toString
     }
