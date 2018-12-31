@@ -45,6 +45,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.scalatest.selenium.WebBrowser
 
 import org.apache.spark._
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
@@ -82,8 +83,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(UPDATE_INTERVAL_S.key, "0")
       .set("spark.testing", "true")
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
-      .set("spark.eventLog.logStageExecutorMetrics.enabled", "true")
-      .set("spark.eventLog.logStageExecutorProcessTreeMetrics.enabled", "true")
+      .set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
+      .set(EVENT_LOG_PROCESS_TREE_METRICS, true)
     conf.setAll(extraConf)
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
@@ -417,9 +418,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     stop()
     val myConf = new SparkConf()
       .set(HISTORY_LOG_DIR, logDir.getAbsolutePath)
-      .set("spark.eventLog.dir", logDir.getAbsolutePath)
+      .set(EVENT_LOG_DIR, logDir.getAbsolutePath)
       .set(UPDATE_INTERVAL_S.key, "1s")
-      .set("spark.eventLog.enabled", "true")
+      .set(EVENT_LOG_ENABLED, true)
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
