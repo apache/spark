@@ -56,6 +56,20 @@ class JDBCSuite extends QueryTest
       Some(StringType)
   }
 
+  val testH2DialectTinyInt = new JdbcDialect {
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+    override def getCatalystType(
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder): Option[DataType] = {
+      sqlType match {
+        case java.sql.Types.TINYINT => Some(ByteType)
+        case _ => None
+      }
+    }
+  }
+
   before {
     Utils.classForName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
@@ -691,6 +705,17 @@ class JDBCSuite extends QueryTest
     assert(rows(0).get(0).isInstanceOf[String])
     assert(rows(0).get(1).isInstanceOf[String])
     JdbcDialects.unregisterDialect(testH2Dialect)
+  }
+
+  test("Map TINYINT to ByteType via JdbcDialects") {
+    JdbcDialects.registerDialect(testH2DialectTinyInt)
+    val df = spark.read.jdbc(urlWithUserAndPass, "test.inttypes", new Properties())
+    val rows = df.collect()
+    assert(rows.length === 2)
+    assert(rows(0).get(2).isInstanceOf[Byte])
+    assert(rows(0).getByte(2) === 3)
+    assert(rows(1).isNullAt(2))
+    JdbcDialects.unregisterDialect(testH2DialectTinyInt)
   }
 
   test("Default jdbc dialect registration") {
