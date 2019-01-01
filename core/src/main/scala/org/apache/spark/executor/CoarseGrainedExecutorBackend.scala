@@ -218,8 +218,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
 
+      val vcores = cores * driverConf.getInt("spark.cpu.tasks", 1)
       val env = SparkEnv.createExecutorEnv(
-        driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, isLocal = false)
+        driverConf, executorId, hostname, vcores, cfg.ioEncryptionKey, isLocal = false)
 
       env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
         env.rpcEnv, driverUrl, executorId, hostname, cores, userClassPath, env))
