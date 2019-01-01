@@ -2048,18 +2048,13 @@ class DataFrame(object):
 
     @since(3.0)
     def transform(self, func):
-        """Returns a new class:`DataFrame` according to a user-defined custom transform method.
+        """Returns a new class:`DataFrame` according to a custom transform function.
         This allows chaining transformations rather than using nested or temporary variables.
 
         :param func: a user-defined custom transform function
-        This is equiavalent to a nested call:
+        This is equivalent to a nested call:
             actual_df = with_something(with_greeting(source_df), "crazy"))
 
-        credit to: https://medium.com/@mrpowers/chaining-custom-pyspark-transformations-4f38a8c7ae55
-
-        A more concrete example::
-        >>> sc = pyspark.SparkContext(master='local')
-        >>> spark = pyspark.sql.SparkSession(sparkContext=sc)
         >>> from pyspark.sql.functions import lit
         >>> def with_greeting(df):
         ...     return df.withColumn("greeting", lit("hi"))
@@ -2076,9 +2071,10 @@ class DataFrame(object):
         |  li|  2|      hi|    crazy|
         | liz|  3|      hi|    crazy|
         +----+---+--------+---------+
-        <BLANKLINE>
         """
-        return func(self)
+        res = func(self)
+        assert isinstance(res, DataFrame)
+        return res
 
     @since(1.3)
     def toPandas(self):
