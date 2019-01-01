@@ -1449,10 +1449,11 @@ abstract class SessionCatalogSuite extends AnalysisTest {
   test("SPARK-24544: test print actual failure cause when look up function failed") {
     withBasicCatalog { catalog =>
       val cause = intercept[NoSuchFunctionException] {
-        catalog.failFunctionLookup(FunctionIdentifier("failureFunc"), Some(new Exception("Actual error!")))
+        catalog.failFunctionLookup(FunctionIdentifier("failureFunc"),
+          Some(new Exception("Actual error")))
       }
 
-      assert(cause.getMessage.contains("Actual error!"))
+      assert(cause.getMessage.contains("Actual error"))
     }
   }
 }
