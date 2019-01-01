@@ -287,7 +287,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val schema = df.schema
       val notIncludedMsg = "[not included in comparison]"
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-      val answer = hiveResultString(df.queryExecution).map(_.replaceAll("#\\d+", "#x")
+      val answer = hiveResultString(df.queryExecution.executedPlan)
+        .map(_.replaceAll("#\\d+", "#x")
         .replaceAll("Location.*/sql/core/", s"Location ${notIncludedMsg}sql/core/")
         .replaceAll("Created By.*", s"Created By $notIncludedMsg")
         .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")

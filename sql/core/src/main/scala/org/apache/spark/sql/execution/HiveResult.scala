@@ -31,11 +31,11 @@ object HiveResult {
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
    * `SparkSQLDriver` for CLI applications.
    */
-  def hiveResultString(qe: QueryExecution): Seq[String] = qe.executedPlan match {
+  def hiveResultString(executedPlan: SparkPlan): Seq[String] = executedPlan match {
     case ExecutedCommandExec(desc: DescribeTableCommand) =>
       // If it is a describe command for a Hive table, we want to have the output format
       // be similar with Hive.
-      desc.run(qe.sparkSession).map {
+      executedPlan.executeCollectPublic().map {
         case Row(name: String, dataType: String, comment) =>
           Seq(name, dataType,
             Option(comment.asInstanceOf[String]).getOrElse(""))
@@ -48,13 +48,13 @@ object HiveResult {
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
       // We need the types so we can output struct field names
-      val types = qe.analyzed.output.map(_.dataType)
+      val types = executedPlan.output.map(_.dataType)
       // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(toHiveString(qe, _))).map(_.mkString("\t"))
+      result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
   }
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
-  private def toHiveString(qe: QueryExecution, a: (Any, DataType)): String = {
+  private def toHiveString(a: (Any, DataType)): String = {
     val primitiveTypes = Seq(StringType, IntegerType, LongType, DoubleType, FloatType,
       BooleanType, ByteType, ShortType, DateType, TimestampType, BinaryType)
     val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)

@@ -62,7 +62,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       context.sparkContext.setJobDescription(command)
       val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
       hiveResponse = SQLExecution.withNewExecutionId(context.sparkSession, execution) {
-        hiveResultString(execution)
+        hiveResultString(execution.executedPlan)
       }
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
