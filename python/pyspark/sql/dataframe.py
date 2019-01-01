@@ -2060,14 +2060,16 @@ class DataFrame(object):
         ...     return df.withColumn("something", lit(something))
         >>> data = [("jose", 1), ("li", 2), ("liz", 3)]
         >>> source_df = spark.createDataFrame(data, ["name", "age"])
-        >>> actual_df = source_df.transform(with_greeting).transform(lambda x: with_something(x, "crazy"))
+        >>> actual_df = (source_df
+        ...             .transform(with_greeting)
+        ...             .transform(lambda x: with_something(x, "nice")))
         >>> actual_df.show()
         +----+---+--------+---------+
         |name|age|greeting|something|
         +----+---+--------+---------+
-        |jose|  1|      hi|    crazy|
-        |  li|  2|      hi|    crazy|
-        | liz|  3|      hi|    crazy|
+        |jose|  1|      hi|     nice|
+        |  li|  2|      hi|     nice|
+        | liz|  3|      hi|     nice|
         +----+---+--------+---------+
         """
         res = func(self)
