@@ -26,6 +26,9 @@ import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCom
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+/**
+ * Runs a query returning the result in Hive compatible form.
+ */
 object HiveResult {
   /**
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
