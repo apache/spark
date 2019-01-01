@@ -57,6 +57,7 @@ object HiveResult {
   private def toHiveString(qe: QueryExecution, a: (Any, DataType)): String = {
     val primitiveTypes = Seq(StringType, IntegerType, LongType, DoubleType, FloatType,
       BooleanType, ByteType, ShortType, DateType, TimestampType, BinaryType)
+    val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
 
     def formatDecimal(d: java.math.BigDecimal): String = {
       if (d.compareTo(java.math.BigDecimal.ZERO) == 0) {
@@ -102,8 +103,7 @@ object HiveResult {
       case (d: Date, DateType) =>
         DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
       case (t: Timestamp, TimestampType) =>
-        DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t),
-          DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone))
+        DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t), timeZone)
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
       case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
       case (interval, CalendarIntervalType) => interval.toString
