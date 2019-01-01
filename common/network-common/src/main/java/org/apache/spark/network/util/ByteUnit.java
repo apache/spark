@@ -18,11 +18,11 @@ package org.apache.spark.network.util;
 
 public enum ByteUnit {
   BYTE(1),
-  KiB(1 << 10L),
-  MiB(1 << 20L),
-  GiB(1 << 30L),
-  TiB(1 << 40L),
-  PiB(1 << 50L);
+  KiB(1L << 10),
+  MiB(1L << 20),
+  GiB(1L << 30),
+  TiB(1L << 40),
+  PiB(1L << 50);
 
   ByteUnit(long multiplier) {
     this.multiplier = multiplier;
