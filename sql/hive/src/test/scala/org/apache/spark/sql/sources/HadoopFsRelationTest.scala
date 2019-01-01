@@ -126,8 +126,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     } else {
       Seq(false)
     }
-    // TODO: Support new parser too, see SPARK-26374.
-    withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_ENABLED.key -> "false") {
       for (dataType <- supportedDataTypes) {
         for (parquetDictionaryEncodingEnabled <- parquetDictionaryEncodingEnabledConfs) {
           val extraMessage = if (isParquetDataSource) {
@@ -138,7 +137,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           logInfo(s"Testing $dataType data type$extraMessage")
 
           val extraOptions = Map[String, String](
-            "parquet.enable.dictionary" -> parquetDictionaryEncodingEnabled.toString
+            "parquet.enable.dictionary" -> parquetDictionaryEncodingEnabled.toString,
+            "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
           )
 
           withTempPath { file =>
