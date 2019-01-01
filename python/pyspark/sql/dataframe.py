@@ -2051,9 +2051,7 @@ class DataFrame(object):
         """Returns a new class:`DataFrame` according to a custom transform function.
         This allows chaining transformations rather than using nested or temporary variables.
 
-        :param func: a user-defined custom transform function
-        This is equivalent to a nested call:
-            actual_df = with_something(with_greeting(source_df), "crazy"))
+        :param func: a custom transform function which returns a DataFrame
 
         >>> from pyspark.sql.functions import lit
         >>> def with_greeting(df):
