@@ -18,9 +18,6 @@
 package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
-import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
-import java.io.{BufferedWriter, OutputStreamWriter, Writer}
 
 import org.apache.hadoop.fs.Path
 
@@ -31,7 +28,6 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
