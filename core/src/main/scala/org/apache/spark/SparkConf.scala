@@ -504,11 +504,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
 
     val executorOptsKey = EXECUTOR_JAVA_OPTIONS.key
-    val executorClasspathKey = EXECUTOR_CLASS_PATH.key
-    val driverOptsKey = DRIVER_JAVA_OPTIONS.key
-    val driverClassPathKey = DRIVER_CLASS_PATH.key
-    val driverLibraryPathKey = DRIVER_LIBRARY_PATH.key
-    val sparkExecutorInstances = EXECUTOR_INSTANCES.key
 
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
@@ -517,7 +512,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
           |spark.driver.libraryPath was detected (set to '$value').
           |This is deprecated in Spark 1.2+.
           |
-          |Please instead use: $driverLibraryPathKey
+          |Please instead use: ${DRIVER_LIBRARY_PATH.key}
         """.stripMargin
       logWarning(warning)
     }
