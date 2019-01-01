@@ -1453,7 +1453,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
           Some(new Exception("Actual error")))
       }
 
-      assert(cause.getMessage.contains("Actual error"))
+      assert(cause.cause.get.getMessage.contains("Actual error"))
     }
   }
 }
