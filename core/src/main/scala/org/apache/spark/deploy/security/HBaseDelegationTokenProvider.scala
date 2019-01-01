@@ -50,7 +50,7 @@ private[security] class HBaseDelegationTokenProvider
       creds.addToken(token.getService, token)
     } catch {
       case NonFatal(e) =>
-        logDebug(s"Failed to get token from service $serviceName", e)
+        logWarning(s"Failed to get token from service $serviceName", e)
     }
 
     None
@@ -71,7 +71,7 @@ private[security] class HBaseDelegationTokenProvider
       confCreate.invoke(null, conf).asInstanceOf[Configuration]
     } catch {
       case NonFatal(e) =>
-        logDebug("Fail to invoke HBaseConfiguration", e)
+        logWarning("Fail to invoke HBaseConfiguration", e)
         conf
     }
   }
