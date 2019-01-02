@@ -209,21 +209,25 @@ public final class Platform {
   }
 
   /**
-   * Uses internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
-   * MaxDirectMemorySize limit (the default limit is too low and we do not want to require users
-   * to increase it).
+   * Allocate a DirectByteBuffer, potentially bypassing the JVM's MaxDirectMemorySize limit.
    */
   public static ByteBuffer allocateDirectBuffer(int size) {
     try {
+      if (CLEANER_CREATE_METHOD == null) {
+        // Can't set a Cleaner (see comments on field), so need to allocate via normal Java APIs
+        return ByteBuffer.allocateDirect(size);
+      }
+      // Otherwise, use internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
+      // MaxDirectMemorySize limit (the default limit is too low and we do not want to
+      // require users to increase it).
       long memory = allocateMemory(size);
       ByteBuffer buffer = (ByteBuffer) DBB_CONSTRUCTOR.newInstance(memory, size);
-      if (CLEANER_CREATE_METHOD != null) {
-        try {
-          DBB_CLEANER_FIELD.set(buffer,
-              CLEANER_CREATE_METHOD.invoke(null, buffer, (Runnable) () -> freeMemory(memory)));
-        } catch (IllegalAccessException | InvocationTargetException e) {
-          throw new IllegalStateException(e);
-        }
+      try {
+        DBB_CLEANER_FIELD.set(buffer,
+            CLEANER_CREATE_METHOD.invoke(null, buffer, (Runnable) () -> freeMemory(memory)));
+      } catch (IllegalAccessException | InvocationTargetException e) {
+        freeMemory(memory);
+        throw new IllegalStateException(e);
       }
       return buffer;
     } catch (Exception e) {
