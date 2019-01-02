@@ -92,6 +92,9 @@ private[spark] object Utils extends Logging {
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
+  /** Scheme used for files that are locally available on worker nodes in the cluster. */
+  val LOCAL_SCHEME = "local"
+
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -1037,7 +1040,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Convert a time parameter such as (50s, 100ms, or 250us) to microseconds for internal use. If
+   * Convert a time parameter such as (50s, 100ms, or 250us) to milliseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in ms.
    */
   def timeStringAsMs(str: String): Long = {
@@ -2737,13 +2740,17 @@ private[spark] object Utils extends Logging {
 
   /**
    * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
-   * This method mimicks scalatest's getSimpleNameOfAnObjectsClass.
+   * This method mimics scalatest's getSimpleNameOfAnObjectsClass.
    */
   def getSimpleName(cls: Class[_]): String = {
     try {
-      return cls.getSimpleName
+      cls.getSimpleName
     } catch {
-      case err: InternalError => return stripDollars(stripPackages(cls.getName))
+      // TODO: the value returned here isn't even quite right; it returns simple names
+      // like UtilsSuite$MalformedClassObject$MalformedClass instead of MalformedClass
+      // The exact value may not matter much as it's used in log statements
+      case _: InternalError =>
+        stripDollars(stripPackages(cls.getName))
     }
   }
 
@@ -2828,6 +2835,11 @@ private[spark] object Utils extends Logging {
 
   def isClientMode(conf: SparkConf): Boolean = {
     "client".equals(conf.get(SparkLauncher.DEPLOY_MODE, "client"))
+  }
+
+  /** Returns whether the URI is a "local:" URI. */
+  def isLocalUri(uri: String): Boolean = {
+    uri.startsWith(s"$LOCAL_SCHEME:")
   }
 }
 

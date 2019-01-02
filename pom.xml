@@ -132,7 +132,7 @@
     <kafka.version>2.1.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.0</parquet.version>
-    <orc.version>1.5.3</orc.version>
+    <orc.version>1.5.4</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.4.12.v20180830</jetty.version>
@@ -1741,6 +1741,10 @@
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
           </exclusion>
@@ -2056,6 +2060,8 @@
           </executions>
           <configuration>
             <scalaVersion>${scala.version}</scalaVersion>
+            <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
+            <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
             <recompileMode>incremental</recompileMode>
             <useZincServer>true</useZincServer>
             <args>
@@ -2099,7 +2105,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M1</version>
+          <version>3.0.0-M2</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
