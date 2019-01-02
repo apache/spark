@@ -49,7 +49,7 @@ public class NettyUtils {
    */
   private static int MAX_DEFAULT_NETTY_THREADS = 8;
 
-  private static PooledByteBufAllocator[] _sharedPooledByteBufAllocator =
+  private static final PooledByteBufAllocator[] _sharedPooledByteBufAllocator =
       new PooledByteBufAllocator[2];
 
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */

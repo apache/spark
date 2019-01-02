@@ -1292,6 +1292,24 @@ Apart from these, the following properties are also available, and may be useful
     Controls whether to clean checkpoint files if the reference is out of scope.
   </td>
 </tr>
+<tr>
+  <td><code>spark.network.sharedByteBufAllocators.enabled</code></td>
+  <td>true</td>
+  <td>
+   Controls whether to share the pooled ByteBuf allocators between the different Netty channels.
+   When disabled a separate allocator is created for each transport servers and clients.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.sharedByteBufAllocators.io.preferDirectBufs</code></td>
+  <td>true</td>
+  <td>
+    If enable then off-heap buffer allocations are prefered by the shared ByteBuf allocators.
+    Off-heap buffers are used to reduce garbage collection during shuffle and cache
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to
+    turn this off to force all allocations from Netty to be on-heap.
+    </td>
+</tr>
 </table>
 
 ### Execution Behavior

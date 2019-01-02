@@ -71,7 +71,7 @@ public class TransportServer implements Closeable {
     this.appRpcHandler = appRpcHandler;
     if (conf.sharedByteBufAllocators()) {
       this.pooledAllocator = NettyUtils.getSharedPooledByteBufAllocator(
-          conf.preferDirectBufs(), true /* allowCache */);
+          conf.preferDirectBufsForSharedByteBufAllocators(), true /* allowCache */);
     } else {
       this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
           conf.preferDirectBufs(), true /* allowCache */, conf.serverThreads());
