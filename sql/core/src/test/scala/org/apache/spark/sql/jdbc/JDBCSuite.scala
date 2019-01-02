@@ -56,6 +56,20 @@ class JDBCSuite extends QueryTest
       Some(StringType)
   }
 
+  val testH2DialectTinyInt = new JdbcDialect {
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+    override def getCatalystType(
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder): Option[DataType] = {
+      sqlType match {
+        case java.sql.Types.TINYINT => Some(ByteType)
+        case _ => None
+      }
+    }
+  }
+
   before {
     Utils.classForName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
@@ -691,6 +705,17 @@ class JDBCSuite extends QueryTest
     assert(rows(0).get(0).isInstanceOf[String])
     assert(rows(0).get(1).isInstanceOf[String])
     JdbcDialects.unregisterDialect(testH2Dialect)
+  }
+
+  test("Map TINYINT to ByteType via JdbcDialects") {
+    JdbcDialects.registerDialect(testH2DialectTinyInt)
+    val df = spark.read.jdbc(urlWithUserAndPass, "test.inttypes", new Properties())
+    val rows = df.collect()
+    assert(rows.length === 2)
+    assert(rows(0).get(2).isInstanceOf[Byte])
+    assert(rows(0).getByte(2) === 3)
+    assert(rows(1).isNullAt(2))
+    JdbcDialects.unregisterDialect(testH2DialectTinyInt)
   }
 
   test("Default jdbc dialect registration") {
@@ -1348,9 +1373,13 @@ class JDBCSuite extends QueryTest
          |the partition columns using the supplied subquery alias to resolve any ambiguity.
          |Example :
          |spark.read.format("jdbc")
-         |        .option("dbtable", "(select c1, c2 from t1) as subq")
-         |        .option("partitionColumn", "subq.c1"
-         |        .load()
+         |  .option("url", jdbcUrl)
+         |  .option("dbtable", "(select c1, c2 from t1) as subq")
+         |  .option("partitionColumn", "c1")
+         |  .option("lowerBound", "1")
+         |  .option("upperBound", "100")
+         |  .option("numPartitions", "3")
+         |  .load()
      """.stripMargin
     val e5 = intercept[RuntimeException] {
       sql(

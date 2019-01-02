@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources.v2.reader;
 import java.io.Closeable;
 import java.io.IOException;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * A partition reader returned by {@link PartitionReaderFactory#createReader(InputPartition)} or
@@ -32,7 +32,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * data sources(whose {@link PartitionReaderFactory#supportColumnarReads(InputPartition)}
  * returns true).
  */
-@InterfaceStability.Evolving
+@Evolving
 public interface PartitionReader<T> extends Closeable {
 
   /**

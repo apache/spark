@@ -106,6 +106,10 @@ case class CsvToStructs(
       throw new AnalysisException(s"from_csv() doesn't support the ${mode.name} mode. " +
         s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
     }
+    ExprUtils.verifyColumnNameOfCorruptRecord(
+      nullableSchema,
+      parsedOptions.columnNameOfCorruptRecord)
+
     val actualSchema =
       StructType(nullableSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     val rawParser = new UnivocityParser(actualSchema, actualSchema, parsedOptions)
@@ -176,8 +180,9 @@ case class SchemaOfCsv(
 
     val header = row.zipWithIndex.map { case (_, index) => s"_c$index" }
     val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-    val fieldTypes = CSVInferSchema.inferRowType(parsedOptions)(startType, row)
-    val st = StructType(CSVInferSchema.toStructFields(fieldTypes, header, parsedOptions))
+    val inferSchema = new CSVInferSchema(parsedOptions)
+    val fieldTypes = inferSchema.inferRowType(startType, row)
+    val st = StructType(inferSchema.toStructFields(fieldTypes, header))
     UTF8String.fromString(st.catalogString)
   }
 

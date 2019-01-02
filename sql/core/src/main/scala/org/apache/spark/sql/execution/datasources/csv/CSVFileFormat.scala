@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityGenerator, UnivocityParser}
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -110,13 +111,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
-    dataSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
-      val f = dataSchema(corruptFieldIndex)
-      if (f.dataType != StringType || !f.nullable) {
-        throw new AnalysisException(
-          "The field for corrupt records must be string type and nullable")
-      }
-    }
+    ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
 
     if (requiredSchema.length == 1 &&
       requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
@@ -174,13 +169,25 @@ private[csv] class CsvOutputWriter(
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
 
-  private val charset = Charset.forName(params.charset)
+  private var univocityGenerator: Option[UnivocityGenerator] = None
 
-  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
+  if (params.headerFlag) {
+    val gen = getGen()
+    gen.writeHeaders()
+  }
 
-  private val gen = new UnivocityGenerator(dataSchema, writer, params)
+  private def getGen(): UnivocityGenerator = univocityGenerator.getOrElse {
+    val charset = Charset.forName(params.charset)
+    val os = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
+    val newGen = new UnivocityGenerator(dataSchema, os, params)
+    univocityGenerator = Some(newGen)
+    newGen
+  }
 
-  override def write(row: InternalRow): Unit = gen.write(row)
+  override def write(row: InternalRow): Unit = {
+    val gen = getGen()
+    gen.write(row)
+  }
 
-  override def close(): Unit = gen.close()
+  override def close(): Unit = univocityGenerator.foreach(_.close())
 }

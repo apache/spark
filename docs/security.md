@@ -26,21 +26,29 @@ not documented, Spark does not support.
 Spark currently supports authentication for RPC channels using a shared secret. Authentication can
 be turned on by setting the `spark.authenticate` configuration parameter.
 
-The exact mechanism used to generate and distribute the shared secret is deployment-specific.
+The exact mechanism used to generate and distribute the shared secret is deployment-specific. Unless
+specified below, the secret must be defined by setting the `spark.authenticate.secret` config
+option. The same secret is shared by all Spark applications and daemons in that case, which limits
+the security of these deployments, especially on multi-tenant clusters.
 
-For Spark on [YARN](running-on-yarn.html) and local deployments, Spark will automatically handle
-generating and distributing the shared secret. Each application will use a unique shared secret. In
+The REST Submission Server and the MesosClusterDispatcher do not support authentication.  You should
+ensure that all network access to the REST API & MesosClusterDispatcher (port 6066 and 7077
+respectively by default) are restricted to hosts that are trusted to submit jobs.
+
+### YARN
+
+For Spark on [YARN](running-on-yarn.html), Spark will automatically handle generating and
+distributing the shared secret. Each application will use a unique shared secret. In
 the case of YARN, this feature relies on YARN RPC encryption being enabled for the distribution of
 secrets to be secure.
 
-For other resource managers, `spark.authenticate.secret` must be configured on each of the nodes.
-This secret will be shared by all the daemons and applications, so this deployment configuration is
-not as secure as the above, especially when considering multi-tenant clusters.  In this
-configuration, a user with the secret can effectively impersonate any other user.
+### Kubernetes
 
-The Rest Submission Server and the MesosClusterDispatcher do not support authentication.  You should
-ensure that all network access to the REST API & MesosClusterDispatcher (port 6066 and 7077
-respectively by default) are restricted to hosts that are trusted to submit jobs.
+On Kubernetes, Spark will also automatically generate an authentication secret unique to each
+application. The secret is propagated to executor pods using environment variables. This means
+that any user that can list pods in the namespace where the Spark application is running can
+also see their authentication secret. Access control rules should be properly set up by the
+Kubernetes admin to ensure that Spark authentication is secure.
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -57,6 +65,50 @@ respectively by default) are restricted to hosts that are trusted to submit jobs
   </td>
 </tr>
 </table>
+
+Alternatively, one can mount authentication secrets using files and Kubernetes secrets that
+the user mounts into their pods.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.authenticate.secret.file</code></td>
+  <td>None</td>
+  <td>
+    Path pointing to the secret key to use for securing connections. Ensure that the
+    contents of the file have been securely generated. This file is loaded on both the driver
+    and the executors unless other settings override this (see below).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.secret.driver.file</code></td>
+  <td>The value of <code>spark.authenticate.secret.file</code></td>
+  <td>
+    When specified, overrides the location that the Spark driver reads to load the secret.
+    Useful when in client mode, when the location of the secret file may differ in the pod versus
+    the node the driver is running in. When this is specified,
+    <code>spark.authenticate.secret.executor.file</code> must be specified so that the driver
+    and the executors can both use files to load the secret key. Ensure that the contents of the file
+    on the driver is identical to the contents of the file on the executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.secret.executor.file</code></td>
+  <td>The value of <code>spark.authenticate.secret.file</code></td>
+  <td>
+    When specified, overrides the location that the Spark executors read to load the secret.
+    Useful in client mode, when the location of the secret file may differ in the pod versus
+    the node the driver is running in. When this is specified,
+    <code>spark.authenticate.secret.driver.file</code> must be specified so that the driver
+    and the executors can both use files to load the secret key. Ensure that the contents of the file
+    on the driver is identical to the contents of the file on the executors.
+  </td>
+</tr>
+</table>
+
+Note that when using files, Spark will not mount these files into the containers for you. It is up
+you to ensure that the secret files are deployed securely into your containers and that the driver's
+secret file agrees with the executors' secret file.
 
 ## Encryption
 
@@ -337,7 +389,7 @@ Configuration for SSL is organized hierarchically. The user can configure the de
 which will be used for all the supported communication protocols unless they are overwritten by
 protocol-specific settings. This way the user can easily provide the common settings for all the
 protocols without disabling the ability to configure each one individually. The following table
-describes the the SSL configuration namespaces:
+describes the SSL configuration namespaces:
 
 <table class="table">
   <tr>
@@ -738,10 +790,10 @@ tokens for supported will be created.
 ## Secure Interaction with Kubernetes
 
 When talking to Hadoop-based services behind Kerberos, it was noted that Spark needs to obtain delegation tokens
-so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are 
-shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job: 
+so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are
+shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job:
 
-In all cases you must define the environment variable: `HADOOP_CONF_DIR` or 
+In all cases you must define the environment variable: `HADOOP_CONF_DIR` or
 `spark.kubernetes.hadoop.configMapName.`
 
 It also important to note that the KDC needs to be visible from inside the containers.
@@ -820,4 +872,15 @@ should correspond to the super user who is running the Spark History Server.
 
 This will allow all users to write to the directory but will prevent unprivileged users from
 reading, removing or renaming a file unless they own it. The event log files will be created by
+Spark with permissions such that only the user and group have read and write access.
+
+# Persisting driver logs in client mode
+
+If your applications persist driver logs in client mode by enabling `spark.driver.log.persistToDfs.enabled`,
+the directory where the driver logs go (`spark.driver.log.dfsDir`) should be manually created with proper
+permissions. To secure the log files, the directory permissions should be set to `drwxrwxrwxt`. The owner
+and group of the directory should correspond to the super user who is running the Spark History Server.
+
+This will allow all users to write to the directory but will prevent unprivileged users from
+reading, removing or renaming a file unless they own it. The driver log files will be created by
 Spark with permissions such that only the user and group have read and write access.

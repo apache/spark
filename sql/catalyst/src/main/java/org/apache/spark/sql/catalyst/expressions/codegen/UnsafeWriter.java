@@ -198,16 +198,45 @@ public abstract class UnsafeWriter {
     Platform.putLong(getBuffer(), offset, value);
   }
 
+  // We need to take care of NaN and -0.0 in several places:
+  //   1. When compare values, different NaNs should be treated as same, `-0.0` and `0.0` should be
+  //      treated as same.
+  //   2. In GROUP BY, different NaNs should belong to the same group, -0.0 and 0.0 should belong
+  //      to the same group.
+  //   3. As join keys, different NaNs should be treated as same, `-0.0` and `0.0` should be
+  //      treated as same.
+  //   4. As window partition keys, different NaNs should be treated as same, `-0.0` and `0.0`
+  //      should be treated as same.
+  //
+  // Case 1 is fine, as we handle NaN and -0.0 well during comparison. For complex types, we
+  // recursively compare the fields/elements, so it's also fine.
+  //
+  // Case 2, 3 and 4 are problematic, as they compare `UnsafeRow` binary directly, and different
+  // NaNs have different binary representation, and the same thing happens for -0.0 and 0.0.
+  //
+  // Here we normalize NaN and -0.0, so that `UnsafeProjection` will normalize them when writing
+  // float/double columns and nested fields to `UnsafeRow`.
+  //
+  // Note that, we must do this for all the `UnsafeProjection`s, not only the ones that extract
+  // join/grouping/window partition keys. `UnsafeProjection` copies unsafe data directly for complex
+  // types, so nested float/double may not be normalized. We need to make sure that all the unsafe
+  // data(`UnsafeRow`, `UnsafeArrayData`, `UnsafeMapData`) will have flat/double normalized during
+  // creation.
   protected final void writeFloat(long offset, float value) {
     if (Float.isNaN(value)) {
       value = Float.NaN;
+    } else if (value == -0.0f) {
+      value = 0.0f;
     }
     Platform.putFloat(getBuffer(), offset, value);
   }
 
+  // See comments for `writeFloat`.
   protected final void writeDouble(long offset, double value) {
     if (Double.isNaN(value)) {
       value = Double.NaN;
+    } else if (value == -0.0d) {
+      value = 0.0d;
     }
     Platform.putDouble(getBuffer(), offset, value);
   }

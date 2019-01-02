@@ -170,15 +170,6 @@ public class YarnShuffleService extends AuxiliaryService {
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
       blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
 
-      // register metrics on the block handler into the Node Manager's metrics system.
-      YarnShuffleServiceMetrics serviceMetrics =
-        new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
-
-      MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
-      metricsSystem.register(
-        "sparkShuffleService", "Metrics on the Spark Shuffle Service", serviceMetrics);
-      logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
-
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
       List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
@@ -199,6 +190,18 @@ public class YarnShuffleService extends AuxiliaryService {
       port = shuffleServer.getPort();
       boundPort = port;
       String authEnabledString = authEnabled ? "enabled" : "not enabled";
+
+      // register metrics on the block handler into the Node Manager's metrics system.
+      blockHandler.getAllMetrics().getMetrics().put("numRegisteredConnections",
+          shuffleServer.getRegisteredConnections());
+      YarnShuffleServiceMetrics serviceMetrics =
+          new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
+
+      MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
+      metricsSystem.register(
+          "sparkShuffleService", "Metrics on the Spark Shuffle Service", serviceMetrics);
+      logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
+
       logger.info("Started YARN shuffle service for Spark on port {}. " +
         "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
         registeredExecutorFile);

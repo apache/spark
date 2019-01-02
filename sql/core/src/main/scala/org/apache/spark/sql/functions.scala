@@ -23,7 +23,7 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
@@ -68,7 +68,7 @@ import org.apache.spark.util.Utils
  * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 // scalastyle:off
 object functions {
 // scalastyle:on
@@ -2578,7 +2578,7 @@ object functions {
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
-   * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
+   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
    *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -2811,7 +2811,7 @@ object functions {
    * representing the timestamp of that moment in the current system time zone in the given
    * format.
    *
-   * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
+   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param ut A number of a type that is castable to a long, such as string or integer. Can be
    *           negative for timestamps before the unix epoch
@@ -2855,7 +2855,7 @@ object functions {
   /**
    * Converts time string with given pattern to Unix timestamp (in seconds).
    *
-   * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
+   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
    *          cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -2883,7 +2883,7 @@ object functions {
   /**
    * Converts time string with the given pattern to timestamp.
    *
-   * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
+   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param s   A date, timestamp or string. If a string, the data must be in a format that can be
    *            cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -2908,7 +2908,7 @@ object functions {
   /**
    * Converts the column into a `DateType` with a specified format
    *
-   * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
+   * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param e   A date, timestamp or string. If a string, the data must be in a format that can be
    *            cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -3731,7 +3731,7 @@ object functions {
   /**
    * Returns an unordered array of all entries in the given map.
    * @group collection_funcs
-   * @since 2.4.0
+   * @since 3.0.0
    */
   def map_entries(e: Column): Column = withExpr { MapEntries(e.expr) }
 
@@ -4259,7 +4259,7 @@ object functions {
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
     // TODO: should call SparkUserDefinedFunction.create() instead but inputSchemas is currently
     // unavailable. We may need to create type-safe overloaded versions of udf() methods.
-    new UserDefinedFunction(f, dataType, inputTypes = None)
+    SparkUserDefinedFunction(f, dataType, inputTypes = None, nullableTypes = None)
   }
 
   /**

@@ -798,7 +798,7 @@ def factorial(col):
 # ---------------  Window functions ------------------------
 
 @since(1.4)
-def lag(col, count=1, default=None):
+def lag(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows before the current row, and
     `defaultValue` if there is less than `offset` rows before the current row. For example,
@@ -807,15 +807,15 @@ def lag(col, count=1, default=None):
     This is equivalent to the LAG function in SQL.
 
     :param col: name of column or expression
-    :param count: number of row to extend
+    :param offset: number of row to extend
     :param default: default value
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.lag(_to_java_column(col), count, default))
+    return Column(sc._jvm.functions.lag(_to_java_column(col), offset, default))
 
 
 @since(1.4)
-def lead(col, count=1, default=None):
+def lead(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows after the current row, and
     `defaultValue` if there is less than `offset` rows after the current row. For example,
@@ -824,11 +824,11 @@ def lead(col, count=1, default=None):
     This is equivalent to the LEAD function in SQL.
 
     :param col: name of column or expression
-    :param count: number of row to extend
+    :param offset: number of row to extend
     :param default: default value
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.lead(_to_java_column(col), count, default))
+    return Column(sc._jvm.functions.lead(_to_java_column(col), offset, default))
 
 
 @since(1.4)
@@ -874,7 +874,7 @@ def date_format(date, format):
     format given by the second argument.
 
     A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
-    pattern letters of the Java class `java.text.SimpleDateFormat` can be used.
+    pattern letters of the Java class `java.time.format.DateTimeFormatter` can be used.
 
     .. note:: Use when ever possible specialized functions like `year`. These benefit from a
         specialized implementation.
@@ -1094,7 +1094,7 @@ def to_date(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to
-    `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
+    `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted (equivalent to ``col.cast("date")``).
 
@@ -1119,7 +1119,7 @@ def to_timestamp(col, format=None):
     """Converts a :class:`Column` of :class:`pyspark.sql.types.StringType` or
     :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to
-    `SimpleDateFormats <http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html>`_.
+    `DateTimeFormatter <https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html>`_. # noqa
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted (equivalent to ``col.cast("timestamp")``).
 
@@ -2576,7 +2576,7 @@ def map_values(col):
     return Column(sc._jvm.functions.map_values(_to_java_column(col)))
 
 
-@since(2.4)
+@since(3.0)
 def map_entries(col):
     """
     Collection function: Returns an unordered array of all entries in the given map.
@@ -2656,11 +2656,11 @@ def map_concat(*cols):
     >>> from pyspark.sql.functions import map_concat
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c', 1, 'd') as map2")
     >>> df.select(map_concat("map1", "map2").alias("map3")).show(truncate=False)
-    +--------------------------------+
-    |map3                            |
-    +--------------------------------+
-    |[1 -> a, 2 -> b, 3 -> c, 1 -> d]|
-    +--------------------------------+
+    +------------------------+
+    |map3                    |
+    +------------------------+
+    |[1 -> d, 2 -> b, 3 -> c]|
+    +------------------------+
     """
     sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
@@ -2982,8 +2982,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  2|        6.0|
        +---+-----------+
 
-       This example shows using grouped aggregated UDFs as window functions. Note that only
-       unbounded window frame is supported at the moment:
+       This example shows using grouped aggregated UDFs as window functions.
 
        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
        >>> from pyspark.sql import Window
@@ -2993,19 +2992,23 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
        ... def mean_udf(v):
        ...     return v.mean()
-       >>> w = Window \\
-       ...     .partitionBy('id') \\
-       ...     .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+       >>> w = (Window.partitionBy('id')
+       ...            .orderBy('v')
+       ...            .rowsBetween(-1, 0))
        >>> df.withColumn('mean_v', mean_udf(df['v']).over(w)).show()  # doctest: +SKIP
        +---+----+------+
        | id|   v|mean_v|
        +---+----+------+
-       |  1| 1.0|   1.5|
+       |  1| 1.0|   1.0|
        |  1| 2.0|   1.5|
-       |  2| 3.0|   6.0|
-       |  2| 5.0|   6.0|
-       |  2|10.0|   6.0|
+       |  2| 3.0|   3.0|
+       |  2| 5.0|   4.0|
+       |  2|10.0|   7.5|
        +---+----+------+
+
+       .. note:: For performance reasons, the input series to window functions are not copied.
+            Therefore, mutating the input series is not allowed and will cause incorrect results.
+            For the same reason, users should also not rely on the index of the input series.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.agg` and :class:`pyspark.sql.Window`
 
