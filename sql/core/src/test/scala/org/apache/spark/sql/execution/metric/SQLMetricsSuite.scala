@@ -77,11 +77,16 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
   }
 
   test("WholeStageCodegen metrics") {
-    // Assume the execution plan is
-    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
+    // Assume the execution plan with node id is
+    // WholeStageCodegen(nodeId = 0)
+    //   Filter(nodeId = 1)
+    //     Range(nodeId = 2)
     // TODO: update metrics in generated operators
     val ds = spark.range(10).filter('id < 5)
-    testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
+    testSparkPlanMetricsWithPredicates(ds.toDF(), 1, Map(
+      0L -> (("WholeStageCodegen", Map(
+        "duration total (min, med, max)" -> {_.toString.matches(timingMetricPattern)})))
+    ), true)
   }
 
   test("Aggregate metrics") {
