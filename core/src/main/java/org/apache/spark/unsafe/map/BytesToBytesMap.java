@@ -712,7 +712,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       final long recordOffset = offset;
       UnsafeAlignedOffset.putSize(base, offset, klen + vlen + uaoSize);
       UnsafeAlignedOffset.putSize(base, offset + uaoSize, klen);
-      offset += (2 * uaoSize);
+      offset += (2L * uaoSize);
       Platform.copyMemory(kbase, koff, base, offset, klen);
       offset += klen;
       Platform.copyMemory(vbase, voff, base, offset, vlen);
@@ -780,7 +780,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     assert (capacity >= 0);
     capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    longArray = allocateArray(capacity * 2);
+    longArray = allocateArray(capacity * 2L);
     longArray.zeroOut();
 
     this.growthThreshold = (int) (capacity * loadFactor);
