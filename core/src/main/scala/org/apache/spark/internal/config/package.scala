@@ -733,4 +733,45 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  private[spark] val PYTHON_WORKER_REUSE = ConfigBuilder("spark.python.worker.reuse")
+    .booleanConf
+    .createWithDefault(true)
+
+  private[spark] val PYTHON_TASK_KILL_TIMEOUT = ConfigBuilder("spark.python.task.killTimeout")
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefaultString("2s")
+
+  private[spark] val PYTHON_USE_DAEMON = ConfigBuilder("spark.python.use.daemon")
+    .booleanConf
+    .createWithDefault(true)
+
+  private[spark] val PYTHON_DAEMON_MODULE = ConfigBuilder("spark.python.daemon.module")
+    .stringConf
+    .createOptional
+
+  private[spark] val PYTHON_WORKER_MODULE = ConfigBuilder("spark.python.worker.module")
+    .stringConf
+    .createOptional
+
+  private[spark] val R_BACKEND_CONNECTION_TIMEOUT =
+    ConfigBuilder("spark.r.backendConnectionTimeout")
+      .intConf
+      .createWithDefault(6000)
+
+  private[spark] val R_NUM_BACKEND_THREADS = ConfigBuilder("spark.r.numRBackendThreads")
+    .intConf
+    .createWithDefault(2)
+
+  private[spark] val R_HEARTBEAT_INTERVAL = ConfigBuilder("spark.r.heartBeatInterval")
+    .intConf
+    .createWithDefault(100)
+
+  private[spark] val SPARKR_COMMAND = ConfigBuilder("spark.sparkr.r.command")
+    .stringConf
+    .createWithDefault("Rscript")
+
+  private[spark] val R_COMMAND = ConfigBuilder("spark.r.command")
+    .stringConf
+    .createOptional
 }

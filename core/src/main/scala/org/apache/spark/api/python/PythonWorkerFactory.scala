@@ -28,6 +28,7 @@ import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -41,7 +42,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   // currently only works on UNIX-based systems now because it uses signals for child management,
   // so we can also fall back to launching workers, pyspark/worker.py (by default) directly.
   private val useDaemon = {
-    val useDaemonEnabled = SparkEnv.get.conf.getBoolean("spark.python.use.daemon", true)
+    val useDaemonEnabled = SparkEnv.get.conf.get(PYTHON_USE_DAEMON)
 
     // This flag is ignored on Windows as it's unable to fork.
     !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
@@ -53,21 +54,21 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   // This configuration indicates the module to run the daemon to execute its Python workers.
   private val daemonModule =
-    SparkEnv.get.conf.getOption("spark.python.daemon.module").map { value =>
+    SparkEnv.get.conf.get(PYTHON_DAEMON_MODULE).map { value =>
       logInfo(
-        s"Python daemon module in PySpark is set to [$value] in 'spark.python.daemon.module', " +
+        s"Python daemon module in PySpark is set to [$value] in '${PYTHON_DAEMON_MODULE.key}', " +
         "using this to start the daemon up. Note that this configuration only has an effect when " +
-        "'spark.python.use.daemon' is enabled and the platform is not Windows.")
+        s"'${PYTHON_USE_DAEMON.key}' is enabled and the platform is not Windows.")
       value
     }.getOrElse("pyspark.daemon")
 
   // This configuration indicates the module to run each Python worker.
   private val workerModule =
-    SparkEnv.get.conf.getOption("spark.python.worker.module").map { value =>
+    SparkEnv.get.conf.get(PYTHON_WORKER_MODULE).map { value =>
       logInfo(
-        s"Python worker module in PySpark is set to [$value] in 'spark.python.worker.module', " +
+        s"Python worker module in PySpark is set to [$value] in '${PYTHON_WORKER_MODULE.key}', " +
         "using this to start the worker up. Note that this configuration only has an effect when " +
-        "'spark.python.use.daemon' is disabled or the platform is Windows.")
+        s"'${PYTHON_USE_DAEMON.key}' is disabled or the platform is Windows.")
       value
     }.getOrElse("pyspark.worker")
 

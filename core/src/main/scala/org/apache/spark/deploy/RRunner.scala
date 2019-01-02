@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, SparkUserAppException}
 import org.apache.spark.api.r.{RBackend, RUtils, SparkRDefaults}
+import org.apache.spark.internal.config._
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -43,8 +44,8 @@ object RRunner {
     val rCommand = {
       // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
       // but kept here for backward compatibility.
-      var cmd = sys.props.getOrElse("spark.sparkr.r.command", "Rscript")
-      cmd = sys.props.getOrElse("spark.r.command", cmd)
+      var cmd = sys.props.getOrElse(SPARKR_COMMAND.key, SPARKR_COMMAND.defaultValue.get)
+      cmd = sys.props.getOrElse(R_COMMAND.key, cmd)
       if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
         cmd = sys.props.getOrElse("spark.r.driver.command", cmd)
       }
@@ -53,7 +54,7 @@ object RRunner {
 
     //  Connection timeout set by R process on its connection to RBackend in seconds.
     val backendConnectionTimeout = sys.props.getOrElse(
-      "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT.toString)
+      R_BACKEND_CONNECTION_TIMEOUT.key, R_BACKEND_CONNECTION_TIMEOUT.defaultValue.get.toString)
 
     // Check if the file path exists.
     // If not, change directory to current working directory for YARN cluster mode
