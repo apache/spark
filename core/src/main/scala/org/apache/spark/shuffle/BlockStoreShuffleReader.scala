@@ -19,6 +19,7 @@ package org.apache.spark.shuffle
 
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
@@ -35,20 +36,37 @@ private[spark] class BlockStoreShuffleReader[K, C](
     context: TaskContext,
     serializerManager: SerializerManager = SparkEnv.get.serializerManager,
     blockManager: BlockManager = SparkEnv.get.blockManager,
-    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
+    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker,
+    conf: SparkConf = SparkEnv.get.conf)
   extends ShuffleReader[K, C] with Logging {
 
   private val dep = handle.dependency
 
+  private def supportsConcatenationOfSerializedStreams: Boolean = {
+    val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
+    CompressionCodec.supportsConcatenationOfSerializedStreams(compressionCodec)
+  }
+
+  private def supportsContinuousBlockBatchFetch: Boolean = {
+    val configEnabled = conf.getBoolean("spark.shuffle.continuousBlockBatchFetch", true)
+    val compressed = conf.getBoolean("spark.shuffle.compress", true)
+    val serializerRelocatable = dep.serializer.supportsRelocationOfSerializedObjects
+
+    configEnabled &&
+      serializerRelocatable &&
+      (!compressed || supportsConcatenationOfSerializedStreams)
+  }
+
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
+    val continuousBlockBatchFetch = supportsContinuousBlockBatchFetch
     val wrappedStreams = new ShuffleBlockFetcherIterator(
       context,
       blockManager.shuffleClient,
       blockManager,
       mapOutputTracker.getMapSizesByExecutorId(
-        handle.shuffleId, startPartition, endPartition,
-        serializerRelocatable = false),
+        handle.shuffleId, startPartition, endPartition, blockManager,
+        continuousBlockBatchFetch),
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,
