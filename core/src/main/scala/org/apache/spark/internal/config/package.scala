@@ -114,6 +114,27 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_GARBAGE_COLLECTION_METRICS =
+    ConfigBuilder("spark.eventLog.logStageExecutorGCMetrics.enabled")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS =
+    ConfigBuilder("spark.additionalYoungGenerationGarbageCollectors")
+      .doc("Names of additional young generation garbage collector, " +
+        "usually is the return of GarbageCollectorMXBean.getName, e.g. ParNew.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  private[spark] val ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS =
+    ConfigBuilder("spark.additionalOldGenerationGarbageCollectors")
+      .doc("Names of additional old generation garbage collector, " +
+        "usually is the return of GarbageCollectorMXBean.getName, e.g. ConcurrentMarkSweep.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
 

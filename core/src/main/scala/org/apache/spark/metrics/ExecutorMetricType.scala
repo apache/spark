@@ -22,7 +22,9 @@ import javax.management.ObjectName
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.executor.ProcfsMetricsGetter
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.memory.MemoryManager
 
 /**
@@ -100,7 +102,7 @@ case object ProcessTreeMetrics extends ExecutorMetricType {
   }
 }
 
-case object GarbageCollectionMetrics extends ExecutorMetricType {
+case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
   import GC_TYPE._
   override val names = Seq(
     "MinorGCCount",
@@ -108,17 +110,38 @@ case object GarbageCollectionMetrics extends ExecutorMetricType {
     "MajorGCCount",
     "MajorGCTime"
   )
+
+  private lazy val supported: Boolean = {
+    val shouldLogStageExecutorGCMetrics =
+      SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
+    val supportedVendor = System.getProperty("java.vendor").contains("Oracle") ||
+      System.getProperty("java.vendor").contains("OpenJDK")
+    shouldLogStageExecutorGCMetrics && supportedVendor
+  }
+
+  private lazy val youngGenGarbageCollector: Seq[String] = {
+    Seq(`copy`, `psScavenge`, `parNew`, `g1Young`) ++ /* additional young gc we added */
+      SparkEnv.get.conf.get(config.ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS)
+  }
+
+  private lazy val oldGenGarbageCollector: Seq[String] = {
+    Seq(`markSweepCompact`, `psMarkSweep`, `cms`, `g1Old`) ++ /* additional old gc we added */
+      SparkEnv.get.conf.get(config.ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS)
+  }
+
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     val gcMetrics = Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
-    ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
-      mxBean.getName match {
-        case `copy` | `psScavenge` | `parNew` | `g1Young` =>
+    if (supported) {
+      ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
+        if (youngGenGarbageCollector.contains(mxBean.getName)) {
           gcMetrics(0) = mxBean.getCollectionCount
           gcMetrics(1) = mxBean.getCollectionTime
-        case `markSweepCompact` | `psMarkSweep` | `cms` | `g1Old` =>
+        } else if (oldGenGarbageCollector.contains(mxBean.getName)) {
           gcMetrics(2) = mxBean.getCollectionCount
           gcMetrics(3) = mxBean.getCollectionTime
-        case _ =>
+        } else {
+          logDebug(s"${mxBean.getName} is an unsupported garbage collector.")
+        }
       }
     }
     gcMetrics
