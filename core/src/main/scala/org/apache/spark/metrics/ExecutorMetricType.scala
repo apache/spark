@@ -109,24 +109,19 @@ case object GarbageCollectionMetrics extends ExecutorMetricType {
     "MajorGCTime"
   )
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
-    var allMetrics = GCMetrics(0, 0, 0, 0)
+    val gcMetrics = Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
     ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
-      val metrics = mxBean.getName match {
+      mxBean.getName match {
         case `copy` | `psScavenge` | `parNew` | `g1Young` =>
-          GCMetrics(mxBean.getCollectionCount, mxBean.getCollectionTime, 0, 0)
+          gcMetrics(0) = mxBean.getCollectionCount
+          gcMetrics(1) = mxBean.getCollectionTime
         case `markSweepCompact` | `psMarkSweep` | `cms` | `g1Old` =>
-          GCMetrics(0, 0, mxBean.getCollectionCount, mxBean.getCollectionTime)
+          gcMetrics(2) = mxBean.getCollectionCount
+          gcMetrics(3) = mxBean.getCollectionTime
         case _ =>
-          GCMetrics(0, 0, 0, 0)
       }
-      allMetrics += metrics
     }
-    val gcMetricsAsSet = new Array[Long](names.size)
-    gcMetricsAsSet(0) = allMetrics.minorCount
-    gcMetricsAsSet(1) = allMetrics.minorTime
-    gcMetricsAsSet(2) = allMetrics.majorCount
-    gcMetricsAsSet(3) = allMetrics.majorTime
-    gcMetricsAsSet
+    gcMetrics
   }
 }
 
@@ -142,17 +137,6 @@ private[spark] object GC_TYPE {
   val psMarkSweep = "PS MarkSweep"
   val cms = "ConcurrentMarkSweep"
   val g1Old = "G1 Old Generation"
-}
-
-private[spark] case class GCMetrics(
-    minorCount: Long,
-    minorTime: Long,
-    majorCount: Long,
-    majorTime: Long) {
-  def + (other: GCMetrics): GCMetrics = {
-    GCMetrics(this.minorCount + other.minorCount, this.minorTime + other.minorTime,
-      this.majorCount + other.majorCount, this.majorTime + other.majorTime)
-  }
 }
 
 case object OnHeapExecutionMemory extends MemoryManagerExecutorMetricType(
