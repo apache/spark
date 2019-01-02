@@ -198,7 +198,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     }
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Pushdown for many distinct value case") {
       withTempPath { dir =>
         withTempTable("orcTable", "parquetTable") {

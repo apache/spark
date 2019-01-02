@@ -38,6 +38,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TestMemoryManager;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.JavaSerializer;
 import org.apache.spark.serializer.SerializerInstance;
@@ -534,10 +535,10 @@ public class UnsafeExternalSorterSuite {
       insertNumber(sorter, 1024);
       fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
     }
-    // we expect an OutOfMemoryError here, anything else (i.e the original NPE is a failure)
-    catch (OutOfMemoryError oom){
+    // we expect an SparkOutOfMemoryError here, anything else (i.e the original NPE is a failure)
+    catch (SparkOutOfMemoryError oom){
       String oomStackTrace = Utils.exceptionString(oom);
-      assertThat("expected OutOfMemoryError in " +
+      assertThat("expected SparkOutOfMemoryError in " +
         "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
         oomStackTrace,
         Matchers.containsString(

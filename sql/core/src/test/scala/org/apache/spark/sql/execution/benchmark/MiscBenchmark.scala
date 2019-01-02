@@ -148,7 +148,7 @@ object MiscBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     filterAndAggregateWithoutGroup(500L << 22)
     limitAndAggregateWithoutGroup(500L << 20)
     sample(500 << 18)

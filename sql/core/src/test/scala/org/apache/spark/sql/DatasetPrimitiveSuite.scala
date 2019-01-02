@@ -295,7 +295,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(LHMap("test" -> 2.toLong)).toDS(), LHMap("test" -> 2.toLong))
   }
 
-  ignore("SPARK-19104: map and product combinations") {
+  test("SPARK-25817: map and product combinations") {
     // Case classes
     checkDataset(Seq(MapClass(Map(1 -> 2))).toDS(), MapClass(Map(1 -> 2)))
     checkDataset(Seq(Map(1 -> MapClass(Map(2 -> 3)))).toDS(), Map(1 -> MapClass(Map(2 -> 3))))
@@ -392,5 +392,34 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     val data = Seq.tabulate(10)(i => NestedData(1, Map("key" -> InnerData("name", i + 100))))
     val ds = spark.createDataset(data)
     checkDataset(ds, data: _*)
+  }
+
+  test("special floating point values") {
+    import org.scalatest.exceptions.TestFailedException
+
+    // Spark treats -0.0 as 0.0
+    intercept[TestFailedException] {
+      checkDataset(Seq(-0.0d).toDS(), -0.0d)
+    }
+    intercept[TestFailedException] {
+      checkDataset(Seq(-0.0f).toDS(), -0.0f)
+    }
+    intercept[TestFailedException] {
+      checkDataset(Seq(Tuple1(-0.0)).toDS(), Tuple1(-0.0))
+    }
+
+    val floats = Seq[Float](-0.0f, 0.0f, Float.NaN).toDS()
+    checkDataset(floats, 0.0f, 0.0f, Float.NaN)
+
+    val doubles = Seq[Double](-0.0d, 0.0d, Double.NaN).toDS()
+    checkDataset(doubles, 0.0, 0.0, Double.NaN)
+
+    checkDataset(Seq(Tuple1(Float.NaN)).toDS(), Tuple1(Float.NaN))
+    checkDataset(Seq(Tuple1(-0.0f)).toDS(), Tuple1(0.0f))
+    checkDataset(Seq(Tuple1(Double.NaN)).toDS(), Tuple1(Double.NaN))
+    checkDataset(Seq(Tuple1(-0.0)).toDS(), Tuple1(0.0))
+
+    val complex = Map(Array(Seq(Tuple1(Double.NaN))) -> Map(Tuple2(Float.NaN, null)))
+    checkDataset(Seq(complex).toDS(), complex)
   }
 }

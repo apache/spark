@@ -49,9 +49,30 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
   def currentValue: InternalRow = mutableRow
 
   override def target(row: InternalRow): MutableProjection = {
+    // If `mutableRow` is `UnsafeRow`, `MutableProjection` accepts fixed-length types only
+    require(!row.isInstanceOf[UnsafeRow] ||
+      validExprs.forall { case (e, _) => UnsafeRow.isFixedLength(e.dataType) },
+      "MutableProjection cannot use UnsafeRow for output data types: " +
+        validExprs.map(_._1.dataType).filterNot(UnsafeRow.isFixedLength)
+          .map(_.catalogString).mkString(", "))
     mutableRow = row
     this
   }
+
+  private[this] val fieldWriters: Array[Any => Unit] = validExprs.map { case (e, i) =>
+    val writer = InternalRow.getWriter(i, e.dataType)
+    if (!e.nullable) {
+      (v: Any) => writer(mutableRow, v)
+    } else {
+      (v: Any) => {
+        if (v == null) {
+          mutableRow.setNullAt(i)
+        } else {
+          writer(mutableRow, v)
+        }
+      }
+    }
+  }.toArray
 
   override def apply(input: InternalRow): InternalRow = {
     var i = 0
@@ -64,7 +85,7 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
     i = 0
     while (i < validExprs.length) {
       val (_, ordinal) = validExprs(i)
-      mutableRow(ordinal) = buffer(ordinal)
+      fieldWriters(i)(buffer(ordinal))
       i += 1
     }
     mutableRow

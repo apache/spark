@@ -26,6 +26,7 @@ package org.apache.spark.sql.catalyst.expressions
  *
  * The following rules are applied:
  *  - Names and nullability hints for [[org.apache.spark.sql.types.DataType]]s are stripped.
+ *  - Names for [[GetStructField]] are stripped.
  *  - Commutative and associative operations ([[Add]] and [[Multiply]]) have their children ordered
  *    by `hashCode`.
  *  - [[EqualTo]] and [[EqualNullSafe]] are reordered by `hashCode`.
@@ -37,10 +38,11 @@ object Canonicalize {
     expressionReorder(ignoreNamesTypes(e))
   }
 
-  /** Remove names and nullability from types. */
+  /** Remove names and nullability from types, and names from `GetStructField`. */
   private[expressions] def ignoreNamesTypes(e: Expression): Expression = e match {
     case a: AttributeReference =>
       AttributeReference("none", a.dataType.asNullable)(exprId = a.exprId)
+    case GetStructField(child, ordinal, Some(_)) => GetStructField(child, ordinal, None)
     case _ => e
   }
 

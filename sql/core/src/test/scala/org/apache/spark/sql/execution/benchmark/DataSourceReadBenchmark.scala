@@ -447,7 +447,9 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
   }
 
   def stringWithNullsScanBenchmark(values: Int, fractionOfNulls: Double): Unit = {
-    val benchmark = new Benchmark("String with Nulls Scan", values, output = output)
+    val percentageOfNulls = fractionOfNulls * 100
+    val benchmark =
+      new Benchmark(s"String with Nulls Scan ($percentageOfNulls%)", values, output = output)
 
     withTempPath { dir =>
       withTempTable("t1", "csvTable", "jsonTable", "parquetTable", "orcTable") {
@@ -585,7 +587,7 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
     }
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
       Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach {
         dataType => numericScanBenchmark(1024 * 1024 * 15, dataType)

@@ -30,7 +30,7 @@ set -e
 # If there is no passwd entry for the container UID, attempt to create one
 if [ -z "$uidentry" ] ; then
     if [ -w /etc/passwd ] ; then
-        echo "$myuid:x:$myuid:$mygid:anonymous uid:$SPARK_HOME:/bin/false" >> /etc/passwd
+        echo "$myuid:x:$myuid:$mygid:${SPARK_USER_NAME:-anonymous uid}:$SPARK_HOME:/bin/false" >> /etc/passwd
     else
         echo "Container ENTRYPOINT failed to add passwd entry for anonymous UID"
     fi
@@ -94,22 +94,6 @@ case "$SPARK_K8S_CMD" in
       --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
       --deploy-mode client
       "$@"
-    )
-    ;;
-  driver-py)
-    CMD=(
-      "$SPARK_HOME/bin/spark-submit"
-      --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
-      --deploy-mode client
-      "$@" $PYSPARK_PRIMARY $PYSPARK_ARGS
-    )
-    ;;
-    driver-r)
-    CMD=(
-      "$SPARK_HOME/bin/spark-submit"
-      --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
-      --deploy-mode client
-      "$@" $R_PRIMARY $R_ARGS
     )
     ;;
   executor)

@@ -128,11 +128,10 @@ class DiskStoreSuite extends SparkFunSuite {
 
     assert(e.getMessage ===
       s"requirement failed: can't create a byte buffer of size ${blockData.size}" +
-      " since it exceeds 10.0 KB.")
+      " since it exceeds 10.0 KiB.")
   }
 
   test("block data encryption") {
-    val testDir = Utils.createTempDir()
     val testData = new Array[Byte](128 * 1024)
     new Random().nextBytes(testData)
 

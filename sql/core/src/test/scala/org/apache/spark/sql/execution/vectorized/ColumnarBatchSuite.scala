@@ -1123,7 +1123,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
             compareStruct(childFields, r1.getStruct(ordinal, fields.length),
               r2.getStruct(ordinal), seed)
           case _ =>
-            throw new NotImplementedError("Not implemented " + field.dataType)
+            throw new UnsupportedOperationException("Not implemented " + field.dataType)
         }
       }
     }
