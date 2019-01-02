@@ -119,16 +119,16 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS =
-    ConfigBuilder("spark.additionalYoungGenerationGarbageCollectors")
+  private[spark] val EVENT_LOG_ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS =
+    ConfigBuilder("spark.eventLog.additionalYoungGenerationGarbageCollectors")
       .doc("Names of additional young generation garbage collector, " +
         "usually is the return of GarbageCollectorMXBean.getName, e.g. ParNew.")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
 
-  private[spark] val ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS =
-    ConfigBuilder("spark.additionalOldGenerationGarbageCollectors")
+  private[spark] val EVENT_LOG_ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS =
+    ConfigBuilder("spark.eventLog.additionalOldGenerationGarbageCollectors")
       .doc("Names of additional old generation garbage collector, " +
         "usually is the return of GarbageCollectorMXBean.getName, e.g. ConcurrentMarkSweep.")
       .stringConf

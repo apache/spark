@@ -121,12 +121,12 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
 
   private lazy val youngGenGarbageCollector: Seq[String] = {
     Seq(`copy`, `psScavenge`, `parNew`, `g1Young`) ++ /* additional young gc we added */
-      SparkEnv.get.conf.get(config.ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS)
+      SparkEnv.get.conf.get(config.EVENT_LOG_ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS)
   }
 
   private lazy val oldGenGarbageCollector: Seq[String] = {
     Seq(`markSweepCompact`, `psMarkSweep`, `cms`, `g1Old`) ++ /* additional old gc we added */
-      SparkEnv.get.conf.get(config.ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS)
+      SparkEnv.get.conf.get(config.EVENT_LOG_ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS)
   }
 
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
@@ -140,7 +140,9 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
           gcMetrics(2) = mxBean.getCollectionCount
           gcMetrics(3) = mxBean.getCollectionTime
         } else {
-          logDebug(s"${mxBean.getName} is an unsupported garbage collector.")
+          logDebug(s"${mxBean.getName} is an unsupported garbage collector." +
+            s"Add it to ${config.EVENT_LOG_ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS} " +
+            s"or ${config.EVENT_LOG_ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS} to enable.")
         }
       }
     }
