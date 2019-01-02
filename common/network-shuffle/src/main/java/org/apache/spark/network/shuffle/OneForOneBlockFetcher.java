@@ -65,7 +65,7 @@ public class OneForOneBlockFetcher {
     String[] blockIds,
     BlockFetchingListener listener,
     TransportConf transportConf) {
-    this(client, appId, execId, blockIds, listener, transportConf, null);
+    this(client, appId, execId, blockIds, listener, transportConf, null, false);
   }
 
   public OneForOneBlockFetcher(
@@ -75,9 +75,10 @@ public class OneForOneBlockFetcher {
       String[] blockIds,
       BlockFetchingListener listener,
       TransportConf transportConf,
-      DownloadFileManager downloadFileManager) {
+      DownloadFileManager downloadFileManager,
+      boolean continuousBlockBatchFetch) {
     this.client = client;
-    this.openMessage = new OpenBlocks(appId, execId, blockIds, true);
+    this.openMessage = new OpenBlocks(appId, execId, blockIds, continuousBlockBatchFetch);
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
