@@ -89,10 +89,10 @@ package object expressions  {
    * A helper function to bind given expressions to an input schema.
    */
   def toBoundExprs[A <: Expression](
-    in: Seq[A],
+    exprs: Seq[A],
     inputSchema: Seq[Attribute]): Seq[A] = {
     lazy val inputSchemaAttrSeq: AttributeSeq = inputSchema
-    in.map(BindReferences.bindReference(_, inputSchemaAttrSeq))
+    exprs.map(BindReferences.bindReference(_, inputSchemaAttrSeq))
   }
 
   /**
