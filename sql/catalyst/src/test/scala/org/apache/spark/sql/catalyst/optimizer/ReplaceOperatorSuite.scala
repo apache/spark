@@ -248,7 +248,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val condition = basePlan.output.zip(otherPlan.output).map { case (a1, a2) =>
       a1 <=> a2 }.reduce( _ && _)
     val correctAnswer = Aggregate(basePlan.output, otherPlan.output,
-      Join(basePlan, otherPlan, LeftAnti, Option(condition))).analyze
+      Join(basePlan, otherPlan, LeftAnti, Option(condition), JoinHint.NONE)).analyze
     comparePlans(result, correctAnswer)
   }
 }
