@@ -1,4 +1,21 @@
 [ {
+  "id": "application_1536831636016_56998",
+  "name": "SparkSQL::10.210.21.211",
+  "attempts": [
+    {
+      "startTime": "2019-01-02T08:15:04.475GMT",
+      "endTime": "2019-01-02T08:16:45.206GMT",
+      "lastUpdated": "",
+      "duration": 100731,
+      "sparkUser": "lajin",
+      "completed": true,
+      "appSparkVersion": "3.0.0-SNAPSHOT",
+      "lastUpdatedEpoch": 0,
+      "startTimeEpoch": 1546416904475,
+      "endTimeEpoch": 1546417005206
+    }
+  ]
+}, {
   "id" : "application_1538416563558_0014",
   "name" : "PythonBisectingKMeansExample",
   "attempts" : [ {
