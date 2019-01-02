@@ -212,7 +212,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PullupCorrelatedPredicates.ruleName ::
       RewriteCorrelatedScalarSubquery.ruleName ::
       RewritePredicateSubquery.ruleName ::
-      PullOutPythonUDFInJoinCondition.ruleName :: Nil
+      PullOutPythonUDFInJoinCondition.ruleName ::
+      NormalizeFloatingNumbers.ruleName :: Nil
 
   /**
    * Optimize all the subqueries inside expression.

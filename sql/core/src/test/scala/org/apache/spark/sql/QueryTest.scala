@@ -337,6 +337,10 @@ object QueryTest {
     case (_, null) => false
     case (a: Array[_], b: Array[_]) =>
       a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
+    case (a: Map[_, _], b: Map[_, _]) =>
+      val entries1 = a.iterator.toSeq.sortBy(_.toString())
+      val entries2 = b.iterator.toSeq.sortBy(_.toString())
+      compare(entries1, entries2)
     case (a: Iterable[_], b: Iterable[_]) =>
       a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
     case (a: Product, b: Product) =>
