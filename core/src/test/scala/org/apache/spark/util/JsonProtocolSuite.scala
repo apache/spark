@@ -132,7 +132,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(executorUnblacklisted, executorUnblacklistedJsonString)
     testEvent(nodeBlacklisted, nodeBlacklistedJsonString)
     testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
-//    testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
+    testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
     testEvent(stageExecutorMetrics, stageExecutorMetricsJsonString)
   }
