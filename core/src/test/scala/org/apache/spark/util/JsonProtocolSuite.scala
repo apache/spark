@@ -761,13 +761,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
-    val expectedJson = pretty(parse(expected))
-    val actualJson = pretty(parse(actual))
+    val expectedJson = parse(expected)
+    val actualJson = parse(actual)
     if (expectedJson != actualJson) {
       // scalastyle:off
       // This prints something useful if the JSON strings don't match
-      println("=== EXPECTED ===\n" + expectedJson + "\n")
-      println("=== ACTUAL ===\n" + actualJson + "\n")
+      println(s"=== EXPECTED ===\n${pretty(expectedJson)}\n")
+      println(s"=== ACTUAL ===\n${pretty(actualJson)}\n")
       // scalastyle:on
       throw new TestFailedException(s"$metadata JSON did not equal", 1)
     }
@@ -807,7 +807,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertStackTraceElementEquals(ste1: StackTraceElement, ste2: StackTraceElement) {
-    assert(ste1 === ste2)
+    // This mimics the equals() method from Java 8 and earlier. Java 9 adds checks for
+    // class loader and module, which will cause them to be not equal, when we don't
+    // care about those
+    assert(ste1.getClassName === ste2.getClassName)
+    assert(ste1.getMethodName === ste2.getMethodName)
+    assert(ste1.getLineNumber === ste2.getLineNumber)
+    assert(ste1.getFileName === ste2.getFileName)
   }
 
   /** ----------------------------------- *
