@@ -279,7 +279,7 @@ public class TransportConf {
   * If enabled then off-heap byte buffers will be prefered for the shared ByteBuf allocators.
   */
   public boolean preferDirectBufsForSharedByteBufAllocators() {
-    return conf.getBoolean("spark.network.sharedByteBufAllocators.io.preferDirectBufs", true);
+    return conf.getBoolean("spark.network.io.preferDirectBufs", true);
   }
 
   /**
