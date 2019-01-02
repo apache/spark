@@ -193,19 +193,16 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
    * @param expectedNumOfJobs number of jobs that will run
    * @param expectedMetrics the expected metrics. The format is
    *                        `nodeId -> (operatorName, metric name -> metric value)`.
-   * @param enableWholeStage enable whole-stage code generation or not.
    */
   protected def testSparkPlanMetrics(
       df: DataFrame,
       expectedNumOfJobs: Int,
-      expectedMetrics: Map[Long, (String, Map[String, Any])],
-      enableWholeStage: Boolean = false): Unit = {
+      expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
     val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
       (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
         (actualMetricValue: Any) => expectedMetricValue.toString === actualMetricValue))
     }
-    testSparkPlanMetricsWithPredicates(
-      df, expectedNumOfJobs, expectedMetricsPredicates, enableWholeStage)
+    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates)
   }
 
   /**
