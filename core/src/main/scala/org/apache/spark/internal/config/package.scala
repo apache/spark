@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -61,6 +62,14 @@ package object config {
     ConfigBuilder("spark.driver.log.persistToDfs.enabled")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_ENABLED = ConfigBuilder("spark.eventLog.enabled")
+    .booleanConf
+    .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_DIR = ConfigBuilder("spark.eventLog.dir")
+    .stringConf
+    .createWithDefault(EventLoggingListener.DEFAULT_LOG_DIR)
 
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
