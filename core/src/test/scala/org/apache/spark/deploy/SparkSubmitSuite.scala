@@ -72,13 +72,9 @@ trait TestPrematureExit {
     mainObject.printStream = printStream
 
     @volatile var exitedCleanly = false
-    def withFakeExit(body: => Unit): Unit = {
-      val original = mainObject.exitFn
-      mainObject.exitFn = (_) => exitedCleanly = true
-      body
-      mainObject.exitFn = original
-    }
-    withFakeExit {
+    val original = mainObject.exitFn
+    mainObject.exitFn = (_) => exitedCleanly = true
+    try {
       @volatile var exception: Exception = null
       val thread = new Thread {
         override def run() = try {
@@ -99,6 +95,8 @@ trait TestPrematureExit {
           throw exception
         }
       }
+    } finally {
+      mainObject.exitFn = original
     }
   }
 }
