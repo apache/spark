@@ -119,7 +119,7 @@ class SparkContext(object):
                     "You are passing in an insecure Py4j gateway.  This "
                     "presents a security risk, and will be completely forbidden in Spark 3.0")
             else:
-                raise Exception(
+                raise ValueError(
                     "You are trying to pass an insecure Py4j gateway to Spark. This"
                     " presents a security risk.  If you are sure you understand and accept this"
                     " risk, you can set the environment variable"
