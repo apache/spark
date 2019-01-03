@@ -312,15 +312,8 @@ class ParquetSchemaPruningSuite
   // schema's column and field names. N.B. this implies that `testThunk` should pass using either a
   // case-sensitive or case-insensitive query parser
   private def testExactCaseQueryPruning(testName: String)(testThunk: => Unit) {
-    test(s"Spark vectorized reader - case-sensitive parser - mixed-case schema - $testName") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-        SQLConf.CASE_SENSITIVE.key -> "true") {
-        withMixedCaseData(testThunk)
-      }
-    }
-    test(s"Parquet-mr reader - case-sensitive parser - mixed-case schema - $testName") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-        SQLConf.CASE_SENSITIVE.key -> "true") {
+    test(s"Case-sensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         withMixedCaseData(testThunk)
       }
     }
@@ -330,20 +323,14 @@ class ParquetSchemaPruningSuite
   // Tests schema pruning for a query whose column and field names may differ in case from the table
   // schema's column and field names
   private def testMixedCaseQueryPruning(testName: String)(testThunk: => Unit) {
-    test(s"Spark vectorized reader - case-insensitive parser - mixed-case schema - $testName") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-        SQLConf.CASE_SENSITIVE.key -> "false") {
-        withMixedCaseData(testThunk)
-      }
-    }
-    test(s"Parquet-mr reader - case-insensitive parser - mixed-case schema - $testName") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
-        SQLConf.CASE_SENSITIVE.key -> "false") {
+    test(s"Case-insensitive parser - mixed-case schema - $testName") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         withMixedCaseData(testThunk)
       }
     }
   }
 
+  // Tests given test function with Spark vectorized reader and Parquet-mr reader.
   private def withMixedCaseData(testThunk: => Unit) {
     withParquetTable(mixedCaseData, "mixedcase") {
       testThunk
