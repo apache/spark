@@ -148,7 +148,6 @@ class TaskContextTestsWithWorkerReuse(PySparkTestCase):
         reused python worker.
         """
         import os
-        self.sc._conf.set("spark.python.work.reuse", "true")
         # start a normal job first to start all workers and get all worker pids
         worker_pids = self.sc.parallelize(range(2), 2).map(lambda x: os.getpid()).collect()
         # the worker will reuse in this barrier job
@@ -164,8 +163,8 @@ class TaskContextTestsWithWorkerReuse(PySparkTestCase):
             return (time.time(), os.getpid())
 
         result = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
-        times = map(lambda x: x[0], result)
-        pids = map(lambda x: x[1], result)
+        times = list(map(lambda x: x[0], result))
+        pids = list(map(lambda x: x[1], result))
         # check both barrier and worker reuse effect
         self.assertTrue(max(times) - min(times) < 1)
         for pid in pids:
