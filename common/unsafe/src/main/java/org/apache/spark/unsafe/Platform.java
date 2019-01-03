@@ -215,7 +215,12 @@ public final class Platform {
     try {
       if (CLEANER_CREATE_METHOD == null) {
         // Can't set a Cleaner (see comments on field), so need to allocate via normal Java APIs
-        return ByteBuffer.allocateDirect(size);
+        try {
+          return ByteBuffer.allocateDirect(size);
+        } catch (OutOfMemoryError oome) {
+          throw new OutOfMemoryError("Failed to allocate direct buffer (" + oome.getMessage() +
+              "); try increasing -XX:MaxDirectMemorySize=... to, for example, your heap size");
+        }
       }
       // Otherwise, use internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
       // MaxDirectMemorySize limit (the default limit is too low and we do not want to
