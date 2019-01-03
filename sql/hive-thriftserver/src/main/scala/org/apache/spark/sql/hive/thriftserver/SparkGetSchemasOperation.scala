@@ -20,11 +20,10 @@ package org.apache.spark.sql.hive.thriftserver
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetSchemasOperation
+import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 
 /**
  * Spark's own GetSchemasOperation
@@ -39,15 +38,7 @@ private[hive] class SparkGetSchemasOperation(
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String)
-  extends GetSchemasOperation(parentSession, catalogName, schemaName) with Logging {
-
-  val catalog: SessionCatalog = sqlContext.sessionState.catalog
-
-  private final val RESULT_SET_SCHEMA = new TableSchema()
-    .addStringColumn("TABLE_SCHEM", "Schema name.")
-    .addStringColumn("TABLE_CATALOG", "Catalog name.")
-
-  private val rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
+  extends GetSchemasOperation(parentSession, catalogName, schemaName) {
 
   override def runInternal(): Unit = {
     setState(OperationState.RUNNING)
@@ -61,8 +52,9 @@ private[hive] class SparkGetSchemasOperation(
     }
 
     try {
-      catalog.listDatabases(convertSchemaPattern(schemaName)).foreach { dbName =>
-        rowSet.addRow(Array[AnyRef](dbName, ""))
+      val schemaPattern = convertSchemaPattern(schemaName)
+      sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
+        rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
       }
       setState(OperationState.FINISHED)
     } catch {
@@ -70,15 +62,5 @@ private[hive] class SparkGetSchemasOperation(
         setState(OperationState.ERROR)
         throw e
     }
-  }
-
-  override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
-    assertState(OperationState.FINISHED)
-    validateDefaultFetchOrientation(orientation)
-    setHasResultSet(true)
-    if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
-      rowSet.setStartOffset(0)
-    }
-    rowSet.extractSubset(maxRows.toInt)
   }
 }
