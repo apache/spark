@@ -1780,7 +1780,7 @@ class SparkContext(config: SparkConf) extends Logging {
         env.rpcEnv.fileServer.addJar(file)
       } catch {
         case NonFatal(e) =>
-          logError(s"Failed to add $path to Spark environment", e)
+          logWarning(s"Failed to add $path to Spark environment", e)
           null
       }
     }
