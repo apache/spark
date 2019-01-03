@@ -474,9 +474,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
-  def treeString: String = treeString(verbose = true)
+  final def treeString: String = treeString(verbose = true)
 
-  def treeString(
+  final def treeString(
       verbose: Boolean,
       addSuffix: Boolean = false,
       maxFields: Int = SQLConf.get.maxToStringFields): String = {
