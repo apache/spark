@@ -18,22 +18,17 @@ package org.apache.spark.deploy.k8s.integrationtest
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
+  import DecommissionSuite._
   import KubernetesSuite.k8sTestTag
-  import KubernetesSuite.SPARK_PI_MAIN_CLASS
 
   test("Test basic decommissioning", k8sTestTag) {
     sparkAppConf
       .set("spark.worker.decommission.enabled", "true")
 
     runSparkApplicationAndVerifyCompletion(
-      appResource = containerLocalSparkDistroExamplesJar,
-      mainClass = SPARK_PI_MAIN_CLASS,
+      SPARK_PI_MAIN_CLASS,
       expectedLogOnCompletion = Seq("Decommissioning executor"),
       appArgs = Array("100"), // Give it some time to run
-      driverPodChecker = doBasicDriverPodCheck,
-      executorPodChecker = doBasicExecutorPodCheck,
-      appLocator = appLocator,
-      isJVM = true,
       decomissioningTest = true)
   }
 }
