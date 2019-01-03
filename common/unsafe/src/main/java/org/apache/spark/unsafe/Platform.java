@@ -218,8 +218,10 @@ public final class Platform {
         try {
           return ByteBuffer.allocateDirect(size);
         } catch (OutOfMemoryError oome) {
+          // checkstyle.off: RegexpSinglelineJava
           throw new OutOfMemoryError("Failed to allocate direct buffer (" + oome.getMessage() +
               "); try increasing -XX:MaxDirectMemorySize=... to, for example, your heap size");
+          // checkstyle.on: RegexpSinglelineJava
         }
       }
       // Otherwise, use internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
