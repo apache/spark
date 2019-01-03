@@ -18,7 +18,7 @@ import random
 import sys
 import time
 
-from pyspark import SparkContext, TaskContext, BarrierTaskContext
+from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
 from pyspark.testing.utils import PySparkTestCase
 
 
@@ -118,21 +118,6 @@ class TaskContextTests(PySparkTestCase):
         times = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
         self.assertTrue(max(times) - min(times) < 1)
 
-    def test_barrier_with_python_worker_reuse(self):
-        """
-        Verify that BarrierTaskContext.barrier() with reused python worker.
-        """
-        self.sc._conf.set("spark.python.work.reuse", "true")
-        rdd = self.sc.parallelize(range(4), 4)
-        # start a normal job first to start all worker
-        result = rdd.map(lambda x: x ** 2).collect()
-        self.assertEqual([0, 1, 4, 9], result)
-        # make sure `spark.python.work.reuse=true`
-        self.assertEqual(self.sc._conf.get("spark.python.work.reuse"), "true")
-
-        # worker will be reused in this barrier job
-        self.test_barrier()
-
     def test_barrier_infos(self):
         """
         Verify that BarrierTaskContext.getTaskInfos() returns a list of all task infos in the
@@ -147,6 +132,44 @@ class TaskContextTests(PySparkTestCase):
                                                        .getTaskInfos()).collect()
         self.assertTrue(len(taskInfos) == 4)
         self.assertTrue(len(taskInfos[0]) == 4)
+
+
+class TaskContextTestsWithWorkerReuse(PySparkTestCase):
+
+    def setUp(self):
+        self._old_sys_path = list(sys.path)
+        class_name = self.__class__.__name__
+        conf = SparkConf().set("spark.python.worker.reuse", "true")
+        self.sc = SparkContext('local[2]', class_name, conf=conf)
+
+    def test_barrier_with_python_worker_reuse(self):
+        """
+        Regression test for SPARK-25921: verify that BarrierTaskContext.barrier() with
+        reused python worker.
+        """
+        import os
+        self.sc._conf.set("spark.python.work.reuse", "true")
+        # start a normal job first to start all workers and get all worker pids
+        worker_pids = self.sc.parallelize(range(2), 2).map(lambda x: os.getpid()).collect()
+        # the worker will reuse in this barrier job
+        rdd = self.sc.parallelize(range(10), 2)
+
+        def f(iterator):
+            yield sum(iterator)
+
+        def context_barrier(x):
+            tc = BarrierTaskContext.get()
+            time.sleep(random.randint(1, 10))
+            tc.barrier()
+            return (time.time(), os.getpid())
+
+        result = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
+        times = map(lambda x: x[0], result)
+        pids = map(lambda x: x[1], result)
+        # check both barrier and worker reuse effect
+        self.assertTrue(max(times) - min(times) < 1)
+        for pid in pids:
+            self.assertTrue(pid in worker_pids)
 
 
 if __name__ == "__main__":
