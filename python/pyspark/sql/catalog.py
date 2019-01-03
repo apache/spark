@@ -29,7 +29,7 @@ from pyspark.sql.types import IntegerType, StringType, StructType
 Database = namedtuple("Database", "name description locationUri")
 Table = namedtuple("Table", "name database description tableType isTemporary")
 Column = namedtuple("Column", "name description dataType nullable isPartition isBucket")
-Function = namedtuple("Function", "name description className isTemporary")
+Function = namedtuple("Function", "name database description className isTemporary")
 
 
 class Catalog(object):
@@ -108,6 +108,7 @@ class Catalog(object):
             jfunction = iter.next()
             functions.append(Function(
                 name=jfunction.name(),
+                database=jfunction.database(),
                 description=jfunction.description(),
                 className=jfunction.className(),
                 isTemporary=jfunction.isTemporary()))
@@ -205,6 +206,7 @@ class Catalog(object):
         function = self._jcatalog.getFunction(dbName, functionName)
         return Function(
             name=function.name(),
+            database=function.database(),
             description=function.description(),
             className=function.className(),
             isTemporary=function.isTemporary())

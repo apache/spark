@@ -108,6 +108,7 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertTrue("current_database" in functions)
             self.assertEquals(functions["+"], Function(
                 name="+",
+                database=None,
                 description=None,
                 className="org.apache.spark.sql.catalyst.expressions.Add",
                 isTemporary=True))
@@ -258,6 +259,7 @@ class CatalogTests(ReusedSQLTestCase):
                 spark.sql("CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'")
                 self.assertEquals(spark.catalog.getFunction('func2', 'some_db'), Function(
                     name="func2",
+                    database="some_db",
                     description=None,
                     className="org.apache.spark.data.bricks",
                     isTemporary=False))
