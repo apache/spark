@@ -67,6 +67,12 @@ private[spark] class HiveDelegationTokenProvider
     // Other modes (such as client with or without keytab, or cluster mode with keytab) do not need
     // a delegation token, since there's a valid kerberos TGT for the right user available to the
     // driver, which is the only process that connects to the HMS.
+    //
+    // Note that this means Hive tokens are not re-created periodically by the token manager.
+    // This is because HMS connections are only performed by the Spark driver, and the driver
+    // either has a TGT, in which case it does not need tokens, or it has a token created
+    // elsewhere, in which case it cannot create new ones. The check for an existing token avoids
+    // printing an exception to the logs in the latter case.
     val currentToken = UserGroupInformation.getCurrentUser().getCredentials().getToken(tokenAlias)
     currentToken == null && UserGroupInformation.isSecurityEnabled &&
       hiveConf(hadoopConf).getTrimmed("hive.metastore.uris", "").nonEmpty &&

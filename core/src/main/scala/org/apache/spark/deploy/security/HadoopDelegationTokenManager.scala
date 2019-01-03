@@ -85,8 +85,8 @@ private[spark] class HadoopDelegationTokenManager(
    * obtain delegation tokens for all configured services and send them to the driver, and
    * set up tasks to periodically get fresh tokens as needed.
    *
-   * If the logged in user has a keytab, this method will also try to keep that user's TGT
-   * valid while this manager is active.
+   * This method requires that a keytab has been provided to Spark, and will try to keep the
+   * logged in user's TGT valid while this manager is active.
    *
    * @return New set of delegation tokens created for the configured principal.
    */
