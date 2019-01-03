@@ -14,17 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.internal.config
 
-package org.apache.spark.api.r
+private[spark] object R {
 
-private[spark] object SparkRDefaults {
+  val R_BACKEND_CONNECTION_TIMEOUT = ConfigBuilder("spark.r.backendConnectionTimeout")
+    .intConf
+    .createWithDefault(6000)
 
-  // Default value for spark.r.backendConnectionTimeout config
-  val DEFAULT_CONNECTION_TIMEOUT: Int = 6000
+  val R_NUM_BACKEND_THREADS = ConfigBuilder("spark.r.numRBackendThreads")
+    .intConf
+    .createWithDefault(2)
 
-  // Default value for spark.r.heartBeatInterval config
-  val DEFAULT_HEARTBEAT_INTERVAL: Int = 100
+  val R_HEARTBEAT_INTERVAL = ConfigBuilder("spark.r.heartBeatInterval")
+    .intConf
+    .createWithDefault(100)
 
-  // Default value for spark.r.numRBackendThreads config
-  val DEFAULT_NUM_RBACKEND_THREADS = 2
+  val SPARKR_COMMAND = ConfigBuilder("spark.sparkr.r.command")
+    .stringConf
+    .createWithDefault("Rscript")
+
+  val R_COMMAND = ConfigBuilder("spark.r.command")
+    .stringConf
+    .createOptional
 }
