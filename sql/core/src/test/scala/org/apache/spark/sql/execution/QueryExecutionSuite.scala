@@ -121,18 +121,6 @@ class QueryExecutionSuite extends SharedSQLContext {
     }
   }
 
-  test("date formatting in hive result") {
-    val date = "2018-12-28"
-    val result = Seq(Date.valueOf(date)).toDS().queryExecution.hiveResultString()
-    assert(result.head == date)
-  }
-
-  test("timestamp formatting in hive result") {
-    val timestamp = "2018-12-28 01:02:03"
-    val result = Seq(Timestamp.valueOf(timestamp)).toDS().queryExecution.hiveResultString()
-    assert(result.head == timestamp)
-  }
-
   test("toString() exception/error handling") {
     spark.experimental.extraStrategies = Seq(
         new SparkStrategy {

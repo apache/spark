@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -55,6 +55,10 @@ object HiveResult {
       // Reformat to match hive tab delimited output.
       result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
   }
+
+  private lazy val dateFormatter = DateFormatter()
+  private lazy val timestampFormatter = TimestampFormatter(
+    DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone))
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
   private def toHiveString(a: (Any, DataType)): String = {
@@ -103,10 +107,9 @@ object HiveResult {
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "NULL"
-      case (d: Date, DateType) =>
-        DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
+      case (d: Date, DateType) => dateFormatter.format(DateTimeUtils.fromJavaDate(d))
       case (t: Timestamp, TimestampType) =>
-        DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t), timeZone)
+        DateTimeUtils.timestampToString(timestampFormatter, DateTimeUtils.fromJavaTimestamp(t))
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
       case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
       case (interval, CalendarIntervalType) => interval.toString
