@@ -172,8 +172,9 @@ user B in the above example.
 
 Spark does not allow token renewal when impersonation is on. Impersonation was added in Spark
 as a means for services (like Hive or Oozie) to start Spark applications on behalf of users.
-That means that those services would provide the Spark launcher code with privileged credentials,
-to submit applications and, potentially, user code to run as a regular user.
+That means that those services would provide the Spark launcher code with privileged credentials
+and, potentially, user code that will run when the application starts. The user code is not
+necessarily under control of the service.
 
 In that situation, the service credentials should never be made available to the Spark application,
 since that would be tantamount to giving your service credentials to unprivileged users.
