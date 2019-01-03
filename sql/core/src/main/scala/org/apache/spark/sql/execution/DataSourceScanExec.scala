@@ -58,13 +58,8 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
         key + ": " + StringUtils.abbreviate(redact(value), 100)
     }
     val metadataStr = truncatedString(metadataEntries, " ", ", ", "", maxFields)
-    s"$nodeNamePrefix$nodeName${truncatedString(output, "[", ",", "]", maxFields)}$metadataStr"
-  }
-
-  override def verboseString(maxFields: Int): String = redact(super.verboseString(maxFields))
-
-  override def treeString(verbose: Boolean, addSuffix: Boolean, maxFields: Int): String = {
-    redact(super.treeString(verbose, addSuffix, maxFields))
+    redact(
+      s"$nodeNamePrefix$nodeName${truncatedString(output, "[", ",", "]", maxFields)}$metadataStr")
   }
 
   /**
