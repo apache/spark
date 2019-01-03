@@ -55,7 +55,7 @@ import org.apache.spark.util.ThreadUtils
 private[spark] class HadoopDelegationTokenManager(
     protected val sparkConf: SparkConf,
     protected val hadoopConf: Configuration,
-    protected val driverRef: RpcEndpointRef) extends Logging {
+    protected val schedulerRef: RpcEndpointRef) extends Logging {
 
   private val deprecatedProviderEnabledConfigs = List(
     "spark.yarn.security.tokens.%s.enabled",
@@ -92,7 +92,7 @@ private[spark] class HadoopDelegationTokenManager(
    */
   def start(): Array[Byte] = {
     require(renewalEnabled, "Token renewal must be enabled to start the renewer.")
-    require(driverRef != null, "Token renewal requires a driver endpoint.")
+    require(schedulerRef != null, "Token renewal requires a scheduler endpoint.")
     renewalExecutor =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")
 
@@ -200,7 +200,7 @@ private[spark] class HadoopDelegationTokenManager(
       val tokens = SparkHadoopUtil.get.serialize(creds)
 
       logInfo("Updating delegation tokens.")
-      driverRef.send(UpdateDelegationTokens(tokens))
+      schedulerRef.send(UpdateDelegationTokens(tokens))
       tokens
     } catch {
       case e: Exception =>

@@ -713,9 +713,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Create the delegation token manager to be used for the application. This method is called
    * once during the start of the scheduler backend (so after the object has already been
    * fully constructed), only if security is enabled in the Hadoop configuration.
+   *
+   * @param schedulerRef RPC endpoint for the scheduler, where updated delegation tokens should be
+   *                     sent.
    */
   protected def createTokenManager(
-      driverRef: RpcEndpointRef): Option[HadoopDelegationTokenManager] = None
+      schedulerRef: RpcEndpointRef): Option[HadoopDelegationTokenManager] = None
 
   /**
    * Called when a new set of delegation tokens is sent to the driver. Child classes can override

@@ -39,8 +39,8 @@ import org.apache.spark.util.Utils
 private[spark] class YARNHadoopDelegationTokenManager(
     _sparkConf: SparkConf,
     _hadoopConf: Configuration,
-    _driverRef: RpcEndpointRef)
-  extends HadoopDelegationTokenManager(_sparkConf, _hadoopConf, _driverRef) {
+    _schedulerRef: RpcEndpointRef)
+  extends HadoopDelegationTokenManager(_sparkConf, _hadoopConf, _schedulerRef) {
 
   private val credentialProviders = {
     ServiceLoader.load(classOf[ServiceCredentialProvider], Utils.getContextOrSparkClassLoader)
