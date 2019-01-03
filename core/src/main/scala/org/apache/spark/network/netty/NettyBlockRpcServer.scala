@@ -48,8 +48,7 @@ class NettyBlockRpcServer(
 
   private val streamManager = new OneForOneStreamManager()
 
-  private def mergeContiguousShuffleBlocks(blockIds: Array[String]) = {
-    logDebug(s"blockIds: ${blockIds.mkString(" ")}")
+  private def mergeContinuousShuffleBlocks(blockIds: Array[String]) = {
     val shuffleBlockIds = blockIds.map(id => BlockId(id).asInstanceOf[ShuffleBlockId])
     var continuousShuffleBlockIds = ArrayBuffer.empty[ContinuousShuffleBlockId]
     var sizeArray = ArrayBuffer.empty[Int]
@@ -61,18 +60,16 @@ class NettyBlockRpcServer(
 
     if (shuffleBlockIds.nonEmpty) {
       var prev = 0
-      (0 until shuffleBlockIds.length + 1).foreach { idx =>
-        if (idx != 0) {
-          if (idx == shuffleBlockIds.length || !sameMapFile(idx)) {
-            continuousShuffleBlockIds += ContinuousShuffleBlockId(
-              shuffleBlockIds(prev).shuffleId,
-              shuffleBlockIds(prev).mapId,
-              shuffleBlockIds(prev).reduceId,
-              shuffleBlockIds(idx - 1).reduceId - shuffleBlockIds(prev).reduceId + 1
-            )
-            sizeArray += (idx - prev)
-            prev = idx
-          }
+      (1 until shuffleBlockIds.length + 1).foreach { idx =>
+        if (idx == shuffleBlockIds.length || !sameMapFile(idx)) {
+          continuousShuffleBlockIds += ContinuousShuffleBlockId(
+            shuffleBlockIds(prev).shuffleId,
+            shuffleBlockIds(prev).mapId,
+            shuffleBlockIds(prev).reduceId,
+            shuffleBlockIds(idx - 1).reduceId - shuffleBlockIds(prev).reduceId + 1
+          )
+          sizeArray += (idx - prev)
+          prev = idx
         }
       }
     }
@@ -89,13 +86,11 @@ class NettyBlockRpcServer(
     message match {
       case openBlocks: OpenBlocks =>
         val (blocksIds, sizes) =
-          if (openBlocks.continuousBlockBatchFetch
-            && BlockId(openBlocks.blockIds(0)).isInstanceOf[ShuffleBlockIdBase]) {
-            mergeContiguousShuffleBlocks(openBlocks.blockIds)
+          if (openBlocks.shuffleBlockBatchFetch) {
+            mergeContinuousShuffleBlocks(openBlocks.blockIds)
           } else {
-            (openBlocks.blockIds.map(BlockId.apply), Array.fill[Int](openBlocks.blockIds.length)(1))
+            (openBlocks.blockIds.map(BlockId.apply), Array[Int]())
           }
-
         val blocksNum = blocksIds.length
         val blocks = for (i <- (0 until blocksNum).view)
           yield blockManager.getBlockData(blocksIds(i))

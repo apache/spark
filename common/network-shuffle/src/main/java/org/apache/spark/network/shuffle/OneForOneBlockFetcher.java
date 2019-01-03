@@ -76,9 +76,9 @@ public class OneForOneBlockFetcher {
       BlockFetchingListener listener,
       TransportConf transportConf,
       DownloadFileManager downloadFileManager,
-      boolean continuousBlockBatchFetch) {
+      boolean shuffleBlockBatchFetch) {
     this.client = client;
-    this.openMessage = new OpenBlocks(appId, execId, blockIds, continuousBlockBatchFetch);
+    this.openMessage = new OpenBlocks(appId, execId, blockIds, shuffleBlockBatchFetch);
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
@@ -121,10 +121,14 @@ public class OneForOneBlockFetcher {
         try {
           streamHandle = (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response);
           logger.trace("Successfully opened blocks {}, preparing to fetch chunks.", streamHandle);
-          chunkIndice = new int[streamHandle.chunkSizes.length + 1];
+          chunkIndice = new int[streamHandle.numChunks + 1];
           chunkIndice[0] = 0;
-          for (int i = 0; i < streamHandle.chunkSizes.length; i++) {
-            chunkIndice[i + 1] = chunkIndice[i] + streamHandle.chunkSizes[i];
+          for (int i = 0; i < streamHandle.numChunks; i++) {
+            if (streamHandle.chunkSizes.length != 0) {
+              chunkIndice[i + 1] = chunkIndice[i] + streamHandle.chunkSizes[i];
+            } else {
+              chunkIndice[i + 1] = chunkIndice[i] + 1;
+            }
           }
           assert chunkIndice[chunkIndice.length - 1] == blockIds.length;
 

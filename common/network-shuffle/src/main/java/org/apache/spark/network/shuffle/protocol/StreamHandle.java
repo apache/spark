@@ -84,7 +84,10 @@ public class StreamHandle extends BlockTransferMessage {
   public static StreamHandle decode(ByteBuf buf) {
     long streamId = buf.readLong();
     int numChunks = buf.readInt();
-    int[] chunkSizes = Encoders.IntArrays.decode(buf);
+    int[] chunkSizes = new int[0];
+    if (buf.readableBytes() != 0) {
+      chunkSizes = Encoders.IntArrays.decode(buf);
+    }
     return new StreamHandle(streamId, numChunks, chunkSizes);
   }
 }

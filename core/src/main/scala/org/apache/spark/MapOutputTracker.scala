@@ -300,7 +300,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   // For testing
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
-      : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
+    : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     getMapSizesByExecutorId(shuffleId, reduceId, reduceId + 1, null,
       supportsContinuousBlockBatchFetch = false)
   }
@@ -675,7 +675,7 @@ private[spark] class MapOutputTrackerMaster(
       endPartition: Int,
       blockManager: BlockManager,
       supportsContinuousBlockBatchFetch: Boolean)
-      : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
+    : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     shuffleStatuses.get(shuffleId) match {
       case Some (shuffleStatus) =>
@@ -911,7 +911,7 @@ private[spark] object MapOutputTracker extends Logging {
       statuses: Array[MapStatus],
       blockManager: BlockManager,
       supportsContinuousBlockBatchFetch: Boolean)
-      : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
+    : Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     assert (statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long)]]
     for ((status, mapId) <- statuses.iterator.zipWithIndex) {

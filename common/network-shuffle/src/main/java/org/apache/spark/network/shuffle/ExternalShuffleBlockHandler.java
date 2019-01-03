@@ -20,9 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
@@ -91,16 +89,19 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       try {
         OpenBlocks msg = (OpenBlocks) msgObj;
         checkAuth(client, msg.appId);
-        long streamId = streamManager.registerStream(client.getClientId(),
-          new ManagedBufferIterator(msg.appId, msg.execId, msg.blockIds));
+        ManagedBufferIterator iter = new ManagedBufferIterator(
+          msg.appId, msg.execId, msg.blockIds, msg.shuffleBlockBatchFetch);
+        long streamId = streamManager.registerStream(client.getClientId(), iter);
+        int[] chunkSizes = iter.getChunkSizes();
         if (logger.isTraceEnabled()) {
           logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
                        streamId,
-                       msg.blockIds.length,
+                       chunkSizes.length,
                        client.getClientId(),
                        getRemoteAddress(client.getChannel()));
         }
-        callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length, null).toByteBuffer());
+        callback.onSuccess(
+          new StreamHandle(streamId, chunkSizes.length, chunkSizes).toByteBuffer());
       } finally {
         responseDelayContext.stop();
       }
@@ -215,13 +216,68 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   private class ManagedBufferIterator implements Iterator<ManagedBuffer> {
 
     private int index = 0;
+    private int capacity = 0;
     private final String appId;
     private final String execId;
     private final int shuffleId;
     // An array containing mapId, reduceId and numBlocks tuple
-    private final int[] shuffleBlockIds;
+    private int[] shuffleBlockIds;
+    private int[] chunkSizes;
 
-    ManagedBufferIterator(String appId, String execId, String[] blockIds) {
+    private int[] parseBlockId(String blockId) {
+      String[] blockIdParts = blockId.split("_");
+      if (!isShuffleBlock(blockIdParts)) {
+        throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
+      }
+      if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
+        throw new IllegalArgumentException("Expected shuffleId=" + shuffleId + ", got:" + blockId);
+      }
+      int[] parsedBlockId = new int[2];
+      parsedBlockId[0] = Integer.parseInt(blockIdParts[2]);
+      parsedBlockId[1] = Integer.parseInt(blockIdParts[3]);
+      return parsedBlockId;
+    }
+
+    private void loadShuffleBlockIds(
+        String[] blockIds,
+        boolean shuffleBlockBatchFetch) {
+      if (shuffleBlockBatchFetch) {
+        int capacity = 0;
+        ArrayList<int[]> tempIds = new ArrayList<>(blockIds.length);
+        for (String blockId : blockIds) {
+          tempIds.add(parseBlockId(blockId));
+        }
+        int prevIdx = 0;
+        int[] previous = tempIds.get(0);
+        for (int i = 1; i <= blockIds.length; i++) {
+          int[] current = tempIds.get(i);
+          if (i == blockIds.length || current[0] != previous[0]) {
+            this.shuffleBlockIds[3 * capacity] = previous[0];
+            this.shuffleBlockIds[3 * capacity + 1] = previous[1];
+            this.shuffleBlockIds[3 * capacity + 2] = tempIds.get(i - 1)[1] - previous[1] + 1;
+            this.chunkSizes[capacity++] = i - prevIdx;
+            previous = current;
+            prevIdx = i;
+          }
+          this.capacity = 3 * capacity;
+        }
+      } else {
+        for (int i = 0; i < blockIds.length; i++) {
+          int[] blockId = parseBlockId(blockIds[i]);
+          shuffleBlockIds[3 * i] = blockId[0];
+          shuffleBlockIds[3 * i + 1] = blockId[1];
+          shuffleBlockIds[3 * i + 2] = 1;
+        }
+        this.chunkSizes = new int[0];
+        this.capacity = 3 * blockIds.length;
+      }
+    }
+
+    ManagedBufferIterator(
+        String appId,
+        String execId,
+        String[] blockIds,
+        boolean shuffleBlockBatchFetch) {
       this.appId = appId;
       this.execId = execId;
       String[] blockId0Parts = blockIds[0].split("_");
@@ -229,29 +285,18 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[0]);
       }
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
-      shuffleBlockIds = new int[3 * blockIds.length];
-      for (int i = 0; i < blockIds.length; i++) {
-        String[] blockIdParts = blockIds[i].split("_");
-        if (!isShuffleBlock(blockIdParts)) {
-          throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[i]);
-        }
-        if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
-          throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
-            ", got:" + blockIds[i]);
-        }
-        shuffleBlockIds[3 * i] = Integer.parseInt(blockIdParts[2]);
-        shuffleBlockIds[3 * i + 1] = Integer.parseInt(blockIdParts[3]);
-        if (blockIdParts.length == 4) {
-          shuffleBlockIds[3 * i + 2] = 1;
-        } else {
-          shuffleBlockIds[3 * i + 2] = Integer.parseInt(blockIdParts[4]);
-        }
-      }
+      this.shuffleBlockIds = new int[3 * blockIds.length];
+      this.chunkSizes = new int[blockIds.length];
+      loadShuffleBlockIds(blockIds, shuffleBlockBatchFetch);
+    }
+
+    public int[] getChunkSizes() {
+      return Arrays.copyOfRange(this.chunkSizes, 0, capacity / 3);
     }
 
     @Override
     public boolean hasNext() {
-      return index < shuffleBlockIds.length;
+      return index < capacity;
     }
 
     @Override

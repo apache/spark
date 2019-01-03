@@ -90,21 +90,7 @@ public class Encoders {
     }
   }
 
-  public static class Boolean {
-    public static int encodedLength(boolean b) {
-      return 1;
-    }
-
-    public static void encode(ByteBuf buf, boolean b) {
-      buf.writeBoolean(b);
-    }
-
-    public static boolean decode(ByteBuf buf) {
-      return buf.readBoolean();
-    }
-  }
-
-  /** Byte arrays are encoded with their length followed by bytes. */
+  /** Int arrays are encoded with their length followed by bytes. */
   public static class IntArrays {
     public static int encodedLength(int[] arr) {
       return 4 + arr.length * 4;

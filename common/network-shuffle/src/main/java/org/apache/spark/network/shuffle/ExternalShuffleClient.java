@@ -92,7 +92,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       String[] blockIds,
       BlockFetchingListener listener,
       DownloadFileManager downloadFileManager,
-      boolean continuousBlockBatchFetch) {
+      boolean shuffleBlockBatchFetch) {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
@@ -100,7 +100,7 @@ public class ExternalShuffleClient extends ShuffleClient {
           (blockIds1, listener1) -> {
             TransportClient client = clientFactory.createClient(host, port);
             new OneForOneBlockFetcher(client, appId, execId,
-              blockIds1, listener1, conf, downloadFileManager, continuousBlockBatchFetch).start();
+              blockIds1, listener1, conf, downloadFileManager, shuffleBlockBatchFetch).start();
           };
 
       int maxRetries = conf.maxIORetries();

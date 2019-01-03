@@ -172,6 +172,8 @@ public class ExternalShuffleBlockResolver {
       int mapId,
       int reduceId,
       int numBlocks) {
+    logger.debug("block: shuffleId={}, mapId={}, reduceId={}, numBlocks={}",
+      shuffleId, mapId, reduceId, numBlocks);
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
       throw new RuntimeException(
