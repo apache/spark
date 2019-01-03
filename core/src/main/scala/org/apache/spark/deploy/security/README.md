@@ -193,6 +193,21 @@ Hadoop-to-local-OS-user mapping configured for the service. But the overall supp
 for connecting to other services even when YARN is not being used.
 
 
+## Externally Generated DTs
+
+Spark uses the `UserGroupInformation` API to manage the Hadoop credentials. That means that Spark
+inherits the feature of loading DTs automatically from a file. The Hadoop classes will load the
+token cache pointed at by the `HADOOP_TOKEN_FILE_LOCATION` environment variable, when it's defined.
+
+In this situation, Spark will not create DTs for the services that already have tokens in the
+cache. It may try to get delegation tokens for other services if Kerberos credentials are also
+provided.
+
+This feature is mostly used by services that start Spark on behalf of users. Regular users do not
+generally use this feature, given it would require them to figure out how to get those tokens
+outside of Spark.
+
+
 ## Limitations of DT support in Spark
 
 There are certain limitations to bear in mind when talking about DTs in Spark.
