@@ -572,7 +572,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
   def sqlOperator: String = symbol
 
-  override def toString: String = s"($left $symbol $right)"
+  override def toString: String = s"($left $sqlOperator $right)"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
 

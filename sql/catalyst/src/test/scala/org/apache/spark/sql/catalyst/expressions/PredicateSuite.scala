@@ -457,9 +457,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(interpreted.eval(new UnsafeRow()))
   }
 
-  test("SPARK-24872: Replace the symbol '||' of Or operator with 'or'") {
+  test("SPARK-24872: Replace taking the $symbol with $sqlOperator in BinaryOperator's" +
+    " toString method") {
     val expression = CatalystSqlParser.parseExpression("id=1 or id=2").toString()
-    val expected = "(('id = 1) or ('id = 2))"
+    val expected = "(('id = 1) OR ('id = 2))"
     assert(expression == expected)
   }
 }
