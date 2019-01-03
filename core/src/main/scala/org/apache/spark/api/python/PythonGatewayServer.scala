@@ -43,12 +43,17 @@ private[spark] object PythonGatewayServer extends Logging {
     // with the same secret, in case the app needs callbacks from the JVM to the underlying
     // python processes.
     val localhost = InetAddress.getLoopbackAddress()
-    val gatewayServer: GatewayServer = new GatewayServer.GatewayServerBuilder()
-      .authToken(secret)
+    val builder = new GatewayServer.GatewayServerBuilder()
       .javaPort(0)
       .javaAddress(localhost)
       .callbackClient(GatewayServer.DEFAULT_PYTHON_PORT, localhost, secret)
-      .build()
+    if (sys.env.getOrElse("_PYSPARK_CREATE_INSECURE_GATEWAY", "0") != "1") {
+      builder.authToken(secret)
+    } else {
+      assert(sys.env.getOrElse("SPARK_TESTING", "0") == "1",
+        "Creating insecure Java gateways only allowed for testing")
+    }
+    val gatewayServer: GatewayServer = builder.build()
 
     gatewayServer.start()
     val boundPort: Int = gatewayServer.getListeningPort

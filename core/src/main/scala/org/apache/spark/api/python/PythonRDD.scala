@@ -595,8 +595,10 @@ private[spark] class PythonAccumulatorV2(
     if (socket == null || socket.isClosed) {
       socket = new Socket(serverHost, serverPort)
       logInfo(s"Connected to AccumulatorServer at host: $serverHost port: $serverPort")
-      // send the secret just for the initial authentication when opening a new connection
-      socket.getOutputStream.write(secretToken.getBytes(StandardCharsets.UTF_8))
+      if (secretToken != null) {
+        // send the secret just for the initial authentication when opening a new connection
+        socket.getOutputStream.write(secretToken.getBytes(StandardCharsets.UTF_8))
+      }
     }
     socket
   }
