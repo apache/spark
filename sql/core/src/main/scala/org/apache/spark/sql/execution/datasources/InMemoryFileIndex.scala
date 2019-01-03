@@ -28,7 +28,8 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BoundReference, Expression, InterpretedPredicate}
 import org.apache.spark.sql.execution.streaming.FileStreamSink
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -131,6 +132,46 @@ class InMemoryFileIndex(
       output ++= leafFiles
     }
     output
+  }
+
+  /**
+   * Returns a [[InMemoryFileIndex]] for this table restricted to the subset of partitions
+   * specified by the given partition-pruning filters.
+   *
+   * @param filters partition-pruning filters
+   */
+  def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = {
+    if (partitionSchema.nonEmpty) {
+      val startTime = System.nanoTime()
+      val partitionColumnNames = partitionSchema.fields.map(_.name).toSet
+
+      val nonPartitionPruningPredicates = filters.filterNot {
+        _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+      }
+      if (nonPartitionPruningPredicates.nonEmpty) {
+        throw new AnalysisException("Expected only partition pruning predicates: " +
+          nonPartitionPruningPredicates)
+      }
+
+      val boundPredicate =
+        InterpretedPredicate.create(filters.reduce(And).transform {
+          case att: AttributeReference =>
+            val index = partitionSchema.indexWhere(_.name == att.name)
+            BoundReference(index, partitionSchema(index).dataType, nullable = true)
+        })
+
+      val spec = partitionSpec()
+      val prunedPartitions = spec.partitions.filter { p =>
+        boundPredicate.eval(p.values)
+      }
+      val prunedPartitionSpec = spec.copy(partitions = prunedPartitions)
+
+      val timeNs = System.nanoTime() - startTime
+      new PrunedInMemoryFileIndex(
+        sparkSession, fileStatusCache, prunedPartitionSpec, Option(timeNs))
+    } else {
+      this
+    }
   }
 }
 

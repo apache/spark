@@ -82,7 +82,7 @@ class CatalogFileIndex(
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       val timeNs = System.nanoTime() - startTime
       new PrunedInMemoryFileIndex(
-        sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec, Option(timeNs))
+        sparkSession, fileStatusCache, partitionSpec, Option(timeNs))
     } else {
       new InMemoryFileIndex(
         sparkSession, rootPaths, table.storage.properties, userSpecifiedSchema = None)
@@ -111,7 +111,6 @@ class CatalogFileIndex(
  */
 private class PrunedInMemoryFileIndex(
     sparkSession: SparkSession,
-    tableBasePath: Path,
     fileStatusCache: FileStatusCache,
     override val partitionSpec: PartitionSpec,
     override val metadataOpsTimeNs: Option[Long])

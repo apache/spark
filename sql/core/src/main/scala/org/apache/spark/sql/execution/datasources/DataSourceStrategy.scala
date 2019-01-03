@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 import java.util.concurrent.Callable
+import javax.activation.FileDataSource
+
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -37,8 +40,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTab
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -213,6 +218,22 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
   }
 }
 
+/**
+ * Replace the V2 data source of table in [[InsertIntoTable]] to V1 [[FileFormat]].
+ * E.g, with temporary view `t` using [[FileDataSourceV2]], inserting into  view `t` fails
+ * since there is no correspoding physical plan.
+ * This is a temporary hack for making current data source V2 work.
+ */
+class FallBackFileDataSourceToV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case i @InsertIntoTable(d @
+      DataSourceV2Relation(source: FileDataSourceV2, table: FileTable, _, _, _), _, _, _, _) =>
+      val v1FileFormat = source.fallBackFileFormat.getConstructor().newInstance()
+      val relation = HadoopFsRelation(table.getFileIndex, table.getFileIndex.partitionSchema,
+        table.schema(), None, v1FileFormat, d.options)(sparkSession)
+      i.copy(table = LogicalRelation(relation))
+  }
+}
 
 /**
  * Replaces [[UnresolvedCatalogRelation]] with concrete relation logical plans.
