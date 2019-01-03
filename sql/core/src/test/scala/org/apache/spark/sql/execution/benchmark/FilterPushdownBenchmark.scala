@@ -24,9 +24,9 @@ import scala.util.Random
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.functions.monotonically_increasing_id
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType
  *      Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
  * }}}
  */
-object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
+  object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 
   private val conf = new SparkConf()
     .setAppName(this.getClass.getSimpleName)
@@ -125,13 +125,32 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
 
     Seq(false, true).foreach { pushDownEnabled =>
       val name = s"Native ORC Vectorized ${if (pushDownEnabled) s"(Pushdown)" else ""}"
-      benchmark.addCase(name) { _ =>
+    benchmark.addCase(name) { _ =>
         withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled") {
           spark.sql(s"SELECT $selectExpr FROM orcTable WHERE $whereExpr").collect()
         }
       }
     }
 
+    benchmark.run()
+  }
+
+  def filterPushDownBenchmarkWithColumn(
+    values: Int,
+    title: String,
+    whereColumn: Column,
+    selectExpr: String = "*"
+  ): Unit = {
+    val benchmark = new Benchmark(title, values, minNumIters = 5, output = output)
+    val name = s"Native ORC Vectorized (Pushdown)"
+    benchmark.addCase(name) { _ =>
+      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        spark
+          .sql(s"SELECT $selectExpr FROM orcTable")
+          .filter(whereColumn)
+          .collect()
+      }
+    }
     benchmark.run()
   }
 
@@ -200,180 +219,205 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runBenchmark("Pushdown for many distinct value case") {
-      withTempPath { dir =>
-        withTempTable("orcTable", "parquetTable") {
-          Seq(true, false).foreach { useStringForValue =>
-            prepareTable(dir, numRows, width, useStringForValue)
-            if (useStringForValue) {
-              runStringBenchmark(numRows, width, mid, "string")
-            } else {
-              runIntBenchmark(numRows, width, mid)
-            }
-          }
-        }
-      }
-    }
+//    runBenchmark("Pushdown for many distinct value case") {
+//      withTempPath { dir =>
+//        withTempTable("orcTable", "parquetTable") {
+//          Seq(true, false).foreach { useStringForValue =>
+//            prepareTable(dir, numRows, width, useStringForValue)
+//            if (useStringForValue) {
+//              runStringBenchmark(numRows, width, mid, "string")
+//            } else {
+//              runIntBenchmark(numRows, width, mid)
+//            }
+//          }
+//        }
+//      }
+//    }
+//
+//    runBenchmark("Pushdown for few distinct value case (use dictionary encoding)") {
+//      withTempPath { dir =>
+//        val numDistinctValues = 200
+//
+//        withTempTable("orcTable", "parquetTable") {
+//          prepareStringDictTable(dir, numRows, numDistinctValues, width)
+//          runStringBenchmark(numRows, width, numDistinctValues / 2, "distinct string")
+//        }
+//      }
+//    }
+//
+//    runBenchmark("Pushdown benchmark for StringStartsWith") {
+//      withTempPath { dir =>
+//        withTempTable("orcTable", "parquetTable") {
+//          prepareTable(dir, numRows, width, true)
+//          Seq(
+//            "value like '10%'",
+//            "value like '1000%'",
+//            s"value like '${mid.toString.substring(0, mid.toString.length - 1)}%'"
+//          ).foreach { whereExpr =>
+//            val title = s"StringStartsWith filter: ($whereExpr)"
+//            filterPushDownBenchmark(numRows, title, whereExpr)
+//          }
+//        }
+//      }
+//    }
+//
+//    runBenchmark(s"Pushdown benchmark for ${DecimalType.simpleString}") {
+//      withTempPath { dir =>
+//        Seq(
+//          s"decimal(${Decimal.MAX_INT_DIGITS}, 2)",
+//          s"decimal(${Decimal.MAX_LONG_DIGITS}, 2)",
+//          s"decimal(${DecimalType.MAX_PRECISION}, 2)"
+//        ).foreach { dt =>
+//          val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
+//          val valueCol = if (dt.equalsIgnoreCase(s"decimal(${Decimal.MAX_INT_DIGITS}, 2)")) {
+//            monotonically_increasing_id() % 9999999
+//          } else {
+//            monotonically_increasing_id()
+//          }
+//          val df = spark.range(numRows)
+//            .selectExpr(columns: _*).withColumn("value", valueCol.cast(dt))
+//          withTempTable("orcTable", "parquetTable") {
+//            saveAsTable(df, dir)
+//
+//            Seq(s"value = $mid").foreach { whereExpr =>
+//              val title = s"Select 1 $dt row ($whereExpr)".replace("value AND value", "value")
+//              filterPushDownBenchmark(numRows, title, whereExpr)
+//            }
+//
+//            val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
+//            Seq(10, 50, 90).foreach { percent =>
+//              filterPushDownBenchmark(
+//                numRows,
+//                s"Select $percent% $dt rows (value < ${numRows * percent / 100})",
+//                s"value < ${numRows * percent / 100}",
+//                selectExpr
+//              )
+//            }
+//          }
+//        }
+//      }
+//    }
+//
+//    runBenchmark("Pushdown benchmark for InSet -> InFilters") {
+//      withTempPath { dir =>
+//        withTempTable("orcTable", "parquetTable") {
+//          prepareTable(dir, numRows, width, false)
+//          Seq(5, 10, 50, 100).foreach { count =>
+//            Seq(10, 50, 90).foreach { distribution =>
+//              val filter =
+//                Range(0, count).map(r => scala.util.Random.nextInt(numRows * distribution / 100))
+//              val whereExpr = s"value in(${filter.mkString(",")})"
+//             val title = s"InSet -> InFilters (values count: $count, distribution: $distribution)"
+//              filterPushDownBenchmark(numRows, title, whereExpr)
+//            }
+//          }
+//        }
+//      }
+//    }
+//
+//    runBenchmark(s"Pushdown benchmark for ${ByteType.simpleString}") {
+//      withTempPath { dir =>
+//        val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
+//        val df = spark.range(numRows).selectExpr(columns: _*)
+//          .withColumn("value", (monotonically_increasing_id() % Byte.MaxValue).cast(ByteType))
+//          .orderBy("value")
+//        withTempTable("orcTable", "parquetTable") {
+//          saveAsTable(df, dir)
+//
+//          Seq(s"value = CAST(${Byte.MaxValue / 2} AS ${ByteType.simpleString})")
+//            .foreach { whereExpr =>
+//              val title = s"Select 1 ${ByteType.simpleString} row ($whereExpr)"
+//                .replace("value AND value", "value")
+//              filterPushDownBenchmark(numRows, title, whereExpr)
+//            }
+//
+//          val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
+//          Seq(10, 50, 90).foreach { percent =>
+//            filterPushDownBenchmark(
+//              numRows,
+//              s"Select $percent% ${ByteType.simpleString} rows " +
+//                s"(value < CAST(${Byte.MaxValue * percent / 100} AS ${ByteType.simpleString}))",
+//              s"value < CAST(${Byte.MaxValue * percent / 100} AS ${ByteType.simpleString})",
+//              selectExpr
+//            )
+//          }
+//        }
+//      }
+//    }
+//
+//    runBenchmark(s"Pushdown benchmark for Timestamp") {
+//      withTempPath { dir =>
+//        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> true.toString) {
+//          ParquetOutputTimestampType.values.toSeq.map(_.toString).foreach { fileType =>
+//            withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fileType) {
+//              val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
+//              val df = spark.range(numRows).selectExpr(columns: _*)
+//                .withColumn("value", monotonically_increasing_id().cast(TimestampType))
+//              withTempTable("orcTable", "parquetTable") {
+//                saveAsTable(df, dir)
+//
+//                Seq(s"value = CAST($mid AS timestamp)").foreach { whereExpr =>
+//                  val title = s"Select 1 timestamp stored as $fileType row ($whereExpr)"
+//                    .replace("value AND value", "value")
+//                  filterPushDownBenchmark(numRows, title, whereExpr)
+//                }
+//
+//                val selectExpr = (1 to width)
+//                  .map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
+//                Seq(10, 50, 90).foreach { percent =>
+//                  filterPushDownBenchmark(
+//                    numRows,
+//                    s"Select $percent% timestamp stored as $fileType rows " +
+//                      s"(value < CAST(${numRows * percent / 100} AS timestamp))",
+//                    s"value < CAST(${numRows * percent / 100} as timestamp)",
+//                    selectExpr
+//                  )
+//                }
+//              }
+//            }
+//          }
+//        }
+//      }
+//    }
 
-    runBenchmark("Pushdown for few distinct value case (use dictionary encoding)") {
-      withTempPath { dir =>
-        val numDistinctValues = 200
+//    runBenchmark(s"Pushdown benchmark with many filters") {
+//      val numRows = 1
+//      val width = 500
+//
+//      withTempPath { dir =>
+//        val columns = (1 to width).map(i => s"id c$i")
+//        val df = spark.range(1).selectExpr(columns: _*)
+//        withTempTable("orcTable", "parquetTable") {
+//          saveAsTable(df, dir)
+//          Seq(1, 250, 500).foreach { numFilter =>
+//            val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" or ")
+//            // Note: InferFiltersFromConstraints will add more filters to this given filters
+//            filterPushDownBenchmark(numRows, s"Select 1 row with $numFilter filters", whereExpr)
+//          }
+//        }
+//      }
+//    }
 
-        withTempTable("orcTable", "parquetTable") {
-          prepareStringDictTable(dir, numRows, numDistinctValues, width)
-          runStringBenchmark(numRows, width, numDistinctValues / 2, "distinct string")
-        }
-      }
-    }
-
-    runBenchmark("Pushdown benchmark for StringStartsWith") {
-      withTempPath { dir =>
-        withTempTable("orcTable", "parquetTable") {
-          prepareTable(dir, numRows, width, true)
-          Seq(
-            "value like '10%'",
-            "value like '1000%'",
-            s"value like '${mid.toString.substring(0, mid.toString.length - 1)}%'"
-          ).foreach { whereExpr =>
-            val title = s"StringStartsWith filter: ($whereExpr)"
-            filterPushDownBenchmark(numRows, title, whereExpr)
-          }
-        }
-      }
-    }
-
-    runBenchmark(s"Pushdown benchmark for ${DecimalType.simpleString}") {
-      withTempPath { dir =>
-        Seq(
-          s"decimal(${Decimal.MAX_INT_DIGITS}, 2)",
-          s"decimal(${Decimal.MAX_LONG_DIGITS}, 2)",
-          s"decimal(${DecimalType.MAX_PRECISION}, 2)"
-        ).foreach { dt =>
-          val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
-          val valueCol = if (dt.equalsIgnoreCase(s"decimal(${Decimal.MAX_INT_DIGITS}, 2)")) {
-            monotonically_increasing_id() % 9999999
-          } else {
-            monotonically_increasing_id()
-          }
-          val df = spark.range(numRows)
-            .selectExpr(columns: _*).withColumn("value", valueCol.cast(dt))
-          withTempTable("orcTable", "parquetTable") {
-            saveAsTable(df, dir)
-
-            Seq(s"value = $mid").foreach { whereExpr =>
-              val title = s"Select 1 $dt row ($whereExpr)".replace("value AND value", "value")
-              filterPushDownBenchmark(numRows, title, whereExpr)
-            }
-
-            val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
-            Seq(10, 50, 90).foreach { percent =>
-              filterPushDownBenchmark(
-                numRows,
-                s"Select $percent% $dt rows (value < ${numRows * percent / 100})",
-                s"value < ${numRows * percent / 100}",
-                selectExpr
-              )
-            }
-          }
-        }
-      }
-    }
-
-    runBenchmark("Pushdown benchmark for InSet -> InFilters") {
-      withTempPath { dir =>
-        withTempTable("orcTable", "parquetTable") {
-          prepareTable(dir, numRows, width, false)
-          Seq(5, 10, 50, 100).foreach { count =>
-            Seq(10, 50, 90).foreach { distribution =>
-              val filter =
-                Range(0, count).map(r => scala.util.Random.nextInt(numRows * distribution / 100))
-              val whereExpr = s"value in(${filter.mkString(",")})"
-              val title = s"InSet -> InFilters (values count: $count, distribution: $distribution)"
-              filterPushDownBenchmark(numRows, title, whereExpr)
-            }
-          }
-        }
-      }
-    }
-
-    runBenchmark(s"Pushdown benchmark for ${ByteType.simpleString}") {
-      withTempPath { dir =>
-        val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
-        val df = spark.range(numRows).selectExpr(columns: _*)
-          .withColumn("value", (monotonically_increasing_id() % Byte.MaxValue).cast(ByteType))
-          .orderBy("value")
-        withTempTable("orcTable", "parquetTable") {
-          saveAsTable(df, dir)
-
-          Seq(s"value = CAST(${Byte.MaxValue / 2} AS ${ByteType.simpleString})")
-            .foreach { whereExpr =>
-              val title = s"Select 1 ${ByteType.simpleString} row ($whereExpr)"
-                .replace("value AND value", "value")
-              filterPushDownBenchmark(numRows, title, whereExpr)
-            }
-
-          val selectExpr = (1 to width).map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
-          Seq(10, 50, 90).foreach { percent =>
-            filterPushDownBenchmark(
-              numRows,
-              s"Select $percent% ${ByteType.simpleString} rows " +
-                s"(value < CAST(${Byte.MaxValue * percent / 100} AS ${ByteType.simpleString}))",
-              s"value < CAST(${Byte.MaxValue * percent / 100} AS ${ByteType.simpleString})",
-              selectExpr
-            )
-          }
-        }
-      }
-    }
-
-    runBenchmark(s"Pushdown benchmark for Timestamp") {
-      withTempPath { dir =>
-        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> true.toString) {
-          ParquetOutputTimestampType.values.toSeq.map(_.toString).foreach { fileType =>
-            withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> fileType) {
-              val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
-              val df = spark.range(numRows).selectExpr(columns: _*)
-                .withColumn("value", monotonically_increasing_id().cast(TimestampType))
-              withTempTable("orcTable", "parquetTable") {
-                saveAsTable(df, dir)
-
-                Seq(s"value = CAST($mid AS timestamp)").foreach { whereExpr =>
-                  val title = s"Select 1 timestamp stored as $fileType row ($whereExpr)"
-                    .replace("value AND value", "value")
-                  filterPushDownBenchmark(numRows, title, whereExpr)
-                }
-
-                val selectExpr = (1 to width)
-                  .map(i => s"MAX(c$i)").mkString("", ",", ", MAX(value)")
-                Seq(10, 50, 90).foreach { percent =>
-                  filterPushDownBenchmark(
-                    numRows,
-                    s"Select $percent% timestamp stored as $fileType rows " +
-                      s"(value < CAST(${numRows * percent / 100} AS timestamp))",
-                    s"value < CAST(${numRows * percent / 100} as timestamp)",
-                    selectExpr
-                  )
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    runBenchmark(s"Pushdown benchmark with many filters") {
+    runBenchmark(s"Pushdown benchmark with unbalanced Column") {
       val numRows = 1
-      val width = 500
+      val width = 1000
 
       withTempPath { dir =>
         val columns = (1 to width).map(i => s"id c$i")
         val df = spark.range(1).selectExpr(columns: _*)
         withTempTable("orcTable", "parquetTable") {
           saveAsTable(df, dir)
-          Seq(1, 250, 500).foreach { numFilter =>
-            val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" and ")
+        (1 to width by 50).foreach { numFilter =>
+            val whereColumn = (1 to numFilter)
+              .map(i => col(s"c$i") === lit(0))
+              .foldLeft(lit(false))(_ || _)
+//            val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" or ")
             // Note: InferFiltersFromConstraints will add more filters to this given filters
-            filterPushDownBenchmark(numRows, s"Select 1 row with $numFilter filters", whereExpr)
+//            filterPushDownBenchmark(numRows, s"Select 1 row with $numFilter filters", whereExpr)
+            filterPushDownBenchmarkWithColumn(
+              numRows,
+              s"Select 1 row with $numFilter filters",
+              whereColumn)
           }
         }
       }

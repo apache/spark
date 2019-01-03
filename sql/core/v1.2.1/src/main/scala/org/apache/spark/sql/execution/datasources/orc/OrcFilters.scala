@@ -185,22 +185,28 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         // Pushing one side of AND down is only safe to do at the top level or in the child
         // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
         // can be safely removed.
-        val leftBuilderOption =
-          createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts)
-        val rightBuilderOption =
-          createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts)
-        (leftBuilderOption, rightBuilderOption) match {
-          case (Some(_), Some(_)) =>
+        val leftIsConvertible = isConvertibleToOrcPredicate(
+          dataTypeMap,
+          left,
+          canPartialPushDownConjuncts
+        )
+        val rightIsConvertible = isConvertibleToOrcPredicate(
+          dataTypeMap,
+          right,
+          canPartialPushDownConjuncts
+        )
+        (leftIsConvertible, rightIsConvertible) match {
+          case (true, true) =>
             for {
               lhs <- createBuilder(dataTypeMap, left,
                 builder.startAnd(), canPartialPushDownConjuncts)
               rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts)
             } yield rhs.end()
 
-          case (Some(_), None) if canPartialPushDownConjuncts =>
+          case (true, false) if canPartialPushDownConjuncts =>
             createBuilder(dataTypeMap, left, builder, canPartialPushDownConjuncts)
 
-          case (None, Some(_)) if canPartialPushDownConjuncts =>
+          case (false, true) if canPartialPushDownConjuncts =>
             createBuilder(dataTypeMap, right, builder, canPartialPushDownConjuncts)
 
           case _ => None
@@ -218,9 +224,18 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         // The predicate can be converted as
         // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
         // As per the logical in And predicate, we can push down (a1 OR b1).
+        val leftIsConvertible = isConvertibleToOrcPredicate(
+          dataTypeMap,
+          left,
+          canPartialPushDownConjuncts
+        )
+        val rightIsConvertible = isConvertibleToOrcPredicate(
+          dataTypeMap,
+          right,
+          canPartialPushDownConjuncts
+        )
         for {
-          _ <- createBuilder(dataTypeMap, left, newBuilder, canPartialPushDownConjuncts)
-          _ <- createBuilder(dataTypeMap, right, newBuilder, canPartialPushDownConjuncts)
+          _ <- Option(leftIsConvertible && rightIsConvertible).filter(identity)
           lhs <- createBuilder(dataTypeMap, left,
             builder.startOr(), canPartialPushDownConjuncts)
           rhs <- createBuilder(dataTypeMap, right, lhs, canPartialPushDownConjuncts)
@@ -228,9 +243,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
       case Not(child) =>
         for {
-          _ <- createBuilder(dataTypeMap, child, newBuilder, canPartialPushDownConjuncts = false)
           negate <- createBuilder(dataTypeMap,
             child, builder.startNot(), canPartialPushDownConjuncts = false)
+            if isConvertibleToOrcPredicate(dataTypeMap, child, canPartialPushDownConjuncts = false)
         } yield negate.end()
 
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
@@ -282,6 +297,81 @@ private[sql] object OrcFilters extends OrcFiltersBase {
           castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None
+    }
+  }
+
+  private def isConvertibleToOrcPredicate(
+    dataTypeMap: Map[String, DataType],
+    expression: Filter,
+    canPartialPushDownConjuncts: Boolean
+  ): Boolean = {
+    import org.apache.spark.sql.sources._
+
+    expression match {
+      case And(left, right) =>
+        // At here, it is not safe to just convert one side and remove the other side
+        // if we do not understand what the parent filters are.
+        //
+        // Here is an example used to explain the reason.
+        // Let's say we have NOT(a = 2 AND b in ('1')) and we do not understand how to
+        // convert b in ('1'). If we only convert a = 2, we will end up with a filter
+        // NOT(a = 2), which will generate wrong results.
+        //
+        // Pushing one side of AND down is only safe to do at the top level or in the child
+        // AND before hitting NOT or OR conditions, and in this case, the unsupported predicate
+        // can be safely removed.
+        val leftIsConvertible = isConvertibleToOrcPredicate(
+          dataTypeMap,
+          left,
+          canPartialPushDownConjuncts)
+        val rightIsConvertible = isConvertibleToOrcPredicate(
+          dataTypeMap,
+          right,
+          canPartialPushDownConjuncts)
+        // NOTE: If we can use partial predicates here, we only need one of the children to
+        // be convertible to be able to convert the parent. Otherwise, we need both to be
+        // convertible.
+        if (canPartialPushDownConjuncts) {
+          leftIsConvertible || rightIsConvertible
+        } else {
+          leftIsConvertible && rightIsConvertible
+        }
+
+      case Or(left, right) =>
+        val leftIsConvertible = isConvertibleToOrcPredicate(
+          dataTypeMap,
+          left,
+          canPartialPushDownConjuncts)
+        val rightIsConvertible = isConvertibleToOrcPredicate(
+          dataTypeMap,
+          right,
+          canPartialPushDownConjuncts
+        )
+        leftIsConvertible && rightIsConvertible
+
+      case Not(child) =>
+        val childIsConvertible = isConvertibleToOrcPredicate(
+          dataTypeMap,
+          child,
+          canPartialPushDownConjuncts = false
+        )
+        childIsConvertible
+
+      // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
+      // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
+      // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
+
+      case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
+      case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
+      case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
+      case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
+      case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
+      case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) => true
+      case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) => true
+      case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) => true
+      case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) => true
+
+      case _ => false
     }
   }
 }
