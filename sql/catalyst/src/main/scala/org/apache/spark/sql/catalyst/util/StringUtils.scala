@@ -134,14 +134,14 @@ object StringUtils {
                           && current == '/'
                           && remaining.startsWith(BRACKETED_COMMENT_START) =>
           quoteFlag = current
-          currentSQL.append("/*")
+          currentSQL.append(BRACKETED_COMMENT_START)
           cursor += 2
         // if it stands on the ending of a bracketed comment, consume 2 characters
         case remaining if quoteFlag == FORWARD_SLASH
                           && current == '*'
                           && remaining.startsWith(BRACKETED_COMMENT_END) =>
           quoteFlag = DOT
-          currentSQL.append("*/")
+          currentSQL.append(BRACKETED_COMMENT_END)
           cursor += 2
 
         // if it stands on the opening of inline comment, move cursor at the end of this line

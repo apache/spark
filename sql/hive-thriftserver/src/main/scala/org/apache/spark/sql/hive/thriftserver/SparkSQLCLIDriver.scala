@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
-import java.util.{ArrayList, Locale}
+import java.util.{ArrayList => JArrayList, Locale}
 
 import scala.collection.JavaConverters._
 
@@ -448,7 +448,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             return ret
           }
 
-          val res = new ArrayList[String]()
+          val res = new JArrayList[String]()
 
           if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
             // Print the column names.
