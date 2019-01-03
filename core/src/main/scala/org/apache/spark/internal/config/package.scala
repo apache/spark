@@ -153,7 +153,14 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
-  private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max").intConf.createOptional
+  private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
+    .doc("When running on a standalone deploy cluster or a Mesos cluster in coarse-grained " +
+      "sharing mode, the maximum amount of CPU cores to request for the application from across " +
+      "the cluster (not from each machine). If not set, the default will be " +
+      "`spark.deploy.defaultCores` on Spark's standalone cluster manager, or infinite " +
+      "(all available cores) on Mesos.")
+    .intConf
+    .createOptional
 
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
