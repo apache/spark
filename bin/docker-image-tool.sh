@@ -210,14 +210,14 @@ Options:
                         Skips building PySpark docker image if not specified.
                         A sample PySpark Dockerfile is at:
                         kubernetes/dockerfiles/spark/bindings/python/Dockerfile
-			File must be relative the build path, in dev this is copied from:
-			resource-managers/kubernetes/docker/src/main/dockerfiles
+                        File must be relative the build path, in dev this is copied from:
+                        resource-managers/kubernetes/docker/src/main/dockerfiles
   -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
                         Skips building SparkR docker image if not specified.
-			 A sample SparkR Dockerfile is at:
+                        A sample SparkR Dockerfile is at:
                         kubernetes/dockerfiles/spark/bindings/R/Dockerfile
-			File must be relative the build path, in dev this is copied from:
-			resource-managers/kubernetes/docker/src/main/dockerfiles
+                        File must be relative the build path, in dev this is copied from:
+                        resource-managers/kubernetes/docker/src/main/dockerfiles
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
