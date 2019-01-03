@@ -275,7 +275,7 @@ class KubernetesSuite extends SparkFunSuite
                 Eventually.eventually(TIMEOUT, INTERVAL) {
                   resource.getStatus.getConditions().asScala
                     .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
-                    .headOption.getOrElse(false)
+                    .headOption.getOrElse(false) shouldBe (true)
                 }
                 // Sleep a small interval to ensure everything is registered.
                 Thread.sleep(500)
@@ -317,7 +317,7 @@ class KubernetesSuite extends SparkFunSuite
     // an executor at some point.
     Eventually.eventually(TIMEOUT, INTERVAL) {
       println(s"This iteration is ${execPods.values.nonEmpty} with ${execPods}")
-      execPods.values.nonEmpty
+      execPods.values.nonEmpty should be (true)
     }
     println(s"Closing watcher with execPods $execPods nonEmpty: ${execPods.values.nonEmpty}")
     execWatcher.close()
