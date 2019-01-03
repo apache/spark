@@ -28,7 +28,6 @@ import scala.util.Try
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.Utils
 
 
@@ -44,7 +43,7 @@ private[spark] case class ProcfsMetrics(
 // project.
 private[spark] class ProcfsMetricsGetter(procfsDir: String = "/proc/") extends Logging {
   private val procfsStatFile = "stat"
-  private val testing = sys.env.contains("SPARK_TESTING") || sys.props.contains(IS_TESTING.key)
+  private val testing = Utils.isTesting
   private val pageSize = computePageSize()
   private var isAvailable: Boolean = isProcfsAvailable
   private val pid = computePid()
