@@ -427,6 +427,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 61)
       assert(getMonth(getInUTCDays(c.getTimeInMillis)) === 3)
 
+      // testing leap day (February 29) in leap years
+      c.set(year, 1, 29, 0, 0, 0)
+      assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)
+
       // For non-leap years:
       c.set(year + 1, 2, 1, 0, 0, 0)
       assert(getDayInYear(getInUTCDays(c.getTimeInMillis)) === 60)

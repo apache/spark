@@ -56,9 +56,12 @@ object DateTimeUtils {
   // number of days in 400 years by Gregorian calendar
   final val daysIn400Years: Int = 146097
 
-  // In Julian calendar every year which is a multiple of 4 is a leap year.
-  // So in 400 years there are 3 extra leap years compared to the Gregorian calendar:
-  // 100, 200 and 300 (as multiples of 100 but not 400).
+  // In the Julian calendar every year that is exactly divisible by 4 is a leap year without any
+  // exception. But in the Gregorian calendar every year that is exactly divisible by four
+  // is a leap year, except for years that are exactly divisible by 100, but these centurial years
+  // are leap years if they are exactly divisible by 400.
+  // So there are 3 extra days in the Julian calendar within a 400 years cycle compared to the
+  // Gregorian calendar.
   final val extraLeapDaysIn400YearsJulian = 3
 
   // number of days in 400 years by Julian calendar
