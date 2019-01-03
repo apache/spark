@@ -269,7 +269,7 @@ class KubernetesSuite extends SparkFunSuite
               execPods(name) = resource
               // If testing decomissioning delete the node 5 seconds after it starts running
               // Open question: could we put this in the checker
-              if (decomissioningTest && false) {
+              if (decomissioningTest) {
                 // Wait for all the containers in the pod to be running
                 println("Waiting for pod to become OK then delete.")
                 Eventually.eventually(TIMEOUT, INTERVAL) {
@@ -318,6 +318,12 @@ class KubernetesSuite extends SparkFunSuite
     Eventually.eventually(TIMEOUT, INTERVAL) {
       println(s"This iteration is ${execPods.values.nonEmpty} with ${execPods}")
       execPods.values.nonEmpty should be (true)
+    }
+    if (decomissioningTest) {
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        println(s"Decom: This iteration is ${execPods.values.nonEmpty} with ${execPods}")
+        execPods.values.nonEmpty should be (false)
+      }
     }
     println(s"Closing watcher with execPods $execPods nonEmpty: ${execPods.values.nonEmpty}")
     execWatcher.close()
