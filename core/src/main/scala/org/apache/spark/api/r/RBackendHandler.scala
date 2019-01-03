@@ -29,7 +29,7 @@ import io.netty.handler.timeout.ReadTimeoutException
 import org.apache.spark.SparkConf
 import org.apache.spark.api.r.SerDe._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.R._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**

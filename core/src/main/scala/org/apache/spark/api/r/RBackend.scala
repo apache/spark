@@ -32,7 +32,7 @@ import io.netty.handler.timeout.ReadTimeoutHandler
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.R._
 
 /**
  * Netty-based backend server that is used to communicate between R and Java.

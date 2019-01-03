@@ -27,7 +27,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{PYSPARK_EXECUTOR_MEMORY, PYTHON_TASK_KILL_TIMEOUT, PYTHON_WORKER_REUSE}
+import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
