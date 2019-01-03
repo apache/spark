@@ -25,11 +25,10 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
-  ExecutorState, SparkHadoopUtil}
+import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState.DriverState
-import org.apache.spark.deploy.master.MasterMessages._
+import org.apache.spark.deploy.master.MasterMessages.{CheckForWorkerBlackTimeOut, _}
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.internal.Logging
@@ -60,6 +59,9 @@ private[deploy] class Master(
   private val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   private val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
   private val MAX_EXECUTOR_RETRIES = conf.getInt("spark.deploy.maxExecutorRetries", 10)
+  private val MAX_EXECUTOR_THRESHOLD = conf.getInt(
+    "spark.deploy.executorFailedPerWorkerThreshold", 10)
+  private val WORKER_BLACK_TIMEOUT_MS = conf.getLong("spark.worker.black.timeout", 3600) * 1000
 
   val workers = new HashSet[WorkerInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
@@ -108,6 +110,8 @@ private[deploy] class Master(
 
   private var checkForWorkerTimeOutTask: ScheduledFuture[_] = _
 
+  private var checkForWorkerBlackTimeOutTask: ScheduledFuture[_] = _
+
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
@@ -150,6 +154,12 @@ private[deploy] class Master(
         self.send(CheckForWorkerTimeOut)
       }
     }, 0, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+
+    checkForWorkerBlackTimeOutTask = forwardMessageThread.scheduleAtFixedRate(new Runnable {
+      override def run(): Unit = Utils.tryLogNonFatalError {
+        self.send(CheckForWorkerBlackTimeOut)
+      }
+    }, 0, WORKER_BLACK_TIMEOUT_MS, TimeUnit.MILLISECONDS)
 
     if (restServerEnabled) {
       val port = conf.getInt("spark.master.rest.port", 6066)
@@ -198,6 +208,9 @@ private[deploy] class Master(
     }
     if (checkForWorkerTimeOutTask != null) {
       checkForWorkerTimeOutTask.cancel(true)
+    }
+    if (checkForWorkerBlackTimeOutTask != null) {
+      checkForWorkerBlackTimeOutTask.cancel(true)
     }
     forwardMessageThread.shutdownNow()
     webUi.stop()
@@ -278,7 +291,7 @@ private[deploy] class Master(
         schedule()
       }
 
-    case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
+    case ExecutorStateChanged(appId, execId, state, message, exitStatus, workerId) =>
       val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
       execOption match {
         case Some(exec) =>
@@ -318,6 +331,15 @@ private[deploy] class Master(
                 removeApplication(appInfo, ApplicationState.FAILED)
               }
             }
+
+            if (state == ExecutorState.FAILED && exitStatus.isEmpty && workerId.nonEmpty) {
+
+              // Only retry certain number of times so we don't go into an infinite loop
+              // to allocate executor on the same worker
+              workers.filter(_.id == workerId).foreach(worker =>
+                handleExecutorLaunchFail(worker, appInfo.id))
+            }
+
           }
           schedule()
         case None =>
@@ -416,6 +438,18 @@ private[deploy] class Master(
     case CheckForWorkerTimeOut =>
       timeOutDeadWorkers()
 
+    case CheckForWorkerBlackTimeOut =>
+      timeOutBlackedWorkers()
+
+  }
+
+  def handleExecutorLaunchFail(worker: WorkerInfo, appId: String): Unit = {
+     worker.increaseFailedAppCount(appId)
+      if (MAX_EXECUTOR_THRESHOLD >= 0 && worker.getFailedFailedCount(appId) >=
+        MAX_EXECUTOR_THRESHOLD) {
+        worker.setIsBlack()
+        worker.removeFailedAppCount(appId)
+      }
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -681,7 +715,7 @@ private[deploy] class Master(
         // Filter out workers that don't have enough resources to launch an executor
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-            worker.coresFree >= coresPerExecutor)
+            worker.coresFree >= coresPerExecutor && !worker.isBlack)
           .sortBy(_.coresFree).reverse
         val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
@@ -858,6 +892,7 @@ private[deploy] class Master(
 
   private def finishApplication(app: ApplicationInfo) {
     removeApplication(app, ApplicationState.FINISHED)
+    workers.filter(_.isBlack).foreach(_.removeFailedAppCount(app.id))
   }
 
   def removeApplication(app: ApplicationInfo, state: ApplicationState.Value) {
@@ -999,6 +1034,13 @@ private[deploy] class Master(
         }
       }
     }
+  }
+
+  /** Check for, and set, any timed-out workers' black false */
+  private def timeOutBlackedWorkers() {
+    val currentTime = System.currentTimeMillis()
+    workers.filter(w => w.isBlack && (w.lastBlackTime < currentTime - WORKER_BLACK_TIMEOUT_MS))
+      .foreach(w => w.unsetBlack())
   }
 
   private def newDriverId(submitDate: Date): String = {

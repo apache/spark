@@ -63,7 +63,8 @@ private[deploy] object DeployMessages {
       execId: Int,
       state: ExecutorState,
       message: Option[String],
-      exitStatus: Option[Int])
+      exitStatus: Option[Int],
+      workerId: String = "")
     extends DeployMessage
 
   case class DriverStateChanged(

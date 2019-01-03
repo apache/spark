@@ -37,12 +37,14 @@ private[spark] class WorkerInfo(
 
   @transient var executors: mutable.HashMap[String, ExecutorDesc] = _ // executorId => info
   @transient var drivers: mutable.HashMap[String, DriverInfo] = _ // driverId => info
+  @transient var appIdToRetryCount: mutable.HashMap[String, Int] = _
   @transient var state: WorkerState.Value = _
   @transient var coresUsed: Int = _
   @transient var memoryUsed: Int = _
+  @transient var isBlack: Boolean = _
 
   @transient var lastHeartbeat: Long = _
-
+  @transient var lastBlackTime: Long = _
   init()
 
   def coresFree: Int = cores - coresUsed
@@ -56,10 +58,13 @@ private[spark] class WorkerInfo(
   private def init() {
     executors = new mutable.HashMap
     drivers = new mutable.HashMap
+    appIdToRetryCount = new mutable.HashMap
     state = WorkerState.ALIVE
     coresUsed = 0
     memoryUsed = 0
     lastHeartbeat = System.currentTimeMillis()
+    isBlack = false
+    lastBlackTime = 0
   }
 
   def hostPort: String = {
@@ -99,6 +104,28 @@ private[spark] class WorkerInfo(
 
   def setState(state: WorkerState.Value): Unit = {
     this.state = state
+  }
+
+  def setIsBlack(): Unit = {
+    this.isBlack = true
+    this.lastBlackTime = System.currentTimeMillis()
+  }
+
+  def unsetBlack(): Unit = {
+    this.isBlack = false
+    this.lastBlackTime = 0
+  }
+
+  def increaseFailedAppCount(appId: String) {
+    appIdToRetryCount(appId) = appIdToRetryCount.get(appId).map(_ + 1).getOrElse(1)
+  }
+
+  def getFailedFailedCount(appId: String): Int = {
+    appIdToRetryCount.getOrElse(appId, 1)
+  }
+
+  def removeFailedAppCount(appId: String) {
+    appIdToRetryCount.remove(appId)
   }
 
   def isAlive(): Boolean = this.state == WorkerState.ALIVE
