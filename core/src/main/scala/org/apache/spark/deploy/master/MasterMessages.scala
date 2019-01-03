@@ -32,6 +32,8 @@ private[master] object MasterMessages {
 
   case object CheckForWorkerTimeOut
 
+  case object CheckForWorkerBlackTimeOut
+
   case class BeginRecovery(storedApps: Seq[ApplicationInfo], storedWorkers: Seq[WorkerInfo])
 
   case object CompleteRecovery

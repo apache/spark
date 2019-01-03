@@ -551,11 +551,11 @@ private[deploy] class Worker(
               executors -= appId + "/" + execId
             }
             sendToMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
-              Some(e.toString), None))
+              Some(e.toString), None, workerId))
         }
       }
 
-    case executorStateChanged @ ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
+    case executorStateChanged @ ExecutorStateChanged(_, _, _, _, _, _) =>
       handleExecutorStateChanged(executorStateChanged)
 
     case KillExecutor(masterUrl, appId, execId) =>
