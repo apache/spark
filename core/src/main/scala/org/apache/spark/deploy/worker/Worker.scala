@@ -37,6 +37,7 @@ import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
@@ -126,7 +127,7 @@ private[deploy] class Worker(
   private var connected = false
   private val workerId = generateWorkerId()
   private val sparkHome =
-    if (Utils.isTesting) {
+    if (sys.props.contains(IS_TESTING.key)) {
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
       new File(sys.props("spark.test.home"))
     } else {
