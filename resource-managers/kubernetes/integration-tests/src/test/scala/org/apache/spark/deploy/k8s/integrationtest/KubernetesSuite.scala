@@ -278,7 +278,7 @@ class KubernetesSuite extends SparkFunSuite
                     .headOption.getOrElse(false) shouldBe (true)
                 }
                 // Sleep a small interval to ensure everything is registered.
-                Thread.sleep(500)
+                Thread.sleep(100)
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
@@ -319,7 +319,17 @@ class KubernetesSuite extends SparkFunSuite
       println(s"This iteration is ${execPods.values.nonEmpty} with ${execPods}")
       execPods.values.nonEmpty should be (true)
     }
+    // If decomissioning we need to wait and check the executors were removed
     if (decomissioningTest) {
+      // Wait for the executors to become ready
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        resource.getStatus.getConditions().asScala
+          .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
+          .headOption.getOrElse(false) shouldBe (true)
+      }
+      // Sleep a small interval to allow execution
+      Thread.sleep(100)
+      // Wait for the executors to be removed
       Eventually.eventually(TIMEOUT, INTERVAL) {
         println(s"Decom: This iteration is ${execPods.values.nonEmpty} with ${execPods}")
         execPods.values.nonEmpty should be (false)
