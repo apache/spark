@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 // Note: The definition of these commands are based on the ones described in
@@ -294,8 +295,10 @@ case class AlterTableUnsetPropertiesCommand(
 
 
 /**
- * A command to change the column for a table, only support changing the comment of a non-partition
+ * A command to change the column for a table.  For now, this only supports:
  * column for now.
+ * - changing the comment of a non-partition column
+ * - adding sub columns to nested StructType columns
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -318,50 +321,97 @@ case class AlterTableChangeColumnCommand(
 
     // Find the origin column from dataSchema by column name.
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
-    // Throw an AnalysisException if the column name/dataType is changed.
-    if (!columnEqual(originColumn, newColumn, resolver)) {
+        .getOrElse(throw new AnalysisException(
+          s"Can't find column `$columnName` given table data columns " +
+              s"${table.dataSchema.fieldNames.mkString("[`", "`, `", "`]")}"
+        ))
+
+    // Throw an AnalysisException if the column name is changed or the dataType
+    // is incompatible (recursing over StructTypes and checking those for
+    // similar compatibility.
+    if (!columnsCompatible(originColumn, newColumn, resolver)) {
       throw new AnalysisException(
         "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
-          s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
-          s"'${newColumn.name}' with type '${newColumn.dataType}'")
+          s"'${originColumn.name}' with type '${originColumn.dataType.simpleString}' to " +
+          s"'${newColumn.name}' with type '${newColumn.dataType.simpleString}'")
     }
 
+
     val newDataSchema = table.dataSchema.fields.map { field =>
-      if (field.name == originColumn.name) {
-        // Create a new column from the origin column with the new comment.
-        addComment(field, newColumn.getComment)
-      } else {
-        field
+      field.name match {
+        // We've ensured that column names are resolvable, and that
+        // column types are compatible, so use the new column (merging metadata).
+        case originColumn.name =>
+          newColumn.copy(
+            // Preserve originColumn.metadata while merging any newColumn.metadata in too.
+            // This allows e.g. changing of comment without changing other metadata.
+            metadata = new MetadataBuilder()
+                .withMetadata(originColumn.metadata)
+                .withMetadata(newColumn.metadata).build()
+          )
+        // Else this is not a column we are alterting, so use the field from the table.
+        case _ => field
       }
     }
+
     catalog.alterTableDataSchema(tableName, StructType(newDataSchema))
 
     Seq.empty[Row]
   }
 
-  // Find the origin column from schema by column name, throw an AnalysisException if the column
-  // reference is invalid.
+  // Find the origin column from schema by column name using resolver.
   private def findColumnByName(
-      schema: StructType, name: String, resolver: Resolver): StructField = {
-    schema.fields.collectFirst {
-      case field if resolver(field.name, name) => field
-    }.getOrElse(throw new AnalysisException(
-      s"Can't find column `$name` given table data columns " +
-        s"${schema.fieldNames.mkString("[`", "`, `", "`]")}"))
+    schema: StructType,
+    name: String,
+    resolver: Resolver
+  ): Option[StructField] = {
+    schema.fields.find(f => resolver(f.name, name))
   }
 
-  // Add the comment to a column, if comment is empty, return the original column.
-  private def addComment(column: StructField, comment: Option[String]): StructField = {
-    comment.map(column.withComment(_)).getOrElse(column)
+  /**
+   * This checks that the two columns are compatible.  Here, compatible means that:
+   * Their names are resolvable (usually only case differences)
+   * AND
+   * They are either:
+   *  The same dataType
+   *  OR
+   *  both StructTypes, for which common sub fields are all (recursively) compatible.
+   */
+  private def columnsCompatible(
+    ours: StructField,
+    theirs: StructField,
+    resolver: Resolver
+  ): Boolean = {
+    // If we can't resolve between the column names, then these are not compatible.
+    if (!resolver(ours.name, theirs.name)) {
+      return false
+    }
+
+    (ours.dataType, theirs.dataType) match {
+      // If dataTypes are the same, then these columns are compatible
+      case (a, b) if a == b => true
+      // If both are StructTypes, recurse and ensure that each of
+      // the common fields recursively have identical types.
+      case (ourSchema: StructType, theirSchema: StructType) =>
+        // Get all fields in theirSchema that are also in ourSchema
+        // and make sure that all of these fields are also compatible.
+        theirSchema
+        .filter(field => findColumnByName(ourSchema, field.name, resolver).isDefined)
+        .forall { theirField =>
+          columnsCompatible(
+            findColumnByName(ourSchema, theirField.name, resolver).get,
+            theirField,
+            resolver
+          )
+        }
+      case _ => false
+    }
   }
 
-  // Compare a [[StructField]] to another, return true if they have the same column
-  // name(by resolver) and dataType.
-  private def columnEqual(
-      field: StructField, other: StructField, resolver: Resolver): Boolean = {
-    resolver(field.name, other.name) && field.dataType == other.dataType
-  }
+
+
 }
+
 
 /**
  * A command that sets the serde class and/or serde properties of a table/view.

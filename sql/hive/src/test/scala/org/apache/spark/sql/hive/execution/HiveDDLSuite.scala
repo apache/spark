@@ -88,6 +88,11 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     val schema = new StructType()
       .add("col1", "int", nullable = true, metadata = metadata)
       .add("col2", "string")
+      .add("nested1", StructType(Seq(
+        StructField("s1", StringType, nullable = false),
+        StructField("s2", StringType),
+        StructField("i1", IntegerType)
+      )))
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
@@ -260,6 +265,29 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       assert(err.contains("Cannot recognize hive type string:"))
    }
   }
+
+  test("SPARK-23890: Support CHANGE COLUMN to add nested fields to structs") {
+    withTable("t1") {
+      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
+      spark.sql("ALTER TABLE t1 CHANGE COLUMN q q STRUCT<col1:INT, col2:STRING, col3:STRING>");
+      assert(
+        spark.sql("SELECT * FROM t1")
+          .schema("q").dataType.asInstanceOf[StructType].fields.length == 3
+      )
+    }
+  }
+
+  test("SPARK-23890: negative Support CHANGE COLUMN to add nested fields to structs") {
+    withTable("t1") {
+      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
+      val err = intercept[AnalysisException] {
+        // Changing col2 to INT should throw exception
+        spark.sql("ALTER TABLE t1 CHANGE COLUMN q q STRUCT<col1:INT, col2:INT, col3:STRING>");
+      }.getMessage
+      assert(err.contains("ALTER TABLE CHANGE COLUMN is not supported for changing column 'q'"))
+    }
+  }
+
 }
 
 class HiveDDLSuite

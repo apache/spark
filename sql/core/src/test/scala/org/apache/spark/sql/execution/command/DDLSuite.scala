@@ -63,6 +63,11 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
     val schema = new StructType()
       .add("col1", "int", nullable = true, metadata = metadata)
       .add("col2", "string")
+      .add("nested1", StructType(Seq(
+        StructField("s1", StringType, nullable = false),
+        StructField("s2", StringType),
+        StructField("i1", IntegerType)
+      )))
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
@@ -1693,16 +1698,41 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent, isDatasourceTable)
-    def getMetadata(colName: String): Metadata = {
-      val column = catalog.getTableMetadata(tableIdent).schema.fields.find { field =>
+
+    def getColumnFromCatalog(colName: String): Option[StructField] = {
+      catalog.getTableMetadata(tableIdent).schema.fields.find { field =>
         resolver(field.name, colName)
       }
-      column.map(_.metadata).getOrElse(Metadata.empty)
+    }
+    def getMetadata(colName: String): Metadata = {
+      getColumnFromCatalog(colName).map(_.metadata).getOrElse(Metadata.empty)
     }
     // Ensure that change column will preserve other metadata fields.
     sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
     assert(getMetadata("col1").getString("comment") == "this is col1")
+
+
+    // Ensure that change column with simple type change fails
+    intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col2 col2 INT")
+    }
+
+    // Ensure that change column with in nested column with type change fails
+    intercept[AnalysisException] {
+      val alterSql = "ALTER TABLE dbx.tab1 CHANGE COLUMN nested1 " +
+          "nested1 struct<s1:string,s2:string,i1:string>"
+      sql(alterSql)
+    }
+
+    // Ensure that change column on nested field will allow addition of new fields in struct
+    val alterSql = "ALTER TABLE dbx.tab1 CHANGE COLUMN nested1 " +
+        "nested1 struct<s1:string,s2:string,i1:int,s3:string>"
+    sql(alterSql)
+    val alteredNestedColumn = getColumnFromCatalog("nested1").get
+    val alteredNestedSchema = alteredNestedColumn.dataType.asInstanceOf[StructType]
+    assert(alteredNestedSchema.length == 4)
+    assert(alteredNestedSchema("s3").name == "s3")
   }
 
   test("drop build-in function") {
