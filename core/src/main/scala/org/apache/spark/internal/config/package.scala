@@ -729,5 +729,4 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
-
 }

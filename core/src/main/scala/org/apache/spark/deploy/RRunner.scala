@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, SparkUserAppException}
-import org.apache.spark.api.r.{RBackend, RUtils, SparkRDefaults}
+import org.apache.spark.api.r.{RBackend, RUtils}
 import org.apache.spark.internal.config.R._
 import org.apache.spark.util.RedirectThread
 
