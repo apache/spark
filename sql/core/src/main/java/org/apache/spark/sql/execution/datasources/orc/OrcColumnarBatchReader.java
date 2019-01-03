@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc;
 import java.io.IOException;
 import java.util.stream.IntStream;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
@@ -58,9 +59,14 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   /**
    * The column IDs of the physical ORC file schema which are required by this reader.
-   * -1 means this required column doesn't exist in the ORC file.
+   * -1 means this required column is partition column, or it doesn't exist in the ORC file.
+   * Ideally partition column should never appear in the physical file, and should only appear
+   * in the directory name. However, Spark allows partition columns inside physical file,
+   * but Spark will discard the values from the file, and use the partition value got from
+   * directory name. The column order will be reserved though.
    */
-  private int[] requestedColIds;
+  @VisibleForTesting
+  public int[] requestedDataColIds;
 
   // Record reader from ORC row batch.
   private org.apache.orc.RecordReader recordReader;
@@ -68,7 +74,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   private StructField[] requiredFields;
 
   // The result columnar batch for vectorized execution by whole-stage codegen.
-  private ColumnarBatch columnarBatch;
+  @VisibleForTesting
+  public ColumnarBatch columnarBatch;
 
   // Writable column vectors of the result columnar batch.
   private WritableColumnVector[] columnVectors;
@@ -143,25 +150,33 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   /**
    * Initialize columnar batch by setting required schema and partition information.
    * With this information, this creates ColumnarBatch with the full schema.
+   *
+   * @param orcSchema Schema from ORC file reader.
+   * @param requiredFields All the fields that are required to return, including partition fields.
+   * @param requestedDataColIds Requested column ids from orcSchema. -1 if not existed.
+   * @param requestedPartitionColIds Requested column ids from partition schema. -1 if not existed.
+   * @param partitionValues Values of partition columns.
    */
   public void initBatch(
       TypeDescription orcSchema,
-      int[] requestedColIds,
       StructField[] requiredFields,
-      StructType partitionSchema,
+      int[] requestedDataColIds,
+      int[] requestedPartitionColIds,
       InternalRow partitionValues) {
     batch = orcSchema.createRowBatch(capacity);
     assert(!batch.selectedInUse); // `selectedInUse` should be initialized with `false`.
-
+    assert(requiredFields.length == requestedDataColIds.length);
+    assert(requiredFields.length == requestedPartitionColIds.length);
+    // If a required column is also partition column, use partition value and don't read from file.
+    for (int i = 0; i < requiredFields.length; i++) {
+      if (requestedPartitionColIds[i] != -1) {
+        requestedDataColIds[i] = -1;
+      }
+    }
     this.requiredFields = requiredFields;
-    this.requestedColIds = requestedColIds;
-    assert(requiredFields.length == requestedColIds.length);
+    this.requestedDataColIds = requestedDataColIds;
 
     StructType resultSchema = new StructType(requiredFields);
-    for (StructField f : partitionSchema.fields()) {
-      resultSchema = resultSchema.add(f);
-    }
-
     if (copyToSpark) {
       if (MEMORY_MODE == MemoryMode.OFF_HEAP) {
         columnVectors = OffHeapColumnVector.allocateColumns(capacity, resultSchema);
@@ -169,19 +184,15 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         columnVectors = OnHeapColumnVector.allocateColumns(capacity, resultSchema);
       }
 
-      // Initialize the missing columns once.
+      // Initialize the partition columns and missing columns once.
       for (int i = 0; i < requiredFields.length; i++) {
-        if (requestedColIds[i] == -1) {
+        if (requestedPartitionColIds[i] != -1) {
+          ColumnVectorUtils.populate(columnVectors[i],
+            partitionValues, requestedPartitionColIds[i]);
+          columnVectors[i].setIsConstant();
+        } else if (requestedDataColIds[i] == -1) {
           columnVectors[i].putNulls(0, capacity);
           columnVectors[i].setIsConstant();
-        }
-      }
-
-      if (partitionValues.numFields() > 0) {
-        int partitionIdx = requiredFields.length;
-        for (int i = 0; i < partitionValues.numFields(); i++) {
-          ColumnVectorUtils.populate(columnVectors[i + partitionIdx], partitionValues, i);
-          columnVectors[i + partitionIdx].setIsConstant();
         }
       }
 
@@ -192,26 +203,22 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
       for (int i = 0; i < requiredFields.length; i++) {
         DataType dt = requiredFields[i].dataType();
-        int colId = requestedColIds[i];
-        // Initialize the missing columns once.
-        if (colId == -1) {
-          OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
-          missingCol.putNulls(0, capacity);
-          missingCol.setIsConstant();
-          orcVectorWrappers[i] = missingCol;
-        } else {
-          orcVectorWrappers[i] = new OrcColumnVector(dt, batch.cols[colId]);
-        }
-      }
-
-      if (partitionValues.numFields() > 0) {
-        int partitionIdx = requiredFields.length;
-        for (int i = 0; i < partitionValues.numFields(); i++) {
-          DataType dt = partitionSchema.fields()[i].dataType();
+        if (requestedPartitionColIds[i] != -1) {
           OnHeapColumnVector partitionCol = new OnHeapColumnVector(capacity, dt);
-          ColumnVectorUtils.populate(partitionCol, partitionValues, i);
+          ColumnVectorUtils.populate(partitionCol, partitionValues, requestedPartitionColIds[i]);
           partitionCol.setIsConstant();
-          orcVectorWrappers[partitionIdx + i] = partitionCol;
+          orcVectorWrappers[i] = partitionCol;
+        } else {
+          int colId = requestedDataColIds[i];
+          // Initialize the missing columns once.
+          if (colId == -1) {
+            OnHeapColumnVector missingCol = new OnHeapColumnVector(capacity, dt);
+            missingCol.putNulls(0, capacity);
+            missingCol.setIsConstant();
+            orcVectorWrappers[i] = missingCol;
+          } else {
+            orcVectorWrappers[i] = new OrcColumnVector(dt, batch.cols[colId]);
+          }
         }
       }
 
@@ -233,7 +240,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
     if (!copyToSpark) {
       for (int i = 0; i < requiredFields.length; i++) {
-        if (requestedColIds[i] != -1) {
+        if (requestedDataColIds[i] != -1) {
           ((OrcColumnVector) orcVectorWrappers[i]).setBatchSize(batchSize);
         }
       }
@@ -248,8 +255,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       StructField field = requiredFields[i];
       WritableColumnVector toColumn = columnVectors[i];
 
-      if (requestedColIds[i] >= 0) {
-        ColumnVector fromColumn = batch.cols[requestedColIds[i]];
+      if (requestedDataColIds[i] >= 0) {
+        ColumnVector fromColumn = batch.cols[requestedDataColIds[i]];
 
         if (fromColumn.isRepeating) {
           putRepeatingValues(batchSize, field, fromColumn, toColumn);
