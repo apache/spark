@@ -26,12 +26,13 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 
 import org.apache.spark.{SparkException, TaskContext}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{TaskCompletionListener, Utils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
@@ -160,6 +161,8 @@ final class ShuffleBlockFetcherIterator(
   @GuardedBy("this")
   private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
 
+  private[this] var cleanupListener: TaskCompletionListener = _
+
   initialize()
 
   // Decrements the buffer reference count.
@@ -192,7 +195,7 @@ final class ShuffleBlockFetcherIterator(
   /**
    * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
    */
-  private[this] def cleanup() {
+  def cleanup() {
     synchronized {
       isZombie = true
     }
@@ -219,6 +222,9 @@ final class ShuffleBlockFetcherIterator(
         logWarning("Failed to cleanup shuffle fetch temp file " + file.path())
       }
     }
+    // Unregister completion callbacks to avoid memory leak for ShuffleBlockFetcherIterator
+    // contains lots of metadata about MapStatus
+    context.removeTaskCompletionListener(cleanupListener)
   }
 
   private[this] def sendRequest(req: FetchRequest) {
@@ -364,7 +370,8 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] def initialize(): Unit = {
     // Add a task completion callback (called in both success case and failure case) to cleanup.
-    context.addTaskCompletionListener[Unit](_ => cleanup())
+    cleanupListener = _ => cleanup()
+    context.addTaskCompletionListener(cleanupListener)
 
     // Split local and remote blocks.
     val remoteRequests = splitLocalRemoteBlocks()

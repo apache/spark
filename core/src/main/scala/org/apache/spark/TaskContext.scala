@@ -142,6 +142,13 @@ abstract class TaskContext extends Serializable {
   }
 
   /**
+   * Removes a listener which will be executed on task completion. This is useful when callbacks
+   * already executed before task completion, In which case memory or other resources can be
+   * released as soon as possible
+   */
+  def removeTaskCompletionListener(listener: TaskCompletionListener): TaskContext
+
+  /**
    * The ID of the stage that this task belong to.
    */
   def stageId(): Int
