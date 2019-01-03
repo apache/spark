@@ -1,6 +1,6 @@
 # Delegation Token Handling In Spark
 
-This document aims to explain and demistify delegation tokens as they are used by Spark, since
+This document aims to explain and demystify delegation tokens as they are used by Spark, since
 this topic is generally a huge source of confusion.
 
 
@@ -17,21 +17,22 @@ keytabs, and when they do, it's generally frowned upon to distribute them over t
 part of application data.
 
 DTs allow for a single place (e.g. the Spark driver) to require Kerberos credentials. That entity
-can then distribute the DTs to other parts of the distributed application so they can authenticate
-to services.
+can then distribute the DTs to other parts of the distributed application (e.g. Spark executors),
+so they can authenticate to services.
 
 * A single token is used for authentication
 
 If Kerberos authentication were used, each client connection to a server would require a trip
-to the KDC and generation of a service ticket. In a distributed system, the number of service
-tickets can balloon pretty quickly when you think about the number of client processes (e.g.
-Spark executors) vs. the number of service processes (e.g. HDFS DataNodes). That generates
-unnecessary extra load on the KDC, and may even run into usage limits set up by the KDC admin.
+to the Key Distribution Center (KDC) and generation of a service ticket. In a distributed system,
+the number of service tickets can balloon pretty quickly when you think about the number of client
+processes (e.g. Spark executors) vs. the number of service processes (e.g. HDFS DataNodes). That
+generates unnecessary extra load on the KDC, and may even run into usage limits set up by the KDC
+admin.
 
 
-So in short, DTs are *not* Kerberos tokens. They are used to replace Kerberos authentication in
-distributed applications, although there is nothing (aside from maybe implementation details) that
-ties them to Kerberos.
+So in short, DTs are *not* Kerberos tokens. They are used by many services to replace Kerberos
+authentication, or even other forms of authentication, although there is nothing (aside from
+maybe implementation details) that ties them to Kerberos or any other authentication mechanism.
 
 
 ## Lifecycle of DTs
@@ -78,9 +79,9 @@ appropriate service, restarting the above process.
 This is the most confusing part of DT handling, and part of it is because much of the system was
 designed with MapReduce, and later YARN, in mind.
 
-As seen above, DTs need to be renewed periodically until they finally expire for good. An example
-of this is the default configuration of HDFS services: delegation tokens are valid for up to 7
-days, and need to be renewed every 24h. If 24h pass without the token being renewed, the token
+As seen above, DTs need to be renewed periodically until they finally expire for good. An example of
+this is the default configuration of HDFS services: delegation tokens are valid for up to 7 days,
+and need to be renewed every 24 hours. If 24 hours pass without the token being renewed, the token
 cannot be used anymore. And the token cannot be renewed anymore after 7 days.
 
 This raises the question: who renews tokens? And for a long time the answer was YARN.
@@ -99,7 +100,7 @@ But this has a few caveats.
 This is handled mostly transparently by the Hadoop libraries in the case of YARN. Some services have
 the concept of a token "renewer". This "renewer" is the name of the principal that is allowed to
 renew the DT. When submitting to YARN, that will be the principal that the YARN service is running
-as. Which means that the client application needs to know that information.
+as, which means that the client application needs to know that information.
 
 For other resource managers, the renewer mostly does not matter, since there is no service that
 is doing the renewal. Except that it sometimes leaks into library code, such as in SPARK-20328.
@@ -132,9 +133,9 @@ the only way to "renew" an HBase token is to create a new one.
 3. What happens when tokens expire for good?
 
 The final caveat is that DTs have a maximum life, regardless of renewal. And after that deadline
-is met, you need to create new tokens to be able to connect to the services. Which means you need
-the ability to connect to the service without a delegation token, which means you need Kerberos
-credentials.
+is met, you need to create new tokens to be able to connect to the services. That means you need
+the ability to connect to the service without a delegation token, which requires some form of
+authentication aside from DTs.
 
 This is especially important for long-running applications that run unsupervised. They must be
 able to keep on going without having someone logging into a terminal and typing a password every
@@ -229,9 +230,9 @@ available. That means that if an HBase configuration is available to the launche
 doesn't actually use HBase, a DT will still be generated. The user would have to explicitly
 opt out of generating HBase tokens in that case.
 
-The third one is that it's hard to create DTs "as needed". Without access to Kerberos credentials,
-Spark cannot create DTs, which means that applications submitted in cluster mode like the above
-need DTs to be created up front, instead of on demand.
+The third one is that it's hard to create DTs "as needed". Without being able to authenticate
+to specific services, Spark cannot create DTs, which means that applications submitted in cluster
+mode like the above need DTs to be created up front, instead of on demand.
 
 The advantage, though, is that user code does not need to worry about DTs, since Spark will handle
 them transparently when the proper configuration is available.
