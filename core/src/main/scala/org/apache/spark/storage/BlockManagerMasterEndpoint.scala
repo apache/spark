@@ -24,10 +24,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
-
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.internal.config.STORAGE_REPLICATION_PROACTIVE
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
@@ -60,7 +60,7 @@ class BlockManagerMasterEndpoint(
 
   private val topologyMapper = {
     val topologyMapperClassName = conf.get(
-      "spark.storage.replication.topologyMapper", classOf[DefaultTopologyMapper].getName)
+      config.STORAGE_REPLICATION_TOPOLOGY_MAPPER)
     val clazz = Utils.classForName(topologyMapperClassName)
     val mapper =
       clazz.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[TopologyMapper]
@@ -68,7 +68,7 @@ class BlockManagerMasterEndpoint(
     mapper
   }
 
-  val proactivelyReplicate = conf.get("spark.storage.replication.proactive", "false").toBoolean
+  val proactivelyReplicate = conf.get(STORAGE_REPLICATION_PROACTIVE)
 
   logInfo("BlockManagerMasterEndpoint up")
 

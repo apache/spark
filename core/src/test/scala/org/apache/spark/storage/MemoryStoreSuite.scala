@@ -26,7 +26,9 @@ import scala.reflect.ClassTag
 import org.scalatest._
 
 import org.apache.spark._
+import org.apache.spark.internal.config.{STORAGE_UNROLL_FRACTION, STORAGE_UNROLL_MEMORY_THRESHOLD}
 import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
+import org.apache.spark.memory.{MemoryMode, StaticMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
 import org.apache.spark.util._
@@ -39,7 +41,7 @@ class MemoryStoreSuite
   with ResetSystemProperties {
 
   var conf: SparkConf = new SparkConf(false)
-    .set("spark.storage.unrollMemoryThreshold", "512")
+    .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   val serializer = new KryoSerializer(new SparkConf(false).set("spark.kryoserializer.buffer", "1m"))

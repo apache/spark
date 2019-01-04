@@ -117,10 +117,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     conf = new SparkConf(false)
       .set("spark.app.id", "test")
       .set(IS_TESTING, true)
-      .set("spark.memory.fraction", "1")
-      .set("spark.memory.storageFraction", "1")
+      .set(MEMORY_FRACTION, 1)
+      .set(MEMORY_STORAGE_FRACTION, 1)
       .set("spark.kryoserializer.buffer", "1m")
-      .set("spark.storage.unrollMemoryThreshold", "512")
+      .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512)
 
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
     conf.set(DRIVER_PORT, rpcEnv.address.port)

@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.EventLoggingListener
+import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -156,6 +157,7 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
+
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.executor.memoryOverhead")
     .doc("The amount of off-heap memory to be allocated per executor in cluster mode, " +
       "in MiB unless otherwise specified.")
@@ -186,6 +188,108 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .checkValue(_ >= 0, "The off-heap memory size must not be negative")
     .createWithDefault(0)
+  
+    private[spark] val MEMORY_STORAGE_FRACTION = ConfigBuilder("spark.memory.storageFraction")
+      .doc("Amount of storage memory immune to eviction, expressed as a fraction of the " +
+        "size of the region set aside by spark.memory.fraction. The higher this is, the " +
+        "less working memory may be available to execution and tasks may spill to disk more often. " +
+        "Leaving this at the default value is recommended. ")
+      .doubleConf
+      .createWithDefault(0.5)
+
+    private[spark] val MEMORY_FRACTION = ConfigBuilder("spark.memory.fraction")
+      .doc("Fraction of (heap space - 300MB) used for execution and storage. The " +
+        "lower this is, the more frequently spills and cached data eviction occur. " +
+        "The purpose of this config is to set aside memory for internal metadata, " +
+        "user data structures, and imprecise size estimation in the case of sparse, " +
+        "unusually large records. Leaving this at the default value is recommended.  ")
+      .doubleConf
+      .createWithDefault(0.6)
+
+    private[spark] val MEMORY_USE_LEGACY_MODE = ConfigBuilder("spark.memory.useLegacyMode")
+      .doc("Whether to enable the legacy memory management mode used in Spark 1.5 and before. " +
+        "The legacy mode rigidly partitions the heap space into fixed-size regions, potentially " +
+        "leading to excessive spilling if the application was not tuned. " +
+        "The following deprecated memory fraction configurations are not " +
+        "read unless this is enabled: spark.shuffle.memoryFraction , " +
+        "spark.storage.memoryFraction, spark.storage.unrollFraction")
+      .booleanConf
+      .createWithDefault(false)
+
+    private[spark] val STORAGE_MEMORY_FRACTION = ConfigBuilder("spark.storage.memoryFraction")
+      .doc("(deprecated) This is read only if spark.memory.useLegacyMode is enabled. " +
+        "Fraction of Java heap to use for Spark's memory cache. " +
+        "This should not be larger than the \"old\" generation of objects in the JVM, which " +
+        "by default is given 0.6 of the heap, but you can increase it if you configure " +
+        "your own old generation size")
+      .doubleConf
+      .createWithDefault(0.6)
+
+    private[spark] val STORAGE_SAFETY_FRACTION = ConfigBuilder("spark.storage.safetyFraction")
+      .doubleConf
+      .createWithDefault(0.9)
+
+    private[spark] val STORAGE_UNROLL_FRACTION = ConfigBuilder("spark.storage.unrollFraction")
+      .doubleConf
+      .createWithDefault(0.2)
+
+    private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
+      ConfigBuilder("spark.storage.unrollMemoryThreshold")
+      .doc("Initial memory to request before unrolling any block")
+      .longConf
+      .createWithDefault(1024 * 1024)
+
+    private[spark] val STORAGE_REPLICATION_PROACTIVE =
+      ConfigBuilder("spark.storage.replication.proactive")
+      .doc("Enables proactive block replication for RDD blocks. " +
+        "Cached RDD block replicas lost due to executor failures are replenished " +
+        "if there are any existing available replicas. This tries to " +
+        "get the replication level of the block to the initial number")
+      .booleanConf
+      .createWithDefault(false)
+
+    private[spark] val STORAGE_MEMORY_MAP_THRESHOLD =
+      ConfigBuilder("spark.storage.memoryMapThreshold")
+      .doc("Size in bytes of a block above which Spark memory maps when reading a block from disk. " +
+        "This prevents Spark from memory mapping very small blocks. " +
+        "In general, memory mapping has high overhead for blocks close to or below " +
+        "the page size of the operating system.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("2m")
+
+    private[spark] val STORAGE_REPLICATION_POLICY = ConfigBuilder("spark.storage.replication.policy")
+      .stringConf
+      .createWithDefaultString(classOf[RandomBlockReplicationPolicy].getName)
+
+    private[spark] val STORAGE_REPLICATION_TOPOLOGY_MAPPER =
+      ConfigBuilder("spark.storage.replication.topologyMapper")
+      .stringConf
+      .createWithDefaultString(classOf[DefaultTopologyMapper].getName)
+
+    private[spark] val STORAGE_CACHED_PEERS_TTL = ConfigBuilder("spark.storage.cachedPeersTtl")
+      .intConf.createWithDefault(60 * 1000)
+
+    private[spark] val STORAGE_MAX_REPLICATION_FAILURE =
+      ConfigBuilder("spark.storage.maxReplicationFailures")
+      .intConf.createWithDefault(1)
+
+    private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
+      ConfigBuilder("spark.storage.replication.topologyFile").stringConf.createOptional
+
+    private[spark] val STORAGE_EXCEPTION_PIN_LEAK =
+      ConfigBuilder("spark.storage.exceptionOnPinLeak")
+        .booleanConf
+        .createWithDefault(false)
+
+    private[spark] val STORAGE_BLOCKMANAGER_TIMEOUTINTERVAL =
+      ConfigBuilder("spark.storage.blockManagerTimeoutIntervalMs")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("60s")
+
+
+  private[spark] val PYSPARK_EXECUTOR_MEMORY = ConfigBuilder("spark.executor.pyspark.memory")
+    .bytesConf(ByteUnit.MiB)
+    .createOptional
 
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)

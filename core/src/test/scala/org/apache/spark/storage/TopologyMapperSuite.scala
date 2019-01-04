@@ -22,7 +22,9 @@ import java.io.{File, FileOutputStream}
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark._
+import org.apache.spark.internal.config.{STORAGE_REPLICATION_TOPOLOGY_FILE}
 import org.apache.spark.util.Utils
+
 
 class TopologyMapperSuite  extends SparkFunSuite
   with Matchers
@@ -36,7 +38,7 @@ class TopologyMapperSuite  extends SparkFunSuite
     val propsFile = createPropertiesFile(props)
 
     val sparkConf = (new SparkConf(false))
-    sparkConf.set("spark.storage.replication.topologyFile", propsFile.getAbsolutePath)
+    sparkConf.set(STORAGE_REPLICATION_TOPOLOGY_FILE.key, propsFile.getAbsolutePath)
     val topologyMapper = new FileBasedTopologyMapper(sparkConf)
 
     props.foreach {case (host, topology) =>
