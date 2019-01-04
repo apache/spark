@@ -39,7 +39,12 @@ package object config {
   private[spark] val DRIVER_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.driver.userClassPathFirst").booleanConf.createWithDefault(false)
 
-  private[spark] val DRIVER_MEMORY = ConfigBuilder("spark.driver.memory")
+  private[spark] val DRIVER_CORES = ConfigBuilder("spark.driver.cores")
+    .doc("Number of cores to use for the driver process, only in cluster mode.")
+    .intConf
+    .createWithDefault(1)
+
+  private[spark] val DRIVER_MEMORY = ConfigBuilder(SparkLauncher.DRIVER_MEMORY)
     .doc("Amount of memory to use for the driver process, in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
@@ -113,6 +118,9 @@ package object config {
   private[spark] val EVENT_LOG_CALLSITE_LONG_FORM =
     ConfigBuilder("spark.eventLog.longForm.enabled").booleanConf.createWithDefault(false)
 
+  private[spark] val EXECUTOR_ID =
+    ConfigBuilder("spark.executor.id").stringConf.createOptional
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.createOptional
 
@@ -139,7 +147,11 @@ package object config {
   private[spark] val EXECUTOR_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.executor.userClassPathFirst").booleanConf.createWithDefault(false)
 
-  private[spark] val EXECUTOR_MEMORY = ConfigBuilder("spark.executor.memory")
+  private[spark] val EXECUTOR_CORES = ConfigBuilder(SparkLauncher.EXECUTOR_CORES)
+    .intConf
+    .createWithDefault(1)
+
+  private[spark] val EXECUTOR_MEMORY = ConfigBuilder(SparkLauncher.EXECUTOR_MEMORY)
     .doc("Amount of memory to use per executor process, in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
@@ -148,6 +160,15 @@ package object config {
     .doc("The amount of off-heap memory to be allocated per executor in cluster mode, " +
       "in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
+    .createOptional
+
+  private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
+    .doc("When running on a standalone deploy cluster or a Mesos cluster in coarse-grained " +
+      "sharing mode, the maximum amount of CPU cores to request for the application from across " +
+      "the cluster (not from each machine). If not set, the default will be " +
+      "`spark.deploy.defaultCores` on Spark's standalone cluster manager, or infinite " +
+      "(all available cores) on Mesos.")
+    .intConf
     .createOptional
 
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
@@ -346,6 +367,17 @@ package object config {
     .doc("Address of driver endpoints.")
     .stringConf
     .createWithDefault(Utils.localCanonicalHostName())
+
+  private[spark] val DRIVER_PORT = ConfigBuilder("spark.driver.port")
+    .doc("Port of driver endpoints.")
+    .intConf
+    .createWithDefault(0)
+
+  private[spark] val DRIVER_SUPERVISE = ConfigBuilder("spark.driver.supervise")
+    .doc("If true, restarts the driver automatically if it fails with a non-zero exit status. " +
+      "Only has effect in Spark standalone mode or Mesos cluster deploy mode.")
+    .booleanConf
+    .createWithDefault(false)
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
@@ -729,4 +761,23 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
+    ConfigBuilder("spark.executor.logs.rolling.strategy").stringConf.createWithDefault("")
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_TIME_INTERVAL =
+    ConfigBuilder("spark.executor.logs.rolling.time.interval").stringConf.createWithDefault("daily")
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_MAX_SIZE =
+    ConfigBuilder("spark.executor.logs.rolling.maxSize")
+      .stringConf
+      .createWithDefault((1024 * 1024).toString)
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_MAX_RETAINED_FILES =
+    ConfigBuilder("spark.executor.logs.rolling.maxRetainedFiles").intConf.createWithDefault(-1)
+
+  private[spark] val EXECUTOR_LOGS_ROLLING_ENABLE_COMPRESSION =
+    ConfigBuilder("spark.executor.logs.rolling.enableCompression")
+      .booleanConf
+      .createWithDefault(false)
 }

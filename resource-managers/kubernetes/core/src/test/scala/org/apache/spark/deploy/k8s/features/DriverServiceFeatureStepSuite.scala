@@ -39,7 +39,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
 
   test("Headless service has a port for the driver RPC and the block manager.") {
     val sparkConf = new SparkConf(false)
-      .set("spark.driver.port", "9000")
+      .set(DRIVER_PORT, 9000)
       .set(DRIVER_BLOCK_MANAGER_PORT, 8080)
     val kconf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
@@ -61,7 +61,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
 
   test("Hostname and ports are set according to the service name.") {
     val sparkConf = new SparkConf(false)
-      .set("spark.driver.port", "9000")
+      .set(DRIVER_PORT, 9000)
       .set(DRIVER_BLOCK_MANAGER_PORT, 8080)
       .set(KUBERNETES_NAMESPACE, "my-namespace")
     val kconf = KubernetesTestConf.createDriverConf(
@@ -87,7 +87,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
       resolvedService)
     val additionalProps = configurationStep.getAdditionalPodSystemProperties()
-    assert(additionalProps("spark.driver.port") === DEFAULT_DRIVER_PORT.toString)
+    assert(additionalProps(DRIVER_PORT.key) === DEFAULT_DRIVER_PORT.toString)
     assert(additionalProps(DRIVER_BLOCK_MANAGER_PORT.key) === DEFAULT_BLOCKMANAGER_PORT.toString)
   }
 

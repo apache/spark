@@ -155,7 +155,7 @@ class ExecutorAllocationManagerSuite
       .set("spark.dynamicAllocation.maxExecutors", "15")
       .set("spark.dynamicAllocation.minExecutors", "3")
       .set("spark.dynamicAllocation.executorAllocationRatio", divisor.toString)
-      .set("spark.executor.cores", cores.toString)
+      .set(config.EXECUTOR_CORES, cores)
     val sc = new SparkContext(conf)
     contexts += sc
     var manager = sc.executorAllocationManager.get
