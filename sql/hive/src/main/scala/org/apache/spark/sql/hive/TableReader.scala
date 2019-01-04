@@ -123,8 +123,22 @@ class HadoopTableReader(
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
     // logDebug("Table input: %s".format(tablePath))
-    val ifc = hiveTable.getInputFormatClass
-      .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
+    var inputFormatClass = hiveTable.getInputFormatClass.toString
+    if (conf.fileInputFormatEnabled) {
+      hadoopConf.set("mapreduce.input.fileinputformat.split.maxsize",
+        conf.fileInputFormatSplitMaxsize.toString)
+      hadoopConf.set("mapreduce.input.fileinputformat.split.minsize",
+        conf.fileInputFormatSplitMinsize.toString)
+      if (classOf[org.apache.hadoop.mapreduce.InputFormat[_, _]].isAssignableFrom(
+        hiveTable.getInputFormatClass)) {
+        inputFormatClass = "org.apache.hadoop.mapreduce.lib.input.CombineTextInputFormat"
+      }
+      if (classOf[org.apache.hadoop.mapred.InputFormat[_, _]].isAssignableFrom(
+        hiveTable.getInputFormatClass)) {
+        inputFormatClass = "org.apache.hadoop.mapred.lib.input.CombineTextInputFormat"
+      }
+    }
+    val ifc = inputFormatClass.asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
     val hadoopRDD = createHadoopRdd(localTableDesc, inputPathStr, ifc)
 
     val attrsWithIndex = attributes.zipWithIndex
@@ -202,8 +216,22 @@ class HadoopTableReader(
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = partition.getDataLocation
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
-      val ifc = partDesc.getInputFileFormatClass
-        .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
+      var inputFormatClass = partDesc.getInputFileFormatClass.toString
+      if (conf.fileInputFormatEnabled) {
+        hadoopConf.set("mapreduce.input.fileinputformat.split.maxsize",
+          conf.fileInputFormatSplitMaxsize.toString)
+        hadoopConf.set("mapreduce.input.fileinputformat.split.minsize",
+          conf.fileInputFormatSplitMinsize.toString)
+        if (classOf[org.apache.hadoop.mapreduce.InputFormat[_, _]].isAssignableFrom(
+          partDesc.getInputFileFormatClass)) {
+          inputFormatClass = "org.apache.hadoop.mapreduce.lib.input.CombineTextInputFormat"
+        }
+        if (classOf[org.apache.hadoop.mapred.InputFormat[_, _]].isAssignableFrom(
+          partDesc.getInputFileFormatClass)) {
+          inputFormatClass = "org.apache.hadoop.mapred.lib.input.CombineTextInputFormat"
+        }
+      }
+      val ifc = inputFormatClass.asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
       // Get partition field info
       val partSpec = partDesc.getPartSpec
       val partProps = partDesc.getProperties
