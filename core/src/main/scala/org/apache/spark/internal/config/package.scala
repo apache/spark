@@ -192,8 +192,8 @@ package object config {
     private[spark] val MEMORY_STORAGE_FRACTION = ConfigBuilder("spark.memory.storageFraction")
       .doc("Amount of storage memory immune to eviction, expressed as a fraction of the " +
         "size of the region set aside by spark.memory.fraction. The higher this is, the " +
-        "less working memory may be available to execution and tasks may spill to disk more often. " +
-        "Leaving this at the default value is recommended. ")
+        "less working memory may be available to execution and tasks may spill to disk more " +
+        "often. Leaving this at the default value is recommended. ")
       .doubleConf
       .createWithDefault(0.5)
 
@@ -250,14 +250,16 @@ package object config {
 
     private[spark] val STORAGE_MEMORY_MAP_THRESHOLD =
       ConfigBuilder("spark.storage.memoryMapThreshold")
-      .doc("Size in bytes of a block above which Spark memory maps when reading a block from disk. " +
+      .doc("Size in bytes of a block above which Spark memory maps when " +
+        "reading a block from disk. " +
         "This prevents Spark from memory mapping very small blocks. " +
         "In general, memory mapping has high overhead for blocks close to or below " +
         "the page size of the operating system.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("2m")
 
-    private[spark] val STORAGE_REPLICATION_POLICY = ConfigBuilder("spark.storage.replication.policy")
+    private[spark] val STORAGE_REPLICATION_POLICY =
+      ConfigBuilder("spark.storage.replication.policy")
       .stringConf
       .createWithDefaultString(classOf[RandomBlockReplicationPolicy].getName)
 
