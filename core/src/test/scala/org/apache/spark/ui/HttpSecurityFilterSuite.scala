@@ -39,7 +39,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
       "alert3" -> """stdout'%2Balert(60)%2B'""",
       "html" -> """stdout'"><iframe+id%3D1131+src%3Dhttp%3A%2F%2Fdemo.test.net%2Fphishing.html>"""
     )
-    val badKeys = badValues.map { case (k, v) => v -> k }.toMap
+    val badKeys = badValues.map(_.swap)
     val badInput = badValues ++ badKeys
     val goodInput = Map("goodKey" -> "goodValue")
 
@@ -48,7 +48,6 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
 
     def newRequest(): HttpServletRequest = {
       val req = mock(classOf[HttpServletRequest])
-      when(req.getHeaderNames()).thenReturn(Seq.empty[String].iterator.asJavaEnumeration)
       when(req.getParameterMap()).thenReturn(Map.empty[String, Array[String]].asJava)
       req
     }
@@ -69,25 +68,15 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     }
 
     badInput.foreach { case (k, v) =>
-      val req1 = newRequest()
-      when(req1.getHeaderNames()).thenReturn(Seq(k).iterator.asJavaEnumeration)
-      when(req1.getHeaders(meq(k))).thenReturn(Seq(v).iterator.asJavaEnumeration)
-      verifyError(req1)
-
-      val req2 = newRequest()
-      when(req2.getParameterMap()).thenReturn(Map(k -> Array(v)).asJava)
-      verifyError(req2)
+      val req = newRequest()
+      when(req.getParameterMap()).thenReturn(Map(k -> Array(v)).asJava)
+      verifyError(req)
     }
 
     goodInput.foreach { case (k, v) =>
-      val req1 = newRequest()
-      when(req1.getHeaderNames()).thenReturn(Seq(k).iterator.asJavaEnumeration)
-      when(req1.getHeaders(meq(k))).thenReturn(Seq(v).iterator.asJavaEnumeration)
-      verifySuccess(req1)
-
-      val req2 = newRequest()
-      when(req2.getParameterMap()).thenReturn(Map(k -> Array(v)).asJava)
-      verifySuccess(req2)
+      val req = newRequest()
+      when(req.getParameterMap()).thenReturn(Map(k -> Array(v)).asJava)
+      verifySuccess(req)
     }
   }
 
@@ -151,7 +140,6 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
   private def mockEmptyRequest(): HttpServletRequest = {
     val params: Map[String, Array[String]] = Map.empty
     val req = mock(classOf[HttpServletRequest])
-    when(req.getHeaderNames()).thenReturn(params.keys.iterator.asJavaEnumeration)
     when(req.getParameterMap()).thenReturn(params.asJava)
     req
   }

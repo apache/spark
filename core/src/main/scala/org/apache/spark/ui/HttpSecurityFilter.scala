@@ -57,16 +57,9 @@ private class HttpSecurityFilter(
       return
     }
 
-    // Check if any disallowed content is in the incoming headers or parameters. This filters
-    // out content that could be used for XSS attacks from even making it to the UI handlers.
+    // Check if any disallowed content is in the incoming parameters. This filters out content that
+    // could be used for XSS attacks from even making it to the UI handlers.
     try {
-      hreq.getHeaderNames().asScala.foreach { k =>
-        require(isSafe(k), "Request header name contains disallowed content.")
-        hreq.getHeaders(k).asScala.foreach { v =>
-          require(isSafe(v), s"Header value for $k contains disallowed content.")
-        }
-      }
-
       hreq.getParameterMap().asScala.foreach { case (k, values) =>
         require(isSafe(k), "Parameter name contains disallowed content.")
         values.foreach { v =>
