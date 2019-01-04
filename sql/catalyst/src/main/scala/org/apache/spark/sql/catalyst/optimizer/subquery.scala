@@ -68,7 +68,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // attributes in the join condition, the subquery's conflicting attributes are changed using
     // a projection which aliases them and resolves the problem.
     val outerReferences = valuesOpt.map(values =>
-      AttributeSet.fromAttributeSets(values.map(_.references))).getOrElse(AttributeSet.empty)
+      AttributeSet(values.flatMap(_.references))).getOrElse(AttributeSet.empty)
     val outerRefs = outerPlan.outputSet ++ outerReferences
     val duplicates = outerRefs.intersect(subplan.outputSet)
     if (duplicates.nonEmpty) {
