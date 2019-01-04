@@ -287,10 +287,6 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
-  private[spark] val PYSPARK_EXECUTOR_MEMORY = ConfigBuilder("spark.executor.pyspark.memory")
-    .bytesConf(ByteUnit.MiB)
-    .createOptional
-
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
@@ -930,7 +926,7 @@ package object config {
   private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
     ConfigBuilder("spark.io.compression.zstd.level")
       .doc("Compression level for Zstd compression codec. Increasing the compression" +
-        " level will result in better compression at the expense of more CPU and memory ")
+        " level will result in better compression at the expense of more CPU and memory")
       .intConf
       .createWithDefault(1)
 }
