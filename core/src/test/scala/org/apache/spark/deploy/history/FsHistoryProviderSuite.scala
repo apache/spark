@@ -932,7 +932,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       SparkListenerApplicationEnd(5L))
     val mockedFs = spy(provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
-      argThat((path: Path) => { path.getName.toLowerCase(Locale.ROOT) == "accessdenied" }))
+      argThat(new ArgumentMatcher[Path]() {
+        override def matches(path: Path): Boolean = {
+          path.asInstanceOf[Path].getName.toLowerCase(Locale.ROOT) == "accessdenied"
+        }
+      }))
     val mockedProvider = spy(provider)
     when(mockedProvider.fs).thenReturn(mockedFs)
     updateAndCheck(mockedProvider) { list =>
