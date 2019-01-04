@@ -25,6 +25,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -46,7 +47,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
 
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
-    toBoundExprs(in, inputSchema)
+    bindReferences(in, inputSchema)
 
   /**
    * Creates a code gen ordering for sorting this schema, in ascending order.
@@ -188,7 +189,7 @@ class LazilyGeneratedOrdering(val ordering: Seq[SortOrder])
   extends Ordering[InternalRow] with KryoSerializable {
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
-    this(toBoundExprs(ordering, inputSchema))
+    this(bindReferences(ordering, inputSchema))
 
   @transient
   private[this] var generatedOrdering = GenerateOrdering.generate(ordering)
