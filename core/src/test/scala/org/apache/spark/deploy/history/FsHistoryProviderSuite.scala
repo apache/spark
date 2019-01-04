@@ -1038,6 +1038,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val conf = new SparkConf()
       .set(EVENT_LOG_DIR, testDir.getAbsolutePath())
       .set(FAST_IN_PROGRESS_PARSING, true)
+      .set("spark.testing", "true")
 
     if (!inMemory) {
       conf.set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
