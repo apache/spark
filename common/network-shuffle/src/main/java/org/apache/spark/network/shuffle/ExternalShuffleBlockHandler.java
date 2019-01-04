@@ -240,8 +240,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
 
     private void loadShuffleBlockIds(
         String[] blockIds,
-        boolean shuffleBlockBatchFetch) {
-      if (shuffleBlockBatchFetch) {
+        boolean shuffleBlocksBatchFetch) {
+      if (shuffleBlocksBatchFetch) {
         int capacity = 0;
         ArrayList<int[]> tempIds = new ArrayList<>(blockIds.length);
         for (String blockId : blockIds) {
@@ -277,7 +277,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         String appId,
         String execId,
         String[] blockIds,
-        boolean shuffleBlockBatchFetch) {
+        boolean shuffleBlocksBatchFetch) {
       this.appId = appId;
       this.execId = execId;
       String[] blockId0Parts = blockIds[0].split("_");
@@ -287,7 +287,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
       this.shuffleBlockIds = new int[3 * blockIds.length];
       this.chunkSizes = new int[blockIds.length];
-      loadShuffleBlockIds(blockIds, shuffleBlockBatchFetch);
+      loadShuffleBlockIds(blockIds, shuffleBlocksBatchFetch);
     }
 
     public int[] getChunkSizes() {

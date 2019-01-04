@@ -76,9 +76,9 @@ public class OneForOneBlockFetcher {
       BlockFetchingListener listener,
       TransportConf transportConf,
       DownloadFileManager downloadFileManager,
-      boolean shuffleBlockBatchFetch) {
+      boolean shuffleBlocksBatchFetch) {
     this.client = client;
-    this.openMessage = new OpenBlocks(appId, execId, blockIds, shuffleBlockBatchFetch);
+    this.openMessage = new OpenBlocks(appId, execId, blockIds, shuffleBlocksBatchFetch);
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
