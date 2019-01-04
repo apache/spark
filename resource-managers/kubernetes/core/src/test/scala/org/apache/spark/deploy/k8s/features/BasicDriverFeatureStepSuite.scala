@@ -46,7 +46,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   test("Check the pod respects all configurations from the user.") {
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
-      .set("spark.driver.cores", "2")
+      .set(DRIVER_CORES, 2)
       .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
       .set(DRIVER_MEMORY.key, "256M")
       .set(DRIVER_MEMORY_OVERHEAD, 200L)

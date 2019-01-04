@@ -470,8 +470,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         rpcEnv = sc.env.rpcEnv
 
         val userConf = sc.getConf
-        val host = userConf.get("spark.driver.host")
-        val port = userConf.get("spark.driver.port").toInt
+        val host = userConf.get(DRIVER_HOST_ADDRESS)
+        val port = userConf.get(DRIVER_PORT)
         registerAM(host, port, userConf, sc.ui.map(_.webUrl))
 
         val driverRef = rpcEnv.setupEndpointRef(
@@ -505,7 +505,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       amCores, true)
 
     // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
-    registerAM(hostname, -1, sparkConf, sparkConf.getOption("spark.driver.appUIAddress"))
+    registerAM(hostname, -1, sparkConf, sparkConf.get(DRIVER_APP_UI_ADDRESS))
 
     // The driver should be up and listening, so unlike cluster mode, just try to connect to it
     // with no waiting or retrying.

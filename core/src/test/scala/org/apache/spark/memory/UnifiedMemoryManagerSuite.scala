@@ -248,7 +248,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val mm = UnifiedMemoryManager(conf, numCores = 1)
 
     // Try using an executor memory that's too small
-    val conf2 = conf.clone().set("spark.executor.memory", (reservedMemory / 2).toString)
+    val conf2 = conf.clone().set(EXECUTOR_MEMORY.key, (reservedMemory / 2).toString)
     val exception = intercept[IllegalArgumentException] {
       UnifiedMemoryManager(conf2, numCores = 1)
     }

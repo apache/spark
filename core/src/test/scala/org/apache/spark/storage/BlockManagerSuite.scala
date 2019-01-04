@@ -124,7 +124,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set("spark.storage.unrollMemoryThreshold", "512")
 
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
-    conf.set("spark.driver.port", rpcEnv.address.port.toString)
+    conf.set(DRIVER_PORT, rpcEnv.address.port)
 
     // Mock SparkContext to reduce the memory usage of tests. It's fine since the only reason we
     // need to create a SparkContext is to initialize LiveListenerBus.

@@ -129,4 +129,7 @@ package object config {
         "when launching drivers. Default is to accept all offers with sufficient resources.")
       .stringConf
       .createWithDefault("")
+
+  private[spark] val EXECUTOR_URI =
+    ConfigBuilder("spark.executor.uri").stringConf.createOptional
 }
