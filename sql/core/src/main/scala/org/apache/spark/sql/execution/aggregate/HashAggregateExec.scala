@@ -200,15 +200,12 @@ case class HashAggregateExec(
     val (resultVars, genResult) = if (modes.contains(Final) || modes.contains(Complete)) {
       // evaluate aggregate results
       ctx.currentVars = bufVars
-      val aggResults = functions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, aggregateBufferAttributes).genCode(ctx)
-      }
+      val aggResults = bindReferences(functions.map(_.evaluateExpression),
+        aggregateBufferAttributes).map(_.genCode(ctx))
       val evaluateAggResults = evaluateVariables(aggResults)
       // evaluate result expressions
       ctx.currentVars = aggResults
-      val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, aggregateAttributes).genCode(ctx)
-      }
+      val resultVars = bindReferences(resultExpressions, aggregateAttributes).map(_.genCode(ctx))
       (resultVars, s"""
         |$evaluateAggResults
         |${evaluateVariables(resultVars)}
@@ -457,16 +454,14 @@ case class HashAggregateExec(
       val evaluateBufferVars = evaluateVariables(bufferVars)
       // evaluate the aggregation result
       ctx.currentVars = bufferVars
-      val aggResults = declFunctions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, aggregateBufferAttributes).genCode(ctx)
-      }
+      val aggResults = bindReferences(declFunctions.map(_.evaluateExpression),
+        aggregateBufferAttributes).map(_.genCode(ctx))
       val evaluateAggResults = evaluateVariables(aggResults)
       // generate the final result
       ctx.currentVars = keyVars ++ aggResults
       val inputAttrs = groupingAttributes ++ aggregateAttributes
-      val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, inputAttrs).genCode(ctx)
-      }
+      val resultVars = bindReferences[Expression](resultExpressions,
+        inputAttrs).map(_.genCode(ctx))
       s"""
        $evaluateKeyVars
        $evaluateBufferVars
@@ -495,9 +490,8 @@ case class HashAggregateExec(
 
       ctx.currentVars = keyVars ++ resultBufferVars
       val inputAttrs = resultExpressions.map(_.toAttribute)
-      val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, inputAttrs).genCode(ctx)
-      }
+      val resultVars = bindReferences[Expression](resultExpressions,
+        inputAttrs).map(_.genCode(ctx))
       s"""
        $evaluateKeyVars
        $evaluateResultBufferVars
@@ -507,9 +501,8 @@ case class HashAggregateExec(
       // generate result based on grouping key
       ctx.INPUT_ROW = keyTerm
       ctx.currentVars = null
-      val eval = resultExpressions.map{ e =>
-        BindReferences.bindReference(e, groupingAttributes).genCode(ctx)
-      }
+      val eval = bindReferences[Expression](resultExpressions,
+        groupingAttributes).map(_.genCode(ctx))
       consume(ctx, eval)
     }
     ctx.addNewFunction(funcName,
@@ -731,9 +724,9 @@ case class HashAggregateExec(
   private def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // create grouping key
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
-      ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
+      ctx, bindReferences[Expression](groupingExpressions, child.output))
     val fastRowKeys = ctx.generateExpressions(
-      groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
+      bindReferences[Expression](groupingExpressions, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
     val fastRowBuffer = ctx.freshName("fastAggBuffer")

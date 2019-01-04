@@ -168,9 +168,10 @@ case class ExpandExec(
     // Part 2: switch/case statements
     val cases = projections.zipWithIndex.map { case (exprs, row) =>
       var updateCode = ""
+      val attributeSeq: AttributeSeq = child.output
       for (col <- exprs.indices) {
         if (!sameOutput(col)) {
-          val ev = BindReferences.bindReference(exprs(col), child.output).genCode(ctx)
+          val ev = BindReferences.bindReference(exprs(col), attributeSeq).genCode(ctx)
           updateCode +=
             s"""
                |${ev.code}
