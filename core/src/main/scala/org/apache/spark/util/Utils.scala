@@ -337,6 +337,41 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+    * Copy all data from an InputStream to an OutputStream upto maxSize and
+    * closes the input stream if closeStreams is true and all data is read.
+    */
+  def copyStreamUpto(
+      in: InputStream,
+      out: OutputStream,
+      maxSize: Long,
+      closeStreams: Boolean = false): Boolean = {
+    var count = 0L
+    tryWithSafeFinally {
+      val bufSize = 8192
+      val buf = new Array[Byte](bufSize)
+      var n = 0
+      while (n != -1 && count < maxSize) {
+        n = in.read(buf, 0, Math.min(maxSize - count, bufSize.toLong).toInt)
+        if (n != -1) {
+          out.write(buf, 0, n)
+          count += n
+        }
+      }
+      count < maxSize
+    } {
+      if (closeStreams) {
+        try {
+          if (count < maxSize) {
+            in.close()
+          }
+        } finally {
+          out.close()
+        }
+      }
+    }
+  }
+
   def copyFileStreamNIO(
       input: FileChannel,
       output: FileChannel,

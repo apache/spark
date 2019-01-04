@@ -337,9 +337,26 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     intercept[FetchFailedException] { iterator.next() }
   }
 
-  private def mockCorruptBuffer(size: Long = 1L): ManagedBuffer = {
+  private def mockCorruptBuffer(size: Long = 1L, corruptInStart: Boolean = true): ManagedBuffer = {
     val corruptStream = mock(classOf[InputStream])
-    when(corruptStream.read(any(), any(), any())).thenThrow(new IOException("corrupt"))
+    if (size < 8 * 1024 || corruptInStart) {
+      when(corruptStream.read(any(), any(), any())).thenThrow(new IOException("corrupt"))
+    } else {
+      when(corruptStream.read(any(), any(), any(classOf[Int]))).thenAnswer(new Answer[Int] {
+        override def answer(invocationOnMock: InvocationOnMock): Int = {
+          val bufSize = invocationOnMock.getArgumentAt(2, classOf[Int])
+          // This condition is needed as we don't throw exception until we read the stream
+          // less than maxBytesInFlight/3
+          if (bufSize < 8 * 1024) {
+            return bufSize
+          } else {
+            throw new IOException("corrupt")
+          }
+        }
+      })
+      when(corruptStream.read()).thenThrow(new IOException("corrupt"))
+      when(corruptStream.read(any())).thenThrow(new IOException("corrupt"))
+    }
     val corruptBuffer = mock(classOf[ManagedBuffer])
     when(corruptBuffer.size()).thenReturn(size)
     when(corruptBuffer.createInputStream()).thenReturn(corruptStream)
@@ -425,24 +442,25 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     intercept[FetchFailedException] { iterator.next() }
   }
 
-  test("big blocks are not checked for corruption") {
-    val corruptBuffer = mockCorruptBuffer(10000L)
+  test("big blocks are also checked for corruption") {
+    val corruptBuffer1 = mockCorruptBuffer(10000L, true)
 
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-client", 1)
     doReturn(localBmId).when(blockManager).blockManagerId
-    doReturn(corruptBuffer).when(blockManager).getBlockData(ShuffleBlockId(0, 0, 0))
+    doReturn(corruptBuffer1).when(blockManager).getBlockData(ShuffleBlockId(0, 0, 0))
     val localBlockLengths = Seq[Tuple2[BlockId, Long]](
-      ShuffleBlockId(0, 0, 0) -> corruptBuffer.size()
+      ShuffleBlockId(0, 0, 0) -> corruptBuffer1.size()
     )
 
+    val corruptBuffer2 = mockCorruptBuffer(10000L, false)
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
     val remoteBlockLengths = Seq[Tuple2[BlockId, Long]](
-      ShuffleBlockId(0, 1, 0) -> corruptBuffer.size()
+      ShuffleBlockId(0, 1, 0) -> corruptBuffer2.size()
     )
 
     val transfer = createMockTransfer(
-      Map(ShuffleBlockId(0, 0, 0) -> corruptBuffer, ShuffleBlockId(0, 1, 0) -> corruptBuffer))
+      Map(ShuffleBlockId(0, 0, 0) -> corruptBuffer1, ShuffleBlockId(0, 1, 0) -> corruptBuffer2))
 
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (localBmId, localBlockLengths),
@@ -462,9 +480,16 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       true,
       taskContext.taskMetrics.createTempShuffleReadMetrics())
-    // Blocks should be returned without exceptions.
-    assert(Set(iterator.next()._1, iterator.next()._1) ===
-        Set(ShuffleBlockId(0, 0, 0), ShuffleBlockId(0, 1, 0)))
+    // Only one block should be returned which has corruption after maxBytesInFlight/3
+    val (id, st) = iterator.next()
+    assert(id === ShuffleBlockId(0, 1, 0))
+    intercept[FetchFailedException] { iterator.next(); iterator.next() }
+    // Following will succeed as it reads the first part of the stream which is not corrupt
+    st.read(new Array[Byte](8 * 1024), 0, 8 * 1024)
+    // Following will fail as it reads the remaining part of the stream which is corrupt
+    intercept[FetchFailedException] { st.read() }
+    intercept[FetchFailedException] { st.read(new Array[Byte](8 * 1024)) }
+    intercept[FetchFailedException] { st.read(new Array[Byte](8 * 1024), 0, 8 * 1024) }
   }
 
   test("retry corrupt blocks (disabled)") {
