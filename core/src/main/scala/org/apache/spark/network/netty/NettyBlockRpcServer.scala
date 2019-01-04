@@ -86,7 +86,7 @@ class NettyBlockRpcServer(
     message match {
       case openBlocks: OpenBlocks =>
         val (blocksIds, sizes) =
-          if (openBlocks.shuffleBlockBatchFetch) {
+          if (openBlocks.shuffleBlocksBatchFetch) {
             mergeContinuousShuffleBlocks(openBlocks.blockIds)
           } else {
             (openBlocks.blockIds.map(BlockId.apply), Array[Int]())

@@ -704,16 +704,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.continuousBlockBatchFetch</code></td>
-  <td>true</td>
-  <td>
-    In adaptive execution, one reducer will fetch many consecutive partitions from one map output
-    file. If true, Spark could fetch multiple consecutive partitions each time. Otherwise, still
-    fetch the partitions one by one. If external shuffle service is lower than 3.0, need set it
-    to false for backward compatibility.
-  </td>
-</tr>
-<tr>
   <td><code>spark.shuffle.service.port</code></td>
   <td>7337</td>
   <td>

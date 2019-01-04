@@ -32,17 +32,17 @@ public class OpenBlocks extends BlockTransferMessage {
   public final String appId;
   public final String execId;
   public final String[] blockIds;
-  public final boolean shuffleBlockBatchFetch;
+  public final boolean shuffleBlocksBatchFetch;
 
   public OpenBlocks(
       String appId,
       String execId,
       String[] blockIds,
-      boolean shuffleBlockBatchFetch) {
+      boolean shuffleBlocksBatchFetch) {
     this.appId = appId;
     this.execId = execId;
     this.blockIds = blockIds;
-    this.shuffleBlockBatchFetch = shuffleBlockBatchFetch;
+    this.shuffleBlocksBatchFetch = shuffleBlocksBatchFetch;
   }
 
   @Override
@@ -50,7 +50,7 @@ public class OpenBlocks extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, execId, shuffleBlockBatchFetch) * 41
+    return Objects.hashCode(appId, execId, shuffleBlocksBatchFetch) * 41
         + Arrays.hashCode(blockIds);
   }
 
@@ -60,7 +60,7 @@ public class OpenBlocks extends BlockTransferMessage {
       .add("appId", appId)
       .add("execId", execId)
       .add("blockIds", Arrays.toString(blockIds))
-      .add("shuffleBlockBatchFetch", shuffleBlockBatchFetch)
+      .add("shuffleBlocksBatchFetch", shuffleBlocksBatchFetch)
       .toString();
   }
 
@@ -71,7 +71,7 @@ public class OpenBlocks extends BlockTransferMessage {
       return Objects.equal(appId, o.appId)
         && Objects.equal(execId, o.execId)
         && Arrays.equals(blockIds, o.blockIds)
-        && shuffleBlockBatchFetch == o.shuffleBlockBatchFetch;
+        && shuffleBlocksBatchFetch == o.shuffleBlocksBatchFetch;
     }
     return false;
   }
@@ -89,17 +89,17 @@ public class OpenBlocks extends BlockTransferMessage {
     Encoders.Strings.encode(buf, appId);
     Encoders.Strings.encode(buf, execId);
     Encoders.StringArrays.encode(buf, blockIds);
-    buf.writeBoolean(shuffleBlockBatchFetch);
+    buf.writeBoolean(shuffleBlocksBatchFetch);
   }
 
   public static OpenBlocks decode(ByteBuf buf) {
     String appId = Encoders.Strings.decode(buf);
     String execId = Encoders.Strings.decode(buf);
     String[] blockIds = Encoders.StringArrays.decode(buf);
-    boolean shuffleBlockBatchFetch = false;
+    boolean shuffleBlocksBatchFetch = false;
     if (buf.readableBytes() != 0) {
-      shuffleBlockBatchFetch = buf.readBoolean();
+      shuffleBlocksBatchFetch = buf.readBoolean();
     }
-    return new OpenBlocks(appId, execId, blockIds, shuffleBlockBatchFetch);
+    return new OpenBlocks(appId, execId, blockIds, shuffleBlocksBatchFetch);
   }
 }

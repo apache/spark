@@ -90,7 +90,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         OpenBlocks msg = (OpenBlocks) msgObj;
         checkAuth(client, msg.appId);
         ManagedBufferIterator iter = new ManagedBufferIterator(
-          msg.appId, msg.execId, msg.blockIds, msg.shuffleBlockBatchFetch);
+          msg.appId, msg.execId, msg.blockIds, msg.shuffleBlocksBatchFetch);
         long streamId = streamManager.registerStream(client.getClientId(), iter);
         int[] chunkSizes = iter.getChunkSizes();
         if (logger.isTraceEnabled()) {

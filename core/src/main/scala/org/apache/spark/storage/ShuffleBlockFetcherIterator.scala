@@ -74,7 +74,7 @@ final class ShuffleBlockFetcherIterator(
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean,
     shuffleMetrics: ShuffleReadMetricsReporter,
-    continuousBlockBatchFetch: Boolean)
+    shuffleBlocksBatchFetch: Boolean)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
@@ -257,10 +257,10 @@ final class ShuffleBlockFetcherIterator(
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, this, continuousBlockBatchFetch)
+        blockFetchingListener, this, shuffleBlocksBatchFetch)
     } else {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, null, continuousBlockBatchFetch)
+        blockFetchingListener, null, shuffleBlocksBatchFetch)
     }
   }
 
