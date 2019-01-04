@@ -30,6 +30,7 @@ import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, 
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Python._
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -139,7 +140,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("test executor pyspark memory") {
     baseConf.set("spark.kubernetes.resource.type", "python")
-    baseConf.set(config.PYSPARK_EXECUTOR_MEMORY, 42L)
+    baseConf.set(PYSPARK_EXECUTOR_MEMORY, 42L)
 
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf))
     val executor = step.configurePod(SparkPod.initialPod())

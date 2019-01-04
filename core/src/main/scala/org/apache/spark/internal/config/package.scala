@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.scheduler.EventLoggingListener
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -66,6 +67,14 @@ package object config {
     ConfigBuilder("spark.driver.log.persistToDfs.enabled")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_ENABLED = ConfigBuilder("spark.eventLog.enabled")
+    .booleanConf
+    .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_DIR = ConfigBuilder("spark.eventLog.dir")
+    .stringConf
+    .createWithDefault(EventLoggingListener.DEFAULT_LOG_DIR)
 
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
@@ -177,10 +186,6 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .checkValue(_ >= 0, "The off-heap memory size must not be negative")
     .createWithDefault(0)
-
-  private[spark] val PYSPARK_EXECUTOR_MEMORY = ConfigBuilder("spark.executor.pyspark.memory")
-    .bytesConf(ByteUnit.MiB)
-    .createOptional
 
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
