@@ -169,13 +169,13 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    */
   def flattenJoin(
       plan: LogicalPlan,
-      hintMap: mutable.HashMap[Seq[LogicalPlan], HintInfo],
+      hintMap: mutable.HashMap[AttributeSet, HintInfo],
       parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
     case Join(left, right, joinType: InnerLike, cond, hint) =>
       val (plans, conditions) = flattenJoin(left, hintMap, joinType)
-      hint.leftHint.map(hintMap.put(plans.map(_._1), _))
-      hint.rightHint.map(hintMap.put(Seq(right), _))
+      hint.leftHint.map(hintMap.put(left.outputSet, _))
+      hint.rightHint.map(hintMap.put(right.outputSet, _))
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
     case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, _)) =>
@@ -186,14 +186,14 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
   }
 
   def unapply(plan: LogicalPlan)
-      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression], Map[Seq[LogicalPlan], HintInfo])]
+      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression], Map[AttributeSet, HintInfo])]
       = plan match {
     case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, _)) =>
-      val hintMap = new mutable.HashMap[Seq[LogicalPlan], HintInfo]
+      val hintMap = new mutable.HashMap[AttributeSet, HintInfo]
       val flattened = flattenJoin(f, hintMap)
       Some((flattened._1, flattened._2, hintMap.toMap))
     case j @ Join(_, _, joinType, _, _) =>
-      val hintMap = new mutable.HashMap[Seq[LogicalPlan], HintInfo]
+      val hintMap = new mutable.HashMap[AttributeSet, HintInfo]
       val flattened = flattenJoin(j, hintMap)
       Some((flattened._1, flattened._2, hintMap.toMap))
     case _ => None

@@ -100,7 +100,7 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
     }
   }
 
-  test("hint presered after join reorder") {
+  test("hint preserved after join reorder") {
     withTempView("a", "b", "c") {
       df1.createOrReplaceTempView("a")
       df2.createOrReplaceTempView("b")
@@ -156,5 +156,38 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
           JoinHint.NONE:: Nil
       )
     }
+  }
+
+  test("intersect/except") {
+    val dfSub = spark.range(2)
+    verifyJoinHint(
+      df.hint("broadcast").except(dfSub).join(df, "id"),
+      JoinHint(
+        Some(HintInfo(broadcast = true)),
+        None) ::
+        JoinHint.NONE :: Nil
+    )
+    verifyJoinHint(
+      df.join(df.hint("broadcast").intersect(dfSub), "id"),
+      JoinHint(
+        None,
+        Some(HintInfo(broadcast = true))) ::
+        JoinHint.NONE :: Nil
+    )
+  }
+
+  test("hint merge") {
+    verifyJoinHint(
+      df.hint("broadcast").filter('id > 2).hint("broadcast").join(df, "id"),
+      JoinHint(
+        Some(HintInfo(broadcast = true)),
+        None) :: Nil
+    )
+    verifyJoinHint(
+      df.join(df.hint("broadcast").limit(2).hint("broadcast"), "id"),
+      JoinHint(
+        None,
+        Some(HintInfo(broadcast = true))) :: Nil
+    )
   }
 }

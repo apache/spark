@@ -51,7 +51,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       input: Seq[(LogicalPlan, InnerLike)],
       conditions: Seq[Expression],
       leftPlans: Seq[LogicalPlan],
-      hintMap: Map[Seq[LogicalPlan], HintInfo]): LogicalPlan = {
+      hintMap: Map[AttributeSet, HintInfo]): LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
       val (joinConditions, others) = conditions.partition(canEvaluateWithinJoin)
@@ -61,7 +61,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         case (_, _) => Cross
       }
       val join = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And),
-        JoinHint(hintMap.get(leftPlans), hintMap.get(Seq(right))))
+        JoinHint(hintMap.get(left.outputSet), hintMap.get(right.outputSet)))
       if (others.nonEmpty) {
         Filter(others.reduceLeft(And), join)
       } else {
@@ -85,7 +85,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val (joinConditions, others) = conditions.partition(
         e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
       val joined = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And),
-        JoinHint(hintMap.get(leftPlans), hintMap.get(Seq(right))))
+        JoinHint(hintMap.get(left.outputSet), hintMap.get(right.outputSet)))
 
       // should not have reference to same logical plan
       createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right),

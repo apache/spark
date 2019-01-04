@@ -355,6 +355,13 @@ case class Join(
   // Ignore hint for canonicalization
   protected override def doCanonicalize(): LogicalPlan =
     super.doCanonicalize().asInstanceOf[Join].copy(hint = JoinHint.NONE)
+
+  // Do not include an empty join hint in string description
+  protected override def stringArgs: Iterator[Any] = super.stringArgs.filter { e =>
+    (!e.isInstanceOf[JoinHint]
+      || e.asInstanceOf[JoinHint].leftHint.isDefined
+      || e.asInstanceOf[JoinHint].rightHint.isDefined)
+  }
 }
 
 /**

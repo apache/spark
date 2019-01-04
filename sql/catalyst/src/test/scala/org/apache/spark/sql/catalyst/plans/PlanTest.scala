@@ -165,8 +165,10 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
   private def sameJoinPlan(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
     (plan1, plan2) match {
       case (j1: Join, j2: Join) =>
-        (sameJoinPlan(j1.left, j2.left) && sameJoinPlan(j1.right, j2.right)) ||
-          (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left))
+        (sameJoinPlan(j1.left, j2.left) && sameJoinPlan(j1.right, j2.right)
+          && j1.hint.leftHint == j2.hint.leftHint && j1.hint.rightHint == j2.hint.rightHint) ||
+          (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left)
+            && j1.hint.leftHint == j2.hint.rightHint && j1.hint.rightHint == j2.hint.leftHint)
       case (p1: Project, p2: Project) =>
         p1.projectList == p2.projectList && sameJoinPlan(p1.child, p2.child)
       case _ =>

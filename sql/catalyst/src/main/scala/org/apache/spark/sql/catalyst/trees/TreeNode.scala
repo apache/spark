@@ -454,7 +454,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case Some(serde) => table.identifier :: serde :: Nil
         case _ => table.identifier :: Nil
       }
-    case hint: JoinHint if hint.leftHint.isEmpty && hint.rightHint.isEmpty => Nil
     case other => other :: Nil
   }.mkString(", ")
 
