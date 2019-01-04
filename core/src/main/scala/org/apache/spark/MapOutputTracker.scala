@@ -902,7 +902,8 @@ private[spark] object MapOutputTracker extends Logging {
         logError(errorMessage)
         throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
       } else {
-        if (shuffleBlocksBatchFetch && status.location == blockManager.blockManagerId) {
+        if (shuffleBlocksBatchFetch &&
+          status.location.executorId == blockManager.blockManagerId.executorId) {
           val totalSize: Long = (startPartition until endPartition).map(status.getSizeForBlock).sum
           if (totalSize != 0) {
             splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
