@@ -118,7 +118,7 @@ class SparkContext(object):
         if gateway is not None and gateway.gateway_parameters.auth_token is None:
             raise ValueError(
                 "You are trying to pass an insecure Py4j gateway to Spark. This"
-                " presents a security risk.")
+                " is not allowed as it is a security risk.")
 
         SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
         try:
