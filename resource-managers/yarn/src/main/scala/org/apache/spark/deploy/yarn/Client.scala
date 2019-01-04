@@ -728,6 +728,7 @@ private[spark] class Client(
       new File(Utils.getLocalDir(sparkConf)))
     val confStream = new ZipOutputStream(new FileOutputStream(confArchive))
 
+    logDebug(s"Creating an archive with the config files for distribution at $confArchive.")
     try {
       confStream.setLevel(0)
 
@@ -780,19 +781,10 @@ private[spark] class Client(
       props.store(writer, "Spark configuration.")
       writer.flush()
       confStream.closeEntry()
-      confArchive
-    } catch {
-      case e: IOException =>
-        logError(s"IOException occurred while writing to confArchive $confArchive", e)
-        throw e
     } finally {
-      try {
-        confStream.close()
-      } catch {
-        case e: IOException =>
-          logError(s"IOException occurred while close confArchive $confArchive", e)
-      }
+      confStream.close()
     }
+    confArchive
   }
 
   /**
