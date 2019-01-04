@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties}
+import java.util.{Locale, Properties, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -258,7 +258,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               AppendData.byName(relation, df.logicalPlan)
             }
           } else {
-            val writeBuilder = table.newWriteBuilder(df.logicalPlan.schema, dsOptions)
+            val writeBuilder = table.newWriteBuilder(
+              UUID.randomUUID().toString, df.logicalPlan.schema, dsOptions)
             writeBuilder match {
               case s: SupportsSaveMode =>
                 val write = s.mode(mode).buildForBatch()

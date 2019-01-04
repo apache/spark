@@ -18,7 +18,6 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
-import java.util.UUID
 
 import scala.collection.JavaConverters._
 
@@ -146,9 +145,11 @@ class SimpleWritableDataSource extends DataSourceV2
       new MyScanBuilder(new Path(path).toUri.toString, conf)
     }
 
-    override def newWriteBuilder(schema: StructType, options: DataSourceOptions): WriteBuilder = {
-      val uniqueId = UUID.randomUUID().toString
-      new MyWriteBuilder(path, uniqueId)
+    override def newWriteBuilder(
+        queryId: String,
+        schema: StructType,
+        options: DataSourceOptions): WriteBuilder = {
+      new MyWriteBuilder(path, queryId)
     }
   }
 

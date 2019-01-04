@@ -23,8 +23,8 @@ import org.apache.spark.sql.types.StructType;
 
 /**
  * An internal base interface of mix-in interfaces for writable {@link Table}. This adds
- * {@link #newWriteBuilder(StructType, DataSourceOptions)} that is used to create a write for batch
- * or streaming.
+ * {@link #newWriteBuilder(String, StructType, DataSourceOptions)} that is used to create a write
+ * for batch or streaming.
  */
 interface SupportsWrite extends Table {
 
@@ -32,9 +32,12 @@ interface SupportsWrite extends Table {
    * Returns a {@link WriteBuilder} which can be used to create {@link BatchWrite}. Spark will call
    * this method to configure each data source write.
    *
+   * @param queryId A unique string for the writing query. It's possible that there are many
+   *                writing queries running at the same time, or a query is restarted.
+   *                {@link BatchWrite} can use this id to identify the query.
    * @param schema The schema of the data to write.
    * @param options The options for writing, which is an immutable case-insensitive
    *                string-to-string map.
    */
-  WriteBuilder newWriteBuilder(StructType schema, DataSourceOptions options);
+  WriteBuilder newWriteBuilder(String queryId, StructType schema, DataSourceOptions options);
 }

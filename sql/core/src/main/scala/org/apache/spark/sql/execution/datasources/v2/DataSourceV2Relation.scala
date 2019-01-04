@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
@@ -60,7 +62,7 @@ case class DataSourceV2Relation(
   def newWriteBuilder(schema: StructType): WriteBuilder = table match {
     case s: SupportsBatchWrite =>
       val dsOptions = new DataSourceOptions(options.asJava)
-      s.newWriteBuilder(schema, dsOptions)
+      s.newWriteBuilder(UUID.randomUUID().toString, schema, dsOptions)
     case _ => throw new AnalysisException(s"Table is not writable: ${table.name()}")
   }
 

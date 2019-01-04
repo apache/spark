@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.StructType;
  * An empty mix-in interface for {@link Table}, to indicate this table supports batch write.
  * <p>
  * If a {@link Table} implements this interface, the
- * {@link SupportsWrite#newWriteBuilder(StructType, DataSourceOptions)} must return a
+ * {@link SupportsWrite#newWriteBuilder(String, StructType, DataSourceOptions)}  must return a
  * {@link WriteBuilder} with {@link WriteBuilder#buildForBatch()} implemented.
  * </p>
  */
