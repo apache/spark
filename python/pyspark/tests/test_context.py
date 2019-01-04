@@ -20,11 +20,7 @@ import tempfile
 import threading
 import time
 import unittest
-import sys
-if sys.version >= '3':
-    from unittest.mock import MagicMock
-else:
-    from mock import MagicMock
+from collections import namedtuple
 
 from pyspark import SparkFiles, SparkContext
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest, SPARK_HOME
@@ -254,9 +250,8 @@ class ContextTests(unittest.TestCase):
     def test_forbid_insecure_gateway(self):
         # Fail immediately if you try to create a SparkContext
         # with an insecure gateway
-        mock_insecure_gateway = MagicMock()
-        mock_insecure_gateway.gateway_parameters = MagicMock()
-        mock_insecure_gateway.gateway_parameters.auth_token = None
+        parameters = namedtuple('MockGatewayParameters', 'auth_token')(None)
+        mock_insecure_gateway = namedtuple('MockJavaGateway', 'gateway_parameters')(parameters)
         with self.assertRaises(Exception) as context:
             SparkContext(gateway=mock_insecure_gateway)
         self.assertIn("insecure Py4j gateway", str(context.exception))
