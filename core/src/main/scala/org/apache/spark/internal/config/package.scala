@@ -930,7 +930,7 @@ package object config {
   private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
     ConfigBuilder("spark.io.compression.zstd.level")
       .doc("Compression level for Zstd compression codec. Increasing the compression" +
-        " level will result in better compression at the expense of more CPU and memory")
+        " level will result in better compression at the expense of more CPU and memory ")
       .intConf
       .createWithDefault(1)
 }
