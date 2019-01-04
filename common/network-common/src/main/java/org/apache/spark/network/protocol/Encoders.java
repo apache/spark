@@ -90,7 +90,7 @@ public class Encoders {
     }
   }
 
-  /** Int arrays are encoded with their length followed by bytes. */
+  /** Int arrays are encoded with their length followed by ints. */
   public static class IntArrays {
     public static int encodedLength(int[] arr) {
       return 4 + arr.length * 4;
@@ -104,8 +104,8 @@ public class Encoders {
     }
 
     public static int[] decode(ByteBuf buf) {
-      int n = buf.readInt();
-      int[] arr = new int[n];
+      int length = buf.readInt();
+      int[] arr = new int[length];
       for (int i = 0; i < arr.length; i ++) {
         arr[i] = buf.readInt();
       }

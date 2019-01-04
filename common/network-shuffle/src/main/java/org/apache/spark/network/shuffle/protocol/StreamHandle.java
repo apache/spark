@@ -54,7 +54,7 @@ public class StreamHandle extends BlockTransferMessage {
     return Objects.toStringHelper(this)
       .add("streamId", streamId)
       .add("numChunks", numChunks)
-      .add("blockIds", Arrays.toString(chunkSizes))
+      .add("chunkSizes", Arrays.toString(chunkSizes))
       .toString();
   }
 

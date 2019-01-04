@@ -71,7 +71,7 @@ public class OpenBlocks extends BlockTransferMessage {
       return Objects.equal(appId, o.appId)
         && Objects.equal(execId, o.execId)
         && Arrays.equals(blockIds, o.blockIds)
-        && shuffleBlocksBatchFetch == o.shuffleBlocksBatchFetch;
+        && Objects.equal(shuffleBlocksBatchFetch, o.shuffleBlocksBatchFetch);
     }
     return false;
   }
