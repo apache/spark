@@ -17,8 +17,9 @@
 
 package org.apache.spark.ui
 
+import java.util.{Enumeration, Map => JMap}
 import javax.servlet._
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
 import scala.collection.JavaConverters._
 
@@ -35,12 +36,13 @@ import org.apache.spark.internal.config._
  * - check request data for disallowed content (e.g. things that could be used to create XSS
  *   attacks).
  * - set response headers to prevent certain kinds of attacks.
+ *
+ * Request parameters are sanitized so that HTML content is escaped, and disallowed content is
+ * removed.
  */
 private class HttpSecurityFilter(
     conf: SparkConf,
     securityMgr: SecurityManager) extends Filter {
-
-  private val NEWLINE_AND_SINGLE_QUOTE_REGEX = raw"(?i)(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)".r
 
   override def destroy(): Unit = { }
 
@@ -55,23 +57,6 @@ private class HttpSecurityFilter(
       hres.sendError(HttpServletResponse.SC_FORBIDDEN,
         "User is not authorized to access this page.")
       return
-    }
-
-    // Check if any disallowed content is in the incoming parameters. This filters out content that
-    // could be used for XSS attacks from even making it to the UI handlers.
-    try {
-      hreq.getParameterMap().asScala.foreach { case (k, values) =>
-        require(isSafe(k), "Parameter name contains disallowed content.")
-        values.foreach { v =>
-          require(isSafe(v), s"Parameter value for $k contains disallowed content.")
-        }
-      }
-    } catch {
-      case e: IllegalArgumentException =>
-        // Do not allow the request to go further if any problem is detected.
-        hres.setContentType("text/plain;charset=utf-8")
-        hres.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage())
-        return
     }
 
     // SPARK-10589 avoid frame-related click-jacking vulnerability, using X-Frame-Options
@@ -92,10 +77,32 @@ private class HttpSecurityFilter(
         hres.setHeader("Strict-Transport-Security", _))
     }
 
-    chain.doFilter(req, res)
+    chain.doFilter(new XssSafeRequest(hreq), res)
   }
 
-  private def isSafe(str: String): Boolean = stripXSS(str) == str
+}
+
+private class XssSafeRequest(req: HttpServletRequest) extends HttpServletRequestWrapper(req) {
+
+  private val NEWLINE_AND_SINGLE_QUOTE_REGEX = raw"(?i)(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)".r
+
+  private val parameterMap: Map[String, Array[String]] = {
+    super.getParameterMap().asScala.map { case (name, values) =>
+      stripXSS(name) -> values.map(stripXSS)
+    }.toMap
+  }
+
+  override def getParameterMap(): JMap[String, Array[String]] = parameterMap.asJava
+
+  override def getParameterNames(): Enumeration[String] = {
+    parameterMap.keys.iterator.asJavaEnumeration
+  }
+
+  override def getParameterValues(name: String): Array[String] = parameterMap.get(name).orNull
+
+  override def getParameter(name: String): String = {
+    parameterMap.get(name).flatMap(_.headOption).orNull
+  }
 
   private def stripXSS(str: String): String = {
     if (str != null) {

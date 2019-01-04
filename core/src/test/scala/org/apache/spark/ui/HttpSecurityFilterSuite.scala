@@ -23,6 +23,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.JavaConverters._
 
+import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, never, times, verify, when}
 
@@ -31,7 +32,7 @@ import org.apache.spark.internal.config._
 
 class HttpSecurityFilterSuite extends SparkFunSuite {
 
-  test("disallow bad user input") {
+  test("filter bad user input") {
     val badValues = Map(
       "encoded" -> "Encoding:base64%0d%0a%0d%0aPGh0bWw%2bjcmlwdD48L2h0bWw%2b",
       "alert1" -> """>"'><script>alert(401)<%2Fscript>""",
@@ -40,7 +41,6 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
       "html" -> """stdout'"><iframe+id%3D1131+src%3Dhttp%3A%2F%2Fdemo.test.net%2Fphishing.html>"""
     )
     val badKeys = badValues.map(_.swap)
-    val badInput = badValues ++ badKeys
     val goodInput = Map("goodKey" -> "goodValue")
 
     val conf = new SparkConf()
@@ -52,31 +52,41 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
       req
     }
 
-    def verifyError(req: HttpServletRequest): Unit = {
-      val chain = mock(classOf[FilterChain])
-      val res = mock(classOf[HttpServletResponse])
-      filter.doFilter(req, res, chain)
-      verify(chain, never()).doFilter(any(), any())
-      verify(res).sendError(meq(HttpServletResponse.SC_BAD_REQUEST), any())
-    }
-
-    def verifySuccess(req: HttpServletRequest): Unit = {
-      val chain = mock(classOf[FilterChain])
-      val res = mock(classOf[HttpServletResponse])
-      filter.doFilter(req, res, chain)
-      verify(chain).doFilter(any(), any())
-    }
-
-    badInput.foreach { case (k, v) =>
+    def doRequest(k: String, v: String): HttpServletRequest = {
       val req = newRequest()
       when(req.getParameterMap()).thenReturn(Map(k -> Array(v)).asJava)
-      verifyError(req)
+
+      val chain = mock(classOf[FilterChain])
+      val res = mock(classOf[HttpServletResponse])
+      filter.doFilter(req, res, chain)
+
+      val captor = ArgumentCaptor.forClass(classOf[HttpServletRequest])
+      verify(chain).doFilter(captor.capture(), any())
+      captor.getValue()
+    }
+
+    badKeys.foreach { case (k, v) =>
+      val req = doRequest(k, v)
+      assert(req.getParameter(k) === null)
+      assert(req.getParameterValues(k) === null)
+      assert(!req.getParameterMap().containsKey(k))
+    }
+
+    badValues.foreach { case (k, v) =>
+      val req = doRequest(k, v)
+      assert(req.getParameter(k) != null)
+      assert(req.getParameter(k) != v)
+      assert(req.getParameterValues(k) != null)
+      assert(req.getParameterValues(k) != Array(v))
+      assert(req.getParameterMap().get(k) != null)
+      assert(req.getParameterMap().get(k) != Array(v))
     }
 
     goodInput.foreach { case (k, v) =>
-      val req = newRequest()
-      when(req.getParameterMap()).thenReturn(Map(k -> Array(v)).asJava)
-      verifySuccess(req)
+      val req = doRequest(k, v)
+      assert(req.getParameter(k) === v)
+      assert(req.getParameterValues(k) === Array(v))
+      assert(req.getParameterMap().get(k) === Array(v))
     }
   }
 
