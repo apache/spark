@@ -431,11 +431,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         }
         // End the other task of the taskset, doesn't matter whether it succeeds or fails.
         val otherTask = tasks(1)
-        val result = new DirectTaskResult[Int](valueSer.serialize(otherTask.taskId), Seq())
+        val result = new DirectTaskResult[Int](valueSer.serialize(otherTask.taskId), Seq(), Array())
         tsm.handleSuccessfulTask(otherTask.taskId, result)
       } else {
         tasks.foreach { task =>
-          val result = new DirectTaskResult[Int](valueSer.serialize(task.taskId), Seq())
+          val result = new DirectTaskResult[Int](valueSer.serialize(task.taskId), Seq(), Array())
           tsm.handleSuccessfulTask(task.taskId, result)
         }
       }

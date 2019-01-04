@@ -173,7 +173,19 @@ private[spark] class EventLoggingListener(
 
   override def onTaskGettingResult(event: SparkListenerTaskGettingResult): Unit = logEvent(event)
 
-  override def onTaskEnd(event: SparkListenerTaskEnd): Unit = logEvent(event)
+  override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+    logEvent(event)
+    if (shouldLogStageExecutorMetrics) {
+      val k1 = (event.stageId, event.stageAttemptId)
+      liveStageExecutorMetrics.foreach { case (k2, peakExecutorMetrics) =>
+        if (k1 == k2) {
+          val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
+            event.taskInfo.executorId, new ExecutorMetrics())
+          peakMetrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
+        }
+      }
+    }
+  }
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
     logEvent(redactEvent(event))
@@ -268,12 +280,17 @@ private[spark] class EventLoggingListener(
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     if (shouldLogStageExecutorMetrics) {
-      // For the active stages, record any new peak values for the memory metrics for the executor
-      event.executorUpdates.foreach { executorUpdates =>
-        liveStageExecutorMetrics.values.foreach { peakExecutorMetrics =>
-          val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
-            event.execId, new ExecutorMetrics())
-          peakMetrics.compareAndUpdatePeakValues(executorUpdates)
+      event.executorUpdates.foreach { case (k1, peakUpdates) =>
+        liveStageExecutorMetrics.foreach { case (k2, peakExecutorMetrics) =>
+          // If the update came from the driver, the key k1 will be the dummy key (-1, -1),
+          // so record those peaks for all active stages.
+          // Otherwise, record the peaks for the matching stage.
+          val k0 = (-1, -1)
+          if (k1 == k0 || k1 == k2) {
+            val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
+              event.execId, new ExecutorMetrics())
+            peakMetrics.compareAndUpdatePeakValues(peakUpdates)
+          }
         }
       }
     }

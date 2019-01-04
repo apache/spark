@@ -47,6 +47,7 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       reason: TaskEndReason,
       result: Any,
       accumUpdates: Seq[AccumulatorV2[_, _]],
+      metricPeaks: Array[Long],
       taskInfo: TaskInfo) {
     taskScheduler.endedTasks(taskInfo.index) = reason
   }
@@ -716,8 +717,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
           reason: TaskEndReason,
           result: Any,
           accumUpdates: Seq[AccumulatorV2[_, _]],
+          metricPeaks: Array[Long],
           taskInfo: TaskInfo): Unit = {
-        super.taskEnded(task, reason, result, accumUpdates, taskInfo)
+        super.taskEnded(task, reason, result, accumUpdates, metricPeaks, taskInfo)
         reason match {
           case Resubmitted => resubmittedTasks += 1
           case _ =>
@@ -745,7 +747,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.runningTasks === 2)
     assert(manager.isZombie === false)
 
-    val directTaskResult = new DirectTaskResult[String](null, Seq()) {
+    val directTaskResult = new DirectTaskResult[String](null, Seq(), Array()) {
       override def value(resultSer: SerializerInstance): String = ""
     }
     // Complete one copy of the task, which should result in the task set manager
@@ -797,8 +799,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
           reason: TaskEndReason,
           result: Any,
           accumUpdates: Seq[AccumulatorV2[_, _]],
+          metricPeaks: Array[Long],
           taskInfo: TaskInfo): Unit = {
-        super.taskEnded(task, reason, result, accumUpdates, taskInfo)
+        super.taskEnded(task, reason, result, accumUpdates, metricPeaks, taskInfo)
         reason match {
           case Resubmitted => resubmittedTasks += 1
           case _ =>
@@ -1204,7 +1207,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched.dagScheduler = mockDAGScheduler
     val taskSet = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = new ManualClock(1))
-    when(mockDAGScheduler.taskEnded(any(), any(), any(), any(), any())).thenAnswer(
+    when(mockDAGScheduler.taskEnded(any(), any(), any(), any(), any(), any())).thenAnswer(
       (invocationOnMock: InvocationOnMock) => assert(manager.isZombie))
     val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
@@ -1439,8 +1442,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
           reason: TaskEndReason,
           result: Any,
           accumUpdates: Seq[AccumulatorV2[_, _]],
+          metricPeaks: Array[Long],
           taskInfo: TaskInfo): Unit = {
-        super.taskEnded(task, reason, result, accumUpdates, taskInfo)
+        super.taskEnded(task, reason, result, accumUpdates, metricPeaks, taskInfo)
         reason match {
           case Resubmitted => resubmittedTasks += taskInfo.index
           case _ =>
@@ -1515,9 +1519,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
   private def createTaskResult(
       id: Int,
-      accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty): DirectTaskResult[Int] = {
+      accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty,
+      metricPeaks: Array[Long] = Array.empty): DirectTaskResult[Int] = {
     val valueSer = SparkEnv.get.serializer.newInstance()
-    new DirectTaskResult[Int](valueSer.serialize(id), accumUpdates)
+    new DirectTaskResult[Int](valueSer.serialize(id), accumUpdates, metricPeaks)
   }
 
   test("SPARK-13343 speculative tasks that didn't commit shouldn't be marked as success") {
@@ -1585,9 +1590,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       TaskKilled("Finish but did not commit due to another attempt succeeded"),
       null,
       Seq.empty,
+      Array.empty,
       info4)
     verify(sched.dagScheduler).taskEnded(manager.tasks(3), Success, result.value(),
-      result.accumUpdates, info3)
+      result.accumUpdates, Array.empty, info3)
   }
 
   test("SPARK-13704 Rack Resolution is done with a batch of de-duped hosts") {

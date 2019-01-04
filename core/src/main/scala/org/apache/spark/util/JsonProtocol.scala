@@ -138,6 +138,7 @@ private[spark] object JsonProtocol {
   def taskEndToJson(taskEnd: SparkListenerTaskEnd): JValue = {
     val taskEndReason = taskEndReasonToJson(taskEnd.reason)
     val taskInfo = taskEnd.taskInfo
+    val executorMetrics = taskEnd.taskExecutorMetrics
     val taskMetrics = taskEnd.taskMetrics
     val taskMetricsJson = if (taskMetrics != null) taskMetricsToJson(taskMetrics) else JNothing
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskEnd) ~
@@ -146,6 +147,7 @@ private[spark] object JsonProtocol {
     ("Task Type" -> taskEnd.taskType) ~
     ("Task End Reason" -> taskEndReason) ~
     ("Task Info" -> taskInfoToJson(taskInfo)) ~
+    ("Task Executor Metrics" -> executorMetricsToJson(executorMetrics)) ~
     ("Task Metrics" -> taskMetricsJson)
   }
 
@@ -242,7 +244,7 @@ private[spark] object JsonProtocol {
   def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
     val execId = metricsUpdate.execId
     val accumUpdates = metricsUpdate.accumUpdates
-    val executorMetrics = metricsUpdate.executorUpdates.map(executorMetricsToJson(_))
+    val executorUpdates = metricsUpdate.executorUpdates
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.metricsUpdate) ~
     ("Executor ID" -> execId) ~
     ("Metrics Updated" -> accumUpdates.map { case (taskId, stageId, stageAttemptId, updates) =>
@@ -251,7 +253,12 @@ private[spark] object JsonProtocol {
       ("Stage Attempt ID" -> stageAttemptId) ~
       ("Accumulator Updates" -> JArray(updates.map(accumulableInfoToJson).toList))
     }) ~
-    ("Executor Metrics Updated" -> executorMetrics)
+    ("Executor Metrics Updated" -> executorUpdates.map {
+      case ((stageId, stageAttemptId), metrics) =>
+        ("Stage ID" -> stageId) ~
+        ("Stage Attempt ID" -> stageAttemptId) ~
+        ("Executor Metrics" -> executorMetricsToJson(metrics))
+    })
   }
 
   def stageExecutorMetricsToJson(metrics: SparkListenerStageExecutorMetrics): JValue = {
@@ -628,8 +635,10 @@ private[spark] object JsonProtocol {
     val taskType = (json \ "Task Type").extract[String]
     val taskEndReason = taskEndReasonFromJson(json \ "Task End Reason")
     val taskInfo = taskInfoFromJson(json \ "Task Info")
+    val executorMetrics = executorMetricsFromJson(json \ "Task Executor Metrics")
     val taskMetrics = taskMetricsFromJson(json \ "Task Metrics")
-    SparkListenerTaskEnd(stageId, stageAttemptId, taskType, taskEndReason, taskInfo, taskMetrics)
+    SparkListenerTaskEnd(stageId, stageAttemptId, taskType, taskEndReason, taskInfo,
+      executorMetrics, taskMetrics)
   }
 
   def jobStartFromJson(json: JValue): SparkListenerJobStart = {
@@ -733,8 +742,14 @@ private[spark] object JsonProtocol {
         (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
       (taskId, stageId, stageAttemptId, updates)
     }
-    val executorUpdates = jsonOption(json \ "Executor Metrics Updated").map {
-      executorUpdate => executorMetricsFromJson(executorUpdate)
+    val executorUpdates = (json \ "Executor Metrics Updated") match {
+      case JNothing => Map.empty[(Int, Int), ExecutorMetrics]
+      case value: JValue => value.extract[List[JValue]].map { json =>
+        val stageId = (json \ "Stage ID").extract[Int]
+        val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
+        val executorMetrics = executorMetricsFromJson(json \ "Executor Metrics")
+        ((stageId, stageAttemptId) -> executorMetrics)
+      }.toMap
     }
     SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates, executorUpdates)
   }

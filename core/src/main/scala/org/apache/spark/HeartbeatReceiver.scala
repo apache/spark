@@ -19,7 +19,8 @@ package org.apache.spark
 
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
-import scala.collection.mutable
+import scala.collection.Map
+import scala.collection.mutable.HashMap
 import scala.concurrent.Future
 
 import org.apache.spark.executor.ExecutorMetrics
@@ -40,7 +41,7 @@ private[spark] case class Heartbeat(
     executorId: String,
     accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])], // taskId -> accumulator updates
     blockManagerId: BlockManagerId,
-    executorUpdates: ExecutorMetrics) // executor level updates
+    executorUpdates: Map[(Int, Int), ExecutorMetrics]) // executor level updates
 
 /**
  * An event that SparkContext uses to notify HeartbeatReceiver that SparkContext.taskScheduler is
@@ -73,7 +74,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   private[spark] var scheduler: TaskScheduler = null
 
   // executor ID -> timestamp of when the last heartbeat from this executor was received
-  private val executorLastSeen = new mutable.HashMap[String, Long]
+  private val executorLastSeen = new HashMap[String, Long]
 
   private val executorTimeoutMs = sc.conf.get(config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT)
 

@@ -176,6 +176,11 @@ package object config {
   private[spark] val EXECUTOR_HEARTBEAT_MAX_FAILURES =
     ConfigBuilder("spark.executor.heartbeat.maxFailures").internal().intConf.createWithDefault(60)
 
+  private[spark] val EXECUTOR_METRICS_POLLING_INTERVAL =
+    ConfigBuilder("spark.executor.metrics.pollingInterval")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("0")
+
   private[spark] val EXECUTOR_JAVA_OPTIONS =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
       .withPrepended(SparkLauncher.EXECUTOR_DEFAULT_JAVA_OPTIONS)

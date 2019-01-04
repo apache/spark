@@ -18,12 +18,14 @@
 package org.apache.spark.executor
 
 import java.io.{File, NotSerializableException}
+import java.lang.Long.{MAX_VALUE => LONG_MAX_VALUE}
 import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
 import java.net.{URI, URL}
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent._
+import java.util.concurrent.atomic.{AtomicLong, AtomicLongArray}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -38,6 +40,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
+import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
@@ -170,6 +173,17 @@ private[spark] class Executor(
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
+  type StageKey = (Int, Int)
+
+  // Map of (stageId, stageAttemptId) to count of running tasks
+  private val activeStages = new ConcurrentHashMap[StageKey, AtomicLong]
+
+  // Map of (stageId, stageAttemptId) to executor metric peaks
+  private val stageMetricPeaks = new ConcurrentHashMap[StageKey, AtomicLongArray]
+
+  // Map of taskId to executor metric peaks
+  private val taskMetricPeaks = new ConcurrentHashMap[Long, AtomicLongArray]
+
   /**
    * When an executor is unable to send heartbeats to the driver more than `HEARTBEAT_MAX_FAILURES`
    * times, it should kill itself. The default value is 60. For example, if max failures is 60 and
@@ -188,9 +202,44 @@ private[spark] class Executor(
    */
   private val HEARTBEAT_INTERVAL_MS = conf.get(EXECUTOR_HEARTBEAT_INTERVAL)
 
+  /**
+   * Interval to poll for executor metrics, in milliseconds
+   */
+  private val METRICS_POLLING_INTERVAL_MS = conf.get(EXECUTOR_METRICS_POLLING_INTERVAL)
+
+  // Executor for the metrics polling task
+  private val poller =
+    if (METRICS_POLLING_INTERVAL_MS > 0) {
+      ThreadUtils.newDaemonSingleThreadScheduledExecutor("executor-poller")
+    } else {
+      null
+    }
+
+  private def poll(): Unit = {
+    // get the latest values for the metrics
+    val latestMetrics = ExecutorMetrics.getCurrentMetrics(env.memoryManager)
+
+    def compareAndUpdate(current: Long, latest: Long): Long =
+      if (latest > current) latest else current
+
+    def updatePeaks(metrics: AtomicLongArray): Unit = {
+      (0 until metrics.length).foreach { i =>
+        metrics.getAndAccumulate(i, latestMetrics(i), compareAndUpdate)
+      }
+    }
+
+    def peaksForStage(k: StageKey, v: AtomicLong): AtomicLongArray =
+      if (v.get() > 0) stageMetricPeaks.get(k) else null
+
+    // for each active stage (number of running tasks > 0), get the peaks and update them
+    activeStages.forEach[AtomicLongArray](LONG_MAX_VALUE, peaksForStage, updatePeaks)
+
+    // for each running task, update the peaks
+    taskMetricPeaks.forEachValue(LONG_MAX_VALUE, updatePeaks)
+  }
+
   // Executor for the heartbeat task.
   private val heartbeater = new Heartbeater(
-    env.memoryManager,
     () => Executor.this.reportHeartBeat(),
     "executor-heartbeater",
     HEARTBEAT_INTERVAL_MS)
@@ -207,11 +256,19 @@ private[spark] class Executor(
 
   heartbeater.start()
 
+  if (poller != null) {
+    val pollingTask = new Runnable() {
+      override def run(): Unit = Utils.logUncaughtExceptions(poll())
+    }
+    poller.scheduleAtFixedRate(pollingTask, 0L, METRICS_POLLING_INTERVAL_MS, TimeUnit.MILLISECONDS)
+  }
+
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
+    taskMetricPeaks.put(taskDescription.taskId, new AtomicLongArray(ExecutorMetricType.numMetrics))
     threadPool.execute(tr)
   }
 
@@ -254,12 +311,21 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     env.metricsSystem.report()
+    if (poller != null) {
+      try {
+        poller.shutdown()
+        poller.awaitTermination(METRICS_POLLING_INTERVAL_MS, TimeUnit.MILLISECONDS)
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Unable to stop poller", e)
+      }
+    }
     try {
       heartbeater.stop()
     } catch {
       case NonFatal(e) =>
         logWarning("Unable to stop heartbeater", e)
-     }
+    }
     threadPool.shutdown()
 
     // Notify plugins that executor is shutting down so they can terminate cleanly
@@ -412,6 +478,21 @@ private[spark] class Executor(
           env.mapOutputTracker.asInstanceOf[MapOutputTrackerWorker].updateEpoch(task.epoch)
         }
 
+        val stageId = task.stageId
+        val stageAttemptId = task.stageAttemptId
+        val count = new AtomicLong(0)
+        val old = activeStages.putIfAbsent((stageId, stageAttemptId), count)
+        val stageCount =
+          if (old != null) {
+            old.incrementAndGet()
+          } else {
+            logDebug(s"added ($stageId, $stageAttemptId) to activeStages")
+            count.incrementAndGet()
+          }
+        logDebug(s"activeStages: ($stageId, $stageAttemptId) -> $stageCount")
+        stageMetricPeaks.putIfAbsent((stageId, stageAttemptId),
+          new AtomicLongArray(ExecutorMetricType.numMetrics))
+
         // Run the actual task and measure its runtime.
         taskStartTimeNs = System.nanoTime()
         taskStartCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
@@ -527,10 +608,19 @@ private[spark] class Executor(
         executorSource.METRIC_DISK_BYTES_SPILLED.inc(task.metrics.diskBytesSpilled)
         executorSource.METRIC_MEMORY_BYTES_SPILLED.inc(task.metrics.memoryBytesSpilled)
 
+        def getMetricPeaks(): Array[Long] = {
+          val currentPeaks = taskMetricPeaks.get(taskId)
+          val metricPeaks = new Array[Long](ExecutorMetricType.numMetrics)
+          ExecutorMetricType.metricToOffset.foreach { case (_, i) =>
+            metricPeaks(i) = currentPeaks.get(i)
+          }
+          metricPeaks
+        }
+
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
         // TODO: do not serialize value twice
-        val directResult = new DirectTaskResult(valueBytes, accumUpdates)
+        val directResult = new DirectTaskResult(valueBytes, accumUpdates, getMetricPeaks)
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit()
 
@@ -556,10 +646,31 @@ private[spark] class Executor(
           }
         }
 
+        def decrementCount(stage: StageKey, count: AtomicLong): AtomicLong = {
+          val countValue = count.decrementAndGet()
+          if (countValue == 0L) {
+            logDebug(s"removing (${stage._1}, ${stage._2}) from activeStages")
+            null
+          } else {
+            logDebug(s"activeStages: (${stage._1}, ${stage._2}) -> " + countValue)
+            count
+          }
+        }
+
+        // If the count is zero, the stage is removed from activeStages
+        activeStages.compute((stageId, stageAttemptId), decrementCount)
+
+        // If the stage has been removed from activeStages, remove it from stageMetricPeaks too
+        def removeInactive(k: StageKey): Unit = {
+          if (activeStages.get(k) == null) {
+            stageMetricPeaks.remove(k)
+          }
+        }
+        stageMetricPeaks.forEachKey(LONG_MAX_VALUE, removeInactive)
+
         executorSource.SUCCEEDED_TASKS.inc(1L)
         setTaskFinishedAndClearInterruptStatus()
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
-
       } catch {
         case t: TaskKilledException =>
           logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
@@ -632,6 +743,7 @@ private[spark] class Executor(
           }
       } finally {
         runningTasks.remove(taskId)
+        taskMetricPeaks.remove(taskId)
       }
     }
 
@@ -848,8 +960,25 @@ private[spark] class Executor(
     val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulatorV2[_, _]])]()
     val curGCTime = computeTotalGcTime()
 
-    // get executor level memory metrics
-    val executorUpdates = heartbeater.getCurrentMetrics()
+    // if not polling in a separater poller, poll here
+    if (poller == null) {
+      poll()
+    }
+
+    // build the executor level memory metrics
+    val executorUpdates = new HashMap[StageKey, ExecutorMetrics]
+
+    def peaksForStage(k: StageKey, v: AtomicLong): (StageKey, AtomicLongArray) =
+      if (v.get() > 0) (k, stageMetricPeaks.get(k)) else null
+
+    def addPeaks(nested: (StageKey, AtomicLongArray)): Unit = {
+      val (k, v) = nested
+      executorUpdates.put(k, new ExecutorMetrics(v))
+      // at the same time, reset the peaks in stageMetricPeaks
+      stageMetricPeaks.put(k, new AtomicLongArray(ExecutorMetricType.numMetrics))
+    }
+
+    activeStages.forEach[(StageKey, AtomicLongArray)](LONG_MAX_VALUE, peaksForStage, addPeaks)
 
     for (taskRunner <- runningTasks.values().asScala) {
       if (taskRunner.task != null) {
