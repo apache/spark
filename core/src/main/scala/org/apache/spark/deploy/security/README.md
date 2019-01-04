@@ -23,11 +23,10 @@ so they can authenticate to services.
 * A single token is used for authentication
 
 If Kerberos authentication were used, each client connection to a server would require a trip
-to the Key Distribution Center (KDC) and generation of a service ticket. In a distributed system,
-the number of service tickets can balloon pretty quickly when you think about the number of client
-processes (e.g. Spark executors) vs. the number of service processes (e.g. HDFS DataNodes). That
-generates unnecessary extra load on the KDC, and may even run into usage limits set up by the KDC
-admin.
+to the KDC and generation of a service ticket. In a distributed system, the number of service
+tickets can balloon pretty quickly when you think about the number of client processes (e.g. Spark
+executors) vs. the number of service processes (e.g. HDFS DataNodes). That generates unnecessary
+extra load on the KDC, and may even run into usage limits set up by the KDC admin.
 
 
 So in short, DTs are *not* Kerberos tokens. They are used by many services to replace Kerberos
@@ -58,11 +57,11 @@ use them. While it would be possible to create a shared API or even a shared ser
 creation and use of DTs, that doesn't currently exist, and retrofitting such a system would be a
 huge change in a bunch of different services.
 
-Spark works around this by having a (somewhat) pluggable DT creation API. Support for new
-services can be added by implementing a "DT provider" that is then called by Spark when
-generating delegation tokens for an application. Spark distributes tokens to executors using
-the `UserGroupInformation` Hadoop API, and it's up to the DT provider and the respective
-client library to agree on how to use those tokens.
+Spark works around this by having a (somewhat) pluggable, internal DT creation API. Support for new
+services can be added by implementing a `HadoopDelegationTokenProvider` that is then called by Spark
+when generating delegation tokens for an application. Spark distributes tokens to executors using
+the `UserGroupInformation` Hadoop API, and it's up to the DT provider and the respective client
+library to agree on how to use those tokens.
 
 Once they are created, the semantics of how DTs operate are also service-specific. But, in general,
 they try to follow the semantics of Kerberos tokens:
