@@ -77,16 +77,16 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
       assert(req.getParameter(k) != null)
       assert(req.getParameter(k) != v)
       assert(req.getParameterValues(k) != null)
-      assert(req.getParameterValues(k) != Array(v))
+      assert(req.getParameterValues(k).toSeq != Seq(v))
       assert(req.getParameterMap().get(k) != null)
-      assert(req.getParameterMap().get(k) != Array(v))
+      assert(req.getParameterMap().get(k).toSeq != Seq(v))
     }
 
     goodInput.foreach { case (k, v) =>
       val req = doRequest(k, v)
       assert(req.getParameter(k) === v)
-      assert(req.getParameterValues(k) === Array(v))
-      assert(req.getParameterMap().get(k) === Array(v))
+      assert(req.getParameterValues(k).toSeq === Seq(v))
+      assert(req.getParameterMap().get(k).toSeq === Seq(v))
     }
   }
 
