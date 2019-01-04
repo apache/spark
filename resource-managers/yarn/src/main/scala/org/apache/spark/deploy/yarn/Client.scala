@@ -780,10 +780,19 @@ private[spark] class Client(
       props.store(writer, "Spark configuration.")
       writer.flush()
       confStream.closeEntry()
+      confArchive
+    } catch {
+      case e: IOException =>
+        logError(s"IOException occurred while writing to confArchive $confArchive", e)
+        throw e
     } finally {
-      confStream.close()
+      try {
+        confStream.close()
+      } catch {
+        case e: IOException =>
+          logError(s"IOException occurred while close confArchive $confArchive", e)
+      }
     }
-    confArchive
   }
 
   /**
