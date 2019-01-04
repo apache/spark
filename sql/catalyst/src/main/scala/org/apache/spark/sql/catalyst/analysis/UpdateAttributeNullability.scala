@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -41,22 +41,17 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
     // Skip leaf node, as it has no child and no need to update nullability.
     case p: LeafNode => p
     case p: LogicalPlan =>
-      val childrenOutput = p.children.flatMap(c => c.output).groupBy(_.exprId).flatMap {
-        case (exprId, attributes) =>
-          // If there are multiple Attributes having the same ExprId, we need to resolve
-          // the conflict of nullable field. We do not really expect this happen.
-          val nullable = attributes.exists(_.nullable)
-          attributes.map(attr => attr.withNullability(nullable))
-      }.toSeq
-      // At here, we create an AttributeMap that only compare the exprId for the lookup
-      // operation. So, we can find the corresponding input attribute's nullability.
-      val attributeMap = AttributeMap[Attribute](childrenOutput.map(attr => attr -> attr))
+      val nullabilities = p.children.flatMap(c => c.output).groupBy(_.exprId).map {
+        // If there are multiple Attributes having the same ExprId, we need to resolve
+        // the conflict of nullable field. We do not really expect this to happen.
+        case (exprId, attributes) => exprId -> attributes.exists(_.nullable)
+      }
       // For an Attribute used by the current LogicalPlan, if it is from its children,
       // we fix the nullable field by using the nullability setting of the corresponding
       // output Attribute from the children.
       p.transformExpressions {
-        case attr: Attribute if attributeMap.contains(attr) =>
-          attr.withNullability(attributeMap(attr).nullable)
+        case attr: Attribute if nullabilities.contains(attr.exprId) =>
+          attr.withNullability(nullabilities(attr.exprId))
       }
   }
 }
