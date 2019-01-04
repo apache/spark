@@ -467,16 +467,17 @@ final class ShuffleBlockFetcherIterator(
           var isStreamCopied: Boolean = false
           try {
             input = streamWrapper(blockId, in)
-            // Only copy the stream if it's wrapped by compression or encryption, also the size of
-            // block is small (the decompressed block is smaller than maxBytesInFlight)
-            if (detectCorrupt && !input.eq(in)) {
+            // Only copy the stream if it's wrapped by compression or encryption upto a size of
+            // maxBytesInFlight/3. If stream is longer, then corruption will be caught while reading
+            // the stream.
+            streamCompressedOrEncrypted = !input.eq(in)
+            if (detectCorrupt && streamCompressedOrEncrypted) {
               isStreamCopied = true
-              streamCompressedOrEncrypted = true
               val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
-              // Decompress the whole block at once to detect any corruption, which could increase
-              // the memory usage tne potential increase the chance of OOM.
+              // Decompress the block upto maxBytesInFlight/3 at once to detect any corruption which
+              // could increase the memory usage and potentially increase the chance of OOM.
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
-              isStreamCopied = Utils.copyStreamUpto(
+              isStreamCopied = Utils.copyStreamUpTo(
                 input, out, maxBytesInFlight / 3, closeStreams = true)
               if (isStreamCopied) {
                 input = out.toChunkedByteBuffer.toInputStream(dispose = true)
@@ -595,14 +596,15 @@ final class ShuffleBlockFetcherIterator(
 
 /**
  * Helper class that ensures a ManagedBuffer is released upon InputStream.close() and
- * also detects stream corruption if detectCorruption is true
+ * also detects stream corruption if streamCompressedOrEncrypted is true
  */
 private class BufferReleasingInputStream(
-    private val delegate: InputStream,
+    // This is visible for testing
+    private[storage] val delegate: InputStream,
     private val iterator: ShuffleBlockFetcherIterator,
     private val blockId: BlockId,
     private val address: BlockManagerId,
-    private val detectCorruption: Boolean)
+    private val streamCompressedOrEncrypted: Boolean)
   extends InputStream {
   private[this] var closed = false
 
@@ -610,7 +612,7 @@ private class BufferReleasingInputStream(
     try {
       delegate.read()
     } catch {
-      case e: IOException if detectCorruption =>
+      case e: IOException if streamCompressedOrEncrypted =>
         iterator.throwFetchFailedException(blockId, address, e)
     }
   }
@@ -635,7 +637,7 @@ private class BufferReleasingInputStream(
     try {
       delegate.read(b)
     } catch {
-      case e: IOException if detectCorruption =>
+      case e: IOException if streamCompressedOrEncrypted =>
         iterator.throwFetchFailedException(blockId, address, e)
     }
   }
@@ -644,7 +646,7 @@ private class BufferReleasingInputStream(
     try {
       delegate.read(b, off, len)
     } catch {
-      case e: IOException if detectCorruption =>
+      case e: IOException if streamCompressedOrEncrypted =>
         iterator.throwFetchFailedException(blockId, address, e)
     }
   }

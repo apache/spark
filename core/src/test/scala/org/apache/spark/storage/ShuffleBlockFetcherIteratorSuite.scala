@@ -17,7 +17,8 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, IOException}
+import java.io._
+import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.Semaphore
 
@@ -490,6 +491,55 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     intercept[FetchFailedException] { st.read() }
     intercept[FetchFailedException] { st.read(new Array[Byte](8 * 1024)) }
     intercept[FetchFailedException] { st.read(new Array[Byte](8 * 1024), 0, 8 * 1024) }
+  }
+
+  test("ensure big blocks available as a concatenated stream can be read") {
+    val tmpDir = Utils.createTempDir()
+    val tmpFile = new File(tmpDir, "someFile.txt")
+    val os = new FileOutputStream(tmpFile)
+    val buf = ByteBuffer.allocate(10000)
+    for (i <- 1 to 2500) {
+      buf.putInt(i)
+    }
+    os.write(buf.array())
+    os.close()
+    val managedBuffer = new FileSegmentManagedBuffer(null, tmpFile, 0, 10000)
+
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+    doReturn(managedBuffer).when(blockManager).getBlockData(ShuffleBlockId(0, 0, 0))
+    val localBlockLengths = Seq[Tuple2[BlockId, Long]](
+      ShuffleBlockId(0, 0, 0) -> 10000
+    )
+    val transfer = createMockTransfer(Map(ShuffleBlockId(0, 0, 0) -> managedBuffer))
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
+      (localBmId, localBlockLengths)
+    ).toIterator
+
+    val taskContext = TaskContext.empty()
+    val iterator = new ShuffleBlockFetcherIterator(
+      taskContext,
+      transfer,
+      blockManager,
+      blocksByAddress,
+      (_, in) => new LimitedInputStream(in, 10000),
+      2048,
+      Int.MaxValue,
+      Int.MaxValue,
+      Int.MaxValue,
+      true,
+      taskContext.taskMetrics.createTempShuffleReadMetrics())
+    val (id, st) = iterator.next()
+    // The returned stream is a concatenated stream
+    assert (st.asInstanceOf[BufferReleasingInputStream].delegate.isInstanceOf[SequenceInputStream])
+
+    val dst = new DataInputStream(st)
+    for (i <- 1 to 2500) {
+      assert(i === dst.readInt())
+    }
+    assert(dst.available() === 0)
+    dst.close()
   }
 
   test("retry corrupt blocks (disabled)") {
