@@ -20,9 +20,15 @@ import tempfile
 import threading
 import time
 import unittest
+import sys
+if sys.version >= '3':
+    from unittest.mock import MagicMock
+else:
+    from mock import MagicMock
+
+
 
 from pyspark import SparkFiles, SparkContext
-from pyspark.java_gateway import _launch_gateway
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest, SPARK_HOME
 
 
@@ -250,16 +256,12 @@ class ContextTests(unittest.TestCase):
     def test_forbid_insecure_gateway(self):
         # Fail immediately if you try to create a SparkContext
         # with an insecure gateway
-        gateway = _launch_gateway(insecure=True)
-        log4j = gateway.jvm.org.apache.log4j
-        old_level = log4j.LogManager.getRootLogger().getLevel()
-        try:
-            log4j.LogManager.getRootLogger().setLevel(log4j.Level.FATAL)
-            with self.assertRaises(Exception) as context:
-                SparkContext(gateway=gateway)
-            self.assertIn("insecure Py4j gateway", str(context.exception))
-        finally:
-            log4j.LogManager.getRootLogger().setLevel(old_level)
+        mock_insecure_gateway = MagicMock()
+        mock_insecure_gateway.gateway_parameters = MagicMock()
+        mock_insecure_gateway.gateway_parameters.auth_token = None
+        with self.assertRaises(Exception) as context:
+            SparkContext(gateway=mock_insecure_gateway)
+        self.assertIn("insecure Py4j gateway", str(context.exception))
 
 
 if __name__ == "__main__":
