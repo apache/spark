@@ -323,9 +323,13 @@ class KubernetesSuite extends SparkFunSuite
     if (decomissioningTest) {
       // Wait for the executors to become ready
       Eventually.eventually(TIMEOUT, INTERVAL) {
-        resource.getStatus.getConditions().asScala
+        val resourceConditions = execPods.flatMap{
+          case (podName, resource) => resource.getStatus.getConditions().asScala}
+        val podsReady = (resourceConditions
           .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
-          .headOption.getOrElse(false) shouldBe (true)
+          .headOption.getOrElse(false))
+        assert(podsReady,
+          "The pods did not become ready the resource conditions are ${resourceConditions}")
       }
       // Sleep a small interval to allow execution
       Thread.sleep(100)
