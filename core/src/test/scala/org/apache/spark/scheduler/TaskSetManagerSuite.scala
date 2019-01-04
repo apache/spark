@@ -655,7 +655,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   test("abort the job if total size of results is too large") {
-    val conf = new SparkConf().set("spark.driver.maxResultSize", "2m")
+    val conf = new SparkConf().set(config.MAX_RESULT_SIZE.key, "2m")
     sc = new SparkContext("local", "test", conf)
 
     def genBytes(size: Int): (Int) => Array[Byte] = { (x: Int) =>
