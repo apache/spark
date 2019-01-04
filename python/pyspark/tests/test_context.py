@@ -26,8 +26,6 @@ if sys.version >= '3':
 else:
     from mock import MagicMock
 
-
-
 from pyspark import SparkFiles, SparkContext
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest, SPARK_HOME
 
