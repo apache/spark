@@ -675,10 +675,10 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
     EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
-    "spark.io.compression.snappy.blockSize" -> Seq(
-      AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
-    "spark.io.compression.lz4.blockSize" -> Seq(
-      AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
+     IO_COMPRESSION_SNAPPY_BLOCKSIZE.key -> Seq(
+      AlternateConfig(IO_COMPRESSION_SNAPPY_BLOCK_SIZE.key, "1.4")),
+    IO_COMPRESSION_LZ4_BLOCKSIZE.key -> Seq(
+      AlternateConfig(IO_COMPRESSION_LZ4_BLOCK_SIZE.key, "1.4")),
     "spark.rpc.numRetries" -> Seq(
       AlternateConfig("spark.akka.num.retries", "1.4")),
     "spark.rpc.retry.wait" -> Seq(

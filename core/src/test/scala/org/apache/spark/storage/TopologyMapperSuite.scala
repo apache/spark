@@ -25,7 +25,6 @@ import org.apache.spark._
 import org.apache.spark.internal.config.{STORAGE_REPLICATION_TOPOLOGY_FILE}
 import org.apache.spark.util.Utils
 
-
 class TopologyMapperSuite  extends SparkFunSuite
   with Matchers
   with BeforeAndAfter

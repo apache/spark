@@ -533,7 +533,7 @@ object EventLoggingListenerSuite {
     conf.set(EVENT_LOG_DIR, logDir.toString)
     compressionCodec.foreach { codec =>
       conf.set(EVENT_LOG_COMPRESS, true)
-      conf.set("spark.io.compression.codec", codec)
+      conf.set(IO_COMPRESSION_CODEC.key, codec)
     }
     conf.set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
     conf

@@ -21,8 +21,9 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.Future
+
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerId

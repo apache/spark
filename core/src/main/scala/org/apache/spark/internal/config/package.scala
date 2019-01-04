@@ -157,7 +157,6 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
-
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.executor.memoryOverhead")
     .doc("The amount of off-heap memory to be allocated per executor in cluster mode, " +
       "in MiB unless otherwise specified.")
@@ -188,7 +187,7 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .checkValue(_ >= 0, "The off-heap memory size must not be negative")
     .createWithDefault(0)
-  
+
     private[spark] val MEMORY_STORAGE_FRACTION = ConfigBuilder("spark.memory.storageFraction")
       .doc("Amount of storage memory immune to eviction, expressed as a fraction of the " +
         "size of the region set aside by spark.memory.fraction. The higher this is, the " +
@@ -233,14 +232,14 @@ package object config {
       .doubleConf
       .createWithDefault(0.2)
 
-    private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
-      ConfigBuilder("spark.storage.unrollMemoryThreshold")
+  private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
+    ConfigBuilder("spark.storage.unrollMemoryThreshold")
       .doc("Initial memory to request before unrolling any block")
       .longConf
       .createWithDefault(1024 * 1024)
 
-    private[spark] val STORAGE_REPLICATION_PROACTIVE =
-      ConfigBuilder("spark.storage.replication.proactive")
+  private[spark] val STORAGE_REPLICATION_PROACTIVE =
+    ConfigBuilder("spark.storage.replication.proactive")
       .doc("Enables proactive block replication for RDD blocks. " +
         "Cached RDD block replicas lost due to executor failures are replenished " +
         "if there are any existing available replicas. This tries to " +
@@ -248,8 +247,8 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-    private[spark] val STORAGE_MEMORY_MAP_THRESHOLD =
-      ConfigBuilder("spark.storage.memoryMapThreshold")
+  private[spark] val STORAGE_MEMORY_MAP_THRESHOLD =
+    ConfigBuilder("spark.storage.memoryMapThreshold")
       .doc("Size in bytes of a block above which Spark memory maps when " +
         "reading a block from disk. " +
         "This prevents Spark from memory mapping very small blocks. " +
@@ -258,36 +257,35 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("2m")
 
-    private[spark] val STORAGE_REPLICATION_POLICY =
-      ConfigBuilder("spark.storage.replication.policy")
+  private[spark] val STORAGE_REPLICATION_POLICY =
+    ConfigBuilder("spark.storage.replication.policy")
       .stringConf
       .createWithDefaultString(classOf[RandomBlockReplicationPolicy].getName)
 
-    private[spark] val STORAGE_REPLICATION_TOPOLOGY_MAPPER =
-      ConfigBuilder("spark.storage.replication.topologyMapper")
+  private[spark] val STORAGE_REPLICATION_TOPOLOGY_MAPPER =
+    ConfigBuilder("spark.storage.replication.topologyMapper")
       .stringConf
       .createWithDefaultString(classOf[DefaultTopologyMapper].getName)
 
-    private[spark] val STORAGE_CACHED_PEERS_TTL = ConfigBuilder("spark.storage.cachedPeersTtl")
-      .intConf.createWithDefault(60 * 1000)
+  private[spark] val STORAGE_CACHED_PEERS_TTL = ConfigBuilder("spark.storage.cachedPeersTtl")
+    .intConf.createWithDefault(60 * 1000)
 
-    private[spark] val STORAGE_MAX_REPLICATION_FAILURE =
-      ConfigBuilder("spark.storage.maxReplicationFailures")
+  private[spark] val STORAGE_MAX_REPLICATION_FAILURE =
+    ConfigBuilder("spark.storage.maxReplicationFailures")
       .intConf.createWithDefault(1)
 
-    private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
-      ConfigBuilder("spark.storage.replication.topologyFile").stringConf.createOptional
+  private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
+    ConfigBuilder("spark.storage.replication.topologyFile").stringConf.createOptional
 
-    private[spark] val STORAGE_EXCEPTION_PIN_LEAK =
-      ConfigBuilder("spark.storage.exceptionOnPinLeak")
-        .booleanConf
-        .createWithDefault(false)
+  private[spark] val STORAGE_EXCEPTION_PIN_LEAK =
+    ConfigBuilder("spark.storage.exceptionOnPinLeak")
+      .booleanConf
+      .createWithDefault(false)
 
-    private[spark] val STORAGE_BLOCKMANAGER_TIMEOUTINTERVAL =
-      ConfigBuilder("spark.storage.blockManagerTimeoutIntervalMs")
+  private[spark] val STORAGE_BLOCKMANAGER_TIMEOUTINTERVAL =
+    ConfigBuilder("spark.storage.blockManagerTimeoutIntervalMs")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
-
 
   private[spark] val PYSPARK_EXECUTOR_MEMORY = ConfigBuilder("spark.executor.pyspark.memory")
     .bytesConf(ByteUnit.MiB)
@@ -506,7 +504,7 @@ package object config {
 
   private[spark] val IGNORE_MISSING_FILES = ConfigBuilder("spark.files.ignoreMissingFiles")
     .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
-        "encountering missing files and the contents that have been read will still be returned.")
+      "encountering missing files and the contents that have been read will still be returned.")
     .booleanConf
     .createWithDefault(false)
 
@@ -878,4 +876,61 @@ package object config {
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .intConf
     .createWithDefault(8080)
+
+  private[spark] val IO_COMPRESSION_SNAPPY_BLOCKSIZE =
+    ConfigBuilder("spark.io.compression.snappy.blockSize")
+      .doc("Block size in bytes used in Snappy compression, in the case when " +
+        "Snappy compression codec is used. Lowering this block size " +
+        "will also lower shuffle memory usage when Snappy is used")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("32k")
+
+  private[spark] val IO_COMPRESSION_SNAPPY_BLOCK_SIZE =
+    ConfigBuilder("spark.io.compression.snappy.block.size")
+      .doc("Block size in bytes used in Snappy compression, in the case when " +
+        "Snappy compression codec is used. Lowering this block size " +
+        "will also lower shuffle memory usage when Snappy is used. This used in older version 1.4")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("32k")
+
+  private[spark] val IO_COMPRESSION_LZ4_BLOCKSIZE =
+    ConfigBuilder("spark.io.compression.lz4.blockSize")
+      .doc("Block size in bytes used in LZ4 compression, in the case when LZ4 compression" +
+        "codec is used. Lowering this block size will also lower shuffle memory " +
+        "usage when LZ4 is used.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("32k")
+
+  private[spark] val IO_COMPRESSION_LZ4_BLOCK_SIZE =
+    ConfigBuilder("spark.io.compression.lz4.block.size")
+      .doc("Block size in bytes used in LZ4 compression, in the case when LZ4 compression" +
+        "codec is used. Lowering this block size will also lower shuffle memory " +
+        "usage when LZ4 is used. This used in older version 1.4")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("32k")
+
+  private[spark] val IO_COMPRESSION_CODEC =
+    ConfigBuilder("spark.io.compression.codec")
+      .doc("The codec used to compress internal data such as RDD partitions, event log, " +
+        "broadcast variables and shuffle outputs. By default, Spark provides four codecs: " +
+        "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
+        "the codec")
+      .stringConf
+      .createWithDefaultString("lz4")
+
+  private[spark] val IO_COMPRESSION_ZSTD_BUFFERSIZE =
+    ConfigBuilder("spark.io.compression.zstd.bufferSize")
+      .doc("Buffer size in bytes used in Zstd compression, in the case when Zstd " +
+        "compression codec is used. Lowering this size will lower the shuffle " +
+        "memory usage when Zstd is used, but it might increase the compression " +
+        "cost because of excessive JNI call overhead")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("32k")
+
+  private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
+    ConfigBuilder("spark.io.compression.zstd.level")
+      .doc("Compression level for Zstd compression codec. Increasing the compression" +
+        " level will result in better compression at the expense of more CPU and memory")
+      .intConf
+      .createWithDefault(1)
 }
