@@ -22,9 +22,7 @@ import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -38,6 +36,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.datasources.none.NoneDataSource
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.streaming._
@@ -621,6 +620,8 @@ object DataSource extends Logging {
         "org.apache.spark.sql.hive.orc.OrcFileFormat"
       case "com.databricks.spark.avro" if conf.replaceDatabricksSparkAvroEnabled =>
         "org.apache.spark.sql.avro.AvroFileFormat"
+      case name if name.equalsIgnoreCase("none") =>
+        "org.apache.spark.sql.execution.datasources.none.NoneDataSource"
       case name => name
     }
     val provider2 = s"$provider1.DefaultSource"
