@@ -14,9 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import random
 import sys
 import time
+import unittest
 
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
 from pyspark.testing.utils import PySparkTestCase
@@ -134,10 +136,9 @@ class TaskContextTests(PySparkTestCase):
         self.assertTrue(len(taskInfos[0]) == 4)
 
 
-class TaskContextTestsWithWorkerReuse(PySparkTestCase):
+class TaskContextTestsWithWorkerReuse(unittest.TestCase):
 
     def setUp(self):
-        self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.python.worker.reuse", "true")
         self.sc = SparkContext('local[2]', class_name, conf=conf)
@@ -147,7 +148,6 @@ class TaskContextTestsWithWorkerReuse(PySparkTestCase):
         Regression test for SPARK-25921: verify that BarrierTaskContext.barrier() with
         reused python worker.
         """
-        import os
         # start a normal job first to start all workers and get all worker pids
         worker_pids = self.sc.parallelize(range(2), 2).map(lambda x: os.getpid()).collect()
         # the worker will reuse in this barrier job
@@ -169,6 +169,9 @@ class TaskContextTestsWithWorkerReuse(PySparkTestCase):
         self.assertTrue(max(times) - min(times) < 1)
         for pid in pids:
             self.assertTrue(pid in worker_pids)
+
+    def tearDown(self):
+        self.sc.stop()
 
 
 if __name__ == "__main__":
