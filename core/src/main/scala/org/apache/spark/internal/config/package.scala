@@ -934,4 +934,16 @@ package object config {
     ConfigBuilder("spark.buffer.size")
       .intConf
       .createWithDefault(65536)
+
+  private[spark] val LOCALITY_WAIT_PROCESS = ConfigBuilder("spark.locality.wait.process")
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefaultString(LOCALITY_WAIT.defaultValueString)
+
+  private[spark] val LOCALITY_WAIT_NODE = ConfigBuilder("spark.locality.wait.node")
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefaultString(LOCALITY_WAIT.defaultValueString)
+
+  private[spark] val LOCALITY_WAIT_RACK = ConfigBuilder("spark.locality.wait.rack")
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefaultString(LOCALITY_WAIT.defaultValueString)
 }
