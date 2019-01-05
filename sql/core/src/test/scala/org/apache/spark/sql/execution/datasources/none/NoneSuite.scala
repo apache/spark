@@ -23,6 +23,11 @@ class NoneSuite extends SharedSQLContext {
   import testImplicits._
 
   test("writing to none") {
-    spark.range(10).write.format("none").save()
+    val numElems = 10
+    val accum = spark.sparkContext.longAccumulator
+    spark.range(10)
+      .map(x => {accum.add(1); x})
+      .write.format("none").save()
+    assert(accum.value == numElems)
   }
 }
