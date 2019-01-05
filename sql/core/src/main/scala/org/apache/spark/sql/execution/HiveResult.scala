@@ -57,7 +57,7 @@ object HiveResult {
   }
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
-  private def toHiveString(a: (Any, DataType)): String = {
+  def toHiveString(a: (Any, DataType)): String = {
     val primitiveTypes = Seq(StringType, IntegerType, LongType, DoubleType, FloatType,
       BooleanType, ByteType, ShortType, DateType, TimestampType, BinaryType)
     val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
@@ -110,6 +110,7 @@ object HiveResult {
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
       case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
       case (interval, CalendarIntervalType) => interval.toString
+      case (other, _ : UserDefinedType[_]) => other.toString
       case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
     }
   }
