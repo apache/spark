@@ -133,7 +133,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.byteStringAsBytes("1p") === ByteUnit.PiB.toBytes(1))
 
     // Overflow handling, 1073741824p exceeds Long.MAX_VALUE if converted straight to Bytes
-    // This demonstrates that we can have e.g 1024^3 PB without overflowing.
+    // This demonstrates that we can have e.g 1024^3 PiB without overflowing.
     assert(Utils.byteStringAsGb("1073741824p") === ByteUnit.PiB.toGiB(1073741824))
     assert(Utils.byteStringAsMb("1073741824p") === ByteUnit.PiB.toMiB(1073741824))
 
@@ -149,7 +149,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     // Test overflow exception
     intercept[IllegalArgumentException] {
-      // This value exceeds Long.MAX when converted to TB
+      // This value exceeds Long.MAX when converted to TiB
       ByteUnit.PiB.toTiB(9223372036854775807L)
     }
 
@@ -189,13 +189,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")
     assert(Utils.bytesToString(1500) === "1500.0 B")
-    assert(Utils.bytesToString(2000000) === "1953.1 KB")
-    assert(Utils.bytesToString(2097152) === "2.0 MB")
-    assert(Utils.bytesToString(2306867) === "2.2 MB")
-    assert(Utils.bytesToString(5368709120L) === "5.0 GB")
-    assert(Utils.bytesToString(5L * (1L << 40)) === "5.0 TB")
-    assert(Utils.bytesToString(5L * (1L << 50)) === "5.0 PB")
-    assert(Utils.bytesToString(5L * (1L << 60)) === "5.0 EB")
+    assert(Utils.bytesToString(2000000) === "1953.1 KiB")
+    assert(Utils.bytesToString(2097152) === "2.0 MiB")
+    assert(Utils.bytesToString(2306867) === "2.2 MiB")
+    assert(Utils.bytesToString(5368709120L) === "5.0 GiB")
+    assert(Utils.bytesToString(5L * (1L << 40)) === "5.0 TiB")
+    assert(Utils.bytesToString(5L * (1L << 50)) === "5.0 PiB")
+    assert(Utils.bytesToString(5L * (1L << 60)) === "5.0 EiB")
     assert(Utils.bytesToString(BigInt(1L << 11) * (1L << 60)) === "2.36E+21 B")
   }
 
@@ -1154,22 +1154,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     intercept[IllegalArgumentException] {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
-  }
-
-  object MalformedClassObject {
-    class MalformedClass
-  }
-
-  test("Safe getSimpleName") {
-    // getSimpleName on class of MalformedClass will result in error: Malformed class name
-    // Utils.getSimpleName works
-    val err = intercept[java.lang.InternalError] {
-      classOf[MalformedClassObject.MalformedClass].getSimpleName
-    }
-    assert(err.getMessage === "Malformed class name")
-
-    assert(Utils.getSimpleName(classOf[MalformedClassObject.MalformedClass]) ===
-      "UtilsSuite$MalformedClassObject$MalformedClass")
   }
 
   test("stringHalfWidth") {

@@ -211,7 +211,7 @@ class DataFrameReader(OptionUtils):
                      set, it uses the default value, ``PERMISSIVE``.
 
                 * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
@@ -226,11 +226,12 @@ class DataFrameReader(OptionUtils):
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
@@ -406,11 +407,12 @@ class DataFrameReader(OptionUtils):
         :param negativeInf: sets the string representation of a negative infinity value. If None
                             is set, it uses the default value, ``Inf``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
@@ -424,7 +426,7 @@ class DataFrameReader(OptionUtils):
                      set, it uses the default value, ``PERMISSIVE``.
 
                 * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
@@ -803,11 +805,12 @@ class DataFrameWriter(OptionUtils):
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param encoding: specifies encoding (charset) of saved json files. If None is set,
@@ -904,11 +907,12 @@ class DataFrameWriter(OptionUtils):
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from

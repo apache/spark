@@ -40,7 +40,7 @@ class HadoopFileWholeTextReader(file: PartitionedFile, conf: Configuration)
       Array(new Path(new URI(file.filePath))),
       Array(file.start),
       Array(file.length),
-      // TODO: Implement Locality
+      // The locality is decided by `getPreferredLocations` in `FileScanRDD`.
       Array.empty[String])
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)

@@ -184,14 +184,14 @@ package object util extends Logging {
       start: String,
       sep: String,
       end: String,
-      maxNumFields: Int = SQLConf.get.maxToStringFields): String = {
-    if (seq.length > maxNumFields) {
+      maxFields: Int): String = {
+    if (seq.length > maxFields) {
       if (truncationWarningPrinted.compareAndSet(false, true)) {
         logWarning(
           "Truncated the string representation of a plan since it was too large. This " +
             s"behavior can be adjusted by setting '${SQLConf.MAX_TO_STRING_FIELDS.key}'.")
       }
-      val numFields = math.max(0, maxNumFields - 1)
+      val numFields = math.max(0, maxFields - 1)
       seq.take(numFields).mkString(
         start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
     } else {
@@ -200,7 +200,9 @@ package object util extends Logging {
   }
 
   /** Shorthand for calling truncatedString() without start or end strings. */
-  def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
+  def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
+    truncatedString(seq, "", sep, "", maxFields)
+  }
 
   /** Whether we have warned about plan string truncation yet. */
   private val planSizeWarningPrinted = new AtomicBoolean(false)

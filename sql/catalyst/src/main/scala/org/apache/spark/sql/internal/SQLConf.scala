@@ -263,7 +263,9 @@ object SQLConf {
       .createWithDefault(true)
 
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
-    .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
+    .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
+      "Note: For structured streaming, this configuration cannot be changed between query " +
+      "restarts from the same checkpoint location.")
     .intConf
     .createWithDefault(200)
 
@@ -882,7 +884,9 @@ object SQLConf {
       .internal()
       .doc(
         "The class used to manage state data in stateful streaming queries. This class must " +
-          "be a subclass of StateStoreProvider, and must have a zero-arg constructor.")
+          "be a subclass of StateStoreProvider, and must have a zero-arg constructor. " +
+          "Note: For structured streaming, this configuration cannot be changed between query " +
+          "restarts from the same checkpoint location.")
       .stringConf
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")

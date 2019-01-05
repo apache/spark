@@ -15,16 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.r
+package org.apache.spark.executor
 
-private[spark] object SparkRDefaults {
+import org.apache.spark.SparkFunSuite
 
-  // Default value for spark.r.backendConnectionTimeout config
-  val DEFAULT_CONNECTION_TIMEOUT: Int = 6000
 
-  // Default value for spark.r.heartBeatInterval config
-  val DEFAULT_HEARTBEAT_INTERVAL: Int = 100
+class ProcfsMetricsGetterSuite extends SparkFunSuite {
 
-  // Default value for spark.r.numRBackendThreads config
-  val DEFAULT_NUM_RBACKEND_THREADS = 2
+  val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
+
+  test("testGetProcessInfo") {
+    var r = ProcfsMetrics(0, 0, 0, 0, 0, 0)
+    r = p.addProcfsMetricsFromOneProcess(r, 26109)
+    assert(r.jvmVmemTotal == 4769947648L)
+    assert(r.jvmRSSTotal == 262610944)
+    assert(r.pythonVmemTotal == 0)
+    assert(r.pythonRSSTotal == 0)
+
+    r = p.addProcfsMetricsFromOneProcess(r, 22763)
+    assert(r.pythonVmemTotal == 360595456)
+    assert(r.pythonRSSTotal == 7831552)
+    assert(r.jvmVmemTotal == 4769947648L)
+    assert(r.jvmRSSTotal == 262610944)
+  }
 }

@@ -49,7 +49,7 @@ private[spark] class HiveDelegationTokenProvider
       new HiveConf(hadoopConf, classOf[HiveConf])
     } catch {
       case NonFatal(e) =>
-        logDebug("Fail to create Hive Configuration", e)
+        logWarning("Fail to create Hive Configuration", e)
         hadoopConf
       case e: NoClassDefFoundError =>
         logWarning(classNotFoundErrorStr)
@@ -104,7 +104,7 @@ private[spark] class HiveDelegationTokenProvider
       None
     } catch {
       case NonFatal(e) =>
-        logDebug(s"Failed to get token from service $serviceName", e)
+        logWarning(s"Failed to get token from service $serviceName", e)
         None
       case e: NoClassDefFoundError =>
         logWarning(classNotFoundErrorStr)
