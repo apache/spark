@@ -67,3 +67,4 @@ class NoneWriter extends DataWriter[InternalRow] with Logging {
   override def commit(): WriterCommitMessage = null
   override def abort(): Unit = ()
 }
+

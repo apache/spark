@@ -31,3 +31,4 @@ class NoneSuite extends SharedSQLContext {
     assert(accum.value == numElems)
   }
 }
+
