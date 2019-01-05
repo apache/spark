@@ -25,6 +25,7 @@ import org.scalatest.Assertions
 
 import org.apache.spark._
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.BROADCAST_COMPRESS
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.security.EncryptionFunSuite
@@ -69,7 +70,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
   encryptionTest("Accessing TorrentBroadcast variables in a local cluster") { conf =>
     val numSlaves = 4
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    conf.set("spark.broadcast.compress", "true")
+    conf.set(BROADCAST_COMPRESS.key, "true")
     sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
     val list = List[Int](1, 2, 3, 4)
     val broadcast = sc.broadcast(list)

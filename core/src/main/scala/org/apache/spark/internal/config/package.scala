@@ -975,10 +975,25 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(Int.MaxValue - 512)
 
-  private[spark] val BROADCAST_COMPRESS =
-    ConfigBuilder("spark.broadcast.compress")
-      .doc("Whether to compress broadcast variables before sending them. " +
-        "Generally a good idea. Compression will use spark.io.compression.codec")
-      .booleanConf.createWithDefault(true)
+  private[spark] val BROADCAST_COMPRESS = ConfigBuilder("spark.broadcast.compress")
+    .doc("Whether to compress broadcast variables before sending them. " +
+      "Generally a good idea. Compression will use spark.io.compression.codec")
+    .booleanConf.createWithDefault(true)
+
+  private[spark] val BROADCAST_BLOCKSIZE = ConfigBuilder("spark.broadcast.blockSize")
+    .doc("Size of each piece of a block for TorrentBroadcastFactory, in " +
+      "KiB unless otherwise specified. Too large a value decreases " +
+      "parallelism during broadcast (makes it slower); however, " +
+      "if it is too small, BlockManager might take a performance hit")
+    .bytesConf(ByteUnit.KiB)
+    .createWithDefaultString("4m")
+
+  private[spark] val BROADCAST_CHECKSUM = ConfigBuilder("spark.broadcast.checksum")
+    .doc("Whether to enable checksum for broadcast. If enabled, " +
+      "broadcasts will include a checksum, which can help detect " +
+      "corrupted blocks, at the cost of computing and sending a little " +
+      "more data. It's possible to disable it if the network has other " +
+      "mechanisms to guarantee data won't be corrupted during broadcast")
+    .booleanConf.createWithDefault(true)
 
 }

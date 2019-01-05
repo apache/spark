@@ -854,7 +854,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store.stop()
       store = null
 
-      conf.set("spark.broadcast.compress", "true")
+      conf.set(BROADCAST_COMPRESS.key, "true")
       store = makeBlockManager(20000, "exec3")
       store.putSingle(
         BroadcastBlockId(0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
@@ -863,7 +863,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store.stop()
       store = null
 
-      conf.set("spark.broadcast.compress", "false")
+      conf.set(BROADCAST_COMPRESS.key, "false")
       store = makeBlockManager(20000, "exec4")
       store.putSingle(
         BroadcastBlockId(0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
@@ -893,7 +893,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store = null
     } finally {
       System.clearProperty("spark.shuffle.compress")
-      System.clearProperty("spark.broadcast.compress")
+      System.clearProperty(BROADCAST_COMPRESS.key)
       System.clearProperty("spark.rdd.compress")
     }
   }
