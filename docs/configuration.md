@@ -1509,10 +1509,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.network.io.preferDirectBufs</code></td>
   <td>true</td>
   <td>
-    If enable then off-heap buffer allocations are prefered by the shared ByteBuf allocators.
+    If enabled then off-heap buffer allocations are preferred by the shared allocators.
     Off-heap buffers are used to reduce garbage collection during shuffle and cache
     block transfer. For environments where off-heap memory is tightly limited, users may wish to
-    turn this off to force all allocations from Netty to be on-heap.
+    turn this off to force all allocations to be on-heap.
     </td>
 </tr>
 <tr>
