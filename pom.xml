@@ -39,7 +39,7 @@
   </licenses>
   <scm>
     <connection>scm:git:git@github.com:apache/spark.git</connection>
-    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/spark.git</developerConnection>
+    <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/spark.git</url>
     <tag>HEAD</tag>
   </scm>
