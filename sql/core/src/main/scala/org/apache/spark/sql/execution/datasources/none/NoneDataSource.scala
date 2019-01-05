@@ -48,7 +48,8 @@ class NoneWriteSupport extends BatchWriteSupport {
   override def createBatchWriterFactory(): DataWriterFactory = {
     new NoneWriterFactory()
   }
-  override def onDataWriterCommit(message: WriterCommitMessage): Unit = ()
+
+  override def useCommitCoordinator(): Boolean = false
   override def commit(messages: Array[WriterCommitMessage]): Unit = ()
   override def abort(messages: Array[WriterCommitMessage]): Unit = ()
 }
