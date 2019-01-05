@@ -22,12 +22,14 @@ import org.apache.spark.sql.test.SharedSQLContext
 class NoneSuite extends SharedSQLContext {
   import testImplicits._
 
-  test("writing to none") {
+  test("materialisation of all rows") {
     val numElems = 10
     val accum = spark.sparkContext.longAccumulator
-    spark.range(10)
+    spark.range(numElems)
       .map(x => {accum.add(1); x})
-      .write.format("none").save()
+      .write.
+      format("none")
+      .save()
     assert(accum.value == numElems)
   }
 }
