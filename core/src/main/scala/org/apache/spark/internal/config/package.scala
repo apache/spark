@@ -929,4 +929,9 @@ package object config {
         " level will result in better compression at the expense of more CPU and memory")
       .intConf
       .createWithDefault(1)
+
+  private[spark] val BUFFER_SIZE =
+    ConfigBuilder("spark.buffer.size")
+      .intConf
+      .createWithDefault(65536)
 }
