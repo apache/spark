@@ -975,4 +975,10 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(Int.MaxValue - 512)
 
+  private[spark] val BROADCAST_COMPRESS =
+    ConfigBuilder("spark.broadcast.compress")
+      .doc("Whether to compress broadcast variables before sending them. " +
+        "Generally a good idea. Compression will use spark.io.compression.codec")
+      .booleanConf.createWithDefault(true)
+
 }
