@@ -22,10 +22,40 @@ import java.time.chrono.IsoChronology
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
 import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 trait DateTimeFormatterHelper {
+  protected def toInstantWithZoneId(temporalAccessor: TemporalAccessor, zoneId: ZoneId): Instant = {
+    val localTime = if (temporalAccessor.query(TemporalQueries.localTime) == null) {
+      LocalTime.ofNanoOfDay(0)
+    } else {
+      LocalTime.from(temporalAccessor)
+    }
+    val localDate = LocalDate.from(temporalAccessor)
+    val localDateTime = LocalDateTime.of(localDate, localTime)
+    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+    Instant.from(zonedDateTime)
+  }
+}
 
-  protected def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
+object DateTimeFormatterHelper {
+  private val cache = new ConcurrentHashMap[(String, Locale), DateTimeFormatter]()
+
+  def getFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
+    val key = (pattern, locale)
+    var formatter = cache.get(key)
+    if (formatter == null) {
+      formatter = buildFormatter(pattern, locale)
+      val previousFormatter = cache.putIfAbsent(key, formatter)
+      if (previousFormatter != null) {
+        // Another thread already updated the cache, we should return the instance from the cache
+        formatter = previousFormatter
+      }
+    }
+    formatter
+  }
+
+  private def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
     new DateTimeFormatterBuilder()
       .parseCaseInsensitive()
       .appendPattern(pattern)
@@ -37,17 +67,5 @@ trait DateTimeFormatterHelper {
       .toFormatter(locale)
       .withChronology(IsoChronology.INSTANCE)
       .withResolverStyle(ResolverStyle.STRICT)
-  }
-
-  protected def toInstantWithZoneId(temporalAccessor: TemporalAccessor, zoneId: ZoneId): Instant = {
-    val localTime = if (temporalAccessor.query(TemporalQueries.localTime) == null) {
-      LocalTime.ofNanoOfDay(0)
-    } else {
-      LocalTime.from(temporalAccessor)
-    }
-    val localDate = LocalDate.from(temporalAccessor)
-    val localDateTime = LocalDateTime.of(localDate, localTime)
-    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
-    Instant.from(zonedDateTime)
   }
 }
