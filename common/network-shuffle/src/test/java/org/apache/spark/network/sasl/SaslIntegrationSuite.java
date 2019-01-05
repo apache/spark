@@ -192,7 +192,7 @@ public class SaslIntegrationSuite {
       CountDownLatch blockFetchLatch = new CountDownLatch(1);
       BlockFetchingListener listener = new BlockFetchingListener() {
         @Override
-        public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
+        public void onBlockFetchSuccess(String[] blockId, ManagedBuffer data) {
           blockFetchLatch.countDown();
         }
         @Override
@@ -218,7 +218,7 @@ public class SaslIntegrationSuite {
 
       // Make a successful request to fetch blocks, which creates a new stream. But do not actually
       // fetch any blocks, to keep the stream open.
-      OpenBlocks openMessage = new OpenBlocks("app-1", "0", blockIds);
+      OpenBlocks openMessage = new OpenBlocks("app-1", "0", blockIds, false);
       ByteBuffer response = client1.sendRpcSync(openMessage.toByteBuffer(), TIMEOUT_MS);
       StreamHandle stream = (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response);
       long streamId = stream.streamId;

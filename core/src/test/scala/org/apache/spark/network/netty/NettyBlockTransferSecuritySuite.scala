@@ -162,10 +162,10 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
           promise.failure(exception)
         }
 
-        override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
+        override def onBlockFetchSuccess(blockIds: Array[String], data: ManagedBuffer): Unit = {
           promise.success(data.retain())
         }
-      }, null)
+      }, null, false)
 
     ThreadUtils.awaitReady(promise.future, FiniteDuration(10, TimeUnit.SECONDS))
     promise.future.value.get

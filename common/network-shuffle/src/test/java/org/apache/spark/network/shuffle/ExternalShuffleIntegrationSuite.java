@@ -138,13 +138,15 @@ public class ExternalShuffleIntegrationSuite {
       client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
         new BlockFetchingListener() {
           @Override
-          public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
+          public void onBlockFetchSuccess(String[] blockIds, ManagedBuffer data) {
             synchronized (this) {
-              if (!res.successBlocks.contains(blockId) && !res.failedBlocks.contains(blockId)) {
-                data.retain();
-                res.successBlocks.add(blockId);
-                res.buffers.add(data);
-                requestsRemaining.release();
+              for (String blockId : blockIds) {
+                if (!res.successBlocks.contains(blockId) && !res.failedBlocks.contains(blockId)) {
+                  data.retain();
+                  res.successBlocks.add(blockId);
+                  res.buffers.add(data);
+                  requestsRemaining.release();
+                }
               }
             }
           }
@@ -158,7 +160,7 @@ public class ExternalShuffleIntegrationSuite {
               }
             }
           }
-        }, null);
+        }, null, false);
 
       if (!requestsRemaining.tryAcquire(blockIds.length, 5, TimeUnit.SECONDS)) {
         fail("Timeout getting response from the server");

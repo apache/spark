@@ -60,7 +60,7 @@ public class OneForOneBlockFetcherSuite {
 
     BlockFetchingListener listener = fetchBlocks(blocks);
 
-    verify(listener).onBlockFetchSuccess("shuffle_0_0_0", blocks.get("shuffle_0_0_0"));
+    verify(listener).onBlockFetchSuccess(new String[] {"shuffle_0_0_0"}, blocks.get("shuffle_0_0_0"));
   }
 
   @Test
@@ -73,7 +73,7 @@ public class OneForOneBlockFetcherSuite {
     BlockFetchingListener listener = fetchBlocks(blocks);
 
     for (int i = 0; i < 3; i ++) {
-      verify(listener, times(1)).onBlockFetchSuccess("b" + i, blocks.get("b" + i));
+      verify(listener, times(1)).onBlockFetchSuccess(new String[] {"b" + i}, blocks.get("b" + i));
     }
   }
 
@@ -87,7 +87,7 @@ public class OneForOneBlockFetcherSuite {
     BlockFetchingListener listener = fetchBlocks(blocks);
 
     // Each failure will cause a failure to be invoked in all remaining block fetches.
-    verify(listener, times(1)).onBlockFetchSuccess("b0", blocks.get("b0"));
+    verify(listener, times(1)).onBlockFetchSuccess(new String[] {"b0"}, blocks.get("b0"));
     verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
     verify(listener, times(2)).onBlockFetchFailure(eq("b2"), any());
   }
@@ -102,9 +102,9 @@ public class OneForOneBlockFetcherSuite {
     BlockFetchingListener listener = fetchBlocks(blocks);
 
     // We may call both success and failure for the same block.
-    verify(listener, times(1)).onBlockFetchSuccess("b0", blocks.get("b0"));
+    verify(listener, times(1)).onBlockFetchSuccess(new String[] {"b0"}, blocks.get("b0"));
     verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
-    verify(listener, times(1)).onBlockFetchSuccess("b2", blocks.get("b2"));
+    verify(listener, times(1)).onBlockFetchSuccess(new String[] {"b2"}, blocks.get("b2"));
     verify(listener, times(1)).onBlockFetchFailure(eq("b2"), any());
   }
 
@@ -138,8 +138,8 @@ public class OneForOneBlockFetcherSuite {
       BlockTransferMessage message = BlockTransferMessage.Decoder.fromByteBuffer(
         (ByteBuffer) invocationOnMock.getArguments()[0]);
       RpcResponseCallback callback = (RpcResponseCallback) invocationOnMock.getArguments()[1];
-      callback.onSuccess(new StreamHandle(123, blocks.size()).toByteBuffer());
-      assertEquals(new OpenBlocks("app-id", "exec-id", blockIds), message);
+      callback.onSuccess(new StreamHandle(123, blocks.size(), new int[0]).toByteBuffer());
+      assertEquals(new OpenBlocks("app-id", "exec-id", blockIds, false), message);
       return null;
     }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
 
