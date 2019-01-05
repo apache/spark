@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 

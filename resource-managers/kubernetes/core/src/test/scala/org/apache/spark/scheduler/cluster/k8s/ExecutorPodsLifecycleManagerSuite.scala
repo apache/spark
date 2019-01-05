@@ -21,7 +21,7 @@ import io.fabric8.kubernetes.api.model.{DoneablePod, Pod}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{Mock, MockitoAnnotations}
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -128,7 +128,7 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
   private def namedPodsAnswer(): Answer[PodResource[Pod, DoneablePod]] = {
     new Answer[PodResource[Pod, DoneablePod]] {
       override def answer(invocation: InvocationOnMock): PodResource[Pod, DoneablePod] = {
-        val podName = invocation.getArgumentAt(0, classOf[String])
+        val podName: String = invocation.getArgument(0)
         namedExecutorPods.getOrElseUpdate(
           podName, mock(classOf[PodResource[Pod, DoneablePod]]))
       }

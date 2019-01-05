@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.MoreExecutors
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{any, anyLong}
+import org.mockito.ArgumentMatchers.{any, anyLong}
 import org.mockito.Mockito.{spy, times, verify}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.streaming.continuous
 
+import org.mockito.ArgumentMatchers.{any, eq => eqTo}
 import org.mockito.InOrder
-import org.mockito.Matchers.{any, eq => eqTo}
-import org.mockito.Mockito._
+import org.mockito.Mockito.{inOrder, never, verify}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mockito.MockitoSugar
 

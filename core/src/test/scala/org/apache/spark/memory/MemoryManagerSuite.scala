@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.mockito.Matchers.{any, anyLong}
+import org.mockito.ArgumentMatchers.{any, anyLong}
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer

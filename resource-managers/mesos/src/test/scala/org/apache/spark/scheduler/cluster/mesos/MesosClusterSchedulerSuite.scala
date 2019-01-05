@@ -24,7 +24,8 @@ import scala.collection.JavaConverters._
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Value.{Scalar, Type}
 import org.apache.mesos.SchedulerDriver
-import org.mockito.{ArgumentCaptor, Matchers}
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.{eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.mockito.MockitoSugar
 
@@ -133,7 +134,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     when(
       driver.launchTasks(
-        Matchers.eq(Collections.singleton(offer.getId)),
+        meq(Collections.singleton(offer.getId)),
         capture.capture())
     ).thenReturn(Status.valueOf(1))
 
@@ -156,7 +157,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(mem.exists(_.getRole() == "*"))
 
     verify(driver, times(1)).launchTasks(
-      Matchers.eq(Collections.singleton(offer.getId)),
+      meq(Collections.singleton(offer.getId)),
       capture.capture()
     )
   }

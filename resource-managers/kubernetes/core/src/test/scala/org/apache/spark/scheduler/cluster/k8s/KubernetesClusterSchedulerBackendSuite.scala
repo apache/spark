@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
-import org.mockito.Matchers.{eq => mockitoEq}
+import org.mockito.ArgumentMatchers.{eq => mockitoEq}
 import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.BeforeAndAfter
 

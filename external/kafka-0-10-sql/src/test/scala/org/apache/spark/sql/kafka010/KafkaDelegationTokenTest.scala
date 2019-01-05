@@ -22,7 +22,7 @@ import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
-import org.mockito.Mockito.{doReturn, mock}
+import org.mockito.Mockito.mock
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
@@ -34,6 +34,8 @@ import org.apache.spark.deploy.security.KafkaTokenUtil.KafkaDelegationTokenIdent
  */
 trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
   self: SparkFunSuite =>
+
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   protected val tokenId = "tokenId" + ju.UUID.randomUUID().toString
   protected val tokenPassword = "tokenPassword" + ju.UUID.randomUUID().toString

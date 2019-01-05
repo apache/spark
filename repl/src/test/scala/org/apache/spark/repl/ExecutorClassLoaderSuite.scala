@@ -30,7 +30,7 @@ import scala.io.Source
 import scala.language.implicitConversions
 
 import com.google.common.io.Files
-import org.mockito.Matchers.anyString
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
