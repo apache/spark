@@ -18,6 +18,9 @@
 package org.apache.spark.internal.config
 
 private[spark] object Tests {
+
+  val TEST_USE_COMPRESSED_OOPS_KEY = "spark.test.useCompressedOops"
+
   val TEST_MEMORY = ConfigBuilder("spark.testing.memory")
     .longConf
     .createWithDefault(Runtime.getRuntime.maxMemory)
@@ -28,10 +31,6 @@ private[spark] object Tests {
       .createWithDefault(100)
 
   val IS_TESTING = ConfigBuilder("spark.testing")
-    .booleanConf
-    .createOptional
-
-  val TEST_USE_COMPRESSED_OOPS = ConfigBuilder("spark.test.useCompressedOops")
     .booleanConf
     .createOptional
 
