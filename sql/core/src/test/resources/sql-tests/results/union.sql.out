@@ -40,14 +40,14 @@ FROM   (SELECT * FROM t1
         UNION ALL
         SELECT * FROM t2)
 -- !query 3 schema
-struct<c1:decimal(11,1),c2:string>
+struct<c1:double,c2:string>
 -- !query 3 output
-1	1
-1	1
-1	a
-2	4
-2	4
-2	b
+1.0	1
+1.0	1
+1.0	a
+2.0	4
+2.0	4
+2.0	b
 
 
 -- !query 4

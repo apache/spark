@@ -21,7 +21,7 @@ true
 -- !query 2
 select 1.0 = '1'
 -- !query 2 schema
-struct<(CAST(1.0 AS DOUBLE) = CAST(1 AS DOUBLE)):boolean>
+struct<(1.0 = CAST(1 AS DOUBLE)):boolean>
 -- !query 2 output
 true
 
@@ -29,7 +29,7 @@ true
 -- !query 3
 select 1.5 = '1.51'
 -- !query 3 schema
-struct<(CAST(1.5 AS DOUBLE) = CAST(1.51 AS DOUBLE)):boolean>
+struct<(1.5 = CAST(1.51 AS DOUBLE)):boolean>
 -- !query 3 output
 false
 
@@ -69,7 +69,7 @@ false
 -- !query 8
 select '1.5' > 0.5
 -- !query 8 schema
-struct<(CAST(1.5 AS DOUBLE) > CAST(0.5 AS DOUBLE)):boolean>
+struct<(CAST(1.5 AS DOUBLE) > 0.5):boolean>
 -- !query 8 output
 true
 
@@ -117,7 +117,7 @@ true
 -- !query 14
 select 2.0 >= '2.2'
 -- !query 14 schema
-struct<(CAST(2.0 AS DOUBLE) >= CAST(2.2 AS DOUBLE)):boolean>
+struct<(2.0 >= CAST(2.2 AS DOUBLE)):boolean>
 -- !query 14 output
 false
 
@@ -125,7 +125,7 @@ false
 -- !query 15
 select '1.5' >= 0.5
 -- !query 15 schema
-struct<(CAST(1.5 AS DOUBLE) >= CAST(0.5 AS DOUBLE)):boolean>
+struct<(CAST(1.5 AS DOUBLE) >= 0.5):boolean>
 -- !query 15 output
 true
 
@@ -173,7 +173,7 @@ false
 -- !query 21
 select 2.0 < '2.2'
 -- !query 21 schema
-struct<(CAST(2.0 AS DOUBLE) < CAST(2.2 AS DOUBLE)):boolean>
+struct<(2.0 < CAST(2.2 AS DOUBLE)):boolean>
 -- !query 21 output
 true
 
@@ -181,7 +181,7 @@ true
 -- !query 22
 select 0.5 < '1.5'
 -- !query 22 schema
-struct<(CAST(0.5 AS DOUBLE) < CAST(1.5 AS DOUBLE)):boolean>
+struct<(0.5 < CAST(1.5 AS DOUBLE)):boolean>
 -- !query 22 output
 true
 
@@ -229,7 +229,7 @@ true
 -- !query 28
 select 2.0 <= '2.2'
 -- !query 28 schema
-struct<(CAST(2.0 AS DOUBLE) <= CAST(2.2 AS DOUBLE)):boolean>
+struct<(2.0 <= CAST(2.2 AS DOUBLE)):boolean>
 -- !query 28 output
 true
 
@@ -237,7 +237,7 @@ true
 -- !query 29
 select 0.5 <= '1.5'
 -- !query 29 schema
-struct<(CAST(0.5 AS DOUBLE) <= CAST(1.5 AS DOUBLE)):boolean>
+struct<(0.5 <= CAST(1.5 AS DOUBLE)):boolean>
 -- !query 29 output
 true
 

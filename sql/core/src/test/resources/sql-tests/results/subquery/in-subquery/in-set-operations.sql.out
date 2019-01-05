@@ -498,9 +498,9 @@ FROM   (SELECT *
                           FROM   t3
                           WHERE  t4.t2a = t3a))
 -- !query 13 schema
-struct<t2a:string,t2b:smallint,t2c:int,t2d:bigint,t2e:float,t2f:double,t2g:decimal(2,-2),t2h:timestamp,t2i:date>
+struct<t2a:string,t2b:smallint,t2c:int,t2d:bigint,t2e:float,t2f:double,t2g:double,t2h:timestamp,t2i:date>
 -- !query 13 output
-val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1b	8	16	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
 
 
 -- !query 14

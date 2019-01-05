@@ -1591,7 +1591,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   /**
    * Create an integral literal expression. The code selects the most narrow integral type
-   * possible, either a BigDecimal, a Long or an Integer is returned.
+   * possible, either a BigDecimal, a Double, a Long or an Integer is returned.
    */
   override def visitIntegerLiteral(ctx: IntegerLiteralContext): Literal = withOrigin(ctx) {
     BigDecimal(ctx.getText) match {
@@ -1599,15 +1599,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Literal(v.intValue())
       case v if v.isValidLong =>
         Literal(v.longValue())
+      case v if v.isDecimalDouble && !conf.getConf(SQLConf.LEGACY_LITERALS_AS_DECIMAL) =>
+        Literal(v.doubleValue())
       case v => Literal(v.underlying())
     }
   }
 
   /**
-   * Create a decimal literal for a regular decimal number.
+   * Create a Double or Decimal literal for a regular decimal number.
    */
   override def visitDecimalLiteral(ctx: DecimalLiteralContext): Literal = withOrigin(ctx) {
-    Literal(BigDecimal(ctx.getText).underlying())
+    BigDecimal(ctx.getText) match {
+      case v if v.isDecimalDouble && !conf.getConf(SQLConf.LEGACY_LITERALS_AS_DECIMAL) =>
+        Literal(v.doubleValue())
+      case v => Literal(v.underlying())
+    }
   }
 
   /** Create a numeric literal expression. */

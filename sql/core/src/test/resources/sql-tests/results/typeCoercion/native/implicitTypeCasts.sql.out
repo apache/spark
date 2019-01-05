@@ -45,7 +45,7 @@ struct<(CAST(4 AS DOUBLE) / CAST(CAST(2 AS DOUBLE) AS DOUBLE)):double>
 -- !query 5
 SELECT 1.1 + '2' FROM t
 -- !query 5 schema
-struct<(CAST(1.1 AS DOUBLE) + CAST(2 AS DOUBLE)):double>
+struct<(1.1 + CAST(2 AS DOUBLE)):double>
 -- !query 5 output
 3.1
 
@@ -53,7 +53,7 @@ struct<(CAST(1.1 AS DOUBLE) + CAST(2 AS DOUBLE)):double>
 -- !query 6
 SELECT 1.1 - '2' FROM t
 -- !query 6 schema
-struct<(CAST(1.1 AS DOUBLE) - CAST(2 AS DOUBLE)):double>
+struct<(1.1 - CAST(2 AS DOUBLE)):double>
 -- !query 6 output
 -0.8999999999999999
 
@@ -61,7 +61,7 @@ struct<(CAST(1.1 AS DOUBLE) - CAST(2 AS DOUBLE)):double>
 -- !query 7
 SELECT 1.1 * '2' FROM t
 -- !query 7 schema
-struct<(CAST(1.1 AS DOUBLE) * CAST(2 AS DOUBLE)):double>
+struct<(1.1 * CAST(2 AS DOUBLE)):double>
 -- !query 7 output
 2.2
 
@@ -69,7 +69,7 @@ struct<(CAST(1.1 AS DOUBLE) * CAST(2 AS DOUBLE)):double>
 -- !query 8
 SELECT 4.4 / '2' FROM t
 -- !query 8 schema
-struct<(CAST(4.4 AS DOUBLE) / CAST(2 AS DOUBLE)):double>
+struct<(4.4 / CAST(2 AS DOUBLE)):double>
 -- !query 8 output
 2.2
 
@@ -77,7 +77,7 @@ struct<(CAST(4.4 AS DOUBLE) / CAST(2 AS DOUBLE)):double>
 -- !query 9
 SELECT 1.1 + '2.2' FROM t
 -- !query 9 schema
-struct<(CAST(1.1 AS DOUBLE) + CAST(2.2 AS DOUBLE)):double>
+struct<(1.1 + CAST(2.2 AS DOUBLE)):double>
 -- !query 9 output
 3.3000000000000003
 
@@ -85,7 +85,7 @@ struct<(CAST(1.1 AS DOUBLE) + CAST(2.2 AS DOUBLE)):double>
 -- !query 10
 SELECT 1.1 - '2.2' FROM t
 -- !query 10 schema
-struct<(CAST(1.1 AS DOUBLE) - CAST(2.2 AS DOUBLE)):double>
+struct<(1.1 - CAST(2.2 AS DOUBLE)):double>
 -- !query 10 output
 -1.1
 
@@ -93,7 +93,7 @@ struct<(CAST(1.1 AS DOUBLE) - CAST(2.2 AS DOUBLE)):double>
 -- !query 11
 SELECT 1.1 * '2.2' FROM t
 -- !query 11 schema
-struct<(CAST(1.1 AS DOUBLE) * CAST(2.2 AS DOUBLE)):double>
+struct<(1.1 * CAST(2.2 AS DOUBLE)):double>
 -- !query 11 output
 2.4200000000000004
 
@@ -101,7 +101,7 @@ struct<(CAST(1.1 AS DOUBLE) * CAST(2.2 AS DOUBLE)):double>
 -- !query 12
 SELECT 4.4 / '2.2' FROM t
 -- !query 12 schema
-struct<(CAST(4.4 AS DOUBLE) / CAST(2.2 AS DOUBLE)):double>
+struct<(4.4 / CAST(2.2 AS DOUBLE)):double>
 -- !query 12 output
 2.0
 

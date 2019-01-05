@@ -40,7 +40,7 @@ SELECT rand(1.0)
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'rand(1.0BD)' due to data type mismatch: argument 1 requires (int or bigint) type, however, '1.0BD' is of decimal(2,1) type.; line 1 pos 7
+cannot resolve 'rand(1.0D)' due to data type mismatch: argument 1 requires (int or bigint) type, however, '1.0D' is of double type.; line 1 pos 7
 
 
 -- !query 5

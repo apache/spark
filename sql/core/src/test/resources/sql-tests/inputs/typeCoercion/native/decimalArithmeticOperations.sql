@@ -15,6 +15,8 @@
 --   limitations under the License.
 --
 
+set spark.sql.legacy.literals.asDecimal=true;
+
 CREATE TEMPORARY VIEW t AS SELECT 1.0 as a, 0.0 as b;
 
 -- division, remainder and pmod by 0 return NULL

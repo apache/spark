@@ -37,11 +37,11 @@ WHERE  (a, b) NOT IN (SELECT *
                       FROM   s
                       WHERE  d > 5.0) -- Matches no rows
 -- !query 2 schema
-struct<a:int,b:decimal(2,1)>
+struct<a:int,b:double>
 -- !query 2 output
-2	3
-4	5
-NULL	1
+2	3.0
+4	5.0
+NULL	1.0
 NULL	NULL
 
 
@@ -54,7 +54,7 @@ WHERE  (a, b) NOT IN (SELECT *
                       FROM s
                       WHERE c IS NULL AND d IS NULL) -- Matches only (null, null)
 -- !query 3 schema
-struct<a:int,b:decimal(2,1)>
+struct<a:int,b:double>
 -- !query 3 output
 
 
@@ -69,7 +69,7 @@ WHERE  a IS NULL AND b IS NULL -- Matches only (null, null)
                           FROM s
                           WHERE c IS NOT NULL) -- Matches (0, 1.0), (2, 3.0), (4, null)
 -- !query 4 schema
-struct<a:int,b:decimal(2,1)>
+struct<a:int,b:double>
 -- !query 4 output
 
 
@@ -84,7 +84,7 @@ WHERE  b = 1.0 -- Matches (null, 1.0)
                           FROM s
                           WHERE c IS NOT NULL) -- Matches (0, 1.0), (2, 3.0), (4, null)
 -- !query 5 schema
-struct<a:int,b:decimal(2,1)>
+struct<a:int,b:double>
 -- !query 5 output
 
 
@@ -99,9 +99,9 @@ WHERE  b = 1.0 -- Matches (null, 1.0)
                           FROM s
                           WHERE c = 2) -- Matches (2, 3.0)
 -- !query 6 schema
-struct<a:int,b:decimal(2,1)>
+struct<a:int,b:double>
 -- !query 6 output
-NULL	1
+NULL	1.0
 
 
 -- !query 7
@@ -114,7 +114,7 @@ WHERE  b = 3.0 -- Matches (2, 3.0)
                           FROM s
                           WHERE c = 2) -- Matches (2, 3.0)
 -- !query 7 schema
-struct<a:int,b:decimal(2,1)>
+struct<a:int,b:double>
 -- !query 7 output
 
 
@@ -129,6 +129,6 @@ WHERE  b = 5.0 -- Matches (4, 5.0)
                           FROM s
                           WHERE c = 2) -- Matches (2, 3.0)
 -- !query 8 schema
-struct<a:int,b:decimal(2,1)>
+struct<a:int,b:double>
 -- !query 8 output
-4	5
+4	5.0

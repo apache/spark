@@ -23,9 +23,9 @@ FROM   m
 WHERE  b = 1.0 -- Matches (null, 1.0)
        AND (a, b) NOT IN ((2, 3.0))
 -- !query 1 schema
-struct<a:int,b:decimal(2,1)>
+struct<a:int,b:double>
 -- !query 1 output
-NULL	1
+NULL	1.0
 
 
 -- !query 2
@@ -36,7 +36,7 @@ FROM   m
 WHERE  b = 3.0 -- Matches (2, 3.0)
        AND (a, b) NOT IN ((2, 3.0))
 -- !query 2 schema
-struct<a:int,b:decimal(2,1)>
+struct<a:int,b:double>
 -- !query 2 output
 
 
@@ -49,6 +49,6 @@ FROM   m
 WHERE  b = 5.0 -- Matches (4, 5.0)
        AND (a, b) NOT IN ((2, 3.0))
 -- !query 3 schema
-struct<a:int,b:decimal(2,1)>
+struct<a:int,b:double>
 -- !query 3 output
-4	5
+4	5.0

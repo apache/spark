@@ -21,7 +21,7 @@ struct<230:int>
 -- !query 2
 select -5.2
 -- !query 2 schema
-struct<-5.2:decimal(2,1)>
+struct<-5.2:double>
 -- !query 2 output
 -5.2
 
@@ -29,7 +29,7 @@ struct<-5.2:decimal(2,1)>
 -- !query 3
 select +6.8e0
 -- !query 3 schema
-struct<6.8:decimal(2,1)>
+struct<6.8:double>
 -- !query 3 output
 6.8
 
@@ -261,7 +261,7 @@ struct<CEIL(1234567890123456):bigint>
 -- !query 32
 select ceil(0.01)
 -- !query 32 schema
-struct<CEIL(0.01):decimal(1,0)>
+struct<CEIL(0.01):bigint>
 -- !query 32 output
 1
 
@@ -269,7 +269,7 @@ struct<CEIL(0.01):decimal(1,0)>
 -- !query 33
 select ceiling(-0.10)
 -- !query 33 schema
-struct<CEIL(-0.10):decimal(1,0)>
+struct<CEIL(-0.1):bigint>
 -- !query 33 output
 0
 
@@ -301,7 +301,7 @@ struct<FLOOR(1234567890123456):bigint>
 -- !query 37
 select floor(0.01)
 -- !query 37 schema
-struct<FLOOR(0.01):decimal(1,0)>
+struct<FLOOR(0.01):bigint>
 -- !query 37 output
 0
 
@@ -309,7 +309,7 @@ struct<FLOOR(0.01):decimal(1,0)>
 -- !query 38
 select floor(-0.10)
 -- !query 38 schema
-struct<FLOOR(-0.10):decimal(1,0)>
+struct<FLOOR(-0.1):bigint>
 -- !query 38 output
 -1
 
@@ -317,7 +317,7 @@ struct<FLOOR(-0.10):decimal(1,0)>
 -- !query 39
 select 1 > 0.00001
 -- !query 39 schema
-struct<(CAST(1 AS BIGINT) > 0):boolean>
+struct<(CAST(1 AS DOUBLE) > 1.0E-5):boolean>
 -- !query 39 output
 true
 
@@ -365,7 +365,7 @@ struct<octet_length(abc):int>
 -- !query 45
 select abs(-3.13), abs('-2.19')
 -- !query 45 schema
-struct<abs(-3.13):decimal(3,2),abs(CAST(-2.19 AS DOUBLE)):double>
+struct<abs(-3.13):double,abs(CAST(-2.19 AS DOUBLE)):double>
 -- !query 45 output
 3.13	2.19
 
@@ -373,7 +373,7 @@ struct<abs(-3.13):decimal(3,2),abs(CAST(-2.19 AS DOUBLE)):double>
 -- !query 46
 select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11)
 -- !query 46 schema
-struct<(+ CAST(-1.11 AS DOUBLE)):double,(+ -1.11):decimal(3,2),(- CAST(-1.11 AS DOUBLE)):double,(- -1.11):decimal(3,2)>
+struct<(+ CAST(-1.11 AS DOUBLE)):double,(+ -1.11):double,(- CAST(-1.11 AS DOUBLE)):double,(- -1.11):double>
 -- !query 46 output
 -1.11	-1.11	1.11	1.11
 

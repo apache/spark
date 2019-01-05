@@ -1639,6 +1639,14 @@ object SQLConf {
       "java.time.* packages are used for the same purpose.")
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_LITERALS_AS_DECIMAL = buildConf("spark.sql.legacy.literals.asDecimal")
+    .internal()
+    .doc("When set to true, literal values which don't fit in the long range are considered as " +
+      "decimals. If set to false (default), they are parsed as double if possible; if the value" +
+      "is not representable as double, then we fallback to decimal.")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**

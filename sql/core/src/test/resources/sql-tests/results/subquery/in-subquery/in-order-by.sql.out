@@ -73,13 +73,13 @@ WHERE  t1a IN (SELECT t2a
                FROM   t2)
 ORDER  BY t1a
 -- !query 3 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:double,t1h:timestamp,t1i:date>
 -- !query 3 output
-val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
-val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
-val1e	10	NULL	25	17.0	25.0	2600	2014-08-04 01:01:00	2014-08-04
-val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
-val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
+val1b	8	16	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
+val1c	8	16	19	17.0	25.0	2600.0	2014-05-04 01:02:00.001	2014-05-05
+val1e	10	NULL	25	17.0	25.0	2600.0	2014-08-04 01:01:00	2014-08-04
+val1e	10	NULL	19	17.0	25.0	2600.0	2014-09-04 01:02:00.001	2014-09-04
+val1e	10	NULL	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
 
 
 -- !query 4
@@ -130,10 +130,10 @@ WHERE  t1b IN (SELECT t2c
                FROM   t2
                ORDER  BY t2d)
 -- !query 7 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:double,t1h:timestamp,t1i:date>
 -- !query 7 output
-val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
-val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
+val1a	16	12	10	15.0	20.0	2000.0	2014-07-04 01:01:00	2014-07-04
+val1a	16	12	21	15.0	20.0	2000.0	2014-06-04 01:02:00.001	2014-06-04
 
 
 -- !query 8
@@ -145,16 +145,16 @@ WHERE  t1b IN (SELECT Min(t2b)
                ORDER  BY Min(t2b))
 ORDER BY t1c DESC nulls first
 -- !query 8 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:double,t1h:timestamp,t1i:date>
 -- !query 8 output
-val1e	10	NULL	25	17.0	25.0	2600	2014-08-04 01:01:00	2014-08-04
-val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
-val1d	10	NULL	12	17.0	25.0	2600	2015-05-04 01:01:00	2015-05-04
-val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
-val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
-val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
-val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
-val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
+val1e	10	NULL	25	17.0	25.0	2600.0	2014-08-04 01:01:00	2014-08-04
+val1e	10	NULL	19	17.0	25.0	2600.0	2014-09-04 01:02:00.001	2014-09-04
+val1d	10	NULL	12	17.0	25.0	2600.0	2015-05-04 01:01:00	2015-05-04
+val1e	10	NULL	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
+val1b	8	16	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
+val1c	8	16	19	17.0	25.0	2600.0	2014-05-04 01:02:00.001	2014-05-05
+val1a	6	8	10	15.0	20.0	2000.0	2014-04-04 01:00:00	2014-04-04
+val1a	6	8	10	15.0	20.0	2000.0	2014-04-04 01:02:00.001	2014-04-04
 
 
 -- !query 9
@@ -184,15 +184,15 @@ WHERE  t1a NOT IN (SELECT t2a
                    FROM   t2)
 ORDER  BY t1a
 -- !query 10 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:double,t1h:timestamp,t1i:date>
 -- !query 10 output
-val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
-val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
-val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
-val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
-val1d	NULL	16	22	17.0	25.0	2600	2014-06-04 01:01:00	NULL
-val1d	NULL	16	19	17.0	25.0	2600	2014-07-04 01:02:00.001	NULL
-val1d	10	NULL	12	17.0	25.0	2600	2015-05-04 01:01:00	2015-05-04
+val1a	6	8	10	15.0	20.0	2000.0	2014-04-04 01:00:00	2014-04-04
+val1a	16	12	21	15.0	20.0	2000.0	2014-06-04 01:02:00.001	2014-06-04
+val1a	16	12	10	15.0	20.0	2000.0	2014-07-04 01:01:00	2014-07-04
+val1a	6	8	10	15.0	20.0	2000.0	2014-04-04 01:02:00.001	2014-04-04
+val1d	NULL	16	22	17.0	25.0	2600.0	2014-06-04 01:01:00	NULL
+val1d	NULL	16	19	17.0	25.0	2600.0	2014-07-04 01:02:00.001	NULL
+val1d	10	NULL	12	17.0	25.0	2600.0	2015-05-04 01:01:00	2015-05-04
 
 
 -- !query 11
@@ -226,12 +226,12 @@ WHERE  t1a NOT IN (SELECT t2a
                    ORDER  BY t2b DESC nulls last)
 ORDER  BY t1c DESC nulls last
 -- !query 12 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:double,t1h:timestamp,t1i:date>
 -- !query 12 output
-val1d	NULL	16	22	17.0	25.0	2600	2014-06-04 01:01:00	NULL
-val1d	NULL	16	19	17.0	25.0	2600	2014-07-04 01:02:00.001	NULL
-val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
-val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
+val1d	NULL	16	22	17.0	25.0	2600.0	2014-06-04 01:01:00	NULL
+val1d	NULL	16	19	17.0	25.0	2600.0	2014-07-04 01:02:00.001	NULL
+val1a	16	12	21	15.0	20.0	2000.0	2014-06-04 01:02:00.001	2014-06-04
+val1a	16	12	10	15.0	20.0	2000.0	2014-07-04 01:01:00	2014-07-04
 
 
 -- !query 13
@@ -242,12 +242,12 @@ WHERE  t1b IN (SELECT Min(t2b)
                GROUP  BY t2a
                ORDER  BY t2a DESC)
 -- !query 13 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:double,t1h:timestamp,t1i:date>
 -- !query 13 output
-val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:00:00	2014-04-04
-val1a	6	8	10	15.0	20.0	2000	2014-04-04 01:02:00.001	2014-04-04
-val1b	8	16	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
-val1c	8	16	19	17.0	25.0	2600	2014-05-04 01:02:00.001	2014-05-05
+val1a	6	8	10	15.0	20.0	2000.0	2014-04-04 01:00:00	2014-04-04
+val1a	6	8	10	15.0	20.0	2000.0	2014-04-04 01:02:00.001	2014-04-04
+val1b	8	16	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
+val1c	8	16	19	17.0	25.0	2600.0	2014-05-04 01:02:00.001	2014-05-05
 
 
 -- !query 14
@@ -276,14 +276,14 @@ WHERE  t1b NOT IN (SELECT Min(t2b)
                    GROUP  BY t2a
                    ORDER  BY t2a)
 -- !query 15 schema
-struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:decimal(2,-2),t1h:timestamp,t1i:date>
+struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1e:float,t1f:double,t1g:double,t1h:timestamp,t1i:date>
 -- !query 15 output
-val1a	16	12	10	15.0	20.0	2000	2014-07-04 01:01:00	2014-07-04
-val1a	16	12	21	15.0	20.0	2000	2014-06-04 01:02:00.001	2014-06-04
-val1d	10	NULL	12	17.0	25.0	2600	2015-05-04 01:01:00	2015-05-04
-val1e	10	NULL	19	17.0	25.0	2600	2014-05-04 01:01:00	2014-05-04
-val1e	10	NULL	19	17.0	25.0	2600	2014-09-04 01:02:00.001	2014-09-04
-val1e	10	NULL	25	17.0	25.0	2600	2014-08-04 01:01:00	2014-08-04
+val1a	16	12	10	15.0	20.0	2000.0	2014-07-04 01:01:00	2014-07-04
+val1a	16	12	21	15.0	20.0	2000.0	2014-06-04 01:02:00.001	2014-06-04
+val1d	10	NULL	12	17.0	25.0	2600.0	2015-05-04 01:01:00	2015-05-04
+val1e	10	NULL	19	17.0	25.0	2600.0	2014-05-04 01:01:00	2014-05-04
+val1e	10	NULL	19	17.0	25.0	2600.0	2014-09-04 01:02:00.001	2014-09-04
+val1e	10	NULL	25	17.0	25.0	2600.0	2014-08-04 01:01:00	2014-08-04
 
 
 -- !query 16

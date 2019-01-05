@@ -437,8 +437,12 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("literals") {
-    def testDecimal(value: String): Unit = {
-      assertEqual(value, Literal(BigDecimal(value).underlying))
+    def testDecimal(value: String, asDecimal: Boolean, parser: ParserInterface): Unit = {
+      if (asDecimal) {
+        assertEqual(value, Literal(BigDecimal(value).underlying), parser)
+      } else {
+        assertEqual(value, Literal(BigDecimal(value).doubleValue()), parser)
+      }
     }
 
     // NULL
@@ -451,18 +455,26 @@ class ExpressionParserSuite extends PlanTest {
     // Integral should have the narrowest possible type
     assertEqual("787324", Literal(787324))
     assertEqual("7873247234798249234", Literal(7873247234798249234L))
-    testDecimal("78732472347982492793712334")
 
-    // Decimal
-    testDecimal("7873247234798249279371.2334")
+    Seq(true, false).foreach { asDecimal =>
+      val conf = new SQLConf()
+      conf.setConf(SQLConf.LEGACY_LITERALS_AS_DECIMAL, asDecimal)
+      val parser = new CatalystSqlParser(conf)
+      testDecimal("78732472347982492793712334", true, parser)
+      testDecimal("1e40", asDecimal, parser)
 
-    // Scientific Decimal
-    testDecimal("9.0e1")
-    testDecimal(".9e+2")
-    testDecimal("0.9e+2")
-    testDecimal("900e-1")
-    testDecimal("900.0E-1")
-    testDecimal("9.e+1")
+      // Decimal
+      testDecimal("7873247234798249279371.2334", true, parser)
+
+      // Scientific Decimal
+      testDecimal("9.0e1", asDecimal, parser)
+      testDecimal(".9e+2", asDecimal, parser)
+      testDecimal("0.9e+2", asDecimal, parser)
+      testDecimal("900e-1", asDecimal, parser)
+      testDecimal("900.0E-1", asDecimal, parser)
+      testDecimal("9.e+1", asDecimal, parser)
+    }
+
     intercept(".e3")
 
     // Tiny Int Literal

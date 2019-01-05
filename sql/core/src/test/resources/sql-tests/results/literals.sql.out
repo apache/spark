@@ -167,17 +167,17 @@ select 1234567890123456789012345678901234567890.0
 -- !query 17
 select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5, .9e+2, 0.9e+2, 900e-1, 9.e+1
 -- !query 17 schema
-struct<1.0:double,1.2:double,1E+10:decimal(1,-10),1.5E+5:decimal(2,-4),0.1:double,0.1:double,1E+4:decimal(1,-4),9E+1:decimal(1,-1),9E+1:decimal(1,-1),90.0:decimal(3,1),9E+1:decimal(1,-1)>
+struct<1.0:double,1.2:double,1.0E10:double,150000.0:double,0.1:double,0.1:double,10000.0:double,90.0:double,90.0:double,90.0:double,90.0:double>
 -- !query 17 output
-1.0	1.2	10000000000	150000	0.1	0.1	10000	90	90	90	90
+1.0	1.2	1.0E10	150000.0	0.1	0.1	10000.0	90.0	90.0	90.0	90.0
 
 
 -- !query 18
 select -1D, -1.2D, -1e10, -1.5e5, -.10D, -0.10D, -.1e5
 -- !query 18 schema
-struct<-1.0:double,-1.2:double,-1E+10:decimal(1,-10),-1.5E+5:decimal(2,-4),-0.1:double,-0.1:double,-1E+4:decimal(1,-4)>
+struct<-1.0:double,-1.2:double,-1.0E10:double,-150000.0:double,-0.1:double,-0.1:double,-10000.0:double>
 -- !query 18 output
--1.0	-1.2	-10000000000	-150000	-0.1	-0.1	-10000
+-1.0	-1.2	-1.0E10	-150000.0	-0.1	-0.1	-10000.0
 
 
 -- !query 19
@@ -205,7 +205,7 @@ struct<1E+309:decimal(1,-309),-1E+309:decimal(1,-309)>
 -- !query 21
 select 0.3, -0.8, .5, -.18, 0.1111, .1111
 -- !query 21 schema
-struct<0.3:decimal(1,1),-0.8:decimal(1,1),0.5:decimal(1,1),-0.18:decimal(2,2),0.1111:decimal(4,4),0.1111:decimal(4,4)>
+struct<0.3:double,-0.8:double,0.5:double,-0.18:double,0.1111:double,0.1111:double>
 -- !query 21 output
 0.3	-0.8	0.5	-0.18	0.1111	0.1111
 
@@ -411,9 +411,9 @@ select X'XuZ'
 -- !query 42
 SELECT 3.14, -3.14, 3.14e8, 3.14e-8, -3.14e8, -3.14e-8, 3.14e+8, 3.14E8, 3.14E-8
 -- !query 42 schema
-struct<3.14:decimal(3,2),-3.14:decimal(3,2),3.14E+8:decimal(3,-6),3.14E-8:decimal(10,10),-3.14E+8:decimal(3,-6),-3.14E-8:decimal(10,10),3.14E+8:decimal(3,-6),3.14E+8:decimal(3,-6),3.14E-8:decimal(10,10)>
+struct<3.14:double,-3.14:double,3.14E8:double,3.14E-8:double,-3.14E8:double,-3.14E-8:double,3.14E8:double,3.14E8:double,3.14E-8:double>
 -- !query 42 output
-3.14	-3.14	314000000	0.0000000314	-314000000	-0.0000000314	314000000	314000000	0.0000000314
+3.14	-3.14	3.14E8	3.14E-8	-3.14E8	-3.14E-8	3.14E8	3.14E8	3.14E-8
 
 
 -- !query 43

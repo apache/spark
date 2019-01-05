@@ -119,7 +119,7 @@ NULL	b	NULL
 SELECT val_double, cate, sum(val_double) OVER(PARTITION BY cate ORDER BY val_double
 RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING) FROM testData ORDER BY cate, val_double
 -- !query 7 schema
-struct<val_double:double,cate:string,sum(val_double) OVER (PARTITION BY cate ORDER BY val_double ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND CAST(2.5 AS DOUBLE) FOLLOWING):double>
+struct<val_double:double,cate:string,sum(val_double) OVER (PARTITION BY cate ORDER BY val_double ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING):double>
 -- !query 7 output
 NULL	NULL	NULL
 1.0	NULL	1.0
