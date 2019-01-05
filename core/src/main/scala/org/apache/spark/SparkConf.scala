@@ -664,8 +664,8 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
         // Translate old value to a duration, with 10s wait time per try.
         translation = s => s"${s.toLong * 10}s")),
-    "spark.reducer.maxSizeInFlight" -> Seq(
-      AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
+    REDUCER_MAX_SIZE_IN_FLIGHT.key -> Seq(
+      AlternateConfig(REDUCER_MAX_MB_IN_FLIGHT.key, "1.4")),
     "spark.kryoserializer.buffer" -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
         translation = s => s"${(s.toDouble * 1000).toInt}k")),
@@ -700,7 +700,7 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.access.hadoopFileSystems" -> Seq(
       AlternateConfig("spark.yarn.access.namenodes", "2.2")),
     MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
-      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
+      AlternateConfig(REDUCER_MAX_REQ_SIZE_SHUFFLE_MEM.key, "2.3")),
     LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
       AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3")),
     DRIVER_MEMORY_OVERHEAD.key -> Seq(

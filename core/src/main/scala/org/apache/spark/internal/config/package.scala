@@ -946,4 +946,33 @@ package object config {
   private[spark] val LOCALITY_WAIT_RACK = ConfigBuilder("spark.locality.wait.rack")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString(LOCALITY_WAIT.defaultValueString)
+
+    private[spark] val REDUCER_MAX_SIZE_IN_FLIGHT = ConfigBuilder("spark.reducer.maxSizeInFlight")
+    .doc("Maximum size of map outputs to fetch simultaneously from each reduce task, " +
+      "in MiB unless otherwise specified. Since each output requires us to create a " +
+      "buffer to receive it, this represents a fixed memory overhead per reduce task, " +
+      "so keep it small unless you have a large amount of memory.")
+    .bytesConf(ByteUnit.MiB)
+    .createWithDefaultString("48m")
+
+  private[spark] val REDUCER_MAX_REQS_IN_FLIGHT = ConfigBuilder("spark.reducer.maxReqsInFlight")
+    .doc("This configuration limits the number of remote requests to fetch blocks at " +
+      "any given point. When the number of hosts in the cluster increase, " +
+      "it might lead to very large number of inbound connections to one or more nodes, " +
+      "causing the workers to fail under load. By allowing it to limit the number of " +
+      "fetch requests, this scenario can be mitigated")
+    .intConf
+    .createWithDefault(Int.MaxValue)
+
+  private[spark] val REDUCER_MAX_MB_IN_FLIGHT = ConfigBuilder("spark.reducer.maxMbInFlight")
+    .doc("Maximum size (in megabytes) of map outputs to fetch simultaneously from each " +
+      "reduce task. Its for spark 1.4 ")
+    .bytesConf(ByteUnit.MiB)
+    .createWithDefaultString("48")
+
+  private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_MEM =
+    ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(Int.MaxValue - 512)
+
 }
