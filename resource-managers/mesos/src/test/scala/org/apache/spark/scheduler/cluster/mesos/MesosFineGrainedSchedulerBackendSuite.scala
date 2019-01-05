@@ -30,8 +30,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
 import org.apache.mesos.Protos.Value.Scalar
-import org.mockito.{ArgumentCaptor, Matchers}
-import org.mockito.Matchers._
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.{any, anyLong, eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.mockito.MockitoSugar
 
@@ -264,7 +264,7 @@ class MesosFineGrainedSchedulerBackendSuite
     val capture = ArgumentCaptor.forClass(classOf[Collection[TaskInfo]])
     when(
       driver.launchTasks(
-        Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+        meq(Collections.singleton(mesosOffers.get(0).getId)),
         capture.capture(),
         any(classOf[Filters])
       )
@@ -275,7 +275,7 @@ class MesosFineGrainedSchedulerBackendSuite
     backend.resourceOffers(driver, mesosOffers)
 
     verify(driver, times(1)).launchTasks(
-      Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+      meq(Collections.singleton(mesosOffers.get(0).getId)),
       capture.capture(),
       any(classOf[Filters])
     )
@@ -373,7 +373,7 @@ class MesosFineGrainedSchedulerBackendSuite
     val capture = ArgumentCaptor.forClass(classOf[Collection[TaskInfo]])
     when(
       driver.launchTasks(
-        Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+        meq(Collections.singleton(mesosOffers.get(0).getId)),
         capture.capture(),
         any(classOf[Filters])
       )
@@ -382,7 +382,7 @@ class MesosFineGrainedSchedulerBackendSuite
     backend.resourceOffers(driver, mesosOffers)
 
     verify(driver, times(1)).launchTasks(
-      Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+      meq(Collections.singleton(mesosOffers.get(0).getId)),
       capture.capture(),
       any(classOf[Filters])
     )
