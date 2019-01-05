@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * {{{
  *   SparkSession.builder()
  *     .master("...")
- *     .conf("...", true)
+ *     .config("...", true)
  *     .withExtensions { extensions =>
  *       extensions.injectResolutionRule { session =>
  *         ...
@@ -59,6 +59,26 @@ import org.apache.spark.sql.catalyst.rules.Rule
  *       }
  *     }
  *     .getOrCreate()
+ * }}}
+ *
+ * The extensions can also be used by setting the Spark SQL configuration property
+ * spark.sql.extensions, for example:
+ * {{{
+ *   SparkSession.builder()
+ *     .master("...")
+ *     .config("spark.sql.extensions", "org.example.MyExtensions")
+ *     .getOrCreate()
+ *
+ *   class MyExtensions extends Function1[SparkSessionExtensions, Unit] {
+ *     override def apply(extensions: SparkSessionExtensions): Unit = {
+ *       extensions.injectResolutionRule { session =>
+ *         ...
+ *       }
+ *       extensions.injectParser { (session, parser) =>
+ *         ...
+ *       }
+ *     }
+ *   }
  * }}}
  *
  * Note that none of the injected builders should assume that the [[SparkSession]] is fully
