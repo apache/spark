@@ -107,6 +107,11 @@ class YarnShuffleServiceMetrics implements MetricsSource {
         throw new IllegalStateException(
                 "Not supported class type of metric[" + name + "] for value " + gaugeValue);
       }
+    } else if (metric instanceof Counter) {
+      Counter c = (Counter) metric;
+      long counterValue = c.getCount();
+      metricsRecordBuilder.addGauge(new ShuffleServiceMetricsInfo(name, "Number of " +
+          "connections to shuffle service " + name), counterValue);
     }
   }
 

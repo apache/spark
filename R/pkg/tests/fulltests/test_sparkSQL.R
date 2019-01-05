@@ -1620,14 +1620,26 @@ test_that("column functions", {
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 
-  # Test from_csv()
+  # Test from_csv(), schema_of_csv()
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, alias(from_csv(df$col, "a INT"), "csv")))
   expect_equal(c[[1]][[1]]$a, 1)
   c <- collect(select(df, alias(from_csv(df$col, lit("a INT")), "csv")))
   expect_equal(c[[1]][[1]]$a, 1)
+  c <- collect(select(df, alias(from_csv(df$col, structType("a INT")), "csv")))
+  expect_equal(c[[1]][[1]]$a, 1)
+  c <- collect(select(df, alias(from_csv(df$col, schema_of_csv("1")), "csv")))
+  expect_equal(c[[1]][[1]]$`_c0`, 1)
+  c <- collect(select(df, alias(from_csv(df$col, schema_of_csv(lit("1"))), "csv")))
+  expect_equal(c[[1]][[1]]$`_c0`, 1)
 
-  # Test to_json(), from_json()
+  df <- as.DataFrame(list(list("col" = "1")))
+  c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
+  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  c <- collect(select(df, schema_of_csv(lit("Amsterdam,2018"))))
+  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+
+  # Test to_json(), from_json(), schema_of_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
   j <- collect(select(df, alias(to_json(df$people), "json")))
   expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
@@ -1645,7 +1657,9 @@ test_that("column functions", {
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
   df <- as.DataFrame(j)
   schemas <- list(structType(structField("age", "integer"), structField("height", "double")),
-                  "age INT, height DOUBLE")
+                  "age INT, height DOUBLE",
+                  schema_of_json("{\"age\":16,\"height\":176.5}"),
+                  schema_of_json(lit("{\"age\":16,\"height\":176.5}")))
   for (schema in schemas) {
     s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
     expect_equal(ncol(s), 1)
@@ -1653,6 +1667,12 @@ test_that("column functions", {
     expect_is(s[[1]][[1]], "struct")
     expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 })))
   }
+
+  df <- as.DataFrame(list(list("col" = "1")))
+  c <- collect(select(df, schema_of_json('{"name":"Bob"}')))
+  expect_equal(c[[1]], "struct<name:string>")
+  c <- collect(select(df, schema_of_json(lit('{"name":"Bob"}'))))
+  expect_equal(c[[1]], "struct<name:string>")
 
   # Test to_json() supports arrays of primitive types and arrays
   df <- sql("SELECT array(19, 42, 70) as age")
@@ -1679,7 +1699,11 @@ test_that("column functions", {
   # check if array type in string is correctly supported.
   jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
   df <- as.DataFrame(list(list("people" = jsonArr)))
-  for (schema in list(structType(structField("name", "string")), "name STRING")) {
+  schemas <- list(structType(structField("name", "string")),
+                  "name STRING",
+                  schema_of_json("{\"name\":\"Alice\"}"),
+                  schema_of_json(lit("{\"name\":\"Bob\"}")))
+  for (schema in schemas) {
     arr <- collect(select(df, alias(from_json(df$people, schema, as.json.array = TRUE), "arrcol")))
     expect_equal(ncol(arr), 1)
     expect_equal(nrow(arr), 1)

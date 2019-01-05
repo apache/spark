@@ -23,7 +23,7 @@ import unittest
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, Column, Row
-from pyspark.sql.functions import UserDefinedFunction
+from pyspark.sql.functions import UserDefinedFunction, udf
 from pyspark.sql.types import *
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
@@ -102,7 +102,6 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_nondeterministic_udf(self):
         # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
-        from pyspark.sql.functions import udf
         import random
         udf_random_col = udf(lambda: int(100 * random.random()), IntegerType()).asNondeterministic()
         self.assertEqual(udf_random_col.deterministic, False)
@@ -113,7 +112,6 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_nondeterministic_udf2(self):
         import random
-        from pyspark.sql.functions import udf
         random_udf = udf(lambda: random.randint(6, 6), IntegerType()).asNondeterministic()
         self.assertEqual(random_udf.deterministic, False)
         random_udf1 = self.spark.catalog.registerFunction("randInt", random_udf)
@@ -132,7 +130,6 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_nondeterministic_udf3(self):
         # regression test for SPARK-23233
-        from pyspark.sql.functions import udf
         f = udf(lambda x: x)
         # Here we cache the JVM UDF instance.
         self.spark.range(1).select(f("id"))
@@ -144,7 +141,7 @@ class UDFTests(ReusedSQLTestCase):
         self.assertFalse(deterministic)
 
     def test_nondeterministic_udf_in_aggregate(self):
-        from pyspark.sql.functions import udf, sum
+        from pyspark.sql.functions import sum
         import random
         udf_random_col = udf(lambda: int(100 * random.random()), 'int').asNondeterministic()
         df = self.spark.range(10)
@@ -181,7 +178,6 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(tuple(row), (6, 5))
 
     def test_udf_in_filter_on_top_of_outer_join(self):
-        from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1)])
         right = self.spark.createDataFrame([Row(a=1)])
         df = left.join(right, on='a', how='left_outer')
@@ -190,7 +186,6 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_udf_in_filter_on_top_of_join(self):
         # regression test for SPARK-18589
-        from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1)])
         right = self.spark.createDataFrame([Row(b=1)])
         f = udf(lambda a, b: a == b, BooleanType())
@@ -199,7 +194,6 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_udf_in_join_condition(self):
         # regression test for SPARK-25314
-        from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1)])
         right = self.spark.createDataFrame([Row(b=1)])
         f = udf(lambda a, b: a == b, BooleanType())
@@ -209,9 +203,20 @@ class UDFTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
             self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
+    def test_udf_in_left_outer_join_condition(self):
+        # regression test for SPARK-26147
+        from pyspark.sql.functions import col
+        left = self.spark.createDataFrame([Row(a=1)])
+        right = self.spark.createDataFrame([Row(b=1)])
+        f = udf(lambda a: str(a), StringType())
+        # The join condition can't be pushed down, as it refers to attributes from both sides.
+        # The Python UDF only refer to attributes from one side, so it's evaluable.
+        df = left.join(right, f("a") == col("b").cast("string"), how="left_outer")
+        with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
+            self.assertEqual(df.collect(), [Row(a=1, b=1)])
+
     def test_udf_in_left_semi_join_condition(self):
         # regression test for SPARK-25314
-        from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1)])
         f = udf(lambda a, b: a == b, BooleanType())
@@ -224,7 +229,6 @@ class UDFTests(ReusedSQLTestCase):
     def test_udf_and_common_filter_in_join_condition(self):
         # regression test for SPARK-25314
         # test the complex scenario with both udf and common filter
-        from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
         f = udf(lambda a, b: a == b, BooleanType())
@@ -235,7 +239,6 @@ class UDFTests(ReusedSQLTestCase):
     def test_udf_and_common_filter_in_left_semi_join_condition(self):
         # regression test for SPARK-25314
         # test the complex scenario with both udf and common filter
-        from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
         f = udf(lambda a, b: a == b, BooleanType())
@@ -246,7 +249,6 @@ class UDFTests(ReusedSQLTestCase):
     def test_udf_not_supported_in_join_condition(self):
         # regression test for SPARK-25314
         # test python udf is not supported in join type besides left_semi and inner join.
-        from pyspark.sql.functions import udf
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
         right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
         f = udf(lambda a, b: a == b, BooleanType())
@@ -289,7 +291,7 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_udf_with_filter_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
-        from pyspark.sql.functions import udf, col
+        from pyspark.sql.functions import col
         from pyspark.sql.types import BooleanType
 
         my_filter = udf(lambda a: a < 2, BooleanType())
@@ -298,7 +300,7 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
-        from pyspark.sql.functions import udf, col, sum
+        from pyspark.sql.functions import col, sum
         from pyspark.sql.types import BooleanType
 
         my_filter = udf(lambda a: a == 1, BooleanType())
@@ -314,7 +316,7 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(sel.collect(), [Row(t=4), Row(t=3)])
 
     def test_udf_in_generate(self):
-        from pyspark.sql.functions import udf, explode
+        from pyspark.sql.functions import explode
         df = self.spark.range(5)
         f = udf(lambda x: list(range(x)), ArrayType(LongType()))
         row = df.select(explode(f(*df))).groupBy().sum().first()
@@ -341,7 +343,6 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(res[3][1], 1)
 
     def test_udf_with_order_by_and_limit(self):
-        from pyspark.sql.functions import udf
         my_copy = udf(lambda x: x, IntegerType())
         df = self.spark.range(10).orderBy("id")
         res = df.select(df.id, my_copy(df.id).alias("copy")).limit(1)
@@ -382,14 +383,14 @@ class UDFTests(ReusedSQLTestCase):
                                 lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
 
     def test_udf_with_input_file_name(self):
-        from pyspark.sql.functions import udf, input_file_name
+        from pyspark.sql.functions import input_file_name
         sourceFile = udf(lambda path: path, StringType())
         filePath = "python/test_support/sql/people1.json"
         row = self.spark.read.json(filePath).select(sourceFile(input_file_name())).first()
         self.assertTrue(row[0].find("people1.json") != -1)
 
     def test_udf_with_input_file_name_for_hadooprdd(self):
-        from pyspark.sql.functions import udf, input_file_name
+        from pyspark.sql.functions import input_file_name
 
         def filename(path):
             return path
@@ -415,9 +416,6 @@ class UDFTests(ReusedSQLTestCase):
         # This is separate of  UDFInitializationTests
         # to avoid context initialization
         # when udf is called
-
-        from pyspark.sql.functions import UserDefinedFunction
-
         f = UserDefinedFunction(lambda x: x, StringType())
 
         self.assertIsNone(
@@ -433,8 +431,6 @@ class UDFTests(ReusedSQLTestCase):
         )
 
     def test_udf_with_string_return_type(self):
-        from pyspark.sql.functions import UserDefinedFunction
-
         add_one = UserDefinedFunction(lambda x: x + 1, "integer")
         make_pair = UserDefinedFunction(lambda x: (-x, x), "struct<x:integer,y:integer>")
         make_array = UserDefinedFunction(
@@ -448,13 +444,11 @@ class UDFTests(ReusedSQLTestCase):
         self.assertTupleEqual(expected, actual)
 
     def test_udf_shouldnt_accept_noncallable_object(self):
-        from pyspark.sql.functions import UserDefinedFunction
-
         non_callable = None
         self.assertRaises(TypeError, UserDefinedFunction, non_callable, StringType())
 
     def test_udf_with_decorator(self):
-        from pyspark.sql.functions import lit, udf
+        from pyspark.sql.functions import lit
         from pyspark.sql.types import IntegerType, DoubleType
 
         @udf(IntegerType())
@@ -511,7 +505,6 @@ class UDFTests(ReusedSQLTestCase):
         )
 
     def test_udf_wrapper(self):
-        from pyspark.sql.functions import udf
         from pyspark.sql.types import IntegerType
 
         def f(x):
@@ -557,7 +550,7 @@ class UDFTests(ReusedSQLTestCase):
     # SPARK-24721
     @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_datasource_with_udf(self):
-        from pyspark.sql.functions import udf, lit, col
+        from pyspark.sql.functions import lit, col
 
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
@@ -597,8 +590,6 @@ class UDFTests(ReusedSQLTestCase):
 
     # SPARK-25591
     def test_same_accumulator_in_udfs(self):
-        from pyspark.sql.functions import udf
-
         data_schema = StructType([StructField("a", IntegerType(), True),
                                   StructField("b", IntegerType(), True)])
         data = self.spark.createDataFrame([[1, 2]], schema=data_schema)
@@ -620,6 +611,15 @@ class UDFTests(ReusedSQLTestCase):
         data.collect()
         self.assertEqual(test_accum.value, 101)
 
+    # SPARK-26293
+    def test_udf_in_subquery(self):
+        f = udf(lambda x: x, "long")
+        with self.tempView("v"):
+            self.spark.range(1).filter(f("id") >= 0).createTempView("v")
+            sql = self.spark.sql
+            result = sql("select i from values(0L) as data(i) where i in (select id from v)")
+            self.assertEqual(result.collect(), [Row(i=0)])
+
 
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):
@@ -630,8 +630,6 @@ class UDFInitializationTests(unittest.TestCase):
             SparkContext._active_spark_context.stop()
 
     def test_udf_init_shouldnt_initialize_context(self):
-        from pyspark.sql.functions import UserDefinedFunction
-
         UserDefinedFunction(lambda x: x, StringType())
 
         self.assertIsNone(

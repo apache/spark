@@ -36,8 +36,8 @@ abstract class LogicalPlan
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming == true)
 
-  override def verboseStringWithSuffix: String = {
-    super.verboseString + statsCache.map(", " + _.toString).getOrElse("")
+  override def verboseStringWithSuffix(maxFields: Int): String = {
+    super.verboseString(maxFields) + statsCache.map(", " + _.toString).getOrElse("")
   }
 
   /**
@@ -93,7 +93,7 @@ abstract class LogicalPlan
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
    * nodes of this LogicalPlan. The attribute is expressed as
-   * as string in the following form: `[scope].AttributeName.[nested].[fields]...`.
+   * string in the following form: `[scope].AttributeName.[nested].[fields]...`.
    */
   def resolveChildren(
       nameParts: Seq[String],

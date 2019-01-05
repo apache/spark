@@ -60,8 +60,12 @@ private class BatchIterator[T](iter: Iterator[T], batchSize: Int)
 /**
  * A logical plan that evaluates a [[PythonUDF]].
  */
-case class ArrowEvalPython(udfs: Seq[PythonUDF], output: Seq[Attribute], child: LogicalPlan)
-  extends UnaryNode
+case class ArrowEvalPython(
+    udfs: Seq[PythonUDF],
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  override def producedAttributes: AttributeSet = AttributeSet(output.drop(child.output.length))
+}
 
 /**
  * A physical plan that evaluates a [[PythonUDF]].

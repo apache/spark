@@ -503,12 +503,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       logWarning(msg)
     }
 
-    val executorOptsKey = "spark.executor.extraJavaOptions"
-    val executorClasspathKey = "spark.executor.extraClassPath"
-    val driverOptsKey = "spark.driver.extraJavaOptions"
-    val driverClassPathKey = "spark.driver.extraClassPath"
-    val driverLibraryPathKey = "spark.driver.extraLibraryPath"
-    val sparkExecutorInstances = "spark.executor.instances"
+    val executorOptsKey = EXECUTOR_JAVA_OPTIONS.key
 
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
@@ -517,7 +512,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
           |spark.driver.libraryPath was detected (set to '$value').
           |This is deprecated in Spark 1.2+.
           |
-          |Please instead use: $driverLibraryPathKey
+          |Please instead use: ${DRIVER_LIBRARY_PATH.key}
         """.stripMargin
       logWarning(warning)
     }
@@ -594,14 +589,23 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains("spark.cores.max") && contains("spark.executor.cores")) {
-      val totalCores = getInt("spark.cores.max", 1)
-      val executorCores = getInt("spark.executor.cores", 1)
+    if (contains(CORES_MAX) && contains(EXECUTOR_CORES)) {
+      val totalCores = getInt(CORES_MAX.key, 1)
+      val executorCores = get(EXECUTOR_CORES)
       val leftCores = totalCores % executorCores
       if (leftCores != 0) {
         logWarning(s"Total executor cores: ${totalCores} is not " +
           s"divisible by cores per executor: ${executorCores}, " +
           s"the left cores: ${leftCores} will not be allocated")
+      }
+    }
+
+    if (contains(EXECUTOR_CORES) && contains("spark.task.cpus")) {
+      val executorCores = get(EXECUTOR_CORES)
+      val taskCpus = getInt("spark.task.cpus", 1)
+
+      if (executorCores < taskCpus) {
+        throw new SparkException(s"${EXECUTOR_CORES.key} must not be less than spark.task.cpus.")
       }
     }
 
@@ -671,13 +675,13 @@ private[spark] object SparkConf extends Logging {
    * TODO: consolidate it with `ConfigBuilder.withAlternative`.
    */
   private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
-    "spark.executor.userClassPathFirst" -> Seq(
+    EXECUTOR_USER_CLASS_PATH_FIRST.key -> Seq(
       AlternateConfig("spark.files.userClassPathFirst", "1.3")),
-    "spark.history.fs.update.interval" -> Seq(
+    UPDATE_INTERVAL_S.key -> Seq(
       AlternateConfig("spark.history.fs.update.interval.seconds", "1.4"),
       AlternateConfig("spark.history.fs.updateInterval", "1.3"),
       AlternateConfig("spark.history.updateInterval", "1.3")),
-    "spark.history.fs.cleaner.interval" -> Seq(
+    CLEANER_INTERVAL_S.key -> Seq(
       AlternateConfig("spark.history.fs.cleaner.interval.seconds", "1.4")),
     MAX_LOG_AGE_S.key -> Seq(
       AlternateConfig("spark.history.fs.cleaner.maxAge.seconds", "1.4")),
@@ -694,7 +698,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
     "spark.shuffle.file.buffer" -> Seq(
       AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
-    "spark.executor.logs.rolling.maxSize" -> Seq(
+    EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
     "spark.io.compression.snappy.blockSize" -> Seq(
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),

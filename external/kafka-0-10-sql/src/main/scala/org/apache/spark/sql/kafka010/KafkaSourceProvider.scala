@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.{Locale, Optional, UUID}
+import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -27,7 +27,7 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2._
@@ -80,12 +80,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
 
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
+    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
     val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
       STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
@@ -122,12 +117,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val uniqueGroupId = streamingUniqueGroupId(parameters, metadataPath)
 
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
+    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
     val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
       STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
@@ -198,12 +188,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters: Map[String, String]): BaseRelation = {
     validateBatchOptions(parameters)
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap
+    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
 
     val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
       caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
@@ -230,8 +215,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       outputMode: OutputMode): Sink = {
     val defaultTopic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(parameters)
-    new KafkaSink(sqlContext,
-      new ju.HashMap[String, Object](specifiedKafkaParams.asJava), defaultTopic)
+    new KafkaSink(sqlContext, specifiedKafkaParams, defaultTopic)
   }
 
   override def createRelation(
@@ -248,8 +232,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
     val topic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(parameters)
-    KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution,
-      new ju.HashMap[String, Object](specifiedKafkaParams.asJava), topic)
+    KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution, specifiedKafkaParams,
+      topic)
 
     /* This method is suppose to return a relation that reads the data that was written.
      * We cannot support this for Kafka. Therefore, in order to make things consistent,
@@ -274,13 +258,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       options: DataSourceOptions): StreamingWriteSupport = {
     import scala.collection.JavaConverters._
 
-    val spark = SparkSession.getActiveSession.get
     val topic = Option(options.get(TOPIC_OPTION_KEY).orElse(null)).map(_.trim)
     // We convert the options argument from V2 -> Java map -> scala mutable -> scala immutable.
     val producerParams = kafkaParamsForProducer(options.asMap.asScala.toMap)
-
-    KafkaWriter.validateQuery(
-      schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
 
     new KafkaStreamingWriteSupport(topic, producerParams, schema)
   }
@@ -481,6 +461,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
 
 
 
+  private val serClassName = classOf[ByteArraySerializer].getName
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
   def getKafkaOffsetRangeLimit(
@@ -498,7 +479,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   }
 
   def kafkaParamsForDriver(specifiedKafkaParams: Map[String, String]): ju.Map[String, Object] =
-    ConfigUpdater("source", specifiedKafkaParams)
+    KafkaConfigUpdater("source", specifiedKafkaParams)
       .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
       .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
 
@@ -515,12 +496,13 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       // If buffer config is not set, set it to reasonable value to work around
       // buffer issues (see KAFKA-3135)
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
+      .setAuthenticationConfigIfNeeded()
       .build()
 
   def kafkaParamsForExecutors(
       specifiedKafkaParams: Map[String, String],
       uniqueGroupId: String): ju.Map[String, Object] =
-    ConfigUpdater("executor", specifiedKafkaParams)
+    KafkaConfigUpdater("executor", specifiedKafkaParams)
       .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
       .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
 
@@ -536,6 +518,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       // If buffer config is not set, set it to reasonable value to work around
       // buffer issues (see KAFKA-3135)
       .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
+      .setAuthenticationConfigIfNeeded()
       .build()
 
   /**
@@ -550,29 +533,8 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     s"${groupIdPrefix}-${UUID.randomUUID}-${metadataPath.hashCode}"
   }
 
-  /** Class to conveniently update Kafka config params, while logging the changes */
-  private case class ConfigUpdater(module: String, kafkaParams: Map[String, String]) {
-    private val map = new ju.HashMap[String, Object](kafkaParams.asJava)
-
-    def set(key: String, value: Object): this.type = {
-      map.put(key, value)
-      logDebug(s"$module: Set $key to $value, earlier value: ${kafkaParams.getOrElse(key, "")}")
-      this
-    }
-
-    def setIfUnset(key: String, value: Object): ConfigUpdater = {
-      if (!map.containsKey(key)) {
-        map.put(key, value)
-        logDebug(s"$module: Set $key to $value")
-      }
-      this
-    }
-
-    def build(): ju.Map[String, Object] = map
-  }
-
   private[kafka010] def kafkaParamsForProducer(
-      parameters: Map[String, String]): Map[String, String] = {
+      parameters: Map[String, String]): ju.Map[String, Object] = {
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
@@ -580,17 +542,26 @@ private[kafka010] object KafkaSourceProvider extends Logging {
           + "are serialized with ByteArraySerializer.")
     }
 
-    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}"))
-    {
+    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Kafka option '${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}' is not supported as "
           + "value are serialized with ByteArraySerializer.")
     }
+
+    val specifiedKafkaParams = convertToSpecifiedParams(parameters)
+
+    KafkaConfigUpdater("executor", specifiedKafkaParams)
+      .set(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, serClassName)
+      .set(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, serClassName)
+      .setAuthenticationConfigIfNeeded()
+      .build()
+  }
+
+  private def convertToSpecifiedParams(parameters: Map[String, String]): Map[String, String] = {
     parameters
       .keySet
       .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
       .map { k => k.drop(6).toString -> parameters(k) }
-      .toMap + (ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName,
-      ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName)
+      .toMap
   }
 }
