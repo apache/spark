@@ -3038,7 +3038,7 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   expect_equal(coltypes(x), "map<string,string>")
 
   df <- selectExpr(read.json(jsonPath), "name", "(age * 1.21) as age")
-  expect_equal(dtypes(df), list(c("name", "string"), c("age", "decimal(24,2)")))
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "double")))
 
   df1 <- select(df, cast(df$age, "integer"))
   coltypes(df) <- c("character", "integer")
