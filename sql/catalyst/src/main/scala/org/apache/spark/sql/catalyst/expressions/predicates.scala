@@ -649,9 +649,9 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   // +---------+---------+---------+---------+
   // | <=>     | TRUE    | FALSE   | UNKNOWN |
   // +---------+---------+---------+---------+
-  // | TRUE    | TRUE    | FALSE   | UNKNOWN |
-  // | FALSE   | FALSE   | TRUE    | UNKNOWN |
-  // | UNKNOWN | UNKNOWN | UNKNOWN | TRUE    |
+  // | TRUE    | TRUE    | FALSE   | FALSE   |
+  // | FALSE   | FALSE   | TRUE    | FALSE   |
+  // | UNKNOWN | FALSE   | FALSE   | TRUE    |
   // +---------+---------+---------+---------+
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
