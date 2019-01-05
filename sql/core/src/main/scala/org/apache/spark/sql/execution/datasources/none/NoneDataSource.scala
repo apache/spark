@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StructType
  * of each written row of a dataset without converting fields to other types.
  * This can be used in caching of datasets without additional overhead of an actions.
  */
-class NoneDataSource extends DataSourceV2 with BatchWriteSupportProvider with DataSourceRegister{
+class NoneDataSource extends DataSourceV2 with BatchWriteSupportProvider with DataSourceRegister {
   override def shortName(): String = "none"
 
   override def createBatchWriteSupport(
