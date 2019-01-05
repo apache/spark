@@ -446,7 +446,12 @@ def main(infile, outfile):
         pickleSer._write_with_length((aid, accum._value), outfile)
 
     # check end of stream
-    if read_int(infile) == SpecialLengths.END_OF_STREAM:
+    res = read_int(infile)
+    if sys.version >= '3' and res == SpecialLengths.END_OF_DATA_SECTION:
+        # skip the END_OF_DATA_SECTION for Python3, otherwise the worker reuse will take
+        # no effect, see SPARK-26549 for more details.
+        res = read_int(infile)
+    if res == SpecialLengths.END_OF_STREAM:
         write_int(SpecialLengths.END_OF_STREAM, outfile)
     else:
         # write a different value to tell JVM to not reuse this worker

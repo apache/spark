@@ -144,6 +144,15 @@ class WorkerTests(ReusedPySparkTestCase):
         finally:
             self.sc.pythonVer = version
 
+    def test_reuse_worker(self):
+        def get_worker_pid(input_rdd):
+            return input_rdd.map(lambda x: os.getpid()).collect()
+        rdd = self.sc.parallelize(range(20), 20)
+        worker_pids = get_worker_pid(rdd)
+        pids = get_worker_pid(rdd)
+        for pid in pids:
+            self.assertTrue(pid in worker_pids)
+
 
 if __name__ == "__main__":
     import unittest
