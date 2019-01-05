@@ -32,18 +32,18 @@ import org.apache.spark.internal.config.R._
 import org.apache.spark.util.Utils
 
 /**
-  * A helper class to run R UDFs in Spark.
-  */
+ * A helper class to run R UDFs in Spark.
+ */
 private[spark] class RRunner[U](
-  func: Array[Byte],
-  deserializer: String,
-  serializer: String,
-  packageNames: Array[Byte],
-  broadcastVars: Array[Broadcast[Object]],
-  numPartitions: Int = -1,
-  isDataFrame: Boolean = false,
-  colNames: Array[String] = null,
-  mode: Int = RRunnerModes.RDD)
+    func: Array[Byte],
+    deserializer: String,
+    serializer: String,
+    packageNames: Array[Byte],
+    broadcastVars: Array[Broadcast[Object]],
+    numPartitions: Int = -1,
+    isDataFrame: Boolean = false,
+    colNames: Array[String] = null,
+    mode: Int = RRunnerModes.RDD)
   extends Logging {
   private var bootTime: Double = _
   private var dataStream: DataInputStream = _
@@ -57,8 +57,8 @@ private[spark] class RRunner[U](
   }
 
   def compute(
-    inputIterator: Iterator[_],
-    partitionIndex: Int): Iterator[U] = {
+      inputIterator: Iterator[_],
+      partitionIndex: Int): Iterator[U] = {
     // Timing start
     bootTime = System.currentTimeMillis / 1000.0
 
@@ -117,12 +117,12 @@ private[spark] class RRunner[U](
   }
 
   /**
-    * Start a thread to write RDD data to the R process.
-    */
+   * Start a thread to write RDD data to the R process.
+   */
   private def startStdinThread(
-    output: OutputStream,
-    iter: Iterator[_],
-    partitionIndex: Int): Unit = {
+      output: OutputStream,
+      iter: Iterator[_],
+      partitionIndex: Int): Unit = {
     val env = SparkEnv.get
     val taskContext = TaskContext.get()
     val bufferSize = System.getProperty(BUFFER_SIZE.key,
@@ -232,13 +232,13 @@ private[spark] class RRunner[U](
             ("Times: boot = %.3f s, init = %.3f s, broadcast = %.3f s, " +
               "read-input = %.3f s, compute = %.3f s, write-output = %.3f s, " +
               "total = %.3f s").format(
-              boot,
-              init,
-              broadcast,
-              input,
-              compute,
-              output,
-              boot + init + broadcast + input + compute + output))
+                boot,
+                init,
+                broadcast,
+                input,
+                compute,
+                output,
+                boot + init + broadcast + input + compute + output))
           read()
         case length if length >= 0 =>
           readData(length).asInstanceOf[U]
@@ -291,12 +291,11 @@ private[spark] object RRunnerModes {
 }
 
 private[r] class BufferedStreamThread(
-  in: InputStream,
-  name: String,
-  errBufferSize: Int) extends Thread(name) with Logging {
+    in: InputStream,
+    name: String,
+    errBufferSize: Int) extends Thread(name) with Logging {
   val lines = new Array[String](errBufferSize)
   var lineIdx = 0
-
   override def run() {
     for (line <- Source.fromInputStream(in).getLines) {
       synchronized {
@@ -330,8 +329,8 @@ private[r] object RRunner {
   }
 
   /**
-    * Start a thread to print the process's stderr to ours
-    */
+   * Start a thread to print the process's stderr to ours
+   */
   private def startStdoutThread(proc: Process): BufferedStreamThread = {
     val BUFFER_SIZE = 100
     val thread = new BufferedStreamThread(proc.getInputStream, "stdout reader for R", BUFFER_SIZE)
@@ -363,15 +362,15 @@ private[r] object RRunner {
     pb.environment().put("SPARKR_SPARKFILES_ROOT_DIR", SparkFiles.getRootDirectory())
     pb.environment().put("SPARKR_IS_RUNNING_ON_WORKER", "TRUE")
     pb.environment().put("SPARKR_WORKER_SECRET", authHelper.secret)
-    pb.redirectErrorStream(true) // redirect stderr into stdout
+    pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()
     val errThread = startStdoutThread(proc)
     errThread
   }
 
   /**
-    * ProcessBuilder used to launch worker R processes.
-    */
+   * ProcessBuilder used to launch worker R processes.
+   */
   def createRWorker(port: Int): BufferedStreamThread = {
     val useDaemon = SparkEnv.get.conf.getBoolean("spark.sparkr.use.daemon", true)
     if (!Utils.isWindows && useDaemon) {
