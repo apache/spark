@@ -27,8 +27,8 @@ class NoneSuite extends SharedSQLContext {
     val accum = spark.sparkContext.longAccumulator
     spark.range(numElems)
       .map(x => {accum.add(1); x})
-      .write.
-      format("none")
+      .write
+      .format("none")
       .save()
     assert(accum.value == numElems)
   }
