@@ -109,65 +109,108 @@ object StringUtils {
     val SEMICOLON: Char = ';'
     val ESCAPE: Char = '\\'
     val DOT = '.'
+    val STAR = '*'
+    val DASH = '-'
     val SINGLE_COMMENT = "--"
     val BRACKETED_COMMENT_START = "/*"
     val BRACKETED_COMMENT_END = "*/"
     val FORWARD_SLASH = '/'
 
-    // quoteFlag acts as an enum of D_QUOTE, S_QUOTE, DOT
-    // * D_QUOTE: the cursor stands on a doulbe quoted string
-    // * S_QUOTE: the cursor stands on a single quoted string
-    // * DASH: the cursor stands in the SINGLE_COMMENT
-    // * FORWARD_SLASH: the cursor stands in the BRACKETED_COMMENT
-    // * DOT: default value for other cases
-    var quoteFlag: Char = DOT
+    sealed trait Flag
+    case object Common extends Flag
+    trait Quote extends Flag {
+      def toChar: Char
+      def sameAs(quoteChar: Char): Boolean = { toChar == quoteChar }
+    }
+    object Quote {
+      def validate(quoteChar: Char): Boolean = {
+        List(D_QUOTE, S_QUOTE, Q_QUOTE).contains(quoteChar)
+      }
+
+      def apply(quoteChar: Char): Quote = quoteChar match {
+        case D_QUOTE => DoubleQuote
+        case S_QUOTE => SingleQuote
+        case Q_QUOTE => QuasiQuote
+        case _ =>
+          throw new IllegalArgumentException(s"$quoteChar is not a character for quoting")
+      }
+    }
+    trait Comment extends Flag
+    trait OpenAndClose {
+      def openBy(text: String): Boolean
+      def closeBy(text: String): Boolean
+    }
+    // the cursor stands on a doulbe quoted string
+    case object DoubleQuote extends Quote with OpenAndClose {
+      override def openBy(text: String): Boolean = text.startsWith(D_QUOTE.toString)
+      override def closeBy(text: String): Boolean = text.startsWith(D_QUOTE.toString)
+      override def toChar: Char = D_QUOTE
+    }
+    // the cursor stands on a quasiquoted string
+    case object QuasiQuote extends Quote with OpenAndClose {
+      override def openBy(text: String): Boolean = text.startsWith(Q_QUOTE.toString)
+      override def closeBy(text: String): Boolean = text.startsWith(Q_QUOTE.toString)
+      override def toChar: Char = Q_QUOTE
+    }
+    // the cursor stands on a single quoted string
+    case object SingleQuote extends Quote with OpenAndClose {
+      override def openBy(text: String): Boolean = text.startsWith(S_QUOTE.toString)
+      override def closeBy(text: String): Boolean = text.startsWith(S_QUOTE.toString)
+      override def toChar: Char = S_QUOTE
+    }
+    // the cursor stands in the SINGLE_COMMENT
+    case object SingleComment extends Comment {
+      def openBy(text: String): Boolean = text.startsWith(SINGLE_COMMENT)
+    }
+    // the cursor stands in the BRACKETED_COMMENT
+    case object BracketedComment extends Comment with OpenAndClose {
+      override def openBy(text: String): Boolean = text.startsWith(BRACKETED_COMMENT_START)
+      override def closeBy(text: String): Boolean = text.startsWith(BRACKETED_COMMENT_END)
+    }
+
+    var flag: Flag = Common
     var cursor: Int = 0
     val ret: mutable.ArrayBuffer[String] = mutable.ArrayBuffer()
     var currentSQL: mutable.StringBuilder = mutable.StringBuilder.newBuilder
 
     while (cursor < text.length) {
       val current: Char = text(cursor)
+      val remaining = text.substring(cursor)
 
-      text.substring(cursor) match {
+      (flag, current) match {
         // if it stands on the opening of a bracketed comment, consume 2 characters
-        case remaining if quoteFlag == DOT
-                          && current == '/'
-                          && remaining.startsWith(BRACKETED_COMMENT_START) =>
-          quoteFlag = current
+        case (Common, FORWARD_SLASH) if BracketedComment.openBy(remaining) =>
+          flag = BracketedComment
           currentSQL.append(BRACKETED_COMMENT_START)
           cursor += 2
         // if it stands on the ending of a bracketed comment, consume 2 characters
-        case remaining if quoteFlag == FORWARD_SLASH
-                          && current == '*'
-                          && remaining.startsWith(BRACKETED_COMMENT_END) =>
-          quoteFlag = DOT
+        case (BracketedComment, STAR) if BracketedComment.closeBy(remaining) =>
+          flag = Common
           currentSQL.append(BRACKETED_COMMENT_END)
           cursor += 2
 
         // if it stands on the opening of inline comment, move cursor at the end of this line
-        case remaining if quoteFlag == DOT && remaining.startsWith(SINGLE_COMMENT) =>
+        case (Common, DASH) if SingleComment.openBy(remaining) =>
           cursor += remaining.takeWhile(x => x != '\n').length
 
         // if it stands on a normal semicolon, stage the current sql and move the cursor on
-        case remaining if quoteFlag == DOT && current == SEMICOLON =>
+        case (Common, SEMICOLON) =>
           ret += currentSQL.toString.trim
           currentSQL.clear()
           cursor += 1
 
         // if it stands on the openning of quotes, mark the flag and move on
-        case remaining if quoteFlag == DOT
-                          && List(D_QUOTE, S_QUOTE, Q_QUOTE).contains(current) =>
-          quoteFlag = current
+        case (Common, quoteChar) if Quote.validate(quoteChar) =>
+          flag = Quote(quoteChar)
           currentSQL += current
           cursor += 1
         // if it stands on '\' in the quotes, consume 2 characters to avoid the ESCAPE of " or '
-        case remaining if remaining.length >= 2 && quoteFlag != DOT && current == ESCAPE =>
+        case (quote: Quote, ESCAPE) if remaining.length >= 2 =>
           currentSQL.append(remaining.take(2))
           cursor += 2
         // if it stands on the ending of quotes, clear the flag and move on
-        case remaining if List(D_QUOTE, S_QUOTE, Q_QUOTE).contains(quoteFlag)
-                          && current == quoteFlag =>
-          quoteFlag = DOT
+        case (quote: Quote, quoteChar) if quote.sameAs(quoteChar) =>
+          flag = Common
           currentSQL += current
           cursor += 1
 
@@ -192,9 +235,9 @@ object StringUtils {
     private var length: Int = 0
 
     /**
-      * Appends a string and accumulates its length to allocate a string buffer for all
-      * appended strings once in the toString method.
-      */
+     * Appends a string and accumulates its length to allocate a string buffer for all
+     * appended strings once in the toString method.
+     */
     def append(s: String): Unit = {
       if (s != null) {
         strings.append(s)
@@ -203,9 +246,9 @@ object StringUtils {
     }
 
     /**
-      * The method allocates memory for all appended strings, writes them to the memory and
-      * returns concatenated string.
-      */
+     * The method allocates memory for all appended strings, writes them to the memory and
+     * returns concatenated string.
+     */
     override def toString: String = {
       val result = new java.lang.StringBuilder(length)
       strings.foreach(result.append)
