@@ -19,8 +19,8 @@
 
 DRY_RUN=${DRY_RUN:-0}
 GPG="gpg --no-tty --batch"
-ASF_REPO="https://git-wip-us.apache.org/repos/asf/spark.git"
-ASF_REPO_WEBUI="https://git-wip-us.apache.org/repos/asf?p=spark.git"
+ASF_REPO="https://gitbox.apache.org/repos/asf/spark.git"
+ASF_REPO_WEBUI="https://gitbox.apache.org/repos/asf?p=spark.git"
 
 function error {
   echo "$*"
