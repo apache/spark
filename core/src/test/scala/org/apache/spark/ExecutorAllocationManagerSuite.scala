@@ -19,7 +19,7 @@ package org.apache.spark
 
 import scala.collection.mutable
 
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
@@ -156,7 +156,7 @@ class ExecutorAllocationManagerSuite
       .set("spark.dynamicAllocation.maxExecutors", "15")
       .set("spark.dynamicAllocation.minExecutors", "3")
       .set("spark.dynamicAllocation.executorAllocationRatio", divisor.toString)
-      .set("spark.executor.cores", cores.toString)
+      .set(config.EXECUTOR_CORES, cores)
     val sc = new SparkContext(conf)
     contexts += sc
     var manager = sc.executorAllocationManager.get

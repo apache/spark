@@ -17,9 +17,8 @@
 
 package org.apache.spark.metrics.source
 
-import com.codahale.metrics.MetricRegistry
 import org.mockito.ArgumentCaptor
-import org.mockito.Mockito.{mock, never, spy, times, verify, when}
+import org.mockito.Mockito.{mock, times, verify, when}
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.metrics.MetricsSystem
@@ -37,7 +36,7 @@ class AccumulatorSourceSuite extends SparkFunSuite {
     val accs = Map("my-accumulator-1" -> acc1,
                    "my-accumulator-2" -> acc2)
     LongAccumulatorSource.register(mockContext, accs)
-    val captor = new ArgumentCaptor[AccumulatorSource]()
+    val captor = ArgumentCaptor.forClass(classOf[AccumulatorSource])
     verify(mockMetricSystem, times(1)).registerSource(captor.capture())
     val source = captor.getValue()
     val gauges = source.metricRegistry.getGauges()
@@ -59,7 +58,7 @@ class AccumulatorSourceSuite extends SparkFunSuite {
     val accs = Map("my-accumulator-1" -> acc1,
                    "my-accumulator-2" -> acc2)
     LongAccumulatorSource.register(mockContext, accs)
-    val captor = new ArgumentCaptor[AccumulatorSource]()
+    val captor = ArgumentCaptor.forClass(classOf[AccumulatorSource])
     verify(mockMetricSystem, times(1)).registerSource(captor.capture())
     val source = captor.getValue()
     val gauges = source.metricRegistry.getGauges()
@@ -81,7 +80,7 @@ class AccumulatorSourceSuite extends SparkFunSuite {
       "my-accumulator-1" -> acc1,
       "my-accumulator-2" -> acc2)
     DoubleAccumulatorSource.register(mockContext, accs)
-    val captor = new ArgumentCaptor[AccumulatorSource]()
+    val captor = ArgumentCaptor.forClass(classOf[AccumulatorSource])
     verify(mockMetricSystem, times(1)).registerSource(captor.capture())
     val source = captor.getValue()
     val gauges = source.metricRegistry.getGauges()

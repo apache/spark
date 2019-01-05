@@ -34,8 +34,8 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.YarnClientApplication
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
-import org.mockito.Matchers.{eq => meq, _}
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyShort, eq => meq}
+import org.mockito.Mockito.{spy, verify}
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TestUtils}
@@ -43,6 +43,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class ClientSuite extends SparkFunSuite with Matchers {
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   import Client._
 
