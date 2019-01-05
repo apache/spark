@@ -315,7 +315,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
       Array(size10000, size0, size1000, size0)))
     assert(tracker.containsShuffle(10))
-    assert(tracker.getMapSizesByExecutorId(10, 0, 4, serializerRelocatable = true).toSeq ===
+    assert(tracker.getMapSizesByExecutorId(10, 0, 4, "c", shuffleBlocksBatchFetch = true).toSeq ===
       Seq(
         (BlockManagerId("a", "hostA", 1000),
           Seq((ShuffleBlockId(10, 0, 1), size1000), (ShuffleBlockId(10, 0, 3), size10000))),
@@ -343,46 +343,20 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Array(1000L, 10000L, 2000L)))
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
       Array(10000L, 2000L, 1000L)))
-    val statuses1 = tracker.getMapSizesByExecutorId(10, 0, 2, serializerRelocatable = true)
+    val statuses1 = tracker.getMapSizesByExecutorId(10, 0, 2, "a", shuffleBlocksBatchFetch = true)
     assert(statuses1.toSet ===
       Seq((BlockManagerId("a", "hostA", 1000),
         ArrayBuffer((ContinuousShuffleBlockId(10, 0, 0, 2), size1000 + size10000))),
         (BlockManagerId("b", "hostB", 1000),
-          ArrayBuffer((ContinuousShuffleBlockId(10, 1, 0, 2), size10000 + size2000))))
+          ArrayBuffer((ShuffleBlockId(10, 1, 0), size10000),
+            (ShuffleBlockId(10, 1, 1), size2000))))
         .toSet)
-    val statuses2 = tracker.getMapSizesByExecutorId(10, 2, 3, serializerRelocatable = true)
+    val statuses2 = tracker.getMapSizesByExecutorId(10, 2, 3, "a", shuffleBlocksBatchFetch = true)
     assert(statuses2.toSet ===
       Seq((BlockManagerId("a", "hostA", 1000),
         ArrayBuffer((ShuffleBlockId(10, 0, 2), size2000))),
         (BlockManagerId("b", "hostB", 1000),
           ArrayBuffer((ShuffleBlockId(10, 1, 2), size1000))))
-        .toSet)
-    assert(0 == tracker.getNumCachedSerializedBroadcast)
-    tracker.stop()
-    rpcEnv.shutdown()
-  }
-
-  test("fetch contiguous partitions (continuousBlockBatchFetch = false)") {
-    val newConf = new SparkConf
-    newConf.set("spark.shuffle.continuousBlockBatchFetch", "false")
-    val rpcEnv = createRpcEnv("test")
-    val tracker = newTrackerMaster(newConf)
-    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
-      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, newConf))
-    tracker.registerShuffle(10, 2)
-    assert(tracker.containsShuffle(10))
-    val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
-    val size10000 = MapStatus.decompressSize(MapStatus.compressSize(10000L))
-    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
-      Array(1000L, 10000L)))
-    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
-      Array(10000L, 1000L)))
-    val statuses = tracker.getMapSizesByExecutorId(10, 0, 2, serializerRelocatable = true)
-    assert(statuses.toSet ===
-      Seq((BlockManagerId("a", "hostA", 1000),
-        ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000), (ShuffleBlockId(10, 0, 1), size10000))),
-        (BlockManagerId("b", "hostB", 1000),
-          ArrayBuffer((ShuffleBlockId(10, 1, 0), size10000), (ShuffleBlockId(10, 1, 1), size1000))))
         .toSet)
     tracker.stop()
     rpcEnv.shutdown()
