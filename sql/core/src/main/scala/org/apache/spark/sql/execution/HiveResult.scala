@@ -95,7 +95,7 @@ object HiveResult {
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
       }.toSeq.sorted.mkString("{", ",", "}")
     case (null, _) => "null"
-    case (s: String, StringType) => "\"" + s + "\""
+    case (s: String, StringType) => "\"" + escapeString(s) + "\""
     case (decimal, DecimalType()) => decimal.toString
     case (interval, CalendarIntervalType) => interval.toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
@@ -123,5 +123,47 @@ object HiveResult {
     case (interval, CalendarIntervalType) => interval.toString
     case (other, _ : UserDefinedType[_]) => other.toString
     case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
+  }
+
+  /** Escape a String in JSON format. */
+  private def escapeString(str: String): String = {
+    val length = str.length
+    val escape = new StringBuilder(length + 16)
+
+    str.foreach {
+      case c @ ('"' | '\\') =>
+        escape.append('\\')
+        escape.append(c);
+      case '\b' =>
+        escape.append('\\')
+        escape.append('b')
+      case '\f' =>
+        escape.append('\\')
+        escape.append('f')
+      case '\n' =>
+        escape.append('\\')
+        escape.append('n')
+      case '\r' =>
+        escape.append('\\')
+        escape.append('r')
+      case '\t' =>
+        escape.append('\\')
+        escape.append('t')
+      case c =>
+        // Control characeters! According to JSON RFC u0020
+        if (c < ' ') {
+          val hex = Integer.toHexString(c)
+          escape.append('\\')
+          escape.append('u')
+          for (_ <- hex.length() + 1 to 4) {
+            escape.append('0')
+          }
+          escape.append(hex)
+        } else {
+          escape.append(c)
+        }
+    }
+
+    return escape.toString()
   }
 }

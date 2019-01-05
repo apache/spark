@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+import org.apache.spark.sql.types.MapType
 
 class HiveResultSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
@@ -44,4 +45,11 @@ class HiveResultSuite extends SparkFunSuite with SharedSQLContext {
     val tpe = new ExamplePointUDT()
     assert(HiveResult.toHiveString((point, tpe)) === "(50.0, 50.0)")
   }
+
+  test("SPARK-26544: toHiveString correctly escape map type") {
+    val m = Map("log_pb" -> """{"impr_id":"20181231"}""", "request_id" -> "001")
+    assert(HiveResult.toHiveString((m, new MapType)) ===
+      """{"log_pb":"{\"impr_id\":\"20181231\"}", "request_id":"001"}""")
+  }
+
 }
