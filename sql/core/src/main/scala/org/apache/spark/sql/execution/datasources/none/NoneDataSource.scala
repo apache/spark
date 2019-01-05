@@ -27,7 +27,11 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.types.StructType
 
-
+/**
+ * The datasource can be used in benchmarking because it forces materialization
+ * of each written row of a dataset without converting fields to other types.
+ * This can be used in caching of datasets without additional overhead of an actions.
+ */
 class NoneDataSource extends DataSourceV2 with BatchWriteSupportProvider with DataSourceRegister{
   override def shortName(): String = "none"
 
