@@ -200,7 +200,8 @@ case class HashAggregateExec(
     val (resultVars, genResult) = if (modes.contains(Final) || modes.contains(Complete)) {
       // evaluate aggregate results
       ctx.currentVars = bufVars
-      val aggResults = bindReferences(functions.map(_.evaluateExpression),
+      val aggResults = bindReferences(
+        functions.map(_.evaluateExpression),
         aggregateBufferAttributes).map(_.genCode(ctx))
       val evaluateAggResults = evaluateVariables(aggResults)
       // evaluate result expressions
@@ -454,13 +455,15 @@ case class HashAggregateExec(
       val evaluateBufferVars = evaluateVariables(bufferVars)
       // evaluate the aggregation result
       ctx.currentVars = bufferVars
-      val aggResults = bindReferences(declFunctions.map(_.evaluateExpression),
+      val aggResults = bindReferences(
+        declFunctions.map(_.evaluateExpression),
         aggregateBufferAttributes).map(_.genCode(ctx))
       val evaluateAggResults = evaluateVariables(aggResults)
       // generate the final result
       ctx.currentVars = keyVars ++ aggResults
       val inputAttrs = groupingAttributes ++ aggregateAttributes
-      val resultVars = bindReferences[Expression](resultExpressions,
+      val resultVars = bindReferences[Expression](
+        resultExpressions,
         inputAttrs).map(_.genCode(ctx))
       s"""
        $evaluateKeyVars
@@ -490,7 +493,8 @@ case class HashAggregateExec(
 
       ctx.currentVars = keyVars ++ resultBufferVars
       val inputAttrs = resultExpressions.map(_.toAttribute)
-      val resultVars = bindReferences[Expression](resultExpressions,
+      val resultVars = bindReferences[Expression](
+        resultExpressions,
         inputAttrs).map(_.genCode(ctx))
       s"""
        $evaluateKeyVars
@@ -501,7 +505,8 @@ case class HashAggregateExec(
       // generate result based on grouping key
       ctx.INPUT_ROW = keyTerm
       ctx.currentVars = null
-      val eval = bindReferences[Expression](resultExpressions,
+      val eval = bindReferences[Expression](
+        resultExpressions,
         groupingAttributes).map(_.genCode(ctx))
       consume(ctx, eval)
     }

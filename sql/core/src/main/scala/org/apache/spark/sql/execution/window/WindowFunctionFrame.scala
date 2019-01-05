@@ -90,9 +90,8 @@ private[window] final class OffsetWindowFunctionFrame(
   private[this] val projection = {
     // Collect the expressions and bind them.
     val inputAttrs = inputSchema.map(_.withNullability(true))
-    val boundExpressions = bindReferences(
-      Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map(_.input),
-      inputAttrs)
+    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ bindReferences(
+      expressions.toSeq.map(_.input), inputAttrs)
 
     // Create the projection.
     newMutableProjection(boundExpressions, Nil).target(target)

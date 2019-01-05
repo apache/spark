@@ -147,8 +147,7 @@ object FileFormatWriter extends Logging {
         // the physical plan may have different attribute ids due to optimizer removing some
         // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
         val orderingExpr = bindReferences(
-          requiredOrdering.map(SortOrder(_, Ascending)),
-          outputSpec.outputColumns)
+          requiredOrdering.map(SortOrder(_, Ascending)), outputSpec.outputColumns)
         SortExec(
           orderingExpr,
           global = false,
