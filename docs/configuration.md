@@ -1292,16 +1292,6 @@ Apart from these, the following properties are also available, and may be useful
     Controls whether to clean checkpoint files if the reference is out of scope.
   </td>
 </tr>
-<tr>
-  <td><code>spark.network.io.preferDirectBufs</code></td>
-  <td>true</td>
-  <td>
-    If enable then off-heap buffer allocations are prefered by the shared ByteBuf allocators.
-    Off-heap buffers are used to reduce garbage collection during shuffle and cache
-    block transfer. For environments where off-heap memory is tightly limited, users may wish to
-    turn this off to force all allocations from Netty to be on-heap.
-    </td>
-</tr>
 </table>
 
 ### Execution Behavior
@@ -1514,6 +1504,16 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
   </td>
+</tr>
+<tr>
+  <td><code>spark.network.io.preferDirectBufs</code></td>
+  <td>true</td>
+  <td>
+    If enable then off-heap buffer allocations are prefered by the shared ByteBuf allocators.
+    Off-heap buffers are used to reduce garbage collection during shuffle and cache
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to
+    turn this off to force all allocations from Netty to be on-heap.
+    </td>
 </tr>
 <tr>
   <td><code>spark.port.maxRetries</code></td>
