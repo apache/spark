@@ -68,7 +68,7 @@ private[spark] class SerializerManager(
   // Whether to compress shuffle output that are stored
   private[this] val compressShuffle = conf.getBoolean("spark.shuffle.compress", true)
   // Whether to compress RDD partitions that are stored serialized
-  private[this] val compressRdds = conf.getBoolean("spark.rdd.compress", false)
+  private[this] val compressRdds = conf.get(config.RDD_COMPRESS)
   // Whether to compress shuffle output temporarily spilled to disk
   private[this] val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
 

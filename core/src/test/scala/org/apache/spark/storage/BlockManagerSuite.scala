@@ -871,14 +871,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store.stop()
       store = null
 
-      conf.set("spark.rdd.compress", "true")
+      conf.set(RDD_COMPRESS.key, "true")
       store = makeBlockManager(20000, "exec5")
       store.putSingle(rdd(0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(rdd(0, 0)) <= 1000, "rdd_0_0 was not compressed")
       store.stop()
       store = null
 
-      conf.set("spark.rdd.compress", "false")
+      conf.set(RDD_COMPRESS.key, "false")
       store = makeBlockManager(20000, "exec6")
       store.putSingle(rdd(0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(rdd(0, 0)) >= 10000, "rdd_0_0 was compressed")
@@ -894,7 +894,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     } finally {
       System.clearProperty("spark.shuffle.compress")
       System.clearProperty(BROADCAST_COMPRESS.key)
-      System.clearProperty("spark.rdd.compress")
+      System.clearProperty(RDD_COMPRESS.key)
     }
   }
 

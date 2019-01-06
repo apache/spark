@@ -29,6 +29,7 @@ import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -136,10 +137,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
 
     assert(serialUnion.asInstanceOf[UnionRDD[Int]].isPartitionListingParallel === false)
 
-    sc.conf.set("spark.rdd.parallelListingThreshold", "1")
+    sc.conf.set(RDD_PARALLEL_LISTING_THRESHOLD.key, "1")
     val parallelUnion = sc.union(nums1, nums2)
     val actual = parallelUnion.collect().toList
-    sc.conf.remove("spark.rdd.parallelListingThreshold")
+    sc.conf.remove(RDD_PARALLEL_LISTING_THRESHOLD.key)
 
     assert(parallelUnion.asInstanceOf[UnionRDD[Int]].isPartitionListingParallel === true)
     assert(expected === actual)

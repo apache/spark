@@ -26,6 +26,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.config.{RDD_PARALLEL_LISTING_THRESHOLD}
 import org.apache.spark.util.Utils
 
 /**
@@ -71,7 +72,7 @@ class UnionRDD[T: ClassTag](
 
   // visible for testing
   private[spark] val isPartitionListingParallel: Boolean =
-    rdds.length > conf.getInt("spark.rdd.parallelListingThreshold", 10)
+    rdds.length > conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
 
   override def getPartitions: Array[Partition] = {
     val parRDDs = if (isPartitionListingParallel) {

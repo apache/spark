@@ -996,4 +996,22 @@ package object config {
       "mechanisms to guarantee data won't be corrupted during broadcast")
     .booleanConf.createWithDefault(true)
 
+  private[spark] val RDD_COMPRESS = ConfigBuilder("spark.rdd.compress")
+    .doc("Whether to compress serialized RDD partitions " +
+      "(e.g. for StorageLevel.MEMORY_ONLY_SER in Scala " +
+      "or StorageLevel.MEMORY_ONLY in Python). Can save substantial " +
+      "space at the cost of some extra CPU time. " +
+      "Compression will use spark.io.compression.codec")
+    .booleanConf.createWithDefault(false)
+
+  private[spark] val RDD_PARALLEL_LISTING_THRESHOLD =
+    ConfigBuilder("spark.rdd.parallelListingThreshold")
+    .intConf
+    .createWithDefault(10)
+
+  private[spark] val RDD_LIMIT_SCALE_UP_FACTOR =
+    ConfigBuilder("spark.rdd.limit.scaleUpFactor")
+      .intConf
+      .createWithDefault(4)
+
 }
