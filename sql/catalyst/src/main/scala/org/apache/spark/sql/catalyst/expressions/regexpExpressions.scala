@@ -21,12 +21,14 @@ import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
 import org.apache.commons.lang3.StringEscapeUtils
-
-import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, ArrayBasedMapData, GenericArrayData, StringUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 
 abstract class StringRegexExpression extends BinaryExpression
@@ -465,4 +467,76 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       }"""
     })
   }
+}
+
+/**
+ * Extract a map identified by a Java regex.
+ *
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str, regexp) - Extracts a group that matches `regexp`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('100-200', '(?<col1>\\d+)-(?<col2>\\d+)');
+       {"col1": "100", "col2": "200"}
+  """)
+case class RegExpToMap(subject: Expression, regexp: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  // last regex in string, we will update the pattern iff regexp value changed.
+  @transient private var lastRegex: UTF8String = _
+  // last regex pattern, we cache it for performance concern
+  @transient private var pattern: Pattern = _
+  // relations between column id and names, we will update it iff regexp value changed
+  @transient private val columnIdToNames = new mutable.HashMap[Int, String]()
+
+  private lazy val mapBuilder = new ArrayBasedMapBuilder(StringType, StringType)
+
+  override def nullSafeEval(s: Any, p: Any): Any = {
+    if (!p.equals(lastRegex)) {
+      // regex value changed
+      lastRegex = p.asInstanceOf[UTF8String].clone()
+      pattern = Pattern.compile(lastRegex.toString)
+      updateColumnIdToNames(lastRegex.toString)
+    }
+
+    val m = pattern.matcher(s.toString)
+
+    if (m.find) {
+      for (i <- 1 to m.groupCount) {
+        // if there is a group without name,
+        // we will assign a default name, column1, column2, ... etc.
+        mapBuilder.put(
+          UTF8String.fromString(columnIdToNames.getOrElse(i, s"column$i")),
+          UTF8String.fromString(m.group(i)))
+      }
+      mapBuilder.build()
+    } else {
+      null
+    }
+  }
+
+  override def dataType: DataType = MapType(keyType = StringType, valueType = StringType)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
+
+  override def left: Expression = subject
+
+  override def right: Expression = regexp
+
+  override def prettyName: String = "regexp_to_map"
+
+  private def updateColumnIdToNames(regex: String): Unit = {
+    columnIdToNames.clear
+
+    val groupNamePattern = "\\(\\?<([a-zA-Z][a-zA-Z0-9]*)>".r.pattern
+    val groups = "(\\([^()]*\\))".r.findAllMatchIn(regex).map(_.group(1)).toArray
+
+    for (i <- groups.indices) {
+      val m = groupNamePattern.matcher(groups(i))
+      if (m.find) {
+        columnIdToNames.put(i + 1, m.group(1))
+      }
+    }
+  }
+
 }

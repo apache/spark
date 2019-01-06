@@ -337,6 +337,7 @@ object FunctionRegistry {
     expression[FormatString]("printf"),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
+    expression[RegExpToMap]("regexp_to_map"),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
     expression[RLike]("rlike"),

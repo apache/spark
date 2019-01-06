@@ -2386,6 +2386,17 @@ object functions {
   }
 
   /**
+   * Extract a map matched by a Java regex, from the specified string column.
+   * The keys of map are group names, and the values are related group values.
+   * If a group are not set a name, we will give it a default name based on its index,
+   * like column1, column2, ... etc.
+   * @group string_funcs
+   */
+  def regexp_to_map(e: Column, exp: String): Column = withExpr {
+    RegExpToMap(e.expr, lit(exp).expr)
+  }
+
+  /**
    * Decodes a BASE64 encoded string column and returns it as a binary column.
    * This is the reverse of base64.
    *
