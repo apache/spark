@@ -169,7 +169,7 @@ of the most common options to set are:
     The amount of off-heap memory to be allocated per driver in cluster mode, in MiB unless
     otherwise specified. This is memory that accounts for things like VM overheads, interned strings, 
     other native overheads, etc. This tends to grow with the container size (typically 6-10%). 
-    This option is currently supported on YARN and Kubernetes.
+    This option is currently supported on YARN, Mesos and Kubernetes.
   </td>
 </tr>
 <tr>
