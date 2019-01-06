@@ -22,9 +22,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
-import org.apache.spark.sql.sources.v2.SupportsBatchRead
-import org.apache.spark.sql.types.StructType
 
 private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
@@ -73,40 +70,6 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         // Keep partition-pruning predicates so that they are visible in physical planning
         val filterExpression = filters.reduceLeft(And)
         val filter = Filter(filterExpression, prunedLogicalRelation)
-        Project(projects, filter)
-      } else {
-        op
-      }
-    case op @ PhysicalOperation(projects, filters,
-        relation @DataSourceV2Relation(_, table: FileTable, output: Seq[AttributeReference], _, _))
-      if filters.nonEmpty && table.getFileIndex.isInstanceOf[InMemoryFileIndex] &&
-        ! table.getFileIndex.isInstanceOf[PrunedInMemoryFileIndex]
-        && table.getFileIndex.partitionSchema.nonEmpty =>
-      // The attribute name of predicate could be different than the one in schema in case of
-      // case insensitive, we should change them to match the one in schema, so we donot need to
-      // worry about case sensitivity anymore.
-      val normalizedFilters = filters.filterNot(SubqueryExpression.hasSubquery).map { e =>
-        e transform {
-          case a: AttributeReference =>
-            a.withName(output.find(_.semanticEquals(a)).get.name)
-        }
-      }
-      val fileIndex = table.getFileIndex.asInstanceOf[InMemoryFileIndex]
-      val caseSensitive = fileIndex.getSparkSession.sessionState.conf.caseSensitiveAnalysis
-      val partitionColumns =
-        PartitioningUtils.partitionColumns(output, fileIndex.partitionSchema, caseSensitive)
-      val partitionSet = AttributeSet(partitionColumns)
-      val partitionKeyFilters = ExpressionSet(normalizedFilters
-        .filter(_.references.subsetOf(partitionSet)))
-
-      if (partitionKeyFilters.nonEmpty) {
-        val prunedFileIndex = fileIndex.filterPartitions(partitionKeyFilters.toSeq)
-        val prunedTable = table.withNewFileIndex(prunedFileIndex)
-        val prunedRelation = relation.copy(table = prunedTable)
-        // Todo: Change table stats based on the sizeInBytes of pruned files
-        // Keep partition-pruning predicates so that they are visible in physical planning
-        val filterExpression = filters.reduceLeft(And)
-        val filter = Filter(filterExpression, prunedRelation)
         Project(projects, filter)
       } else {
         op

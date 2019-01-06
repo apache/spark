@@ -55,8 +55,6 @@ abstract class PartitioningAwareFileIndex(
 
   def getSparkSession: SparkSession = this.sparkSession
 
-  def getUserSpecifiedSchema: Option[StructType] = this.userSpecifiedSchema
-
   val hadoopConf: Configuration =
     sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
