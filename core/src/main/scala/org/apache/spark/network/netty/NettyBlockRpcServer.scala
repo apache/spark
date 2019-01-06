@@ -48,10 +48,10 @@ class NettyBlockRpcServer(
 
   private val streamManager = new OneForOneStreamManager()
 
-  private def mergeContinuousShuffleBlocks(blockIds: Array[String]) = {
+  private def consolidateShuffleBlocks(blockIds: Array[String]) = {
     val shuffleBlockIds = blockIds.map(id => BlockId(id).asInstanceOf[ShuffleBlockId])
-    var continuousShuffleBlockIds = ArrayBuffer.empty[ContinuousShuffleBlockId]
-    var sizeArray = ArrayBuffer.empty[Int]
+    var shuffleBlockBatches = ArrayBuffer.empty[ContinuousShuffleBlockId]
+    var chunkSizes = ArrayBuffer.empty[Int]
 
     def sameMapFile(index: Int) = {
       shuffleBlockIds(index).shuffleId == shuffleBlockIds(index - 1).shuffleId &&
@@ -62,18 +62,18 @@ class NettyBlockRpcServer(
       var prev = 0
       (1 until shuffleBlockIds.length + 1).foreach { idx =>
         if (idx == shuffleBlockIds.length || !sameMapFile(idx)) {
-          continuousShuffleBlockIds += ContinuousShuffleBlockId(
+          shuffleBlockBatches += ContinuousShuffleBlockId(
             shuffleBlockIds(prev).shuffleId,
             shuffleBlockIds(prev).mapId,
             shuffleBlockIds(prev).reduceId,
             shuffleBlockIds(idx - 1).reduceId - shuffleBlockIds(prev).reduceId + 1
           )
-          sizeArray += (idx - prev)
+          chunkSizes += (idx - prev)
           prev = idx
         }
       }
     }
-    (continuousShuffleBlockIds.toArray, sizeArray.toArray)
+    (shuffleBlockBatches.toArray, chunkSizes.toArray)
   }
 
   override def receive(
@@ -87,7 +87,7 @@ class NettyBlockRpcServer(
       case openBlocks: OpenBlocks =>
         val (blocksIds, sizes) =
           if (openBlocks.shuffleBlocksBatchFetch) {
-            mergeContinuousShuffleBlocks(openBlocks.blockIds)
+            consolidateShuffleBlocks(openBlocks.blockIds)
           } else {
             (openBlocks.blockIds.map(BlockId.apply), Array[Int]())
           }

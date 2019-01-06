@@ -120,6 +120,8 @@ public class OneForOneBlockFetcher {
         try {
           streamHandle = (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response);
           logger.trace("Successfully opened blocks {}, preparing to fetch chunks.", streamHandle);
+
+          // initiate blockIdIndexes
           blockIdIndexes = new int[streamHandle.numChunks + 1];
           blockIdIndexes[0] = 0;
           if (streamHandle.chunkSizes.length == 0) {
