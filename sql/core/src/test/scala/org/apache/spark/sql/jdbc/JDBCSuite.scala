@@ -45,6 +45,7 @@ class JDBCSuite extends QueryTest
 
   val url = "jdbc:h2:mem:testdb0"
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
+  val wrongUrl = "jdbc:h2:mem:testdbx"
   var conn: java.sql.Connection = null
 
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
@@ -1506,5 +1507,17 @@ class JDBCSuite extends QueryTest
     checkAnswer(
       checkNotPushdown(sql("SELECT name, theid FROM predicateOption WHERE theid = 1")),
       Row("fred", 1) :: Nil)
+  }
+
+  test("SPARK-26383 throw IllegalArgumentException if url is wrong") {
+    val e = intercept[IllegalArgumentException] {
+      val opts = Map(
+        "url" -> "jdbc:mysql://localhost/db",
+        "dbtable" -> "table",
+        "driver" -> "org.postgresql.Driver"
+      )
+      spark.read.format("jdbc").options(opts).load
+    }.getMessage
+    assert(e.contains("Wrong url in JDBC options."))
   }
 }
