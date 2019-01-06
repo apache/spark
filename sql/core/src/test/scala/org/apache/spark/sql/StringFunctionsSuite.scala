@@ -104,19 +104,19 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     // every group has a name
     checkAnswer(df.select(
       regexp_to_map($"a", "(?<first>\\d+)-(?<second>\\d+)-(?<third>\\d+)") as "temp"
-    ).selectExpr("temp.second, temp.first"),
+    ).selectExpr("temp.second", "temp.first"),
       Row("200", "100") :: Row("300", "200") :: Row("100", "500") :: Nil)
 
     // every group does not has a name
     checkAnswer(df.select(
       regexp_to_map($"a", "(\\d+)-(\\d+)-(\\d+)") as "temp"
-    ).selectExpr("temp.column2, temp.column1"),
+    ).selectExpr("temp.column2", "temp.column1"),
       Row("200", "100") :: Row("300", "200") :: Row("100", "500") :: Nil)
 
     // some groups do not has a name, while others have
     checkAnswer(df.select(
       regexp_to_map($"a", "(?<first>\\d+)-(\\d+)-(?<third>\\d+)") as "temp"
-    ).selectExpr("temp.column2, temp.first"),
+    ).selectExpr("temp.column2", "temp.first"),
       Row("200", "100") :: Row("300", "200") :: Row("100", "500") :: Nil)
   }
 
