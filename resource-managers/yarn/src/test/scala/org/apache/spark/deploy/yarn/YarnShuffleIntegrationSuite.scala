@@ -29,6 +29,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
 import org.apache.spark.tags.ExtendedYarnTest
