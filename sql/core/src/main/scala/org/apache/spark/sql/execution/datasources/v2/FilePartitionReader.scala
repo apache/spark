@@ -24,52 +24,52 @@ import org.apache.spark.sql.sources.v2.reader.PartitionReader
 
 class FilePartitionReader[T](
     readers: Iterator[PartitionReader[T]]) extends PartitionReader[T] with Logging {
-  private var currentFile: PartitionReader[T] = null
+  private var currentReader: PartitionReader[T] = null
 
   private val sqlConf = SQLConf.get
-  private val ignoreMissingFiles = sqlConf.ignoreMissingFiles
-  private val ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
+  private def ignoreMissingFiles = sqlConf.ignoreMissingFiles
+  private def ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
 
   override def next(): Boolean = {
-    if (currentFile == null) {
+    if (currentReader == null) {
       if (readers.hasNext) {
         if (ignoreMissingFiles || ignoreCorruptFiles) {
           try {
-            currentFile = readers.next()
+            currentReader = readers.next()
           } catch {
             case e: FileNotFoundException if ignoreMissingFiles =>
-              logWarning(s"Skipped missing file: $currentFile", e)
-              currentFile = null
+              logWarning(s"Skipped missing file: $currentReader", e)
+              currentReader = null
               return false
             // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
             case e: FileNotFoundException if !ignoreMissingFiles => throw e
             case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
               logWarning(
-                s"Skipped the rest of the content in the corrupted file: $currentFile", e)
-              currentFile = null
+                s"Skipped the rest of the content in the corrupted file: $currentReader", e)
+              currentReader = null
               return false
           }
         } else {
-          currentFile = readers.next()
+          currentReader = readers.next()
         }
       } else {
         return false
       }
     }
-    if (currentFile.next()) {
-      return true
+    if (currentReader.next()) {
+      true
     } else {
       close()
-      currentFile = null
+      currentReader = null
+      next()
     }
-    next()
   }
 
-  override def get(): T = currentFile.get()
+  override def get(): T = currentReader.get()
 
   override def close(): Unit = {
-    if (currentFile != null) {
-      currentFile.close()
+    if (currentReader != null) {
+      currentReader.close()
     }
   }
 }

@@ -31,16 +31,13 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   /**
    * Returns a V1 [[FileFormat]] class of the same file data source.
    * This is a solution for the following cases:
-   * 1. File datasource V2 might be implemented partially during migration.
-   *    E.g. if [[SupportsBatchRead]] is implemented while [[SupportsBatchWrite]] is not,
-   *    write path should fall back to V1 implementation.
-   * 2. File datasource V2 implementations cause regression.
-   * 3. Catalog support is required, which is still under development for data source V2.
+   * 1. File datasource V2 implementations cause regression. Users can disable the problematic data
+   *    source via SQL configuration and fall back to FileFormat.
+   * 2. Catalog support is required, which is still under development for data source V2.
    */
   def fallBackFileFormat: Class[_ <: FileFormat]
 
-  lazy val sparkSession =
-    SparkSession.getActiveSession.getOrElse(SparkSession.getDefaultSession.get)
+  lazy val sparkSession = SparkSession.active
 
   def getFileIndex(
       options: DataSourceOptions,
