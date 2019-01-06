@@ -1509,7 +1509,7 @@ class JDBCSuite extends QueryTest
       Row("fred", 1) :: Nil)
   }
 
-  test("SPARK-26383 throw IllegalArgumentException if url is wrong") {
+  test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {
     val e = intercept[IllegalArgumentException] {
       val opts = Map(
         "url" -> "jdbc:mysql://localhost/db",
@@ -1518,6 +1518,7 @@ class JDBCSuite extends QueryTest
       )
       spark.read.format("jdbc").options(opts).load
     }.getMessage
-    assert(e.contains("Wrong url in JDBC options."))
+    assert(e.contains("The driver could not open a JDBC connection. " +
+      "Check the URL: jdbc:mysql://localhost/db"))
   }
 }

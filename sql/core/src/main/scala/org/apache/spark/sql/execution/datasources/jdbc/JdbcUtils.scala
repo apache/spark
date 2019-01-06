@@ -62,10 +62,8 @@ object JdbcUtils extends Logging {
           s"Did not find registered driver with class $driverClass")
       }
       val connection: Connection = driver.connect(options.url, options.asConnectionProperties)
-
-      if (connection == null) {
-        throw new IllegalArgumentException("Wrong url in JDBC options.")
-      }
+      require(connection != null,
+        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
 
       connection
     }
