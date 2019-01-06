@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -37,9 +36,10 @@ class JoinOptimizationSuite extends PlanTest {
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
-        ReorderJoin(conf),
+        ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
+        RemoveNoopOperators,
         CollapseProject) :: Nil
 
   }
@@ -70,27 +70,27 @@ class JoinOptimizationSuite extends PlanTest {
 
     testExtract(x, None)
     testExtract(x.where("x.b".attr === 1), None)
-    testExtract(x.join(y), Some(Seq(x, y), Seq()))
+    testExtract(x.join(y), Some((Seq(x, y), Seq())))
     testExtract(x.join(y, condition = Some("x.b".attr === "y.d".attr)),
-      Some(Seq(x, y), Seq("x.b".attr === "y.d".attr)))
+      Some((Seq(x, y), Seq("x.b".attr === "y.d".attr))))
     testExtract(x.join(y).where("x.b".attr === "y.d".attr),
-      Some(Seq(x, y), Seq("x.b".attr === "y.d".attr)))
-    testExtract(x.join(y).join(z), Some(Seq(x, y, z), Seq()))
+      Some((Seq(x, y), Seq("x.b".attr === "y.d".attr))))
+    testExtract(x.join(y).join(z), Some((Seq(x, y, z), Seq())))
     testExtract(x.join(y).where("x.b".attr === "y.d".attr).join(z),
-      Some(Seq(x, y, z), Seq("x.b".attr === "y.d".attr)))
-    testExtract(x.join(y).join(x.join(z)), Some(Seq(x, y, x.join(z)), Seq()))
+      Some((Seq(x, y, z), Seq("x.b".attr === "y.d".attr))))
+    testExtract(x.join(y).join(x.join(z)), Some((Seq(x, y, x.join(z)), Seq())))
     testExtract(x.join(y).join(x.join(z)).where("x.b".attr === "y.d".attr),
-      Some(Seq(x, y, x.join(z)), Seq("x.b".attr === "y.d".attr)))
+      Some((Seq(x, y, x.join(z)), Seq("x.b".attr === "y.d".attr))))
 
-    testExtractCheckCross(x.join(y, Cross), Some(Seq((x, Cross), (y, Cross)), Seq()))
+    testExtractCheckCross(x.join(y, Cross), Some((Seq((x, Cross), (y, Cross)), Seq())))
     testExtractCheckCross(x.join(y, Cross).join(z, Cross),
-      Some(Seq((x, Cross), (y, Cross), (z, Cross)), Seq()))
+      Some((Seq((x, Cross), (y, Cross), (z, Cross)), Seq())))
     testExtractCheckCross(x.join(y, Cross, Some("x.b".attr === "y.d".attr)).join(z, Cross),
-      Some(Seq((x, Cross), (y, Cross), (z, Cross)), Seq("x.b".attr === "y.d".attr)))
+      Some((Seq((x, Cross), (y, Cross), (z, Cross)), Seq("x.b".attr === "y.d".attr))))
     testExtractCheckCross(x.join(y, Inner, Some("x.b".attr === "y.d".attr)).join(z, Cross),
-      Some(Seq((x, Inner), (y, Inner), (z, Cross)), Seq("x.b".attr === "y.d".attr)))
+      Some((Seq((x, Inner), (y, Inner), (z, Cross)), Seq("x.b".attr === "y.d".attr))))
     testExtractCheckCross(x.join(y, Cross, Some("x.b".attr === "y.d".attr)).join(z, Inner),
-      Some(Seq((x, Cross), (y, Cross), (z, Inner)), Seq("x.b".attr === "y.d".attr)))
+      Some((Seq((x, Cross), (y, Cross), (z, Inner)), Seq("x.b".attr === "y.d".attr))))
   }
 
   test("reorder inner joins") {
@@ -103,22 +103,25 @@ class JoinOptimizationSuite extends PlanTest {
         x.join(y).join(z).where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr)),
         x.join(z, condition = Some("x.b".attr === "z.b".attr))
           .join(y, condition = Some("y.d".attr === "z.a".attr))
+          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
       ),
       (
         x.join(y, Cross).join(z, Cross)
           .where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr)),
         x.join(z, Cross, Some("x.b".attr === "z.b".attr))
           .join(y, Cross, Some("y.d".attr === "z.a".attr))
+          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
       ),
       (
         x.join(y, Inner).join(z, Cross).where("x.b".attr === "z.a".attr),
         x.join(z, Cross, Some("x.b".attr === "z.a".attr)).join(y, Inner)
+          .select(Seq("x.a", "x.b", "x.c", "y.d", "z.a", "z.b", "z.c").map(_.attr): _*)
       )
     )
 
     queryAnswers foreach { queryAnswerPair =>
       val optimized = Optimize.execute(queryAnswerPair._1.analyze)
-      comparePlans(optimized, analysis.EliminateSubqueryAliases(queryAnswerPair._2.analyze))
+      comparePlans(optimized, queryAnswerPair._2.analyze)
     }
   }
 
@@ -129,20 +132,20 @@ class JoinOptimizationSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           SubqueryAlias("x", input),
-          BroadcastHint(SubqueryAlias("y", input)), Cross, None)).analyze
+          ResolvedHint(SubqueryAlias("y", input)), Cross, None)).analyze
 
     val optimized = Optimize.execute(query)
 
     val expected =
       Join(
         Project(Seq($"x.key"), SubqueryAlias("x", input)),
-        BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
+        ResolvedHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
         Cross, None).analyze
 
     comparePlans(optimized, expected)
 
     val broadcastChildren = optimized.collect {
-      case Join(_, r, _, _) if r.stats(conf).sizeInBytes == 1 => r
+      case Join(_, r, _, _) if r.stats.sizeInBytes == 1 => r
     }
     assert(broadcastChildren.size == 1)
   }

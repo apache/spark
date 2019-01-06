@@ -25,9 +25,10 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType}
 
-class ConstraintPropagationSuite extends SparkFunSuite {
+class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
 
   private def resolveColumn(tr: LocalRelation, columnName: String): Expression =
     resolveColumn(tr.analyze, columnName)
@@ -186,7 +187,7 @@ class ConstraintPropagationSuite extends SparkFunSuite {
 
     verifyConstraints(tr1
       .where('a.attr > 10)
-      .intersect(tr2.where('b.attr < 100))
+      .intersect(tr2.where('b.attr < 100), isAll = false)
       .analyze.constraints,
       ExpressionSet(Seq(resolveColumn(tr1, "a") > 10,
         resolveColumn(tr1, "b") < 100,
@@ -199,7 +200,7 @@ class ConstraintPropagationSuite extends SparkFunSuite {
     val tr2 = LocalRelation('a.int, 'b.int, 'c.int)
     verifyConstraints(tr1
       .where('a.attr > 10)
-      .except(tr2.where('b.attr < 100))
+      .except(tr2.where('b.attr < 100), isAll = false)
       .analyze.constraints,
       ExpressionSet(Seq(resolveColumn(tr1, "a") > 10,
         IsNotNull(resolveColumn(tr1, "a")))))
@@ -402,17 +403,23 @@ class ConstraintPropagationSuite extends SparkFunSuite {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
     val filterRelation = tr.where('a.attr > 10)
 
-    verifyConstraints(
-      filterRelation.analyze.getConstraints(constraintPropagationEnabled = true),
-      filterRelation.analyze.constraints)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
+      assert(filterRelation.analyze.constraints.nonEmpty)
+    }
 
-    assert(filterRelation.analyze.getConstraints(constraintPropagationEnabled = false).isEmpty)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      assert(filterRelation.analyze.constraints.isEmpty)
+    }
 
     val aliasedRelation = tr.where('c.attr > 10 && 'a.attr < 5)
       .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).select('c1, 'a, 'a3)
 
-    verifyConstraints(aliasedRelation.analyze.getConstraints(constraintPropagationEnabled = true),
-      aliasedRelation.analyze.constraints)
-    assert(aliasedRelation.analyze.getConstraints(constraintPropagationEnabled = false).isEmpty)
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
+      assert(aliasedRelation.analyze.constraints.nonEmpty)
+    }
+
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      assert(aliasedRelation.analyze.constraints.isEmpty)
+    }
   }
 }

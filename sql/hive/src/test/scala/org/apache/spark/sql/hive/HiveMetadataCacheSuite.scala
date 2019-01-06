@@ -31,14 +31,22 @@ import org.apache.spark.sql.test.SQLTestUtils
 class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-16337 temporary view refresh") {
-    withTempView("view_refresh") {
+    checkRefreshView(isTemp = true)
+  }
+
+  test("view refresh") {
+    checkRefreshView(isTemp = false)
+  }
+
+  private def checkRefreshView(isTemp: Boolean) {
+    withView("view_refresh") {
       withTable("view_table") {
         // Create a Parquet directory
         spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
           .write.saveAsTable("view_table")
 
-        // Read the table in
-        spark.table("view_table").filter("id > -1").createOrReplaceTempView("view_refresh")
+        val temp = if (isTemp) "TEMPORARY" else ""
+        spark.sql(s"CREATE $temp VIEW view_refresh AS SELECT * FROM view_table WHERE id > -1")
         assert(sql("select count(*) from view_refresh").first().getLong(0) == 100)
 
         // Delete a file using the Hadoop file system interface since the path returned by

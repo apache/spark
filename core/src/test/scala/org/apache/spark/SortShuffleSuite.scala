@@ -38,6 +38,10 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
 
   override def beforeAll() {
     super.beforeAll()
+    // Once 'spark.local.dir' is set, it is cached. Unless this is manually cleared
+    // before/after a test, it could return the same directory even if this property
+    // is configured.
+    Utils.clearLocalRootDirs()
     conf.set("spark.shuffle.manager", "sort")
   }
 
@@ -50,6 +54,7 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
   override def afterEach(): Unit = {
     try {
       Utils.deleteRecursively(tempDir)
+      Utils.clearLocalRootDirs()
     } finally {
       super.afterEach()
     }

@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
@@ -38,7 +37,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val plan = table(tableName).queryExecution.sparkPlan
     plan.collect {
       case InMemoryTableScanExec(_, _, relation) =>
-        relation.cachedColumnBuffers.id
+        relation.cacheBuilder.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
     }.head
@@ -97,20 +96,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("DROP nonexistant table") {
-    sql("DROP TABLE IF EXISTS nonexistantTable")
+  test("DROP nonexistent table") {
+    sql("DROP TABLE IF EXISTS nonexistentTable")
   }
 
-  test("uncache of nonexistant tables") {
+  test("uncache of nonexistent tables") {
+    val expectedErrorMsg = "Table or view not found: nonexistentTable"
     // make sure table doesn't exist
-    intercept[NoSuchTableException](spark.table("nonexistantTable"))
-    intercept[NoSuchTableException] {
-      spark.catalog.uncacheTable("nonexistantTable")
-    }
-    intercept[NoSuchTableException] {
-      sql("UNCACHE TABLE nonexistantTable")
-    }
-    sql("UNCACHE TABLE IF EXISTS nonexistantTable")
+    var e = intercept[AnalysisException](spark.table("nonexistentTable")).getMessage
+    assert(e.contains(expectedErrorMsg))
+    e = intercept[AnalysisException] {
+      spark.catalog.uncacheTable("nonexistentTable")
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+    e = intercept[AnalysisException] {
+      sql("UNCACHE TABLE nonexistentTable")
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+    sql("UNCACHE TABLE IF EXISTS nonexistentTable")
   }
 
   test("no error on uncache of non-cached table") {

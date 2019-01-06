@@ -17,21 +17,29 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
-import org.scalatest.ShouldMatchers
+import scala.reflect.ClassTag
 
+import org.scalatest.Matchers
+
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.Cross
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
+  RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
-class AnalysisSuite extends AnalysisTest with ShouldMatchers {
+class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
@@ -231,7 +239,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     checkAnalysis(plan, expected)
   }
 
-  test("Analysis may leave unnecassary aliases") {
+  test("Analysis may leave unnecessary aliases") {
     val att1 = testRelation.output.head
     var plan = testRelation.select(
       CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
@@ -269,7 +277,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   }
 
   test("self intersect should resolve duplicate expression IDs") {
-    val plan = testRelation.intersect(testRelation)
+    val plan = testRelation.intersect(testRelation, isAll = false)
     assertAnalysisSuccess(plan)
   }
 
@@ -308,21 +316,24 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     }
 
     // non-primitive parameters do not need special null handling
-    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil)
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil, true :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
-    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
-    val expected2 = If(IsNull(double), nullResult, udf2)
+    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
+      true :: false :: Nil)
+    val expected2 =
+      If(IsNull(double), nullResult, udf2.copy(inputsNullSafe = true :: true :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
-    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil)
+    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
+      false :: false :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
-      udf3)
+      udf3.copy(inputsNullSafe = true :: true :: Nil))
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
@@ -330,12 +341,22 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val udf4 = ScalaUDF(
       (s: Short, d: Double) => "x",
       StringType,
-      short :: double.withNullability(false) :: Nil)
+      short :: double.withNullability(false) :: Nil,
+      false :: false :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4)
+      udf4.copy(inputsNullSafe = true :: true :: Nil))
     // checkUDF(udf4, expected4)
+  }
+
+  test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
+    val a = testRelation.output(0)
+    val func = (x: Int, y: Int) => x + y
+    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil, false :: false :: Nil)
+    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil, false :: false :: Nil)
+    val plan = Project(Alias(udf2, "")() :: Nil, testRelation)
+    comparePlans(plan.analyze, plan.analyze.analyze)
   }
 
   test("SPARK-11863 mixture of aliases and real columns in order by clause - tpcds 19,55,71") {
@@ -385,7 +406,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
       expression: Expression,
       expectedDataType: DataType): Unit = {
     val afterAnalyze =
-      Project(Seq(Alias(expression, "a")()), OneRowRelation).analyze.expressions.head
+      Project(Seq(Alias(expression, "a")()), OneRowRelation()).analyze.expressions.head
     if (!afterAnalyze.dataType.equals(expectedDataType)) {
       fail(
         s"""
@@ -407,8 +428,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     assertExpressionType(sum(Divide(1.0, 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1, 2.0f)), DoubleType)
     assertExpressionType(sum(Divide(1.0f, 2)), DoubleType)
-    assertExpressionType(sum(Divide(1, Decimal(2))), DecimalType(31, 11))
-    assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(31, 11))
+    assertExpressionType(sum(Divide(1, Decimal(2))), DecimalType(22, 11))
+    assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(26, 6))
     assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
   }
@@ -425,8 +446,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val unionPlan = Union(firstTable, secondTable)
     assertAnalysisSuccess(unionPlan)
 
-    val r1 = Except(firstTable, secondTable)
-    val r2 = Intersect(firstTable, secondTable)
+    val r1 = Except(firstTable, secondTable, isAll = false)
+    val r2 = Intersect(firstTable, secondTable, isAll = false)
 
     assertAnalysisSuccess(r1)
     assertAnalysisSuccess(r2)
@@ -440,5 +461,170 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
       caseSensitive = false)
 
     checkAnalysis(SubqueryAlias("tbl", testRelation).as("tbl2"), testRelation)
+  }
+
+  test("SPARK-20311 range(N) as alias") {
+    def rangeWithAliases(args: Seq[Int], outputNames: Seq[String]): LogicalPlan = {
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", args.map(Literal(_)), outputNames))
+        .select(star())
+    }
+    assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
+    assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
+    assertAnalysisSuccess(rangeWithAliases(2 :: 6 :: 2 :: Nil, "c" :: Nil))
+    assertAnalysisError(
+      rangeWithAliases(3 :: Nil, "a" :: "b" :: Nil),
+      Seq("Number of given aliases does not match number of output columns. "
+        + "Function name: range; number of aliases: 2; number of output columns: 1."))
+  }
+
+  test("SPARK-20841 Support table column aliases in FROM clause") {
+    def tableColumnsWithAliases(outputNames: Seq[String]): LogicalPlan = {
+      UnresolvedSubqueryColumnAliases(
+        outputNames,
+        SubqueryAlias("t", UnresolvedRelation(TableIdentifier("TaBlE3")))
+      ).select(star())
+    }
+    assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
+    assertAnalysisError(
+      tableColumnsWithAliases("col1" :: Nil),
+      Seq("Number of column aliases does not match number of columns. " +
+        "Number of column aliases: 1; number of columns: 4."))
+    assertAnalysisError(
+      tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
+      Seq("Number of column aliases does not match number of columns. " +
+        "Number of column aliases: 5; number of columns: 4."))
+  }
+
+  test("SPARK-20962 Support subquery column aliases in FROM clause") {
+    def tableColumnsWithAliases(outputNames: Seq[String]): LogicalPlan = {
+      UnresolvedSubqueryColumnAliases(
+        outputNames,
+        SubqueryAlias(
+          "t",
+          UnresolvedRelation(TableIdentifier("TaBlE3")))
+      ).select(star())
+    }
+    assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
+    assertAnalysisError(
+      tableColumnsWithAliases("col1" :: Nil),
+      Seq("Number of column aliases does not match number of columns. " +
+        "Number of column aliases: 1; number of columns: 4."))
+    assertAnalysisError(
+      tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
+      Seq("Number of column aliases does not match number of columns. " +
+        "Number of column aliases: 5; number of columns: 4."))
+  }
+
+  test("SPARK-20963 Support aliases for join relations in FROM clause") {
+    def joinRelationWithAliases(outputNames: Seq[String]): LogicalPlan = {
+      val src1 = LocalRelation('id.int, 'v1.string).as("s1")
+      val src2 = LocalRelation('id.int, 'v2.string).as("s2")
+      UnresolvedSubqueryColumnAliases(
+        outputNames,
+        SubqueryAlias(
+          "dst",
+          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+      ).select(star())
+    }
+    assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
+    assertAnalysisError(
+      joinRelationWithAliases("col1" :: Nil),
+      Seq("Number of column aliases does not match number of columns. " +
+        "Number of column aliases: 1; number of columns: 4."))
+    assertAnalysisError(
+      joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
+      Seq("Number of column aliases does not match number of columns. " +
+        "Number of column aliases: 5; number of columns: 4."))
+  }
+
+  test("SPARK-22614 RepartitionByExpression partitioning") {
+    def checkPartitioning[T <: Partitioning: ClassTag](
+        numPartitions: Int, exprs: Expression*): Unit = {
+      val partitioning = RepartitionByExpression(exprs, testRelation2, numPartitions).partitioning
+      val clazz = implicitly[ClassTag[T]].runtimeClass
+      assert(clazz.isInstance(partitioning))
+    }
+
+    checkPartitioning[HashPartitioning](numPartitions = 10, exprs = Literal(20))
+    checkPartitioning[HashPartitioning](numPartitions = 10, exprs = 'a.attr, 'b.attr)
+
+    checkPartitioning[RangePartitioning](numPartitions = 10,
+      exprs = SortOrder(Literal(10), Ascending))
+    checkPartitioning[RangePartitioning](numPartitions = 10,
+      exprs = SortOrder('a.attr, Ascending), SortOrder('b.attr, Descending))
+
+    checkPartitioning[RoundRobinPartitioning](numPartitions = 10, exprs = Seq.empty: _*)
+
+    intercept[IllegalArgumentException] {
+      checkPartitioning(numPartitions = 0, exprs = Literal(20))
+    }
+    intercept[IllegalArgumentException] {
+      checkPartitioning(numPartitions = -1, exprs = Literal(20))
+    }
+    intercept[IllegalArgumentException] {
+      checkPartitioning(numPartitions = 10, exprs = SortOrder('a.attr, Ascending), 'b.attr)
+    }
+  }
+
+  test("SPARK-24208: analysis fails on self-join with FlatMapGroupsInPandas") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+      true)
+    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val flatMapGroupsInPandas = FlatMapGroupsInPandas(
+      Seq(UnresolvedAttribute("a")), pythonUdf, output, project)
+    val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
+    val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
+    val join = Join(left, right, Inner, None)
+    assertAnalysisSuccess(
+      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
+  }
+
+  test("SPARK-24488 Generator with multiple aliases") {
+    assertAnalysisSuccess(
+      listRelation.select(Explode('list).as("first_alias").as("second_alias")))
+    assertAnalysisSuccess(
+      listRelation.select(MultiAlias(MultiAlias(
+        PosExplode('list), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
+  }
+
+  test("SPARK-24151: CURRENT_DATE, CURRENT_TIMESTAMP should be case insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val input = Project(Seq(
+        UnresolvedAttribute("current_date"),
+        UnresolvedAttribute("CURRENT_DATE"),
+        UnresolvedAttribute("CURRENT_TIMESTAMP"),
+        UnresolvedAttribute("current_timestamp")), testRelation)
+      val expected = Project(Seq(
+        Alias(CurrentDate(), toPrettySQL(CurrentDate()))(),
+        Alias(CurrentDate(), toPrettySQL(CurrentDate()))(),
+        Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))(),
+        Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))()), testRelation).analyze
+      checkAnalysis(input, expected)
+    }
+  }
+
+  test("SPARK-25691: AliasViewChild with different nullabilities") {
+    object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("View", Once, AliasViewChild(conf), EliminateView) :: Nil
+    }
+    val relation = LocalRelation('a.int.notNull, 'b.string)
+    val view = View(CatalogTable(
+        identifier = TableIdentifier("v1"),
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+      output = Seq('a.int, 'b.string),
+      child = relation)
+    val tz = Option(conf.sessionLocalTimeZone)
+    val expected = Project(Seq(
+        Alias(Cast('a.int.notNull, IntegerType, tz), "a")(),
+        Alias(Cast('b.string, StringType, tz), "b")()),
+      relation)
+    val res = ViewAnalyzer.execute(view)
+    comparePlans(res, expected)
   }
 }

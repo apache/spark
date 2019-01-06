@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.task.JobContextImpl
 
 import org.apache.spark.{Partition, SparkContext}
@@ -35,8 +36,12 @@ private[spark] class BinaryFileRDD[T](
   extends NewHadoopRDD[String, T](sc, inputFormatClass, keyClass, valueClass, conf) {
 
   override def getPartitions: Array[Partition] = {
-    val inputFormat = inputFormatClass.newInstance
     val conf = getConf
+    // setMinPartitions below will call FileInputFormat.listStatus(), which can be quite slow when
+    // traversing a large number of directories and files. Parallelize it.
+    conf.setIfUnset(FileInputFormat.LIST_STATUS_NUM_THREADS,
+      Runtime.getRuntime.availableProcessors().toString)
+    val inputFormat = inputFormatClass.getConstructor().newInstance()
     inputFormat match {
       case configurable: Configurable =>
         configurable.setConf(conf)

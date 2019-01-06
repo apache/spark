@@ -24,114 +24,100 @@ import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 
 
 class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBase {
-
-  override val conf = new SQLConf().copy(
-    CBO_ENABLED -> true,
-    JOIN_REORDER_ENABLED -> true,
-    JOIN_REORDER_DP_STAR_FILTER -> true)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
         PushDownPredicate,
-        ReorderJoin(conf),
+        ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::
-        Batch("Join Reorder", Once,
-          CostBasedJoinReorder(conf)) :: Nil
+      Batch("Join Reorder", Once,
+        CostBasedJoinReorder) :: Nil
+  }
+
+  var originalConfCBOEnabled = false
+  var originalConfJoinReorderEnabled = false
+  var originalConfJoinReorderDPStarFilter = false
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalConfCBOEnabled = conf.cboEnabled
+    originalConfJoinReorderEnabled = conf.joinReorderEnabled
+    originalConfJoinReorderDPStarFilter = conf.joinReorderDPStarFilter
+    conf.setConf(CBO_ENABLED, true)
+    conf.setConf(JOIN_REORDER_ENABLED, true)
+    conf.setConf(JOIN_REORDER_DP_STAR_FILTER, true)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      conf.setConf(CBO_ENABLED, originalConfCBOEnabled)
+      conf.setConf(JOIN_REORDER_ENABLED, originalConfJoinReorderEnabled)
+      conf.setConf(JOIN_REORDER_DP_STAR_FILTER, originalConfJoinReorderDPStarFilter)
+    } finally {
+      super.afterAll()
+    }
   }
 
   private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
     // F1 (fact table)
-    attr("f1_fk1") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("f1_fk2") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("f1_fk3") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("f1_c1") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("f1_c2") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("f1_fk1") -> rangeColumnStat(100, 0),
+    attr("f1_fk2") -> rangeColumnStat(100, 0),
+    attr("f1_fk3") -> rangeColumnStat(100, 0),
+    attr("f1_c1") -> rangeColumnStat(100, 0),
+    attr("f1_c2") -> rangeColumnStat(100, 0),
 
     // D1 (dimension)
-    attr("d1_pk") -> ColumnStat(distinctCount = 100, min = Some(1), max = Some(100),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d1_c2") -> ColumnStat(distinctCount = 50, min = Some(1), max = Some(50),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d1_c3") -> ColumnStat(distinctCount = 50, min = Some(1), max = Some(50),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("d1_pk") -> rangeColumnStat(100, 0),
+    attr("d1_c2") -> rangeColumnStat(50, 0),
+    attr("d1_c3") -> rangeColumnStat(50, 0),
 
     // D2 (dimension)
-    attr("d2_pk") -> ColumnStat(distinctCount = 20, min = Some(1), max = Some(20),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d2_c2") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d2_c3") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("d2_pk") -> rangeColumnStat(20, 0),
+    attr("d2_c2") -> rangeColumnStat(10, 0),
+    attr("d2_c3") -> rangeColumnStat(10, 0),
 
     // D3 (dimension)
-    attr("d3_pk") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d3_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d3_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("d3_pk") -> rangeColumnStat(10, 0),
+    attr("d3_c2") -> rangeColumnStat(5, 0),
+    attr("d3_c3") -> rangeColumnStat(5, 0),
 
     // T1 (regular table i.e. outside star)
-    attr("t1_c1") -> ColumnStat(distinctCount = 20, min = Some(1), max = Some(20),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t1_c2") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t1_c3") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+    attr("t1_c1") -> rangeColumnStat(20, 1),
+    attr("t1_c2") -> rangeColumnStat(10, 1),
+    attr("t1_c3") -> rangeColumnStat(10, 1),
 
     // T2 (regular table)
-    attr("t2_c1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t2_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t2_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+    attr("t2_c1") -> rangeColumnStat(5, 1),
+    attr("t2_c2") -> rangeColumnStat(5, 1),
+    attr("t2_c3") -> rangeColumnStat(5, 1),
 
     // T3 (regular table)
-    attr("t3_c1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t3_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t3_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+    attr("t3_c1") -> rangeColumnStat(5, 1),
+    attr("t3_c2") -> rangeColumnStat(5, 1),
+    attr("t3_c3") -> rangeColumnStat(5, 1),
 
     // T4 (regular table)
-    attr("t4_c1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t4_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t4_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+    attr("t4_c1") -> rangeColumnStat(5, 1),
+    attr("t4_c2") -> rangeColumnStat(5, 1),
+    attr("t4_c3") -> rangeColumnStat(5, 1),
 
     // T5 (regular table)
-    attr("t5_c1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t5_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t5_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
+    attr("t5_c1") -> rangeColumnStat(5, 1),
+    attr("t5_c2") -> rangeColumnStat(5, 1),
+    attr("t5_c3") -> rangeColumnStat(5, 1),
 
     // T6 (regular table)
-    attr("t6_c1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t6_c2") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("t6_c3") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 1, avgLen = 4, maxLen = 4)
+    attr("t6_c1") -> rangeColumnStat(5, 1),
+    attr("t6_c2") -> rangeColumnStat(5, 1),
+    attr("t6_c3") -> rangeColumnStat(5, 1)
 
   ))
 
@@ -232,6 +218,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
         .join(t2, Inner, Some(nameToAttr("f1_c2") === nameToAttr("t2_c1")))
         .join(t1, Inner, Some(nameToAttr("f1_c1") === nameToAttr("t1_c1")))
+        .select(outputsOf(f1, t1, t2, d1, d2): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -270,6 +257,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
         .join(t3.join(t2, Inner, Some(nameToAttr("t2_c2") === nameToAttr("t3_c1"))), Inner,
           Some(nameToAttr("d1_c2") === nameToAttr("t2_c1")))
         .join(t1, Inner, Some(nameToAttr("t1_c1") === nameToAttr("f1_c1")))
+        .select(outputsOf(d1, t1, t2, f1, d2, t3): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -311,6 +299,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
           Some(nameToAttr("t3_c1") === nameToAttr("t4_c1")))
         .join(t1.join(t2, Inner, Some(nameToAttr("t1_c1") === nameToAttr("t2_c1"))), Inner,
           Some(nameToAttr("t1_c2") === nameToAttr("t4_c2")))
+        .select(outputsOf(d1, t1, t2, t3, t4, f1, d2): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -361,6 +350,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
           Some(nameToAttr("d3_c2") === nameToAttr("t1_c1")))
         .join(t5.join(t6, Inner, Some(nameToAttr("t5_c2") === nameToAttr("t6_c2"))), Inner,
           Some(nameToAttr("d2_c2") === nameToAttr("t5_c1")))
+        .select(outputsOf(d1, t3, t4, f1, d2, t5, t6, d3, t1, t2): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -389,6 +379,7 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
       f1.join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk")))
         .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
+        .select(outputsOf(d1, d2, f1, d3): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -414,13 +405,27 @@ class StarJoinCostBasedReorderSuite extends PlanTest with StatsEstimationTestBas
       f1.join(t3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("t3_c1")))
         .join(t2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("t2_c1")))
         .join(t1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("t1_c1")))
+        .select(outputsOf(t1, f1, t2, t3): _*)
 
     assertEqualPlans(query, expected)
   }
 
   private def assertEqualPlans( plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
-    val optimized = Optimize.execute(plan1.analyze)
+    val analyzed = plan1.analyze
+    val optimized = Optimize.execute(analyzed)
     val expected = plan2.analyze
+
+    assert(equivalentOutput(analyzed, expected)) // if this fails, the expected itself is incorrect
+    assert(equivalentOutput(analyzed, optimized))
+
     compareJoinOrder(optimized, expected)
+  }
+
+  private def outputsOf(plans: LogicalPlan*): Seq[Attribute] = {
+    plans.map(_.output).reduce(_ ++ _)
+  }
+
+  private def equivalentOutput(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
+    normalizeExprIds(plan1).output == normalizeExprIds(plan2).output
   }
 }

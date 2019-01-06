@@ -119,8 +119,9 @@ SHOW TABLE EXTENDED LIKE 'show_t*'
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 12 output
 show_t3	true	Table: show_t3
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type: VIEW
 Schema: root
  |-- e: integer (nullable = true)
@@ -128,8 +129,9 @@ Schema: root
 
 showdb	show_t1	false	Database: showdb
 Table: show_t1
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type: MANAGED
 Provider: parquet
 Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1
@@ -144,8 +146,9 @@ Schema: root
 
 showdb	show_t2	false	Database: showdb
 Table: show_t2
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type: MANAGED
 Provider: parquet
 Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t2
@@ -161,7 +164,7 @@ struct<>
 -- !query 13 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input '<EOF>' expecting 'LIKE'(line 1, pos 19)
+mismatched input '<EOF>' expecting {'FROM', 'IN', 'LIKE'}(line 1, pos 19)
 
 == SQL ==
 SHOW TABLE EXTENDED
@@ -175,6 +178,8 @@ struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 14 output
 showdb	show_t1	false	Partition Values: [c=Us, d=1]
 Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1
+Created Time [not included in comparison]
+Last Access [not included in comparison]
 
 
 -- !query 15
@@ -184,7 +189,7 @@ struct<>
 -- !query 15 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'PARTITION' expecting 'LIKE'(line 1, pos 20)
+mismatched input 'PARTITION' expecting {'FROM', 'IN', 'LIKE'}(line 1, pos 20)
 
 == SQL ==
 SHOW TABLE EXTENDED PARTITION(c='Us', d=1)

@@ -17,24 +17,28 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{DataInputStream, DataOutputStream, FileNotFoundException, IOException}
+import java.io._
+import java.util
 import java.util.Locale
+import java.util.concurrent.atomic.LongAdder
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
+import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SizeEstimator, Utils}
 
 
 /**
@@ -66,13 +70,7 @@ import org.apache.spark.util.Utils
  * to ensure re-executed RDD operations re-apply updates on the correct past version of the
  * store.
  */
-private[state] class HDFSBackedStateStoreProvider(
-    val id: StateStoreId,
-    keySchema: StructType,
-    valueSchema: StructType,
-    storeConf: StateStoreConf,
-    hadoopConf: Configuration
-  ) extends StateStoreProvider with Logging {
+private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider with Logging {
 
   // ConcurrentHashMap is used because it generates fail-safe iterators on filtering
   // - The iterator is weakly consistent with the map, i.e., iterator's data reflect the values in
@@ -92,94 +90,38 @@ private[state] class HDFSBackedStateStoreProvider(
     case object ABORTED extends STATE
 
     private val newVersion = version + 1
-    private val tempDeltaFile = new Path(baseDir, s"temp-${Random.nextLong}")
-    private lazy val tempDeltaFileStream = compressStream(fs.create(tempDeltaFile, true))
-    private val allUpdates = new java.util.HashMap[UnsafeRow, StoreUpdate]()
-
     @volatile private var state: STATE = UPDATING
-    @volatile private var finalDeltaFile: Path = null
+    private val finalDeltaFile: Path = deltaFile(newVersion)
+    private lazy val deltaFileStream = fm.createAtomic(finalDeltaFile, overwriteIfPossible = true)
+    private lazy val compressedStream = compressStream(deltaFileStream)
 
-    override def id: StateStoreId = HDFSBackedStateStoreProvider.this.id
+    override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
-    override def get(key: UnsafeRow): Option[UnsafeRow] = {
-      Option(mapToUpdate.get(key))
-    }
-
-    override def filter(
-        condition: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
-      mapToUpdate
-        .entrySet
-        .asScala
-        .iterator
-        .filter { entry => condition(entry.getKey, entry.getValue) }
-        .map { entry => (entry.getKey, entry.getValue) }
+    override def get(key: UnsafeRow): UnsafeRow = {
+      mapToUpdate.get(key)
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
       verify(state == UPDATING, "Cannot put after already committed or aborted")
-
-      val isNewKey = !mapToUpdate.containsKey(key)
-      mapToUpdate.put(key, value)
-
-      Option(allUpdates.get(key)) match {
-        case Some(ValueAdded(_, _)) =>
-          // Value did not exist in previous version and was added already, keep it marked as added
-          allUpdates.put(key, ValueAdded(key, value))
-        case Some(ValueUpdated(_, _)) | Some(ValueRemoved(_, _)) =>
-          // Value existed in previous version and updated/removed, mark it as updated
-          allUpdates.put(key, ValueUpdated(key, value))
-        case None =>
-          // There was no prior update, so mark this as added or updated according to its presence
-          // in previous version.
-          val update = if (isNewKey) ValueAdded(key, value) else ValueUpdated(key, value)
-          allUpdates.put(key, update)
-      }
-      writeToDeltaFile(tempDeltaFileStream, ValueUpdated(key, value))
+      val keyCopy = key.copy()
+      val valueCopy = value.copy()
+      mapToUpdate.put(keyCopy, valueCopy)
+      writeUpdateToDeltaFile(compressedStream, keyCopy, valueCopy)
     }
 
-    /** Remove keys that match the following condition */
-    override def remove(condition: UnsafeRow => Boolean): Unit = {
-      verify(state == UPDATING, "Cannot remove after already committed or aborted")
-      val entryIter = mapToUpdate.entrySet().iterator()
-      while (entryIter.hasNext) {
-        val entry = entryIter.next
-        if (condition(entry.getKey)) {
-          val value = entry.getValue
-          val key = entry.getKey
-          entryIter.remove()
-
-          Option(allUpdates.get(key)) match {
-            case Some(ValueUpdated(_, _)) | None =>
-              // Value existed in previous version and maybe was updated, mark removed
-              allUpdates.put(key, ValueRemoved(key, value))
-            case Some(ValueAdded(_, _)) =>
-              // Value did not exist in previous version and was added, should not appear in updates
-              allUpdates.remove(key)
-            case Some(ValueRemoved(_, _)) =>
-              // Remove already in update map, no need to change
-          }
-          writeToDeltaFile(tempDeltaFileStream, ValueRemoved(key, value))
-        }
-      }
-    }
-
-    /** Remove a single key. */
     override def remove(key: UnsafeRow): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
-      if (mapToUpdate.containsKey(key)) {
-        val value = mapToUpdate.remove(key)
-        Option(allUpdates.get(key)) match {
-          case Some(ValueUpdated(_, _)) | None =>
-            // Value existed in previous version and maybe was updated, mark removed
-            allUpdates.put(key, ValueRemoved(key, value))
-          case Some(ValueAdded(_, _)) =>
-            // Value did not exist in previous version and was added, should not appear in updates
-            allUpdates.remove(key)
-          case Some(ValueRemoved(_, _)) =>
-          // Remove already in update map, no need to change
-        }
-        writeToDeltaFile(tempDeltaFileStream, ValueRemoved(key, value))
+      val prevValue = mapToUpdate.remove(key)
+      if (prevValue != null) {
+        writeRemoveToDeltaFile(compressedStream, key)
       }
+    }
+
+    override def getRange(
+        start: Option[UnsafeRow],
+        end: Option[UnsafeRow]): Iterator[UnsafeRowPair] = {
+      verify(state == UPDATING, "Cannot getRange after already committed or aborted")
+      iterator()
     }
 
     /** Commit all the updates that have been made to the store, and return the new version. */
@@ -187,8 +129,7 @@ private[state] class HDFSBackedStateStoreProvider(
       verify(state == UPDATING, "Cannot commit after already committed or aborted")
 
       try {
-        finalizeDeltaFile(tempDeltaFileStream)
-        finalDeltaFile = commitUpdates(newVersion, mapToUpdate, tempDeltaFile)
+        commitUpdates(newVersion, mapToUpdate, compressedStream)
         state = COMMITTED
         logInfo(s"Committed version $newVersion for $this to file $finalDeltaFile")
         newVersion
@@ -201,14 +142,14 @@ private[state] class HDFSBackedStateStoreProvider(
 
     /** Abort all the updates made on this store. This store will not be usable any more. */
     override def abort(): Unit = {
-      verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
-
-      state = ABORTED
-      if (tempDeltaFileStream != null) {
-        tempDeltaFileStream.close()
-      }
-      if (tempDeltaFile != null) {
-        fs.delete(tempDeltaFile, true)
+      // This if statement is to ensure that files are deleted only if there are changes to the
+      // StateStore. We have two StateStores for each task, one which is used only for reading, and
+      // the other used for read+write. We don't want the read-only to delete state files.
+      if (state == UPDATING) {
+        state = ABORTED
+        cancelDeltaFile(compressedStream, deltaFileStream)
+      } else {
+        state = ABORTED
       }
       logInfo(s"Aborted version $newVersion for $this")
     }
@@ -217,34 +158,42 @@ private[state] class HDFSBackedStateStoreProvider(
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(): Iterator[(UnsafeRow, UnsafeRow)] = {
-      verify(state == COMMITTED,
-        "Cannot get iterator of store data before committing or after aborting")
-      HDFSBackedStateStoreProvider.this.iterator(newVersion)
+    override def iterator(): Iterator[UnsafeRowPair] = {
+      val unsafeRowPair = new UnsafeRowPair()
+      mapToUpdate.entrySet.asScala.iterator.map { entry =>
+        unsafeRowPair.withRows(entry.getKey, entry.getValue)
+      }
     }
 
-    /**
-     * Get an iterator of all the updates made to the store in the current version.
-     * This can be called only after committing all the updates made in the current thread.
-     */
-    override def updates(): Iterator[StoreUpdate] = {
-      verify(state == COMMITTED,
-        "Cannot get iterator of updates before committing or after aborting")
-      allUpdates.values().asScala.toIterator
-    }
+    override def metrics: StateStoreMetrics = {
+      // NOTE: we provide estimation of cache size as "memoryUsedBytes", and size of state for
+      // current version as "stateOnCurrentVersionSizeBytes"
+      val metricsFromProvider: Map[String, Long] = getMetricsForProvider()
 
-    override def numKeys(): Long = mapToUpdate.size()
+      val customMetrics = metricsFromProvider.flatMap { case (name, value) =>
+        // just allow searching from list cause the list is small enough
+        supportedCustomMetrics.find(_.name == name).map(_ -> value)
+      } + (metricStateOnCurrentVersionSizeBytes -> SizeEstimator.estimate(mapToUpdate))
+
+      StateStoreMetrics(mapToUpdate.size(), metricsFromProvider("memoryUsedBytes"), customMetrics)
+    }
 
     /**
      * Whether all updates have been committed
      */
-    override private[streaming] def hasCommitted: Boolean = {
+    override def hasCommitted: Boolean = {
       state == COMMITTED
     }
 
     override def toString(): String = {
       s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
+  }
+
+  def getMetricsForProvider(): Map[String, Long] = synchronized {
+    Map("memoryUsedBytes" -> SizeEstimator.estimate(loadedMaps),
+      metricLoadedMapCacheHit.name -> loadedMapCacheHitCount.sum(),
+      metricLoadedMapCacheMiss.name -> loadedMapCacheMissCount.sum())
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
@@ -259,6 +208,24 @@ private[state] class HDFSBackedStateStoreProvider(
     store
   }
 
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int], // for sorting the data
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration): Unit = {
+    this.stateStoreId_ = stateStoreId
+    this.keySchema = keySchema
+    this.valueSchema = valueSchema
+    this.storeConf = storeConf
+    this.hadoopConf = hadoopConf
+    this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
+    fm.mkdirs(baseDir)
+  }
+
+  override def stateStoreId: StateStoreId = stateStoreId_
+
   /** Do maintenance backing data files, including creating snapshots and cleaning up old files */
   override def doMaintenance(): Unit = {
     try {
@@ -270,42 +237,55 @@ private[state] class HDFSBackedStateStoreProvider(
     }
   }
 
-  override def toString(): String = {
-    s"HDFSStateStoreProvider[id = (op=${id.operatorId}, part=${id.partitionId}), dir = $baseDir]"
+  override def close(): Unit = {
+    loadedMaps.values.asScala.foreach(_.clear())
   }
 
-  /* Internal classes and methods */
+  override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {
+    metricStateOnCurrentVersionSizeBytes :: metricLoadedMapCacheHit :: metricLoadedMapCacheMiss ::
+      Nil
+  }
 
-  private val loadedMaps = new mutable.HashMap[Long, MapType]
-  private val baseDir =
-    new Path(id.checkpointLocation, s"${id.operatorId}/${id.partitionId.toString}")
-  private val fs = baseDir.getFileSystem(hadoopConf)
-  private val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+  override def toString(): String = {
+    s"HDFSStateStoreProvider[" +
+      s"id = (op=${stateStoreId.operatorId},part=${stateStoreId.partitionId}),dir = $baseDir]"
+  }
 
-  initialize()
+  /* Internal fields and methods */
+
+  @volatile private var stateStoreId_ : StateStoreId = _
+  @volatile private var keySchema: StructType = _
+  @volatile private var valueSchema: StructType = _
+  @volatile private var storeConf: StateStoreConf = _
+  @volatile private var hadoopConf: Configuration = _
+  @volatile private var numberOfVersionsToRetainInMemory: Int = _
+
+  private lazy val loadedMaps = new util.TreeMap[Long, MapType](Ordering[Long].reverse)
+  private lazy val baseDir = stateStoreId.storeCheckpointLocation()
+  private lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
+  private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+
+  private val loadedMapCacheHitCount: LongAdder = new LongAdder
+  private val loadedMapCacheMissCount: LongAdder = new LongAdder
+
+  private lazy val metricStateOnCurrentVersionSizeBytes: StateStoreCustomSizeMetric =
+    StateStoreCustomSizeMetric("stateOnCurrentVersionSizeBytes",
+      "estimated size of state only on current version")
+
+  private lazy val metricLoadedMapCacheHit: StateStoreCustomMetric =
+    StateStoreCustomSumMetric("loadedMapCacheHitCount",
+      "count of cache hit on states cache in provider")
+
+  private lazy val metricLoadedMapCacheMiss: StateStoreCustomMetric =
+    StateStoreCustomSumMetric("loadedMapCacheMissCount",
+      "count of cache miss on states cache in provider")
 
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
 
-  /** Commit a set of updates to the store with the given new version */
-  private def commitUpdates(newVersion: Long, map: MapType, tempDeltaFile: Path): Path = {
+  private def commitUpdates(newVersion: Long, map: MapType, output: DataOutputStream): Unit = {
     synchronized {
-      val finalDeltaFile = deltaFile(newVersion)
-
-      // scalastyle:off
-      // Renaming a file atop an existing one fails on HDFS
-      // (http://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/filesystem/filesystem.html).
-      // Hence we should either skip the rename step or delete the target file. Because deleting the
-      // target file will break speculation, skipping the rename step is the only choice. It's still
-      // semantically correct because Structured Streaming requires rerunning a batch should
-      // generate the same output. (SPARK-19677)
-      // scalastyle:on
-      if (fs.exists(finalDeltaFile)) {
-        fs.delete(tempDeltaFile, true)
-      } else if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
-        throw new IOException(s"Failed to rename $tempDeltaFile to $finalDeltaFile")
-      }
-      loadedMaps.put(newVersion, map)
-      finalDeltaFile
+      finalizeDeltaFile(output)
+      putStateIntoStateCacheMap(newVersion, map)
     }
   }
 
@@ -313,76 +293,123 @@ private[state] class HDFSBackedStateStoreProvider(
    * Get iterator of all the data of the latest version of the store.
    * Note that this will look up the files to determined the latest known version.
    */
-  private[state] def latestIterator(): Iterator[(UnsafeRow, UnsafeRow)] = synchronized {
+  private[state] def latestIterator(): Iterator[UnsafeRowPair] = synchronized {
     val versionsInFiles = fetchFiles().map(_.version).toSet
-    val versionsLoaded = loadedMaps.keySet
+    val versionsLoaded = loadedMaps.keySet.asScala
     val allKnownVersions = versionsInFiles ++ versionsLoaded
+    val unsafeRowTuple = new UnsafeRowPair()
     if (allKnownVersions.nonEmpty) {
-      loadMap(allKnownVersions.max).entrySet().iterator().asScala.map { x =>
-        (x.getKey, x.getValue)
+      loadMap(allKnownVersions.max).entrySet().iterator().asScala.map { entry =>
+        unsafeRowTuple.withRows(entry.getKey, entry.getValue)
       }
     } else Iterator.empty
   }
 
-  /** Get iterator of a specific version of the store */
-  private[state] def iterator(version: Long): Iterator[(UnsafeRow, UnsafeRow)] = synchronized {
-    loadMap(version).entrySet().iterator().asScala.map { x =>
-      (x.getKey, x.getValue)
-    }
+  /** This method is intended to be only used for unit test(s). DO NOT TOUCH ELEMENTS IN MAP! */
+  private[state] def getLoadedMaps(): util.SortedMap[Long, MapType] = synchronized {
+    // shallow copy as a minimal guard
+    loadedMaps.clone().asInstanceOf[util.SortedMap[Long, MapType]]
   }
 
-  /** Initialize the store provider */
-  private def initialize(): Unit = {
-    try {
-      fs.mkdirs(baseDir)
-    } catch {
-      case e: IOException =>
-        throw new IllegalStateException(
-          s"Cannot use ${id.checkpointLocation} for storing state data for $this: $e ", e)
+  private def putStateIntoStateCacheMap(newVersion: Long, map: MapType): Unit = synchronized {
+    if (numberOfVersionsToRetainInMemory <= 0) {
+      if (loadedMaps.size() > 0) loadedMaps.clear()
+      return
     }
+
+    while (loadedMaps.size() > numberOfVersionsToRetainInMemory) {
+      loadedMaps.remove(loadedMaps.lastKey())
+    }
+
+    val size = loadedMaps.size()
+    if (size == numberOfVersionsToRetainInMemory) {
+      val versionIdForLastKey = loadedMaps.lastKey()
+      if (versionIdForLastKey > newVersion) {
+        // this is the only case which we can avoid putting, because new version will be placed to
+        // the last key and it should be evicted right away
+        return
+      } else if (versionIdForLastKey < newVersion) {
+        // this case needs removal of the last key before putting new one
+        loadedMaps.remove(versionIdForLastKey)
+      }
+    }
+
+    loadedMaps.put(newVersion, map)
   }
 
   /** Load the required version of the map data from the backing files */
   private def loadMap(version: Long): MapType = {
-    if (version <= 0) return new MapType
-    synchronized { loadedMaps.get(version) }.getOrElse {
-      val mapFromFile = readSnapshotFile(version).getOrElse {
-        val prevMap = loadMap(version - 1)
-        val newMap = new MapType(prevMap)
-        updateFromDeltaFile(version, newMap)
-        newMap
-      }
-      loadedMaps.put(version, mapFromFile)
-      mapFromFile
+
+    // Shortcut if the map for this version is already there to avoid a redundant put.
+    val loadedCurrentVersionMap = synchronized { Option(loadedMaps.get(version)) }
+    if (loadedCurrentVersionMap.isDefined) {
+      loadedMapCacheHitCount.increment()
+      return loadedCurrentVersionMap.get
     }
+
+    logWarning(s"The state for version $version doesn't exist in loadedMaps. " +
+      "Reading snapshot file and delta files if needed..." +
+      "Note that this is normal for the first batch of starting query.")
+
+    loadedMapCacheMissCount.increment()
+
+    val (result, elapsedMs) = Utils.timeTakenMs {
+      val snapshotCurrentVersionMap = readSnapshotFile(version)
+      if (snapshotCurrentVersionMap.isDefined) {
+        synchronized { putStateIntoStateCacheMap(version, snapshotCurrentVersionMap.get) }
+        return snapshotCurrentVersionMap.get
+      }
+
+      // Find the most recent map before this version that we can.
+      // [SPARK-22305] This must be done iteratively to avoid stack overflow.
+      var lastAvailableVersion = version
+      var lastAvailableMap: Option[MapType] = None
+      while (lastAvailableMap.isEmpty) {
+        lastAvailableVersion -= 1
+
+        if (lastAvailableVersion <= 0) {
+          // Use an empty map for versions 0 or less.
+          lastAvailableMap = Some(new MapType)
+        } else {
+          lastAvailableMap =
+            synchronized { Option(loadedMaps.get(lastAvailableVersion)) }
+              .orElse(readSnapshotFile(lastAvailableVersion))
+        }
+      }
+
+      // Load all the deltas from the version after the last available one up to the target version.
+      // The last available version is the one with a full snapshot, so it doesn't need deltas.
+      val resultMap = new MapType(lastAvailableMap.get)
+      for (deltaVersion <- lastAvailableVersion + 1 to version) {
+        updateFromDeltaFile(deltaVersion, resultMap)
+      }
+
+      synchronized { putStateIntoStateCacheMap(version, resultMap) }
+      resultMap
+    }
+
+    logDebug(s"Loading state for $version takes $elapsedMs ms.")
+
+    result
   }
 
-  private def writeToDeltaFile(output: DataOutputStream, update: StoreUpdate): Unit = {
+  private def writeUpdateToDeltaFile(
+      output: DataOutputStream,
+      key: UnsafeRow,
+      value: UnsafeRow): Unit = {
+    val keyBytes = key.getBytes()
+    val valueBytes = value.getBytes()
+    output.writeInt(keyBytes.size)
+    output.write(keyBytes)
+    output.writeInt(valueBytes.size)
+    output.write(valueBytes)
+  }
 
-    def writeUpdate(key: UnsafeRow, value: UnsafeRow): Unit = {
-      val keyBytes = key.getBytes()
-      val valueBytes = value.getBytes()
-      output.writeInt(keyBytes.size)
-      output.write(keyBytes)
-      output.writeInt(valueBytes.size)
-      output.write(valueBytes)
-    }
-
-    def writeRemove(key: UnsafeRow): Unit = {
-      val keyBytes = key.getBytes()
-      output.writeInt(keyBytes.size)
-      output.write(keyBytes)
-      output.writeInt(-1)
-    }
-
-    update match {
-      case ValueAdded(key, value) =>
-        writeUpdate(key, value)
-      case ValueUpdated(key, value) =>
-        writeUpdate(key, value)
-      case ValueRemoved(key, value) =>
-        writeRemove(key)
-    }
+  private def writeRemoveToDeltaFile(output: DataOutputStream, key: UnsafeRow): Unit = {
+    val keyBytes = key.getBytes()
+    output.writeInt(keyBytes.size)
+    output.write(keyBytes)
+    output.writeInt(-1)
   }
 
   private def finalizeDeltaFile(output: DataOutputStream): Unit = {
@@ -394,7 +421,7 @@ private[state] class HDFSBackedStateStoreProvider(
     val fileToRead = deltaFile(version)
     var input: DataInputStream = null
     val sourceStream = try {
-      fs.open(fileToRead)
+      fm.open(fileToRead)
     } catch {
       case f: FileNotFoundException =>
         throw new IllegalStateException(
@@ -425,7 +452,11 @@ private[state] class HDFSBackedStateStoreProvider(
             val valueRowBuffer = new Array[Byte](valueSize)
             ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
-            valueRow.pointTo(valueRowBuffer, valueSize)
+            // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
+            // This is a workaround for the following:
+            // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
+            // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
+            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             map.put(keyRow, valueRow)
           }
         }
@@ -437,10 +468,12 @@ private[state] class HDFSBackedStateStoreProvider(
   }
 
   private def writeSnapshotFile(version: Long, map: MapType): Unit = {
-    val fileToWrite = snapshotFile(version)
+    val targetFile = snapshotFile(version)
+    var rawOutput: CancellableFSDataOutputStream = null
     var output: DataOutputStream = null
-    Utils.tryWithSafeFinally {
-      output = compressStream(fs.create(fileToWrite, false))
+    try {
+      rawOutput = fm.createAtomic(targetFile, overwriteIfPossible = true)
+      output = compressStream(rawOutput)
       val iter = map.entrySet().iterator()
       while(iter.hasNext) {
         val entry = iter.next()
@@ -452,10 +485,34 @@ private[state] class HDFSBackedStateStoreProvider(
         output.write(valueBytes)
       }
       output.writeInt(-1)
-    } {
-      if (output != null) output.close()
+      output.close()
+    } catch {
+      case e: Throwable =>
+        cancelDeltaFile(compressedStream = output, rawStream = rawOutput)
+        throw e
     }
-    logInfo(s"Written snapshot file for version $version of $this at $fileToWrite")
+    logInfo(s"Written snapshot file for version $version of $this at $targetFile")
+  }
+
+  /**
+   * Try to cancel the underlying stream and safely close the compressed stream.
+   *
+   * @param compressedStream the compressed stream.
+   * @param rawStream the underlying stream which needs to be cancelled.
+   */
+  private def cancelDeltaFile(
+      compressedStream: DataOutputStream,
+      rawStream: CancellableFSDataOutputStream): Unit = {
+    try {
+      if (rawStream != null) rawStream.cancel()
+      IOUtils.closeQuietly(compressedStream)
+    } catch {
+      case e: FSError if e.getCause.isInstanceOf[IOException] =>
+        // Closing the compressedStream causes the stream to write/flush flush data into the
+        // rawStream. Since the rawStream is already closed, there may be errors.
+        // Usually its an IOException. However, Hadoop's RawLocalFileSystem wraps
+        // IOException into FSError.
+    }
   }
 
   private def readSnapshotFile(version: Long): Option[MapType] = {
@@ -464,7 +521,7 @@ private[state] class HDFSBackedStateStoreProvider(
     var input: DataInputStream = null
 
     try {
-      input = decompressStream(fs.open(fileToRead))
+      input = decompressStream(fm.open(fileToRead))
       var eof = false
 
       while (!eof) {
@@ -489,7 +546,11 @@ private[state] class HDFSBackedStateStoreProvider(
             val valueRowBuffer = new Array[Byte](valueSize)
             ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
-            valueRow.pointTo(valueRowBuffer, valueSize)
+            // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
+            // This is a workaround for the following:
+            // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
+            // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
+            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             map.put(keyRow, valueRow)
           }
         }
@@ -508,20 +569,22 @@ private[state] class HDFSBackedStateStoreProvider(
   /** Perform a snapshot of the store to allow delta files to be consolidated */
   private def doSnapshot(): Unit = {
     try {
-      val files = fetchFiles()
+      val (files, e1) = Utils.timeTakenMs(fetchFiles())
+      logDebug(s"fetchFiles() took $e1 ms.")
+
       if (files.nonEmpty) {
         val lastVersion = files.last.version
         val deltaFilesForLastVersion =
           filesForVersion(files, lastVersion).filter(_.isSnapshot == false)
-        synchronized { loadedMaps.get(lastVersion) } match {
+        synchronized { Option(loadedMaps.get(lastVersion)) } match {
           case Some(map) =>
             if (deltaFilesForLastVersion.size > storeConf.minDeltasForSnapshot) {
-              writeSnapshotFile(lastVersion, map)
+              val (_, e2) = Utils.timeTakenMs(writeSnapshotFile(lastVersion, map))
+              logDebug(s"writeSnapshotFile() took $e2 ms.")
             }
           case None =>
             // The last map is not loaded, probably some other instance is in charge
         }
-
       }
     } catch {
       case NonFatal(e) =>
@@ -536,19 +599,20 @@ private[state] class HDFSBackedStateStoreProvider(
    */
   private[state] def cleanup(): Unit = {
     try {
-      val files = fetchFiles()
+      val (files, e1) = Utils.timeTakenMs(fetchFiles())
+      logDebug(s"fetchFiles() took $e1 ms.")
+
       if (files.nonEmpty) {
         val earliestVersionToRetain = files.last.version - storeConf.minVersionsToRetain
         if (earliestVersionToRetain > 0) {
           val earliestFileToRetain = filesForVersion(files, earliestVersionToRetain).head
-          synchronized {
-            val mapsToRemove = loadedMaps.keys.filter(_ < earliestVersionToRetain).toSeq
-            mapsToRemove.foreach(loadedMaps.remove)
-          }
           val filesToDelete = files.filter(_.version < earliestFileToRetain.version)
-          filesToDelete.foreach { f =>
-            fs.delete(f.path, true)
+          val (_, e2) = Utils.timeTakenMs {
+            filesToDelete.foreach { f =>
+              fm.delete(f.path)
+            }
           }
+          logDebug(s"deleting files took $e2 ms.")
           logInfo(s"Deleted files older than ${earliestFileToRetain.version} for $this: " +
             filesToDelete.mkString(", "))
         }
@@ -589,7 +653,7 @@ private[state] class HDFSBackedStateStoreProvider(
   /** Fetch all the files that back the store */
   private def fetchFiles(): Seq[StoreFile] = {
     val files: Seq[FileStatus] = try {
-      fs.listStatus(baseDir)
+      fm.list(baseDir)
     } catch {
       case _: java.io.FileNotFoundException =>
         Seq.empty

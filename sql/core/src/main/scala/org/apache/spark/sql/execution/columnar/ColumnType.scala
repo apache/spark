@@ -43,6 +43,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * WARNING: This only works with HeapByteBuffer
  */
 private[columnar] object ByteBufferHelper {
+  def getShort(buffer: ByteBuffer): Short = {
+    val pos = buffer.position()
+    buffer.position(pos + 2)
+    Platform.getShort(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+
   def getInt(buffer: ByteBuffer): Int = {
     val pos = buffer.position()
     buffer.position(pos + 4)
@@ -65,6 +71,33 @@ private[columnar] object ByteBufferHelper {
     val pos = buffer.position()
     buffer.position(pos + 8)
     Platform.getDouble(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+
+  def putShort(buffer: ByteBuffer, value: Short): Unit = {
+    val pos = buffer.position()
+    buffer.position(pos + 2)
+    Platform.putShort(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos, value)
+  }
+
+  def putInt(buffer: ByteBuffer, value: Int): Unit = {
+    val pos = buffer.position()
+    buffer.position(pos + 4)
+    Platform.putInt(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos, value)
+  }
+
+  def putLong(buffer: ByteBuffer, value: Long): Unit = {
+    val pos = buffer.position()
+    buffer.position(pos + 8)
+    Platform.putLong(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos, value)
+  }
+
+  def copyMemory(src: ByteBuffer, dst: ByteBuffer, len: Int): Unit = {
+    val srcPos = src.position()
+    val dstPos = dst.position()
+    src.position(srcPos + len)
+    dst.position(dstPos + len)
+    Platform.copyMemory(src.array(), Platform.BYTE_ARRAY_OFFSET + srcPos,
+      dst.array(), Platform.BYTE_ARRAY_OFFSET + dstPos, len)
   }
 }
 
@@ -684,7 +717,7 @@ private[columnar] object ColumnType {
       case struct: StructType => STRUCT(struct)
       case udt: UserDefinedType[_] => apply(udt.sqlType)
       case other =>
-        throw new Exception(s"Unsupported type: $other")
+        throw new Exception(s"Unsupported type: ${other.catalogString}")
     }
   }
 }

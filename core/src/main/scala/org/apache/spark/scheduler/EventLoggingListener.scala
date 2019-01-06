@@ -22,8 +22,7 @@ import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, Map}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
@@ -33,7 +32,9 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -42,10 +43,12 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  *
  * Event logging is specified by the following configurable parameters:
  *   spark.eventLog.enabled - Whether event logging is enabled.
+ *   spark.eventLog.logBlockUpdates.enabled - Whether to log block updates
  *   spark.eventLog.compress - Whether to compress logged events
  *   spark.eventLog.overwrite - Whether to overwrite any existing files.
  *   spark.eventLog.dir - Path to the directory in which events are logged.
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
+ *   spark.eventLog.logStageExecutorMetrics.enabled - Whether to log stage executor metrics
  */
 private[spark] class EventLoggingListener(
     appId: String,
@@ -61,10 +64,13 @@ private[spark] class EventLoggingListener(
     this(appId, appAttemptId, logBaseDir, sparkConf,
       SparkHadoopUtil.get.newConfiguration(sparkConf))
 
-  private val shouldCompress = sparkConf.getBoolean("spark.eventLog.compress", false)
-  private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
-  private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
-  private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
+  private val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS)
+  private val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
+  private val shouldLogBlockUpdates = sparkConf.get(EVENT_LOG_BLOCK_UPDATES)
+  private val shouldAllowECLogs = sparkConf.get(EVENT_LOG_ALLOW_EC)
+  private val shouldLogStageExecutorMetrics = sparkConf.get(EVENT_LOG_STAGE_EXECUTOR_METRICS)
+  private val testing = sparkConf.get(EVENT_LOG_TESTING)
+  private val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
   private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
   private val compressionCodec =
     if (shouldCompress) {
@@ -87,6 +93,9 @@ private[spark] class EventLoggingListener(
   // Visible for tests only.
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
+  // map of (stageId, stageAttempt), to peak executor metrics for the stage
+  private val liveStageExecutorMetrics = Map.empty[(Int, Int), Map[String, ExecutorMetrics]]
+
   /**
    * Creates the log file in the configured log directory.
    */
@@ -96,8 +105,8 @@ private[spark] class EventLoggingListener(
     }
 
     val workingPath = logPath + IN_PROGRESS
-    val uri = new URI(workingPath)
     val path = new Path(workingPath)
+    val uri = path.toUri
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
@@ -111,7 +120,11 @@ private[spark] class EventLoggingListener(
       if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
         new FileOutputStream(uri.getPath)
       } else {
-        hadoopDataStream = Some(fileSystem.create(path))
+        hadoopDataStream = Some(if (shouldAllowECLogs) {
+          fileSystem.create(path)
+        } else {
+          SparkHadoopUtil.createNonECFile(fileSystem, path)
+        })
         hadoopDataStream.get
       }
 
@@ -119,7 +132,7 @@ private[spark] class EventLoggingListener(
       val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
 
-      EventLoggingListener.initEventLog(bstream)
+      EventLoggingListener.initEventLog(bstream, testing, loggedEvents)
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
       writer = Some(new PrintWriter(bstream))
       logInfo("Logging events to %s".format(logPath))
@@ -146,7 +159,14 @@ private[spark] class EventLoggingListener(
   }
 
   // Events that do not trigger a flush
-  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = logEvent(event)
+  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
+    logEvent(event)
+    if (shouldLogStageExecutorMetrics) {
+      // record the peak metrics for the new stage
+      liveStageExecutorMetrics.put((event.stageInfo.stageId, event.stageInfo.attemptNumber()),
+        Map.empty[String, ExecutorMetrics])
+    }
+  }
 
   override def onTaskStart(event: SparkListenerTaskStart): Unit = logEvent(event)
 
@@ -160,6 +180,26 @@ private[spark] class EventLoggingListener(
 
   // Events that trigger a flush
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+    if (shouldLogStageExecutorMetrics) {
+      // clear out any previous attempts, that did not have a stage completed event
+      val prevAttemptId = event.stageInfo.attemptNumber() - 1
+      for (attemptId <- 0 to prevAttemptId) {
+        liveStageExecutorMetrics.remove((event.stageInfo.stageId, attemptId))
+      }
+
+      // log the peak executor metrics for the stage, for each live executor,
+      // whether or not the executor is running tasks for the stage
+      val executorOpt = liveStageExecutorMetrics.remove(
+        (event.stageInfo.stageId, event.stageInfo.attemptNumber()))
+      executorOpt.foreach { execMap =>
+        execMap.foreach { case (executorId, peakExecutorMetrics) =>
+            logEvent(new SparkListenerStageExecutorMetrics(executorId, event.stageInfo.stageId,
+              event.stageInfo.attemptNumber(), peakExecutorMetrics))
+        }
+      }
+    }
+
+    // log stage completed event
     logEvent(event, flushLogger = true)
   }
 
@@ -198,6 +238,15 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   }
 
+  override def onExecutorBlacklistedForStage(
+      event: SparkListenerExecutorBlacklistedForStage): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
+  override def onNodeBlacklistedForStage(event: SparkListenerNodeBlacklistedForStage): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
   override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
     logEvent(event, flushLogger = true)
   }
@@ -210,11 +259,24 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   }
 
-  // No-op because logging every update would be overkill
-  override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {}
+  override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
+    if (shouldLogBlockUpdates) {
+      logEvent(event, flushLogger = true)
+    }
+  }
 
-  // No-op because logging every update would be overkill
-  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
+  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
+    if (shouldLogStageExecutorMetrics) {
+      // For the active stages, record any new peak values for the memory metrics for the executor
+      event.executorUpdates.foreach { executorUpdates =>
+        liveStageExecutorMetrics.values.foreach { peakExecutorMetrics =>
+          val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
+            event.execId, new ExecutorMetrics())
+          peakMetrics.compareAndUpdatePeakValues(executorUpdates)
+        }
+      }
+    }
+  }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (event.logEvent) {
@@ -252,11 +314,17 @@ private[spark] class EventLoggingListener(
 
   private[spark] def redactEvent(
       event: SparkListenerEnvironmentUpdate): SparkListenerEnvironmentUpdate = {
-    // "Spark Properties" entry will always exist because the map is always populated with it.
-    val redactedProps = Utils.redact(sparkConf, event.environmentDetails("Spark Properties"))
-    val redactedEnvironmentDetails = event.environmentDetails +
-      ("Spark Properties" -> redactedProps)
-    SparkListenerEnvironmentUpdate(redactedEnvironmentDetails)
+    // environmentDetails maps a string descriptor to a set of properties
+    // Similar to:
+    // "JVM Information" -> jvmInformation,
+    // "Spark Properties" -> sparkProperties,
+    // ...
+    // where jvmInformation, sparkProperties, etc. are sequence of tuples.
+    // We go through the various  of properties and redact sensitive information from them.
+    val redactedProps = event.environmentDetails.map{ case (name, props) =>
+      name -> Utils.redact(sparkConf, props)
+    }
+    SparkListenerEnvironmentUpdate(redactedProps)
   }
 
 }
@@ -269,7 +337,7 @@ private[spark] object EventLoggingListener extends Logging {
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 
   // A cache for compression codecs to avoid creating the same codec many times
-  private val codecMap = new mutable.HashMap[String, CompressionCodec]
+  private val codecMap = Map.empty[String, CompressionCodec]
 
   /**
    * Write metadata about an event log to the given stream.
@@ -277,10 +345,17 @@ private[spark] object EventLoggingListener extends Logging {
    *
    * @param logStream Raw output stream to the event log file.
    */
-  def initEventLog(logStream: OutputStream): Unit = {
+  def initEventLog(
+      logStream: OutputStream,
+      testing: Boolean,
+      loggedEvents: ArrayBuffer[JValue]): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
-    val metadataJson = compact(JsonProtocol.logStartToJson(metadata)) + "\n"
+    val eventJson = JsonProtocol.logStartToJson(metadata)
+    val metadataJson = compact(eventJson) + "\n"
     logStream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
+    if (testing && loggedEvents != null) {
+      loggedEvents += eventJson
+    }
   }
 
   /**
@@ -307,17 +382,13 @@ private[spark] object EventLoggingListener extends Logging {
       appId: String,
       appAttemptId: Option[String],
       compressionCodecName: Option[String] = None): String = {
-    val base = logBaseDir.toString.stripSuffix("/") + "/" + sanitize(appId)
+    val base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + Utils.sanitizeDirName(appId)
     val codec = compressionCodecName.map("." + _).getOrElse("")
     if (appAttemptId.isDefined) {
-      base + "_" + sanitize(appAttemptId.get) + codec
+      base + "_" + Utils.sanitizeDirName(appAttemptId.get) + codec
     } else {
       base + codec
     }
-  }
-
-  private def sanitize(str: String): String = {
-    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }
 
   /**
@@ -327,22 +398,23 @@ private[spark] object EventLoggingListener extends Logging {
    */
   def openEventLog(log: Path, fs: FileSystem): InputStream = {
     val in = new BufferedInputStream(fs.open(log))
-
-    // Compression codec is encoded as an extension, e.g. app_123.lzf
-    // Since we sanitize the app ID to not include periods, it is safe to split on it
-    val logName = log.getName.stripSuffix(IN_PROGRESS)
-    val codecName: Option[String] = logName.split("\\.").tail.lastOption
-    val codec = codecName.map { c =>
-      codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
-    }
-
     try {
-      codec.map(_.compressedInputStream(in)).getOrElse(in)
+      val codec = codecName(log).map { c =>
+        codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
+      }
+      codec.map(_.compressedContinuousInputStream(in)).getOrElse(in)
     } catch {
-      case e: Exception =>
+      case e: Throwable =>
         in.close()
         throw e
     }
+  }
+
+  def codecName(log: Path): Option[String] = {
+    // Compression codec is encoded as an extension, e.g. app_123.lzf
+    // Since we sanitize the app ID to not include periods, it is safe to split on it
+    val logName = log.getName.stripSuffix(IN_PROGRESS)
+    logName.split("\\.").tail.lastOption
   }
 
 }

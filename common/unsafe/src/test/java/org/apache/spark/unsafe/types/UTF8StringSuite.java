@@ -51,15 +51,19 @@ public class UTF8StringSuite {
 
     assertTrue(s1.contains(s2));
     assertTrue(s2.contains(s1));
-    assertTrue(s1.startsWith(s1));
-    assertTrue(s1.endsWith(s1));
+    assertTrue(s1.startsWith(s2));
+    assertTrue(s1.endsWith(s2));
   }
 
   @Test
   public void basicTest() {
     checkBasic("", 0);
-    checkBasic("hello", 5);
+    checkBasic("¡", 1); // 2 bytes char
+    checkBasic("ку", 2); // 2 * 2 bytes chars
+    checkBasic("hello", 5); // 5 * 1 byte chars
     checkBasic("大 千 世 界", 7);
+    checkBasic("︽﹋％", 3); // 3 * 3 bytes chars
+    checkBasic("\uD83E\uDD19", 1); // 4 bytes char
   }
 
   @Test
@@ -222,10 +226,13 @@ public class UTF8StringSuite {
 
   @Test
   public void trims() {
+    assertEquals(fromString("1"), fromString("1").trim());
+
     assertEquals(fromString("hello"), fromString("  hello ").trim());
     assertEquals(fromString("hello "), fromString("  hello ").trimLeft());
     assertEquals(fromString("  hello"), fromString("  hello ").trimRight());
 
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.trim());
     assertEquals(EMPTY_UTF8, fromString("  ").trim());
     assertEquals(EMPTY_UTF8, fromString("  ").trimLeft());
     assertEquals(EMPTY_UTF8, fromString("  ").trimRight());
@@ -386,12 +393,14 @@ public class UTF8StringSuite {
 
   @Test
   public void split() {
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), -1),
-      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi")}));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
-    assertTrue(Arrays.equals(fromString("ab,def,ghi").split(fromString(","), 2),
-      new UTF8String[]{fromString("ab"), fromString("def,ghi")}));
+    UTF8String[] negativeAndZeroLimitCase =
+      new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 0),
+      negativeAndZeroLimitCase));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), -1),
+      negativeAndZeroLimitCase));
+    assertTrue(Arrays.equals(fromString("ab,def,ghi,").split(fromString(","), 2),
+      new UTF8String[]{fromString("ab"), fromString("def,ghi,")}));
   }
 
   @Test
@@ -728,6 +737,81 @@ public class UTF8StringSuite {
 
     for (String negativeInput : negativeInputs) {
       assertFalse(negativeInput, UTF8String.fromString(negativeInput).toLong(wrapper));
+    }
+  }
+
+  @Test
+  public void trimBothWithTrimString() {
+    assertEquals(fromString("hello"), fromString("  hello ").trim(fromString(" ")));
+    assertEquals(fromString("o"), fromString("  hello ").trim(fromString(" hle")));
+    assertEquals(fromString("h e"), fromString("ooh e ooo").trim(fromString("o ")));
+    assertEquals(fromString(""), fromString("ooo...oooo").trim(fromString("o.")));
+    assertEquals(fromString("b"), fromString("%^b[]@").trim(fromString("][@^%")));
+
+    assertEquals(EMPTY_UTF8, fromString("  ").trim(fromString(" ")));
+
+    assertEquals(fromString("数据砖头"), fromString("  数据砖头 ").trim());
+    assertEquals(fromString("数"), fromString("a数b").trim(fromString("ab")));
+    assertEquals(fromString(""), fromString("a").trim(fromString("a数b")));
+    assertEquals(fromString(""), fromString("数数 数数数").trim(fromString("数 ")));
+    assertEquals(fromString("据砖头"), fromString("数]数[数据砖头#数数").trim(fromString("[数]#")));
+    assertEquals(fromString("据砖头数数 "), fromString("数数数据砖头数数 ").trim(fromString("数")));
+  }
+
+  @Test
+  public void trimLeftWithTrimString() {
+    assertEquals(fromString("  hello "), fromString("  hello ").trimLeft(fromString("")));
+    assertEquals(fromString(""), fromString("a").trimLeft(fromString("a")));
+    assertEquals(fromString("b"), fromString("b").trimLeft(fromString("a")));
+    assertEquals(fromString("ba"), fromString("ba").trimLeft(fromString("a")));
+    assertEquals(fromString(""), fromString("aaaaaaa").trimLeft(fromString("a")));
+    assertEquals(fromString("trim"), fromString("oabtrim").trimLeft(fromString("bao")));
+    assertEquals(fromString("rim "), fromString("ooootrim ").trimLeft(fromString("otm")));
+
+    assertEquals(EMPTY_UTF8, fromString("  ").trimLeft(fromString(" ")));
+
+    assertEquals(fromString("数据砖头 "), fromString("  数据砖头 ").trimLeft(fromString(" ")));
+    assertEquals(fromString("数"), fromString("数").trimLeft(fromString("a")));
+    assertEquals(fromString("a"), fromString("a").trimLeft(fromString("数")));
+    assertEquals(fromString("砖头数数"), fromString("数数数据砖头数数").trimLeft(fromString("据数")));
+    assertEquals(fromString("据砖头数数"), fromString(" 数数数据砖头数数").trimLeft(fromString("数 ")));
+    assertEquals(fromString("据砖头数数"), fromString("aa数数数据砖头数数").trimLeft(fromString("a数砖")));
+    assertEquals(fromString("$S,.$BR"), fromString(",,,,%$S,.$BR").trimLeft(fromString("%,")));
+  }
+
+  @Test
+  public void trimRightWithTrimString() {
+    assertEquals(fromString("  hello "), fromString("  hello ").trimRight(fromString("")));
+    assertEquals(fromString(""), fromString("a").trimRight(fromString("a")));
+    assertEquals(fromString("cc"), fromString("ccbaaaa").trimRight(fromString("ba")));
+    assertEquals(fromString(""), fromString("aabbbbaaa").trimRight(fromString("ab")));
+    assertEquals(fromString("  he"), fromString("  hello ").trimRight(fromString(" ol")));
+    assertEquals(fromString("oohell"),
+        fromString("oohellooo../*&").trimRight(fromString("./,&%*o")));
+
+    assertEquals(EMPTY_UTF8, fromString("  ").trimRight(fromString(" ")));
+
+    assertEquals(fromString("  数据砖头"), fromString("  数据砖头 ").trimRight(fromString(" ")));
+    assertEquals(fromString("数数砖头"), fromString("数数砖头数aa数").trimRight(fromString("a数")));
+    assertEquals(fromString(""), fromString("数数数据砖ab").trimRight(fromString("数据砖ab")));
+    assertEquals(fromString("头"), fromString("头a???/").trimRight(fromString("数?/*&^%a")));
+    assertEquals(fromString("头"), fromString("头数b数数 [").trimRight(fromString(" []数b")));
+  }
+
+  @Test
+  public void skipWrongFirstByte() {
+    int[] wrongFirstBytes = {
+      0x80, 0x9F, 0xBF, // Skip Continuation bytes
+      0xC0, 0xC2, // 0xC0..0xC1 - disallowed in UTF-8
+      // 0xF5..0xFF - disallowed in UTF-8
+      0xF5, 0xF6, 0xF7, 0xF8, 0xF9,
+      0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF
+    };
+    byte[] c = new byte[1];
+
+    for (int i = 0; i < wrongFirstBytes.length; ++i) {
+      c[0] = (byte)wrongFirstBytes[i];
+      assertEquals(fromBytes(c).numChars(), 1);
     }
   }
 }

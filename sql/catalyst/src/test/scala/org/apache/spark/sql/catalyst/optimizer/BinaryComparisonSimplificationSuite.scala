@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper {
 
@@ -33,11 +34,11 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
       Batch("Constant Folding", FixedPoint(50),
-        NullPropagation(conf),
+        NullPropagation,
         ConstantFolding,
         BooleanSimplification,
         SimplifyBinaryComparison,
-        PruneFilters(conf)) :: Nil
+        PruneFilters) :: Nil
   }
 
   val nullableRelation = LocalRelation('a.int.withNullability(true))
@@ -91,5 +92,34 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
     val actual = Optimize.execute(plan)
     val correctAnswer = nonNullableRelation.analyze
     comparePlans(actual, correctAnswer)
+  }
+
+  test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
+    val expId = NamedExpression.newExprId
+    val qualifier = Seq.empty[String]
+    val structType = StructType(
+      StructField("a", StructType(StructField("b", IntegerType, false) :: Nil), false) :: Nil)
+
+    val fieldA1 = GetStructField(
+      GetStructField(
+        AttributeReference("data1", structType, false)(expId, qualifier),
+        0, Some("a1")),
+      0, Some("b1"))
+    val fieldA2 = GetStructField(
+      GetStructField(
+        AttributeReference("data2", structType, false)(expId, qualifier),
+        0, Some("a2")),
+      0, Some("b2"))
+
+    // GetStructField with different names are semantically equal; thus, `EqualTo(fieldA1, fieldA2)`
+    // will be optimized to `TrueLiteral` by `SimplifyBinaryComparison`.
+    val originalQuery = nonNullableRelation
+        .where(EqualTo(fieldA1, fieldA2))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer = nonNullableRelation.analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }

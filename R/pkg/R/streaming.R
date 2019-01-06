@@ -28,7 +28,6 @@ NULL
 #' @seealso \link{read.stream}
 #'
 #' @param ssq A Java object reference to the backing Scala StreamingQuery
-#' @export
 #' @note StreamingQuery since 2.2.0
 #' @note experimental
 setClass("StreamingQuery",
@@ -45,7 +44,6 @@ streamingQuery <- function(ssq) {
 }
 
 #' @rdname show
-#' @export
 #' @note show(StreamingQuery) since 2.2.0
 setMethod("show", "StreamingQuery",
           function(object) {
@@ -70,7 +68,6 @@ setMethod("show", "StreamingQuery",
 #' @aliases queryName,StreamingQuery-method
 #' @family StreamingQuery methods
 #' @seealso \link{write.stream}
-#' @export
 #' @examples
 #' \dontrun{ queryName(sq) }
 #' @note queryName(StreamingQuery) since 2.2.0
@@ -85,7 +82,6 @@ setMethod("queryName",
 #' @name explain
 #' @aliases explain,StreamingQuery-method
 #' @family StreamingQuery methods
-#' @export
 #' @examples
 #' \dontrun{ explain(sq) }
 #' @note explain(StreamingQuery) since 2.2.0
@@ -104,7 +100,6 @@ setMethod("explain",
 #' @name lastProgress
 #' @aliases lastProgress,StreamingQuery-method
 #' @family StreamingQuery methods
-#' @export
 #' @examples
 #' \dontrun{ lastProgress(sq) }
 #' @note lastProgress(StreamingQuery) since 2.2.0
@@ -129,7 +124,6 @@ setMethod("lastProgress",
 #' @name status
 #' @aliases status,StreamingQuery-method
 #' @family StreamingQuery methods
-#' @export
 #' @examples
 #' \dontrun{ status(sq) }
 #' @note status(StreamingQuery) since 2.2.0
@@ -150,7 +144,6 @@ setMethod("status",
 #' @name isActive
 #' @aliases isActive,StreamingQuery-method
 #' @family StreamingQuery methods
-#' @export
 #' @examples
 #' \dontrun{ isActive(sq) }
 #' @note isActive(StreamingQuery) since 2.2.0
@@ -169,21 +162,26 @@ setMethod("isActive",
 #' immediately.
 #'
 #' @param x a StreamingQuery.
-#' @param timeout time to wait in milliseconds
-#' @return TRUE if query has terminated within the timeout period.
+#' @param timeout time to wait in milliseconds, if omitted, wait indefinitely until \code{stopQuery}
+#'                is called or an error has occurred.
+#' @return TRUE if query has terminated within the timeout period; nothing if timeout is not
+#'         specified.
 #' @rdname awaitTermination
 #' @name awaitTermination
 #' @aliases awaitTermination,StreamingQuery-method
 #' @family StreamingQuery methods
-#' @export
 #' @examples
 #' \dontrun{ awaitTermination(sq, 10000) }
 #' @note awaitTermination(StreamingQuery) since 2.2.0
 #' @note experimental
 setMethod("awaitTermination",
           signature(x = "StreamingQuery"),
-          function(x, timeout) {
-            handledCallJMethod(x@ssq, "awaitTermination", as.integer(timeout))
+          function(x, timeout = NULL) {
+            if (is.null(timeout)) {
+              invisible(handledCallJMethod(x@ssq, "awaitTermination"))
+            } else {
+              handledCallJMethod(x@ssq, "awaitTermination", as.integer(timeout))
+            }
           })
 
 #' stopQuery
@@ -196,7 +194,6 @@ setMethod("awaitTermination",
 #' @name stopQuery
 #' @aliases stopQuery,StreamingQuery-method
 #' @family StreamingQuery methods
-#' @export
 #' @examples
 #' \dontrun{ stopQuery(sq) }
 #' @note stopQuery(StreamingQuery) since 2.2.0

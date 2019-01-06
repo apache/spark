@@ -23,8 +23,9 @@ import org.apache.spark.metrics.source.Source
 
 private[mesos] class MesosClusterSchedulerSource(scheduler: MesosClusterScheduler)
   extends Source {
-  override def sourceName: String = "mesos_cluster"
-  override def metricRegistry: MetricRegistry = new MetricRegistry()
+
+  override val sourceName: String = "mesos_cluster"
+  override val metricRegistry: MetricRegistry = new MetricRegistry()
 
   metricRegistry.register(MetricRegistry.name("waitingDrivers"), new Gauge[Int] {
     override def getValue: Int = scheduler.getQueuedDriversSize

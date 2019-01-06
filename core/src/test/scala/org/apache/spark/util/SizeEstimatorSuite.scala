@@ -92,14 +92,14 @@ class SizeEstimatorSuite
   }
 
   test("primitive wrapper objects") {
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Boolean(true)))
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Byte("1")))
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Character('1')))
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Short("1")))
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Integer(1)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Long(1)))
-    assertResult(16)(SizeEstimator.estimate(new java.lang.Float(1.0)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Double(1.0d)))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Boolean.TRUE))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Byte.valueOf("1")))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Character.valueOf('1')))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Short.valueOf("1")))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Integer.valueOf(1)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Long.valueOf(1)))
+    assertResult(16)(SizeEstimator.estimate(java.lang.Float.valueOf(1.0f)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Double.valueOf(1.0)))
   }
 
   test("class field blocks rounding") {
@@ -202,14 +202,14 @@ class SizeEstimatorSuite
     assertResult(72)(SizeEstimator.estimate(DummyString("abcdefgh")))
 
     // primitive wrapper classes
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Boolean(true)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Byte("1")))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Character('1')))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Short("1")))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Integer(1)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Long(1)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Float(1.0)))
-    assertResult(24)(SizeEstimator.estimate(new java.lang.Double(1.0d)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Boolean.TRUE))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Byte.valueOf("1")))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Character.valueOf('1')))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Short.valueOf("1")))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Integer.valueOf(1)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Long.valueOf(1)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Float.valueOf(1.0f)))
+    assertResult(24)(SizeEstimator.estimate(java.lang.Double.valueOf(1.0)))
   }
 
   test("class field blocks rounding on 64-bit VM without useCompressedOops") {

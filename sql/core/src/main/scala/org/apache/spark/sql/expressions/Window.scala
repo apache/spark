@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions._
 
@@ -33,9 +33,13 @@ import org.apache.spark.sql.catalyst.expressions._
  *   Window.partitionBy("country").orderBy("date").rowsBetween(-3, 3)
  * }}}
  *
+ * @note When ordering is not defined, an unbounded window frame (rowFrame, unboundedPreceding,
+ *       unboundedFollowing) is used by default. When ordering is defined, a growing window frame
+ *       (rangeFrame, unboundedPreceding, currentRow) is used by default.
+ *
  * @since 1.4.0
  */
-@InterfaceStability.Stable
+@Stable
 object Window {
 
   /**
@@ -75,7 +79,7 @@ object Window {
   }
 
   /**
-   * Value representing the last row in the partition, equivalent to "UNBOUNDED PRECEDING" in SQL.
+   * Value representing the first row in the partition, equivalent to "UNBOUNDED PRECEDING" in SQL.
    * This can be used to specify the frame boundaries:
    *
    * {{{
@@ -167,24 +171,24 @@ object Window {
    * current row.
    *
    * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
-   * and `Window.currentRow` to specify special boundary values, rather than using integral
-   * values directly.
+   * and `Window.currentRow` to specify special boundary values, rather than using long values
+   * directly.
    *
-   * A range based boundary is based on the actual value of the ORDER BY
+   * A range-based boundary is based on the actual value of the ORDER BY
    * expression(s). An offset is used to alter the value of the ORDER BY expression, for
    * instance if the current order by expression has a value of 10 and the lower bound offset
    * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
    * number of constraints on the ORDER BY expressions: there can be only one expression and this
-   * expression must have a numerical data type. An exception can be made when the offset is 0,
-   * because no value modification is needed, in this case multiple and non-numeric ORDER BY
-   * expression are allowed.
+   * expression must have a numerical data type. An exception can be made when the offset is
+   * unbounded, because no value modification is needed, in this case multiple and non-numeric
+   * ORDER BY expression are allowed.
    *
    * {{{
    *   import org.apache.spark.sql.expressions.Window
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
    *     .toDF("id", "category")
    *   val byCategoryOrderedById =
-   *     Window.partitionBy('category).orderBy('id).rowsBetween(Window.currentRow, 1)
+   *     Window.partitionBy('category).orderBy('id).rangeBetween(Window.currentRow, 1)
    *   df.withColumn("sum", sum('id) over byCategoryOrderedById).show()
    *
    *   +---+--------+---+
@@ -230,5 +234,5 @@ object Window {
  *
  * @since 1.4.0
  */
-@InterfaceStability.Stable
+@Stable
 class Window private()  // So we can see Window in JavaDoc.

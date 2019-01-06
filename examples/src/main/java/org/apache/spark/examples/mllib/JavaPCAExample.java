@@ -18,7 +18,8 @@
 package org.apache.spark.examples.mllib;
 
 // $example on$
-import java.util.LinkedList;
+import java.util.Arrays;
+import java.util.List;
 // $example off$
 
 import org.apache.spark.SparkConf;
@@ -39,21 +40,25 @@ public class JavaPCAExample {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf().setAppName("PCA Example");
     SparkContext sc = new SparkContext(conf);
+    JavaSparkContext jsc = JavaSparkContext.fromSparkContext(sc);
 
     // $example on$
-    double[][] array = {{1.12, 2.05, 3.12}, {5.56, 6.28, 8.94}, {10.2, 8.0, 20.5}};
-    LinkedList<Vector> rowsList = new LinkedList<>();
-    for (int i = 0; i < array.length; i++) {
-      Vector currentRow = Vectors.dense(array[i]);
-      rowsList.add(currentRow);
-    }
-    JavaRDD<Vector> rows = JavaSparkContext.fromSparkContext(sc).parallelize(rowsList);
+    List<Vector> data = Arrays.asList(
+            Vectors.sparse(5, new int[] {1, 3}, new double[] {1.0, 7.0}),
+            Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
+            Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
+    );
+
+    JavaRDD<Vector> rows = jsc.parallelize(data);
 
     // Create a RowMatrix from JavaRDD<Vector>.
     RowMatrix mat = new RowMatrix(rows.rdd());
 
-    // Compute the top 3 principal components.
-    Matrix pc = mat.computePrincipalComponents(3);
+    // Compute the top 4 principal components.
+    // Principal components are stored in a local dense matrix.
+    Matrix pc = mat.computePrincipalComponents(4);
+
+    // Project the rows to the linear space spanned by the top 4 principal components.
     RowMatrix projected = mat.multiply(pc);
     // $example off$
     Vector[] collectPartitions = (Vector[])projected.rows().collect();
@@ -61,6 +66,6 @@ public class JavaPCAExample {
     for (Vector vector : collectPartitions) {
       System.out.println("\t" + vector);
     }
-    sc.stop();
+    jsc.stop();
   }
 }

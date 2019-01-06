@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
 
-  override val dataSourceName: String = "parquet"
+  override val dataSourceName: String = parquetDataSourceName
 
   // Parquet does not play well with NullType.
   override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
@@ -124,7 +124,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
   test("SPARK-8604: Parquet data source should write summary file while doing appending") {
     withSQLConf(
-        ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true",
+        ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
         SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
           classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       withTempPath { dir =>
@@ -229,6 +229,35 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
           .read
           .parquet(path)
         checkAnswer(df, copyDf)
+      }
+    }
+  }
+
+  // NOTE: This test suite is not super deterministic.  On nodes with only relatively few cores
+  // (4 or even 1), it's hard to reproduce the data loss issue.  But on nodes with for example 8 or
+  // more cores, the issue can be reproduced steadily.  Fortunately our Jenkins builder meets this
+  // requirement.  We probably want to move this test case to spark-integration-tests or spark-perf
+  // later.
+  // Also, this test is slow. As now all the file format data source are using common code
+  // for creating result files, we can test Parquet only to reduce test time.
+  test("SPARK-8406: Avoids name collision while writing files") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark
+        .range(10000)
+        .repartition(250)
+        .write
+        .mode(SaveMode.Overwrite)
+        .format(dataSourceName)
+        .save(path)
+
+      assertResult(10000) {
+        spark
+          .read
+          .format(dataSourceName)
+          .option("dataSchema", StructType(StructField("id", LongType) :: Nil).json)
+          .load(path)
+          .count()
       }
     }
   }

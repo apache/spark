@@ -15,13 +15,14 @@
 # limitations under the License.
 #
 
+import sys
 import warnings
 from collections import namedtuple
 
 from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix
+from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import UserDefinedFunction
+from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import IntegerType, StringType, StructType
 
 
@@ -176,8 +177,7 @@ class Catalog(object):
         if path is not None:
             options["path"] = path
         if source is None:
-            source = self._sparkSession.conf.get(
-                "spark.sql.sources.default", "org.apache.spark.sql.parquet")
+            source = self._sparkSession._wrapped._conf.defaultDataSourceName()
         if schema is None:
             df = self._jcatalog.createTable(tableName, source, options)
         else:
@@ -224,36 +224,17 @@ class Catalog(object):
         """
         self._jcatalog.dropGlobalTempView(viewName)
 
-    @ignore_unicode_prefix
     @since(2.0)
-    def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a python function (including lambda function) as a UDF
-        so it can be used in SQL statements.
+    def registerFunction(self, name, f, returnType=None):
+        """An alias for :func:`spark.udf.register`.
+        See :meth:`pyspark.sql.UDFRegistration.register`.
 
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not given it default to a string and conversion will automatically
-        be done.  For any other return type, the produced object must match the specified type.
-
-        :param name: name of the UDF
-        :param f: python function
-        :param returnType: a :class:`pyspark.sql.types.DataType` object
-
-        >>> spark.catalog.registerFunction("stringLengthString", lambda x: len(x))
-        >>> spark.sql("SELECT stringLengthString('test')").collect()
-        [Row(stringLengthString(test)=u'4')]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> spark.catalog.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
-        >>> spark.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
-        >>> spark.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
         """
-        udf = UserDefinedFunction(f, returnType, name)
-        self._jsparkSession.udf().registerPython(name, udf._judf)
+        warnings.warn(
+            "Deprecated in 2.3.0. Use spark.udf.register instead.",
+            DeprecationWarning)
+        return self._sparkSession.udf.register(name, f, returnType)
 
     @since(2.0)
     def isCached(self, tableName):
@@ -325,7 +306,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

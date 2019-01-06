@@ -17,7 +17,7 @@ export R_HOME=/home/username/R
 
 #### Build Spark
 
-Build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#building-with-buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
+Build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
 
 ```bash
 build/mvn -DskipTests -Psparkr package
@@ -39,15 +39,7 @@ To set other options like driver memory, executor memory etc. you can pass in th
 
 #### Using SparkR from RStudio
 
-If you wish to use SparkR from RStudio or other R frontends you will need to set some environment variables which point SparkR to your Spark installation. For example
-```R
-# Set this to where Spark is installed
-Sys.setenv(SPARK_HOME="/Users/username/spark")
-# This line loads SparkR from the installed directory
-.libPaths(c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib"), .libPaths()))
-library(SparkR)
-sparkR.session()
-```
+If you wish to use SparkR from RStudio, please refer [SparkR documentation](https://spark.apache.org/docs/latest/sparkr.html#starting-up-from-rstudio).
 
 #### Making changes to SparkR
 
@@ -66,11 +58,7 @@ To run one of them, use `./bin/spark-submit <filename> <args>`. For example:
 ```bash
 ./bin/spark-submit examples/src/main/r/dataframe.R
 ```
-You can also run the unit tests for SparkR by running. You need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first:
-```bash
-R -e 'install.packages("testthat", repos="http://cran.us.r-project.org")'
-./R/run-tests.sh
-```
+You can run R unit tests by following the instructions under [Running R Tests](http://spark.apache.org/docs/latest/building-spark.html#running-r-tests).
 
 ### Running on YARN
 

@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
-import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}
 
+import org.apache.spark.internal.config
 import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -30,7 +31,10 @@ class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {
 
 
 class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContext
-  with EncryptionFunSuite {
+  with EncryptionFunSuite with TimeLimits {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   val clusterUrl = "local-cluster[2,1,1024]"
 
@@ -151,17 +155,29 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc.parallelize(1 to 10).count()
   }
 
+  private def testCaching(testName: String, conf: SparkConf, storageLevel: StorageLevel): Unit = {
+    test(testName) {
+      testCaching(conf, storageLevel)
+    }
+    if (storageLevel.replication > 1) {
+      // also try with block replication as a stream
+      val uploadStreamConf = new SparkConf()
+      uploadStreamConf.setAll(conf.getAll)
+      uploadStreamConf.set(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, 1L)
+      test(s"$testName (with replication as stream)") {
+        testCaching(uploadStreamConf, storageLevel)
+      }
+    }
+  }
+
   private def testCaching(conf: SparkConf, storageLevel: StorageLevel): Unit = {
     sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
-    sc.jobProgressListener.waitUntilExecutorsUp(2, 30000)
+    TestUtils.waitUntilExecutorsUp(sc, 2, 30000)
     val data = sc.parallelize(1 to 1000, 10)
     val cachedData = data.persist(storageLevel)
     assert(cachedData.count === 1000)
-    assert(sc.getExecutorStorageStatus.map(_.rddBlocksById(cachedData.id).size).sum ===
-      storageLevel.replication * data.getNumPartitions)
-    assert(cachedData.count === 1000)
-    assert(cachedData.count === 1000)
-
+    assert(sc.getRDDStorageInfo.filter(_.id == cachedData.id).map(_.numCachedPartitions).sum ===
+      data.getNumPartitions)
     // Get all the locations of the first partition and try to fetch the partitions
     // from those locations.
     val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index)).toArray
@@ -169,14 +185,17 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val blockManager = SparkEnv.get.blockManager
     val blockTransfer = blockManager.blockTransferService
     val serializerManager = SparkEnv.get.serializerManager
-    blockManager.master.getLocations(blockId).foreach { cmId =>
+    val locations = blockManager.master.getLocations(blockId)
+    assert(locations.size === storageLevel.replication,
+      s"; got ${locations.size} replicas instead of ${storageLevel.replication}")
+    locations.foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
-        blockId.toString)
+        blockId.toString, null)
       val deserialized = serializerManager.dataDeserializeStream(blockId,
         new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
       assert(deserialized === (1 to 100).toList)
     }
-    // This will exercise the getRemoteBytes / getRemoteValues code paths:
+    // This will exercise the getRemoteValues code path:
     assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
   }
 
@@ -189,8 +208,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
     "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
   ).foreach { case (testName, storageLevel) =>
-    encryptionTest(testName) { conf =>
-      testCaching(conf, storageLevel)
+    encryptionTestHelper(testName) { case (name, conf) =>
+      testCaching(name, conf, storageLevel)
     }
   }
 

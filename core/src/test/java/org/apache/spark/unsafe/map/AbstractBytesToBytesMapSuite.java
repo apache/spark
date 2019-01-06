@@ -33,6 +33,8 @@ import org.mockito.MockitoAnnotations;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.memory.TestMemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.network.util.JavaUtils;
@@ -48,8 +50,8 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 
 
@@ -379,7 +381,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void randomizedStressTest() {
-    final int size = 65536;
+    final int size = 32768;
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
     final Map<ByteBuffer, byte[]> expected = new HashMap<>();
@@ -388,7 +390,7 @@ public abstract class AbstractBytesToBytesMapSuite {
       // Fill the map to 90% full so that we can trigger probing
       for (int i = 0; i < size * 0.9; i++) {
         final byte[] key = getRandomByteArray(rand.nextInt(256) + 1);
-        final byte[] value = getRandomByteArray(rand.nextInt(512) + 1);
+        final byte[] value = getRandomByteArray(rand.nextInt(256) + 1);
         if (!expected.containsKey(ByteBuffer.wrap(key))) {
           expected.put(ByteBuffer.wrap(key), value);
           final BytesToBytesMap.Location loc = map.lookup(
@@ -530,7 +532,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void spillInIterator() throws IOException {
     BytesToBytesMap map = new BytesToBytesMap(
-      taskMemoryManager, blockManager, serializerManager, 1, 0.75, 1024, false);
+      taskMemoryManager, blockManager, serializerManager, 1, 0.75, 1024);
     try {
       int i;
       for (i = 0; i < 1024; i++) {
@@ -569,7 +571,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Test
   public void multipleValuesForSameKey() {
     BytesToBytesMap map =
-      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 1, 0.5, 1024, false);
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 1, 0.5, 1024);
     try {
       int i;
       for (i = 0; i < 1024; i++) {
@@ -622,6 +624,17 @@ public abstract class AbstractBytesToBytesMapSuite {
     } catch (IllegalArgumentException e) {
       // expected exception
     }
+
+    try {
+      new BytesToBytesMap(
+        taskMemoryManager,
+        1,
+        TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES + 1);
+      Assert.fail("Expected IllegalArgumentException to be thrown");
+    } catch (IllegalArgumentException e) {
+      // expected exception
+    }
+
   }
 
   @Test
@@ -664,6 +677,51 @@ public abstract class AbstractBytesToBytesMapSuite {
 
     } finally {
       map.free();
+    }
+  }
+
+  @Test
+  public void avoidDeadlock() throws InterruptedException {
+    memoryManager.limit(PAGE_SIZE_BYTES);
+    MemoryMode mode = useOffHeapMemoryAllocator() ? MemoryMode.OFF_HEAP: MemoryMode.ON_HEAP;
+    TestMemoryConsumer c1 = new TestMemoryConsumer(taskMemoryManager, mode);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 1, 0.5, 1024);
+
+    Thread thread = new Thread(() -> {
+      int i = 0;
+      long used = 0;
+      while (i < 10) {
+        c1.use(10000000);
+        used += 10000000;
+        i++;
+      }
+      c1.free(used);
+    });
+
+    try {
+      int i;
+      for (i = 0; i < 1024; i++) {
+        final long[] arr = new long[]{i};
+        final BytesToBytesMap.Location loc = map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8);
+        loc.append(arr, Platform.LONG_ARRAY_OFFSET, 8, arr, Platform.LONG_ARRAY_OFFSET, 8);
+      }
+
+      // Starts to require memory at another memory consumer.
+      thread.start();
+
+      BytesToBytesMap.MapIterator iter = map.destructiveIterator();
+      for (i = 0; i < 1024; i++) {
+        iter.next();
+      }
+      assertFalse(iter.hasNext());
+    } finally {
+      map.free();
+      thread.join();
+      for (File spillFile : spillFilesCreated) {
+        assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
+          spillFile.exists());
+      }
     }
   }
 

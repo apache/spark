@@ -32,13 +32,13 @@ import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.FileRegion;
 import io.netty.handler.codec.MessageToMessageDecoder;
-import io.netty.util.AbstractReferenceCounted;
 
+import org.apache.spark.network.util.AbstractFileRegion;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
- * Provides SASL-based encription for transport channels. The single method exposed by this
+ * Provides SASL-based encryption for transport channels. The single method exposed by this
  * class installs the needed channel handlers on a connected channel.
  */
 class SaslEncryption {
@@ -129,19 +129,20 @@ class SaslEncryption {
   }
 
   @VisibleForTesting
-  static class EncryptedMessage extends AbstractReferenceCounted implements FileRegion {
+  static class EncryptedMessage extends AbstractFileRegion {
 
     private final SaslEncryptionBackend backend;
     private final boolean isByteBuf;
     private final ByteBuf buf;
     private final FileRegion region;
+    private final int maxOutboundBlockSize;
 
     /**
      * A channel used to buffer input data for encryption. The channel has an upper size bound
      * so that if the input is larger than the allowed buffer, it will be broken into multiple
-     * chunks.
+     * chunks. Made non-final to enable lazy initialization, which saves memory.
      */
-    private final ByteArrayWritableChannel byteChannel;
+    private ByteArrayWritableChannel byteChannel;
 
     private ByteBuf currentHeader;
     private ByteBuffer currentChunk;
@@ -157,7 +158,7 @@ class SaslEncryption {
       this.isByteBuf = msg instanceof ByteBuf;
       this.buf = isByteBuf ? (ByteBuf) msg : null;
       this.region = isByteBuf ? null : (FileRegion) msg;
-      this.byteChannel = new ByteArrayWritableChannel(maxOutboundBlockSize);
+      this.maxOutboundBlockSize = maxOutboundBlockSize;
     }
 
     /**
@@ -166,7 +167,7 @@ class SaslEncryption {
      * This makes assumptions about how netty treats FileRegion instances, because there's no way
      * to know beforehand what will be the size of the encrypted message. Namely, it assumes
      * that netty will try to transfer data from this message while
-     * <code>transfered() < count()</code>. So these two methods return, technically, wrong data,
+     * <code>transferred() < count()</code>. So these two methods return, technically, wrong data,
      * but netty doesn't know better.
      */
     @Override
@@ -183,8 +184,43 @@ class SaslEncryption {
      * Returns an approximation of the amount of data transferred. See {@link #count()}.
      */
     @Override
-    public long transfered() {
+    public long transferred() {
       return transferred;
+    }
+
+    @Override
+    public EncryptedMessage touch(Object o) {
+      super.touch(o);
+      if (buf != null) {
+        buf.touch(o);
+      }
+      if (region != null) {
+        region.touch(o);
+      }
+      return this;
+    }
+
+    @Override
+    public EncryptedMessage retain(int increment) {
+      super.retain(increment);
+      if (buf != null) {
+        buf.retain(increment);
+      }
+      if (region != null) {
+        region.retain(increment);
+      }
+      return this;
+    }
+
+    @Override
+    public boolean release(int decrement) {
+      if (region != null) {
+        region.release(decrement);
+      }
+      if (buf != null) {
+        buf.release(decrement);
+      }
+      return super.release(decrement);
     }
 
     /**
@@ -195,17 +231,17 @@ class SaslEncryption {
      * data into memory at once, and can avoid ballooning memory usage when transferring large
      * messages such as shuffle blocks.
      *
-     * The {@link #transfered()} counter also behaves a little funny, in that it won't go forward
+     * The {@link #transferred()} counter also behaves a little funny, in that it won't go forward
      * until a whole chunk has been written. This is done because the code can't use the actual
      * number of bytes written to the channel as the transferred count (see {@link #count()}).
      * Instead, once an encrypted chunk is written to the output (including its header), the
-     * size of the original block will be added to the {@link #transfered()} amount.
+     * size of the original block will be added to the {@link #transferred()} amount.
      */
     @Override
     public long transferTo(final WritableByteChannel target, final long position)
       throws IOException {
 
-      Preconditions.checkArgument(position == transfered(), "Invalid position.");
+      Preconditions.checkArgument(position == transferred(), "Invalid position.");
 
       long reportedWritten = 0L;
       long actuallyWritten = 0L;
@@ -237,7 +273,7 @@ class SaslEncryption {
           currentChunkSize = 0;
           currentReportedBytes = 0;
         }
-      } while (currentChunk == null && transfered() + reportedWritten < count());
+      } while (currentChunk == null && transferred() + reportedWritten < count());
 
       // Returning 0 triggers a backoff mechanism in netty which may harm performance. Instead,
       // we return 1 until we can (i.e. until the reported count would actually match the size
@@ -257,12 +293,15 @@ class SaslEncryption {
     }
 
     private void nextChunk() throws IOException {
+      if (byteChannel == null) {
+        byteChannel = new ByteArrayWritableChannel(maxOutboundBlockSize);
+      }
       byteChannel.reset();
       if (isByteBuf) {
         int copied = byteChannel.write(buf.nioBuffer());
         buf.skipBytes(copied);
       } else {
-        region.transferTo(byteChannel, region.transfered());
+        region.transferTo(byteChannel, region.transferred());
       }
 
       byte[] encrypted = backend.wrap(byteChannel.getData(), 0, byteChannel.length());

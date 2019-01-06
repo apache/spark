@@ -26,7 +26,7 @@ from shutil import copyfile, copytree, rmtree
 if sys.version_info < (2, 7):
     print("Python versions prior to 2.7 are not supported for pip installed PySpark.",
           file=sys.stderr)
-    exit(-1)
+    sys.exit(-1)
 
 try:
     exec(open('pyspark/version.py').read())
@@ -34,7 +34,7 @@ except IOError:
     print("Failed to load PySpark version file for packaging. You must be in Spark's python dir.",
           file=sys.stderr)
     sys.exit(-1)
-VERSION = __version__
+VERSION = __version__  # noqa
 # A temporary path so we can access above the Python project root and fetch scripts and jars we need
 TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")
@@ -98,7 +98,12 @@ if (in_spark):
     except:
         print("Temp path for symlink to parent already exists {0}".format(TEMP_PATH),
               file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
+
+# If you are changing the versions here, please also change ./python/pyspark/sql/utils.py and
+# ./python/run-tests.py. In case of Arrow, you should also check ./pom.xml.
+_minimum_pandas_version = "0.19.2"
+_minimum_pyarrow_version = "0.8.0"
 
 try:
     # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
@@ -135,7 +140,7 @@ try:
 
     if not os.path.isdir(SCRIPTS_TARGET):
         print(incorrect_invocation_message, file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     # Scripts directive requires a list of each script path and does not take wild cards.
     script_names = os.listdir(SCRIPTS_TARGET)
@@ -151,6 +156,8 @@ try:
         long_description = pypandoc.convert('README.md', 'rst')
     except ImportError:
         print("Could not import pypandoc - required to package PySpark", file=sys.stderr)
+    except OSError:
+        print("Could not convert - pandoc is not installed", file=sys.stderr)
 
     setup(
         name='pyspark',
@@ -194,12 +201,15 @@ try:
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
-        install_requires=['py4j==0.10.4'],
+        install_requires=['py4j==0.10.8.1'],
         setup_requires=['pypandoc'],
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
-            'sql': ['pandas']
+            'sql': [
+                'pandas>=%s' % _minimum_pandas_version,
+                'pyarrow>=%s' % _minimum_pyarrow_version,
+            ]
         },
         classifiers=[
             'Development Status :: 5 - Production/Stable',
@@ -208,6 +218,8 @@ try:
             'Programming Language :: Python :: 3',
             'Programming Language :: Python :: 3.4',
             'Programming Language :: Python :: 3.5',
+            'Programming Language :: Python :: 3.6',
+            'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: Implementation :: CPython',
             'Programming Language :: Python :: Implementation :: PyPy']
     )

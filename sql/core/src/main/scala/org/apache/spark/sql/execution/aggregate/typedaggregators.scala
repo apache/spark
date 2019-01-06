@@ -37,7 +37,7 @@ class TypedSumDouble[IN](val f: IN => Double) extends Aggregator[IN, Double, Dou
   override def outputEncoder: Encoder[Double] = ExpressionEncoder[Double]()
 
   // Java api support
-  def this(f: MapFunction[IN, java.lang.Double]) = this(x => f.call(x).asInstanceOf[Double])
+  def this(f: MapFunction[IN, java.lang.Double]) = this((x: IN) => f.call(x).asInstanceOf[Double])
 
   def toColumnJava: TypedColumn[IN, java.lang.Double] = {
     toColumn.asInstanceOf[TypedColumn[IN, java.lang.Double]]
@@ -55,7 +55,7 @@ class TypedSumLong[IN](val f: IN => Long) extends Aggregator[IN, Long, Long] {
   override def outputEncoder: Encoder[Long] = ExpressionEncoder[Long]()
 
   // Java api support
-  def this(f: MapFunction[IN, java.lang.Long]) = this(x => f.call(x).asInstanceOf[Long])
+  def this(f: MapFunction[IN, java.lang.Long]) = this((x: IN) => f.call(x).asInstanceOf[Long])
 
   def toColumnJava: TypedColumn[IN, java.lang.Long] = {
     toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
@@ -75,7 +75,7 @@ class TypedCount[IN](val f: IN => Any) extends Aggregator[IN, Long, Long] {
   override def outputEncoder: Encoder[Long] = ExpressionEncoder[Long]()
 
   // Java api support
-  def this(f: MapFunction[IN, Object]) = this(x => f.call(x))
+  def this(f: MapFunction[IN, Object]) = this((x: IN) => f.call(x).asInstanceOf[Any])
   def toColumnJava: TypedColumn[IN, java.lang.Long] = {
     toColumn.asInstanceOf[TypedColumn[IN, java.lang.Long]]
   }
@@ -94,7 +94,7 @@ class TypedAverage[IN](val f: IN => Double) extends Aggregator[IN, (Double, Long
   override def outputEncoder: Encoder[Double] = ExpressionEncoder[Double]()
 
   // Java api support
-  def this(f: MapFunction[IN, java.lang.Double]) = this(x => f.call(x).asInstanceOf[Double])
+  def this(f: MapFunction[IN, java.lang.Double]) = this((x: IN) => f.call(x).asInstanceOf[Double])
   def toColumnJava: TypedColumn[IN, java.lang.Double] = {
     toColumn.asInstanceOf[TypedColumn[IN, java.lang.Double]]
   }

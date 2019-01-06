@@ -23,14 +23,15 @@ import java.util.{Locale, Map => JMap}
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
@@ -48,9 +49,17 @@ private[sql] object SQLUtils extends Logging {
       sparkConfigMap: JMap[Object, Object],
       enableHiveSupport: Boolean): SparkSession = {
     val spark =
-      if (SparkSession.hiveClassesArePresent && enableHiveSupport &&
+      if (enableHiveSupport &&
           jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
-            "hive") {
+            "hive" &&
+          // Note that the order of conditions here are on purpose.
+          // `SparkSession.hiveClassesArePresent` checks if Hive's `HiveConf` is loadable or not;
+          // however, `HiveConf` itself has some static logic to check if Hadoop version is
+          // supported or not, which throws an `IllegalArgumentException` if unsupported.
+          // If this is checked first, there's no way to disable Hive support in the case above.
+          // So, we intentionally check if Hive classes are loadable or not only when
+          // Hive support is explicitly enabled by short-circuiting. See also SPARK-26422.
+          SparkSession.hiveClassesArePresent) {
         SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
       } else {
         if (enableHiveSupport) {
@@ -92,48 +101,8 @@ private[sql] object SQLUtils extends Logging {
     def r: Regex = new Regex(sc.parts.mkString, sc.parts.tail.map(_ => "x"): _*)
   }
 
-  def getSQLDataType(dataType: String): DataType = {
-    dataType match {
-      case "byte" => org.apache.spark.sql.types.ByteType
-      case "integer" => org.apache.spark.sql.types.IntegerType
-      case "float" => org.apache.spark.sql.types.FloatType
-      case "double" => org.apache.spark.sql.types.DoubleType
-      case "numeric" => org.apache.spark.sql.types.DoubleType
-      case "character" => org.apache.spark.sql.types.StringType
-      case "string" => org.apache.spark.sql.types.StringType
-      case "binary" => org.apache.spark.sql.types.BinaryType
-      case "raw" => org.apache.spark.sql.types.BinaryType
-      case "logical" => org.apache.spark.sql.types.BooleanType
-      case "boolean" => org.apache.spark.sql.types.BooleanType
-      case "timestamp" => org.apache.spark.sql.types.TimestampType
-      case "date" => org.apache.spark.sql.types.DateType
-      case r"\Aarray<(.+)${elemType}>\Z" =>
-        org.apache.spark.sql.types.ArrayType(getSQLDataType(elemType))
-      case r"\Amap<(.+)${keyType},(.+)${valueType}>\Z" =>
-        if (keyType != "string" && keyType != "character") {
-          throw new IllegalArgumentException("Key type of a map must be string or character")
-        }
-        org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
-      case r"\Astruct<(.+)${fieldsStr}>\Z" =>
-        if (fieldsStr(fieldsStr.length - 1) == ',') {
-          throw new IllegalArgumentException(s"Invalid type $dataType")
-        }
-        val fields = fieldsStr.split(",")
-        val structFields = fields.map { field =>
-          field match {
-            case r"\A(.+)${fieldName}:(.+)${fieldType}\Z" =>
-              createStructField(fieldName, fieldType, true)
-
-            case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
-          }
-        }
-        createStructType(structFields)
-      case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
-    }
-  }
-
   def createStructField(name: String, dataType: String, nullable: Boolean): StructField = {
-    val dtObj = getSQLDataType(dataType)
+    val dtObj = CatalystSqlParser.parseDataType(dataType)
     StructField(name, dtObj, nullable)
   }
 
@@ -150,7 +119,7 @@ private[sql] object SQLUtils extends Logging {
   private[this] def doConversion(data: Object, dataType: DataType): Object = {
     data match {
       case d: java.lang.Double if dataType == FloatType =>
-        new java.lang.Float(d)
+        java.lang.Float.valueOf(d.toFloat)
       // Scala Map is the only allowed external type of map type in Row.
       case m: java.util.Map[_, _] => m.asScala
       case _ => data
@@ -223,30 +192,6 @@ private[sql] object SQLUtils extends Logging {
     colArray
   }
 
-  def saveMode(mode: String): SaveMode = {
-    mode match {
-      case "append" => SaveMode.Append
-      case "overwrite" => SaveMode.Overwrite
-      case "error" => SaveMode.ErrorIfExists
-      case "ignore" => SaveMode.Ignore
-    }
-  }
-
-  def loadDF(
-      sparkSession: SparkSession,
-      source: String,
-      options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.read.format(source).options(options).load()
-  }
-
-  def loadDF(
-      sparkSession: SparkSession,
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.read.format(source).schema(schema).options(options).load()
-  }
-
   def readSqlObject(dis: DataInputStream, dataType: Char): Object = {
     dataType match {
       case 's' =>
@@ -287,5 +232,9 @@ private[sql] object SQLUtils extends Logging {
         sparkSession.catalog.currentDatabase
     }
     sparkSession.sessionState.catalog.listTables(db).map(_.table).toArray
+  }
+
+  def createArrayType(column: Column): ArrayType = {
+    new ArrayType(ExprUtils.evalTypeExpr(column.expr), true)
   }
 }

@@ -28,11 +28,12 @@ import org.apache.commons.codec.digest.DigestUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.unsafe.Platform
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the expressions for hashing.
@@ -44,7 +45,7 @@ import org.apache.spark.unsafe.Platform
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns an MD5 128-bit checksum as a hex string of `expr`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark');
        8cde774d6f7333752ed72cacddb05126
@@ -78,7 +79,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
     _FUNC_(expr, bitLength) - Returns a checksum of SHA-2 family as a hex string of `expr`.
       SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark', 256);
        529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b
@@ -151,7 +152,7 @@ case class Sha2(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a sha1 hash value as a hex string of the `expr`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark');
        85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c
@@ -178,7 +179,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a cyclic redundancy check value of the `expr` as a bigint.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark');
        1557323817
@@ -247,8 +248,9 @@ abstract class HashExpression[E] extends Expression {
   override def nullable: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.isEmpty) {
-      TypeCheckResult.TypeCheckFailure("function hash requires at least one argument")
+    if (children.length < 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least one argument")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -268,18 +270,33 @@ abstract class HashExpression[E] extends Expression {
   protected def computeHash(value: Any, dataType: DataType, seed: E): E
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = "false"
-    val childrenHash = ctx.splitExpressions(ctx.INPUT_ROW, children.map { child =>
+    ev.isNull = FalseLiteral
+
+    val childrenHash = children.map { child =>
       val childGen = child.genCode(ctx)
       childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
         computeHash(childGen.value, child.dataType, ev.value, ctx)
       }
-    })
+    }
 
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
-    ev.copy(code = s"""
-      ${ev.value} = $seed;
-      $childrenHash""")
+    val hashResultType = CodeGenerator.javaType(dataType)
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = childrenHash,
+      funcName = "computeHash",
+      extraArguments = Seq(hashResultType -> ev.value),
+      returnType = hashResultType,
+      makeSplitFunction = body =>
+        s"""
+           |$body
+           |return ${ev.value};
+         """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
+
+    ev.copy(code =
+      code"""
+         |$hashResultType ${ev.value} = $seed;
+         |$codes
+       """.stripMargin)
   }
 
   protected def nullSafeElementHash(
@@ -291,9 +308,10 @@ abstract class HashExpression[E] extends Expression {
       ctx: CodegenContext): String = {
     val element = ctx.freshName("element")
 
+    val jt = CodeGenerator.javaType(elementType)
     ctx.nullSafeExec(nullable, s"$input.isNullAt($index)") {
       s"""
-        final ${ctx.javaType(elementType)} $element = ${ctx.getValue(input, elementType, index)};
+        final $jt $element = ${CodeGenerator.getValue(input, elementType, index)};
         ${computeHash(element, elementType, result, ctx)}
       """
     }
@@ -329,9 +347,9 @@ abstract class HashExpression[E] extends Expression {
     } else {
       val bytes = ctx.freshName("bytes")
       s"""
-            final byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();
-            ${genHashBytes(bytes, result)}
-          """
+         |final byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();
+         |${genHashBytes(bytes, result)}
+       """.stripMargin
     }
   }
 
@@ -388,9 +406,26 @@ abstract class HashExpression[E] extends Expression {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
-    fields.zipWithIndex.map { case (field, index) =>
-      nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
-    }.mkString("\n")
+    val tmpInput = ctx.freshName("input")
+    val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
+      nullSafeElementHash(tmpInput, index.toString, field.nullable, field.dataType, result, ctx)
+    }
+    val hashResultType = CodeGenerator.javaType(dataType)
+    val code = ctx.splitExpressions(
+      expressions = fieldsHash,
+      funcName = "computeHashForStruct",
+      arguments = Seq("InternalRow" -> tmpInput, hashResultType -> result),
+      returnType = hashResultType,
+      makeSplitFunction = body =>
+        s"""
+           |$body
+           |return $result;
+         """.stripMargin,
+      foldFunctions = _.map(funcCall => s"$result = $funcCall;").mkString("\n"))
+    s"""
+       |final InternalRow $tmpInput = $input;
+       |$code
+     """.stripMargin
   }
 
   @tailrec
@@ -521,10 +556,10 @@ abstract class InterpretedHashFunction {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
-        -1321691492
+       -1321691492
   """)
 case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
   def this(arguments: Seq[Expression]) = this(arguments, 42)
@@ -604,21 +639,42 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = "false"
-    val childHash = ctx.freshName("childHash")
-    val childrenHash = ctx.splitExpressions(ctx.INPUT_ROW, children.map { child =>
-      val childGen = child.genCode(ctx)
-      childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
-        computeHash(childGen.value, child.dataType, childHash, ctx)
-      } + s"${ev.value} = (31 * ${ev.value}) + $childHash;" +
-        s"\n$childHash = 0;"
-    })
+    ev.isNull = FalseLiteral
 
-    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
-    ctx.addMutableState("int", childHash, s"$childHash = 0;")
-    ev.copy(code = s"""
-      ${ev.value} = $seed;
-      $childrenHash""")
+    val childHash = ctx.freshName("childHash")
+    val childrenHash = children.map { child =>
+      val childGen = child.genCode(ctx)
+      val codeToComputeHash = ctx.nullSafeExec(child.nullable, childGen.isNull) {
+        computeHash(childGen.value, child.dataType, childHash, ctx)
+      }
+      s"""
+         |${childGen.code}
+         |$childHash = 0;
+         |$codeToComputeHash
+         |${ev.value} = (31 * ${ev.value}) + $childHash;
+       """.stripMargin
+    }
+
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = childrenHash,
+      funcName = "computeHash",
+      extraArguments = Seq(CodeGenerator.JAVA_INT -> ev.value),
+      returnType = CodeGenerator.JAVA_INT,
+      makeSplitFunction = body =>
+        s"""
+           |${CodeGenerator.JAVA_INT} $childHash = 0;
+           |$body
+           |return ${ev.value};
+         """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
+
+
+    ev.copy(code =
+      code"""
+         |${CodeGenerator.JAVA_INT} ${ev.value} = $seed;
+         |${CodeGenerator.JAVA_INT} $childHash = 0;
+         |$codes
+       """.stripMargin)
   }
 
   override def eval(input: InternalRow = null): Int = {
@@ -720,23 +776,35 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       input: String,
       result: String,
       fields: Array[StructField]): String = {
-    val localResult = ctx.freshName("localResult")
+    val tmpInput = ctx.freshName("input")
     val childResult = ctx.freshName("childResult")
-    fields.zipWithIndex.map { case (field, index) =>
+    val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
+      val computeFieldHash = nullSafeElementHash(
+        tmpInput, index.toString, field.nullable, field.dataType, childResult, ctx)
       s"""
-         $childResult = 0;
-         ${nullSafeElementHash(input, index.toString, field.nullable, field.dataType,
-           childResult, ctx)}
-         $localResult = (31 * $localResult) + $childResult;
-       """
-    }.mkString(
-      s"""
-         int $localResult = 0;
-         int $childResult = 0;
-       """,
-      "",
-      s"$result = (31 * $result) + $localResult;"
-    )
+         |$childResult = 0;
+         |$computeFieldHash
+         |$result = (31 * $result) + $childResult;
+       """.stripMargin
+    }
+
+    val code = ctx.splitExpressions(
+      expressions = fieldsHash,
+      funcName = "computeHashForStruct",
+      arguments = Seq("InternalRow" -> tmpInput, CodeGenerator.JAVA_INT -> result),
+      returnType = CodeGenerator.JAVA_INT,
+      makeSplitFunction = body =>
+        s"""
+           |${CodeGenerator.JAVA_INT} $childResult = 0;
+           |$body
+           |return $result;
+           """.stripMargin,
+      foldFunctions = _.map(funcCall => s"$result = $funcCall;").mkString("\n"))
+    s"""
+       |final InternalRow $tmpInput = $input;
+       |${CodeGenerator.JAVA_INT} $childResult = 0;
+       |$code
+     """.stripMargin
   }
 }
 

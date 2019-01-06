@@ -41,7 +41,7 @@ class ExpressionSetSuite extends SparkFunSuite {
           // maxHash's hashcode is calculated based on this exprId's hashcode, so we set this
           // exprId's hashCode to this specific value to make sure maxHash's hashcode is
           // `Int.MaxValue`
-          override def hashCode: Int = -1030353449
+          override def hashCode: Int = 1394598635
           // We are implementing this equals() only because the style-checking rule "you should
           // implement equals and hashCode together" requires us to
           override def equals(obj: Any): Boolean = super.equals(obj)
@@ -57,7 +57,7 @@ class ExpressionSetSuite extends SparkFunSuite {
           // minHash's hashcode is calculated based on this exprId's hashcode, so we set this
           // exprId's hashCode to this specific value to make sure minHash's hashcode is
           // `Int.MinValue`
-          override def hashCode: Int = 1407330692
+          override def hashCode: Int = -462684520
           // We are implementing this equals() only because the style-checking rule "you should
           // implement equals and hashCode together" requires us to
           override def equals(obj: Any): Boolean = super.equals(obj)
@@ -175,20 +175,14 @@ class ExpressionSetSuite extends SparkFunSuite {
     aUpper > bUpper || aUpper <= Rand(1L) || aUpper <= 10,
     aUpper <= Rand(1L) || aUpper <= 10 || aUpper > bUpper)
 
-  // Partial reorder case: we don't reorder non-deterministic expressions,
-  // but we can reorder sub-expressions in deterministic AND/OR expressions.
-  // There are two predicates:
-  //   (aUpper > bUpper || bUpper > 100) => we can reorder sub-expressions in it.
-  //   (aUpper === Rand(1L))
-  setTest(1,
+  // Keep all the non-deterministic expressions even they are semantically equal.
+  setTest(2, Rand(1L), Rand(1L))
+
+  setTest(2,
     (aUpper > bUpper || bUpper > 100) && aUpper === Rand(1L),
     (bUpper > 100 || aUpper > bUpper) && aUpper === Rand(1L))
 
-  // There are three predicates:
-  //   (Rand(1L) > aUpper)
-  //   (aUpper <= Rand(1L) && aUpper > bUpper)
-  //   (aUpper > 10 && bUpper > 10) => we can reorder sub-expressions in it.
-  setTest(1,
+  setTest(2,
     Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (aUpper > 10 && bUpper > 10),
     Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (bUpper > 10 && aUpper > 10))
 
@@ -210,4 +204,48 @@ class ExpressionSetSuite extends SparkFunSuite {
     assert((initialSet - (aLower + 1)).size == 0)
 
   }
+
+  test("add multiple elements to set") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Nil)
+    val setToAddWithSameExpression = ExpressionSet(aUpper + 1 :: aUpper + 2 :: Nil)
+    val setToAddWithOutSameExpression = ExpressionSet(aUpper + 3 :: aUpper + 4 :: Nil)
+
+    assert((initialSet ++ setToAddWithSameExpression).size == 2)
+    assert((initialSet ++ setToAddWithOutSameExpression).size == 3)
+  }
+
+  test("add single element to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+
+    assert((initialSet + (aUpper + 1)).size == 2)
+    assert((initialSet + Rand(0)).size == 3)
+    assert((initialSet + (aUpper + 2)).size == 3)
+  }
+
+  test("remove single element to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+
+    assert((initialSet - (aUpper + 1)).size == 1)
+    assert((initialSet - Rand(0)).size == 2)
+    assert((initialSet - (aUpper + 2)).size == 2)
+  }
+
+  test("add multiple elements to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToAddWithSameDeterministicExpression = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToAddWithOutSameExpression = ExpressionSet(aUpper + 3 :: aUpper + 4 :: Nil)
+
+    assert((initialSet ++ setToAddWithSameDeterministicExpression).size == 3)
+    assert((initialSet ++ setToAddWithOutSameExpression).size == 4)
+  }
+
+  test("remove multiple elements to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToRemoveWithSameDeterministicExpression = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToRemoveWithOutSameExpression = ExpressionSet(aUpper + 3 :: aUpper + 4 :: Nil)
+
+    assert((initialSet -- setToRemoveWithSameDeterministicExpression).size == 1)
+    assert((initialSet -- setToRemoveWithOutSameExpression).size == 2)
+  }
+
 }

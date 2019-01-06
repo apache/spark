@@ -19,12 +19,16 @@ package org.apache.spark.ml.feature
 
 import java.{util => ju}
 
+import org.json4s.JsonDSL._
+import org.json4s.JValue
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -33,10 +37,17 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.
+ *
+ * Since 2.3.0,
+ * `Bucketizer` can map multiple columns at once by setting the `inputCols` parameter. Note that
+ * when both the `inputCol` and `inputCols` parameters are set, an Exception will be thrown. The
+ * `splits` parameter is only used for single column usage, and `splitsArray` is for multiple
+ * columns.
  */
 @Since("1.4.0")
 final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Model[Bucketizer] with HasInputCol with HasOutputCol with DefaultParamsWritable {
+  extends Model[Bucketizer] with HasHandleInvalid with HasInputCol with HasOutputCol
+    with HasInputCols with HasOutputCols with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("bucketizer"))
@@ -78,60 +89,130 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
+   * Param for how to handle invalid entries containing NaN values. Values outside the splits
+   * will always be treated as errors. Options are 'skip' (filter out rows with
    * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
-   * additional bucket).
+   * additional bucket). Note that in the multiple column case, the invalid handling is applied
+   * to all columns. That said for 'error' it will throw an error if any invalids are found in
+   * any column, for 'skip' it will skip rows with any invalids in any columns, etc.
    * Default: "error"
    * @group param
    */
-  // TODO: SPARK-18619 Make Bucketizer inherit from HasHandleInvalid.
   @Since("2.1.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
-    "invalid entries. Options are skip (filter out rows with invalid values), " +
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "how to handle invalid entries containing NaN values. Values outside the splits will always " +
+    "be treated as errorsOptions are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
-
-  /** @group getParam */
-  @Since("2.1.0")
-  def getHandleInvalid: String = $(handleInvalid)
 
   /** @group setParam */
   @Since("2.1.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
   setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
 
+  /**
+   * Parameter for specifying multiple splits parameters. Each element in this array can be used to
+   * map continuous features into buckets.
+   *
+   * @group param
+   */
+  @Since("2.3.0")
+  val splitsArray: DoubleArrayArrayParam = new DoubleArrayArrayParam(this, "splitsArray",
+    "The array of split points for mapping continuous features into buckets for multiple " +
+      "columns. For each input column, with n+1 splits, there are n buckets. A bucket defined by " +
+      "splits x,y holds values in the range [x,y) except the last bucket, which also includes y. " +
+      "The splits should be of length >= 3 and strictly increasing. Values at -inf, inf must be " +
+      "explicitly provided to cover all Double values; otherwise, values outside the splits " +
+      "specified will be treated as errors.",
+    Bucketizer.checkSplitsArray)
+
+  /** @group getParam */
+  @Since("2.3.0")
+  def getSplitsArray: Array[Array[Double]] = $(splitsArray)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setSplitsArray(value: Array[Array[Double]]): this.type = set(splitsArray, value)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setInputCols(value: Array[String]): this.type = set(inputCols, value)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema)
+    val transformedSchema = transformSchema(dataset.schema)
+
+    val (inputColumns, outputColumns) = if (isSet(inputCols)) {
+      ($(inputCols).toSeq, $(outputCols).toSeq)
+    } else {
+      (Seq($(inputCol)), Seq($(outputCol)))
+    }
+
     val (filteredDataset, keepInvalid) = {
       if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
         // "skip" NaN option is set, will filter out NaN values in the dataset
-        (dataset.na.drop().toDF(), false)
+        (dataset.na.drop(inputColumns).toDF(), false)
       } else {
         (dataset.toDF(), getHandleInvalid == Bucketizer.KEEP_INVALID)
       }
     }
 
-    val bucketizer: UserDefinedFunction = udf { (feature: Double) =>
-      Bucketizer.binarySearchForBuckets($(splits), feature, keepInvalid)
+    val seqOfSplits = if (isSet(inputCols)) {
+      $(splitsArray).toSeq
+    } else {
+      Seq($(splits))
     }
 
-    val newCol = bucketizer(filteredDataset($(inputCol)))
-    val newField = prepOutputField(filteredDataset.schema)
-    filteredDataset.withColumn($(outputCol), newCol, newField.metadata)
+    val bucketizers: Seq[UserDefinedFunction] = seqOfSplits.zipWithIndex.map { case (splits, idx) =>
+      udf { (feature: Double) =>
+        Bucketizer.binarySearchForBuckets(splits, feature, keepInvalid)
+      }.withName(s"bucketizer_$idx")
+    }
+
+
+    val newCols = inputColumns.zipWithIndex.map { case (inputCol, idx) =>
+      bucketizers(idx)(filteredDataset(inputCol).cast(DoubleType))
+    }
+    val metadata = outputColumns.map { col =>
+      transformedSchema(col).metadata
+    }
+    filteredDataset.withColumns(outputColumns, newCols, metadata)
   }
 
-  private def prepOutputField(schema: StructType): StructField = {
-    val buckets = $(splits).sliding(2).map(bucket => bucket.mkString(", ")).toArray
-    val attr = new NominalAttribute(name = Some($(outputCol)), isOrdinal = Some(true),
+  private def prepOutputField(splits: Array[Double], outputCol: String): StructField = {
+    val buckets = splits.sliding(2).map(bucket => bucket.mkString(", ")).toArray
+    val attr = new NominalAttribute(name = Some(outputCol), isOrdinal = Some(true),
       values = Some(buckets))
     attr.toStructField()
   }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
-    SchemaUtils.appendColumn(schema, prepOutputField(schema))
+    ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol, splits),
+      Seq(outputCols, splitsArray))
+
+    if (isSet(inputCols)) {
+      require(getInputCols.length == getOutputCols.length &&
+        getInputCols.length == getSplitsArray.length, s"Bucketizer $this has mismatched Params " +
+        s"for multi-column transform.  Params (inputCols, outputCols, splitsArray) should have " +
+        s"equal lengths, but they have different lengths: " +
+        s"(${getInputCols.length}, ${getOutputCols.length}, ${getSplitsArray.length}).")
+
+      var transformedSchema = schema
+      $(inputCols).zip($(outputCols)).zipWithIndex.foreach { case ((inputCol, outputCol), idx) =>
+        SchemaUtils.checkNumericType(transformedSchema, inputCol)
+        transformedSchema = SchemaUtils.appendColumn(transformedSchema,
+          prepOutputField($(splitsArray)(idx), outputCol))
+      }
+      transformedSchema
+    } else {
+      SchemaUtils.checkNumericType(schema, $(inputCol))
+      SchemaUtils.appendColumn(schema, prepOutputField($(splits), $(outputCol)))
+    }
   }
 
   @Since("1.4.1")
@@ -165,6 +246,13 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
       }
       !splits(n).isNaN
     }
+  }
+
+  /**
+   * Check each splits in the splits array.
+   */
+  private[feature] def checkSplitsArray(splitsArray: Array[Array[Double]]): Boolean = {
+    splitsArray.forall(checkSplits(_))
   }
 
   /**

@@ -21,15 +21,12 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext, SQLImplicits}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A collection of sample data used in SQL tests.
  */
 private[sql] trait SQLTestData { self =>
   protected def spark: SparkSession
-
-  protected def sqlConf: SQLConf = spark.sessionState.conf
 
   // Helper object to import SQL implicits without a concrete SQLContext
   private object internalImplicits extends SQLImplicits {
@@ -133,6 +130,19 @@ private[sql] trait SQLTestData { self =>
     val df = spark.sparkContext.parallelize(
       LowerCaseData(1, "a") ::
       LowerCaseData(2, "b") ::
+      LowerCaseData(3, "c") ::
+      LowerCaseData(4, "d") :: Nil).toDF()
+    df.createOrReplaceTempView("lowerCaseData")
+    df
+  }
+
+  protected lazy val lowerCaseDataWithDuplicates: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      LowerCaseData(1, "a") ::
+      LowerCaseData(2, "b") ::
+      LowerCaseData(2, "b") ::
+      LowerCaseData(3, "c") ::
+      LowerCaseData(3, "c") ::
       LowerCaseData(3, "c") ::
       LowerCaseData(4, "d") :: Nil).toDF()
     df.createOrReplaceTempView("lowerCaseData")
@@ -258,6 +268,17 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val trainingSales: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      TrainingSales("Experts", CourseSales("dotNET", 2012, 10000)) ::
+        TrainingSales("Experts", CourseSales("JAVA", 2012, 20000)) ::
+        TrainingSales("Dummies", CourseSales("dotNet", 2012, 5000)) ::
+        TrainingSales("Experts", CourseSales("dotNET", 2013, 48000)) ::
+        TrainingSales("Dummies", CourseSales("Java", 2013, 30000)) :: Nil).toDF()
+    df.createOrReplaceTempView("trainingSales")
+    df
+  }
+
   /**
    * Initialize all test data such that all temp tables are properly registered.
    */
@@ -313,4 +334,5 @@ private[sql] object SQLTestData {
   case class Salary(personId: Int, salary: Double)
   case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   case class CourseSales(course: String, year: Int, earnings: Double)
+  case class TrainingSales(training: String, sales: CourseSales)
 }

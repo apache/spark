@@ -17,15 +17,15 @@
 
 package org.apache.spark.streaming.kinesis
 
-import java.lang.IllegalArgumentException
+import java.util.Calendar
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Seconds, StreamingContext, TestSuiteBase}
+import org.apache.spark.streaming.{Duration, Seconds, StreamingContext, TestSuiteBase}
+import org.apache.spark.streaming.kinesis.KinesisInitialPositions.{AtTimestamp, TrimHorizon}
 
 class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterEach
    with MockitoSugar {
@@ -40,7 +40,11 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     .checkpointAppName(checkpointAppName)
 
   override def afterAll(): Unit = {
-    ssc.stop()
+    try {
+      ssc.stop()
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("should raise an exception if the StreamingContext is missing") {
@@ -72,7 +76,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     val dstream = builder.build()
     assert(dstream.endpointUrl == DEFAULT_KINESIS_ENDPOINT_URL)
     assert(dstream.regionName == DEFAULT_KINESIS_REGION_NAME)
-    assert(dstream.initialPositionInStream == DEFAULT_INITIAL_POSITION_IN_STREAM)
+    assert(dstream.initialPosition == DEFAULT_INITIAL_POSITION)
     assert(dstream.checkpointInterval == batchDuration)
     assert(dstream._storageLevel == DEFAULT_STORAGE_LEVEL)
     assert(dstream.kinesisCreds == DefaultCredentials)
@@ -83,7 +87,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
   test("should propagate custom non-auth values to KinesisInputDStream") {
     val customEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
     val customRegion = "us-west-2"
-    val customInitialPosition = InitialPositionInStream.TRIM_HORIZON
+    val customInitialPosition = new TrimHorizon()
     val customAppName = "a-very-nice-kinesis-app"
     val customCheckpointInterval = Seconds(30)
     val customStorageLevel = StorageLevel.MEMORY_ONLY
@@ -94,7 +98,7 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
     val dstream = builder
       .endpointUrl(customEndpointUrl)
       .regionName(customRegion)
-      .initialPositionInStream(customInitialPosition)
+      .initialPosition(customInitialPosition)
       .checkpointAppName(customAppName)
       .checkpointInterval(customCheckpointInterval)
       .storageLevel(customStorageLevel)
@@ -104,12 +108,67 @@ class KinesisInputDStreamBuilderSuite extends TestSuiteBase with BeforeAndAfterE
       .build()
     assert(dstream.endpointUrl == customEndpointUrl)
     assert(dstream.regionName == customRegion)
-    assert(dstream.initialPositionInStream == customInitialPosition)
+    assert(dstream.initialPosition == customInitialPosition)
     assert(dstream.checkpointAppName == customAppName)
     assert(dstream.checkpointInterval == customCheckpointInterval)
     assert(dstream._storageLevel == customStorageLevel)
     assert(dstream.kinesisCreds == customKinesisCreds)
     assert(dstream.dynamoDBCreds == Option(customDynamoDBCreds))
     assert(dstream.cloudWatchCreds == Option(customCloudWatchCreds))
+
+    // Testing with AtTimestamp
+    val cal = Calendar.getInstance()
+    cal.add(Calendar.DATE, -1)
+    val timestamp = cal.getTime()
+    val initialPositionAtTimestamp = new AtTimestamp(timestamp)
+
+    val dstreamAtTimestamp = builder
+      .endpointUrl(customEndpointUrl)
+      .regionName(customRegion)
+      .initialPosition(initialPositionAtTimestamp)
+      .checkpointAppName(customAppName)
+      .checkpointInterval(customCheckpointInterval)
+      .storageLevel(customStorageLevel)
+      .kinesisCredentials(customKinesisCreds)
+      .dynamoDBCredentials(customDynamoDBCreds)
+      .cloudWatchCredentials(customCloudWatchCreds)
+      .build()
+    assert(dstreamAtTimestamp.endpointUrl == customEndpointUrl)
+    assert(dstreamAtTimestamp.regionName == customRegion)
+    assert(dstreamAtTimestamp.initialPosition.getPosition
+      == initialPositionAtTimestamp.getPosition)
+    assert(
+      dstreamAtTimestamp.initialPosition.asInstanceOf[AtTimestamp].getTimestamp.equals(timestamp))
+    assert(dstreamAtTimestamp.checkpointAppName == customAppName)
+    assert(dstreamAtTimestamp.checkpointInterval == customCheckpointInterval)
+    assert(dstreamAtTimestamp._storageLevel == customStorageLevel)
+    assert(dstreamAtTimestamp.kinesisCreds == customKinesisCreds)
+    assert(dstreamAtTimestamp.dynamoDBCreds == Option(customDynamoDBCreds))
+    assert(dstreamAtTimestamp.cloudWatchCreds == Option(customCloudWatchCreds))
+  }
+
+  test("old Api should throw UnsupportedOperationExceptionexception with AT_TIMESTAMP") {
+    val streamName: String = "a-very-nice-stream-name"
+    val endpointUrl: String = "https://kinesis.us-west-2.amazonaws.com"
+    val region: String = "us-west-2"
+    val appName: String = "a-very-nice-kinesis-app"
+    val checkpointInterval: Duration = Seconds.apply(30)
+    val storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY
+
+    // This should not build.
+    // InitialPositionInStream.AT_TIMESTAMP is not supported in old Api.
+    // The builder Api in KinesisInputDStream should be used.
+    intercept[UnsupportedOperationException] {
+      val kinesisDStream: KinesisInputDStream[Array[Byte]] = KinesisInputDStream.builder
+        .streamingContext(ssc)
+        .streamName(streamName)
+        .endpointUrl(endpointUrl)
+        .regionName(region)
+        .initialPositionInStream(InitialPositionInStream.AT_TIMESTAMP)
+        .checkpointAppName(appName)
+        .checkpointInterval(checkpointInterval)
+        .storageLevel(storageLevel)
+        .build
+    }
   }
 }

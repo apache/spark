@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.types._
 
 /**
@@ -43,34 +43,7 @@ case class WindowSpecDefinition(
     orderSpec: Seq[SortOrder],
     frameSpecification: WindowFrame) extends Expression with WindowSpec with Unevaluable {
 
-  def validate: Option[String] = frameSpecification match {
-    case UnspecifiedFrame =>
-      Some("Found a UnspecifiedFrame. It should be converted to a SpecifiedWindowFrame " +
-        "during analysis. Please file a bug report.")
-    case frame: SpecifiedWindowFrame => frame.validate.orElse {
-      def checkValueBasedBoundaryForRangeFrame(): Option[String] = {
-        if (orderSpec.length > 1)  {
-          // It is not allowed to have a value-based PRECEDING and FOLLOWING
-          // as the boundary of a Range Window Frame.
-          Some("This Range Window Frame only accepts at most one ORDER BY expression.")
-        } else if (orderSpec.nonEmpty && !orderSpec.head.dataType.isInstanceOf[NumericType]) {
-          Some("The data type of the expression in the ORDER BY clause should be a numeric type.")
-        } else {
-          None
-        }
-      }
-
-      (frame.frameType, frame.frameStart, frame.frameEnd) match {
-        case (RangeFrame, vp: ValuePreceding, _) => checkValueBasedBoundaryForRangeFrame()
-        case (RangeFrame, vf: ValueFollowing, _) => checkValueBasedBoundaryForRangeFrame()
-        case (RangeFrame, _, vp: ValuePreceding) => checkValueBasedBoundaryForRangeFrame()
-        case (RangeFrame, _, vf: ValueFollowing) => checkValueBasedBoundaryForRangeFrame()
-        case (_, _, _) => None
-      }
-    }
-  }
-
-  override def children: Seq[Expression] = partitionSpec ++ orderSpec
+  override def children: Seq[Expression] = partitionSpec ++ orderSpec :+ frameSpecification
 
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess &&
@@ -78,22 +51,49 @@ case class WindowSpecDefinition(
 
   override def nullable: Boolean = true
   override def foldable: Boolean = false
-  override def dataType: DataType = throw new UnsupportedOperationException
+  override def dataType: DataType = throw new UnsupportedOperationException("dataType")
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    frameSpecification match {
+      case UnspecifiedFrame =>
+        TypeCheckFailure(
+          "Cannot use an UnspecifiedFrame. This should have been converted during analysis. " +
+            "Please file a bug report.")
+      case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded &&
+          orderSpec.isEmpty =>
+        TypeCheckFailure(
+          "A range window frame cannot be used in an unordered window specification.")
+      case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
+          orderSpec.size > 1 =>
+        TypeCheckFailure(
+          s"A range window frame with value boundaries cannot be used in a window specification " +
+            s"with multiple order by expressions: ${orderSpec.mkString(",")}")
+      case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
+          !isValidFrameType(f.valueBoundary.head.dataType) =>
+        TypeCheckFailure(
+          s"The data type '${orderSpec.head.dataType.catalogString}' used in the order " +
+            "specification does not match the data type " +
+            s"'${f.valueBoundary.head.dataType.catalogString}' which is used in the range frame.")
+      case _ => TypeCheckSuccess
+    }
+  }
 
   override def sql: String = {
-    val partition = if (partitionSpec.isEmpty) {
-      ""
-    } else {
-      "PARTITION BY " + partitionSpec.map(_.sql).mkString(", ") + " "
+    def toSql(exprs: Seq[Expression], prefix: String): Seq[String] = {
+      Seq(exprs).filter(_.nonEmpty).map(_.map(_.sql).mkString(prefix, ", ", ""))
     }
 
-    val order = if (orderSpec.isEmpty) {
-      ""
-    } else {
-      "ORDER BY " + orderSpec.map(_.sql).mkString(", ") + " "
-    }
+    val elements =
+      toSql(partitionSpec, "PARTITION BY ") ++
+        toSql(orderSpec, "ORDER BY ") ++
+        Seq(frameSpecification.sql)
+    elements.mkString("(", " ", ")")
+  }
 
-    s"($partition$order${frameSpecification.toString})"
+  private def isValidFrameType(ft: DataType): Boolean = (orderSpec.head.dataType, ft) match {
+    case (DateType, IntegerType) => true
+    case (TimestampType, CalendarIntervalType) => true
+    case (a, b) => a == b
   }
 }
 
@@ -106,173 +106,166 @@ case class WindowSpecReference(name: String) extends WindowSpec
 /**
  * The trait used to represent the type of a Window Frame.
  */
-sealed trait FrameType
+sealed trait FrameType {
+  def inputType: AbstractDataType
+  def sql: String
+}
 
 /**
- * RowFrame treats rows in a partition individually. When a [[ValuePreceding]]
- * or a [[ValueFollowing]] is used as its [[FrameBoundary]], the value is considered
- * as a physical offset.
+ * RowFrame treats rows in a partition individually. Values used in a row frame are considered
+ * to be physical offsets.
  * For example, `ROW BETWEEN 1 PRECEDING AND 1 FOLLOWING` represents a 3-row frame,
- * from the row precedes the current row to the row follows the current row.
+ * from the row that precedes the current row to the row that follows the current row.
  */
-case object RowFrame extends FrameType
+case object RowFrame extends FrameType {
+  override def inputType: AbstractDataType = IntegerType
+  override def sql: String = "ROWS"
+}
 
 /**
- * RangeFrame treats rows in a partition as groups of peers.
- * All rows having the same `ORDER BY` ordering are considered as peers.
- * When a [[ValuePreceding]] or a [[ValueFollowing]] is used as its [[FrameBoundary]],
- * the value is considered as a logical offset.
+ * RangeFrame treats rows in a partition as groups of peers. All rows having the same `ORDER BY`
+ * ordering are considered as peers. Values used in a range frame are considered to be logical
+ * offsets.
  * For example, assuming the value of the current row's `ORDER BY` expression `expr` is `v`,
  * `RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING` represents a frame containing rows whose values
  * `expr` are in the range of [v-1, v+1].
  *
- * If `ORDER BY` clause is not defined, all rows in the partition is considered as peers
+ * If `ORDER BY` clause is not defined, all rows in the partition are considered as peers
  * of the current row.
  */
-case object RangeFrame extends FrameType
-
-/**
- * The trait used to represent the type of a Window Frame Boundary.
- */
-sealed trait FrameBoundary {
-  def notFollows(other: FrameBoundary): Boolean
+case object RangeFrame extends FrameType {
+  override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
+  override def sql: String = "RANGE"
 }
 
 /**
- * Extractor for making working with frame boundaries easier.
+ * The trait used to represent special boundaries used in a window frame.
  */
-object FrameBoundary {
-  def apply(boundary: FrameBoundary): Option[Int] = unapply(boundary)
-  def unapply(boundary: FrameBoundary): Option[Int] = boundary match {
-    case CurrentRow => Some(0)
-    case ValuePreceding(offset) => Some(-offset)
-    case ValueFollowing(offset) => Some(offset)
-    case _ => None
-  }
+sealed trait SpecialFrameBoundary extends Expression with Unevaluable {
+  override def children: Seq[Expression] = Nil
+  override def dataType: DataType = NullType
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
 }
 
-/** UNBOUNDED PRECEDING boundary. */
-case object UnboundedPreceding extends FrameBoundary {
-  def notFollows(other: FrameBoundary): Boolean = other match {
-    case UnboundedPreceding => true
-    case vp: ValuePreceding => true
-    case CurrentRow => true
-    case vf: ValueFollowing => true
-    case UnboundedFollowing => true
-  }
-
-  override def toString: String = "UNBOUNDED PRECEDING"
+/** UNBOUNDED boundary. */
+case object UnboundedPreceding extends SpecialFrameBoundary {
+  override def sql: String = "UNBOUNDED PRECEDING"
 }
 
-/** <value> PRECEDING boundary. */
-case class ValuePreceding(value: Int) extends FrameBoundary {
-  def notFollows(other: FrameBoundary): Boolean = other match {
-    case UnboundedPreceding => false
-    case ValuePreceding(anotherValue) => value >= anotherValue
-    case CurrentRow => true
-    case vf: ValueFollowing => true
-    case UnboundedFollowing => true
-  }
-
-  override def toString: String = s"$value PRECEDING"
+case object UnboundedFollowing extends SpecialFrameBoundary {
+  override def sql: String = "UNBOUNDED FOLLOWING"
 }
 
 /** CURRENT ROW boundary. */
-case object CurrentRow extends FrameBoundary {
-  def notFollows(other: FrameBoundary): Boolean = other match {
-    case UnboundedPreceding => false
-    case vp: ValuePreceding => false
-    case CurrentRow => true
-    case vf: ValueFollowing => true
-    case UnboundedFollowing => true
-  }
-
-  override def toString: String = "CURRENT ROW"
-}
-
-/** <value> FOLLOWING boundary. */
-case class ValueFollowing(value: Int) extends FrameBoundary {
-  def notFollows(other: FrameBoundary): Boolean = other match {
-    case UnboundedPreceding => false
-    case vp: ValuePreceding => false
-    case CurrentRow => false
-    case ValueFollowing(anotherValue) => value <= anotherValue
-    case UnboundedFollowing => true
-  }
-
-  override def toString: String = s"$value FOLLOWING"
-}
-
-/** UNBOUNDED FOLLOWING boundary. */
-case object UnboundedFollowing extends FrameBoundary {
-  def notFollows(other: FrameBoundary): Boolean = other match {
-    case UnboundedPreceding => false
-    case vp: ValuePreceding => false
-    case CurrentRow => false
-    case vf: ValueFollowing => false
-    case UnboundedFollowing => true
-  }
-
-  override def toString: String = "UNBOUNDED FOLLOWING"
+case object CurrentRow extends SpecialFrameBoundary {
+  override def sql: String = "CURRENT ROW"
 }
 
 /**
- * The trait used to represent the a Window Frame.
+ * Represents a window frame.
  */
-sealed trait WindowFrame
-
-/** Used as a place holder when a frame specification is not defined.  */
-case object UnspecifiedFrame extends WindowFrame
-
-/** A specified Window Frame. */
-case class SpecifiedWindowFrame(
-    frameType: FrameType,
-    frameStart: FrameBoundary,
-    frameEnd: FrameBoundary) extends WindowFrame {
-
-  /** If this WindowFrame is valid or not. */
-  def validate: Option[String] = (frameType, frameStart, frameEnd) match {
-    case (_, UnboundedFollowing, _) =>
-      Some(s"$UnboundedFollowing is not allowed as the start of a Window Frame.")
-    case (_, _, UnboundedPreceding) =>
-      Some(s"$UnboundedPreceding is not allowed as the end of a Window Frame.")
-    // case (RowFrame, start, end) => ??? RowFrame specific rule
-    // case (RangeFrame, start, end) => ??? RangeFrame specific rule
-    case (_, start, end) =>
-      if (start.notFollows(end)) {
-        None
-      } else {
-        val reason =
-          s"The end of this Window Frame $end is smaller than the start of " +
-          s"this Window Frame $start."
-        Some(reason)
-      }
-  }
-
-  override def toString: String = frameType match {
-    case RowFrame => s"ROWS BETWEEN $frameStart AND $frameEnd"
-    case RangeFrame => s"RANGE BETWEEN $frameStart AND $frameEnd"
-  }
+sealed trait WindowFrame extends Expression with Unevaluable {
+  override def children: Seq[Expression] = Nil
+  override def dataType: DataType = throw new UnsupportedOperationException("dataType")
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
 }
 
-object SpecifiedWindowFrame {
-  /**
-   *
-   * @param hasOrderSpecification If the window spec has order by expressions.
-   * @param acceptWindowFrame If the window function accepts user-specified frame.
-   * @return
-   */
-  def defaultWindowFrame(
-      hasOrderSpecification: Boolean,
-      acceptWindowFrame: Boolean): SpecifiedWindowFrame = {
-    if (hasOrderSpecification && acceptWindowFrame) {
-      // If order spec is defined and the window function supports user specified window frames,
-      // the default frame is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
-      SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
-    } else {
-      // Otherwise, the default frame is
-      // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING.
-      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+/** Used as a placeholder when a frame specification is not defined. */
+case object UnspecifiedFrame extends WindowFrame
+
+/**
+ * A specified Window Frame. The val lower/uppper can be either a foldable [[Expression]] or a
+ * [[SpecialFrameBoundary]].
+ */
+case class SpecifiedWindowFrame(
+    frameType: FrameType,
+    lower: Expression,
+    upper: Expression)
+  extends WindowFrame {
+
+  override def children: Seq[Expression] = lower :: upper :: Nil
+
+  lazy val valueBoundary: Seq[Expression] =
+    children.filterNot(_.isInstanceOf[SpecialFrameBoundary])
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // Check lower value.
+    val lowerCheck = checkBoundary(lower, "lower")
+    if (lowerCheck.isFailure) {
+      return lowerCheck
+    }
+
+    // Check upper value.
+    val upperCheck = checkBoundary(upper, "upper")
+    if (upperCheck.isFailure) {
+      return upperCheck
+    }
+
+    // Check combination (of expressions).
+    (lower, upper) match {
+      case (l: Expression, u: Expression) if !isValidFrameBoundary(l, u) =>
+        TypeCheckFailure(s"Window frame upper bound '$upper' does not follow the lower bound " +
+          s"'$lower'.")
+      case (l: SpecialFrameBoundary, _) => TypeCheckSuccess
+      case (_, u: SpecialFrameBoundary) => TypeCheckSuccess
+      case (l: Expression, u: Expression) if l.dataType != u.dataType =>
+        TypeCheckFailure(
+          s"Window frame bounds '$lower' and '$upper' do no not have the same data type: " +
+            s"'${l.dataType.catalogString}' <> '${u.dataType.catalogString}'")
+      case (l: Expression, u: Expression) if isGreaterThan(l, u) =>
+        TypeCheckFailure(
+          "The lower bound of a window frame must be less than or equal to the upper bound")
+      case _ => TypeCheckSuccess
+    }
+  }
+
+  override def sql: String = {
+    val lowerSql = boundarySql(lower)
+    val upperSql = boundarySql(upper)
+    s"${frameType.sql} BETWEEN $lowerSql AND $upperSql"
+  }
+
+  def isUnbounded: Boolean = lower == UnboundedPreceding && upper == UnboundedFollowing
+
+  def isValueBound: Boolean = valueBoundary.nonEmpty
+
+  def isOffset: Boolean = (lower, upper) match {
+    case (l: Expression, u: Expression) => frameType == RowFrame && l == u
+    case _ => false
+  }
+
+  private def boundarySql(expr: Expression): String = expr match {
+    case e: SpecialFrameBoundary => e.sql
+    case UnaryMinus(n) => n.sql + " PRECEDING"
+    case e: Expression => e.sql + " FOLLOWING"
+  }
+
+  // Check whether the left boundary value is greater than the right boundary value. It's required
+  // that the both expressions have the same data type.
+  // Since CalendarIntervalType is not comparable, we only compare expressions that are AtomicType.
+  private def isGreaterThan(l: Expression, r: Expression): Boolean = l.dataType match {
+    case _: AtomicType => GreaterThan(l, r).eval().asInstanceOf[Boolean]
+    case _ => false
+  }
+
+  private def checkBoundary(b: Expression, location: String): TypeCheckResult = b match {
+    case _: SpecialFrameBoundary => TypeCheckSuccess
+    case e: Expression if !e.foldable =>
+      TypeCheckFailure(s"Window frame $location bound '$e' is not a literal.")
+    case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
+      TypeCheckFailure(
+        s"The data type of the $location bound '${e.dataType.catalogString}' does not match " +
+          s"the expected data type '${frameType.inputType.simpleString}'.")
+    case _ => TypeCheckSuccess
+  }
+
+  private def isValidFrameBoundary(l: Expression, u: Expression): Boolean = {
+    (l, u) match {
+      case (UnboundedFollowing, _) => false
+      case (_, UnboundedPreceding) => false
+      case _ => true
     }
   }
 }
@@ -308,6 +301,37 @@ trait WindowFunction extends Expression {
   /** Frame in which the window operator must be executed. */
   def frame: WindowFrame = UnspecifiedFrame
 }
+
+/**
+ * Case objects that describe whether a window function is a SQL window function or a Python
+ * user-defined window function.
+ */
+sealed trait WindowFunctionType
+
+object WindowFunctionType {
+  case object SQL extends WindowFunctionType
+  case object Python extends WindowFunctionType
+
+  def functionType(windowExpression: NamedExpression): WindowFunctionType = {
+    val t = windowExpression.collectFirst {
+      case _: WindowFunction | _: AggregateFunction => SQL
+      case udf: PythonUDF if PythonUDF.isWindowPandasUDF(udf) => Python
+    }
+
+    // Normally a window expression would either have a SQL window function, a SQL
+    // aggregate function or a python window UDF. However, sometimes the optimizer will replace
+    // the window function if the value of the window function can be predetermined.
+    // For example, for query:
+    //
+    // select count(NULL) over () from values 1.0, 2.0, 3.0 T(a)
+    //
+    // The window function will be replaced by expression literal(0)
+    // To handle this case, if a window expression doesn't have a regular window function, we
+    // consider its type to be SQL as literal(0) is also a SQL expression.
+    t.getOrElse(SQL)
+  }
+}
+
 
 /**
  * An offset window function is a window function that returns the value of the input column offset
@@ -351,18 +375,26 @@ abstract class OffsetWindowFunction
 
   override def nullable: Boolean = default == null || default.nullable || input.nullable
 
-  override lazy val frame = {
-    // This will be triggered by the Analyzer.
-    val offsetValue = offset.eval() match {
-      case o: Int => o
-      case x => throw new AnalysisException(
-        s"Offset expression must be a foldable integer expression: $x")
-    }
+  override lazy val frame: WindowFrame = {
     val boundary = direction match {
-      case Ascending => ValueFollowing(offsetValue)
-      case Descending => ValuePreceding(offsetValue)
+      case Ascending => offset
+      case Descending => UnaryMinus(offset) match {
+          case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
+          case o => o
+      }
     }
     SpecifiedWindowFrame(RowFrame, boundary, boundary)
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val check = super.checkInputDataTypes()
+    if (check.isFailure) {
+      check
+    } else if (!offset.foldable) {
+      TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
+    } else {
+      TypeCheckSuccess
+    }
   }
 
   override def dataType: DataType = input.dataType
@@ -449,7 +481,7 @@ abstract class RowNumberLike extends AggregateWindowFunction {
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
   override val aggBufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
   override val initialValues: Seq[Expression] = zero :: Nil
-  override val updateExpressions: Seq[Expression] = Add(rowNumber, one) :: Nil
+  override val updateExpressions: Seq[Expression] = rowNumber + one :: Nil
 }
 
 /**
@@ -500,7 +532,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
   // return the same value for equal values in the partition.
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
-  override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
+  override val evaluateExpression = rowNumber.cast(DoubleType) / n.cast(DoubleType)
   override def prettyName: String = "cume_dist"
 }
 
@@ -560,8 +592,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
   private val bucketSize = AttributeReference("bucketSize", IntegerType, nullable = false)()
   private val bucketsWithPadding =
     AttributeReference("bucketsWithPadding", IntegerType, nullable = false)()
-  private def bucketOverflow(e: Expression) =
-    If(GreaterThanOrEqual(rowNumber, bucketThreshold), e, zero)
+  private def bucketOverflow(e: Expression) = If(rowNumber >= bucketThreshold, e, zero)
 
   override val aggBufferAttributes = Seq(
     rowNumber,
@@ -575,15 +606,14 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
     zero,
     zero,
     zero,
-    Cast(Divide(n, buckets), IntegerType),
-    Cast(Remainder(n, buckets), IntegerType)
+    (n / buckets).cast(IntegerType),
+    (n % buckets).cast(IntegerType)
   )
 
   override val updateExpressions = Seq(
-    Add(rowNumber, one),
-    Add(bucket, bucketOverflow(one)),
-    Add(bucketThreshold, bucketOverflow(
-      Add(bucketSize, If(LessThan(bucket, bucketsWithPadding), one, zero)))),
+    rowNumber + one,
+    bucket + bucketOverflow(one),
+    bucketThreshold + bucketOverflow(bucketSize + If(bucket < bucketsWithPadding, one, zero)),
     NoOp,
     NoOp
   )
@@ -617,7 +647,7 @@ abstract class RankLike extends AggregateWindowFunction {
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
   protected val zero = Literal(0)
   protected val one = Literal(1)
-  protected val increaseRowNumber = Add(rowNumber, one)
+  protected val increaseRowNumber = rowNumber + one
 
   /**
    * Different RankLike implementations use different source expressions to update their rank value.
@@ -626,7 +656,7 @@ abstract class RankLike extends AggregateWindowFunction {
   protected def rankSource: Expression = rowNumber
 
   /** Increase the rank when the current rank == 0 or when the one of order attributes changes. */
-  protected val increaseRank = If(And(orderEquals, Not(EqualTo(rank, zero))), rank, rankSource)
+  protected val increaseRank = If(orderEquals && rank =!= zero, rank, rankSource)
 
   override val aggBufferAttributes: Seq[AttributeReference] = rank +: rowNumber +: orderAttrs
   override val initialValues = zero +: one +: orderInit
@@ -680,7 +710,7 @@ case class Rank(children: Seq[Expression]) extends RankLike {
 case class DenseRank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
-  override protected def rankSource = Add(rank, one)
+  override protected def rankSource = rank + one
   override val updateExpressions = increaseRank +: children
   override val aggBufferAttributes = rank +: orderAttrs
   override val initialValues = zero +: orderInit
@@ -709,8 +739,7 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order)
   override def dataType: DataType = DoubleType
-  override val evaluateExpression = If(GreaterThan(n, one),
-      Divide(Cast(Subtract(rank, one), DoubleType), Cast(Subtract(n, one), DoubleType)),
-      Literal(0.0d))
+  override val evaluateExpression =
+    If(n > one, (rank - one).cast(DoubleType) / (n - one).cast(DoubleType), 0.0d)
   override def prettyName: String = "percent_rank"
 }

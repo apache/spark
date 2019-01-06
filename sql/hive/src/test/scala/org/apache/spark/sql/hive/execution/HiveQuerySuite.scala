@@ -84,7 +84,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   // Testing the Broadcast based join for cartesian join (cross join)
-  // We assume that the Broadcast Join Threshold will works since the src is a small table
+  // We assume that the Broadcast Join Threshold will work since the src is a small table
   private val spark_10484_1 = """
                                 | SELECT a.key, b.key
                                 | FROM src a LEFT JOIN src b WHERE a.key > b.key + 300
@@ -370,21 +370,23 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     """.stripMargin)
 
   test("SPARK-7270: consider dynamic partition when comparing table output") {
-    sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
-    sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
+    withTable("test_partition", "ptest") {
+      sql(s"CREATE TABLE test_partition (a STRING) PARTITIONED BY (b BIGINT, c STRING)")
+      sql(s"CREATE TABLE ptest (a STRING, b BIGINT, c STRING)")
 
-    val analyzedPlan = sql(
-      """
+      val analyzedPlan = sql(
+        """
         |INSERT OVERWRITE table test_partition PARTITION (b=1, c)
         |SELECT 'a', 'c' from ptest
       """.stripMargin).queryExecution.analyzed
 
-    assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
+      assertResult(false, "Incorrect cast detected\n" + analyzedPlan) {
       var hasCast = false
-      analyzedPlan.collect {
-        case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
+        analyzedPlan.collect {
+          case p: Project => p.transformExpressionsUp { case c: Cast => hasCast = true; c }
+        }
+        hasCast
       }
-      hasCast
     }
   }
 
@@ -435,13 +437,13 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("transform with SerDe2") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withTable("small_src") {
+      sql("CREATE TABLE small_src(key INT, value STRING)")
+      sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
 
-    sql("CREATE TABLE small_src(key INT, value STRING)")
-    sql("INSERT OVERWRITE TABLE small_src SELECT key, value FROM src LIMIT 10")
-
-    val expected = sql("SELECT key FROM small_src").collect().head
-    val res = sql(
-      """
+      val expected = sql("SELECT key FROM small_src").collect().head
+      val res = sql(
+        """
         |SELECT TRANSFORM (key) ROW FORMAT SERDE
         |'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
         |WITH SERDEPROPERTIES ('avro.schema.literal'='{"namespace":
@@ -453,7 +455,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         |FROM small_src
       """.stripMargin.replaceAll(System.lineSeparator(), " ")).collect().head
 
-    assert(expected(0) === res(0))
+      assert(expected(0) === res(0))
+    }
   }
 
   createQueryTest("transform with SerDe3",
@@ -737,10 +740,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("select key, count(*) c from src group by key having c").collect()
   }
 
-  test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
-    assert(sql("select key from src having key > 490").collect().size < 100)
-  }
-
   test("union/except/intersect") {
     assertResult(Array(Row(1), Row(1))) {
       sql("select 1 as a union all select 1 as a").collect()
@@ -780,22 +779,26 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("Exactly once semantics for DDL and command statements") {
     val tableName = "test_exactly_once"
-    val q0 = sql(s"CREATE TABLE $tableName(key INT, value STRING)")
+    withTable(tableName) {
+      val q0 = sql(s"CREATE TABLE $tableName(key INT, value STRING)")
 
-    // If the table was not created, the following assertion would fail
-    assert(Try(table(tableName)).isSuccess)
+      // If the table was not created, the following assertion would fail
+      assert(Try(table(tableName)).isSuccess)
 
-    // If the CREATE TABLE command got executed again, the following assertion would fail
-    assert(Try(q0.count()).isSuccess)
+      // If the CREATE TABLE command got executed again, the following assertion would fail
+      assert(Try(q0.count()).isSuccess)
+    }
   }
 
   test("SPARK-2263: Insert Map<K, V> values") {
-    sql("CREATE TABLE m(value MAP<INT, STRING>)")
-    sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
-    sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).foreach {
-      case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
-        assert(map.size === 1)
-        assert(map.head === (key, value))
+    withTable("m") {
+      sql("CREATE TABLE m(value MAP<INT, STRING>)")
+      sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
+      sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).foreach {
+        case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
+          assert(map.size === 1)
+          assert(map.head === ((key, value)))
+      }
     }
   }
 
@@ -1170,13 +1173,18 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         assert(spark.table("with_parts").filter($"p" === 2).collect().head == Row(1, 2))
       }
 
-      val originalValue = spark.sparkContext.hadoopConfiguration.get(modeConfKey, "nonstrict")
+      // Turn off style check since the following test is to modify hadoop configuration on purpose.
+      // scalastyle:off hadoopconfiguration
+      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      // scalastyle:on hadoopconfiguration
+
+      val originalValue = hadoopConf.get(modeConfKey, "nonstrict")
       try {
-        spark.sparkContext.hadoopConfiguration.set(modeConfKey, "nonstrict")
+        hadoopConf.set(modeConfKey, "nonstrict")
         sql("INSERT OVERWRITE TABLE with_parts partition(p) select 3, 4")
         assert(spark.table("with_parts").filter($"p" === 4).collect().head == Row(3, 4))
       } finally {
-        spark.sparkContext.hadoopConfiguration.set(modeConfKey, originalValue)
+        hadoopConf.set(modeConfKey, originalValue)
       }
     }
   }

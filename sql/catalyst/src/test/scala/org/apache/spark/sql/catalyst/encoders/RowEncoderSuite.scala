@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.encoders
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 
@@ -71,7 +71,7 @@ class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
   private[spark] override def asNullable: ExamplePointUDT = this
 }
 
-class RowEncoderSuite extends SparkFunSuite {
+class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   private val structOfString = new StructType().add("str", StringType)
   private val structOfUDT = new StructType().add("udt", new ExamplePointUDT, false)
@@ -239,7 +239,7 @@ class RowEncoderSuite extends SparkFunSuite {
     val encoder = RowEncoder(schema)
     val e = intercept[RuntimeException](encoder.toRow(null))
     assert(e.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getMessage.contains("top level row object"))
+    assert(e.getMessage.contains("top level Product or row object"))
   }
 
   test("RowEncoder should validate external type") {
@@ -271,6 +271,47 @@ class RowEncoderSuite extends SparkFunSuite {
       encoder.toRow(Row(Array("a")))
     }
     assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
+  }
+
+  test("SPARK-25791: Datatype of serializers should be accessible") {
+    val udtSQLType = new StructType().add("a", IntegerType)
+    val pythonUDT = new PythonUserDefinedType(udtSQLType, "pyUDT", "serializedPyClass")
+    val schema = new StructType().add("pythonUDT", pythonUDT, true)
+    val encoder = RowEncoder(schema)
+    assert(encoder.serializer(0).dataType == pythonUDT.sqlType)
+  }
+
+  for {
+    elementType <- Seq(IntegerType, StringType)
+    containsNull <- Seq(true, false)
+    nullable <- Seq(true, false)
+  } {
+    test("RowEncoder should preserve array nullability: " +
+      s"ArrayType($elementType, containsNull = $containsNull), nullable = $nullable") {
+      val schema = new StructType().add("array", ArrayType(elementType, containsNull), nullable)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      assert(encoder.serializer.length == 1)
+      assert(encoder.serializer.head.dataType == ArrayType(elementType, containsNull))
+      assert(encoder.serializer.head.nullable == nullable)
+    }
+  }
+
+  for {
+    keyType <- Seq(IntegerType, StringType)
+    valueType <- Seq(IntegerType, StringType)
+    valueContainsNull <- Seq(true, false)
+    nullable <- Seq(true, false)
+  } {
+    test("RowEncoder should preserve map nullability: " +
+      s"MapType($keyType, $valueType, valueContainsNull = $valueContainsNull), " +
+      s"nullable = $nullable") {
+      val schema = new StructType().add(
+        "map", MapType(keyType, valueType, valueContainsNull), nullable)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      assert(encoder.serializer.length == 1)
+      assert(encoder.serializer.head.dataType == MapType(keyType, valueType, valueContainsNull))
+      assert(encoder.serializer.head.nullable == nullable)
+    }
   }
 
   private def encodeDecodeTest(schema: StructType): Unit = {

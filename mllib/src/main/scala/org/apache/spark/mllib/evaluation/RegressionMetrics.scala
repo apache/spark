@@ -27,17 +27,18 @@ import org.apache.spark.sql.DataFrame
 /**
  * Evaluator for regression.
  *
- * @param predictionAndObservations an RDD of (prediction, observation) pairs
+ * @param predAndObsWithOptWeight an RDD of either (prediction, observation, weight)
+ *                                                    or (prediction, observation) pairs
  * @param throughOrigin True if the regression is through the origin. For example, in linear
  *                      regression, it will be true without fitting intercept.
  */
 @Since("1.2.0")
 class RegressionMetrics @Since("2.0.0") (
-    predictionAndObservations: RDD[(Double, Double)], throughOrigin: Boolean)
+    predAndObsWithOptWeight: RDD[_ <: Product], throughOrigin: Boolean)
     extends Logging {
 
   @Since("1.2.0")
-  def this(predictionAndObservations: RDD[(Double, Double)]) =
+  def this(predictionAndObservations: RDD[_ <: Product]) =
     this(predictionAndObservations, false)
 
   /**
@@ -52,10 +53,13 @@ class RegressionMetrics @Since("2.0.0") (
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
    */
   private lazy val summary: MultivariateStatisticalSummary = {
-    val summary: MultivariateStatisticalSummary = predictionAndObservations.map {
-      case (prediction, observation) => Vectors.dense(observation, observation - prediction)
-    }.aggregate(new MultivariateOnlineSummarizer())(
-        (summary, v) => summary.add(v),
+    val summary: MultivariateStatisticalSummary = predAndObsWithOptWeight.map {
+      case (prediction: Double, observation: Double, weight: Double) =>
+        (Vectors.dense(observation, observation - prediction), weight)
+      case (prediction: Double, observation: Double) =>
+        (Vectors.dense(observation, observation - prediction), 1.0)
+    }.treeAggregate(new MultivariateOnlineSummarizer())(
+        (summary, sample) => summary.add(sample._1, sample._2),
         (sum1, sum2) => sum1.merge(sum2)
       )
     summary
@@ -63,11 +67,13 @@ class RegressionMetrics @Since("2.0.0") (
 
   private lazy val SSy = math.pow(summary.normL2(0), 2)
   private lazy val SSerr = math.pow(summary.normL2(1), 2)
-  private lazy val SStot = summary.variance(0) * (summary.count - 1)
+  private lazy val SStot = summary.variance(0) * (summary.weightSum - 1)
   private lazy val SSreg = {
     val yMean = summary.mean(0)
-    predictionAndObservations.map {
-      case (prediction, _) => math.pow(prediction - yMean, 2)
+    predAndObsWithOptWeight.map {
+      case (prediction: Double, _: Double, weight: Double) =>
+        math.pow(prediction - yMean, 2) * weight
+      case (prediction: Double, _: Double) => math.pow(prediction - yMean, 2)
     }.sum()
   }
 
@@ -79,7 +85,7 @@ class RegressionMetrics @Since("2.0.0") (
    */
   @Since("1.2.0")
   def explainedVariance: Double = {
-    SSreg / summary.count
+    SSreg / summary.weightSum
   }
 
   /**
@@ -88,7 +94,7 @@ class RegressionMetrics @Since("2.0.0") (
    */
   @Since("1.2.0")
   def meanAbsoluteError: Double = {
-    summary.normL1(1) / summary.count
+    summary.normL1(1) / summary.weightSum
   }
 
   /**
@@ -97,7 +103,7 @@ class RegressionMetrics @Since("2.0.0") (
    */
   @Since("1.2.0")
   def meanSquaredError: Double = {
-    SSerr / summary.count
+    SSerr / summary.weightSum
   }
 
   /**

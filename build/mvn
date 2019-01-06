@@ -67,6 +67,9 @@ install_app() {
   fi
 }
 
+# See simple version normalization: http://stackoverflow.com/questions/16989598/bash-comparing-version-numbers
+function version { echo "$@" | awk -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'; }
+
 # Determine the Maven version from the root pom.xml file and
 # install maven under the build/ folder if needed.
 install_mvn() {
@@ -75,8 +78,6 @@ install_mvn() {
   if [ "$MVN_BIN" ]; then
     local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
   fi
-  # See simple version normalization: http://stackoverflow.com/questions/16989598/bash-comparing-version-numbers
-  function version { echo "$@" | awk -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'; }
   if [ $(version $MVN_DETECTED_VERSION) -lt $(version $MVN_VERSION) ]; then
     local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua?action=download&filename='}
 
@@ -91,15 +92,23 @@ install_mvn() {
 
 # Install zinc under the build/ folder
 install_zinc() {
-  local zinc_path="zinc-0.3.11/bin/zinc"
-  [ ! -f "${_DIR}/${zinc_path}" ] && ZINC_INSTALL_FLAG=1
-  local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.typesafe.com}
+  local ZINC_VERSION=0.3.15
+  ZINC_BIN="$(command -v zinc)"
+  if [ "$ZINC_BIN" ]; then
+    local ZINC_DETECTED_VERSION="$(zinc -version | head -n1 | awk '{print $5}')"
+  fi
 
-  install_app \
-    "${TYPESAFE_MIRROR}/zinc/0.3.11" \
-    "zinc-0.3.11.tgz" \
-    "${zinc_path}"
-  ZINC_BIN="${_DIR}/${zinc_path}"
+  if [ $(version $ZINC_DETECTED_VERSION) -lt $(version $ZINC_VERSION) ]; then
+    local zinc_path="zinc-${ZINC_VERSION}/bin/zinc"
+    [ ! -f "${_DIR}/${zinc_path}" ] && ZINC_INSTALL_FLAG=1
+    local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.lightbend.com}
+
+    install_app \
+      "${TYPESAFE_MIRROR}/zinc/${ZINC_VERSION}" \
+      "zinc-${ZINC_VERSION}.tgz" \
+      "${zinc_path}"
+    ZINC_BIN="${_DIR}/${zinc_path}"
+  fi
 }
 
 # Determine the Scala version from the root pom.xml file, set the Scala URL,
@@ -107,9 +116,10 @@ install_zinc() {
 # the build/ folder
 install_scala() {
   # determine the Scala version used in Spark
-  local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
+  local scala_binary_version=`grep "scala.binary.version" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
+  local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | grep ${scala_binary_version} | head -n1 | awk -F '[<>]' '{print $3}'`
   local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
-  local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.typesafe.com}
+  local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.lightbend.com}
 
   install_app \
     "${TYPESAFE_MIRROR}/scala/${scala_version}" \
@@ -144,6 +154,7 @@ if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`"${ZINC_BIN}" -status -port ${ZINC_PORT}`
   export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
   "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
   "${ZINC_BIN}" -start -port ${ZINC_PORT} \
+    -server 127.0.0.1 -idle-timeout 3h \
     -scala-compiler "${SCALA_COMPILER}" \
     -scala-library "${SCALA_LIBRARY}" &>/dev/null
 fi
@@ -153,5 +164,12 @@ export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
 
 echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
-# Last, call the `mvn` command as usual
-${MVN_BIN} -DzincPort=${ZINC_PORT} "$@"
+# call the `mvn` command as usual
+# SPARK-25854
+"${MVN_BIN}" -DzincPort=${ZINC_PORT} "$@"
+MVN_RETCODE=$?
+
+# Try to shut down zinc explicitly if the server is still running.
+"${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
+
+exit $MVN_RETCODE

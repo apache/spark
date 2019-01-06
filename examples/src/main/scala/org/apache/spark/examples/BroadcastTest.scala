@@ -42,7 +42,7 @@ object BroadcastTest {
     val arr1 = (0 until num).toArray
 
     for (i <- 0 until 3) {
-      println("Iteration " + i)
+      println(s"Iteration $i")
       println("===========")
       val startTime = System.nanoTime
       val barr1 = sc.broadcast(arr1)

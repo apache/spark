@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -28,68 +29,70 @@ class ResolveHintsSuite extends AnalysisTest {
 
   test("invalid hints should be ignored") {
     checkAnalysis(
-      Hint("some_random_hint_that_does_not_exist", Seq("TaBlE"), table("TaBlE")),
+      UnresolvedHint("some_random_hint_that_does_not_exist", Seq("TaBlE"), table("TaBlE")),
       testRelation,
       caseSensitive = false)
   }
 
   test("case-sensitive or insensitive parameters") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      BroadcastHint(testRelation),
+      UnresolvedHint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), table("TaBlE")),
-      BroadcastHint(testRelation),
+      UnresolvedHint("MAPJOIN", Seq("table"), table("TaBlE")),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      BroadcastHint(testRelation),
+      UnresolvedHint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = true)
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), table("TaBlE")),
+      UnresolvedHint("MAPJOIN", Seq("table"), table("TaBlE")),
       testRelation,
       caseSensitive = true)
   }
 
   test("multiple broadcast hint aliases") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table", "table2"), table("table").join(table("table2"))),
-      Join(BroadcastHint(testRelation), BroadcastHint(testRelation2), Inner, None),
+      UnresolvedHint("MAPJOIN", Seq("table", "table2"), table("table").join(table("table2"))),
+      Join(ResolvedHint(testRelation, HintInfo(broadcast = true)),
+        ResolvedHint(testRelation2, HintInfo(broadcast = true)), Inner, None),
       caseSensitive = false)
   }
 
   test("do not traverse past existing broadcast hints") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), BroadcastHint(table("table").where('a > 1))),
-      BroadcastHint(testRelation.where('a > 1)).analyze,
+      UnresolvedHint("MAPJOIN", Seq("table"),
+        ResolvedHint(table("table").where('a > 1), HintInfo(broadcast = true))),
+      ResolvedHint(testRelation.where('a > 1), HintInfo(broadcast = true)).analyze,
       caseSensitive = false)
   }
 
   test("should work for subqueries") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("tableAlias"), table("table").as("tableAlias")),
-      BroadcastHint(testRelation),
+      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").as("tableAlias")),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
-      BroadcastHint(testRelation),
+      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
+      ResolvedHint(testRelation, HintInfo(broadcast = true)),
       caseSensitive = false)
 
     // Negative case: if the alias doesn't match, don't match the original table name.
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), table("table").as("tableAlias")),
+      UnresolvedHint("MAPJOIN", Seq("table"), table("table").as("tableAlias")),
       testRelation,
       caseSensitive = false)
   }
 
   test("do not traverse past subquery alias") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
+      UnresolvedHint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
       testRelation.where('a > 1).analyze,
       caseSensitive = false)
   }
@@ -102,7 +105,8 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
         """.stripMargin
       ),
-      BroadcastHint(testRelation.where('a > 1).select('a)).select('a).analyze,
+      ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(broadcast = true))
+        .select('a).analyze,
       caseSensitive = false)
   }
 
@@ -116,5 +120,39 @@ class ResolveHintsSuite extends AnalysisTest {
       ),
       testRelation.where('a > 1).select('a).select('a).analyze,
       caseSensitive = false)
+  }
+
+  test("coalesce and repartition hint") {
+    checkAnalysis(
+      UnresolvedHint("COALESCE", Seq(Literal(10)), table("TaBlE")),
+      Repartition(numPartitions = 10, shuffle = false, child = testRelation))
+    checkAnalysis(
+      UnresolvedHint("coalesce", Seq(Literal(20)), table("TaBlE")),
+      Repartition(numPartitions = 20, shuffle = false, child = testRelation))
+    checkAnalysis(
+      UnresolvedHint("REPARTITION", Seq(Literal(100)), table("TaBlE")),
+      Repartition(numPartitions = 100, shuffle = true, child = testRelation))
+    checkAnalysis(
+      UnresolvedHint("RePARTITion", Seq(Literal(200)), table("TaBlE")),
+      Repartition(numPartitions = 200, shuffle = true, child = testRelation))
+
+    val errMsgCoal = "COALESCE Hint expects a partition number as parameter"
+    assertAnalysisError(
+      UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")),
+      Seq(errMsgCoal))
+    assertAnalysisError(
+      UnresolvedHint("COALESCE", Seq(Literal(10), Literal(false)), table("TaBlE")),
+      Seq(errMsgCoal))
+    assertAnalysisError(
+      UnresolvedHint("COALESCE", Seq(Literal(1.0)), table("TaBlE")),
+      Seq(errMsgCoal))
+
+    val errMsgRepa = "REPARTITION Hint expects a partition number as parameter"
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+      Seq(errMsgRepa))
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
+      Seq(errMsgRepa))
   }
 }

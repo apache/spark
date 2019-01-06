@@ -24,19 +24,36 @@ import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, STARSCHEMA_DETECTION}
+import org.apache.spark.sql.internal.SQLConf._
 
 class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
 
-  override val conf = new SQLConf().copy(CASE_SENSITIVE -> true, STARSCHEMA_DETECTION -> true)
+  var originalConfStarSchemaDetection = false
+  var originalConfCBOEnabled = true
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalConfStarSchemaDetection = conf.starSchemaDetection
+    originalConfCBOEnabled = conf.cboEnabled
+    conf.setConf(STARSCHEMA_DETECTION, true)
+    conf.setConf(CBO_ENABLED, false)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      conf.setConf(STARSCHEMA_DETECTION, originalConfStarSchemaDetection)
+      conf.setConf(CBO_ENABLED, originalConfCBOEnabled)
+    } finally {
+      super.afterAll()
+    }
+  }
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
         PushDownPredicate,
-        ReorderJoin(conf),
+        ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) :: Nil
@@ -53,59 +70,40 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
   // Tables' cardinality: f1 > d3 > d1 > d2 > s3
   private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
     // F1
-    attr("f1_fk1") -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("f1_fk2") -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("f1_fk3") -> ColumnStat(distinctCount = 4, min = Some(1), max = Some(4),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("f1_c4") -> ColumnStat(distinctCount = 4, min = Some(1), max = Some(4),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("f1_fk1") -> rangeColumnStat(3, 0),
+    attr("f1_fk2") -> rangeColumnStat(3, 0),
+    attr("f1_fk3") -> rangeColumnStat(4, 0),
+    attr("f1_c4") -> rangeColumnStat(4, 0),
     // D1
-    attr("d1_pk1") -> ColumnStat(distinctCount = 4, min = Some(1), max = Some(4),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d1_c2") -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d1_c3") -> ColumnStat(distinctCount = 4, min = Some(1), max = Some(4),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d1_c4") -> ColumnStat(distinctCount = 2, min = Some(2), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("d1_pk1") -> rangeColumnStat(4, 0),
+    attr("d1_c2") -> rangeColumnStat(3, 0),
+    attr("d1_c3") -> rangeColumnStat(4, 0),
+    attr("d1_c4") -> ColumnStat(distinctCount = Some(2), min = Some("2"), max = Some("3"),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
     // D2
-    attr("d2_c2") -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
-      nullCount = 1, avgLen = 4, maxLen = 4),
-    attr("d2_pk1") -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d2_c3") -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d2_c4") -> ColumnStat(distinctCount = 2, min = Some(3), max = Some(4),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("d2_c2") -> ColumnStat(distinctCount = Some(3), min = Some("1"), max = Some("3"),
+      nullCount = Some(1), avgLen = Some(4), maxLen = Some(4)),
+    attr("d2_pk1") -> rangeColumnStat(3, 0),
+    attr("d2_c3") -> rangeColumnStat(3, 0),
+    attr("d2_c4") -> ColumnStat(distinctCount = Some(2), min = Some("3"), max = Some("4"),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
     // D3
-    attr("d3_fk1") -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d3_c2") -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d3_pk1") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("d3_c4") -> ColumnStat(distinctCount = 2, min = Some(2), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("d3_fk1") -> rangeColumnStat(3, 0),
+    attr("d3_c2") -> rangeColumnStat(3, 0),
+    attr("d3_pk1") -> rangeColumnStat(5, 0),
+    attr("d3_c4") -> ColumnStat(distinctCount = Some(2), min = Some("2"), max = Some("3"),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
     // S3
-    attr("s3_pk1") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("s3_c2") -> ColumnStat(distinctCount = 1, min = Some(3), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("s3_c3") -> ColumnStat(distinctCount = 1, min = Some(3), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("s3_c4") -> ColumnStat(distinctCount = 2, min = Some(3), max = Some(4),
-      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("s3_pk1") -> rangeColumnStat(2, 0),
+    attr("s3_c2") -> rangeColumnStat(1, 0),
+    attr("s3_c3") -> rangeColumnStat(1, 0),
+    attr("s3_c4") -> ColumnStat(distinctCount = Some(2), min = Some("3"), max = Some("4"),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
     // F11
-    attr("f11_fk1") -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("f11_fk2") -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(3),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("f11_fk3") -> ColumnStat(distinctCount = 4, min = Some(1), max = Some(4),
-      nullCount = 0, avgLen = 4, maxLen = 4),
-    attr("f11_c4") -> ColumnStat(distinctCount = 4, min = Some(1), max = Some(4),
-      nullCount = 0, avgLen = 4, maxLen = 4)
+    attr("f11_fk1") -> rangeColumnStat(3, 0),
+    attr("f11_fk2") -> rangeColumnStat(3, 0),
+    attr("f11_fk3") -> rangeColumnStat(4, 0),
+    attr("f11_c4") -> rangeColumnStat(4, 0)
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
@@ -184,6 +182,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk1")))
         .join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk1")))
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
+        .select(outputsOf(d1, d2, f1, d3, s3): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -222,6 +221,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk1")))
         .join(d2, Inner, Some(nameToAttr("f1_fk2") < nameToAttr("d2_pk1")))
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
+        .select(outputsOf(d1, f1, d2, s3, d3): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -257,7 +257,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
         .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk1")))
         .join(s3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("s3_c2")))
-
+        .select(outputsOf(d1, f1, d2, s3, d3): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -294,6 +294,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk1")))
         .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_c2")))
         .join(s3, Inner, Some(nameToAttr("d3_fk1") < nameToAttr("s3_pk1")))
+        .select(outputsOf(d1, f1, d2, s3, d3): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -397,6 +398,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d2.where(nameToAttr("d2_c2") === 2), Inner,
           Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk1")))
         .join(s3, Inner, Some(nameToAttr("f11_fk1") === nameToAttr("s3_pk1")))
+        .select(outputsOf(d1, f11, f1, d2, s3): _*)
 
     assertEqualPlans(query, equivQuery)
   }
@@ -432,6 +434,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d2.where(nameToAttr("d2_c2") === 2), Inner,
           Some(nameToAttr("f1_fk2") === nameToAttr("d2_c4")))
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
+        .select(outputsOf(d1, d3, f1, d2, s3): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -467,6 +470,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d2.where(nameToAttr("d2_c2") === 2), Inner,
           Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk1")))
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
+        .select(outputsOf(d1, d3, f1, d2, s3): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -501,6 +505,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d2.where(nameToAttr("d2_c2") === 2),
           Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk1")))
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
+        .select(outputsOf(d1, d3, f1, d2, s3): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -534,6 +539,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d3, Inner, Some(nameToAttr("f1_fk3") < nameToAttr("d3_pk1")))
         .join(d2, Inner, Some(nameToAttr("f1_fk2") < nameToAttr("d2_pk1")))
         .join(s3, Inner, Some(nameToAttr("d3_fk1") < nameToAttr("s3_pk1")))
+        .select(outputsOf(d1, d3, f1, d2, s3): _*)
 
     assertEqualPlans(query, expected)
   }
@@ -567,13 +573,27 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .join(d3, Inner, Some(nameToAttr("f1_fk3") === nameToAttr("d3_pk1")))
         .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk1")))
         .join(s3, Inner, Some(nameToAttr("d3_fk1") === nameToAttr("s3_pk1")))
+        .select(outputsOf(d1, d3, f1, d2, s3): _*)
 
     assertEqualPlans(query, expected)
   }
 
-  private def assertEqualPlans( plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
-    val optimized = Optimize.execute(plan1.analyze)
+  private def assertEqualPlans(plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
+    val analyzed = plan1.analyze
+    val optimized = Optimize.execute(analyzed)
     val expected = plan2.analyze
+
+    assert(equivalentOutput(analyzed, expected)) // if this fails, the expected itself is incorrect
+    assert(equivalentOutput(analyzed, optimized))
+
     compareJoinOrder(optimized, expected)
+  }
+
+  private def outputsOf(plans: LogicalPlan*): Seq[Attribute] = {
+    plans.map(_.output).reduce(_ ++ _)
+  }
+
+  private def equivalentOutput(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
+    normalizeExprIds(plan1).output == normalizeExprIds(plan2).output
   }
 }

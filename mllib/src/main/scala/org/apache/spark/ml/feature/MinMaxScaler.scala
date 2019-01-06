@@ -243,7 +243,7 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
           .select("originalMin", "originalMax")
           .head()
       val model = new MinMaxScalerModel(metadata.uid, originalMin, originalMax)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

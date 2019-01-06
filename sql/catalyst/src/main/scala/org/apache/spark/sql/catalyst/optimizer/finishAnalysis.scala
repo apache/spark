@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.util.TimeZone
-
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -30,13 +29,24 @@ import org.apache.spark.sql.types._
 
 
 /**
- * Finds all [[RuntimeReplaceable]] expressions and replace them with the expressions that can
- * be evaluated. This is mainly used to provide compatibility with other databases.
- * For example, we use this to support "nvl" by replacing it with "coalesce".
+ * Finds all the expressions that are unevaluable and replace/rewrite them with semantically
+ * equivalent expressions that can be evaluated. Currently we replace two kinds of expressions:
+ * 1) [[RuntimeReplaceable]] expressions
+ * 2) [[UnevaluableAggregate]] expressions such as Every, Some, Any
+ * This is mainly used to provide compatibility with other databases.
+ * Few examples are:
+ *   we use this to support "nvl" by replacing it with "coalesce".
+ *   we use this to replace Every and Any with Min and Max respectively.
+ *
+ * TODO: In future, explore an option to replace aggregate functions similar to
+ * how RruntimeReplaceable does.
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case e: RuntimeReplaceable => e.child
+    case SomeAgg(arg) => Max(arg)
+    case AnyAgg(arg) => Max(arg)
+    case EveryAgg(arg) => Min(arg)
   }
 }
 
@@ -55,7 +65,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       case CurrentDate(Some(timeZoneId)) =>
         currentDates.getOrElseUpdate(timeZoneId, {
           Literal.create(
-            DateTimeUtils.millisToDays(timestamp / 1000L, TimeZone.getTimeZone(timeZoneId)),
+            DateTimeUtils.millisToDays(timestamp / 1000L, DateTimeUtils.getTimeZone(timeZoneId)),
             DateType)
         })
       case CurrentTimestamp() => currentTime

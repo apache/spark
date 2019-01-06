@@ -22,7 +22,7 @@ import java.util.concurrent.CountDownLatch
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.crypto.AuthServerBootstrap
@@ -45,8 +45,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   protected val masterMetricsSystem =
     MetricsSystem.createMetricsSystem("shuffleService", sparkConf, securityManager)
 
-  private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
-  private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
+  private val enabled = sparkConf.get(config.SHUFFLE_SERVICE_ENABLED)
+  private val port = sparkConf.get(config.SHUFFLE_SERVICE_PORT)
 
   private val transportConf =
     SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
@@ -56,7 +56,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private var server: TransportServer = _
 
-  private val shuffleServiceSource = new ExternalShuffleServiceSource(blockHandler)
+  private val shuffleServiceSource = new ExternalShuffleServiceSource
 
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
@@ -83,6 +83,10 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
       }
     server = transportContext.createServer(port, bootstraps.asJava)
 
+    shuffleServiceSource.registerMetricSet(server.getAllMetrics)
+    blockHandler.getAllMetrics.getMetrics.put("numRegisteredConnections",
+        server.getRegisteredConnections)
+    shuffleServiceSource.registerMetricSet(blockHandler.getAllMetrics)
     masterMetricsSystem.registerSource(shuffleServiceSource)
     masterMetricsSystem.start()
   }
@@ -90,6 +94,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   /** Clean up all shuffle files associated with an application that has exited. */
   def applicationRemoved(appId: String): Unit = {
     blockHandler.applicationRemoved(appId, true /* cleanupLocalDirs */)
+  }
+
+  /** Clean up all the non-shuffle files associated with an executor that has exited. */
+  def executorRemoved(executorId: String, appId: String): Unit = {
+    blockHandler.executorRemoved(executorId, appId)
   }
 
   def stop() {
@@ -124,7 +133,7 @@ object ExternalShuffleService extends Logging {
 
     // we override this value since this service is started from the command line
     // and we assume the user really wants it to be running
-    sparkConf.set("spark.shuffle.service.enabled", "true")
+    sparkConf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
     server = newShuffleService(sparkConf, securityManager)
     server.start()
 

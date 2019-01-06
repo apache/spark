@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.types._
 
 /**
- * Helper functions to check for valid data types.
+ * Functions to help with checking for valid data types and value comparison of various types.
  */
 object TypeUtils {
   def checkForNumericExpr(dt: DataType, caller: String): TypeCheckResult = {
     if (dt.isInstanceOf[NumericType] || dt == NullType) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller requires numeric types, not $dt")
+      TypeCheckResult.TypeCheckFailure(s"$caller requires numeric types, not ${dt.catalogString}")
     }
   }
 
@@ -37,22 +37,25 @@ object TypeUtils {
     if (RowOrdering.isOrderable(dt)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"$caller does not support ordering on type $dt")
+      TypeCheckResult.TypeCheckFailure(
+        s"$caller does not support ordering on type ${dt.catalogString}")
     }
   }
 
   def checkForSameTypeInputExpr(types: Seq[DataType], caller: String): TypeCheckResult = {
-    if (types.size <= 1) {
+    if (TypeCoercion.haveSameType(types)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      val firstType = types.head
-      types.foreach { t =>
-        if (!t.sameType(firstType)) {
-          return TypeCheckResult.TypeCheckFailure(
-            s"input to $caller should all be the same type, but it's " +
-              types.map(_.simpleString).mkString("[", ", ", "]"))
-        }
-      }
+      TypeCheckResult.TypeCheckFailure(
+        s"input to $caller should all be the same type, but it's " +
+          types.map(_.catalogString).mkString("[", ", ", "]"))
+    }
+  }
+
+  def checkForMapKeyType(keyType: DataType): TypeCheckResult = {
+    if (keyType.existsRecursively(_.isInstanceOf[MapType])) {
+      TypeCheckResult.TypeCheckFailure("The key of map cannot be/contain map.")
+    } else {
       TypeCheckResult.TypeCheckSuccess
     }
   }
@@ -65,14 +68,28 @@ object TypeUtils {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
     }
   }
 
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
     for (i <- 0 until x.length; if i < y.length) {
-      val res = x(i).compareTo(y(i))
+      val v1 = x(i) & 0xff
+      val v2 = y(i) & 0xff
+      val res = v1 - v2
       if (res != 0) return res
     }
     x.length - y.length
+  }
+
+  /**
+   * Returns true if the equals method of the elements of the data type is implemented properly.
+   * This also means that they can be safely used in collections relying on the equals method,
+   * as sets or maps.
+   */
+  def typeWithProperEquals(dataType: DataType): Boolean = dataType match {
+    case BinaryType => false
+    case _: AtomicType => true
+    case _ => false
   }
 }

@@ -19,35 +19,45 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.JavaConverters._
+
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.status.AppStatusStore
+import org.apache.spark.ui._
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
-private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
+private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
+  extends SparkUITab(parent, "jobs") {
+
   val sc = parent.sc
   val killEnabled = parent.killEnabled
-  val jobProgresslistener = parent.jobProgressListener
-  val executorListener = parent.executorsListener
-  val operationGraphListener = parent.operationGraphListener
 
-  def isFairScheduler: Boolean =
-    jobProgresslistener.schedulingMode == Some(SchedulingMode.FAIR)
+  def isFairScheduler: Boolean = {
+    store
+      .environmentInfo()
+      .sparkProperties
+      .contains(("spark.scheduler.mode", SchedulingMode.FAIR.toString))
+  }
 
   def getSparkUser: String = parent.getSparkUser
 
-  attachPage(new AllJobsPage(this))
-  attachPage(new JobPage(this))
+  attachPage(new AllJobsPage(this, store))
+  attachPage(new JobPage(this, store))
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
-      val jobId = Option(request.getParameter("id")).map(_.toInt)
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
+      val jobId = Option(UIUtils.stripXSS(request.getParameter("id"))).map(_.toInt)
       jobId.foreach { id =>
-        if (jobProgresslistener.activeJobs.contains(id)) {
-          sc.foreach(_.cancelJob(id))
-          // Do a quick pause here to give Spark time to kill the job so it shows up as
-          // killed after the refresh. Note that this will block the serving thread so the
-          // time should be limited in duration.
-          Thread.sleep(100)
+        store.asOption(store.job(id)).foreach { job =>
+          if (job.status == JobExecutionStatus.RUNNING) {
+            sc.foreach(_.cancelJob(id))
+            // Do a quick pause here to give Spark time to kill the job so it shows up as
+            // killed after the refresh. Note that this will block the serving thread so the
+            // time should be limited in duration.
+            Thread.sleep(100)
+          }
         }
       }
     }

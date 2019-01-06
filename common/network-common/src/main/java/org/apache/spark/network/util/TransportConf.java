@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Properties;
 
 import com.google.common.primitives.Ints;
+import io.netty.util.NettyRuntime;
 
 /**
  * A central location that tracks all the settings we expose to users.
@@ -40,6 +41,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_MAXRETRIES_KEY;
   private final String SPARK_NETWORK_IO_RETRYWAIT_KEY;
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
+  private final String SPARK_NETWORK_VERBOSE_METRICS;
 
   private final ConfigProvider conf;
 
@@ -61,10 +63,15 @@ public class TransportConf {
     SPARK_NETWORK_IO_MAXRETRIES_KEY = getConfKey("io.maxRetries");
     SPARK_NETWORK_IO_RETRYWAIT_KEY = getConfKey("io.retryWait");
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
+    SPARK_NETWORK_VERBOSE_METRICS = getConfKey("io.enableVerboseMetrics");
   }
 
   public int getInt(String name, int defaultValue) {
     return conf.getInt(name, defaultValue);
+  }
+
+  public String get(String name, String defaultValue) {
+    return conf.get(name, defaultValue);
   }
 
   private String getConfKey(String suffix) {
@@ -159,6 +166,14 @@ public class TransportConf {
   }
 
   /**
+   * Whether to track Netty memory detailed metrics. If true, the detailed metrics of Netty
+   * PoolByteBufAllocator will be gotten, otherwise only general memory usage will be tracked.
+   */
+  public boolean verboseMetrics() {
+    return conf.getBoolean(SPARK_NETWORK_VERBOSE_METRICS, false);
+  }
+
+  /**
    * Maximum number of retries when binding to a port before giving up.
    */
   public int portMaxRetries() {
@@ -195,7 +210,7 @@ public class TransportConf {
    * (128 bits by default), which is not generally the case with user passwords.
    */
   public int keyFactoryIterations() {
-    return conf.getInt("spark.networy.crypto.keyFactoryIterations", 1024);
+    return conf.getInt("spark.network.crypto.keyFactoryIterations", 1024);
   }
 
   /**
@@ -257,4 +272,45 @@ public class TransportConf {
     return CryptoUtils.toCryptoConf("spark.network.crypto.config.", conf.getAll());
   }
 
+  /**
+   * The max number of chunks allowed to be transferred at the same time on shuffle service.
+   * Note that new incoming connections will be closed when the max number is hit. The client will
+   * retry according to the shuffle retry configs (see `spark.shuffle.io.maxRetries` and
+   * `spark.shuffle.io.retryWait`), if those limits are reached the task will fail with fetch
+   * failure.
+   */
+  public long maxChunksBeingTransferred() {
+    return conf.getLong("spark.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);
+  }
+
+  /**
+   * Percentage of io.serverThreads used by netty to process ChunkFetchRequest.
+   * Shuffle server will use a separate EventLoopGroup to process ChunkFetchRequest messages.
+   * Although when calling the async writeAndFlush on the underlying channel to send
+   * response back to client, the I/O on the channel is still being handled by
+   * {@link org.apache.spark.network.server.TransportServer}'s default EventLoopGroup
+   * that's registered with the Channel, by waiting inside the ChunkFetchRequest handler
+   * threads for the completion of sending back responses, we are able to put a limit on
+   * the max number of threads from TransportServer's default EventLoopGroup that are
+   * going to be consumed by writing response to ChunkFetchRequest, which are I/O intensive
+   * and could take long time to process due to disk contentions. By configuring a slightly
+   * higher number of shuffler server threads, we are able to reserve some threads for
+   * handling other RPC messages, thus making the Client less likely to experience timeout
+   * when sending RPC messages to the shuffle server. The number of threads used for handling
+   * chunked fetch requests are percentage of io.serverThreads (if defined) else it is a percentage
+   * of 2 * #cores. However, a percentage of 0 means netty default number of threads which
+   * is 2 * #cores ignoring io.serverThreads. The percentage here is configured via
+   * spark.shuffle.server.chunkFetchHandlerThreadsPercent. The returned value is rounded off to
+   * ceiling of the nearest integer.
+   */
+  public int chunkFetchHandlerThreads() {
+    if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
+      return 0;
+    }
+    int chunkFetchHandlerThreadsPercent =
+      conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 100);
+    int threads =
+      this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors();
+    return (int) Math.ceil(threads * (chunkFetchHandlerThreadsPercent / 100.0));
+  }
 }

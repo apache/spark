@@ -22,7 +22,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamingQueryProgress, StreamingQueryStatus}
 
 /**
- * Wrap non-serializable StreamExecution to make the query serializable as it's easy to for it to
+ * Wrap non-serializable StreamExecution to make the query serializable as it's easy for it to
  * get captured with normal usage. It's safe to capture the query but not use it in executors.
  * However, if the user tries to call its methods, it will throw `IllegalStateException`.
  */

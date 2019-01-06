@@ -20,6 +20,7 @@ package org.apache.spark.network.crypto;
 import java.nio.ByteBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -28,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.sasl.SaslRpcHandler;
@@ -113,7 +115,11 @@ class AuthRpcHandler extends RpcHandler {
     // Here we have the client challenge, so perform the new auth protocol and set up the channel.
     AuthEngine engine = null;
     try {
-      engine = new AuthEngine(challenge.appId, secretKeyHolder.getSecretKey(challenge.appId), conf);
+      String secret = secretKeyHolder.getSecretKey(challenge.appId);
+      Preconditions.checkState(secret != null,
+        "Trying to authenticate non-registered app %s.", challenge.appId);
+      LOG.debug("Authenticating challenge for app {}.", challenge.appId);
+      engine = new AuthEngine(challenge.appId, secret, conf);
       ServerResponse response = engine.respond(challenge);
       ByteBuf responseData = Unpooled.buffer(response.encodedLength());
       response.encode(responseData);
@@ -142,6 +148,14 @@ class AuthRpcHandler extends RpcHandler {
   @Override
   public void receive(TransportClient client, ByteBuffer message) {
     delegate.receive(client, message);
+  }
+
+  @Override
+  public StreamCallbackWithID receiveStream(
+      TransportClient client,
+      ByteBuffer message,
+      RpcResponseCallback callback) {
+    return delegate.receiveStream(client, message, callback);
   }
 
   @Override

@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
@@ -38,6 +42,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row(true, true) :: Nil),
       StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
   }
+
+  private lazy val nullData = Seq(
+    (Some(1), Some(1)), (Some(1), Some(2)), (Some(1), None), (None, None)).toDF("a", "b")
 
   test("column names with space") {
     val df = Seq((1, "a")).toDF("name with space", "name.with.dot")
@@ -284,23 +291,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("<=>") {
     checkAnswer(
-      testData2.filter($"a" === 1),
-      testData2.collect().toSeq.filter(r => r.getInt(0) == 1))
-
-    checkAnswer(
-      testData2.filter($"a" === $"b"),
-      testData2.collect().toSeq.filter(r => r.getInt(0) == r.getInt(1)))
-  }
-
-  test("=!=") {
-    val nullData = spark.createDataFrame(sparkContext.parallelize(
-      Row(1, 1) ::
-      Row(1, 2) ::
-      Row(1, null) ::
-      Row(null, null) :: Nil),
-      StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType))))
-
-    checkAnswer(
       nullData.filter($"b" <=> 1),
       Row(1, 1) :: Nil)
 
@@ -321,7 +311,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       nullData2.filter($"a" <=> null),
       Row(null) :: Nil)
+  }
 
+  test("=!=") {
+    checkAnswer(
+      nullData.filter($"b" =!= 1),
+      Row(1, 2) :: Nil)
+
+    checkAnswer(nullData.filter($"b" =!= null), Nil)
+
+    checkAnswer(
+      nullData.filter($"a" =!= $"b"),
+      Row(1, 2) :: Nil)
   }
 
   test(">") {
@@ -393,11 +394,46 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.filter($"b".isin("z", "y")),
       df.collect().toSeq.filter(r => r.getString(1) == "z" || r.getString(1) == "y"))
 
+    // Auto casting should work with mixture of different types in collections
+    checkAnswer(df.filter($"a".isin(1.toShort, "2")),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isin("3", 2.toLong)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isin(3, "1")),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
     val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
 
-    intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       df2.filter($"a".isin($"b"))
     }
+    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
+      .foreach { s =>
+        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+      }
+  }
+
+  test("isInCollection: Scala Collection") {
+    val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+    // Test with different types of collections
+    checkAnswer(df.filter($"a".isInCollection(Seq(3, 1))),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+    checkAnswer(df.filter($"a".isInCollection(Seq(1, 2).toSet)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isInCollection(Seq(3, 2).toArray)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+    checkAnswer(df.filter($"a".isInCollection(Seq(3, 1).toList)),
+      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
+    val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
+
+    val e = intercept[AnalysisException] {
+      df2.filter($"a".isInCollection(Seq($"b")))
+    }
+    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
+      .foreach { s =>
+        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+      }
   }
 
   test("&&") {
@@ -469,7 +505,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   test("upper") {
     checkAnswer(
       lowerCaseData.select(upper('l)),
-      ('a' to 'd').map(c => Row(c.toString.toUpperCase))
+      ('a' to 'd').map(c => Row(c.toString.toUpperCase(Locale.ROOT)))
     )
 
     checkAnswer(
@@ -490,7 +526,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   test("lower") {
     checkAnswer(
       upperCaseData.select(lower('L)),
-      ('A' to 'F').map(c => Row(c.toString.toLowerCase))
+      ('A' to 'F').map(c => Row(c.toString.toLowerCase(Locale.ROOT)))
     )
 
     checkAnswer(
@@ -531,6 +567,63 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       df.select(spark_partition_id()),
       Row(0) :: Row(0) :: Row(1) :: Row(1) :: Nil
     )
+  }
+
+  test("input_file_name, input_file_block_start, input_file_block_length - more than one source") {
+    withTempView("tempView1") {
+      withTable("tab1", "tab2") {
+        val data = sparkContext.parallelize(0 to 9).toDF("id")
+        data.write.saveAsTable("tab1")
+        data.write.saveAsTable("tab2")
+        data.createOrReplaceTempView("tempView1")
+        Seq("input_file_name", "input_file_block_start", "input_file_block_length").foreach { f =>
+          val e = intercept[AnalysisException] {
+            sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
+          }.getMessage
+          assert(e.contains(s"'$f' does not support more than one source"))
+        }
+
+        def checkResult(
+            fromClause: String,
+            exceptionExpected: Boolean,
+            numExpectedRows: Int = 0): Unit = {
+          val stmt = s"SELECT *, input_file_name() FROM ($fromClause)"
+          if (exceptionExpected) {
+            val e = intercept[AnalysisException](sql(stmt)).getMessage
+            assert(e.contains("'input_file_name' does not support more than one source"))
+          } else {
+            assert(sql(stmt).count() == numExpectedRows)
+          }
+        }
+
+        checkResult(
+          "SELECT * FROM tab1 UNION ALL SELECT * FROM tab2 UNION ALL SELECT * FROM tab2",
+          exceptionExpected = false,
+          numExpectedRows = 30)
+
+        checkResult(
+          "(SELECT * FROM tempView1 NATURAL JOIN tab2) UNION ALL SELECT * FROM tab2",
+          exceptionExpected = false,
+          numExpectedRows = 20)
+
+        checkResult(
+          "(SELECT * FROM tab1 UNION ALL SELECT * FROM tab2) NATURAL JOIN tempView1",
+          exceptionExpected = false,
+          numExpectedRows = 20)
+
+        checkResult(
+          "(SELECT * FROM tempView1 UNION ALL SELECT * FROM tab2) NATURAL JOIN tab2",
+          exceptionExpected = true)
+
+        checkResult(
+          "(SELECT * FROM tab1 NATURAL JOIN tab2) UNION ALL SELECT * FROM tab2",
+          exceptionExpected = true)
+
+        checkResult(
+          "(SELECT * FROM tab1 UNION ALL SELECT * FROM tab2) NATURAL JOIN tab2",
+          exceptionExpected = true)
+      }
+    }
   }
 
   test("input_file_name, input_file_block_start, input_file_block_length - FileScanRDD") {

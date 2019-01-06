@@ -7,6 +7,9 @@
   "resultSize" : [ 2010.0, 2065.0, 2065.0 ],
   "jvmGcTime" : [ 0.0, 0.0, 7.0 ],
   "resultSerializationTime" : [ 0.0, 0.0, 2.0 ],
+  "gettingResultTime" : [ 0.0, 0.0, 0.0 ],
+  "schedulerDelay" : [ 2.0, 6.0, 53.0 ],
+  "peakExecutionMemory" : [ 0.0, 0.0, 0.0 ],
   "memoryBytesSpilled" : [ 0.0, 0.0, 0.0 ],
   "diskBytesSpilled" : [ 0.0, 0.0, 0.0 ],
   "inputMetrics" : {
@@ -24,6 +27,7 @@
     "localBlocksFetched" : [ 0.0, 0.0, 0.0 ],
     "fetchWaitTime" : [ 0.0, 0.0, 0.0 ],
     "remoteBytesRead" : [ 0.0, 0.0, 0.0 ],
+    "remoteBytesReadToDisk" : [ 0.0, 0.0, 0.0 ],
     "totalBlocksFetched" : [ 0.0, 0.0, 0.0 ]
   },
   "shuffleWriteMetrics" : {

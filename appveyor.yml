@@ -26,10 +26,14 @@ branches:
 
 only_commits:
   files:
+    - appveyor.yml
+    - dev/appveyor-install-dependencies.ps1
     - R/
     - sql/core/src/main/scala/org/apache/spark/sql/api/r/
     - core/src/main/scala/org/apache/spark/api/r/
     - mllib/src/main/scala/org/apache/spark/ml/r/
+    - core/src/test/scala/org/apache/spark/deploy/SparkSubmitSuite.scala
+    - bin/*.cmd
 
 cache:
   - C:\Users\appveyor\.m2
@@ -38,22 +42,22 @@ install:
   # Install maven and dependencies
   - ps: .\dev\appveyor-install-dependencies.ps1
   # Required package for R unit tests
-  - cmd: R -e "install.packages('testthat', repos='http://cran.us.r-project.org')"
-  - cmd: R -e "packageVersion('testthat')"
-  - cmd: R -e "install.packages('e1071', repos='http://cran.us.r-project.org')"
-  - cmd: R -e "packageVersion('e1071')"
-  - cmd: R -e "install.packages('survival', repos='http://cran.us.r-project.org')"
-  - cmd: R -e "packageVersion('survival')"
+  - cmd: R -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='http://cran.us.r-project.org')"
+  # Here, we use the fixed version of testthat. For more details, please see SPARK-22817.
+  - cmd: R -e "devtools::install_version('testthat', version = '1.0.2', repos='http://cran.us.r-project.org')"
+  - cmd: R -e "packageVersion('knitr'); packageVersion('rmarkdown'); packageVersion('testthat'); packageVersion('e1071'); packageVersion('survival')"
 
 build_script:
-  - cmd: mvn -DskipTests -Psparkr -Phive -Phive-thriftserver package
+  - cmd: mvn -DskipTests -Psparkr -Phive package
+
+environment:
+  NOT_CRAN: true
 
 test_script:
-  - cmd: .\bin\spark-submit2.cmd --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
+  - cmd: .\bin\spark-submit2.cmd --driver-java-options "-Dlog4j.configuration=file:///%CD:\=/%/R/log4j.properties" --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
 
 notifications:
   - provider: Email
     on_build_success: false
     on_build_failure: false
     on_build_status_changed: false
-

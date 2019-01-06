@@ -31,7 +31,8 @@ object HiveSerDe {
     "sequencefile" ->
       HiveSerDe(
         inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
-        outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat")),
+        outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"),
+        serde = Option("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
 
     "rcfile" ->
       HiveSerDe(
@@ -54,7 +55,8 @@ object HiveSerDe {
     "textfile" ->
       HiveSerDe(
         inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
-        outputFormat = Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
+        outputFormat = Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"),
+        serde = Option("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
 
     "avro" ->
       HiveSerDe(
@@ -73,6 +75,7 @@ object HiveSerDe {
     val key = source.toLowerCase(Locale.ROOT) match {
       case s if s.startsWith("org.apache.spark.sql.parquet") => "parquet"
       case s if s.startsWith("org.apache.spark.sql.orc") => "orc"
+      case s if s.startsWith("org.apache.spark.sql.hive.orc") => "orc"
       case s if s.equals("orcfile") => "orc"
       case s if s.equals("parquetfile") => "parquet"
       case s if s.equals("avrofile") => "avro"

@@ -1,3 +1,7 @@
+- text: Basic statistics
+  url: ml-statistics.html
+- text: Data sources
+  url: ml-datasource
 - text: Pipelines
   url: ml-pipeline.html
 - text: Extracting, transforming and selecting features
@@ -8,6 +12,8 @@
   url: ml-clustering.html
 - text: Collaborative filtering
   url: ml-collaborative-filtering.html
+- text: Frequent Pattern Mining
+  url: ml-frequent-pattern-mining.html
 - text: Model selection and tuning
   url: ml-tuning.html
 - text: Advanced topics

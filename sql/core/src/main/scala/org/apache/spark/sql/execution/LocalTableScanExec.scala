@@ -25,15 +25,18 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Physical plan node for scanning data from a local collection.
+ *
+ * `Seq` may not be serializable and ideally we should not send `rows` and `unsafeRows`
+ * to the executors. Thus marking them as transient.
  */
 case class LocalTableScanExec(
     output: Seq[Attribute],
-    rows: Seq[InternalRow]) extends LeafExecNode {
+    @transient rows: Seq[InternalRow]) extends LeafExecNode with InputRDDCodegen {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  private lazy val unsafeRows: Array[InternalRow] = {
+  @transient private lazy val unsafeRows: Array[InternalRow] = {
     if (rows.isEmpty) {
       Array.empty
     } else {
@@ -73,4 +76,12 @@ case class LocalTableScanExec(
     longMetric("numOutputRows").add(taken.size)
     taken
   }
+
+  // Input is already UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = false
+
+  // Do not codegen when there is no parent - to support the fast driver-local collect/take paths.
+  override def supportCodegen: Boolean = (parent != null)
+
+  override def inputRDD: RDD[InternalRow] = rdd
 }

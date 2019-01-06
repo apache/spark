@@ -32,7 +32,7 @@ import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 
 /**
  * Latent Dirichlet Allocation (LDA) model.
@@ -194,6 +194,8 @@ class LocalLDAModel private[spark] (
     override protected[spark] val gammaShape: Double = 100)
   extends LDAModel with Serializable {
 
+  private var seed: Long = Utils.random.nextLong()
+
   @Since("1.3.0")
   override def k: Int = topics.numCols
 
@@ -215,6 +217,21 @@ class LocalLDAModel private[spark] (
   }
 
   override protected def formatVersion = "1.0"
+
+  /**
+   * Random seed for cluster initialization.
+   */
+  @Since("2.4.0")
+  def getSeed: Long = seed
+
+  /**
+   * Set the random seed for cluster initialization.
+   */
+  @Since("2.4.0")
+  def setSeed(seed: Long): this.type = {
+    this.seed = seed
+    this
+  }
 
   @Since("1.5.0")
   override def save(sc: SparkContext, path: String): Unit = {
@@ -298,6 +315,7 @@ class LocalLDAModel private[spark] (
     // by topic (columns of lambda)
     val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
     val ElogbetaBc = documents.sparkContext.broadcast(Elogbeta)
+    val gammaSeed = this.seed
 
     // Sum bound components for each document:
     //  component for prob(tokens) + component for prob(document-topic distribution)
@@ -306,7 +324,7 @@ class LocalLDAModel private[spark] (
         val localElogbeta = ElogbetaBc.value
         var docBound = 0.0D
         val (gammad: BDV[Double], _, _) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, exp(localElogbeta), brzAlpha, gammaShape, k)
+          termCounts, exp(localElogbeta), brzAlpha, gammaShape, k, gammaSeed + id)
         val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
         // E[log p(doc | theta, beta)]
@@ -314,17 +332,18 @@ class LocalLDAModel private[spark] (
           docBound += count * LDAUtils.logSumExp(Elogthetad + localElogbeta(idx, ::).t)
         }
         // E[log p(theta | alpha) - log q(theta | gamma)]
-        docBound += sum((brzAlpha - gammad) :* Elogthetad)
+        docBound += sum((brzAlpha - gammad) *:* Elogthetad)
         docBound += sum(lgamma(gammad) - lgamma(brzAlpha))
         docBound += lgamma(sum(brzAlpha)) - lgamma(sum(gammad))
 
         docBound
       }.sum()
+    ElogbetaBc.destroy(blocking = false)
 
     // Bound component for prob(topic-term distributions):
     //   E[log p(beta | eta) - log q(beta | lambda)]
     val sumEta = eta * vocabSize
-    val topicsPart = sum((eta - lambda) :* Elogbeta) +
+    val topicsPart = sum((eta - lambda) *:* Elogbeta) +
       sum(lgamma(lambda) - lgamma(eta)) +
       sum(lgamma(sumEta) - lgamma(sum(lambda(::, breeze.linalg.*))))
 
@@ -351,6 +370,7 @@ class LocalLDAModel private[spark] (
     val docConcentrationBrz = this.docConcentration.asBreeze
     val gammaShape = this.gammaShape
     val k = this.k
+    val gammaSeed = this.seed
 
     documents.map { case (id: Long, termCounts: Vector) =>
       if (termCounts.numNonzeros == 0) {
@@ -361,7 +381,8 @@ class LocalLDAModel private[spark] (
           expElogbetaBc.value,
           docConcentrationBrz,
           gammaShape,
-          k)
+          k,
+          gammaSeed + id)
         (id, Vectors.dense(normalize(gamma, 1.0).toArray))
       }
     }
@@ -370,12 +391,12 @@ class LocalLDAModel private[spark] (
   /**
    * Get a method usable as a UDF for `topicDistributions()`
    */
-  private[spark] def getTopicDistributionMethod(sc: SparkContext): Vector => Vector = {
+  private[spark] def getTopicDistributionMethod: Vector => Vector = {
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
-    val expElogbetaBc = sc.broadcast(expElogbeta)
     val docConcentrationBrz = this.docConcentration.asBreeze
     val gammaShape = this.gammaShape
     val k = this.k
+    val gammaSeed = this.seed
 
     (termCounts: Vector) =>
       if (termCounts.numNonzeros == 0) {
@@ -383,10 +404,11 @@ class LocalLDAModel private[spark] (
       } else {
         val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
-          expElogbetaBc.value,
+          expElogbeta,
           docConcentrationBrz,
           gammaShape,
-          k)
+          k,
+          gammaSeed)
         Vectors.dense(normalize(gamma, 1.0).toArray)
       }
   }
@@ -403,6 +425,7 @@ class LocalLDAModel private[spark] (
    */
   @Since("2.0.0")
   def topicDistribution(document: Vector): Vector = {
+    val gammaSeed = this.seed
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
     if (document.numNonzeros == 0) {
       Vectors.zeros(this.k)
@@ -412,7 +435,8 @@ class LocalLDAModel private[spark] (
         expElogbeta,
         this.docConcentration.asBreeze,
         gammaShape,
-        this.k)
+        this.k,
+        gammaSeed)
       Vectors.dense(normalize(gamma, 1.0).toArray)
     }
   }
@@ -721,7 +745,7 @@ class DistributedLDAModel private[clustering] (
       val N_wj = edgeContext.attr
       val smoothed_N_wk: TopicCounts = edgeContext.dstAttr + (eta - 1.0)
       val smoothed_N_kj: TopicCounts = edgeContext.srcAttr + (alpha - 1.0)
-      val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
+      val phi_wk: TopicCounts = smoothed_N_wk /:/ smoothed_N_k
       val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
       val tokenLogLikelihood = N_wj * math.log(phi_wk.dot(theta_kj))
       edgeContext.sendToDst(tokenLogLikelihood)
@@ -748,7 +772,7 @@ class DistributedLDAModel private[clustering] (
         if (isTermVertex(vertex)) {
           val N_wk = vertex._2
           val smoothed_N_wk: TopicCounts = N_wk + (eta - 1.0)
-          val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
+          val phi_wk: TopicCounts = smoothed_N_wk /:/ smoothed_N_k
           sumPrior + (eta - 1.0) * sum(phi_wk.map(math.log))
         } else {
           val N_kj = vertex._2
@@ -788,20 +812,14 @@ class DistributedLDAModel private[clustering] (
   @Since("1.5.0")
   def topTopicsPerDocument(k: Int): RDD[(Long, Array[Int], Array[Double])] = {
     graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
-      // TODO: Remove work-around for the breeze bug.
-      // https://github.com/scalanlp/breeze/issues/561
-      val topIndices = if (k == topicCounts.length) {
-        Seq.range(0, k)
-      } else {
-        argtopk(topicCounts, k)
-      }
+      val topIndices = argtopk(topicCounts, k)
       val sumCounts = sum(topicCounts)
       val weights = if (sumCounts != 0) {
-        topicCounts(topIndices) / sumCounts
+        topicCounts(topIndices).toArray.map(_ / sumCounts)
       } else {
-        topicCounts(topIndices)
+        topicCounts(topIndices).toArray
       }
-      (docID.toLong, topIndices.toArray, weights.toArray)
+      (docID.toLong, topIndices.toArray, weights)
     }
   }
 

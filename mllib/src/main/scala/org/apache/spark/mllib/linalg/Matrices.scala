@@ -30,6 +30,7 @@ import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
  * Trait for a local matrix.
@@ -456,7 +457,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def zeros(numRows: Int, numCols: Int): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, new Array[Double](numRows * numCols))
   }
@@ -469,7 +470,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def ones(numRows: Int, numCols: Int): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(1.0))
   }
@@ -499,7 +500,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
@@ -513,7 +514,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
   }
@@ -797,7 +798,7 @@ object SparseMatrix {
     var prevRow = -1
     var prevVal = 0.0
     // Append a dummy entry to include the last one at the end of the loop.
-    (sortedEntries.view :+ (numRows, numCols, 1.0)).foreach { case (i, j, v) =>
+    (sortedEntries.view :+ ((numRows, numCols, 1.0))).foreach { case (i, j, v) =>
       if (v != 0) {
         if (i == prevRow && j == prevCol) {
           prevVal += v
@@ -846,8 +847,8 @@ object SparseMatrix {
       s"density must be a double in the range 0.0 <= d <= 1.0. Currently, density: $density")
     val size = numRows.toLong * numCols
     val expected = size * density
-    assert(expected < Int.MaxValue,
-      "The expected number of nonzeros cannot be greater than Int.MaxValue.")
+    assert(expected < ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+      "The expected number of nonzeros cannot be greater than Int.MaxValue - 15.")
     val nnz = math.ceil(expected).toInt
     if (density == 0.0) {
       new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array.empty, Array.empty)
@@ -992,7 +993,16 @@ object Matrices {
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
         // There is no isTranspose flag for sparse matrices in Breeze
-        new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
+        val nsm = if (sm.rowIndices.length > sm.activeSize) {
+          // This sparse matrix has trailing zeros.
+          // Remove them by compacting the matrix.
+          val csm = sm.copy
+          csm.compact()
+          csm
+        } else {
+          sm
+        }
+        new SparseMatrix(nsm.rows, nsm.cols, nsm.colPtrs, nsm.rowIndices, nsm.data)
       case _ =>
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")

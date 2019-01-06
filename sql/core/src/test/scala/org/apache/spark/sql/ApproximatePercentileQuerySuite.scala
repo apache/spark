@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
+
+import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
@@ -50,6 +54,21 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("percentile_approx, the first element satisfies small percentages") {
+    withTempView(table) {
+      (1 to 10).toDF("col").createOrReplaceTempView(table)
+      checkAnswer(
+        spark.sql(
+          s"""
+             |SELECT
+             |  percentile_approx(col, array(0.01, 0.1, 0.11))
+             |FROM $table
+           """.stripMargin),
+        Row(Seq(1, 1, 2))
+      )
+    }
+  }
+
   test("percentile_approx, array of percentile value") {
     withTempView(table) {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
@@ -63,6 +82,30 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
              |FROM $table
            """.stripMargin),
         Row(Seq(250D, 500D, 750D), 1000, Seq(1D, 1000D), 500500)
+      )
+    }
+  }
+
+  test("percentile_approx, different column types") {
+    withTempView(table) {
+      val intSeq = 1 to 1000
+      val data: Seq[(java.math.BigDecimal, Date, Timestamp)] = intSeq.map { i =>
+        (new java.math.BigDecimal(i), DateTimeUtils.toJavaDate(i), DateTimeUtils.toJavaTimestamp(i))
+      }
+      data.toDF("cdecimal", "cdate", "ctimestamp").createOrReplaceTempView(table)
+      checkAnswer(
+        spark.sql(
+          s"""SELECT
+             |  percentile_approx(cdecimal, array(0.25, 0.5, 0.75D)),
+             |  percentile_approx(cdate, array(0.25, 0.5, 0.75D)),
+             |  percentile_approx(ctimestamp, array(0.25, 0.5, 0.75D))
+             |FROM $table
+           """.stripMargin),
+        Row(
+          Seq("250.000000000000000000", "500.000000000000000000", "750.000000000000000000")
+              .map(i => new java.math.BigDecimal(i)),
+          Seq(250, 500, 750).map(DateTimeUtils.toJavaDate),
+          Seq(250, 500, 750).map(i => DateTimeUtils.toJavaTimestamp(i.toLong)))
       )
     }
   }
@@ -88,7 +131,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
       val accuracies = Array(1, 10, 100, 1000, 10000)
       val errors = accuracies.map { accuracy =>
         val df = spark.sql(s"SELECT percentile_approx(col, 0.25, $accuracy) FROM $table")
-        val approximatePercentile = df.collect().head.getDouble(0)
+        val approximatePercentile = df.collect().head.getInt(0)
         val error = Math.abs(approximatePercentile - expectedPercentile)
         error
       }
@@ -103,7 +146,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       checkAnswer(
         spark.sql(s"SELECT percentile_approx(col, array(0.25 + 0.25D), 200 + 800D) FROM $table"),
-        Row(Seq(500D))
+        Row(Seq(499))
       )
     }
   }
@@ -165,7 +208,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
 
   test("percentile_approx(col, ...), input rows contains null, with out group by") {
     withTempView(table) {
-      (1 to 1000).map(new Integer(_)).flatMap(Seq(null: Integer, _)).toDF("col")
+      (1 to 1000).map(Integer.valueOf(_)).flatMap(Seq(null: Integer, _)).toDF("col")
         .createOrReplaceTempView(table)
       checkAnswer(
         spark.sql(
@@ -183,8 +226,8 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
     withTempView(table) {
       val rand = new java.util.Random()
       (1 to 1000)
-        .map(new Integer(_))
-        .map(v => (new Integer(v % 2), v))
+        .map(Integer.valueOf(_))
+        .map(v => (Integer.valueOf(v % 2), v))
         // Add some nulls
         .flatMap(Seq(_, (null: Integer, null: Integer)))
         .toDF("key", "value").createOrReplaceTempView(table)
@@ -236,5 +279,17 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
 
       checkAnswer(query, expected)
     }
+  }
+
+  test("SPARK-24013: unneeded compress can cause performance issues with sorted input") {
+    val buffer = new PercentileDigest(1.0D / ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY)
+    var compressCounts = 0
+    (1 to 10000000).foreach { i =>
+      buffer.add(i)
+      if (buffer.isCompressed) compressCounts += 1
+    }
+    assert(compressCounts > 0)
+    buffer.quantileSummaries
+    assert(buffer.isCompressed)
   }
 }

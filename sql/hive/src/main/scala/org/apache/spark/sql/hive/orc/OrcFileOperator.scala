@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.io.IOException
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.orc.{OrcFile, Reader}
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -46,7 +49,10 @@ private[hive] object OrcFileOperator extends Logging {
    *       create the result reader from that file.  If no such file is found, it returns `None`.
    * @todo Needs to consider all files when schema evolution is taken into account.
    */
-  def getFileReader(basePath: String, config: Option[Configuration] = None): Option[Reader] = {
+  def getFileReader(basePath: String,
+      config: Option[Configuration] = None,
+      ignoreCorruptFiles: Boolean = false)
+      : Option[Reader] = {
     def isWithNonEmptySchema(path: Path, reader: Reader): Boolean = {
       reader.getObjectInspector match {
         case oi: StructObjectInspector if oi.getAllStructFieldRefs.size() == 0 =>
@@ -65,20 +71,33 @@ private[hive] object OrcFileOperator extends Logging {
     }
 
     listOrcFiles(basePath, conf).iterator.map { path =>
-      path -> OrcFile.createReader(fs, path)
+      val reader = try {
+        Some(OrcFile.createReader(fs, path))
+      } catch {
+        case e: IOException =>
+          if (ignoreCorruptFiles) {
+            logWarning(s"Skipped the footer in the corrupted file: $path", e)
+            None
+          } else {
+            throw new SparkException(s"Could not read footer for file: $path", e)
+          }
+      }
+      path -> reader
     }.collectFirst {
-      case (path, reader) if isWithNonEmptySchema(path, reader) => reader
+      case (path, Some(reader)) if isWithNonEmptySchema(path, reader) => reader
     }
   }
 
-  def readSchema(paths: Seq[String], conf: Option[Configuration]): Option[StructType] = {
+  def readSchema(paths: Seq[String], conf: Option[Configuration], ignoreCorruptFiles: Boolean)
+      : Option[StructType] = {
     // Take the first file where we can open a valid reader if we can find one.  Otherwise just
     // return None to indicate we can't infer the schema.
-    paths.flatMap(getFileReader(_, conf)).headOption.map { reader =>
-      val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
-      val schema = readerInspector.getTypeName
-      logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
-      CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
+    paths.toIterator.map(getFileReader(_, conf, ignoreCorruptFiles)).collectFirst {
+      case Some(reader) =>
+        val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
+        val schema = readerInspector.getTypeName
+        logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
+        CatalystSqlParser.parseDataType(schema).asInstanceOf[StructType]
     }
   }
 

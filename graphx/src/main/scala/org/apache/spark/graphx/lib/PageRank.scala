@@ -184,9 +184,11 @@ object PageRank extends Logging {
    *         indexed by the position of nodes in the sources list) and
    *         edge attributes the normalized edge weight
    */
-  def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED],
-    numIter: Int, resetProb: Double = 0.15,
-    sources: Array[VertexId]): Graph[Vector, Double] = {
+  def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](
+      graph: Graph[VD, ED],
+      numIter: Int,
+      resetProb: Double = 0.15,
+      sources: Array[VertexId]): Graph[Vector, Double] = {
     require(numIter > 0, s"Number of iterations must be greater than 0," +
       s" but got ${numIter}")
     require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
@@ -194,15 +196,13 @@ object PageRank extends Logging {
     require(sources.nonEmpty, s"The list of sources must be non-empty," +
       s" but got ${sources.mkString("[", ",", "]")}")
 
-    // TODO if one sources vertex id is outside of the int range
-    // we won't be able to store its activations in a sparse vector
-    require(sources.max <= Int.MaxValue.toLong,
-      s"This implementation currently only works for source vertex ids at most ${Int.MaxValue}")
     val zero = Vectors.sparse(sources.size, List()).asBreeze
+    // map of vid -> vector where for each vid, the _position of vid in source_ is set to 1.0
     val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
       val v = Vectors.sparse(sources.size, Array(i), Array(1.0)).asBreeze
       (vid, v)
     }.toMap
+
     val sc = graph.vertices.sparkContext
     val sourcesInitMapBC = sc.broadcast(sourcesInitMap)
     // Initialize the PageRank graph with each edge attribute having
@@ -212,13 +212,7 @@ object PageRank extends Logging {
       .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
       // Set the weight on the edges based on the degree
       .mapTriplets(e => 1.0 / e.srcAttr, TripletFields.Src)
-      .mapVertices { (vid, attr) =>
-        if (sourcesInitMapBC.value contains vid) {
-          sourcesInitMapBC.value(vid)
-        } else {
-          zero
-        }
-      }
+      .mapVertices((vid, _) => sourcesInitMapBC.value.getOrElse(vid, zero))
 
     var i = 0
     while (i < numIter) {
@@ -226,18 +220,18 @@ object PageRank extends Logging {
       // Propagates the message along outbound edges
       // and adding start nodes back in with activation resetProb
       val rankUpdates = rankGraph.aggregateMessages[BV[Double]](
-        ctx => ctx.sendToDst(ctx.srcAttr :* ctx.attr),
-        (a : BV[Double], b : BV[Double]) => a :+ b, TripletFields.Src)
+        ctx => ctx.sendToDst(ctx.srcAttr *:* ctx.attr),
+        (a : BV[Double], b : BV[Double]) => a +:+ b, TripletFields.Src)
 
       rankGraph = rankGraph.outerJoinVertices(rankUpdates) {
         (vid, oldRank, msgSumOpt) =>
-          val popActivations: BV[Double] = msgSumOpt.getOrElse(zero) :* (1.0 - resetProb)
+          val popActivations: BV[Double] = msgSumOpt.getOrElse(zero) *:* (1.0 - resetProb)
           val resetActivations = if (sourcesInitMapBC.value contains vid) {
-            sourcesInitMapBC.value(vid) :* resetProb
+            sourcesInitMapBC.value(vid) *:* resetProb
           } else {
             zero
           }
-          popActivations :+ resetActivations
+          popActivations +:+ resetActivations
         }.cache()
 
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
@@ -250,9 +244,9 @@ object PageRank extends Logging {
     }
 
     // SPARK-18847 If the graph has sinks (vertices with no outgoing edges) correct the sum of ranks
-    val rankSums = rankGraph.vertices.values.fold(zero)(_ :+ _)
+    val rankSums = rankGraph.vertices.values.fold(zero)(_ +:+ _)
     rankGraph.mapVertices { (vid, attr) =>
-      Vectors.fromBreeze(attr :/ rankSums)
+      Vectors.fromBreeze(attr /:/ rankSums)
     }
   }
 
@@ -303,7 +297,7 @@ object PageRank extends Logging {
     val src: VertexId = srcId.getOrElse(-1L)
 
     // Initialize the pagerankGraph with each edge attribute
-    // having weight 1/outDegree and each vertex with attribute 1.0.
+    // having weight 1/outDegree and each vertex with attribute 0.
     val pagerankGraph: Graph[(Double, Double), Double] = graph
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) {

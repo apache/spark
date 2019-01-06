@@ -19,14 +19,14 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
 
 /**
@@ -38,7 +38,7 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
  * @since 2.0.0
  */
 @Experimental
-@InterfaceStability.Evolving
+@Evolving
 class KeyValueGroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
     vEncoder: Encoder[V],
@@ -238,7 +238,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def mapGroupsWithState[S: Encoder, U: Encoder](
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
     val flatMapFunc = (key: K, it: Iterator[V], s: GroupState[S]) => Iterator(func(key, it, s))
@@ -273,7 +273,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def mapGroupsWithState[S: Encoder, U: Encoder](
       timeoutConf: GroupStateTimeout)(
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
@@ -310,7 +310,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def mapGroupsWithState[S, U](
       func: MapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
@@ -341,7 +341,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def mapGroupsWithState[S, U](
       func: MapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
@@ -372,7 +372,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
       timeoutConf: GroupStateTimeout)(
@@ -414,7 +414,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.2.0
    */
   @Experimental
-  @InterfaceStability.Evolving
+  @Evolving
   def flatMapGroupsWithState[S, U](
       func: FlatMapGroupsWithStateFunction[K, V, S, U],
       outputMode: OutputMode,
@@ -458,9 +458,13 @@ class KeyValueGroupedDataset[K, V] private[sql](
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(_.withInputType(vExprEnc, dataAttributes).named)
-    val keyColumn = if (kExprEnc.flat) {
+    val keyColumn = if (!kExprEnc.isSerializedAsStructForTopLevel) {
       assert(groupingAttributes.length == 1)
-      groupingAttributes.head
+      if (SQLConf.get.nameNonStructGroupingKeyAsValue) {
+        groupingAttributes.head
+      } else {
+        Alias(groupingAttributes.head, "key")()
+      }
     } else {
       Alias(CreateStruct(groupingAttributes), "key")()
     }
@@ -563,5 +567,26 @@ class KeyValueGroupedDataset[K, V] private[sql](
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] = {
     cogroup(other)((key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
+  }
+
+  override def toString: String = {
+    val builder = new StringBuilder
+    val kFields = kExprEnc.schema.map {
+      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+    }
+    val vFields = vExprEnc.schema.map {
+      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+    }
+    builder.append("KeyValueGroupedDataset: [key: [")
+    builder.append(kFields.take(2).mkString(", "))
+    if (kFields.length > 2) {
+      builder.append(" ... " + (kFields.length - 2) + " more field(s)")
+    }
+    builder.append("], value: [")
+    builder.append(vFields.take(2).mkString(", "))
+    if (vFields.length > 2) {
+      builder.append(" ... " + (vFields.length - 2) + " more field(s)")
+    }
+    builder.append("]]").toString()
   }
 }

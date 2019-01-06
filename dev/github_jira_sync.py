@@ -43,7 +43,7 @@ MAX_UPDATES = int(os.environ.get("MAX_UPDATES", "100000"))
 # "notification overload" when running for the first time.
 MIN_COMMENT_PR = int(os.environ.get("MIN_COMMENT_PR", "1496"))
 
-# File used as an opitimization to store maximum previously seen PR
+# File used as an optimization to store maximum previously seen PR
 # Used mostly because accessing ASF JIRA is slow, so we want to avoid checking
 # the state of JIRA's that are tied to PR's we've already looked at.
 MAX_FILE = ".github-jira-max"

@@ -1,4 +1,64 @@
 [ {
+  "id" : "application_1538416563558_0014",
+  "name" : "PythonBisectingKMeansExample",
+  "attempts" : [ {
+    "startTime" : "2018-10-02T00:42:39.580GMT",
+    "endTime" : "2018-10-02T00:44:02.338GMT",
+    "lastUpdated" : "",
+    "duration" : 82758,
+    "sparkUser" : "root",
+    "completed" : true,
+    "appSparkVersion" : "2.5.0-SNAPSHOT",
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1538440959580,
+    "endTimeEpoch" : 1538441042338
+  } ]
+}, {
+  "id" : "application_1506645932520_24630151",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2018-04-19T23:54:42.734GMT",
+    "endTime" : "2018-04-19T23:56:29.134GMT",
+    "lastUpdated" : "",
+    "duration" : 106400,
+    "sparkUser" : "edlu",
+    "completed" : true,
+    "appSparkVersion" : "2.4.0-SNAPSHOT",
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1524182082734,
+    "endTimeEpoch" : 1524182189134
+  } ]
+}, {
+  "id" : "application_1516285256255_0012",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2018-01-18T18:30:35.119GMT",
+    "endTime" : "2018-01-18T18:38:27.938GMT",
+    "lastUpdated" : "",
+    "duration" : 472819,
+    "sparkUser" : "attilapiros",
+    "completed" : true,
+    "appSparkVersion" : "2.3.0-SNAPSHOT",
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1516300235119,
+    "endTimeEpoch" : 1516300707938
+  } ]
+}, {
+  "id" : "app-20180109111548-0000",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2018-01-09T10:15:42.372GMT",
+    "endTime" : "2018-01-09T10:24:37.606GMT",
+    "lastUpdated" : "",
+    "duration" : 535234,
+    "sparkUser" : "attilapiros",
+    "completed" : true,
+    "appSparkVersion" : "2.3.0-SNAPSHOT",
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1515492942372,
+    "endTimeEpoch" : 1515493477606
+  } ]
+}, {
   "id" : "app-20161116163331-0000",
   "name" : "Spark shell",
   "attempts" : [ {
@@ -8,8 +68,9 @@
     "duration" : 10671,
     "sparkUser" : "jose",
     "completed" : true,
-    "startTimeEpoch" : 1479335609916,
+    "appSparkVersion" : "2.1.0-SNAPSHOT",
     "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1479335609916,
     "endTimeEpoch" : 1479335620587
   } ]
 }, {
@@ -22,8 +83,9 @@
     "duration" : 101795,
     "sparkUser" : "jose",
     "completed" : true,
-    "startTimeEpoch" : 1479252037079,
+    "appSparkVersion" : "2.1.0-SNAPSHOT",
     "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1479252037079,
     "endTimeEpoch" : 1479252138874
   } ]
 }, {
@@ -36,6 +98,7 @@
     "duration" : 10505,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "1.4.0-SNAPSHOT",
     "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380893,
     "endTimeEpoch" : 1430917391398
@@ -51,6 +114,7 @@
     "duration" : 57,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "1.4.0-SNAPSHOT",
     "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380893,
     "endTimeEpoch" : 1430917380950
@@ -62,7 +126,7 @@
     "duration" : 10,
     "sparkUser" : "irashid",
     "completed" : true,
-    "completed" : true,
+    "appSparkVersion" : "1.4.0-SNAPSHOT",
     "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380880,
     "endTimeEpoch" : 1430917380890

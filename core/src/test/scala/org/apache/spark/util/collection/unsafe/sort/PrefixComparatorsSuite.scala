@@ -63,7 +63,9 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
 
      def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
       for (i <- 0 until x.length; if i < y.length) {
-        val res = x(i).compare(y(i))
+        val v1 = x(i) & 0xff
+        val v2 = y(i) & 0xff
+        val res = v1 - v2
         if (res != 0) return res
       }
       x.length - y.length
@@ -78,6 +80,19 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
         (prefixComparisonResult == 0) ||
         (prefixComparisonResult < 0 && compareBinary(x, y) < 0) ||
         (prefixComparisonResult > 0 && compareBinary(x, y) > 0))
+    }
+
+    val binaryRegressionTests = Seq(
+      (Array[Byte](1), Array[Byte](-1)),
+      (Array[Byte](1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, -1)),
+      (Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, -1)),
+      (Array[Byte](1), Array[Byte](1, 1, 1, 1)),
+      (Array[Byte](1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1)),
+      (Array[Byte](-1), Array[Byte](-1, -1, -1, -1)),
+      (Array[Byte](-1, -1, -1, -1, -1), Array[Byte](-1, -1, -1, -1, -1, -1, -1, -1, -1))
+    )
+    binaryRegressionTests.foreach { case (b1, b2) =>
+      testPrefixComparison(b1, b2)
     }
 
     // scalastyle:off
@@ -110,6 +125,7 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
     val nan2Prefix = PrefixComparators.DoublePrefixComparator.computePrefix(nan2)
     assert(nan1Prefix === nan2Prefix)
     val doubleMaxPrefix = PrefixComparators.DoublePrefixComparator.computePrefix(Double.MaxValue)
+    // NaN is greater than the max double value.
     assert(PrefixComparators.DOUBLE.compare(nan1Prefix, doubleMaxPrefix) === 1)
   }
 
@@ -119,22 +135,34 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
     assert(java.lang.Double.doubleToRawLongBits(negativeNan) < 0)
     val prefix = PrefixComparators.DoublePrefixComparator.computePrefix(negativeNan)
     val doubleMaxPrefix = PrefixComparators.DoublePrefixComparator.computePrefix(Double.MaxValue)
+    // -NaN is greater than the max double value.
     assert(PrefixComparators.DOUBLE.compare(prefix, doubleMaxPrefix) === 1)
   }
 
   test("double prefix comparator handles other special values properly") {
-    val nullValue = 0L
+    // See `SortPrefix.nullValue` for how we deal with nulls for float/double type
+    val smallestNullPrefix = 0L
+    val largestNullPrefix = -1L
     val nan = PrefixComparators.DoublePrefixComparator.computePrefix(Double.NaN)
     val posInf = PrefixComparators.DoublePrefixComparator.computePrefix(Double.PositiveInfinity)
     val negInf = PrefixComparators.DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
     val minValue = PrefixComparators.DoublePrefixComparator.computePrefix(Double.MinValue)
     val maxValue = PrefixComparators.DoublePrefixComparator.computePrefix(Double.MaxValue)
     val zero = PrefixComparators.DoublePrefixComparator.computePrefix(0.0)
+    val minusZero = PrefixComparators.DoublePrefixComparator.computePrefix(-0.0)
+
+    // null is greater than everything including NaN, when we need to treat it as the largest value.
+    assert(PrefixComparators.DOUBLE.compare(largestNullPrefix, nan) === 1)
+    // NaN is greater than the positive infinity.
     assert(PrefixComparators.DOUBLE.compare(nan, posInf) === 1)
     assert(PrefixComparators.DOUBLE.compare(posInf, maxValue) === 1)
     assert(PrefixComparators.DOUBLE.compare(maxValue, zero) === 1)
     assert(PrefixComparators.DOUBLE.compare(zero, minValue) === 1)
     assert(PrefixComparators.DOUBLE.compare(minValue, negInf) === 1)
-    assert(PrefixComparators.DOUBLE.compare(negInf, nullValue) === 1)
+    // null is smaller than everything including negative infinity, when we need to treat it as
+    // the smallest value.
+    assert(PrefixComparators.DOUBLE.compare(negInf, smallestNullPrefix) === 1)
+    // 0.0 should be equal to -0.0.
+    assert(PrefixComparators.DOUBLE.compare(zero, minusZero) === 0)
   }
 }

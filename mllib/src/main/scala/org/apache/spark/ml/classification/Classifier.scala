@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -109,7 +109,7 @@ abstract class Classifier[
       case None =>
         // Get number of classes from dataset itself.
         val maxLabelRow: Array[Row] = dataset.select(max($(labelCol))).take(1)
-        if (maxLabelRow.isEmpty) {
+        if (maxLabelRow.isEmpty || maxLabelRow(0).get(0) == null) {
           throw new SparkException("ML algorithm was given empty dataset.")
         }
         val maxDoubleLabel: Double = maxLabelRow.head.getDouble(0)
@@ -192,12 +192,12 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /**
    * Predict label for the given features.
-   * This internal method is used to implement `transform()` and output [[predictionCol]].
+   * This method is used to implement `transform()` and output [[predictionCol]].
    *
    * This default implementation for classification predicts the index of the maximum value
    * from `predictRaw()`.
    */
-  override protected def predict(features: FeaturesType): Double = {
+  override def predict(features: FeaturesType): Double = {
     raw2prediction(predictRaw(features))
   }
 

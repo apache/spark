@@ -211,7 +211,7 @@ object DecisionTreeRunner {
       case Regression =>
         (origExamples, null, 0)
       case _ =>
-        throw new IllegalArgumentException("Algo ${params.algo} not supported.")
+        throw new IllegalArgumentException(s"Algo $algo not supported.")
     }
 
     // Create training, test sets.

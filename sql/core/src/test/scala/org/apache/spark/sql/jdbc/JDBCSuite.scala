@@ -18,26 +18,28 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends SparkFunSuite
+class JDBCSuite extends QueryTest
   with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
   import testImplicits._
 
@@ -52,6 +54,20 @@ class JDBCSuite extends SparkFunSuite
     override def getCatalystType(
         sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
       Some(StringType)
+  }
+
+  val testH2DialectTinyInt = new JdbcDialect {
+    override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+    override def getCatalystType(
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder): Option[DataType] = {
+      sqlType match {
+        case java.sql.Types.TINYINT => Some(ByteType)
+        case _ => None
+      }
+    }
   }
 
   before {
@@ -94,6 +110,15 @@ class JDBCSuite extends SparkFunSuite
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
         |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
+       """.stripMargin.replaceAll("\n", " "))
+
+    sql(
+      s"""
+        |CREATE OR REPLACE TEMPORARY VIEW partsoverflow
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
+        |         partitionColumn 'THEID', lowerBound '-9223372036854775808',
+        |         upperBound '9223372036854775807', numPartitions '3')
        """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("create table test.inttypes (a INT, b BOOLEAN, c TINYINT, "
@@ -141,6 +166,15 @@ class JDBCSuite extends SparkFunSuite
         |OPTIONS (url '$url', dbtable 'TEST.TIMETYPES', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
 
+    conn.prepareStatement("CREATE TABLE test.timezone (tz TIMESTAMP WITH TIME ZONE) " +
+      "AS SELECT '1999-01-08 04:05:06.543543543 GMT-08:00'")
+      .executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement("CREATE TABLE test.array (ar ARRAY) " +
+      "AS SELECT '(1, 2, 3)'")
+      .executeUpdate()
+    conn.commit()
 
     conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(38, 18))"
         ).executeUpdate()
@@ -219,6 +253,22 @@ class JDBCSuite extends SparkFunSuite
         |OPTIONS (url '$url', dbtable 'TEST."mixedCaseCols"', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
 
+    conn.prepareStatement("CREATE TABLE test.partition (THEID INTEGER, `THE ID` INTEGER) " +
+      "AS SELECT 1, 1")
+      .executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement("CREATE TABLE test.datetime (d DATE, t TIMESTAMP)").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO test.datetime VALUES ('2018-07-06', '2018-07-06 05:50:00.0')").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO test.datetime VALUES ('2018-07-06', '2018-07-06 08:10:08.0')").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO test.datetime VALUES ('2018-07-08', '2018-07-08 13:32:01.0')").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO test.datetime VALUES ('2018-07-12', '2018-07-12 09:51:15.0')").executeUpdate()
+    conn.commit()
+
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
 
@@ -229,11 +279,32 @@ class JDBCSuite extends SparkFunSuite
   // Check whether the tables are fetched in the expected degree of parallelism
   def checkNumPartitions(df: DataFrame, expectedNumPartitions: Int): Unit = {
     val jdbcRelations = df.queryExecution.analyzed.collect {
-      case LogicalRelation(r: JDBCRelation, _, _) => r
+      case LogicalRelation(r: JDBCRelation, _, _, _) => r
     }
     assert(jdbcRelations.length == 1)
     assert(jdbcRelations.head.parts.length == expectedNumPartitions,
       s"Expecting a JDBCRelation with $expectedNumPartitions partitions, but got:`$jdbcRelations`")
+  }
+
+  private def checkPushdown(df: DataFrame): DataFrame = {
+    val parentPlan = df.queryExecution.executedPlan
+    // Check if SparkPlan Filter is removed in a physical plan and
+    // the plan only has PhysicalRDD to scan JDBCRelation.
+    assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
+    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
+    assert(node.child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
+    df
+  }
+
+  private def checkNotPushdown(df: DataFrame): DataFrame = {
+    val parentPlan = df.queryExecution.executedPlan
+    // Check if SparkPlan Filter is not removed in a physical plan because JDBCRDD
+    // cannot compile given predicates.
+    assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
+    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.FilterExec])
+    df
   }
 
   test("SELECT *") {
@@ -241,16 +312,6 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    def checkPushdown(df: DataFrame): DataFrame = {
-      val parentPlan = df.queryExecution.executedPlan
-      // Check if SparkPlan Filter is removed in a physical plan and
-      // the plan only has PhysicalRDD to scan JDBCRelation.
-      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
-      val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
-      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
-      assert(node.child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
-      df
-    }
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
@@ -275,20 +336,14 @@ class JDBCSuite extends SparkFunSuite
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
-    val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2 AND NAME != 'mary')")
-    val df2 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
+    val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
     assert(df1.collect.toSet === Set(Row("mary", 2)))
-    assert(df2.collect.toSet === Set(Row("mary", 2)))
 
-    def checkNotPushdown(df: DataFrame): DataFrame = {
-      val parentPlan = df.queryExecution.executedPlan
-      // Check if SparkPlan Filter is not removed in a physical plan because JDBCRDD
-      // cannot compile given predicates.
-      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
-      val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
-      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.FilterExec])
-      df
-    }
+    // SPARK-22548: Incorrect nested AND expression pushed down to JDBC data source
+    val df2 = sql("SELECT * FROM foobar " +
+      "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
+    assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
+
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
   }
@@ -367,6 +422,12 @@ class JDBCSuite extends SparkFunSuite
     assert(ids(2) === 3)
   }
 
+  test("overflow of partition bound difference does not give negative stride") {
+    val df = sql("SELECT * FROM partsoverflow")
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length == 3)
+  }
+
   test("Register JDBC query with renamed fields") {
     // Regression test for bug SPARK-7345
     sql(
@@ -395,6 +456,28 @@ class JDBCSuite extends SparkFunSuite
       spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
     }.getMessage
     assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
+  }
+
+  test("Missing partition columns") {
+    withView("tempPeople") {
+      val e = intercept[IllegalArgumentException] {
+        sql(
+          s"""
+             |CREATE OR REPLACE TEMPORARY VIEW tempPeople
+             |USING org.apache.spark.sql.jdbc
+             |OPTIONS (
+             |  url 'jdbc:h2:mem:testdb0;user=testUser;password=testPass',
+             |  dbtable 'TEST.PEOPLE',
+             |  lowerBound '0',
+             |  upperBound '52',
+             |  numPartitions '53',
+             |  fetchSize '10000' )
+           """.stripMargin.replaceAll("\n", " "))
+      }.getMessage
+      assert(e.contains("When reading JDBC data sources, users need to specify all or none " +
+        "for the following options: 'partitionColumn', 'lowerBound', 'upperBound', and " +
+        "'numPartitions'"))
+    }
   }
 
   test("Basic API with FetchSize") {
@@ -624,6 +707,17 @@ class JDBCSuite extends SparkFunSuite
     JdbcDialects.unregisterDialect(testH2Dialect)
   }
 
+  test("Map TINYINT to ByteType via JdbcDialects") {
+    JdbcDialects.registerDialect(testH2DialectTinyInt)
+    val df = spark.read.jdbc(urlWithUserAndPass, "test.inttypes", new Properties())
+    val rows = df.collect()
+    assert(rows.length === 2)
+    assert(rows(0).get(2).isInstanceOf[Byte])
+    assert(rows(0).getByte(2) === 3)
+    assert(rows(1).isNullAt(2))
+    JdbcDialects.unregisterDialect(testH2DialectTinyInt)
+  }
+
   test("Default jdbc dialect registration") {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
@@ -693,17 +787,65 @@ class JDBCSuite extends SparkFunSuite
         } else {
           None
         }
+      override def quoteIdentifier(colName: String): String = {
+        s"My $colName quoteIdentifier"
+      }
+      override def getTableExistsQuery(table: String): String = {
+        s"My $table Table"
+      }
+      override def getSchemaQuery(table: String): String = {
+        s"My $table Schema"
+      }
+      override def isCascadingTruncateTable(): Option[Boolean] = Some(true)
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
     assert(!agg.canHandle("jdbc:h2"))
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
+    assert(agg.isCascadingTruncateTable() === Some(true))
+    assert(agg.quoteIdentifier ("Dummy") === "My Dummy quoteIdentifier")
+    assert(agg.getTableExistsQuery ("Dummy") === "My Dummy Table")
+    assert(agg.getSchemaQuery ("Dummy") === "My Dummy Schema")
+  }
+
+  test("Aggregated dialects: isCascadingTruncateTable") {
+    def genDialect(cascadingTruncateTable: Option[Boolean]): JdbcDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = true
+      override def getCatalystType(
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder): Option[DataType] = None
+      override def isCascadingTruncateTable(): Option[Boolean] = cascadingTruncateTable
+    }
+
+    def testDialects(cascadings: List[Option[Boolean]], expected: Option[Boolean]): Unit = {
+      val dialects = cascadings.map(genDialect(_))
+      val agg = new AggregatedDialect(dialects)
+      assert(agg.isCascadingTruncateTable() === expected)
+    }
+
+    testDialects(List(Some(true), Some(false), None), Some(true))
+    testDialects(List(Some(true), Some(true), None), Some(true))
+    testDialects(List(Some(false), Some(false), None), None)
+    testDialects(List(Some(true), Some(true)), Some(true))
+    testDialects(List(Some(false), Some(false)), Some(false))
+    testDialects(List(None, None), None)
   }
 
   test("DB2Dialect type mapping") {
     val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
     assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
     assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+    assert(db2Dialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get == "SMALLINT")
+    assert(db2Dialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
+    // test db2 dialect mappings on read
+    assert(db2Dialect.getCatalystType(java.sql.Types.REAL, "REAL", 1, null) == Option(FloatType))
+    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "DECFLOAT", 1, null) ==
+      Option(DecimalType(38, 18)))
+    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "XML", 1, null) == Option(StringType))
+    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, null) ==
+      Option(TimestampType))
   }
 
   test("PostgresDialect type mapping") {
@@ -732,6 +874,12 @@ class JDBCSuite extends SparkFunSuite
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    assert(oracleDialect.getCatalystType(OracleDialect.BINARY_FLOAT, "BINARY_FLOAT", 0, null) ==
+      Some(FloatType))
+    assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
+      Some(DoubleType))
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPTZ, "TIMESTAMP", 0, null) ==
+      Some(TimestampType))
   }
 
   test("table exists query by jdbc dialect") {
@@ -748,6 +896,54 @@ class JDBCSuite extends SparkFunSuite
     assert(db2.getTableExistsQuery(table) == defaultQuery)
     assert(h2.getTableExistsQuery(table) == defaultQuery)
     assert(derby.getTableExistsQuery(table) == defaultQuery)
+  }
+
+  test("truncate table query by jdbc dialect") {
+    val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val h2 = JdbcDialects.get(url)
+    val derby = JdbcDialects.get("jdbc:derby:db")
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val teradata = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+
+    val table = "weblogs"
+    val defaultQuery = s"TRUNCATE TABLE $table"
+    val postgresQuery = s"TRUNCATE TABLE ONLY $table"
+    val teradataQuery = s"DELETE FROM $table ALL"
+
+    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+      assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
+    }
+
+    assert(postgres.getTruncateQuery(table) == postgresQuery)
+    assert(oracle.getTruncateQuery(table) == defaultQuery)
+    assert(teradata.getTruncateQuery(table) == teradataQuery)
+  }
+
+  test("SPARK-22880: Truncate table with CASCADE by jdbc dialect") {
+    // cascade in a truncate should only be applied for databases that support this,
+    // even if the parameter is passed.
+    val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val h2 = JdbcDialects.get(url)
+    val derby = JdbcDialects.get("jdbc:derby:db")
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val teradata = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+
+    val table = "weblogs"
+    val defaultQuery = s"TRUNCATE TABLE $table"
+    val postgresQuery = s"TRUNCATE TABLE ONLY $table CASCADE"
+    val oracleQuery = s"TRUNCATE TABLE $table CASCADE"
+    val teradataQuery = s"DELETE FROM $table ALL"
+
+    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+      assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
+    }
+    assert(postgres.getTruncateQuery(table, Some(true)) == postgresQuery)
+    assert(oracle.getTruncateQuery(table, Some(true)) == oracleQuery)
+    assert(teradata.getTruncateQuery(table, Some(true)) == teradataQuery)
   }
 
   test("Test DataFrame.where for Date and Timestamp") {
@@ -913,16 +1109,67 @@ class JDBCSuite extends SparkFunSuite
     assert(e2.contains("User specified schema not supported with `jdbc`"))
   }
 
+  test("jdbc API support custom schema") {
+    val parts = Array[String]("THEID < 2", "THEID >= 2")
+    val customSchema = "NAME STRING, THEID INT"
+    val props = new Properties()
+    props.put("customSchema", customSchema)
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
+    assert(df.schema.size === 2)
+    assert(df.schema === CatalystSqlParser.parseTableSchema(customSchema))
+    assert(df.count() === 3)
+  }
+
+  test("jdbc API custom schema DDL-like strings.") {
+    withTempView("people_view") {
+      val customSchema = "NAME STRING, THEID INT"
+      sql(
+        s"""
+           |CREATE TEMPORARY VIEW people_view
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass',
+           |customSchema '$customSchema')
+        """.stripMargin.replaceAll("\n", " "))
+      val df = sql("select * from people_view")
+      assert(df.schema.length === 2)
+      assert(df.schema === CatalystSqlParser.parseTableSchema(customSchema))
+      assert(df.count() === 3)
+    }
+  }
+
+  test("SPARK-15648: teradataDialect StringType data mapping") {
+    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+    assert(teradataDialect.getJDBCType(StringType).
+      map(_.databaseTypeDefinition).get == "VARCHAR(255)")
+  }
+
+  test("SPARK-15648: teradataDialect BooleanType data mapping") {
+    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+    assert(teradataDialect.getJDBCType(BooleanType).
+      map(_.databaseTypeDefinition).get == "CHAR(1)")
+  }
+
   test("Checking metrics correctness with JDBC") {
     val foobarCnt = spark.table("foobar").count()
     val res = InputOutputMetricsHelper.run(sql("SELECT * FROM foobar").toDF())
     assert(res === (foobarCnt, 0L, foobarCnt) :: Nil)
   }
 
+  test("unsupported types") {
+    var e = intercept[SQLException] {
+      spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
+    }.getMessage
+    assert(e.contains("Unsupported type TIMESTAMP_WITH_TIMEZONE"))
+    e = intercept[SQLException] {
+      spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY", new Properties()).collect()
+    }.getMessage
+    assert(e.contains("Unsupported type ARRAY"))
+  }
+
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {
     def testJdbcOptions(options: JDBCOptions): Unit = {
       // Spark JDBC data source options are case-insensitive
-      assert(options.table == "t1")
+      assert(options.tableOrQuery == "t1")
       // When we convert it to properties, it should be case-sensitive.
       assert(options.asProperties.size == 3)
       assert(options.asProperties.get("customkey") == null)
@@ -965,5 +1212,299 @@ class JDBCSuite extends SparkFunSuite
 
       assert(sql("select * from people_view").count() == 3)
     }
+  }
+
+  test("SPARK-21519: option sessionInitStatement, run SQL to initialize the database session.") {
+    val initSQL1 = "SET @MYTESTVAR 21519"
+    val df1 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "(SELECT NVL(@MYTESTVAR, -1))")
+      .option("sessionInitStatement", initSQL1)
+      .load()
+    assert(df1.collect() === Array(Row(21519)))
+
+    val initSQL2 = "SET SCHEMA DUMMY"
+    val df2 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLE")
+      .option("sessionInitStatement", initSQL2)
+      .load()
+    val e = intercept[SparkException] {df2.collect()}.getMessage
+    assert(e.contains("""Schema "DUMMY" not found"""))
+
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW test_sessionInitStatement
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$urlWithUserAndPass',
+         |dbtable '(SELECT NVL(@MYTESTVAR1, -1), NVL(@MYTESTVAR2, -1))',
+         |sessionInitStatement 'SET @MYTESTVAR1 21519; SET @MYTESTVAR2 1234')
+       """.stripMargin)
+
+      val df3 = sql("SELECT * FROM test_sessionInitStatement")
+      assert(df3.collect() === Array(Row(21519, 1234)))
+    }
+
+  test("jdbc data source shouldn't have unnecessary metadata in its schema") {
+    val schema = StructType(Seq(
+      StructField("NAME", StringType, true), StructField("THEID", IntegerType, true)))
+
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("DbTaBle", "TEST.PEOPLE")
+      .load()
+    assert(df.schema === schema)
+
+    withTempView("people_view") {
+      sql(
+        s"""
+          |CREATE TEMPORARY VIEW people_view
+          |USING org.apache.spark.sql.jdbc
+          |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass')
+        """.stripMargin.replaceAll("\n", " "))
+
+      assert(sql("select * from people_view").schema === schema)
+    }
+  }
+
+  test("SPARK-23856 Spark jdbc setQueryTimeout option") {
+    val numJoins = 100
+    val longRunningQuery =
+      s"SELECT t0.NAME AS c0, ${(1 to numJoins).map(i => s"t$i.NAME AS c$i").mkString(", ")} " +
+        s"FROM test.people t0 ${(1 to numJoins).map(i => s"join test.people t$i").mkString(" ")}"
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("dbtable", s"($longRunningQuery)")
+      .option("queryTimeout", 1)
+      .load()
+    val errMsg = intercept[SparkException] {
+      df.collect()
+    }.getMessage
+    assert(errMsg.contains("Statement was canceled or the session timed out"))
+  }
+
+  test("SPARK-24327 verify and normalize a partition column based on a JDBC resolved schema") {
+    def testJdbcParitionColumn(partColName: String, expectedColumnName: String): Unit = {
+      val df = spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", "TEST.PARTITION")
+        .option("partitionColumn", partColName)
+        .option("lowerBound", 1)
+        .option("upperBound", 4)
+        .option("numPartitions", 3)
+        .load()
+
+      val quotedPrtColName = testH2Dialect.quoteIdentifier(expectedColumnName)
+      df.logicalPlan match {
+        case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+          val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+          assert(whereClauses === Set(
+            s"$quotedPrtColName < 2 or $quotedPrtColName is null",
+            s"$quotedPrtColName >= 2 AND $quotedPrtColName < 3",
+            s"$quotedPrtColName >= 3"))
+      }
+    }
+
+    testJdbcParitionColumn("THEID", "THEID")
+    testJdbcParitionColumn("\"THEID\"", "THEID")
+    withSQLConf("spark.sql.caseSensitive" -> "false") {
+      testJdbcParitionColumn("ThEiD", "THEID")
+    }
+    testJdbcParitionColumn("THE ID", "THE ID")
+
+    def testIncorrectJdbcPartitionColumn(partColName: String): Unit = {
+      val errMsg = intercept[AnalysisException] {
+        testJdbcParitionColumn(partColName, "THEID")
+      }.getMessage
+      assert(errMsg.contains(s"User-defined partition column $partColName not found " +
+        "in the JDBC relation:"))
+    }
+
+    testIncorrectJdbcPartitionColumn("NoExistingColumn")
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      testIncorrectJdbcPartitionColumn(testH2Dialect.quoteIdentifier("ThEiD"))
+    }
+  }
+
+  test("query JDBC option - negative tests") {
+    val query = "SELECT * FROM  test.people WHERE theid = 1"
+    // load path
+    val e1 = intercept[RuntimeException] {
+      val df = spark.read.format("jdbc")
+        .option("Url", urlWithUserAndPass)
+        .option("query", query)
+        .option("dbtable", "test.people")
+        .load()
+    }.getMessage
+    assert(e1.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    // jdbc api path
+    val properties = new Properties()
+    properties.setProperty(JDBCOptions.JDBC_QUERY_STRING, query)
+    val e2 = intercept[RuntimeException] {
+      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
+    }.getMessage
+    assert(e2.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    val e3 = intercept[RuntimeException] {
+      sql(
+        s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', query '$query', dbtable 'TEST.PEOPLE',
+         |         user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
+      }.getMessage
+    assert(e3.contains("Both 'dbtable' and 'query' can not be specified at the same time."))
+
+    val e4 = intercept[RuntimeException] {
+      val df = spark.read.format("jdbc")
+        .option("Url", urlWithUserAndPass)
+        .option("query", "")
+        .load()
+    }.getMessage
+    assert(e4.contains("Option `query` can not be empty."))
+
+    // Option query and partitioncolumn are not allowed together.
+    val expectedErrorMsg =
+      s"""
+         |Options 'query' and 'partitionColumn' can not be specified together.
+         |Please define the query using `dbtable` option instead and make sure to qualify
+         |the partition columns using the supplied subquery alias to resolve any ambiguity.
+         |Example :
+         |spark.read.format("jdbc")
+         |  .option("url", jdbcUrl)
+         |  .option("dbtable", "(select c1, c2 from t1) as subq")
+         |  .option("partitionColumn", "c1")
+         |  .option("lowerBound", "1")
+         |  .option("upperBound", "100")
+         |  .option("numPartitions", "3")
+         |  .load()
+     """.stripMargin
+    val e5 = intercept[RuntimeException] {
+      sql(
+        s"""
+           |CREATE OR REPLACE TEMPORARY VIEW queryOption
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (url '$url', query '$query', user 'testUser', password 'testPass',
+           |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
+       """.stripMargin.replaceAll("\n", " "))
+    }.getMessage
+    assert(e5.contains(expectedErrorMsg))
+  }
+
+  test("query JDBC option") {
+    val query = "SELECT name, theid FROM  test.people WHERE theid = 1"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("query", query)
+      .load()
+    checkAnswer(
+      df,
+      Row("fred", 1) :: Nil)
+
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', query '$query', user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
+
+    checkAnswer(
+      sql("select name, theid from queryOption"),
+      Row("fred", 1) :: Nil)
+  }
+
+  test("SPARK-22814 support date/timestamp types in partitionColumn") {
+    val expectedResult = Seq(
+      ("2018-07-06", "2018-07-06 05:50:00.0"),
+      ("2018-07-06", "2018-07-06 08:10:08.0"),
+      ("2018-07-08", "2018-07-08 13:32:01.0"),
+      ("2018-07-12", "2018-07-12 09:51:15.0")
+    ).map { case (date, timestamp) =>
+      Row(Date.valueOf(date), Timestamp.valueOf(timestamp))
+    }
+
+    // DateType partition column
+    val df1 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.DATETIME")
+      .option("partitionColumn", "d")
+      .option("lowerBound", "2018-07-06")
+      .option("upperBound", "2018-07-20")
+      .option("numPartitions", 3)
+      .load()
+
+    df1.logicalPlan match {
+      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+        val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+        assert(whereClauses === Set(
+          """"D" < '2018-07-10' or "D" is null""",
+          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
+          """"D" >= '2018-07-14'"""))
+    }
+    checkAnswer(df1, expectedResult)
+
+    // TimestampType partition column
+    val df2 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.DATETIME")
+      .option("partitionColumn", "t")
+      .option("lowerBound", "2018-07-04 03:30:00.0")
+      .option("upperBound", "2018-07-27 14:11:05.0")
+      .option("numPartitions", 2)
+      .load()
+
+    df2.logicalPlan match {
+      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+        val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+        assert(whereClauses === Set(
+          """"T" < '2018-07-15 20:50:32.5' or "T" is null""",
+          """"T" >= '2018-07-15 20:50:32.5'"""))
+    }
+    checkAnswer(df2, expectedResult)
+  }
+
+  test("throws an exception for unsupported partition column types") {
+    val errMsg = intercept[AnalysisException] {
+      spark.read.format("jdbc")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", "TEST.PEOPLE")
+        .option("partitionColumn", "name")
+        .option("lowerBound", "aaa")
+        .option("upperBound", "zzz")
+        .option("numPartitions", 2)
+        .load()
+    }.getMessage
+    assert(errMsg.contains(
+      "Partition column type should be numeric, date, or timestamp, but string found."))
+  }
+
+  test("SPARK-24288: Enable preventing predicate pushdown") {
+    val table = "test.people"
+
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("dbTable", table)
+      .option("pushDownPredicate", false)
+      .load()
+      .filter("theid = 1")
+      .select("name", "theid")
+    checkAnswer(
+      checkNotPushdown(df),
+      Row("fred", 1) :: Nil)
+
+    // pushDownPredicate option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW predicateOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$urlWithUserAndPass', dbTable '$table', pushDownPredicate 'false')
+       """.stripMargin.replaceAll("\n", " "))
+    checkAnswer(
+      checkNotPushdown(sql("SELECT name, theid FROM predicateOption WHERE theid = 1")),
+      Row("fred", 1) :: Nil)
   }
 }

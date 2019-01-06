@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -90,6 +91,31 @@ object Cast {
   }
 
   /**
+   * Return true if we need to use the `timeZone` information casting `from` type to `to` type.
+   * The patterns matched reflect the current implementation in the Cast node.
+   * c.f. usage of `timeZone` in:
+   * * Cast.castToString
+   * * Cast.castToDate
+   * * Cast.castToTimestamp
+   */
+  def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (StringType, TimestampType) => true
+    case (DateType, TimestampType) => true
+    case (TimestampType, StringType) => true
+    case (TimestampType, DateType) => true
+    case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
+    case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
+      needsTimeZone(fromKey, toKey) || needsTimeZone(fromValue, toValue)
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).exists {
+          case (fromField, toField) =>
+            needsTimeZone(fromField.dataType, toField.dataType)
+        }
+    case _ => false
+  }
+
+  /**
    * Return true iff we may truncate during casting `from` type to `to` type. e.g. long -> int,
    * timestamp -> date.
    */
@@ -108,6 +134,35 @@ object Cast {
     toPrecedence > 0 && fromPrecedence > toPrecedence
   }
 
+  /**
+   * Returns true iff we can safely cast the `from` type to `to` type without any truncating or
+   * precision lose, e.g. int -> long, date -> timestamp.
+   */
+  def canSafeCast(from: AtomicType, to: AtomicType): Boolean = (from, to) match {
+    case _ if from == to => true
+    case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
+    case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
+    case (from, to) if legalNumericPrecedence(from, to) => true
+    case (DateType, TimestampType) => true
+    case (_, StringType) => true
+    case _ => false
+  }
+
+  private def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
+    val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
+    val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
+    fromPrecedence >= 0 && fromPrecedence < toPrecedence
+  }
+
+  def canNullSafeCastToDecimal(from: DataType, to: DecimalType): Boolean = from match {
+    case from: BooleanType if to.isWiderThan(DecimalType.BooleanDecimal) => true
+    case from: NumericType if to.isWiderThan(from) => true
+    case from: DecimalType =>
+      // truncating or precision lose
+      (to.precision - to.scale) > (from.precision - from.scale)
+    case _ => false  // overflow
+  }
+
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
     case (NullType, _) => true
     case (_, _) if from == to => false
@@ -123,12 +178,12 @@ object Cast {
     case (DateType, _) => true
     case (_, CalendarIntervalType) => true
 
-    case (_, _: DecimalType) => true  // overflow
+    case (_, to: DecimalType) if !canNullSafeCastToDecimal(from, to) => true
     case (_: FractionalType, _: IntegralType) => true  // NaN, infinity
     case _ => false
   }
 
-  private def resolvableNullability(from: Boolean, to: Boolean) = !from || to
+  def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
 }
 
 /**
@@ -139,7 +194,7 @@ object Cast {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('10' as int);
        10
@@ -156,7 +211,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
-        s"cannot cast ${child.dataType} to $dataType")
+        s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}")
     }
   }
 
@@ -164,6 +219,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
+
+  // When this cast involves TimeZone, it's only resolved if the timeZoneId is set;
+  // Otherwise behave like Expression.resolved.
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
+
+  private[this] def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
@@ -174,6 +236,85 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
     case TimestampType => buildCast[Long](_,
       t => UTF8String.fromString(DateTimeUtils.timestampToString(t, timeZone)))
+    case ArrayType(et, _) =>
+      buildCast[ArrayData](_, array => {
+        val builder = new UTF8StringBuilder
+        builder.append("[")
+        if (array.numElements > 0) {
+          val toUTF8String = castToString(et)
+          if (!array.isNullAt(0)) {
+            builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < array.numElements) {
+            builder.append(",")
+            if (!array.isNullAt(i)) {
+              builder.append(" ")
+              builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.build()
+      })
+    case MapType(kt, vt, _) =>
+      buildCast[MapData](_, map => {
+        val builder = new UTF8StringBuilder
+        builder.append("[")
+        if (map.numElements > 0) {
+          val keyArray = map.keyArray()
+          val valueArray = map.valueArray()
+          val keyToUTF8String = castToString(kt)
+          val valueToUTF8String = castToString(vt)
+          builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
+          builder.append(" ->")
+          if (!valueArray.isNullAt(0)) {
+            builder.append(" ")
+            builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < map.numElements) {
+            builder.append(", ")
+            builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
+            builder.append(" ->")
+            if (!valueArray.isNullAt(i)) {
+              builder.append(" ")
+              builder.append(valueToUTF8String(valueArray.get(i, vt))
+                .asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.build()
+      })
+    case StructType(fields) =>
+      buildCast[InternalRow](_, row => {
+        val builder = new UTF8StringBuilder
+        builder.append("[")
+        if (row.numFields > 0) {
+          val st = fields.map(_.dataType)
+          val toUTF8StringFuncs = st.map(castToString)
+          if (!row.isNullAt(0)) {
+            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < row.numFields) {
+            builder.append(",")
+            if (!row.isNullAt(i)) {
+              builder.append(" ")
+              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.build()
+      })
+    case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
+    case udt: UserDefinedType[_] =>
+      buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -355,10 +496,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   /**
    * Create new `Decimal` with precision and scale given in `decimalType` (if any),
    * returning null if it overflows or creating a new `value` and returning it if successful.
-   *
    */
   private[this] def toPrecision(value: Decimal, decimalType: DecimalType): Decimal =
-    value.toPrecision(decimalType.precision, decimalType.scale).orNull
+    value.toPrecision(decimalType.precision, decimalType.scale)
 
 
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
@@ -450,15 +590,15 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
     // TODO: Could be faster?
-    val newRow = new GenericInternalRow(from.fields.length)
     buildCast[InternalRow](_, row => {
+      val newRow = new GenericInternalRow(from.fields.length)
       var i = 0
       while (i < row.numFields) {
         newRow.update(i,
           if (row.isNullAt(i)) null else castFuncs(i)(row.get(i, from.apply(i).dataType)))
         i += 1
       }
-      newRow.copy()
+      newRow
     })
   }
 
@@ -513,21 +653,22 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
+
     ev.copy(code = eval.code +
       castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
 
-  // three function arguments are: child.primitive, result.primitive and result.isNull
-  // it returns the code snippets to be put in null safe evaluation region
-  private[this] type CastFunction = (String, String, String) => String
+  // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
+  // in parameter list, because the returned code will be put in null safe evaluation region.
+  private[this] type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
 
   private[this] def nullSafeCastFunction(
       from: DataType,
       to: DataType,
       ctx: CodegenContext): CastFunction = to match {
 
-    case _ if from == NullType => (c, evPrim, evNull) => s"$evNull = true;"
-    case _ if to == from => (c, evPrim, evNull) => s"$evPrim = $c;"
+    case _ if from == NullType => (c, evPrim, evNull) => code"$evNull = true;"
+    case _ if to == from => (c, evPrim, evNull) => code"$evPrim = $c;"
     case StringType => castToStringCode(from, ctx)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
@@ -548,51 +689,223 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
     case udt: UserDefinedType[_]
       if udt.userClass == from.asInstanceOf[UserDefinedType[_]].userClass =>
-      (c, evPrim, evNull) => s"$evPrim = $c;"
+      (c, evPrim, evNull) => code"$evPrim = $c;"
     case _: UserDefinedType[_] =>
       throw new SparkException(s"Cannot cast $from to $to.")
   }
 
-  // Since we need to cast child expressions recursively inside ComplexTypes, such as Map's
+  // Since we need to cast input expressions recursively inside ComplexTypes, such as Map's
   // Key and Value, Struct's field, we need to name out all the variable names involved in a cast.
-  private[this] def castCode(ctx: CodegenContext, childPrim: String, childNull: String,
-    resultPrim: String, resultNull: String, resultType: DataType, cast: CastFunction): String = {
-    s"""
-      boolean $resultNull = $childNull;
-      ${ctx.javaType(resultType)} $resultPrim = ${ctx.defaultValue(resultType)};
-      if (!$childNull) {
-        ${cast(childPrim, resultPrim, resultNull)}
+  private[this] def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
+    result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
+    val javaType = JavaCode.javaType(resultType)
+    code"""
+      boolean $resultIsNull = $inputIsNull;
+      $javaType $result = ${CodeGenerator.defaultValue(resultType)};
+      if (!$inputIsNull) {
+        ${cast(input, result, resultIsNull)}
       }
     """
+  }
+
+  private def writeArrayToStringBuilder(
+      et: DataType,
+      array: ExprValue,
+      buffer: ExprValue,
+      ctx: CodegenContext): Block = {
+    val elementToStringCode = castToStringCode(et, ctx)
+    val funcName = ctx.freshName("elementToString")
+    val element = JavaCode.variable("element", et)
+    val elementStr = JavaCode.variable("elementStr", StringType)
+    val elementToStringFunc = inline"${ctx.addNewFunction(funcName,
+      s"""
+         |private UTF8String $funcName(${CodeGenerator.javaType(et)} $element) {
+         |  UTF8String $elementStr = null;
+         |  ${elementToStringCode(element, elementStr, null /* resultIsNull won't be used */)}
+         |  return elementStr;
+         |}
+       """.stripMargin)}"
+
+    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
+    code"""
+       |$buffer.append("[");
+       |if ($array.numElements() > 0) {
+       |  if (!$array.isNullAt(0)) {
+       |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
+       |  }
+       |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
+       |    $buffer.append(",");
+       |    if (!$array.isNullAt($loopIndex)) {
+       |      $buffer.append(" ");
+       |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
+       |    }
+       |  }
+       |}
+       |$buffer.append("]");
+     """.stripMargin
+  }
+
+  private def writeMapToStringBuilder(
+      kt: DataType,
+      vt: DataType,
+      map: ExprValue,
+      buffer: ExprValue,
+      ctx: CodegenContext): Block = {
+
+    def dataToStringFunc(func: String, dataType: DataType) = {
+      val funcName = ctx.freshName(func)
+      val dataToStringCode = castToStringCode(dataType, ctx)
+      val data = JavaCode.variable("data", dataType)
+      val dataStr = JavaCode.variable("dataStr", StringType)
+      val functionCall = ctx.addNewFunction(funcName,
+        s"""
+           |private UTF8String $funcName(${CodeGenerator.javaType(dataType)} $data) {
+           |  UTF8String $dataStr = null;
+           |  ${dataToStringCode(data, dataStr, null /* resultIsNull won't be used */)}
+           |  return dataStr;
+           |}
+         """.stripMargin)
+      inline"$functionCall"
+    }
+
+    val keyToStringFunc = dataToStringFunc("keyToString", kt)
+    val valueToStringFunc = dataToStringFunc("valueToString", vt)
+    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
+    val mapKeyArray = JavaCode.expression(s"$map.keyArray()", classOf[ArrayData])
+    val mapValueArray = JavaCode.expression(s"$map.valueArray()", classOf[ArrayData])
+    val getMapFirstKey = CodeGenerator.getValue(mapKeyArray, kt, JavaCode.literal("0", IntegerType))
+    val getMapFirstValue = CodeGenerator.getValue(mapValueArray, vt,
+      JavaCode.literal("0", IntegerType))
+    val getMapKeyArray = CodeGenerator.getValue(mapKeyArray, kt, loopIndex)
+    val getMapValueArray = CodeGenerator.getValue(mapValueArray, vt, loopIndex)
+    code"""
+       |$buffer.append("[");
+       |if ($map.numElements() > 0) {
+       |  $buffer.append($keyToStringFunc($getMapFirstKey));
+       |  $buffer.append(" ->");
+       |  if (!$map.valueArray().isNullAt(0)) {
+       |    $buffer.append(" ");
+       |    $buffer.append($valueToStringFunc($getMapFirstValue));
+       |  }
+       |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
+       |    $buffer.append(", ");
+       |    $buffer.append($keyToStringFunc($getMapKeyArray));
+       |    $buffer.append(" ->");
+       |    if (!$map.valueArray().isNullAt($loopIndex)) {
+       |      $buffer.append(" ");
+       |      $buffer.append($valueToStringFunc($getMapValueArray));
+       |    }
+       |  }
+       |}
+       |$buffer.append("]");
+     """.stripMargin
+  }
+
+  private def writeStructToStringBuilder(
+      st: Seq[DataType],
+      row: ExprValue,
+      buffer: ExprValue,
+      ctx: CodegenContext): Block = {
+    val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
+      val fieldToStringCode = castToStringCode(ft, ctx)
+      val field = ctx.freshVariable("field", ft)
+      val fieldStr = ctx.freshVariable("fieldStr", StringType)
+      val javaType = JavaCode.javaType(ft)
+      code"""
+         |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
+         |if (!$row.isNullAt($i)) {
+         |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
+         |
+         |  // Append $i field into the string buffer
+         |  $javaType $field = ${CodeGenerator.getValue(row, ft, s"$i")};
+         |  UTF8String $fieldStr = null;
+         |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
+         |  $buffer.append($fieldStr);
+         |}
+       """.stripMargin
+    }
+
+    val writeStructCode = ctx.splitExpressions(
+      expressions = structToStringCode.map(_.code),
+      funcName = "fieldToString",
+      arguments = ("InternalRow", row.code) ::
+        (classOf[UTF8StringBuilder].getName, buffer.code) :: Nil)
+
+    code"""
+       |$buffer.append("[");
+       |$writeStructCode
+       |$buffer.append("]");
+     """.stripMargin
   }
 
   private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case BinaryType =>
-        (c, evPrim, evNull) => s"$evPrim = UTF8String.fromBytes($c);"
+        (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
       case DateType =>
-        (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
+        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c));"""
       case TimestampType =>
-        val tz = ctx.addReferenceMinorObj(timeZone)
-        (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
+        val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
+        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
+      case ArrayType(et, _) =>
+        (c, evPrim, evNull) => {
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
+          val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
+          code"""
+             |$bufferClass $buffer = new $bufferClass();
+             |$writeArrayElemCode;
+             |$evPrim = $buffer.build();
+           """.stripMargin
+        }
+      case MapType(kt, vt, _) =>
+        (c, evPrim, evNull) => {
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
+          val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
+          code"""
+             |$bufferClass $buffer = new $bufferClass();
+             |$writeMapElemCode;
+             |$evPrim = $buffer.build();
+           """.stripMargin
+        }
+      case StructType(fields) =>
+        (c, evPrim, evNull) => {
+          val row = ctx.freshVariable("row", classOf[InternalRow])
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
+          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
+          code"""
+             |InternalRow $row = $c;
+             |$bufferClass $buffer = new $bufferClass();
+             |$writeStructCode
+             |$evPrim = $buffer.build();
+           """.stripMargin
+        }
+      case pudt: PythonUserDefinedType => castToStringCode(pudt.sqlType, ctx)
+      case udt: UserDefinedType[_] =>
+        val udtRef = JavaCode.global(ctx.addReferenceObj("udt", udt), udt.sqlType)
+        (c, evPrim, evNull) => {
+          code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
+        }
       case _ =>
-        (c, evPrim, evNull) => s"$evPrim = UTF8String.fromString(String.valueOf($c));"
+        (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
   }
 
   private[this] def castToBinaryCode(from: DataType): CastFunction = from match {
     case StringType =>
-      (c, evPrim, evNull) => s"$evPrim = $c.getBytes();"
+      (c, evPrim, evNull) => code"$evPrim = $c.getBytes();"
   }
 
   private[this] def castToDateCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val intOpt = ctx.freshName("intOpt")
-      (c, evPrim, evNull) => s"""
+      val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
+      (c, evPrim, evNull) => code"""
         scala.Option<Integer> $intOpt =
           org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c);
         if ($intOpt.isDefined()) {
@@ -602,75 +915,85 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
        """
     case TimestampType =>
-      val tz = ctx.addReferenceMinorObj(timeZone)
+      val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
       (c, evPrim, evNull) =>
-        s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays($c / 1000L, $tz);"
+        code"""$evPrim =
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays($c / 1000L, $tz);"""
     case _ =>
-      (c, evPrim, evNull) => s"$evNull = true;"
+      (c, evPrim, evNull) => code"$evNull = true;"
   }
 
-  private[this] def changePrecision(d: String, decimalType: DecimalType,
-      evPrim: String, evNull: String): String =
-    s"""
-      if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
-        $evPrim = $d;
-      } else {
-        $evNull = true;
-      }
-    """
+  private[this] def changePrecision(d: ExprValue, decimalType: DecimalType,
+      evPrim: ExprValue, evNull: ExprValue, canNullSafeCast: Boolean): Block = {
+    if (canNullSafeCast) {
+      code"""
+         |$d.changePrecision(${decimalType.precision}, ${decimalType.scale});
+         |$evPrim = $d;
+       """.stripMargin
+    } else {
+      code"""
+         |if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
+         |  $evPrim = $d;
+         |} else {
+         |  $evNull = true;
+         |}
+       """.stripMargin
+    }
+  }
 
   private[this] def castToDecimalCode(
       from: DataType,
       target: DecimalType,
       ctx: CodegenContext): CastFunction = {
-    val tmp = ctx.freshName("tmpDecimal")
+    val tmp = ctx.freshVariable("tmpDecimal", classOf[Decimal])
+    val canNullSafeCast = Cast.canNullSafeCastToDecimal(from, target)
     from match {
       case StringType =>
         (c, evPrim, evNull) =>
-          s"""
+          code"""
             try {
               Decimal $tmp = Decimal.apply(new java.math.BigDecimal($c.toString()));
-              ${changePrecision(tmp, target, evPrim, evNull)}
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }
           """
       case BooleanType =>
         (c, evPrim, evNull) =>
-          s"""
+          code"""
             Decimal $tmp = $c ? Decimal.apply(1) : Decimal.apply(0);
-            ${changePrecision(tmp, target, evPrim, evNull)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
           """
       case DateType =>
         // date can't cast to decimal in Hive
-        (c, evPrim, evNull) => s"$evNull = true;"
+        (c, evPrim, evNull) => code"$evNull = true;"
       case TimestampType =>
         // Note that we lose precision here.
         (c, evPrim, evNull) =>
-          s"""
+          code"""
             Decimal $tmp = Decimal.apply(
               scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
-            ${changePrecision(tmp, target, evPrim, evNull)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
           """
       case DecimalType() =>
         (c, evPrim, evNull) =>
-          s"""
+          code"""
             Decimal $tmp = $c.clone();
-            ${changePrecision(tmp, target, evPrim, evNull)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
           """
       case x: IntegralType =>
         (c, evPrim, evNull) =>
-          s"""
+          code"""
             Decimal $tmp = Decimal.apply((long) $c);
-            ${changePrecision(tmp, target, evPrim, evNull)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
           """
       case x: FractionalType =>
         // All other numeric types can be represented precisely as Doubles
         (c, evPrim, evNull) =>
-          s"""
+          code"""
             try {
               Decimal $tmp = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
-              ${changePrecision(tmp, target, evPrim, evNull)}
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }
@@ -682,10 +1005,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val tz = ctx.addReferenceMinorObj(timeZone)
-      val longOpt = ctx.freshName("longOpt")
+      val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
+      val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
-        s"""
+        code"""
           scala.Option<Long> $longOpt =
             org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $tz);
           if ($longOpt.isDefined()) {
@@ -695,18 +1018,19 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           }
          """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0L;"
+      (c, evPrim, evNull) => code"$evPrim = $c ? 1L : 0L;"
     case _: IntegralType =>
-      (c, evPrim, evNull) => s"$evPrim = ${longToTimeStampCode(c)};"
+      (c, evPrim, evNull) => code"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
-      val tz = ctx.addReferenceMinorObj(timeZone)
+      val tz = JavaCode.global(ctx.addReferenceObj("timeZone", timeZone), timeZone.getClass)
       (c, evPrim, evNull) =>
-        s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c, $tz) * 1000;"
+        code"""$evPrim =
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c, $tz) * 1000;"""
     case DecimalType() =>
-      (c, evPrim, evNull) => s"$evPrim = ${decimalToTimestampCode(c)};"
+      (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
       (c, evPrim, evNull) =>
-        s"""
+        code"""
           if (Double.isNaN($c) || Double.isInfinite($c)) {
             $evNull = true;
           } else {
@@ -715,7 +1039,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         """
     case FloatType =>
       (c, evPrim, evNull) =>
-        s"""
+        code"""
           if (Float.isNaN($c) || Float.isInfinite($c)) {
             $evNull = true;
           } else {
@@ -727,7 +1051,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
-        s"""$evPrim = CalendarInterval.fromString($c.toString());
+        code"""$evPrim = CalendarInterval.fromString($c.toString());
            if(${evPrim} == null) {
              ${evNull} = true;
            }
@@ -735,18 +1059,21 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   }
 
-  private[this] def decimalToTimestampCode(d: String): String =
-    s"($d.toBigDecimal().bigDecimal().multiply(new java.math.BigDecimal(1000000L))).longValue()"
-  private[this] def longToTimeStampCode(l: String): String = s"$l * 1000000L"
-  private[this] def timestampToIntegerCode(ts: String): String =
-    s"java.lang.Math.floor((double) $ts / 1000000L)"
-  private[this] def timestampToDoubleCode(ts: String): String = s"$ts / 1000000.0"
+  private[this] def decimalToTimestampCode(d: ExprValue): Block = {
+    val block = inline"new java.math.BigDecimal(1000000L)"
+    code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
+  }
+  private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * 1000000L"
+  private[this] def timestampToIntegerCode(ts: ExprValue): Block =
+    code"java.lang.Math.floor((double) $ts / 1000000L)"
+  private[this] def timestampToDoubleCode(ts: ExprValue): Block =
+    code"$ts / 1000000.0"
 
   private[this] def castToBooleanCode(from: DataType): CastFunction = from match {
     case StringType =>
-      val stringUtils = StringUtils.getClass.getName.stripSuffix("$")
+      val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
       (c, evPrim, evNull) =>
-        s"""
+        code"""
           if ($stringUtils.isTrueString($c)) {
             $evPrim = true;
           } else if ($stringUtils.isFalseString($c)) {
@@ -756,123 +1083,123 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           }
         """
     case TimestampType =>
-      (c, evPrim, evNull) => s"$evPrim = $c != 0;"
+      (c, evPrim, evNull) => code"$evPrim = $c != 0;"
     case DateType =>
       // Hive would return null when cast from date to boolean
-      (c, evPrim, evNull) => s"$evNull = true;"
+      (c, evPrim, evNull) => code"$evNull = true;"
     case DecimalType() =>
-      (c, evPrim, evNull) => s"$evPrim = !$c.isZero();"
+      (c, evPrim, evNull) => code"$evPrim = !$c.isZero();"
     case n: NumericType =>
-      (c, evPrim, evNull) => s"$evPrim = $c != 0;"
+      (c, evPrim, evNull) => code"$evPrim = $c != 0;"
   }
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
-        s"$wrapper = new UTF8String.IntWrapper();")
+      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
-        s"""
+        code"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
           if ($c.toByte($wrapper)) {
             $evPrim = (byte) $wrapper.value;
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? (byte) 1 : (byte) 0;"
+      (c, evPrim, evNull) => code"$evPrim = $c ? (byte) 1 : (byte) 0;"
     case DateType =>
-      (c, evPrim, evNull) => s"$evNull = true;"
+      (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => s"$evPrim = (byte) ${timestampToIntegerCode(c)};"
+      (c, evPrim, evNull) => code"$evPrim = (byte) ${timestampToIntegerCode(c)};"
     case DecimalType() =>
-      (c, evPrim, evNull) => s"$evPrim = $c.toByte();"
+      (c, evPrim, evNull) => code"$evPrim = $c.toByte();"
     case x: NumericType =>
-      (c, evPrim, evNull) => s"$evPrim = (byte) $c;"
+      (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
   }
 
   private[this] def castToShortCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
-        s"$wrapper = new UTF8String.IntWrapper();")
+      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
-        s"""
+        code"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
           if ($c.toShort($wrapper)) {
             $evPrim = (short) $wrapper.value;
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? (short) 1 : (short) 0;"
+      (c, evPrim, evNull) => code"$evPrim = $c ? (short) 1 : (short) 0;"
     case DateType =>
-      (c, evPrim, evNull) => s"$evNull = true;"
+      (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => s"$evPrim = (short) ${timestampToIntegerCode(c)};"
+      (c, evPrim, evNull) => code"$evPrim = (short) ${timestampToIntegerCode(c)};"
     case DecimalType() =>
-      (c, evPrim, evNull) => s"$evPrim = $c.toShort();"
+      (c, evPrim, evNull) => code"$evPrim = $c.toShort();"
     case x: NumericType =>
-      (c, evPrim, evNull) => s"$evPrim = (short) $c;"
+      (c, evPrim, evNull) => code"$evPrim = (short) $c;"
   }
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
-        s"$wrapper = new UTF8String.IntWrapper();")
+      val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
-        s"""
+        code"""
+          UTF8String.IntWrapper $wrapper = new UTF8String.IntWrapper();
           if ($c.toInt($wrapper)) {
             $evPrim = $wrapper.value;
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1 : 0;"
+      (c, evPrim, evNull) => code"$evPrim = $c ? 1 : 0;"
     case DateType =>
-      (c, evPrim, evNull) => s"$evNull = true;"
+      (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => s"$evPrim = (int) ${timestampToIntegerCode(c)};"
+      (c, evPrim, evNull) => code"$evPrim = (int) ${timestampToIntegerCode(c)};"
     case DecimalType() =>
-      (c, evPrim, evNull) => s"$evPrim = $c.toInt();"
+      (c, evPrim, evNull) => code"$evPrim = $c.toInt();"
     case x: NumericType =>
-      (c, evPrim, evNull) => s"$evPrim = (int) $c;"
+      (c, evPrim, evNull) => code"$evPrim = (int) $c;"
   }
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
-      val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.LongWrapper", wrapper,
-        s"$wrapper = new UTF8String.LongWrapper();")
+      val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
 
       (c, evPrim, evNull) =>
-        s"""
+        code"""
+          UTF8String.LongWrapper $wrapper = new UTF8String.LongWrapper();
           if ($c.toLong($wrapper)) {
             $evPrim = $wrapper.value;
           } else {
             $evNull = true;
           }
+          $wrapper = null;
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0L;"
+      (c, evPrim, evNull) => code"$evPrim = $c ? 1L : 0L;"
     case DateType =>
-      (c, evPrim, evNull) => s"$evNull = true;"
+      (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => s"$evPrim = (long) ${timestampToIntegerCode(c)};"
+      (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToIntegerCode(c)};"
     case DecimalType() =>
-      (c, evPrim, evNull) => s"$evPrim = $c.toLong();"
+      (c, evPrim, evNull) => code"$evPrim = $c.toLong();"
     case x: NumericType =>
-      (c, evPrim, evNull) => s"$evPrim = (long) $c;"
+      (c, evPrim, evNull) => code"$evPrim = (long) $c;"
   }
 
   private[this] def castToFloatCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
-        s"""
+        code"""
           try {
             $evPrim = Float.valueOf($c.toString());
           } catch (java.lang.NumberFormatException e) {
@@ -880,21 +1207,21 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1.0f : 0.0f;"
+      (c, evPrim, evNull) => code"$evPrim = $c ? 1.0f : 0.0f;"
     case DateType =>
-      (c, evPrim, evNull) => s"$evNull = true;"
+      (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => s"$evPrim = (float) (${timestampToDoubleCode(c)});"
+      (c, evPrim, evNull) => code"$evPrim = (float) (${timestampToDoubleCode(c)});"
     case DecimalType() =>
-      (c, evPrim, evNull) => s"$evPrim = $c.toFloat();"
+      (c, evPrim, evNull) => code"$evPrim = $c.toFloat();"
     case x: NumericType =>
-      (c, evPrim, evNull) => s"$evPrim = (float) $c;"
+      (c, evPrim, evNull) => code"$evPrim = (float) $c;"
   }
 
   private[this] def castToDoubleCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
-        s"""
+        code"""
           try {
             $evPrim = Double.valueOf($c.toString());
           } catch (java.lang.NumberFormatException e) {
@@ -902,31 +1229,32 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           }
         """
     case BooleanType =>
-      (c, evPrim, evNull) => s"$evPrim = $c ? 1.0d : 0.0d;"
+      (c, evPrim, evNull) => code"$evPrim = $c ? 1.0d : 0.0d;"
     case DateType =>
-      (c, evPrim, evNull) => s"$evNull = true;"
+      (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => s"$evPrim = ${timestampToDoubleCode(c)};"
+      (c, evPrim, evNull) => code"$evPrim = ${timestampToDoubleCode(c)};"
     case DecimalType() =>
-      (c, evPrim, evNull) => s"$evPrim = $c.toDouble();"
+      (c, evPrim, evNull) => code"$evPrim = $c.toDouble();"
     case x: NumericType =>
-      (c, evPrim, evNull) => s"$evPrim = (double) $c;"
+      (c, evPrim, evNull) => code"$evPrim = (double) $c;"
   }
 
   private[this] def castArrayCode(
       fromType: DataType, toType: DataType, ctx: CodegenContext): CastFunction = {
     val elementCast = nullSafeCastFunction(fromType, toType, ctx)
-    val arrayClass = classOf[GenericArrayData].getName
-    val fromElementNull = ctx.freshName("feNull")
-    val fromElementPrim = ctx.freshName("fePrim")
-    val toElementNull = ctx.freshName("teNull")
-    val toElementPrim = ctx.freshName("tePrim")
-    val size = ctx.freshName("n")
-    val j = ctx.freshName("j")
-    val values = ctx.freshName("values")
+    val arrayClass = JavaCode.javaType(classOf[GenericArrayData])
+    val fromElementNull = ctx.freshVariable("feNull", BooleanType)
+    val fromElementPrim = ctx.freshVariable("fePrim", fromType)
+    val toElementNull = ctx.freshVariable("teNull", BooleanType)
+    val toElementPrim = ctx.freshVariable("tePrim", toType)
+    val size = ctx.freshVariable("n", IntegerType)
+    val j = ctx.freshVariable("j", IntegerType)
+    val values = ctx.freshVariable("values", classOf[Array[Object]])
+    val javaType = JavaCode.javaType(fromType)
 
     (c, evPrim, evNull) =>
-      s"""
+      code"""
         final int $size = $c.numElements();
         final Object[] $values = new Object[$size];
         for (int $j = 0; $j < $size; $j ++) {
@@ -934,8 +1262,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
             $values[$j] = null;
           } else {
             boolean $fromElementNull = false;
-            ${ctx.javaType(fromType)} $fromElementPrim =
-              ${ctx.getValue(c, fromType, j)};
+            $javaType $fromElementPrim =
+              ${CodeGenerator.getValue(c, fromType, j)};
             ${castCode(ctx, fromElementPrim,
               fromElementNull, toElementPrim, toElementNull, toType, elementCast)}
             if ($toElementNull) {
@@ -953,23 +1281,23 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val keysCast = castArrayCode(from.keyType, to.keyType, ctx)
     val valuesCast = castArrayCode(from.valueType, to.valueType, ctx)
 
-    val mapClass = classOf[ArrayBasedMapData].getName
+    val mapClass = JavaCode.javaType(classOf[ArrayBasedMapData])
 
-    val keys = ctx.freshName("keys")
-    val convertedKeys = ctx.freshName("convertedKeys")
-    val convertedKeysNull = ctx.freshName("convertedKeysNull")
+    val keys = ctx.freshVariable("keys", ArrayType(from.keyType))
+    val convertedKeys = ctx.freshVariable("convertedKeys", ArrayType(to.keyType))
+    val convertedKeysNull = ctx.freshVariable("convertedKeysNull", BooleanType)
 
-    val values = ctx.freshName("values")
-    val convertedValues = ctx.freshName("convertedValues")
-    val convertedValuesNull = ctx.freshName("convertedValuesNull")
+    val values = ctx.freshVariable("values", ArrayType(from.valueType))
+    val convertedValues = ctx.freshVariable("convertedValues", ArrayType(to.valueType))
+    val convertedValuesNull = ctx.freshVariable("convertedValuesNull", BooleanType)
 
     (c, evPrim, evNull) =>
-      s"""
+      code"""
         final ArrayData $keys = $c.keyArray();
         final ArrayData $values = $c.valueArray();
-        ${castCode(ctx, keys, "false",
+        ${castCode(ctx, keys, FalseLiteral,
           convertedKeys, convertedKeysNull, ArrayType(to.keyType), keysCast)}
-        ${castCode(ctx, values, "false",
+        ${castCode(ctx, values, FalseLiteral,
           convertedValues, convertedValuesNull, ArrayType(to.valueType), valuesCast)}
 
         $evPrim = new $mapClass($convertedKeys, $convertedValues);
@@ -982,40 +1310,45 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val fieldsCasts = from.fields.zip(to.fields).map {
       case (fromField, toField) => nullSafeCastFunction(fromField.dataType, toField.dataType, ctx)
     }
-    val rowClass = classOf[GenericInternalRow].getName
-    val result = ctx.freshName("result")
-    val tmpRow = ctx.freshName("tmpRow")
+    val tmpResult = ctx.freshVariable("tmpResult", classOf[GenericInternalRow])
+    val rowClass = JavaCode.javaType(classOf[GenericInternalRow])
+    val tmpInput = ctx.freshVariable("tmpInput", classOf[InternalRow])
 
     val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) =>
-      val fromFieldPrim = ctx.freshName("ffp")
-      val fromFieldNull = ctx.freshName("ffn")
-      val toFieldPrim = ctx.freshName("tfp")
-      val toFieldNull = ctx.freshName("tfn")
-      val fromType = ctx.javaType(from.fields(i).dataType)
-      s"""
-        boolean $fromFieldNull = $tmpRow.isNullAt($i);
+      val fromFieldPrim = ctx.freshVariable("ffp", from.fields(i).dataType)
+      val fromFieldNull = ctx.freshVariable("ffn", BooleanType)
+      val toFieldPrim = ctx.freshVariable("tfp", to.fields(i).dataType)
+      val toFieldNull = ctx.freshVariable("tfn", BooleanType)
+      val fromType = JavaCode.javaType(from.fields(i).dataType)
+      val setColumn = CodeGenerator.setColumn(tmpResult, to.fields(i).dataType, i, toFieldPrim)
+      code"""
+        boolean $fromFieldNull = $tmpInput.isNullAt($i);
         if ($fromFieldNull) {
-          $result.setNullAt($i);
+          $tmpResult.setNullAt($i);
         } else {
           $fromType $fromFieldPrim =
-            ${ctx.getValue(tmpRow, from.fields(i).dataType, i.toString)};
+            ${CodeGenerator.getValue(tmpInput, from.fields(i).dataType, i.toString)};
           ${castCode(ctx, fromFieldPrim,
             fromFieldNull, toFieldPrim, toFieldNull, to.fields(i).dataType, cast)}
           if ($toFieldNull) {
-            $result.setNullAt($i);
+            $tmpResult.setNullAt($i);
           } else {
-            ${ctx.setColumn(result, to.fields(i).dataType, i, toFieldPrim)};
+            $setColumn;
           }
         }
        """
-    }.mkString("\n")
+    }
+    val fieldsEvalCodes = ctx.splitExpressions(
+      expressions = fieldsEvalCode.map(_.code),
+      funcName = "castStruct",
+      arguments = ("InternalRow", tmpInput.code) :: (rowClass.code, tmpResult.code) :: Nil)
 
-    (c, evPrim, evNull) =>
-      s"""
-        final $rowClass $result = new $rowClass(${fieldsCasts.length});
-        final InternalRow $tmpRow = $c;
-        $fieldsEvalCode
-        $evPrim = $result.copy();
+    (input, result, resultIsNull) =>
+      code"""
+        final $rowClass $tmpResult = new $rowClass(${fieldsCasts.length});
+        final InternalRow $tmpInput = $input;
+        $fieldsEvalCodes
+        $result = $tmpResult;
       """
   }
 

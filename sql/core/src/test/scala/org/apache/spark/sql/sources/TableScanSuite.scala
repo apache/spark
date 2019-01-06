@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.sources
 
@@ -22,11 +22,14 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 class DefaultSource extends SimpleScanSource
 
+// This class is used by pyspark tests. If this class is modified/moved, make sure pyspark
+// tests still pass.
 class SimpleScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
@@ -247,32 +250,34 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
     assert(expectedSchema == spark.table("tableWithSchema").schema)
 
-    checkAnswer(
-      sql(
-        """SELECT
-          | `string$%Field`,
-          | cast(binaryField as string),
-          | booleanField,
-          | byteField,
-          | shortField,
-          | int_Field,
-          | `longField_:,<>=+/~^`,
-          | floatField,
-          | doubleField,
-          | decimalField1,
-          | decimalField2,
-          | dateField,
-          | timestampField,
-          | varcharField,
-          | charField,
-          | arrayFieldSimple,
-          | arrayFieldComplex,
-          | mapFieldSimple,
-          | mapFieldComplex,
-          | structFieldSimple,
-          | structFieldComplex FROM tableWithSchema""".stripMargin),
-      tableWithSchemaExpected
-    )
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+        checkAnswer(
+          sql(
+            """SELECT
+            | `string$%Field`,
+            | cast(binaryField as string),
+            | booleanField,
+            | byteField,
+            | shortField,
+            | int_Field,
+            | `longField_:,<>=+/~^`,
+            | floatField,
+            | doubleField,
+            | decimalField1,
+            | decimalField2,
+            | dateField,
+            | timestampField,
+            | varcharField,
+            | charField,
+            | arrayFieldSimple,
+            | arrayFieldComplex,
+            | mapFieldSimple,
+            | mapFieldComplex,
+            | structFieldSimple,
+            | structFieldComplex FROM tableWithSchema""".stripMargin),
+        tableWithSchemaExpected
+      )
+    }
   }
 
   sqlTest(

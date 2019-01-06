@@ -70,7 +70,7 @@ private[streaming] object StateMap {
 /** Implementation of StateMap interface representing an empty map */
 private[streaming] class EmptyStateMap[K, S] extends StateMap[K, S] {
   override def put(key: K, session: S, updateTime: Long): Unit = {
-    throw new NotImplementedError("put() should not be called on an EmptyStateMap")
+    throw new UnsupportedOperationException("put() should not be called on an EmptyStateMap")
   }
   override def get(key: K): Option[S] = None
   override def getByTime(threshUpdatedTime: Long): Iterator[(K, S, Long)] = Iterator.empty
@@ -364,7 +364,7 @@ private[streaming] object OpenHashMapBasedStateMap {
   }
 
   /**
-   * Internal class to represent a marker the demarkate the end of all state data in the
+   * Internal class to represent a marker that demarcates the end of all state data in the
    * serialized bytes.
    */
   class LimitMarker(val num: Int) extends Serializable

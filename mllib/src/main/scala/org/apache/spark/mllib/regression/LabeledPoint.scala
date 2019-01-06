@@ -17,13 +17,11 @@
 
 package org.apache.spark.mllib.regression
 
-import scala.beans.BeanInfo
-
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.{LabeledPoint => NewLabeledPoint}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.NumericParser
-import org.apache.spark.SparkException
 
 /**
  * Class that represents the features and labels of a data point.
@@ -32,10 +30,14 @@ import org.apache.spark.SparkException
  * @param features List of features for this data point.
  */
 @Since("0.8.0")
-@BeanInfo
 case class LabeledPoint @Since("1.0.0") (
     @Since("0.8.0") label: Double,
     @Since("1.0.0") features: Vector) {
+
+  def getLabel: Double = label
+
+  def getFeatures: Vector = features
+
   override def toString: String = {
     s"($label,$features)"
   }

@@ -22,14 +22,14 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.Files
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
@@ -633,7 +633,12 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("port conflict") {
     val anotherEnv = createRpcEnv(new SparkConf(), "remote", env.address.port)
-    assert(anotherEnv.address.port != env.address.port)
+    try {
+      assert(anotherEnv.address.port != env.address.port)
+    } finally {
+      anotherEnv.shutdown()
+      anotherEnv.awaitTermination()
+    }
   }
 
   private def testSend(conf: SparkConf): Unit = {
@@ -817,63 +822,66 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("file server") {
-    val conf = new SparkConf()
-    val tempDir = Utils.createTempDir()
-    val file = new File(tempDir, "file")
-    Files.write(UUID.randomUUID().toString(), file, UTF_8)
-    val fileWithSpecialChars = new File(tempDir, "file name")
-    Files.write(UUID.randomUUID().toString(), fileWithSpecialChars, UTF_8)
-    val empty = new File(tempDir, "empty")
-    Files.write("", empty, UTF_8);
-    val jar = new File(tempDir, "jar")
-    Files.write(UUID.randomUUID().toString(), jar, UTF_8)
+    withTempDir { tempDir =>
+      withTempDir { destDir =>
+        val conf = new SparkConf()
 
-    val dir1 = new File(tempDir, "dir1")
-    assert(dir1.mkdir())
-    val subFile1 = new File(dir1, "file1")
-    Files.write(UUID.randomUUID().toString(), subFile1, UTF_8)
+        val file = new File(tempDir, "file")
+        Files.write(UUID.randomUUID().toString(), file, UTF_8)
+        val fileWithSpecialChars = new File(tempDir, "file name")
+        Files.write(UUID.randomUUID().toString(), fileWithSpecialChars, UTF_8)
+        val empty = new File(tempDir, "empty")
+        Files.write("", empty, UTF_8);
+        val jar = new File(tempDir, "jar")
+        Files.write(UUID.randomUUID().toString(), jar, UTF_8)
 
-    val dir2 = new File(tempDir, "dir2")
-    assert(dir2.mkdir())
-    val subFile2 = new File(dir2, "file2")
-    Files.write(UUID.randomUUID().toString(), subFile2, UTF_8)
+        val dir1 = new File(tempDir, "dir1")
+        assert(dir1.mkdir())
+        val subFile1 = new File(dir1, "file1")
+        Files.write(UUID.randomUUID().toString(), subFile1, UTF_8)
 
-    val fileUri = env.fileServer.addFile(file)
-    val fileWithSpecialCharsUri = env.fileServer.addFile(fileWithSpecialChars)
-    val emptyUri = env.fileServer.addFile(empty)
-    val jarUri = env.fileServer.addJar(jar)
-    val dir1Uri = env.fileServer.addDirectory("/dir1", dir1)
-    val dir2Uri = env.fileServer.addDirectory("/dir2", dir2)
+        val dir2 = new File(tempDir, "dir2")
+        assert(dir2.mkdir())
+        val subFile2 = new File(dir2, "file2")
+        Files.write(UUID.randomUUID().toString(), subFile2, UTF_8)
 
-    // Try registering directories with invalid names.
-    Seq("/files", "/jars").foreach { uri =>
-      intercept[IllegalArgumentException] {
-        env.fileServer.addDirectory(uri, dir1)
-      }
-    }
+        val fileUri = env.fileServer.addFile(file)
+        val fileWithSpecialCharsUri = env.fileServer.addFile(fileWithSpecialChars)
+        val emptyUri = env.fileServer.addFile(empty)
+        val jarUri = env.fileServer.addJar(jar)
+        val dir1Uri = env.fileServer.addDirectory("/dir1", dir1)
+        val dir2Uri = env.fileServer.addDirectory("/dir2", dir2)
 
-    val destDir = Utils.createTempDir()
-    val sm = new SecurityManager(conf)
-    val hc = SparkHadoopUtil.get.conf
+        // Try registering directories with invalid names.
+        Seq("/files", "/jars").foreach { uri =>
+          intercept[IllegalArgumentException] {
+            env.fileServer.addDirectory(uri, dir1)
+          }
+        }
 
-    val files = Seq(
-      (file, fileUri),
-      (fileWithSpecialChars, fileWithSpecialCharsUri),
-      (empty, emptyUri),
-      (jar, jarUri),
-      (subFile1, dir1Uri + "/file1"),
-      (subFile2, dir2Uri + "/file2"))
-    files.foreach { case (f, uri) =>
-      val destFile = new File(destDir, f.getName())
-      Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
-      assert(Files.equal(f, destFile))
-    }
+        val sm = new SecurityManager(conf)
+        val hc = SparkHadoopUtil.get.conf
 
-    // Try to download files that do not exist.
-    Seq("files", "jars", "dir1").foreach { root =>
-      intercept[Exception] {
-        val uri = env.address.toSparkURL + s"/$root/doesNotExist"
-        Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
+        val files = Seq(
+          (file, fileUri),
+          (fileWithSpecialChars, fileWithSpecialCharsUri),
+          (empty, emptyUri),
+          (jar, jarUri),
+          (subFile1, dir1Uri + "/file1"),
+          (subFile2, dir2Uri + "/file2"))
+        files.foreach { case (f, uri) =>
+          val destFile = new File(destDir, f.getName())
+          Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
+          assert(Files.equal(f, destFile))
+        }
+
+        // Try to download files that do not exist.
+        Seq("files", "jars", "dir1").foreach { root =>
+          intercept[Exception] {
+            val uri = env.address.toSparkURL + s"/$root/doesNotExist"
+            Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
+          }
+        }
       }
     }
   }

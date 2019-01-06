@@ -12,7 +12,7 @@ redirect_from: "building-with-maven.html"
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.3.9 or newer and Java 8+.
+Building Spark using Maven requires Maven 3.6.0 and Java 8.
 Note that support for Java 7 was removed as of Spark 2.2.0.
 
 ### Setting up Maven's Memory Usage
@@ -45,29 +45,24 @@ Other build examples can be found below.
 ## Building a Runnable Distribution
 
 To create a Spark distribution like those distributed by the
-[Spark Downloads](http://spark.apache.org/downloads.html) page, and that is laid out so as
+[Spark Downloads](https://spark.apache.org/downloads.html) page, and that is laid out so as
 to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phadoop-2.7 -Phive -Phive-thriftserver -Pmesos -Pyarn
+    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pmesos -Pyarn -Pkubernetes
 
 This will build Spark distribution along with Python pip and R packages. For more information on usage, run `./dev/make-distribution.sh --help`
 
 ## Specifying the Hadoop Version and Enabling YARN
 
 You can specify the exact version of Hadoop to compile against through the `hadoop.version` property. 
-If unset, Spark will build against Hadoop 2.6.X by default.
 
 You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different 
 from `hadoop.version`.
 
-Examples:
+Example:
 
-    # Apache Hadoop 2.6.X
-    ./build/mvn -Pyarn -DskipTests clean package
-
-    # Apache Hadoop 2.7.X and later
-    ./build/mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.3 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
@@ -91,23 +86,19 @@ like ZooKeeper and Hadoop itself.
 
     ./build/mvn -Pmesos -DskipTests clean package
 
-## Building for Scala 2.10
-To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` property:
+## Building with Kubernetes support
 
-    ./dev/change-scala-version.sh 2.10
-    ./build/mvn -Pyarn -Dscala-2.10 -DskipTests clean package
-
-Note that support for Scala 2.10 is deprecated as of Spark 2.1.0 and may be removed in Spark 2.2.0.
+    ./build/mvn -Pkubernetes -DskipTests clean package
 
 ## Building submodules individually
 
-It's possible to build Spark sub-modules using the `mvn -pl` option.
+It's possible to build Spark submodules using the `mvn -pl` option.
 
 For instance, you can build the Spark Streaming module using:
 
-    ./build/mvn -pl :spark-streaming_2.11 clean install
+    ./build/mvn -pl :spark-streaming_{{site.SCALA_BINARY_VERSION}} clean install
 
-where `spark-streaming_2.11` is the `artifactId` as defined in `streaming/pom.xml` file.
+where `spark-streaming_{{site.SCALA_BINARY_VERSION}}` is the `artifactId` as defined in `streaming/pom.xml` file.
 
 ## Continuous Compilation
 
@@ -119,7 +110,7 @@ should run continuous compilation (i.e. wait for changes). However, this has not
 extensively. A couple of gotchas to note:
 
 * it only scans the paths `src/main` and `src/test` (see
-[docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
+[docs](http://davidb.github.io/scala-maven-plugin/example_cc.html)), so it will only work
 from within certain submodules that have that structure.
 
 * you'll typically need to run `mvn install` from the project root for compilation within
@@ -152,7 +143,7 @@ prompt.
 Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc
 (for developers who build with Maven) or by avoiding re-compilation of the assembly JAR (for
 developers who build with SBT).  For more information about how to do this, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html#reducing-build-times).
+[Useful Developer Tools page](https://spark.apache.org/developer-tools.html#reducing-build-times).
 
 ## Encrypted Filesystems
 
@@ -170,7 +161,7 @@ to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/
 ## IntelliJ IDEA or Eclipse
 
 For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html).
+[Useful Developer Tools page](https://spark.apache.org/developer-tools.html).
 
 
 # Running Tests
@@ -191,7 +182,7 @@ The following is an example of a command to run the tests:
 ## Running Individual Tests
 
 For information about how to run individual tests, refer to the
-[Useful Developer Tools page](http://spark.apache.org/developer-tools.html#running-individual-tests).
+[Useful Developer Tools page](https://spark.apache.org/developer-tools.html#running-individual-tests).
 
 ## PySpark pip installable
 
@@ -203,24 +194,31 @@ If you are building Spark for use in a Python environment and you wish to pip in
 
 Alternatively, you can also run make-distribution with the --pip option.
 
-## PySpark Tests with Maven
+## PySpark Tests with Maven or SBT
 
 If you are building PySpark and wish to run the PySpark tests you will need to build Spark with Hive support.
 
     ./build/mvn -DskipTests clean package -Phive
     ./python/run-tests
 
+If you are building PySpark with SBT and wish to run the PySpark tests, you will need to build Spark with Hive support and also build the test components:
+
+    ./build/sbt -Phive clean package
+    ./build/sbt test:compile
+    ./python/run-tests
+
 The run-tests script also can be limited to a specific Python version or a specific module
 
     ./python/run-tests --python-executables=python --modules=pyspark-sql
 
-**Note:** You can also run Python tests with an sbt build, provided you build Spark with Hive support.
-
 ## Running R Tests
 
-To run the SparkR tests you will need to install the R package `testthat`
-(run `install.packages(testthat)` from R shell).  You can run just the SparkR tests using
-the command:
+To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
+
+    R -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='http://cran.us.r-project.org')"
+    R -e "devtools::install_version('testthat', version = '1.0.2', repos='http://cran.us.r-project.org')"
+
+You can run just the SparkR tests using the command:
 
     ./R/run-tests.sh
 
@@ -232,8 +230,52 @@ Once installed, the `docker` service needs to be started, if not already running
 On Linux, this can be done by `sudo service docker start`.
 
     ./build/mvn install -DskipTests
-    ./build/mvn -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
+    ./build/mvn test -Pdocker-integration-tests -pl :spark-docker-integration-tests_{{site.SCALA_BINARY_VERSION}}
 
 or
 
     ./build/sbt docker-integration-tests/test
+
+## Change Scala Version
+
+To build Spark using another supported Scala version, please change the major Scala version using (e.g. 2.11):
+
+    ./dev/change-scala-version.sh 2.11
+
+For Maven, please enable the profile (e.g. 2.11):
+
+    ./build/mvn -Pscala-2.11 compile
+
+For SBT, specify a complete scala version using (e.g. 2.11.12):
+
+    ./build/sbt -Dscala.version=2.11.12
+
+Otherwise, the sbt-pom-reader plugin will use the `scala.version` specified in the spark-parent pom.
+
+## Running Jenkins tests with Github Enterprise
+
+To run tests with Jenkins:
+
+    ./dev/run-tests-jenkins
+
+If use an individual repository or a repository on GitHub Enterprise, export below environment variables before running above command.
+
+### Related environment variables
+
+<table class="table">
+<tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>SPARK_PROJECT_URL</code></td>
+  <td>https://github.com/apache/spark</td>
+  <td>
+    The Spark project URL of GitHub Enterprise.
+  </td>
+</tr>
+<tr>
+  <td><code>GITHUB_API_BASE</code></td>
+  <td>https://api.github.com/repos/apache/spark</td>
+  <td>
+    The Spark project API server URL of GitHub Enterprise.
+  </td>
+</tr>
+</table>

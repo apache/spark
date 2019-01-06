@@ -28,14 +28,13 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import _convert_to_vector, Matrix, QRDecomposition
+from pyspark.mllib.linalg import _convert_to_vector, DenseMatrix, Matrix, QRDecomposition
 from pyspark.mllib.stat import MultivariateStatisticalSummary
 from pyspark.storagelevel import StorageLevel
 
 
-__all__ = ['DistributedMatrix', 'RowMatrix', 'IndexedRow',
-           'IndexedRowMatrix', 'MatrixEntry', 'CoordinateMatrix',
-           'BlockMatrix']
+__all__ = ['BlockMatrix', 'CoordinateMatrix', 'DistributedMatrix', 'IndexedRow',
+           'IndexedRowMatrix', 'MatrixEntry', 'RowMatrix', 'SingularValueDecomposition']
 
 
 class DistributedMatrix(object):
@@ -271,7 +270,7 @@ class RowMatrix(DistributedMatrix):
         Reference:
          Paul G. Constantine, David F. Gleich. "Tall and skinny QR
          factorizations in MapReduce architectures"
-         ([[http://dx.doi.org/10.1145/1996092.1996103]])
+         ([[https://doi.org/10.1145/1996092.1996103]])
 
         :param: computeQ: whether to computeQ
         :return: QRDecomposition(Q: RowMatrix, R: Matrix), where
@@ -300,6 +299,136 @@ class RowMatrix(DistributedMatrix):
             Q = None
         R = decomp.call("R")
         return QRDecomposition(Q, R)
+
+    @since('2.2.0')
+    def computeSVD(self, k, computeU=False, rCond=1e-9):
+        """
+        Computes the singular value decomposition of the RowMatrix.
+
+        The given row matrix A of dimension (m X n) is decomposed into
+        U * s * V'T where
+
+        * U: (m X k) (left singular vectors) is a RowMatrix whose
+             columns are the eigenvectors of (A X A')
+        * s: DenseVector consisting of square root of the eigenvalues
+             (singular values) in descending order.
+        * v: (n X k) (right singular vectors) is a Matrix whose columns
+             are the eigenvectors of (A' X A)
+
+        For more specific details on implementation, please refer
+        the Scala documentation.
+
+        :param k: Number of leading singular values to keep (`0 < k <= n`).
+                  It might return less than k if there are numerically zero singular values
+                  or there are not enough Ritz values converged before the maximum number of
+                  Arnoldi update iterations is reached (in case that matrix A is ill-conditioned).
+        :param computeU: Whether or not to compute U. If set to be
+                         True, then U is computed by A * V * s^-1
+        :param rCond: Reciprocal condition number. All singular values
+                      smaller than rCond * s[0] are treated as zero
+                      where s[0] is the largest singular value.
+        :returns: :py:class:`SingularValueDecomposition`
+
+        >>> rows = sc.parallelize([[3, 1, 1], [-1, 3, 1]])
+        >>> rm = RowMatrix(rows)
+
+        >>> svd_model = rm.computeSVD(2, True)
+        >>> svd_model.U.rows.collect()
+        [DenseVector([-0.7071, 0.7071]), DenseVector([-0.7071, -0.7071])]
+        >>> svd_model.s
+        DenseVector([3.4641, 3.1623])
+        >>> svd_model.V
+        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
+        """
+        j_model = self._java_matrix_wrapper.call(
+            "computeSVD", int(k), bool(computeU), float(rCond))
+        return SingularValueDecomposition(j_model)
+
+    @since('2.2.0')
+    def computePrincipalComponents(self, k):
+        """
+        Computes the k principal components of the given row matrix
+
+        .. note:: This cannot be computed on matrices with more than 65535 columns.
+
+        :param k: Number of principal components to keep.
+        :returns: :py:class:`pyspark.mllib.linalg.DenseMatrix`
+
+        >>> rows = sc.parallelize([[1, 2, 3], [2, 4, 5], [3, 6, 1]])
+        >>> rm = RowMatrix(rows)
+
+        >>> # Returns the two principal components of rm
+        >>> pca = rm.computePrincipalComponents(2)
+        >>> pca
+        DenseMatrix(3, 2, [-0.349, -0.6981, 0.6252, -0.2796, -0.5592, -0.7805], 0)
+
+        >>> # Transform into new dimensions with the greatest variance.
+        >>> rm.multiply(pca).rows.collect() # doctest: +NORMALIZE_WHITESPACE
+        [DenseVector([0.1305, -3.7394]), DenseVector([-0.3642, -6.6983]), \
+        DenseVector([-4.6102, -4.9745])]
+        """
+        return self._java_matrix_wrapper.call("computePrincipalComponents", k)
+
+    @since('2.2.0')
+    def multiply(self, matrix):
+        """
+        Multiply this matrix by a local dense matrix on the right.
+
+        :param matrix: a local dense matrix whose number of rows must match the number of columns
+                       of this matrix
+        :returns: :py:class:`RowMatrix`
+
+        >>> rm = RowMatrix(sc.parallelize([[0, 1], [2, 3]]))
+        >>> rm.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
+        [DenseVector([2.0, 3.0]), DenseVector([6.0, 11.0])]
+        """
+        if not isinstance(matrix, DenseMatrix):
+            raise ValueError("Only multiplication with DenseMatrix "
+                             "is supported.")
+        j_model = self._java_matrix_wrapper.call("multiply", matrix)
+        return RowMatrix(j_model)
+
+
+class SingularValueDecomposition(JavaModelWrapper):
+    """
+    Represents singular value decomposition (SVD) factors.
+
+    .. versionadded:: 2.2.0
+    """
+
+    @property
+    @since('2.2.0')
+    def U(self):
+        """
+        Returns a distributed matrix whose columns are the left
+        singular vectors of the SingularValueDecomposition if computeU was set to be True.
+        """
+        u = self.call("U")
+        if u is not None:
+            mat_name = u.getClass().getSimpleName()
+            if mat_name == "RowMatrix":
+                return RowMatrix(u)
+            elif mat_name == "IndexedRowMatrix":
+                return IndexedRowMatrix(u)
+            else:
+                raise TypeError("Expected RowMatrix/IndexedRowMatrix got %s" % mat_name)
+
+    @property
+    @since('2.2.0')
+    def s(self):
+        """
+        Returns a DenseVector with singular values in descending order.
+        """
+        return self.call("s")
+
+    @property
+    @since('2.2.0')
+    def V(self):
+        """
+        Returns a DenseMatrix whose columns are the right singular
+        vectors of the SingularValueDecomposition.
+        """
+        return self.call("V")
 
 
 class IndexedRow(object):
@@ -527,6 +656,68 @@ class IndexedRowMatrix(DistributedMatrix):
                                                            rowsPerBlock,
                                                            colsPerBlock)
         return BlockMatrix(java_block_matrix, rowsPerBlock, colsPerBlock)
+
+    @since('2.2.0')
+    def computeSVD(self, k, computeU=False, rCond=1e-9):
+        """
+        Computes the singular value decomposition of the IndexedRowMatrix.
+
+        The given row matrix A of dimension (m X n) is decomposed into
+        U * s * V'T where
+
+        * U: (m X k) (left singular vectors) is a IndexedRowMatrix
+             whose columns are the eigenvectors of (A X A')
+        * s: DenseVector consisting of square root of the eigenvalues
+             (singular values) in descending order.
+        * v: (n X k) (right singular vectors) is a Matrix whose columns
+             are the eigenvectors of (A' X A)
+
+        For more specific details on implementation, please refer
+        the scala documentation.
+
+        :param k: Number of leading singular values to keep (`0 < k <= n`).
+                  It might return less than k if there are numerically zero singular values
+                  or there are not enough Ritz values converged before the maximum number of
+                  Arnoldi update iterations is reached (in case that matrix A is ill-conditioned).
+        :param computeU: Whether or not to compute U. If set to be
+                         True, then U is computed by A * V * s^-1
+        :param rCond: Reciprocal condition number. All singular values
+                      smaller than rCond * s[0] are treated as zero
+                      where s[0] is the largest singular value.
+        :returns: SingularValueDecomposition object
+
+        >>> rows = [(0, (3, 1, 1)), (1, (-1, 3, 1))]
+        >>> irm = IndexedRowMatrix(sc.parallelize(rows))
+        >>> svd_model = irm.computeSVD(2, True)
+        >>> svd_model.U.rows.collect() # doctest: +NORMALIZE_WHITESPACE
+        [IndexedRow(0, [-0.707106781187,0.707106781187]),\
+        IndexedRow(1, [-0.707106781187,-0.707106781187])]
+        >>> svd_model.s
+        DenseVector([3.4641, 3.1623])
+        >>> svd_model.V
+        DenseMatrix(3, 2, [-0.4082, -0.8165, -0.4082, 0.8944, -0.4472, 0.0], 0)
+        """
+        j_model = self._java_matrix_wrapper.call(
+            "computeSVD", int(k), bool(computeU), float(rCond))
+        return SingularValueDecomposition(j_model)
+
+    @since('2.2.0')
+    def multiply(self, matrix):
+        """
+        Multiply this matrix by a local dense matrix on the right.
+
+        :param matrix: a local dense matrix whose number of rows must match the number of columns
+                       of this matrix
+        :returns: :py:class:`IndexedRowMatrix`
+
+        >>> mat = IndexedRowMatrix(sc.parallelize([(0, (0, 1)), (1, (2, 3))]))
+        >>> mat.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
+        [IndexedRow(0, [2.0,3.0]), IndexedRow(1, [6.0,11.0])]
+        """
+        if not isinstance(matrix, DenseMatrix):
+            raise ValueError("Only multiplication with DenseMatrix "
+                             "is supported.")
+        return IndexedRowMatrix(self._java_matrix_wrapper.call("multiply", matrix))
 
 
 class MatrixEntry(object):
@@ -1173,9 +1364,15 @@ class BlockMatrix(DistributedMatrix):
 
 def _test():
     import doctest
+    import numpy
     from pyspark.sql import SparkSession
     from pyspark.mllib.linalg import Matrices
     import pyspark.mllib.linalg.distributed
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.mllib.linalg.distributed.__dict__.copy()
     spark = SparkSession.builder\
         .master("local[2]")\
@@ -1186,7 +1383,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

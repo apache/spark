@@ -68,7 +68,7 @@ case class CreateTempViewUsing(
       s"Temporary view '$tableIdent' should not have specified a database")
   }
 
-  override def argString: String = {
+  override def argString(maxFields: Int): String = {
     s"[tableIdent:$tableIdent " +
       userSpecifiedSchema.map(_ + " ").getOrElse("") +
       s"replace:$replace " +
@@ -76,7 +76,7 @@ case class CreateTempViewUsing(
       CatalogUtils.maskCredentials(options)
   }
 
-  def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     if (provider.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, " +
         "you can't use it with CREATE TEMP VIEW USING")

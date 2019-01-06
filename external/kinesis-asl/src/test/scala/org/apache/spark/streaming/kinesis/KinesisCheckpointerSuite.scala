@@ -24,13 +24,13 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}
 import org.apache.spark.util.ManualClock
@@ -140,7 +140,9 @@ class KinesisCheckpointerSuite extends TestSuiteBase
       ExecutionContext.global)
 
     intercept[TimeoutException] {
+      // scalastyle:off awaitready
       Await.ready(f, 50 millis)
+      // scalastyle:on awaitready
     }
 
     clock.advance(checkpointInterval.milliseconds / 2)
