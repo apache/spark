@@ -618,8 +618,8 @@ private[parquet] class ParquetFilters(
               }
 
               override def keep(value: Binary): Boolean = {
-                UTF8String.fromBytes(value.getBytes).startsWith(
-                  UTF8String.fromBytes(strToBinary.getBytes))
+                value != null && UTF8String.fromBytes(value.getBytes)
+                  .startsWith(UTF8String.fromBytes(strToBinary.getBytes))
               }
             }
           )
