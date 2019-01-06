@@ -329,7 +329,7 @@ class KubernetesSuite extends SparkFunSuite
           .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
           .headOption.getOrElse(false))
         assert(podsReady,
-          "The pods did not become ready the resource conditions are ${resourceConditions}")
+          s"The pods did not become ready the resource conditions are ${resourceConditions}")
       }
       // Sleep a small interval to allow execution
       Thread.sleep(100)
