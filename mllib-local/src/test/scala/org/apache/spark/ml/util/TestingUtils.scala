@@ -31,7 +31,7 @@ object TestingUtils {
    * Note that if x or y is extremely close to zero, i.e., smaller than Double.MinPositiveValue,
    * the relative tolerance is meaningless, so the exception will be raised to warn users.
    */
-  private[ml] def RelativeErrorComparison(x: Double, y: Double, eps: Double): Boolean = {
+  private def RelativeErrorComparison(x: Double, y: Double, eps: Double): Boolean = {
     // Special case for NaNs
     if (x.isNaN && y.isNaN) {
       return true
