@@ -42,17 +42,7 @@ object DateTimeFormatterHelper {
   private val cache = new ConcurrentHashMap[(String, Locale), DateTimeFormatter]()
 
   def getFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
-    val key = (pattern, locale)
-    var formatter = cache.get(key)
-    if (formatter == null) {
-      formatter = buildFormatter(pattern, locale)
-      val previousFormatter = cache.putIfAbsent(key, formatter)
-      if (previousFormatter != null) {
-        // Another thread already updated the cache, we should return the instance from the cache
-        formatter = previousFormatter
-      }
-    }
-    formatter
+    cache.computeIfAbsent((pattern, locale), _ => buildFormatter(pattern, locale))
   }
 
   private def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
