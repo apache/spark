@@ -543,7 +543,7 @@ case class DataSource(
       checkFilesExist: Boolean): Seq[Path] = {
     val allPaths = caseInsensitiveOptions.get("path") ++ paths
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
-    allPaths.flatMap { path =>
+    val allGlobPath = allPaths.flatMap { path =>
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(hadoopConf)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
@@ -560,6 +560,23 @@ case class DataSource(
       }
       globPath
     }.toSeq
+
+    if (checkFilesExist) {
+      val (filteredOut, filteredIn) = allGlobPath.partition { path =>
+        InMemoryFileIndex.shouldFilterOut(path.getName)
+      }
+      if (filteredOut.nonEmpty) {
+        if (filteredIn.isEmpty) {
+          throw new AnalysisException(
+            s"All paths were ignored:\n${filteredOut.mkString("\n  ")}")
+        } else {
+          logDebug(
+            s"Some paths were ignored:\n${filteredOut.mkString("\n  ")}")
+        }
+      }
+    }
+
+    allGlobPath
   }
 }
 
