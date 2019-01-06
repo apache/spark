@@ -193,6 +193,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
    */
   def nonExcludableRules: Seq[String] =
     EliminateDistinct.ruleName ::
+      EliminateResolvedHint.ruleName ::
       EliminateSubqueryAliases.ruleName ::
       EliminateView.ruleName ::
       ReplaceExpressions.ruleName ::

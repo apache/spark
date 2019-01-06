@@ -100,7 +100,7 @@ object PhysicalOperation extends PredicateHelper {
  * value).
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
-  /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */
+  /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild, joinHint) */
   type ReturnType =
     (JoinType, Seq[Expression], Seq[Expression],
       Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
