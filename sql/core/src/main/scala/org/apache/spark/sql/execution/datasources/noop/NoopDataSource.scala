@@ -34,7 +34,6 @@ import org.apache.spark.sql.types.StructType
  */
 class NoopDataSource extends DataSourceV2 with BatchWriteSupportProvider with DataSourceRegister {
   override def shortName(): String = "noop"
-
   override def createBatchWriteSupport(
       queryId: String,
       schema: StructType,
@@ -48,7 +47,6 @@ class NoopWriteSupport extends BatchWriteSupport {
   override def createBatchWriterFactory(): DataWriterFactory = {
     new NoopWriterFactory()
   }
-
   override def useCommitCoordinator(): Boolean = false
   override def commit(messages: Array[WriterCommitMessage]): Unit = ()
   override def abort(messages: Array[WriterCommitMessage]): Unit = ()
@@ -60,10 +58,8 @@ class NoopWriterFactory extends DataWriterFactory {
   }
 }
 
-class NoopWriter extends DataWriter[InternalRow] with Logging {
-  override def write(record: InternalRow): Unit = {
-    logTrace(record.toString)
-  }
+class NoopWriter extends DataWriter[InternalRow] {
+  override def write(record: InternalRow): Unit = ()
   override def commit(): WriterCommitMessage = null
   override def abort(): Unit = ()
 }
