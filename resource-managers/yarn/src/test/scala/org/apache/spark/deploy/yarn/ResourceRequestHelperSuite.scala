@@ -24,7 +24,7 @@ import org.scalatest.Matchers
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.yarn.ResourceRequestTestHelper.ResourceInformation
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.config.{DRIVER_MEMORY, EXECUTOR_MEMORY}
+import org.apache.spark.internal.config.{DRIVER_CORES, DRIVER_MEMORY, EXECUTOR_CORES, EXECUTOR_MEMORY}
 
 class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
 

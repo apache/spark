@@ -2231,7 +2231,7 @@ private[spark] object Utils extends Logging {
               s"${e.getMessage}: Service$serviceString failed after " +
                 s"$maxRetries retries (on a random free port)! " +
                 s"Consider explicitly setting the appropriate binding address for " +
-                s"the service$serviceString (for example spark.driver.bindAddress " +
+                s"the service$serviceString (for example ${DRIVER_BIND_ADDRESS.key} " +
                 s"for SparkDriver) to the correct binding address."
             } else {
               s"${e.getMessage}: Service$serviceString failed after " +
@@ -2740,13 +2740,17 @@ private[spark] object Utils extends Logging {
 
   /**
    * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
-   * This method mimicks scalatest's getSimpleNameOfAnObjectsClass.
+   * This method mimics scalatest's getSimpleNameOfAnObjectsClass.
    */
   def getSimpleName(cls: Class[_]): String = {
     try {
-      return cls.getSimpleName
+      cls.getSimpleName
     } catch {
-      case err: InternalError => return stripDollars(stripPackages(cls.getName))
+      // TODO: the value returned here isn't even quite right; it returns simple names
+      // like UtilsSuite$MalformedClassObject$MalformedClass instead of MalformedClass
+      // The exact value may not matter much as it's used in log statements
+      case _: InternalError =>
+        stripDollars(stripPackages(cls.getName))
     }
   }
 
