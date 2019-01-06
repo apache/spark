@@ -26,7 +26,10 @@ class NoopSuite extends SharedSQLContext {
     val numElems = 10
     val accum = spark.sparkContext.longAccumulator
     spark.range(numElems)
-      .map(x => {accum.add(1); x})
+      .map { x =>
+        accum.add(1)
+        x
+      }
       .write
       .format("noop")
       .save()
