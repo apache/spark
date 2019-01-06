@@ -61,12 +61,12 @@ class FileDataSourceV2FallBackSuite extends QueryTest with ParquetTest with Shar
     withTempPath { file =>
       val path = file.getCanonicalPath
       df.write.parquet(path)
-      withSQLConf(SQLConf.DISABLED_V2_FILE_DATA_SOURCE_READERS.key -> "foo,parquet,bar") {
+      withSQLConf(SQLConf.DISABLED_V2_FILE_READS.key -> "foo,parquet,bar") {
         // Reading file should fall back to v1 and succeed.
         checkAnswer(spark.read.format(dummyParquetReaderV2).load(path), df)
       }
 
-      withSQLConf(SQLConf.DISABLED_V2_FILE_DATA_SOURCE_READERS.key -> "foo,bar") {
+      withSQLConf(SQLConf.DISABLED_V2_FILE_READS.key -> "foo,bar") {
         // Dummy File reader should fail as DISABLED_V2_FILE_DATA_SOURCE_READERS doesn't include it.
         val exception = intercept[AnalysisException] {
           spark.read.format(dummyParquetReaderV2).load(path)

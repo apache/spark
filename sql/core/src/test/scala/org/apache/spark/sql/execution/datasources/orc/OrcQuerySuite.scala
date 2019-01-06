@@ -684,5 +684,5 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
 
 class OrcV1QuerySuite extends OrcQuerySuite {
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.DISABLED_V2_FILE_DATA_SOURCE_READERS, "orc")
+    super.sparkConf.set(SQLConf.DISABLED_V2_FILE_READS, "orc")
 }

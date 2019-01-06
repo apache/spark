@@ -192,8 +192,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    val disabledV2Readers =
-      sparkSession.sessionState.conf.disabledV2FileDataSourceReader.split(",")
+    val disabledV2Readers = sparkSession.sessionState.conf.disabledV2FileReads.split(",")
     val lookupCls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     val cls = lookupCls.newInstance() match {
       case f: FileDataSourceV2 if disabledV2Readers.contains(f.shortName()) => f.fallBackFileFormat
@@ -217,21 +216,26 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table match {
         case _: SupportsBatchRead =>
           Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, finalOptions))
-        case _ => loadV1Source(paths: _*)
+
+        // If the FileDataSourceV2 doesn't implement read path, fall back to FileFormat.
+        case fileSource: FileDataSourceV2 =>
+          loadV1Source(fileSource.fallBackFileFormat.getCanonicalName, paths: _*)
+
+        case _ => loadV1Source(cls.getCanonicalName, paths: _*)
       }
     } else {
-      loadV1Source(paths: _*)
+      loadV1Source(cls.getCanonicalName, paths: _*)
     }
   }
 
-  private def loadV1Source(paths: String*) = {
+  private def loadV1Source(className: String, paths: String*) = {
     // Code path for data source v1.
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
         paths = paths,
         userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
+        className = className,
         options = extraOptions.toMap).resolveRelation())
   }
 

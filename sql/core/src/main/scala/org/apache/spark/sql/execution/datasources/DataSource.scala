@@ -94,19 +94,10 @@ case class DataSource(
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
-  lazy val providingClass: Class[_] = {
-    val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
-    // Here `providingClass` is supposed to be V1 file format. Currently [[FileDataSourceV2]]
-    // doesn't support catalog, so creating tables with V2 file format still uses this code path.
-    // As a temporary hack to avoid failure, [[FileDataSourceV2]] is falled back to [[FileFormat]].
-    cls.newInstance() match {
-      case f: FileDataSourceV2 => f.fallBackFileFormat
-      case _ => cls
-    }
-  }
+  lazy val providingClass: Class[_] =
+    DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
-  private val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
   private val equality = sparkSession.sessionState.conf.resolver
 
   bucketSpec.map { bucket =>
@@ -442,6 +433,7 @@ case class DataSource(
         s"got: ${allPaths.mkString(", ")}")
     }
 
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
 
     val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
