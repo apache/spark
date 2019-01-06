@@ -55,10 +55,6 @@ object JDBCRDD extends Logging {
     val dialect = JdbcDialects.get(url)
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
 
-    if (null == conn) {
-      throw new IllegalArgumentException("Wrong url in JDBC options.")
-    }
-
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
       try {
@@ -73,9 +69,7 @@ object JDBCRDD extends Logging {
         statement.close()
       }
     } finally {
-      if (null != conn) {
-        conn.close()
-      }
+      conn.close()
     }
   }
 

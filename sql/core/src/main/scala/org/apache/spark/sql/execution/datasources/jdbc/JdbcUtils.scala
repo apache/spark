@@ -48,6 +48,7 @@ object JdbcUtils extends Logging {
    * Returns a factory for creating connections to the given JDBC URL.
    *
    * @param options - JDBC options that contains url, table and other information.
+   * @throws IllegalArgumentException If JDBC options has wrong url
    */
   def createConnectionFactory(options: JDBCOptions): () => Connection = {
     val driverClass: String = options.driverClass
@@ -60,7 +61,13 @@ object JdbcUtils extends Logging {
         throw new IllegalStateException(
           s"Did not find registered driver with class $driverClass")
       }
-      driver.connect(options.url, options.asConnectionProperties)
+      val connection: Connection = driver.connect(options.url, options.asConnectionProperties)
+
+      if (connection == null) {
+        throw new IllegalArgumentException("Wrong url in JDBC options.")
+      }
+
+      connection
     }
   }
 
