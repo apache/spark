@@ -48,7 +48,7 @@ object JdbcUtils extends Logging {
    * Returns a factory for creating connections to the given JDBC URL.
    *
    * @param options - JDBC options that contains url, table and other information.
-   * @throws IllegalArgumentException If JDBC options has wrong url
+   * @throws IllegalArgumentException if the driver could not open a JDBC connection.
    */
   def createConnectionFactory(options: JDBCOptions): () => Connection = {
     val driverClass: String = options.driverClass
