@@ -31,7 +31,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.{CPUS_PER_TASK, MAX_TASK_FAILURES}
+import org.apache.spark.internal.config.{CPUS_PER_TASK, TASK_MAX_FAILURES}
 import org.apache.spark.util.ManualClock
 
 class FakeSchedulerBackend extends SchedulerBackend {
@@ -93,7 +93,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     sc = new SparkContext(conf)
     taskScheduler =
-      new TaskSchedulerImpl(sc, sc.conf.get(MAX_TASK_FAILURES)) {
+      new TaskSchedulerImpl(sc, sc.conf.get(TASK_MAX_FAILURES)) {
         override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
           val tsm = super.createTaskSetManager(taskSet, maxFailures)
           // we need to create a spied tsm just so we can set the TaskSetBlacklist

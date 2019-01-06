@@ -62,7 +62,7 @@ private[spark] class TaskSchedulerImpl(
   import TaskSchedulerImpl._
 
   def this(sc: SparkContext) = {
-    this(sc, sc.conf.get(config.MAX_TASK_FAILURES))
+    this(sc, sc.conf.get(config.TASK_MAX_FAILURES))
   }
 
   // Lazily initializing blacklistTrackerOpt to avoid getting empty ExecutorAllocationClient,
@@ -184,7 +184,7 @@ private[spark] class TaskSchedulerImpl(
   override def start() {
     backend.start()
 
-    if (!isLocal && conf.get(SPECULATION)) {
+    if (!isLocal && conf.get(SPECULATION_ENABLED)) {
       logInfo("Starting speculative execution thread")
       speculationScheduler.scheduleWithFixedDelay(new Runnable {
         override def run(): Unit = Utils.tryOrStopSparkContext(sc) {

@@ -35,7 +35,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
 import org.apache.spark.TestUtils.JavaSourceFromString
-import org.apache.spark.internal.config.RPC_MESSAGE_MAX_SIZE
+import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.storage.TaskResultBlockId
 import org.apache.spark.util.{MutableURLClassLoader, RpcUtils, Utils}
 

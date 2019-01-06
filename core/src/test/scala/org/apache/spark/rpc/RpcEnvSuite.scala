@@ -37,6 +37,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network.{RPC_NUM_RETRIES, RPC_RETRY_WAIT}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**

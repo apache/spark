@@ -67,7 +67,7 @@ private[spark] class TaskSetManager(
 
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
 
-  val speculationEnabled = conf.get(SPECULATION)
+  val speculationEnabled = conf.get(SPECULATION_ENABLED)
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get

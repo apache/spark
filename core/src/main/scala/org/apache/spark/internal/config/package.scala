@@ -338,12 +338,12 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
-  private[spark] val MAX_TASK_MAX_DIRECT_RESULT_SIZE =
+  private[spark] val TASK_MAX_DIRECT_RESULT_SIZE =
     ConfigBuilder("spark.task.maxDirectResultSize")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(1L << 20)
 
-  private[spark] val MAX_TASK_FAILURES =
+  private[spark] val TASK_MAX_FAILURES =
     ConfigBuilder("spark.task.maxFailures")
       .intConf
       .createWithDefault(4)
@@ -620,11 +620,6 @@ package object config {
         "used for both the driver and the executors when running in cluster mode. File-based " +
         "secret keys are only allowed when using Kubernetes.")
       .fallbackConf(AUTH_SECRET_FILE)
-
-  private[spark] val NETWORK_ENCRYPTION_ENABLED =
-    ConfigBuilder("spark.network.crypto.enabled")
-      .booleanConf
-      .createWithDefault(false)
 
   private[spark] val BUFFER_WRITE_CHUNK_SIZE =
     ConfigBuilder("spark.buffer.write.chunkSize")
@@ -1227,7 +1222,7 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val SPECULATION =
+  private[spark] val SPECULATION_ENABLED =
     ConfigBuilder("spark.speculation")
       .booleanConf
       .createWithDefault(false)

@@ -31,7 +31,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client._
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}

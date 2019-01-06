@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
 
 private[spark] object RpcUtils {

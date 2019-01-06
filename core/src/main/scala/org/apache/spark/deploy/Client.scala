@@ -28,7 +28,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.internal.config.RPC_ASK_TIMEOUT
+import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.util.{SparkExitCode, ThreadUtils, Utils}
 

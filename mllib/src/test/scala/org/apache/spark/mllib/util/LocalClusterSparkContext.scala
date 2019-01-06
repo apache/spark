@@ -20,7 +20,7 @@ package org.apache.spark.mllib.util
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.internal.config.RPC_MESSAGE_MAX_SIZE
+import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 
 trait LocalClusterSparkContext extends BeforeAndAfterAll { self: Suite =>
   @transient var sc: SparkContext = _
