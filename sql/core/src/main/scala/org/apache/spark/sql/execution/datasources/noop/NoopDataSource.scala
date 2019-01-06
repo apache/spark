@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.noop
 
 import java.util.Optional
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.DataSourceRegister
