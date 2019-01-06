@@ -101,7 +101,7 @@ SCALA_2_11_PROFILES="-Pkafka-0-8"
 SCALA_2_12_PROFILES="-Pscala-2.12"
 
 rm -rf spark
-git clone https://git-wip-us.apache.org/repos/asf/spark.git
+git clone https://gitbox.apache.org/repos/asf/spark.git
 cd spark
 git checkout $GIT_REF
 git_hash=`git rev-parse --short HEAD`

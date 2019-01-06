@@ -54,7 +54,7 @@ for env in ASF_USERNAME ASF_PASSWORD RELEASE_VERSION RELEASE_TAG NEXT_VERSION GI
   fi
 done
 
-ASF_SPARK_REPO="git-wip-us.apache.org/repos/asf/spark.git"
+ASF_SPARK_REPO="gitbox.apache.org/repos/asf/spark.git"
 MVN="build/mvn --force"
 
 rm -rf spark
