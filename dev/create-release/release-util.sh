@@ -73,7 +73,7 @@ function fcreate_secure {
 }
 
 function check_for_tag {
-  curl -s --head --fail "$ASF_REPO_WEBUI;a=commit;h=$1" >/dev/null
+  ! curl -s --fail "$ASF_REPO_WEBUI;a=commit;h=$1" | grep '404 Not Found' > /dev/null
 }
 
 function get_release_info {
