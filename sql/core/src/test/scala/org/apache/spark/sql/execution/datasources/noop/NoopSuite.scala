@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.none
+package org.apache.spark.sql.execution.datasources.noop
 
 import org.apache.spark.sql.test.SharedSQLContext
 
-class NoneSuite extends SharedSQLContext {
+class NoopSuite extends SharedSQLContext {
   import testImplicits._
 
   test("materialisation of all rows") {
@@ -28,7 +28,7 @@ class NoneSuite extends SharedSQLContext {
     spark.range(numElems)
       .map(x => {accum.add(1); x})
       .write
-      .format("none")
+      .format("noop")
       .save()
     assert(accum.value == numElems)
   }

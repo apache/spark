@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.none
+package org.apache.spark.sql.execution.datasources.noop
 
 import java.util.Optional
 
@@ -32,21 +32,21 @@ import org.apache.spark.sql.types.StructType
  * of each written row of a dataset without converting fields to other types.
  * This can be used in caching of datasets without additional overhead of an actions.
  */
-class NoneDataSource extends DataSourceV2 with BatchWriteSupportProvider with DataSourceRegister {
-  override def shortName(): String = "none"
+class NoopDataSource extends DataSourceV2 with BatchWriteSupportProvider with DataSourceRegister {
+  override def shortName(): String = "noop"
 
   override def createBatchWriteSupport(
       queryId: String,
       schema: StructType,
       mode: SaveMode,
       options: DataSourceOptions): Optional[BatchWriteSupport] = {
-    Optional.of(new NoneWriteSupport())
+    Optional.of(new NoopWriteSupport())
   }
 }
 
-class NoneWriteSupport extends BatchWriteSupport {
+class NoopWriteSupport extends BatchWriteSupport {
   override def createBatchWriterFactory(): DataWriterFactory = {
-    new NoneWriterFactory()
+    new NoopWriterFactory()
   }
 
   override def useCommitCoordinator(): Boolean = false
@@ -54,13 +54,13 @@ class NoneWriteSupport extends BatchWriteSupport {
   override def abort(messages: Array[WriterCommitMessage]): Unit = ()
 }
 
-class NoneWriterFactory extends DataWriterFactory {
+class NoopWriterFactory extends DataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    new NoneWriter()
+    new NoopWriter()
   }
 }
 
-class NoneWriter extends DataWriter[InternalRow] with Logging {
+class NoopWriter extends DataWriter[InternalRow] with Logging {
   override def write(record: InternalRow): Unit = {
     logTrace(record.toString)
   }
