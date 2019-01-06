@@ -40,11 +40,19 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
       plan
     }
 
+  // `PhysicalOperation` pattern returns relation operator's outputs if there is no
+  // projects on it. In this case, we don't need to do schema pruning.
+  private def directOutput(projects: Seq[NamedExpression], plan: LogicalPlan): Boolean = {
+    projects.length == plan.output.length && projects.zip(plan.output).forall {
+      case (l, r) => l.name == r.name && l.dataType.sameType(r.dataType)
+    }
+  }
+
   private def apply0(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
           l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _))
-        if canPruneRelation(hadoopFsRelation) =>
+        if canPruneRelation(hadoopFsRelation) && !directOutput(projects, l) =>
         val (normalizedProjects, normalizedFilters) =
           normalizeAttributeRefNames(l, projects, filters)
         val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
@@ -119,7 +127,12 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
       .distinct.partition(_.contentAccessed)
 
     optRootFields.filter { opt =>
-      !rootFields.exists(_.field.name == opt.field.name)
+      !rootFields.exists { root =>
+        val rootFieldType = StructType(Array(root.field))
+        val optFieldType = StructType(Array(opt.field))
+        val merged = optFieldType.merge(rootFieldType)
+        root.field.name == opt.field.name && merged.sameType(optFieldType)
+      }
     } ++ rootFields
   }
 
