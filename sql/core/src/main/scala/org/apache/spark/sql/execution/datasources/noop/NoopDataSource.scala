@@ -31,8 +31,13 @@ import org.apache.spark.sql.types.StructType
  * of each written row of a dataset without converting fields to other types.
  * This can be used in caching of datasets without additional overhead of an actions.
  */
-class NoopDataSource extends DataSourceV2 with BatchWriteSupportProvider with DataSourceRegister {
+private[noop] class NoopDataSource
+  extends DataSourceV2
+  with BatchWriteSupportProvider
+  with DataSourceRegister {
+
   override def shortName(): String = "noop"
+
   override def createBatchWriteSupport(
       queryId: String,
       schema: StructType,
@@ -42,22 +47,23 @@ class NoopDataSource extends DataSourceV2 with BatchWriteSupportProvider with Da
   }
 }
 
-class NoopWriteSupport extends BatchWriteSupport {
+private[noop] class NoopWriteSupport extends BatchWriteSupport {
   override def createBatchWriterFactory(): DataWriterFactory = {
     new NoopWriterFactory()
   }
+
   override def useCommitCoordinator(): Boolean = false
   override def commit(messages: Array[WriterCommitMessage]): Unit = ()
   override def abort(messages: Array[WriterCommitMessage]): Unit = ()
 }
 
-class NoopWriterFactory extends DataWriterFactory {
+private[noop] class NoopWriterFactory extends DataWriterFactory {
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
     new NoopWriter()
   }
 }
 
-class NoopWriter extends DataWriter[InternalRow] {
+private[noop] class NoopWriter extends DataWriter[InternalRow] {
   override def write(record: InternalRow): Unit = ()
   override def commit(): WriterCommitMessage = null
   override def abort(): Unit = ()
