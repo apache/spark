@@ -56,62 +56,70 @@ object HiveResult {
       result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
   }
 
+  private def formatDecimal(d: java.math.BigDecimal): String = {
+    if (d.compareTo(java.math.BigDecimal.ZERO) == 0) {
+      java.math.BigDecimal.ZERO.toPlainString
+    } else {
+      d.stripTrailingZeros().toPlainString // Hive strips trailing zeros
+    }
+  }
+
+  private val primitiveTypes = Seq(
+    StringType,
+    IntegerType,
+    LongType,
+    DoubleType,
+    FloatType,
+    BooleanType,
+    ByteType,
+    ShortType,
+    DateType,
+    TimestampType,
+    BinaryType)
+
+  /** Hive outputs fields of structs slightly differently than top level attributes. */
+  private def toHiveStructString(a: (Any, DataType)): String = a match {
+    case (struct: Row, StructType(fields)) =>
+      struct.toSeq.zip(fields).map {
+        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
+      }.mkString("{", ",", "}")
+    case (seq: Seq[_], ArrayType(typ, _)) =>
+      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
+    case (map: Map[_, _], MapType(kType, vType, _)) =>
+      map.map {
+        case (key, value) =>
+          toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
+      }.toSeq.sorted.mkString("{", ",", "}")
+    case (null, _) => "null"
+    case (s: String, StringType) => "\"" + s + "\""
+    case (decimal, DecimalType()) => decimal.toString
+    case (interval, CalendarIntervalType) => interval.toString
+    case (other, tpe) if primitiveTypes contains tpe => other.toString
+  }
+
   /** Formats a datum (based on the given data type) and returns the string representation. */
-  def toHiveString(a: (Any, DataType)): String = {
-    val primitiveTypes = Seq(StringType, IntegerType, LongType, DoubleType, FloatType,
-      BooleanType, ByteType, ShortType, DateType, TimestampType, BinaryType)
-    val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
-
-    def formatDecimal(d: java.math.BigDecimal): String = {
-      if (d.compareTo(java.math.BigDecimal.ZERO) == 0) {
-        java.math.BigDecimal.ZERO.toPlainString
-      } else {
-        d.stripTrailingZeros().toPlainString
-      }
-    }
-
-    /** Hive outputs fields of structs slightly differently than top level attributes. */
-    def toHiveStructString(a: (Any, DataType)): String = a match {
-      case (struct: Row, StructType(fields)) =>
-        struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
-        }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ, _)) =>
-        seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_, _], MapType(kType, vType, _)) =>
-        map.map {
-          case (key, value) =>
-            toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-        }.toSeq.sorted.mkString("{", ",", "}")
-      case (null, _) => "null"
-      case (s: String, StringType) => "\"" + s + "\""
-      case (decimal, DecimalType()) => decimal.toString
-      case (interval, CalendarIntervalType) => interval.toString
-      case (other, tpe) if primitiveTypes contains tpe => other.toString
-    }
-
-    a match {
-      case (struct: Row, StructType(fields)) =>
-        struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
-        }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ, _)) =>
-        seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_, _], MapType(kType, vType, _)) =>
-        map.map {
-          case (key, value) =>
-            toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-        }.toSeq.sorted.mkString("{", ",", "}")
-      case (null, _) => "NULL"
-      case (d: Date, DateType) =>
-        DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
-      case (t: Timestamp, TimestampType) =>
-        DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t), timeZone)
-      case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
-      case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
-      case (interval, CalendarIntervalType) => interval.toString
-      case (other, _ : UserDefinedType[_]) => other.toString
-      case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
-    }
+  def toHiveString(a: (Any, DataType)): String = a match {
+    case (struct: Row, StructType(fields)) =>
+      struct.toSeq.zip(fields).map {
+        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
+      }.mkString("{", ",", "}")
+    case (seq: Seq[_], ArrayType(typ, _)) =>
+      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
+    case (map: Map[_, _], MapType(kType, vType, _)) =>
+      map.map {
+        case (key, value) =>
+          toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
+      }.toSeq.sorted.mkString("{", ",", "}")
+    case (null, _) => "NULL"
+    case (d: Date, DateType) =>
+      DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
+    case (t: Timestamp, TimestampType) =>
+      val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
+      DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t), timeZone)
+    case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
+    case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
+    case (interval, CalendarIntervalType) => interval.toString
+    case (other, _ : UserDefinedType[_]) => other.toString
+    case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
   }
 }
