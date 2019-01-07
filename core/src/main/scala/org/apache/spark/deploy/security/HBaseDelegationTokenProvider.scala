@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.security
 
 import java.io.Closeable
-import java.lang.reflect.Method
 
 import scala.reflect.runtime.universe
 import scala.util.control.NonFatal
@@ -53,8 +52,8 @@ private[security] class HBaseDelegationTokenProvider
       creds.addToken(token.getService, token)
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to get token from service $serviceName. " +
-          s"Retrying to invoke service with hbase connection.")
+        logWarning(s"Failed to get token from service $serviceName due to  " + e +
+          s" Retrying to fetch HBase security token with hbase connection parameter.")
         // Seems to be spark is trying to get the token from HBase 2.x.x  version or above where the
         // obtainToken(Configuration conf) API is been removed. Lets try obtaining the token from
         // another compatible API of HBase service.
@@ -69,53 +68,41 @@ private[security] class HBaseDelegationTokenProvider
    * same connection can be passed to
    * Token<AuthenticationTokenIdentifier> obtainToken(Connection conn) API
    *
-   * @param hadoopConf
-   * @param creds
+   * @param hadoopConf Configuration of current Hadoop Compatible system.
+   * @param creds Credentials to add tokens and security keys to.
    */
   private def obtainDelegationTokensWithHBaseConn(
       hadoopConf: Configuration, creds: Credentials): Unit = {
-    val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
-    // Token<AuthenticationTokenIdentifier> obtainToken(Configuration conf) is a deprecated
-    // method and in Hbase 2.0.0 the method is already removed. there is one more public
-    // consistent API Token<AuthenticationTokenIdentifier> obtainToken(Connection conn),
-    // in TokenUtil class which can be invoked using reflection.
-    val obtainHBaseConnection = mirror.classLoader.
-      loadClass("org.apache.hadoop.hbase.client.ConnectionFactory").
-      getMethod("createConnection", classOf[Configuration])
-    val conn = obtainHBaseConnection.invoke(null, hbaseConf(hadoopConf))
+    var connectionHbaseClient = null.asInstanceOf[Closeable]
     try {
-      val arrayOfMethod: Array[Method] = ClassLoader.getSystemClassLoader
-        .loadClass("org.apache.hadoop.hbase.security.token.TokenUtil").getMethods
-      val obtainParamTypeClass = getClassParamType(arrayOfMethod)
-      if (null == obtainParamTypeClass) {
-        logDebug(s"Failed to invoke service to get token from service $serviceName")
-      }
-      else {
-        val obtainTokenMethod = mirror.classLoader.
-          loadClass("org.apache.hadoop.hbase.security.token.TokenUtil").
-          getMethod("obtainToken", obtainParamTypeClass)
-        logDebug("Attempting to fetch HBase security token.")
-        val token = obtainTokenMethod.invoke(null, conn)
-          .asInstanceOf[Token[_ <: TokenIdentifier]]
-        logInfo(s"Get token from HBase: ${token.toString}")
-        creds.addToken(token.getService, token)
-      }
-    }
-    catch {
+      val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
+      // Token<AuthenticationTokenIdentifier> obtainToken(Configuration conf) is a deprecated
+      // method and in Hbase 2.0.0 the method is already removed. there is one more public
+      // consistent API Token<AuthenticationTokenIdentifier> obtainToken(Connection conn),
+      // in TokenUtil class which can be invoked using reflection.
+      val connectionFactoryClass = mirror.classLoader.
+        loadClass("org.apache.hadoop.hbase.client.ConnectionFactory").
+        getMethod("createConnection", classOf[Configuration])
+      connectionHbaseClient = connectionFactoryClass.invoke(null, hbaseConf(hadoopConf))
+        .asInstanceOf[Closeable]
+      val connectionParamTypeClassRef = mirror.classLoader
+        .loadClass("org.apache.hadoop.hbase.client.Connection")
+      val obtainTokenMethod = mirror.classLoader.
+        loadClass("org.apache.hadoop.hbase.security.token.TokenUtil").
+        getMethod("obtainToken", connectionParamTypeClassRef)
+      logDebug("Attempting to fetch HBase security token.")
+      val token = obtainTokenMethod.invoke(null, connectionHbaseClient)
+        .asInstanceOf[Token[_ <: TokenIdentifier]]
+      logInfo(s"Get token from HBase: ${token.toString}")
+      creds.addToken(token.getService, token)
+    } catch {
       case NonFatal(e) =>
-        logError(s"Failed to get token from service $serviceName", e)
+        logWarning(s"Failed to get token from service $serviceName", e)
+    } finally {
+      if (null != connectionHbaseClient) {
+        connectionHbaseClient.close()
+      }
     }
-    finally {
-      conn.asInstanceOf[Closeable].close()
-    }
-  }
-
-  private def getClassParamType(arrayOfMethod: Array[Method]): Class[_] = {
-    val seqOfFiltMethod = arrayOfMethod.filter(f => f.getName.equalsIgnoreCase("obtainToken"))
-    val paramClassType = seqOfFiltMethod.map(m => m.getParameterTypes
-      .filter(className => className.getName
-        .equalsIgnoreCase("org.apache.hadoop.hbase.client.Connection")).head).head
-    paramClassType
   }
 
   override def delegationTokensRequired(
