@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.sql.sources.v2.reader.ReadSupport;
 
 /**
@@ -24,6 +26,7 @@ import org.apache.spark.sql.sources.v2.reader.ReadSupport;
  * read support interfaces: {@link MicroBatchReadSupport} or {@link ContinuousReadSupport}.
  * This is exposed for a testing purpose.
  */
+@VisibleForTesting
 public interface StreamingReadSupport extends ReadSupport {
 
   /**
