@@ -92,8 +92,12 @@ case class CallMethodViaReflection(children: Seq[Expression])
       }
       i += 1
     }
-    val ret = method.invoke(null, buffer : _*)
-    UTF8String.fromString(String.valueOf(ret))
+    var ret: Any = null
+    try{
+      ret = method.invoke(null, buffer : _*)
+    } catch {
+      case _ =>
+    }    UTF8String.fromString(String.valueOf(ret))
   }
 
   @transient private lazy val argExprs: Array[Expression] = children.drop(2).toArray
