@@ -48,7 +48,7 @@ class ReplaceOperatorSuite extends PlanTest {
 
     val correctAnswer =
       Aggregate(table1.output, table1.output,
-        Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd))).analyze
+        Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd), JoinHint.NONE)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -160,7 +160,7 @@ class ReplaceOperatorSuite extends PlanTest {
 
     val correctAnswer =
       Aggregate(table1.output, table1.output,
-        Join(table1, table2, LeftAnti, Option('a <=> 'c && 'b <=> 'd))).analyze
+        Join(table1, table2, LeftAnti, Option('a <=> 'c && 'b <=> 'd), JoinHint.NONE)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -175,7 +175,7 @@ class ReplaceOperatorSuite extends PlanTest {
 
     val correctAnswer =
       Aggregate(left.output, right.output,
-        Join(left, right, LeftAnti, Option($"left.a" <=> $"right.a"))).analyze
+        Join(left, right, LeftAnti, Option($"left.a" <=> $"right.a"), JoinHint.NONE)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -248,7 +248,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val condition = basePlan.output.zip(otherPlan.output).map { case (a1, a2) =>
       a1 <=> a2 }.reduce( _ && _)
     val correctAnswer = Aggregate(basePlan.output, otherPlan.output,
-      Join(basePlan, otherPlan, LeftAnti, Option(condition))).analyze
+      Join(basePlan, otherPlan, LeftAnti, Option(condition), JoinHint.NONE)).analyze
     comparePlans(result, correctAnswer)
   }
 }

@@ -27,9 +27,11 @@ import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
@@ -924,5 +926,24 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         assert(!spark.catalog.isCached("t2"))
       }
     }
+  }
+
+  test("Cache should respect the broadcast hint") {
+    val df = broadcast(spark.range(1000)).cache()
+    val df2 = spark.range(1000).cache()
+    df.count()
+    df2.count()
+
+    // Test the broadcast hint.
+    val joinPlan = df.join(df2, "id").queryExecution.optimizedPlan
+    val hint = joinPlan.collect {
+      case Join(_, _, _, _, hint) => hint
+    }
+    assert(hint.size == 1)
+    assert(hint(0).leftHint.get.broadcast)
+    assert(hint(0).rightHint.isEmpty)
+
+    // Clean-up
+    df.unpersist()
   }
 }
