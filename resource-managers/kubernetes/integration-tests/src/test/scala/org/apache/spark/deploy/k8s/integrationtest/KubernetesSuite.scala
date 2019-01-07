@@ -321,6 +321,8 @@ class KubernetesSuite extends SparkFunSuite
     }
     // If decomissioning we need to wait and check the executors were removed
     if (decomissioningTest) {
+      // Sleep a small interval to ensure everything is registered.
+      Thread.sleep(100)
       // Wait for the executors to become ready
       Eventually.eventually(TIMEOUT, INTERVAL) {
         val resourceConditions = execPods.values.flatMap{
