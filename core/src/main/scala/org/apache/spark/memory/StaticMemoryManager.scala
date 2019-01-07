@@ -19,6 +19,7 @@ package org.apache.spark.memory
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.storage.BlockId
 
 /**
@@ -120,7 +121,7 @@ private[spark] object StaticMemoryManager {
    * Return the total amount of memory available for the storage region, in bytes.
    */
   private def getMaxStorageMemory(conf: SparkConf): Long = {
-    val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
+    val systemMaxMemory = conf.get(TEST_MEMORY)
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
     val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
     (systemMaxMemory * memoryFraction * safetyFraction).toLong
@@ -130,7 +131,7 @@ private[spark] object StaticMemoryManager {
    * Return the total amount of memory available for the execution region, in bytes.
    */
   private def getMaxExecutionMemory(conf: SparkConf): Long = {
-    val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
+    val systemMaxMemory = conf.get(TEST_MEMORY)
 
     if (systemMaxMemory < MIN_MEMORY_BYTES) {
       throw new IllegalArgumentException(s"System memory $systemMaxMemory must " +

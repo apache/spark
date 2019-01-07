@@ -23,7 +23,7 @@ import com.google.common.io.Files
 
 import org.apache.spark._
 import org.apache.spark.internal.config.History._
-import org.apache.spark.util.Utils
+import org.apache.spark.internal.config.Tests._
 
 class HistoryServerArgumentsSuite extends SparkFunSuite {
 
@@ -31,14 +31,14 @@ class HistoryServerArgumentsSuite extends SparkFunSuite {
   private val conf = new SparkConf()
     .set(HISTORY_LOG_DIR, logDir.getAbsolutePath)
     .set(UPDATE_INTERVAL_S, 1L)
-    .set("spark.testing", "true")
+    .set(IS_TESTING, true)
 
   test("No Arguments Parsing") {
     val argStrings = Array.empty[String]
     val hsa = new HistoryServerArguments(conf, argStrings)
     assert(conf.get(HISTORY_LOG_DIR) === logDir.getAbsolutePath)
     assert(conf.get(UPDATE_INTERVAL_S) === 1L)
-    assert(conf.get("spark.testing") === "true")
+    assert(conf.get(IS_TESTING).getOrElse(false))
   }
 
   test("Properties File Arguments Parsing --properties-file") {
