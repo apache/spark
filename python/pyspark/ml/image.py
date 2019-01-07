@@ -28,6 +28,7 @@ import sys
 import warnings
 
 import numpy as np
+from distutils.version import LooseVersion
 
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
@@ -190,10 +191,7 @@ class _ImageSchema(object):
         # Running `bytearray(numpy.array([1]))` fails in specific Python versions
         # with a specific Numpy version, for example in Python 3.6.0 and NumPy 1.13.3.
         # Here, it avoids it by converting it to bytes.
-        numpy_version = np.__version__.split('.')
-        numpy_version_major = int(numpy_version[0])
-        numpy_version_minor = int(numpy_version[1])
-        if numpy_version_major > 1 or (numpy_version_major == 1 and numpy_version_minor >= 9):
+        if LooseVersion(np.__version__) >= LooseVersion('1.9'):
             data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
         else:
             data = bytearray(array.astype(dtype=np.uint8).ravel().tostring())
