@@ -72,15 +72,15 @@ private[ui] class EnvironmentPage(
         <div class="aggregated-sparkProperties collapsible-table">
           {sparkPropertiesTable}
         </div>
-        <span class="collapse-aggregated-sparkProperties collapse-table"
-              onClick="collapseTable('collapse-aggregated-sparkProperties',
-            'aggregated-sparkProperties')">
+        <span class="collapse-aggregated-hadoopProperties collapse-table"
+              onClick="collapseTable('collapse-aggregated-hadoopProperties',
+            'aggregated-hadoopProperties')">
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Hadoop Properties</a>
           </h4>
         </span>
-        <div class="aggregated-sparkProperties collapsible-table">
+        <div class="aggregated-hadoopProperties collapsible-table">
           {hadoopPropertiesTable}
         </div>
         <span class="collapse-aggregated-systemProperties collapse-table"
