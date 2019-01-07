@@ -1398,11 +1398,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10316: respect non-deterministic expressions in PhysicalOperation") {
-    val input = spark.read.json((1 to 10).map(i => s"""{"id": $i}""").toDS())
+    withTempDir { dir =>
+      (1 to 10).toDF("id").write.mode(SaveMode.Overwrite).json(dir.getCanonicalPath)
+      val input = spark.read.json(dir.getCanonicalPath)
 
-    val df = input.select($"id", rand(0).as('r))
-    df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>
-      assert(row.getDouble(1) - row.getDouble(3) === 0.0 +- 0.001)
+      val df = input.select($"id", rand(0).as('r))
+      df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>
+        assert(row.getDouble(1) - row.getDouble(3) === 0.0 +- 0.001)
+      }
     }
   }
 

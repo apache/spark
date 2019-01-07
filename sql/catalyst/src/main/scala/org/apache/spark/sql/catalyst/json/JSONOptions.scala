@@ -117,6 +117,12 @@ private[sql] class JSONOptions(
    */
   val pretty: Boolean = parameters.get("pretty").map(_.toBoolean).getOrElse(false)
 
+  /**
+   * Enables inferring of TimestampType from strings matched to the timestamp pattern
+   * defined by the timestampFormat option.
+   */
+  val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(true)
+
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
     factory.configure(JsonParser.Feature.ALLOW_COMMENTS, allowComments)

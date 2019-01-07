@@ -17,8 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.mockito.Matchers.{eq => meq}
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{eq => meq}
+import org.mockito.Mockito.{never, reset, times, verify, when}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.mockito.MockitoSugar

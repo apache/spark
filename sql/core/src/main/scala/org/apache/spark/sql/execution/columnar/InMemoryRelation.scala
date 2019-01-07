@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.storage.StorageLevel
@@ -184,12 +184,7 @@ case class InMemoryRelation(
   override def computeStats(): Statistics = {
     if (cacheBuilder.sizeInBytesStats.value == 0L) {
       // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache.
-      // Note that we should drop the hint info here. We may cache a plan whose root node is a hint
-      // node. When we lookup the cache with a semantically same plan without hint info, the plan
-      // returned by cache lookup should not have hint info. If we lookup the cache with a
-      // semantically same plan with a different hint info, `CacheManager.useCachedData` will take
-      // care of it and retain the hint info in the lookup input plan.
-      statsOfPlanToCache.copy(hints = HintInfo())
+      statsOfPlanToCache
     } else {
       Statistics(sizeInBytes = cacheBuilder.sizeInBytesStats.value.longValue)
     }
