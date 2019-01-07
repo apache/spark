@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.security
+package org.apache.spark.kafka010
 
 import java.{ util => ju }
 import java.text.SimpleDateFormat
@@ -44,7 +44,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     override def getKind: Text = TOKEN_KIND
   }
 
-  private[security] def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
+  private[kafka010] def obtainToken(sparkConf: SparkConf): (Token[_ <: TokenIdentifier], Long) = {
     val adminClient = AdminClient.create(createAdminClientProperties(sparkConf))
     val createDelegationTokenOptions = new CreateDelegationTokenOptions()
     val createResult = adminClient.createDelegationToken(createDelegationTokenOptions)
@@ -59,7 +59,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     ), token.tokenInfo.expiryTimestamp)
   }
 
-  private[security] def createAdminClientProperties(sparkConf: SparkConf): ju.Properties = {
+  private[kafka010] def createAdminClientProperties(sparkConf: SparkConf): ju.Properties = {
     val adminClientProperties = new ju.Properties
 
     val bootstrapServers = sparkConf.get(Kafka.BOOTSTRAP_SERVERS)
@@ -142,7 +142,7 @@ private[spark] object KafkaTokenUtil extends Logging {
     }
   }
 
-  private[security] def getKeytabJaasParams(sparkConf: SparkConf): String = {
+  private[kafka010] def getKeytabJaasParams(sparkConf: SparkConf): String = {
     val params =
       s"""
       |${getKrb5LoginModuleName} required

@@ -15,26 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.security
+package org.apache.spark.kafka010
 
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 
-class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
+class KafkaHadoopDelegationTokenManagerSuite extends SparkFunSuite {
   private val hadoopConf = new Configuration()
 
   test("default configuration") {
     val manager = new HadoopDelegationTokenManager(new SparkConf(false), hadoopConf, null)
-    assert(manager.isProviderLoaded("hadoopfs"))
-    assert(manager.isProviderLoaded("hbase"))
-  }
-
-  test("using deprecated configurations") {
-    val sparkConf = new SparkConf(false)
-      .set("spark.yarn.security.tokens.hadoopfs.enabled", "false")
-    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
-    assert(!manager.isProviderLoaded("hadoopfs"))
-    assert(manager.isProviderLoaded("hbase"))
+    assert(manager.isProviderLoaded("kafka"))
   }
 }
