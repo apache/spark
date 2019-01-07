@@ -178,11 +178,17 @@ class ExchangeCoordinator(
       // If including the nextShuffleInputSize would exceed the target partition size, then start a
       // new partition.
       if (i > 0 && postShuffleInputSize + nextShuffleInputSize > targetPostShuffleInputSize) {
-        partitionStartIndices += i
+        if (postShuffleInputSize != 0) {
+          partitionStartIndices += i
+        }
         // reset postShuffleInputSize.
         postShuffleInputSize = nextShuffleInputSize
       } else postShuffleInputSize += nextShuffleInputSize
 
+      // filter the last indice which will split the postShuffleInputSize=0
+      if (postShuffleInputSize == 0 && i == numPreShufflePartitions - 1) {
+        partitionStartIndices.remove(partitionStartIndices.size - 1)
+      }
       i += 1
     }
 
