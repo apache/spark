@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{If, Literal}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -205,6 +206,10 @@ class StringIndexer @Since("1.4.0") (
 
     val (inputCols, _) = getInOutCols()
 
+    // If input dataset is not originally cached, we need to unpersist it
+    // once we persist it later.
+    val needUnpersist = dataset.storageLevel == StorageLevel.NONE
+
     // In case of equal frequency when frequencyDesc/Asc, the strings are further sorted
     // alphabetically.
     val labelsArray = $(stringOrderType) match {
@@ -225,7 +230,9 @@ class StringIndexer @Since("1.4.0") (
           dataset.select(inputCol).na.drop().distinct().sort(dataset(s"$inputCol").desc)
             .as[String].collect()
         }
-        dataset.unpersist()
+        if (needUnpersist) {
+          dataset.unpersist()
+        }
         labels
       case StringIndexer.alphabetAsc =>
         import dataset.sparkSession.implicits._
@@ -234,7 +241,9 @@ class StringIndexer @Since("1.4.0") (
           dataset.select(inputCol).na.drop().distinct().sort(dataset(s"$inputCol").asc)
             .as[String].collect()
         }
-        dataset.unpersist()
+        if (needUnpersist) {
+          dataset.unpersist()
+        }
         labels
      }
     copyValues(new StringIndexerModel(uid, labelsArray).setParent(this))
@@ -309,12 +318,16 @@ class StringIndexerModel (
 
   import StringIndexerModel._
 
+  @deprecated("`this(labels: Array[String])` is deprecated and will be removed in 3.1.0. " +
+    "Use `this(labelsArray: Array[Array[String]])` instead.", "3.0.0")
   @Since("1.5.0")
   def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), Array(labels))
 
   @Since("3.0.0")
   def this(labelsArray: Array[Array[String]]) = this(Identifiable.randomUID("strIdx"), labelsArray)
 
+  @deprecated("`labels` is deprecated and will be removed in 3.1.0. Use `labelsArray` " +
+    "instead.", "3.0.0")
   @Since("1.5.0")
   def labels: Array[String] = {
     require(labelsArray.length == 1, "This StringIndexerModel is fitted by multi-columns, " +
