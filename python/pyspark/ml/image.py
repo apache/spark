@@ -194,7 +194,8 @@ class _ImageSchema(object):
         if LooseVersion(np.__version__) >= LooseVersion('1.9'):
             data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
         else:
-            data = bytearray(array.astype(dtype=np.uint8).ravel().tostring())
+            # Numpy prior to 1.9 don't have `tobytes` method.
+            data = bytearray(array.astype(dtype=np.uint8).ravel())
 
         # Creating new Row with _create_row(), because Row(name = value, ... )
         # orders fields by name, which conflicts with expected schema order
