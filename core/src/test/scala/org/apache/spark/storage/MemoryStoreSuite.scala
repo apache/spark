@@ -28,7 +28,6 @@ import org.scalatest._
 import org.apache.spark._
 import org.apache.spark.internal.config.{STORAGE_UNROLL_FRACTION, STORAGE_UNROLL_MEMORY_THRESHOLD}
 import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
-import org.apache.spark.memory.{MemoryMode, StaticMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
 import org.apache.spark.util._

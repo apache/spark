@@ -137,7 +137,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
 
     assert(serialUnion.asInstanceOf[UnionRDD[Int]].isPartitionListingParallel === false)
 
-    sc.conf.set(RDD_PARALLEL_LISTING_THRESHOLD.key, "1")
+    sc.conf.set(RDD_PARALLEL_LISTING_THRESHOLD, 1)
     val parallelUnion = sc.union(nums1, nums2)
     val actual = parallelUnion.collect().toList
     sc.conf.remove(RDD_PARALLEL_LISTING_THRESHOLD.key)

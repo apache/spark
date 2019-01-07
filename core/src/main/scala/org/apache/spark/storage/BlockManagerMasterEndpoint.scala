@@ -28,7 +28,6 @@ import scala.util.Random
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.internal.config.STORAGE_REPLICATION_PROACTIVE
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
@@ -69,7 +68,7 @@ class BlockManagerMasterEndpoint(
     mapper
   }
 
-  val proactivelyReplicate = conf.get(STORAGE_REPLICATION_PROACTIVE)
+  val proactivelyReplicate = conf.get(config.STORAGE_REPLICATION_PROACTIVE)
 
   logInfo("BlockManagerMasterEndpoint up")
 

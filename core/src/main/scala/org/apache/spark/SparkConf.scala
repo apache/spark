@@ -538,7 +538,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
         throw new IllegalArgumentException(s"$key should be between 0 and 1 (was '$value').")
       }
     }
-
+    
     if (contains("spark.master") && get("spark.master").startsWith("yarn-")) {
       val warning = s"spark.master ${get("spark.master")} is deprecated in Spark 2.0+, please " +
         "instead use \"yarn\" with specified deploy mode."
@@ -665,7 +665,7 @@ private[spark] object SparkConf extends Logging {
         // Translate old value to a duration, with 10s wait time per try.
         translation = s => s"${s.toLong * 10}s")),
     REDUCER_MAX_SIZE_IN_FLIGHT.key -> Seq(
-      AlternateConfig(REDUCER_MAX_MB_IN_FLIGHT.key, "1.4")),
+      AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
     "spark.kryoserializer.buffer" -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
         translation = s => s"${(s.toDouble * 1000).toInt}k")),
@@ -675,10 +675,10 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
     EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
-     IO_COMPRESSION_SNAPPY_BLOCKSIZE.key -> Seq(
-      AlternateConfig(IO_COMPRESSION_SNAPPY_BLOCK_SIZE.key, "1.4")),
+    IO_COMPRESSION_SNAPPY_BLOCKSIZE.key -> Seq(
+      AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
     IO_COMPRESSION_LZ4_BLOCKSIZE.key -> Seq(
-      AlternateConfig(IO_COMPRESSION_LZ4_BLOCK_SIZE.key, "1.4")),
+      AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
     "spark.rpc.numRetries" -> Seq(
       AlternateConfig("spark.akka.num.retries", "1.4")),
     "spark.rpc.retry.wait" -> Seq(
@@ -700,7 +700,7 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.access.hadoopFileSystems" -> Seq(
       AlternateConfig("spark.yarn.access.namenodes", "2.2")),
     MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
-      AlternateConfig(REDUCER_MAX_REQ_SIZE_SHUFFLE_MEM.key, "2.3")),
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
     LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
       AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3")),
     DRIVER_MEMORY_OVERHEAD.key -> Seq(

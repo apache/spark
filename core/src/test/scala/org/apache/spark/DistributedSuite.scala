@@ -234,8 +234,9 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val size = 10000
     val numPartitions = 20
     val conf = new SparkConf()
-      .set(config.STORAGE_UNROLL_MEMORY_THRESHOLD, 1024)
+      .set(config.STORAGE_UNROLL_MEMORY_THRESHOLD, 1024L)
       .set(TEST_MEMORY, size.toLong)
+
     sc = new SparkContext(clusterUrl, "test", conf)
     val data = sc.parallelize(1 to size, numPartitions).persist(StorageLevel.MEMORY_ONLY)
     assert(data.count() === size)

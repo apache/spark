@@ -881,27 +881,11 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
 
-  private[spark] val IO_COMPRESSION_SNAPPY_BLOCK_SIZE =
-    ConfigBuilder("spark.io.compression.snappy.block.size")
-      .doc("Block size in bytes used in Snappy compression, in the case when " +
-        "Snappy compression codec is used. Lowering this block size " +
-        "will also lower shuffle memory usage when Snappy is used. This used in older version 1.4")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("32k")
-
   private[spark] val IO_COMPRESSION_LZ4_BLOCKSIZE =
     ConfigBuilder("spark.io.compression.lz4.blockSize")
       .doc("Block size in bytes used in LZ4 compression, in the case when LZ4 compression" +
         "codec is used. Lowering this block size will also lower shuffle memory " +
         "usage when LZ4 is used.")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("32k")
-
-  private[spark] val IO_COMPRESSION_LZ4_BLOCK_SIZE =
-    ConfigBuilder("spark.io.compression.lz4.block.size")
-      .doc("Block size in bytes used in LZ4 compression, in the case when LZ4 compression" +
-        "codec is used. Lowering this block size will also lower shuffle memory " +
-        "usage when LZ4 is used. This used in older version 1.4")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
 
@@ -925,8 +909,8 @@ package object config {
 
   private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
     ConfigBuilder("spark.io.compression.zstd.level")
-      .doc("Compression level for Zstd compression codec. Increasing the compression" +
-        " level will result in better compression at the expense of more CPU and memory")
+      .doc("Compression level for Zstd compression codec. Increasing the compression " +
+        "level will result in better compression at the expense of more CPU and memory")
       .intConf
       .createWithDefault(1)
 
@@ -964,17 +948,6 @@ package object config {
     .intConf
     .createWithDefault(Int.MaxValue)
 
-  private[spark] val REDUCER_MAX_MB_IN_FLIGHT = ConfigBuilder("spark.reducer.maxMbInFlight")
-    .doc("Maximum size (in megabytes) of map outputs to fetch simultaneously from each " +
-      "reduce task. Its for spark 1.4 ")
-    .bytesConf(ByteUnit.MiB)
-    .createWithDefaultString("48")
-
-  private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_MEM =
-    ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(Int.MaxValue - 512)
-
   private[spark] val BROADCAST_COMPRESS = ConfigBuilder("spark.broadcast.compress")
     .doc("Whether to compress broadcast variables before sending them. " +
       "Generally a good idea. Compression will use spark.io.compression.codec")
@@ -1006,8 +979,8 @@ package object config {
 
   private[spark] val RDD_PARALLEL_LISTING_THRESHOLD =
     ConfigBuilder("spark.rdd.parallelListingThreshold")
-    .intConf
-    .createWithDefault(10)
+      .intConf
+      .createWithDefault(10)
 
   private[spark] val RDD_LIMIT_SCALE_UP_FACTOR =
     ConfigBuilder("spark.rdd.limit.scaleUpFactor")
