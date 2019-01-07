@@ -28,12 +28,16 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 
 /**
  * The data type representing `java.math.BigDecimal` values.
- * A Decimal that must have fixed precision (the maximum number of digits) and scale (the number
- * of digits on right side of dot).
+ * A Decimal represents an exact numeric in which the precision and scale can be arbitrarily sized.
+ * The precision is the number of significant digits and it can range from 1 to 38. The scale can
+ * be positive or negative. If zero or positive, the scale is the number of digits to the right of
+ * the decimal point. If negative, the unscaled value of the number is multiplied by ten to the
+ * power of the negation of the scale.
  *
- * The precision can be up to 38, scale can also be up to 38 (less or equal to precision).
+ * Please, notice that not all datasources support negative scales. In that case, writing decimals
+ * with negative scales can lead to errors and exceptions.
  *
- * The default precision and scale is (10, 0).
+ * The default precision and scale is (38, 18).
  *
  * Please use `DataTypes.createDecimalType()` to create a specific instance.
  *
