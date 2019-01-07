@@ -277,8 +277,8 @@ class KubernetesSuite extends SparkFunSuite
                     .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
                     .headOption.getOrElse(false) shouldBe (true)
                 }
-                // Sleep a small interval to ensure everything is registered.
-                Thread.sleep(100)
+                // Sleep a small interval to allow execution & downstream pod ready check to also catch up
+                Thread.sleep(2000)
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
@@ -335,7 +335,7 @@ class KubernetesSuite extends SparkFunSuite
           s"The pods (${execPods.values}) did not become ready the resource conditions are ${resourceConditions}")
       }
       // Sleep a small interval to allow execution
-      Thread.sleep(100)
+      Thread.sleep(3000)
       // Wait for the executors to be removed
       Eventually.eventually(TIMEOUT, INTERVAL) {
         println(s"Decom: This iteration is ${execPods.values.nonEmpty} with ${execPods}")
@@ -450,5 +450,5 @@ private[spark] object KubernetesSuite {
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
   val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
   val POD_RUNNING_TIMEOUT = PatienceConfiguration.Timeout(Span(5, Minutes))
-  val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
+  val INTERVAL = PatienceConfiguration.Interval(Span(1, Seconds))
 }
