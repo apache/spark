@@ -57,15 +57,13 @@ This token can now be sent to other processes and used to authenticate to differ
 belonging to that service.
 
 And thus the first drawback of DTs becomes apparent: you need service-specific logic to create and
-use them. While it would be possible to create a shared API or even a shared service to manage the
-creation and use of DTs, that doesn't currently exist, and retrofitting such a system would be a
-huge change in a bunch of different services.
+use them.
 
-Spark works around this by having a (somewhat) pluggable, internal DT creation API. Support for new
-services can be added by implementing a `HadoopDelegationTokenProvider` that is then called by Spark
-when generating delegation tokens for an application. Spark distributes tokens to executors using
-the `UserGroupInformation` Hadoop API, and it's up to the DT provider and the respective client
-library to agree on how to use those tokens.
+Spark implements a (somewhat) pluggable, internal DT creation API. Support for new services can be
+added by implementing a `HadoopDelegationTokenProvider` that is then called by Spark when generating
+delegation tokens for an application. Spark makes the DTs available to code by stashing them in the
+`UserGroupInformation` credentials, and it's up to the DT provider and the respective client library
+to agree on how to use those tokens.
 
 Once they are created, the semantics of how DTs operate are also service-specific. But, in general,
 they try to follow the semantics of Kerberos tokens:
@@ -154,7 +152,10 @@ solution is a compromise: it targets the lowest common denominator, which is ser
 that do not support actual token renewal.
 
 In Spark, DT "renewal" is enabled by giving the application a Kerberos keytab. A keytab is
-basically your Kerberos password written into a plain text file, which is why it's so sensitive.
+basically your Kerberos password written into a plain text file, which is why it's so sensitive:
+if anyone is able to get hold of that keytab file, they'll be able to authenticate to any service
+as that user, for as long as the credentials stored in the keytab remain valid in the KDC.
+
 By having the keytab, Spark can indefinitely maintain a valid Kerberos TGT.
 
 With Kerberos credentials available, Spark will create new DTs for the configured services as old
