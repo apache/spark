@@ -242,15 +242,17 @@ class UISuite extends SparkFunSuite {
 
       assert(TestUtils.httpResponseCode(url) === HttpServletResponse.SC_NOT_FOUND)
 
-      val ctx = newContext(path)
+      val (servlet, ctx) = newContext(path)
       serverInfo.addHandler(ctx, securityMgr)
       assert(TestUtils.httpResponseCode(url) === HttpServletResponse.SC_NOT_ACCEPTABLE)
 
       // Try a request with bad content in a parameter to make sure the security filter
       // is being added to new handlers.
-      val invalidRequest = new URL(
+      val badRequest = new URL(
         s"http://localhost:${serverInfo.boundPort}$path/root?bypass&invalid<=foo")
-      assert(TestUtils.httpResponseCode(invalidRequest) === HttpServletResponse.SC_BAD_REQUEST)
+      assert(TestUtils.httpResponseCode(badRequest) === HttpServletResponse.SC_OK)
+      assert(servlet.lastRequest.getParameter("invalid<") === null)
+      assert(servlet.lastRequest.getParameter("invalid&lt;") !== null)
 
       serverInfo.removeHandler(ctx)
       assert(TestUtils.httpResponseCode(url) === HttpServletResponse.SC_NOT_FOUND)
@@ -263,10 +265,12 @@ class UISuite extends SparkFunSuite {
     val (conf, securityMgr, sslOptions) = sslEnabledConf()
     val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
     try {
-      Seq(newContext("/"), newContext("/test1")).foreach(serverInfo.addHandler(_, securityMgr))
+      Seq(newContext("/"), newContext("/test1")).foreach { case (_, ctx) =>
+        serverInfo.addHandler(ctx, securityMgr)
+      }
       assert(serverInfo.server.getState === "STARTED")
 
-      val testContext = newContext("/test2")
+      val (_, testContext) = newContext("/test2")
       serverInfo.addHandler(testContext, securityMgr)
       testContext.start()
 
@@ -317,17 +321,12 @@ class UISuite extends SparkFunSuite {
    * Create a new context handler for the given path, with a single servlet that responds to
    * requests in `$path/root`.
    */
-  private def newContext(path: String): ServletContextHandler = {
-    val servlet = new HttpServlet() {
-      override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
-        res.sendError(HttpServletResponse.SC_OK)
-      }
-    }
-
+  private def newContext(path: String): (CapturingServlet, ServletContextHandler) = {
+    val servlet = new CapturingServlet()
     val ctx = new ServletContextHandler()
     ctx.setContextPath(path)
     ctx.addServlet(new ServletHolder(servlet), "/root")
-    ctx
+    (servlet, ctx)
   }
 
   def stopServer(info: ServerInfo): Unit = {
@@ -336,6 +335,18 @@ class UISuite extends SparkFunSuite {
 
   def closeSocket(socket: ServerSocket): Unit = {
     if (socket != null) socket.close
+  }
+
+  /** Test servlet that exposes the last request object for GET calls. */
+  private class CapturingServlet extends HttpServlet {
+
+    @volatile var lastRequest: HttpServletRequest = _
+
+    override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+      lastRequest = req
+      res.sendError(HttpServletResponse.SC_OK)
+    }
+
   }
 
 }
