@@ -337,6 +337,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     console.printInfo(s"Spark master: $master, Application Id: $appId")
   }
 
+  // method body imported from Hive and translated from Java to Scala
   override def processLine(line: String, allowInterrupting: Boolean): Int = {
     var oldSignal: SignalHandler = null
     var interruptSignal: Signal = null

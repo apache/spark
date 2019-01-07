@@ -97,6 +97,8 @@ class StringUtilsSuite extends SparkFunSuite {
     assert(StringUtils.split(bracketedComment4).head === "select 1 /**/")
     val bracketedComment5 = "select 1 /**/ ; /**/" // Good
     assert(StringUtils.split(bracketedComment5).head === "select 1 /**/")
+    val bracketedComment6 = "select /* bla bla */ 1" // Hints are reserved
+    assert(StringUtils.split(bracketedComment6).head === bracketedComment6)
 
     val qQuote1 = "select 1 as `;`" // Good
     assert(StringUtils.split(qQuote1) === Array(qQuote1))
