@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.ExecutorService
 
+import com.palantir.logsafe.SafeArg
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -134,6 +135,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
       // drive the rest of the lifecycle decisions
       // TODO what if we disconnect from a networking issue? Probably want to mark the executor
       // to be deleted eventually.
+      safeLogDebug("Executor disconnected",
+        SafeArg.of("executorId", addressToExecutorId.get(rpcAddress)))
       addressToExecutorId.get(rpcAddress).foreach(disableExecutor)
     }
   }

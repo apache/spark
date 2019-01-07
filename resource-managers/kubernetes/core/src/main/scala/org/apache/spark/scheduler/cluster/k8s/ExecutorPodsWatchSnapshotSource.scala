@@ -18,24 +18,25 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.io.Closeable
 
+import com.palantir.logsafe.SafeArg
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.SafeLogging
 import org.apache.spark.util.Utils
 
 private[spark] class ExecutorPodsWatchSnapshotSource(
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    kubernetesClient: KubernetesClient) extends Logging {
+    kubernetesClient: KubernetesClient) extends SafeLogging {
 
   private var watchConnection: Closeable = _
 
   def start(applicationId: String): Unit = {
     require(watchConnection == null, "Cannot start the watcher twice.")
-    logDebug(s"Starting watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
-      s" $SPARK_ROLE_LABEL=$SPARK_POD_EXECUTOR_ROLE.")
+    safeLogDebug("Starting watch for pods.",
+      SafeArg.of("applicationId", applicationId))
     watchConnection = kubernetesClient.pods()
       .withLabel(SPARK_APP_ID_LABEL, applicationId)
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
@@ -54,12 +55,14 @@ private[spark] class ExecutorPodsWatchSnapshotSource(
   private class ExecutorPodsWatcher extends Watcher[Pod] {
     override def eventReceived(action: Action, pod: Pod): Unit = {
       val podName = pod.getMetadata.getName
-      logDebug(s"Received executor pod update for pod named $podName, action $action")
+      safeLogDebug("Received executor pod update for pod",
+        SafeArg.of("podName", podName),
+        SafeArg.of("action", action))
       snapshotsStore.updatePod(pod)
     }
 
     override def onClose(e: KubernetesClientException): Unit = {
-      logWarning("Kubernetes client has been closed (this is expected if the application is" +
+      safeLogWarning("Kubernetes client has been closed (this is expected if the application is" +
         " shutting down.)", e)
     }
   }

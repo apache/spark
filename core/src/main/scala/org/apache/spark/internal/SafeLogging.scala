@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory
 trait SafeLogging {
   private[this] val log_ = LoggerFactory.getLogger(this.getClass.getName)
 
+  def safeLogIsInfoEnabled: Boolean = log_.isInfoEnabled
+
   def safeLogInfo(message: String, args: Arg[_]*): Unit = {
     if (log_.isInfoEnabled) log_.info(message, args: _*)
   }

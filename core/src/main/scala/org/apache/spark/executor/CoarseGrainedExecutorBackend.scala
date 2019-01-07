@@ -26,11 +26,13 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import com.palantir.logsafe.{SafeArg, UnsafeArg}
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, SafeLogging}
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -45,7 +47,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     cores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv)
-  extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
+  extends ThreadSafeRpcEndpoint with ExecutorBackend with SafeLogging {
 
   private[this] val stopping = new AtomicBoolean(false)
   var executor: Executor = null
@@ -56,7 +58,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
   override def onStart() {
-    logInfo("Connecting to driver: " + driverUrl)
+    safeLogInfo("Connecting to driver", UnsafeArg.of("driverUrl", driverUrl))
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
@@ -78,7 +80,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   override def receive: PartialFunction[Any, Unit] = {
     case RegisteredExecutor =>
-      logInfo("Successfully registered with driver")
+      safeLogInfo("Successfully registered with driver")
       try {
         executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
       } catch {
@@ -94,7 +96,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
         val taskDesc = TaskDescription.decode(data.value)
-        logInfo("Got assigned task " + taskDesc.taskId)
+        safeLogInfo("Got assigned task", SafeArg.of("taskId", taskDesc.taskId))
         executor.launchTask(this, taskDesc)
       }
 
@@ -107,7 +109,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case StopExecutor =>
       stopping.set(true)
-      logInfo("Driver commanded a shutdown")
+      safeLogInfo("Driver commanded a shutdown")
       // Cannot shutdown here because an ack may need to be sent back to the caller. So send
       // a message to self to actually do the shutdown.
       self.send(Shutdown)
@@ -125,18 +127,20 @@ private[spark] class CoarseGrainedExecutorBackend(
       }.start()
 
     case UpdateDelegationTokens(tokenBytes) =>
-      logInfo(s"Received tokens of ${tokenBytes.length} bytes")
+      safeLogInfo("Received tokens", UnsafeArg.of("tokenBytesLength", tokenBytes.length))
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (stopping.get()) {
-      logInfo(s"Driver from $remoteAddress disconnected during shutdown")
+      safeLogInfo("Driver disconnected during shutdown",
+        UnsafeArg.of("remoteAddress", remoteAddress))
     } else if (driver.exists(_.address == remoteAddress)) {
       exitExecutor(1, s"Driver $remoteAddress disassociated! Shutting down.", null,
         notifyDriver = false)
     } else {
-      logWarning(s"An unknown ($remoteAddress) driver disconnected.")
+      safeLogWarning("An unknown driver disconnected.",
+        UnsafeArg.of("remoteAddress", remoteAddress))
     }
   }
 
@@ -144,7 +148,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     val msg = StatusUpdate(executorId, taskId, state, data)
     driver match {
       case Some(driverRef) => driverRef.send(msg)
-      case None => logWarning(s"Drop $msg because has not yet connected to driver")
+      case None => safeLogWarning("Drop message because has not yet connected to driver",
+        UnsafeArg.of("msg", msg))
     }
   }
 
@@ -157,11 +162,11 @@ private[spark] class CoarseGrainedExecutorBackend(
                              reason: String,
                              throwable: Throwable = null,
                              notifyDriver: Boolean = true) = {
-    val message = "Executor self-exiting due to : " + reason
+    val message = "Executor self-exiting"
     if (throwable != null) {
-      logError(message, throwable)
+      safeLogError(message, throwable, UnsafeArg.of("reason", reason))
     } else {
-      logError(message)
+      safeLogError(message, UnsafeArg.of("reason", reason))
     }
 
     if (notifyDriver && driver.nonEmpty) {

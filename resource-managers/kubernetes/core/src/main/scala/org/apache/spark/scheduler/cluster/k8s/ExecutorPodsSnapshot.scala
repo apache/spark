@@ -18,10 +18,11 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Locale
 
+import com.palantir.logsafe.SafeArg
 import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.SafeLogging
 
 /**
  * An immutable view of the current executor pods that are running in the cluster.
@@ -36,7 +37,7 @@ private[spark] case class ExecutorPodsSnapshot(executorPods: Map[Long, ExecutorP
   }
 }
 
-object ExecutorPodsSnapshot extends Logging {
+object ExecutorPodsSnapshot extends SafeLogging {
 
   def apply(executorPods: Seq[Pod]): ExecutorPodsSnapshot = {
     ExecutorPodsSnapshot(toStatesByExecutorId(executorPods))
@@ -65,8 +66,10 @@ object ExecutorPodsSnapshot extends Logging {
         case "succeeded" =>
           PodSucceeded(pod)
         case _ =>
-          logWarning(s"Received unknown phase $phase for executor pod with name" +
-            s" ${pod.getMetadata.getName} in namespace ${pod.getMetadata.getNamespace}")
+          safeLogWarning("Received unknown phase for executor pod with name",
+            SafeArg.of("phase", phase),
+            SafeArg.of("podName", pod.getMetadata.getName),
+            SafeArg.of("namespace", pod.getMetadata.getNamespace))
           PodUnknown(pod)
       }
     }

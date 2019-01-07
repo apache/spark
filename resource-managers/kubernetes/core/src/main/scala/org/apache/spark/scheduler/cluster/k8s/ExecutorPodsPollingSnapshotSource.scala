@@ -18,20 +18,21 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{Future, ScheduledExecutorService, TimeUnit}
 
+import com.palantir.logsafe.SafeArg
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.SafeLogging
 import org.apache.spark.util.ThreadUtils
 
 private[spark] class ExecutorPodsPollingSnapshotSource(
     conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    pollingExecutor: ScheduledExecutorService) extends Logging {
+    pollingExecutor: ScheduledExecutorService) extends SafeLogging {
 
   private val pollingInterval = conf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
 
@@ -39,7 +40,8 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
 
   def start(applicationId: String): Unit = {
     require(pollingFuture == null, "Cannot start polling more than once.")
-    logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
+    safeLogDebug("Starting to check for executor pod state",
+      SafeArg.of("pollingIntervalInMs", pollingInterval))
     pollingFuture = pollingExecutor.scheduleWithFixedDelay(
       new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
   }
@@ -54,7 +56,7 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
 
   private class PollRunnable(applicationId: String) extends Runnable {
     override def run(): Unit = {
-      logDebug(s"Resynchronizing full executor pod state from Kubernetes.")
+      safeLogDebug("Resynchronizing full executor pod state from Kubernetes.")
       snapshotsStore.replaceSnapshot(kubernetesClient
         .pods()
         .withLabel(SPARK_APP_ID_LABEL, applicationId)

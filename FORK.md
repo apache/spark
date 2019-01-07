@@ -10,12 +10,15 @@
 * [SPARK-18079](https://issues.apache.org/jira/browse/SPARK-18079) - CollectLimitExec.executeToIterator should perform per-partition limits
 
 * [SPARK-15777](https://issues.apache.org/jira/browse/SPARK-15777) (Partial fix) - Catalog federation
- * make ExternalCatalog configurable beyond in memory and hive
- * FileIndex for catalog tables is provided by external catalog instead of using default impl
+    * make ExternalCatalog configurable beyond in memory and hive
+    * FileIndex for catalog tables is provided by external catalog instead of using default impl
 
 * Better pushdown for IN expressions in parquet via UserDefinedPredicate ([SPARK-17091](https://issues.apache.org/jira/browse/SPARK-17091) for original issue)
-
+* SafeLogging implemented for the following files:
+    * core: Broadcast, CoarseGrainedExecutorBackend, CoarseGrainedSchedulerBackend, Executor, MemoryStore, SparkContext, TorrentBroadcast
+    * kubernetes: ExecutorPodsAllocator, ExecutorPodsLifecycleManager, ExecutorPodsPollingSnapshotSource, ExecutorPodsSnapshot, ExecutorPodsWatchSnapshotSource, KubernetesClusterSchedulerBackend
+    * yarn: YarnClusterSchedulerBackend, YarnSchedulerBackend
 # Added
 
 * Gradle plugin to easily create custom docker images for use with k8s
-* Filter rLibDir by exists so that daemon.R references the correct file [460](https://github.com/palantir/spark/pull/460) 
+* Filter rLibDir by exists so that daemon.R references the correct file [460](https://github.com/palantir/spark/pull/460)
