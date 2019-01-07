@@ -345,7 +345,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     } else {
       when(corruptStream.read(any(), any(), any(classOf[Int]))).thenAnswer(new Answer[Int] {
         override def answer(invocationOnMock: InvocationOnMock): Int = {
-          val bufSize = invocationOnMock.getArgumentAt(2, classOf[Int])
+          val bufSize = invocationOnMock.getArguments()(2).asInstanceOf[Int]
           // This condition is needed as we don't throw exception until we read the stream
           // less than maxBytesInFlight/3
           if (bufSize < 8 * 1024) {
