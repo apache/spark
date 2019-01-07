@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{Clock, SystemClock}
 
 private[spark] class DriverServiceFeatureStep(
@@ -51,18 +51,17 @@ private[spark] class DriverServiceFeatureStep(
   }
 
   private val driverPort = kubernetesConf.sparkConf.getInt(
-    "spark.driver.port", DEFAULT_DRIVER_PORT)
+    config.DRIVER_PORT.key, DEFAULT_DRIVER_PORT)
   private val driverBlockManagerPort = kubernetesConf.sparkConf.getInt(
-    org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
+    config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
 
   override def configurePod(pod: SparkPod): SparkPod = pod
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
     val driverHostname = s"$resolvedServiceName.${kubernetesConf.namespace}.svc"
     Map(DRIVER_HOST_KEY -> driverHostname,
-      "spark.driver.port" -> driverPort.toString,
-      org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT.key ->
-        driverBlockManagerPort.toString)
+      config.DRIVER_PORT.key -> driverPort.toString,
+      config.DRIVER_BLOCK_MANAGER_PORT.key -> driverBlockManagerPort.toString)
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
@@ -90,8 +89,8 @@ private[spark] class DriverServiceFeatureStep(
 }
 
 private[spark] object DriverServiceFeatureStep {
-  val DRIVER_BIND_ADDRESS_KEY = org.apache.spark.internal.config.DRIVER_BIND_ADDRESS.key
-  val DRIVER_HOST_KEY = org.apache.spark.internal.config.DRIVER_HOST_ADDRESS.key
+  val DRIVER_BIND_ADDRESS_KEY = config.DRIVER_BIND_ADDRESS.key
+  val DRIVER_HOST_KEY = config.DRIVER_HOST_ADDRESS.key
   val DRIVER_SVC_POSTFIX = "-driver-svc"
   val MAX_SERVICE_NAME_LENGTH = 63
 }

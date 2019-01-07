@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import scala.collection.mutable
 import scala.concurrent.duration._
 
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, verify, when}
 import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
@@ -243,7 +243,7 @@ class StandaloneDynamicAllocationSuite
   }
 
   test("dynamic allocation with cores per executor") {
-    sc = new SparkContext(appConf.set("spark.executor.cores", "2"))
+    sc = new SparkContext(appConf.set(config.EXECUTOR_CORES, 2))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
@@ -296,7 +296,7 @@ class StandaloneDynamicAllocationSuite
 
   test("dynamic allocation with cores per executor AND max cores") {
     sc = new SparkContext(appConf
-      .set("spark.executor.cores", "2")
+      .set(config.EXECUTOR_CORES, 2)
       .set("spark.cores.max", "8"))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
@@ -526,7 +526,7 @@ class StandaloneDynamicAllocationSuite
     new SparkConf()
       .setMaster(masterRpcEnv.address.toSparkURL)
       .setAppName("test")
-      .set("spark.executor.memory", "256m")
+      .set(config.EXECUTOR_MEMORY.key, "256m")
   }
 
   /** Make a master to which our application will send executor requests. */
