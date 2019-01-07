@@ -18,8 +18,9 @@
 #
 
 function exit_with_usage {
+  local NAME=$(basename $0)
   cat << EOF
-usage: tag-release.sh
+usage: $NAME
 Tags a Spark release on a particular branch.
 
 Inputs are specified with the following environment variables:
