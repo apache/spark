@@ -22,7 +22,9 @@ import java.time.chrono.IsoChronology
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
 import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{Callable, TimeUnit}
+
+import com.google.common.cache.CacheBuilder
 
 trait DateTimeFormatterHelper {
   protected def toInstantWithZoneId(temporalAccessor: TemporalAccessor, zoneId: ZoneId): Instant = {
@@ -39,11 +41,12 @@ trait DateTimeFormatterHelper {
 }
 
 object DateTimeFormatterHelper {
-  private val cache = new ConcurrentHashMap[(String, Locale), DateTimeFormatter]()
+  private val cache = CacheBuilder.newBuilder()
+    .initialCapacity(8)
+    .maximumSize(128)
+    .expireAfterAccess(1, TimeUnit.HOURS)
+    .build[(String, Locale), DateTimeFormatter]()
 
-  def getFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
-    cache.computeIfAbsent((pattern, locale), _ => buildFormatter(pattern, locale))
-  }
 
   private def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
     new DateTimeFormatterBuilder()
@@ -57,5 +60,13 @@ object DateTimeFormatterHelper {
       .toFormatter(locale)
       .withChronology(IsoChronology.INSTANCE)
       .withResolverStyle(ResolverStyle.STRICT)
+  }
+
+  def getFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
+    cache.get(
+      (pattern, locale),
+      new Callable[DateTimeFormatter]() {
+        override def call = buildFormatter(pattern, locale)
+      })
   }
 }
