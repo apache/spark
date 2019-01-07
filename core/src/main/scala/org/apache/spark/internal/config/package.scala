@@ -117,7 +117,7 @@ package object config {
   private[spark] val EVENT_LOG_GARBAGE_COLLECTION_METRICS =
     ConfigBuilder("spark.eventLog.logStageExecutorGCMetrics.enabled")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS =
     ConfigBuilder("spark.eventLog.additionalYoungGenerationGarbageCollectors")

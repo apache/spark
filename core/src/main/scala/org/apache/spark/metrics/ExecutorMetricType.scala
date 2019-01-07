@@ -111,14 +111,6 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
     "MajorGCTime"
   )
 
-  private lazy val supported: Boolean = {
-    val shouldLogStageExecutorGCMetrics =
-      SparkEnv.get.conf.get(config.EVENT_LOG_PROCESS_TREE_METRICS)
-    val supportedVendor = System.getProperty("java.vendor").contains("Oracle") ||
-      System.getProperty("java.vendor").contains("OpenJDK")
-    shouldLogStageExecutorGCMetrics && supportedVendor
-  }
-
   private lazy val youngGenGarbageCollector: Seq[String] = {
     Seq(`copy`, `psScavenge`, `parNew`, `g1Young`) ++ /* additional young gc we added */
       SparkEnv.get.conf.get(config.EVENT_LOG_ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS)
@@ -131,7 +123,7 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
 
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
     val gcMetrics = Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
-    if (supported) {
+    if (SparkEnv.get.conf.get(config.EVENT_LOG_GARBAGE_COLLECTION_METRICS)) {
       ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
         if (youngGenGarbageCollector.contains(mxBean.getName)) {
           gcMetrics(0) = mxBean.getCollectionCount
