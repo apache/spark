@@ -272,7 +272,7 @@ class KubernetesSuite extends SparkFunSuite
               if (decomissioningTest) {
                 // Wait for all the containers in the pod to be running
                 println("Waiting for pod to become OK then delete.")
-                Eventually.eventually(TIMEOUT, INTERVAL) {
+                Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
                   resource.getStatus.getConditions().asScala
                     .map(cond => cond.getStatus() == "True" && cond.getType() == "Ready")
                     .headOption.getOrElse(false) shouldBe (true)
@@ -315,7 +315,7 @@ class KubernetesSuite extends SparkFunSuite
     println("Done driver pod check")
     // If we're testing decomissioning we delete all the executors, but we should have
     // an executor at some point.
-    Eventually.eventually(TIMEOUT, INTERVAL) {
+    Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
       println(s"This iteration is ${execPods.values.nonEmpty} with ${execPods}")
       execPods.values.nonEmpty should be (true)
     }
@@ -449,5 +449,6 @@ private[spark] object KubernetesSuite {
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
   val TIMEOUT = PatienceConfiguration.Timeout(Span(2, Minutes))
+  val POD_RUNNING_TIMEOUT = PatienceConfiguration.Timeout(Span(5, Minutes))
   val INTERVAL = PatienceConfiguration.Interval(Span(2, Seconds))
 }
