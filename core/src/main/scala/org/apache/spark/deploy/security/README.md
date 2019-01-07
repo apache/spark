@@ -4,7 +4,7 @@ This document aims to explain and demystify delegation tokens as they are used b
 this topic is generally a huge source of confusion.
 
 
-## What are delegation tokens?
+## What are delegation tokens and why use them?
 
 Delegation tokens (DTs from now on) are authentication tokens used by some services to replace
 Kerberos service tokens. Many services in the Hadoop ecosystem have support for DTs, since they
@@ -20,7 +20,7 @@ DTs allow for a single place (e.g. the Spark driver) to require Kerberos credent
 can then distribute the DTs to other parts of the distributed application (e.g. Spark executors),
 so they can authenticate to services.
 
-* A single token is used for authentication
+* A single token per service is used for authentication
 
 If Kerberos authentication were used, each client connection to a server would require a trip
 to the KDC and generation of a service ticket. In a distributed system, the number of service
@@ -28,6 +28,10 @@ tickets can balloon pretty quickly when you think about the number of client pro
 executors) vs. the number of service processes (e.g. HDFS DataNodes). That generates unnecessary
 extra load on the KDC, and may even run into usage limits set up by the KDC admin.
 
+* DTs are only used for authentication
+
+DTs, unlike TGTs, can only be used to authenticate to the specific service for which they were
+issued. You cannot use an existing DT to create new DTs or to create DTs for a different service.
 
 So in short, DTs are *not* Kerberos tokens. They are used by many services to replace Kerberos
 authentication, or even other forms of authentication, although there is nothing (aside from
@@ -66,10 +70,12 @@ library to agree on how to use those tokens.
 Once they are created, the semantics of how DTs operate are also service-specific. But, in general,
 they try to follow the semantics of Kerberos tokens:
 
-* A "lifetime" which is for how long the DT is valid before it requires renewal.
-* A "renewable life" which is for how long the DT can be renewed.
+* A "renewable period (equivalent to TGT's "lifetime") which is for how long the DT is valid
+  before it requires renewal.
+* A "max lifetime" (equivalent to TGT's "renewable life") which is for how long the DT can be
+  renewed.
 
-Once the token reaches its "renewable life", a new one needs to be created by contacting the
+Once the token reaches its "max lifetime", a new one needs to be created by contacting the
 appropriate service, restarting the above process.
 
 
@@ -124,9 +130,9 @@ containers, but will not be renewed.
 This means that those tokens will expire way before their max lifetime, unless some other code
 takes care of renewing them.
 
-And, to make matters worse, not all client libraries even implement token renewal. To use the
-example of a service supported by Spark, the `renew()` method of HBase tokens is a no-op. So
-the only way to "renew" an HBase token is to create a new one.
+Also, not all client libraries even implement token renewal. To use the example of a service
+supported by Spark, the `renew()` method of HBase tokens is a no-op. So the only way to "renew" an
+HBase token is to create a new one.
 
 
 3. What happens when tokens expire for good?
