@@ -60,7 +60,7 @@ object TypeCoercion {
       IfCoercion ::
       StackCoercion ::
       Division ::
-      new ImplicitTypeCasts(conf) ::
+      ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
       Nil
@@ -181,8 +181,9 @@ object TypeCoercion {
   }
 
   /**
-   * The method finds a common type for data types that differ only in nullable, containsNull
-   * and valueContainsNull flags. If the input types are too different, None is returned.
+   * The method finds a common type for data types that differ only in nullable flags, including
+   * `nullable`, `containsNull` of [[ArrayType]] and `valueContainsNull` of [[MapType]].
+   * If the input types are different besides nullable flags, None is returned.
    */
   def findCommonTypeDifferentOnlyInNullFlags(t1: DataType, t2: DataType): Option[DataType] = {
     if (t1 == t2) {
@@ -841,32 +842,11 @@ object TypeCoercion {
   /**
    * Casts types according to the expected input types for [[Expression]]s.
    */
-  class ImplicitTypeCasts(conf: SQLConf) extends TypeCoercionRule {
-
-    private def rejectTzInString = conf.getConf(SQLConf.REJECT_TIMEZONE_IN_STRING)
-
+  object ImplicitTypeCasts extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
-      // Special rules for `from/to_utc_timestamp`. These 2 functions assume the input timestamp
-      // string is in a specific timezone, so the string itself should not contain timezone.
-      // TODO: We should move the type coercion logic to expressions instead of a central
-      // place to put all the rules.
-      case e: FromUTCTimestamp if e.left.dataType == StringType =>
-        if (rejectTzInString) {
-          e.copy(left = StringToTimestampWithoutTimezone(e.left))
-        } else {
-          e.copy(left = Cast(e.left, TimestampType))
-        }
-
-      case e: ToUTCTimestamp if e.left.dataType == StringType =>
-        if (rejectTzInString) {
-          e.copy(left = StringToTimestampWithoutTimezone(e.left))
-        } else {
-          e.copy(left = Cast(e.left, TimestampType))
-        }
 
       case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
@@ -884,7 +864,7 @@ object TypeCoercion {
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
-          ImplicitTypeCasts.implicitCast(in, expected).getOrElse(in)
+          implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
 
@@ -899,10 +879,38 @@ object TypeCoercion {
           }
         }
         e.withNewChildren(children)
-    }
-  }
 
-  object ImplicitTypeCasts {
+      case udf: ScalaUDF if udf.inputTypes.nonEmpty =>
+        val children = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
+          implicitCast(in, udfInputToCastType(in.dataType, expected)).getOrElse(in)
+        }
+        udf.withNewChildren(children)
+    }
+
+    private def udfInputToCastType(input: DataType, expectedType: DataType): DataType = {
+      (input, expectedType) match {
+        // SPARK-26308: avoid casting to an arbitrary precision and scale for decimals. Please note
+        // that precision and scale cannot be inferred properly for a ScalaUDF because, when it is
+        // created, it is not bound to any column. So here the precision and scale of the input
+        // column is used.
+        case (in: DecimalType, _: DecimalType) => in
+        case (ArrayType(dtIn, _), ArrayType(dtExp, nullableExp)) =>
+          ArrayType(udfInputToCastType(dtIn, dtExp), nullableExp)
+        case (MapType(keyDtIn, valueDtIn, _), MapType(keyDtExp, valueDtExp, nullableExp)) =>
+          MapType(udfInputToCastType(keyDtIn, keyDtExp),
+            udfInputToCastType(valueDtIn, valueDtExp),
+            nullableExp)
+        case (StructType(fieldsIn), StructType(fieldsExp)) =>
+          val fieldTypes =
+            fieldsIn.map(_.dataType).zip(fieldsExp.map(_.dataType)).map { case (dtIn, dtExp) =>
+              udfInputToCastType(dtIn, dtExp)
+            }
+          StructType(fieldsExp.zip(fieldTypes).map { case (field, newDt) =>
+            field.copy(dataType = newDt)
+          })
+        case (_, other) => other
+      }
+    }
 
     /**
      * Given an expected data type, try to cast the expression and return the cast expression.
@@ -974,6 +982,25 @@ object TypeCoercion {
             if !Cast.forceNullable(fromType, toType) =>
           implicitCast(fromType, toType).map(ArrayType(_, false)).orNull
 
+        // Implicit cast between Map types.
+        // Follows the same semantics of implicit casting between two array types.
+        // Refer to documentation above. Make sure that both key and values
+        // can not be null after the implicit cast operation by calling forceNullable
+        // method.
+        case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, tn))
+            if !Cast.forceNullable(fromKeyType, toKeyType) && Cast.resolvableNullability(fn, tn) =>
+          if (Cast.forceNullable(fromValueType, toValueType) && !tn) {
+            null
+          } else {
+            val newKeyType = implicitCast(fromKeyType, toKeyType).orNull
+            val newValueType = implicitCast(fromValueType, toValueType).orNull
+            if (newKeyType != null && newValueType != null) {
+              MapType(newKeyType, newValueType, tn)
+            } else {
+              null
+            }
+          }
+
         case _ => null
       }
       Option(ret)
@@ -1042,8 +1069,8 @@ trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
             // Leave the same if the dataTypes match.
             case Some(newType) if a.dataType == newType.dataType => a
             case Some(newType) =>
-              logDebug(
-                s"Promoting $a from ${a.dataType} to ${newType.dataType} in ${q.simpleString}")
+              logDebug(s"Promoting $a from ${a.dataType} to ${newType.dataType} in " +
+                s" ${q.simpleString(SQLConf.get.maxToStringFields)}")
               newType
           }
       }

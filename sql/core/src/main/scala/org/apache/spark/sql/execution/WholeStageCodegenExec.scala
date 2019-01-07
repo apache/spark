@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.Writer
 import java.util.Locale
 import java.util.function.Supplier
 
@@ -86,7 +87,7 @@ trait CodegenSupport extends SparkPlan {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
     s"""
-       |${ctx.registerComment(s"PRODUCE: ${this.simpleString}")}
+       |${ctx.registerComment(s"PRODUCE: ${this.simpleString(SQLConf.get.maxToStringFields)}")}
        |${doProduce(ctx)}
      """.stripMargin
   }
@@ -146,7 +147,10 @@ trait CodegenSupport extends SparkPlan {
       if (outputVars != null) {
         assert(outputVars.length == output.length)
         // outputVars will be used to generate the code for UnsafeRow, so we should copy them
-        outputVars.map(_.copy())
+        outputVars.map(_.copy()) match {
+          case stream: Stream[ExprCode] => stream.force
+          case other => other
+        }
       } else {
         assert(row != null, "outputVars and row cannot both be null.")
         ctx.currentVars = null
@@ -184,7 +188,7 @@ trait CodegenSupport extends SparkPlan {
       parent.doConsume(ctx, inputVars, rowVar)
     }
     s"""
-       |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
+       |${ctx.registerComment(s"CONSUME: ${parent.simpleString(SQLConf.get.maxToStringFields)}")}
        |$evaluated
        |$consumeFunc
      """.stripMargin
@@ -345,8 +349,119 @@ trait CodegenSupport extends SparkPlan {
    * don't require shouldStop() in the loop of producing rows.
    */
   def needStopCheck: Boolean = parent.needStopCheck
+
+  /**
+   * Helper default should stop check code.
+   */
+  def shouldStopCheckCode: String = if (needStopCheck) {
+    "if (shouldStop()) return;"
+  } else {
+    "// shouldStop check is eliminated"
+  }
+
+  /**
+   * A sequence of checks which evaluate to true if the downstream Limit operators have not received
+   * enough records and reached the limit. If current node is a data producing node, it can leverage
+   * this information to stop producing data and complete the data flow earlier. Common data
+   * producing nodes are leaf nodes like Range and Scan, and blocking nodes like Sort and Aggregate.
+   * These checks should be put into the loop condition of the data producing loop.
+   */
+  def limitNotReachedChecks: Seq[String] = parent.limitNotReachedChecks
+
+  /**
+   * A helper method to generate the data producing loop condition according to the
+   * limit-not-reached checks.
+   */
+  final def limitNotReachedCond: String = {
+    // InputAdapter is also a leaf node.
+    val isLeafNode = children.isEmpty || this.isInstanceOf[InputAdapter]
+    if (!isLeafNode && !this.isInstanceOf[BlockingOperatorWithCodegen]) {
+      val errMsg = "Only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
+        "in its data producing loop."
+      if (Utils.isTesting) {
+        throw new IllegalStateException(errMsg)
+      } else {
+        logWarning(s"[BUG] $errMsg Please open a JIRA ticket to report it.")
+      }
+    }
+    if (parent.limitNotReachedChecks.isEmpty) {
+      ""
+    } else {
+      parent.limitNotReachedChecks.mkString("", " && ", " &&")
+    }
+  }
 }
 
+/**
+ * A special kind of operators which support whole stage codegen. Blocking means these operators
+ * will consume all the inputs first, before producing output. Typical blocking operators are
+ * sort and aggregate.
+ */
+trait BlockingOperatorWithCodegen extends CodegenSupport {
+
+  // Blocking operators usually have some kind of buffer to keep the data before producing them, so
+  // then don't to copy its result even if its child does.
+  override def needCopyResult: Boolean = false
+
+  // Blocking operators always consume all the input first, so its upstream operators don't need a
+  // stop check.
+  override def needStopCheck: Boolean = false
+
+  // Blocking operators need to consume all the inputs before producing any output. This means,
+  // Limit operator after this blocking operator will never reach its limit during the execution of
+  // this blocking operator's upstream operators. Here we override this method to return Nil, so
+  // that upstream operators will not generate useless conditions (which are always evaluated to
+  // false) for the Limit operators after this blocking operator.
+  override def limitNotReachedChecks: Seq[String] = Nil
+}
+
+/**
+ * Leaf codegen node reading from a single RDD.
+ */
+trait InputRDDCodegen extends CodegenSupport {
+
+  def inputRDD: RDD[InternalRow]
+
+  // If the input can be InternalRows, an UnsafeProjection needs to be created.
+  protected val createUnsafeProjection: Boolean
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    inputRDD :: Nil
+  }
+
+  override def doProduce(ctx: CodegenContext): String = {
+    // Inline mutable state since an InputRDDCodegen is used once in a task for WholeStageCodegen
+    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
+      forceInline = true)
+    val row = ctx.freshName("row")
+
+    val outputVars = if (createUnsafeProjection) {
+      // creating the vars will make the parent consume add an unsafe projection.
+      ctx.INPUT_ROW = row
+      ctx.currentVars = null
+      output.zipWithIndex.map { case (a, i) =>
+        BoundReference(i, a.dataType, a.nullable).genCode(ctx)
+      }
+    } else {
+      null
+    }
+
+    val updateNumOutputRowsMetrics = if (metrics.contains("numOutputRows")) {
+      val numOutputRows = metricTerm(ctx, "numOutputRows")
+      s"$numOutputRows.add(1);"
+    } else {
+      ""
+    }
+    s"""
+       | while ($limitNotReachedCond $input.hasNext()) {
+       |   InternalRow $row = (InternalRow) $input.next();
+       |   ${updateNumOutputRowsMetrics}
+       |   ${consume(ctx, outputVars, if (createUnsafeProjection) null else row).trim}
+       |   ${shouldStopCheckCode}
+       | }
+     """.stripMargin
+  }
+}
 
 /**
  * InputAdapter is used to hide a SparkPlan from a subtree that supports codegen.
@@ -354,7 +469,7 @@ trait CodegenSupport extends SparkPlan {
  * This is the leaf node of a tree with WholeStageCodegen that is used to generate code
  * that consumes an RDD iterator of InternalRow.
  */
-case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCodegen {
 
   override def output: Seq[Attribute] = child.output
 
@@ -370,33 +485,27 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
     child.doExecuteBroadcast()
   }
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    child.execute() :: Nil
-  }
+  override def inputRDD: RDD[InternalRow] = child.execute()
 
-  override def doProduce(ctx: CodegenContext): String = {
-    // Right now, InputAdapter is only used when there is one input RDD.
-    // Inline mutable state since an InputAdapter is used once in a task for WholeStageCodegen
-    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
-      forceInline = true)
-    val row = ctx.freshName("row")
-    s"""
-       | while ($input.hasNext() && !stopEarly()) {
-       |   InternalRow $row = (InternalRow) $input.next();
-       |   ${consume(ctx, null, row).trim}
-       |   if (shouldStop()) return;
-       | }
-     """.stripMargin
-  }
+  // InputAdapter does not need UnsafeProjection.
+  protected val createUnsafeProjection: Boolean = false
 
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
-    child.generateTreeString(depth, lastChildren, builder, verbose, "")
+      addSuffix: Boolean = false,
+      maxFields: Int): Unit = {
+    child.generateTreeString(
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      prefix = "",
+      addSuffix = false,
+      maxFields)
   }
 
   override def needCopyResult: Boolean = false
@@ -668,14 +777,24 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   override def generateTreeString(
       depth: Int,
       lastChildren: Seq[Boolean],
-      builder: StringBuilder,
+      append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
-      addSuffix: Boolean = false): StringBuilder = {
-    child.generateTreeString(depth, lastChildren, builder, verbose, s"*($codegenStageId) ")
+      addSuffix: Boolean = false,
+      maxFields: Int): Unit = {
+    child.generateTreeString(
+      depth,
+      lastChildren,
+      append,
+      verbose,
+      s"*($codegenStageId) ",
+      false,
+      maxFields)
   }
 
   override def needStopCheck: Boolean = true
+
+  override def limitNotReachedChecks: Seq[String] = Nil
 
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(codegenStageId.asInstanceOf[Integer])
 }

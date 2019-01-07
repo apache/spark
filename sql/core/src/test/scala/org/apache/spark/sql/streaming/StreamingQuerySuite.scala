@@ -31,6 +31,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
@@ -256,7 +257,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     var lastProgressBeforeStop: StreamingQueryProgress = null
 
     testStream(mapped, OutputMode.Complete)(
-      StartStream(ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
       AssertStreamExecThreadIsWaitingForTime(1000),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),
@@ -369,7 +370,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.status.message === "Stopped"),
 
       // Test status and progress after query terminated with error
-      StartStream(ProcessingTime(1000), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime(1000), triggerClock = clock),
       AdvanceManualClock(1000), // ensure initial trigger completes before AddData
       AddData(inputData, 0),
       AdvanceManualClock(1000), // allow another trigger
@@ -500,29 +501,52 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery { q =>
         val lastProgress = getLastProgressWithData(q)
         assert(lastProgress.nonEmpty)
-        assert(lastProgress.get.numInputRows == 6)
         assert(lastProgress.get.sources.length == 1)
-        assert(lastProgress.get.sources(0).numInputRows == 6)
+        // The source is scanned twice because of self-union
+        assert(lastProgress.get.numInputRows == 6)
         true
       }
     )
   }
 
   test("input row calculation with same V2 source used twice in self-join") {
-    val streamInput = MemoryStream[Int]
-    val df = streamInput.toDF()
-    testStream(df.join(df, "value"), useV2Sink = true)(
-      AddData(streamInput, 1, 2, 3),
-      CheckAnswer(1, 2, 3),
-      AssertOnQuery { q =>
+    def checkQuery(check: AssertOnQuery): Unit = {
+      val memoryStream = MemoryStream[Int]
+      // TODO: currently the streaming framework always add a dummy Project above streaming source
+      // relation, which breaks exchange reuse, as the optimizer will remove Project from one side.
+      // Here we manually add a useful Project, to trigger exchange reuse.
+      val streamDF = memoryStream.toDF().select('value + 0 as "v")
+      testStream(streamDF.join(streamDF, "v"), useV2Sink = true)(
+        AddData(memoryStream, 1, 2, 3),
+        CheckAnswer(1, 2, 3),
+        check
+      )
+    }
+
+    withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      checkQuery(AssertOnQuery { q =>
         val lastProgress = getLastProgressWithData(q)
         assert(lastProgress.nonEmpty)
-        assert(lastProgress.get.numInputRows == 6)
         assert(lastProgress.get.sources.length == 1)
-        assert(lastProgress.get.sources(0).numInputRows == 6)
+        // The source is scanned twice because of self-join
+        assert(lastProgress.get.numInputRows == 6)
         true
-      }
-    )
+      })
+    }
+
+    withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+      checkQuery(AssertOnQuery { q =>
+        val lastProgress = getLastProgressWithData(q)
+        assert(lastProgress.nonEmpty)
+        assert(lastProgress.get.sources.length == 1)
+        assert(q.lastExecution.executedPlan.collect {
+          case r: ReusedExchangeExec => r
+        }.length == 1)
+        // The source is scanned only once because of exchange reuse
+        assert(lastProgress.get.numInputRows == 3)
+        true
+      })
+    }
   }
 
   test("input row calculation with trigger having data for only one of two V2 sources") {

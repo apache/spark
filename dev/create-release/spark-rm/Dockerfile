@@ -62,8 +62,8 @@ RUN echo 'deb http://cran.cnr.Berkeley.edu/bin/linux/ubuntu xenial/' >> /etc/apt
   pip install $BASE_PIP_PKGS && \
   pip install $PIP_PKGS && \
   cd && \
-  virtualenv -p python3 p35 && \
-  . p35/bin/activate && \
+  virtualenv -p python3 /opt/p35 && \
+  . /opt/p35/bin/activate && \
   pip install $BASE_PIP_PKGS && \
   pip install $PIP_PKGS && \
   # Install R packages and dependencies used when building.
@@ -73,7 +73,7 @@ RUN echo 'deb http://cran.cnr.Berkeley.edu/bin/linux/ubuntu xenial/' >> /etc/apt
   Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='http://cran.us.r-project.org/')" && \
   Rscript -e "devtools::install_github('jimhester/lintr')" && \
   # Install tools needed to build the documentation.
-  $APT_INSTALL ruby2.3 ruby2.3-dev && \
+  $APT_INSTALL ruby2.3 ruby2.3-dev mkdocs && \
   gem install jekyll --no-rdoc --no-ri && \
   gem install jekyll-redirect-from && \
   gem install pygments.rb

@@ -20,14 +20,14 @@ import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentMatcher, Matchers, Mock, MockitoAnnotations}
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
@@ -52,6 +52,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
   private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000L)
+  private val secMgr = new SecurityManager(conf)
 
   private var waitForExecutorPodsClock: ManualClock = _
 
@@ -79,12 +80,12 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(driverPodName)).thenReturn(driverPodOperations)
     when(driverPodOperations.get).thenReturn(driverPod)
-    when(executorBuilder.buildFromFeatures(kubernetesConfWithCorrectFields()))
-      .thenAnswer(executorPodAnswer())
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
+      meq(kubernetesClient))).thenAnswer(executorPodAnswer())
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     waitForExecutorPodsClock = new ManualClock(0L)
     podsAllocatorUnderTest = new ExecutorPodsAllocator(
-      conf, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+      conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID)
   }
 
@@ -138,7 +139,15 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.notifySubscribers()
     snapshotsStore.replaceSnapshot(Seq.empty[Pod])
     waitForExecutorPodsClock.setTime(podCreationTimeout + 1)
-    when(podOperations.withLabel(SPARK_EXECUTOR_ID_LABEL, "1")).thenReturn(labeledPods)
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_EXECUTOR_ID_LABEL, "1"))
+      .thenReturn(labeledPods)
     snapshotsStore.notifySubscribers()
     verify(labeledPods).delete()
     verify(podOperations).create(podWithAttachedContainerForId(2))
@@ -147,43 +156,9 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private def executorPodAnswer(): Answer[SparkPod] = {
     new Answer[SparkPod] {
       override def answer(invocation: InvocationOnMock): SparkPod = {
-        val k8sConf = invocation.getArgumentAt(
-          0, classOf[KubernetesConf[KubernetesExecutorSpecificConf]])
-        executorPodWithId(k8sConf.roleSpecificConf.executorId.toInt)
+        val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
+        executorPodWithId(k8sConf.executorId.toInt)
       }
     }
   }
-
-  private def kubernetesConfWithCorrectFields(): KubernetesConf[KubernetesExecutorSpecificConf] =
-    Matchers.argThat(new ArgumentMatcher[KubernetesConf[KubernetesExecutorSpecificConf]] {
-      override def matches(argument: scala.Any): Boolean = {
-        if (!argument.isInstanceOf[KubernetesConf[KubernetesExecutorSpecificConf]]) {
-          false
-        } else {
-          val k8sConf = argument.asInstanceOf[KubernetesConf[KubernetesExecutorSpecificConf]]
-          val executorSpecificConf = k8sConf.roleSpecificConf
-          val expectedK8sConf = KubernetesConf.createExecutorConf(
-            conf,
-            executorSpecificConf.executorId,
-            TEST_SPARK_APP_ID,
-            Some(driverPod))
-
-          // Set prefixes to a common string since KUBERNETES_EXECUTOR_POD_NAME_PREFIX
-          // has not be set for the tests and thus KubernetesConf will use a random
-          // string for the prefix, based on the app name, and this comparison here will fail.
-          val k8sConfCopy = k8sConf
-            .copy(appResourceNamePrefix = "")
-            .copy(sparkConf = conf)
-          val expectedK8sConfCopy = expectedK8sConf
-            .copy(appResourceNamePrefix = "")
-            .copy(sparkConf = conf)
-
-            k8sConf.sparkConf.getAll.toMap == conf.getAll.toMap &&
-            // Since KubernetesConf.createExecutorConf clones the SparkConf object, force
-            // deep equality comparison for the SparkConf object and use object equality
-            // comparison on all other fields.
-            k8sConfCopy == expectedK8sConfCopy
-        }
-      }
-    })
 }

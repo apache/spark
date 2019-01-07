@@ -27,7 +27,7 @@ import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, ScanConfig, ScanConfigBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWriteSupport
-import org.apache.spark.sql.streaming.{OutputMode, StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -56,13 +56,19 @@ case class FakeReadSupport() extends MicroBatchReadSupport with ContinuousReadSu
 trait FakeMicroBatchReadSupportProvider extends MicroBatchReadSupportProvider {
   override def createMicroBatchReadSupport(
       checkpointLocation: String,
-      options: DataSourceOptions): MicroBatchReadSupport = FakeReadSupport()
+      options: DataSourceOptions): MicroBatchReadSupport = {
+    LastReadOptions.options = options
+    FakeReadSupport()
+  }
 }
 
 trait FakeContinuousReadSupportProvider extends ContinuousReadSupportProvider {
   override def createContinuousReadSupport(
       checkpointLocation: String,
-      options: DataSourceOptions): ContinuousReadSupport = FakeReadSupport()
+      options: DataSourceOptions): ContinuousReadSupport = {
+    LastReadOptions.options = options
+    FakeReadSupport()
+  }
 }
 
 trait FakeStreamingWriteSupportProvider extends StreamingWriteSupportProvider {
@@ -71,16 +77,27 @@ trait FakeStreamingWriteSupportProvider extends StreamingWriteSupportProvider {
       schema: StructType,
       mode: OutputMode,
       options: DataSourceOptions): StreamingWriteSupport = {
+    LastWriteOptions.options = options
     throw new IllegalStateException("fake sink - cannot actually write")
   }
 }
 
-class FakeReadMicroBatchOnly extends DataSourceRegister with FakeMicroBatchReadSupportProvider {
+class FakeReadMicroBatchOnly
+    extends DataSourceRegister
+    with FakeMicroBatchReadSupportProvider
+    with SessionConfigSupport {
   override def shortName(): String = "fake-read-microbatch-only"
+
+  override def keyPrefix: String = shortName()
 }
 
-class FakeReadContinuousOnly extends DataSourceRegister with FakeContinuousReadSupportProvider {
+class FakeReadContinuousOnly
+    extends DataSourceRegister
+    with FakeContinuousReadSupportProvider
+    with SessionConfigSupport {
   override def shortName(): String = "fake-read-continuous-only"
+
+  override def keyPrefix: String = shortName()
 }
 
 class FakeReadBothModes extends DataSourceRegister
@@ -92,8 +109,13 @@ class FakeReadNeitherMode extends DataSourceRegister {
   override def shortName(): String = "fake-read-neither-mode"
 }
 
-class FakeWriteSupportProvider extends DataSourceRegister with FakeStreamingWriteSupportProvider {
+class FakeWriteSupportProvider
+    extends DataSourceRegister
+    with FakeStreamingWriteSupportProvider
+    with SessionConfigSupport {
   override def shortName(): String = "fake-write-microbatch-continuous"
+
+  override def keyPrefix: String = shortName()
 }
 
 class FakeNoWrite extends DataSourceRegister {
@@ -121,6 +143,21 @@ class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
   override def shortName(): String = "fake-write-v1-fallback"
 }
 
+object LastReadOptions {
+  var options: DataSourceOptions = _
+
+  def clear(): Unit = {
+    options = null
+  }
+}
+
+object LastWriteOptions {
+  var options: DataSourceOptions = _
+
+  def clear(): Unit = {
+    options = null
+  }
+}
 
 class StreamingDataSourceV2Suite extends StreamTest {
 
@@ -128,6 +165,11 @@ class StreamingDataSourceV2Suite extends StreamTest {
     super.beforeAll()
     val fakeCheckpoint = Utils.createTempDir()
     spark.conf.set("spark.sql.streaming.checkpointLocation", fakeCheckpoint.getCanonicalPath)
+  }
+
+  override def afterEach(): Unit = {
+    LastReadOptions.clear()
+    LastWriteOptions.clear()
   }
 
   val readFormats = Seq(
@@ -143,7 +185,14 @@ class StreamingDataSourceV2Suite extends StreamTest {
     Trigger.ProcessingTime(1000),
     Trigger.Continuous(1000))
 
-  private def testPositiveCase(readFormat: String, writeFormat: String, trigger: Trigger) = {
+  private def testPositiveCase(readFormat: String, writeFormat: String, trigger: Trigger): Unit = {
+    testPositiveCaseWithQuery(readFormat, writeFormat, trigger)(() => _)
+  }
+
+  private def testPositiveCaseWithQuery(
+      readFormat: String,
+      writeFormat: String,
+      trigger: Trigger)(check: StreamingQuery => Unit): Unit = {
     val query = spark.readStream
       .format(readFormat)
       .load()
@@ -151,8 +200,8 @@ class StreamingDataSourceV2Suite extends StreamTest {
       .format(writeFormat)
       .trigger(trigger)
       .start()
+    check(query)
     query.stop()
-    query
   }
 
   private def testNegativeCase(
@@ -188,19 +237,54 @@ class StreamingDataSourceV2Suite extends StreamTest {
 
   test("disabled v2 write") {
     // Ensure the V2 path works normally and generates a V2 sink..
-    val v2Query = testPositiveCase(
-      "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once())
-    assert(v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
-      .isInstanceOf[FakeWriteSupportProviderV1Fallback])
+    testPositiveCaseWithQuery(
+      "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once()) { v2Query =>
+      assert(v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
+        .isInstanceOf[FakeWriteSupportProviderV1Fallback])
+    }
 
     // Ensure we create a V1 sink with the config. Note the config is a comma separated
     // list, including other fake entries.
     val fullSinkName = classOf[FakeWriteSupportProviderV1Fallback].getName
     withSQLConf(SQLConf.DISABLED_V2_STREAMING_WRITERS.key -> s"a,b,c,test,$fullSinkName,d,e") {
-      val v1Query = testPositiveCase(
-        "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once())
-      assert(v1Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
-        .isInstanceOf[FakeSink])
+      testPositiveCaseWithQuery(
+        "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once()) { v1Query =>
+        assert(v1Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
+          .isInstanceOf[FakeSink])
+      }
+    }
+  }
+
+  Seq(
+    Tuple2(classOf[FakeReadMicroBatchOnly], Trigger.Once()),
+    Tuple2(classOf[FakeReadContinuousOnly], Trigger.Continuous(1000))
+  ).foreach { case (source, trigger) =>
+    test(s"SPARK-25460: session options are respected in structured streaming sources - $source") {
+      // `keyPrefix` and `shortName` are the same in this test case
+      val readSource = source.getConstructor().newInstance().shortName()
+      val writeSource = "fake-write-microbatch-continuous"
+
+      val readOptionName = "optionA"
+      withSQLConf(s"spark.datasource.$readSource.$readOptionName" -> "true") {
+        testPositiveCaseWithQuery(readSource, writeSource, trigger) { _ =>
+          eventually(timeout(streamingTimeout)) {
+            // Write options should not be set.
+            assert(LastWriteOptions.options.getBoolean(readOptionName, false) == false)
+            assert(LastReadOptions.options.getBoolean(readOptionName, false) == true)
+          }
+        }
+      }
+
+      val writeOptionName = "optionB"
+      withSQLConf(s"spark.datasource.$writeSource.$writeOptionName" -> "true") {
+        testPositiveCaseWithQuery(readSource, writeSource, trigger) { _ =>
+          eventually(timeout(streamingTimeout)) {
+            // Read options should not be set.
+            assert(LastReadOptions.options.getBoolean(writeOptionName, false) == false)
+            assert(LastWriteOptions.options.getBoolean(writeOptionName, false) == true)
+          }
+        }
+      }
     }
   }
 
@@ -215,8 +299,10 @@ class StreamingDataSourceV2Suite extends StreamTest {
 
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
-      val readSource = DataSource.lookupDataSource(read, spark.sqlContext.conf).newInstance()
-      val writeSource = DataSource.lookupDataSource(write, spark.sqlContext.conf).newInstance()
+      val readSource = DataSource.lookupDataSource(read, spark.sqlContext.conf).
+        getConstructor().newInstance()
+      val writeSource = DataSource.lookupDataSource(write, spark.sqlContext.conf).
+        getConstructor().newInstance()
       (readSource, writeSource, trigger) match {
         // Valid microbatch queries.
         case (_: MicroBatchReadSupportProvider, _: StreamingWriteSupportProvider, t)

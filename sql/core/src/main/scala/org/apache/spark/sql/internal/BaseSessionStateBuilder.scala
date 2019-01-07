@@ -17,7 +17,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
@@ -50,7 +50,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * and `catalog` fields. Note that the state is cloned when `build` is called, and not before.
  */
 @Experimental
-@InterfaceStability.Unstable
+@Unstable
 abstract class BaseSessionStateBuilder(
     val session: SparkSession,
     val parentState: Option[SessionState] = None) {
@@ -95,7 +95,8 @@ abstract class BaseSessionStateBuilder(
    * This either gets cloned from a pre-existing version or cloned from the built-in registry.
    */
   protected lazy val functionRegistry: FunctionRegistry = {
-    parentState.map(_.functionRegistry).getOrElse(FunctionRegistry.builtin).clone()
+    parentState.map(_.functionRegistry.clone())
+      .getOrElse(extensions.registerFunctions(FunctionRegistry.builtin.clone()))
   }
 
   /**
@@ -266,8 +267,8 @@ abstract class BaseSessionStateBuilder(
    * This gets cloned from parent if available, otherwise a new instance is created.
    */
   protected def listenerManager: ExecutionListenerManager = {
-    parentState.map(_.listenerManager.clone()).getOrElse(
-      new ExecutionListenerManager(session.sparkContext.conf))
+    parentState.map(_.listenerManager.clone(session)).getOrElse(
+      new ExecutionListenerManager(session, loadExtensions = true))
   }
 
   /**
@@ -308,13 +309,14 @@ private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
   def overrideConfs: Map[String, String]
 
   override protected lazy val conf: SQLConf = {
+    val overrideConfigurations = overrideConfs
     val conf = parentState.map(_.conf.clone()).getOrElse {
       new SQLConf {
         clear()
         override def clear(): Unit = {
           super.clear()
           // Make sure we start with the default test configs even after clear
-          overrideConfs.foreach { case (key, value) => setConfString(key, value) }
+          overrideConfigurations.foreach { case (key, value) => setConfString(key, value) }
         }
       }
     }

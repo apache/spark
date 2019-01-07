@@ -21,10 +21,9 @@ import java.util.Locale
 
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
-
 
 /**
  * The data type representing `java.math.BigDecimal` values.
@@ -43,7 +42,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   if (scale > precision) {
@@ -114,7 +113,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object DecimalType extends AbstractDataType {
   import scala.math.min
 

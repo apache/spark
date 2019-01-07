@@ -19,8 +19,8 @@
 
 DRY_RUN=${DRY_RUN:-0}
 GPG="gpg --no-tty --batch"
-ASF_REPO="https://git-wip-us.apache.org/repos/asf/spark.git"
-ASF_REPO_WEBUI="https://git-wip-us.apache.org/repos/asf?p=spark.git"
+ASF_REPO="https://gitbox.apache.org/repos/asf/spark.git"
+ASF_REPO_WEBUI="https://gitbox.apache.org/repos/asf?p=spark.git"
 
 function error {
   echo "$*"
@@ -73,7 +73,9 @@ function fcreate_secure {
 }
 
 function check_for_tag {
-  curl -s --head --fail "$ASF_REPO_WEBUI;a=commit;h=$1" >/dev/null
+  # Check HTML body messages instead of header status codes. Apache GitBox returns
+  # a header with `200 OK` status code for both existing and non-existing tag URLs
+  ! curl -s --fail "$ASF_REPO_WEBUI;a=commit;h=$1" | grep '404 Not Found' > /dev/null
 }
 
 function get_release_info {

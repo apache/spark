@@ -21,11 +21,12 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupportProvider, DataSourceOptions, MicroBatchReadSupportProvider}
@@ -39,7 +40,7 @@ import org.apache.spark.util.Utils
  *
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 final class DataStreamReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Specifies the input data source format.
@@ -157,8 +158,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         "read files of Hive data source directly.")
     }
 
-    val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).newInstance()
-    val options = new DataSourceOptions(extraOptions.asJava)
+    val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
+      getConstructor().newInstance()
     // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
     // We can't be sure at this point whether we'll actually want to use V2, since we don't know the
     // writer or whether the query is continuous.
@@ -173,13 +174,18 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     }
     ds match {
       case s: MicroBatchReadSupportProvider =>
+        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+          ds = s, conf = sparkSession.sessionState.conf)
+        val options = sessionOptions ++ extraOptions
+        val dataSourceOptions = new DataSourceOptions(options.asJava)
         var tempReadSupport: MicroBatchReadSupport = null
         val schema = try {
           val tmpCheckpointPath = Utils.createTempDir(namePrefix = s"tempCP").getCanonicalPath
           tempReadSupport = if (userSpecifiedSchema.isDefined) {
-            s.createMicroBatchReadSupport(userSpecifiedSchema.get, tmpCheckpointPath, options)
+            s.createMicroBatchReadSupport(
+              userSpecifiedSchema.get, tmpCheckpointPath, dataSourceOptions)
           } else {
-            s.createMicroBatchReadSupport(tmpCheckpointPath, options)
+            s.createMicroBatchReadSupport(tmpCheckpointPath, dataSourceOptions)
           }
           tempReadSupport.fullSchema()
         } finally {
@@ -192,16 +198,21 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         Dataset.ofRows(
           sparkSession,
           StreamingRelationV2(
-            s, source, extraOptions.toMap,
+            s, source, options,
             schema.toAttributes, v1Relation)(sparkSession))
       case s: ContinuousReadSupportProvider =>
+        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+          ds = s, conf = sparkSession.sessionState.conf)
+        val options = sessionOptions ++ extraOptions
+        val dataSourceOptions = new DataSourceOptions(options.asJava)
         var tempReadSupport: ContinuousReadSupport = null
         val schema = try {
           val tmpCheckpointPath = Utils.createTempDir(namePrefix = s"tempCP").getCanonicalPath
           tempReadSupport = if (userSpecifiedSchema.isDefined) {
-            s.createContinuousReadSupport(userSpecifiedSchema.get, tmpCheckpointPath, options)
+            s.createContinuousReadSupport(
+              userSpecifiedSchema.get, tmpCheckpointPath, dataSourceOptions)
           } else {
-            s.createContinuousReadSupport(tmpCheckpointPath, options)
+            s.createContinuousReadSupport(tmpCheckpointPath, dataSourceOptions)
           }
           tempReadSupport.fullSchema()
         } finally {
@@ -214,7 +225,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         Dataset.ofRows(
           sparkSession,
           StreamingRelationV2(
-            s, source, extraOptions.toMap,
+            s, source, options,
             schema.toAttributes, v1Relation)(sparkSession))
       case _ =>
         // Code path for data source v1.
@@ -262,7 +273,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * during parsing.
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
-   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To
+   *     field configured by `columnNameOfCorruptRecord`, and sets malformed fields to `null`. To
    *     keep corrupt records, an user can set a string type field named
    *     `columnNameOfCorruptRecord` in an user-defined schema. If a schema does not have the
    *     field, it drops corrupt records during parsing. When inferring a schema, it implicitly
@@ -275,17 +286,19 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
-   * date type.</li>
+   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * This applies to date type.</li>
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
    * <li>`dropFieldIfAllNull` (default `false`): whether to ignore column of all null values or
    * empty array/struct during schema inference.</li>
+   * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
+   * For instance, this is used while parsing dates and timestamps.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -334,11 +347,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
    * value.</li>
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
-   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
-   * date type.</li>
+   * Custom date formats follow the formats at `java.time.format.DateTimeFormatter`.
+   * This applies to date type.</li>
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
-   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * `java.time.format.DateTimeFormatter`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
@@ -347,13 +360,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
    *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
-   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To keep
-   *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
-   *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
-   *     during parsing. A record with less/more tokens than schema is not a corrupted record to
-   *     CSV. When it meets a record having fewer tokens than the length of the schema, sets
-   *     `null` to extra fields. When the record has more tokens than the length of the schema,
-   *     it drops extra tokens.</li>
+   *     field configured by `columnNameOfCorruptRecord`, and sets malformed fields to `null`.
+   *     To keep corrupt records, an user can set a string type field named
+   *     `columnNameOfCorruptRecord` in an user-defined schema. If a schema does not have
+   *     the field, it drops corrupt records during parsing. A record with less/more tokens
+   *     than schema is not a corrupted record to CSV. When it meets a record having fewer
+   *     tokens than the length of the schema, sets `null` to extra fields. When the record
+   *     has more tokens than the length of the schema, it drops extra tokens.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
@@ -362,6 +375,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines.</li>
+   * <li>`locale` (default is `en-US`): sets a locale as language tag in IETF BCP 47 format.
+   * For instance, this is used while parsing dates and timestamps.</li>
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing. Maximum length is 1 character.</li>
    * </ul>
    *
    * @since 2.0.0

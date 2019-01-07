@@ -61,10 +61,11 @@ private[spark] abstract class LiveEntity {
 private class LiveJob(
     val jobId: Int,
     name: String,
-    submissionTime: Option[Date],
+    val submissionTime: Option[Date],
     val stageIds: Seq[Int],
     jobGroup: Option[String],
-    numTasks: Int) extends LiveEntity {
+    numTasks: Int,
+    sqlExecutionId: Option[Long]) extends LiveEntity {
 
   var activeTasks = 0
   var completedTasks = 0
@@ -108,7 +109,7 @@ private class LiveJob(
       skippedStages.size,
       failedStages,
       killedSummary)
-    new JobDataWrapper(info, skippedStages)
+    new JobDataWrapper(info, skippedStages, sqlExecutionId)
   }
 
 }
@@ -375,6 +376,8 @@ private class LiveStage extends LiveEntity {
   var metrics = createMetrics(default = 0L)
 
   val executorSummaries = new HashMap[String, LiveExecutorStageSummary]()
+
+  val activeTasksPerExecutor = new HashMap[String, Int]().withDefaultValue(0)
 
   var blackListedExecutors = new HashSet[String]()
 

@@ -83,6 +83,7 @@ class SparkSession(object):
 
         _lock = RLock()
         _options = {}
+        _sc = None
 
         @since(2.0)
         def config(self, key=None, value=None, conf=None):
@@ -139,6 +140,11 @@ class SparkSession(object):
             """
             return self.config("spark.sql.catalogImplementation", "hive")
 
+        def _sparkContext(self, sc):
+            with self._lock:
+                self._sc = sc
+                return self
+
         @since(2.0)
         def getOrCreate(self):
             """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a
@@ -150,7 +156,7 @@ class SparkSession(object):
             default.
 
             >>> s1 = SparkSession.builder.config("k1", "v1").getOrCreate()
-            >>> s1.conf.get("k1") == s1.sparkContext.getConf().get("k1") == "v1"
+            >>> s1.conf.get("k1") == "v1"
             True
 
             In case an existing SparkSession is returned, the config options specified
@@ -167,28 +173,26 @@ class SparkSession(object):
                 from pyspark.conf import SparkConf
                 session = SparkSession._instantiatedSession
                 if session is None or session._sc._jsc is None:
-                    sparkConf = SparkConf()
-                    for key, value in self._options.items():
-                        sparkConf.set(key, value)
-                    sc = SparkContext.getOrCreate(sparkConf)
-                    # This SparkContext may be an existing one.
-                    for key, value in self._options.items():
-                        # we need to propagate the confs
-                        # before we create the SparkSession. Otherwise, confs like
-                        # warehouse path and metastore url will not be set correctly (
-                        # these confs cannot be changed once the SparkSession is created).
-                        sc._conf.set(key, value)
+                    if self._sc is not None:
+                        sc = self._sc
+                    else:
+                        sparkConf = SparkConf()
+                        for key, value in self._options.items():
+                            sparkConf.set(key, value)
+                        # This SparkContext may be an existing one.
+                        sc = SparkContext.getOrCreate(sparkConf)
+                    # Do not update `SparkConf` for existing `SparkContext`, as it's shared
+                    # by all sessions.
                     session = SparkSession(sc)
                 for key, value in self._options.items():
                     session._jsparkSession.sessionState().conf().setConfString(key, value)
-                for key, value in self._options.items():
-                    session.sparkContext._conf.set(key, value)
                 return session
 
     builder = Builder()
     """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances"""
 
     _instantiatedSession = None
+    _activeSession = None
 
     @ignore_unicode_prefix
     def __init__(self, sparkContext, jsparkSession=None):
@@ -230,7 +234,9 @@ class SparkSession(object):
         if SparkSession._instantiatedSession is None \
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
+            SparkSession._activeSession = self
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
+            self._jvm.SparkSession.setActiveSession(self._jsparkSession)
 
     def _repr_html_(self):
         return """
@@ -251,6 +257,29 @@ class SparkSession(object):
         table cache.
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
+
+    @classmethod
+    @since(3.0)
+    def getActiveSession(cls):
+        """
+        Returns the active SparkSession for the current thread, returned by the builder.
+        >>> s = SparkSession.getActiveSession()
+        >>> l = [('Alice', 1)]
+        >>> rdd = s.sparkContext.parallelize(l)
+        >>> df = s.createDataFrame(rdd, ['name', 'age'])
+        >>> df.select("age").collect()
+        [Row(age=1)]
+        """
+        from pyspark import SparkContext
+        sc = SparkContext._active_spark_context
+        if sc is None:
+            return None
+        else:
+            if sc._jvm.SparkSession.getActiveSession().isDefined():
+                SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
+                return SparkSession._activeSession
+            else:
+                return None
 
     @property
     @since(2.0)
@@ -539,12 +568,18 @@ class SparkSession(object):
                 struct.names[i] = name
             schema = struct
 
+        jsqlContext = self._wrapped._jsqlContext
+
         def reader_func(temp_filename):
-            return self._jvm.PythonSQLUtils.arrowReadStreamFromFile(
-                self._wrapped._jsqlContext, temp_filename, schema.json())
+            return self._jvm.PythonSQLUtils.readArrowStreamFromFile(jsqlContext, temp_filename)
+
+        def create_RDD_server():
+            return self._jvm.ArrowRDDServer(jsqlContext)
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jdf = self._sc._serialize_to_jvm(batches, ArrowStreamSerializer(), reader_func)
+        jrdd = self._sc._serialize_to_jvm(batches, ArrowStreamSerializer(), reader_func,
+                                          create_RDD_server)
+        jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df
@@ -662,6 +697,8 @@ class SparkSession(object):
             ...
         Py4JJavaError: ...
         """
+        SparkSession._activeSession = self
+        self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
@@ -817,7 +854,9 @@ class SparkSession(object):
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         self._jvm.SparkSession.clearDefaultSession()
+        self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
+        SparkSession._activeSession = None
 
     @since(2.0)
     def __enter__(self):

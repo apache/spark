@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2StreamingScanExec, StreamWriterCommitProgress}
 import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
@@ -56,6 +56,7 @@ trait ProgressReporter extends Logging {
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
   protected def newData: Map[BaseStreamingSource, LogicalPlan]
+  protected def sinkCommitProgress: Option[StreamWriterCommitProgress]
   protected def sources: Seq[BaseStreamingSource]
   protected def sink: BaseStreamingSink
   protected def offsetSeqMetadata: OffsetSeqMetadata
@@ -114,7 +115,6 @@ trait ProgressReporter extends Logging {
     logDebug("Starting Trigger Calculation")
     lastTriggerStartTimestamp = currentTriggerStartTimestamp
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
-    currentStatus = currentStatus.copy(isTriggerActive = true)
     currentTriggerStartOffsets = null
     currentTriggerEndOffsets = null
     currentDurationsMs.clear()
@@ -168,7 +168,9 @@ trait ProgressReporter extends Logging {
       )
     }
 
-    val sinkProgress = new SinkProgress(sink.toString)
+    val sinkProgress = SinkProgress(
+      sink.toString,
+      sinkCommitProgress.map(_.numOutputRows))
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -240,9 +242,6 @@ trait ProgressReporter extends Logging {
   /** Extract number of input sources for each streaming source in plan */
   private def extractSourceToNumInputRows(): Map[BaseStreamingSource, Long] = {
 
-    import java.util.IdentityHashMap
-    import scala.collection.JavaConverters._
-
     def sumRows(tuples: Seq[(BaseStreamingSource, Long)]): Map[BaseStreamingSource, Long] = {
       tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
     }
@@ -255,8 +254,11 @@ trait ProgressReporter extends Logging {
     }
 
     if (onlyDataSourceV2Sources) {
+      // It's possible that multiple DataSourceV2ScanExec instances may refer to the same source
+      // (can happen with self-unions or self-joins). This means the source is scanned multiple
+      // times in the query, we should count the numRows for each scan.
       val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
-        case s: DataSourceV2ScanExec if s.readSupport.isInstanceOf[BaseStreamingSource] =>
+        case s: DataSourceV2StreamingScanExec if s.readSupport.isInstanceOf[BaseStreamingSource] =>
           val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
           val source = s.readSupport.asInstanceOf[BaseStreamingSource]
           source -> numRows

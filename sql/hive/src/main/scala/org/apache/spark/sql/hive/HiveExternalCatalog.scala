@@ -27,6 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.DDL_TIME
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
@@ -821,7 +822,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       schema = reorderedSchema,
       partitionColumnNames = partColumnNames,
       bucketSpec = getBucketSpecFromTableProperties(table),
-      tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG))
+      tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG),
+      properties = table.properties.filterKeys(!HIVE_GENERATED_TABLE_PROPERTIES(_)))
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
@@ -868,7 +870,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // and Hive will validate the column names in partition spec to make sure they are partition
       // columns. Here we Lowercase the column names before passing the partition spec to Hive
       // client, to satisfy Hive.
+      // scalastyle:off caselocale
       orderedPartitionSpec.put(colName.toLowerCase, partition(colName))
+      // scalastyle:on caselocale
     }
 
     client.loadPartition(
@@ -896,7 +900,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // and Hive will validate the column names in partition spec to make sure they are partition
       // columns. Here we Lowercase the column names before passing the partition spec to Hive
       // client, to satisfy Hive.
+      // scalastyle:off caselocale
       orderedPartitionSpec.put(colName.toLowerCase, partition(colName))
+      // scalastyle:on caselocale
     }
 
     client.loadDynamicPartitions(
@@ -916,13 +922,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // to lower case the column names in partition specification before calling partition related Hive
   // APIs, to match this behaviour.
   private def lowerCasePartitionSpec(spec: TablePartitionSpec): TablePartitionSpec = {
+    // scalastyle:off caselocale
     spec.map { case (k, v) => k.toLowerCase -> v }
+    // scalastyle:on caselocale
   }
 
   // Build a map from lower-cased partition column names to exact column names for a given table
   private def buildLowerCasePartColNameMap(table: CatalogTable): Map[String, String] = {
     val actualPartColNames = table.partitionColumnNames
+    // scalastyle:off caselocale
     actualPartColNames.map(colName => (colName.toLowerCase, colName)).toMap
+    // scalastyle:on caselocale
   }
 
   // Hive metastore is not case preserving and the column names of the partition specification we
@@ -931,7 +941,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   private def restorePartitionSpec(
       spec: TablePartitionSpec,
       partColMap: Map[String, String]): TablePartitionSpec = {
+    // scalastyle:off caselocale
     spec.map { case (k, v) => partColMap(k.toLowerCase) -> v }
+    // scalastyle:on caselocale
   }
 
   private def restorePartitionSpec(
@@ -990,7 +1002,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // When Hive rename partition for managed tables, it will create the partition location with
     // a default path generate by the new spec with lower cased partition column names. This is
     // unexpected and we need to rename them manually and alter the partition location.
+    // scalastyle:off caselocale
     val hasUpperCasePartitionColumn = partitionColumnNames.exists(col => col.toLowerCase != col)
+    // scalastyle:on caselocale
     if (tableMeta.tableType == MANAGED && hasUpperCasePartitionColumn) {
       val tablePath = new Path(tableMeta.location)
       val fs = tablePath.getFileSystem(hadoopConf)
@@ -1031,7 +1045,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // another partition to `A=1/B=3`, then we will have `A=1/B=2` and `a=1/b=3`, and we should
         // just move `a=1/b=3` into `A=1` with new name `B=3`.
       } else {
+        // scalastyle:off caselocale
         val actualPartitionString = getPartitionPathString(col.toLowerCase, partValue)
+        // scalastyle:on caselocale
         val actualPartitionPath = new Path(currentFullPath, actualPartitionString)
         try {
           fs.rename(actualPartitionPath, expectedPartitionPath)
@@ -1182,7 +1198,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     clientPartitionNames.map { partitionPath =>
       val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partitionPath)
       partSpec.map { case (partName, partValue) =>
+        // scalastyle:off caselocale
         partColNameMap(partName.toLowerCase) + "=" + escapePathName(partValue)
+        // scalastyle:on caselocale
       }.mkString("/")
     }
   }
@@ -1312,6 +1330,7 @@ object HiveExternalCatalog {
 
   val CREATED_SPARK_VERSION = SPARK_SQL_PREFIX + "create.version"
 
+  val HIVE_GENERATED_TABLE_PROPERTIES = Set(DDL_TIME)
   val HIVE_GENERATED_STORAGE_PROPERTIES = Set(SERIALIZATION_FORMAT)
 
   // When storing data source tables in hive metastore, we need to set data schema to empty if the

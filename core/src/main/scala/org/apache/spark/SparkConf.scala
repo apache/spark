@@ -25,9 +25,9 @@ import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
-import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.History._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -503,12 +503,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       logWarning(msg)
     }
 
-    val executorOptsKey = "spark.executor.extraJavaOptions"
-    val executorClasspathKey = "spark.executor.extraClassPath"
-    val driverOptsKey = "spark.driver.extraJavaOptions"
-    val driverClassPathKey = "spark.driver.extraClassPath"
-    val driverLibraryPathKey = "spark.driver.extraLibraryPath"
-    val sparkExecutorInstances = "spark.executor.instances"
+    val executorOptsKey = EXECUTOR_JAVA_OPTIONS.key
 
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
@@ -517,7 +512,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
           |spark.driver.libraryPath was detected (set to '$value').
           |This is deprecated in Spark 1.2+.
           |
-          |Please instead use: $driverLibraryPathKey
+          |Please instead use: ${DRIVER_LIBRARY_PATH.key}
         """.stripMargin
       logWarning(warning)
     }
@@ -594,9 +589,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains("spark.cores.max") && contains("spark.executor.cores")) {
-      val totalCores = getInt("spark.cores.max", 1)
-      val executorCores = getInt("spark.executor.cores", 1)
+    if (contains(CORES_MAX) && contains(EXECUTOR_CORES)) {
+      val totalCores = getInt(CORES_MAX.key, 1)
+      val executorCores = get(EXECUTOR_CORES)
       val leftCores = totalCores % executorCores
       if (leftCores != 0) {
         logWarning(s"Total executor cores: ${totalCores} is not " +
@@ -605,17 +600,27 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
+    if (contains(EXECUTOR_CORES) && contains("spark.task.cpus")) {
+      val executorCores = get(EXECUTOR_CORES)
+      val taskCpus = getInt("spark.task.cpus", 1)
+
+      if (executorCores < taskCpus) {
+        throw new SparkException(s"${EXECUTOR_CORES.key} must not be less than spark.task.cpus.")
+      }
+    }
+
     val encryptionEnabled = get(NETWORK_ENCRYPTION_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
     require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
 
-    val executorTimeoutThreshold = getTimeAsSeconds("spark.network.timeout", "120s")
-    val executorHeartbeatInterval = getTimeAsSeconds("spark.executor.heartbeatInterval", "10s")
+    val executorTimeoutThresholdMs =
+      getTimeAsSeconds("spark.network.timeout", "120s") * 1000
+    val executorHeartbeatIntervalMs = get(EXECUTOR_HEARTBEAT_INTERVAL)
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
-    require(executorTimeoutThreshold > executorHeartbeatInterval, "The value of " +
-      s"spark.network.timeout=${executorTimeoutThreshold}s must be no less than the value of " +
-      s"spark.executor.heartbeatInterval=${executorHeartbeatInterval}s.")
+    require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
+      s"spark.network.timeout=${executorTimeoutThresholdMs}ms must be no less than the value of " +
+      s"spark.executor.heartbeatInterval=${executorHeartbeatIntervalMs}ms.")
   }
 
   /**
@@ -670,13 +675,13 @@ private[spark] object SparkConf extends Logging {
    * TODO: consolidate it with `ConfigBuilder.withAlternative`.
    */
   private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
-    "spark.executor.userClassPathFirst" -> Seq(
+    EXECUTOR_USER_CLASS_PATH_FIRST.key -> Seq(
       AlternateConfig("spark.files.userClassPathFirst", "1.3")),
-    "spark.history.fs.update.interval" -> Seq(
+    UPDATE_INTERVAL_S.key -> Seq(
       AlternateConfig("spark.history.fs.update.interval.seconds", "1.4"),
       AlternateConfig("spark.history.fs.updateInterval", "1.3"),
       AlternateConfig("spark.history.updateInterval", "1.3")),
-    "spark.history.fs.cleaner.interval" -> Seq(
+    CLEANER_INTERVAL_S.key -> Seq(
       AlternateConfig("spark.history.fs.cleaner.interval.seconds", "1.4")),
     MAX_LOG_AGE_S.key -> Seq(
       AlternateConfig("spark.history.fs.cleaner.maxAge.seconds", "1.4")),
@@ -693,7 +698,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
     "spark.shuffle.file.buffer" -> Seq(
       AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
-    "spark.executor.logs.rolling.maxSize" -> Seq(
+    EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
     "spark.io.compression.snappy.blockSize" -> Seq(
       AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
@@ -726,7 +731,13 @@ private[spark] object SparkConf extends Logging {
     DRIVER_MEMORY_OVERHEAD.key -> Seq(
       AlternateConfig("spark.yarn.driver.memoryOverhead", "2.3")),
     EXECUTOR_MEMORY_OVERHEAD.key -> Seq(
-      AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3"))
+      AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3")),
+    KEYTAB.key -> Seq(
+      AlternateConfig("spark.yarn.keytab", "3.0")),
+    PRINCIPAL.key -> Seq(
+      AlternateConfig("spark.yarn.principal", "3.0")),
+    KERBEROS_RELOGIN_PERIOD.key -> Seq(
+      AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0"))
   )
 
   /**

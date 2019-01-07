@@ -19,28 +19,35 @@ package org.apache.spark.deploy.k8s.integrationtest
 import java.io.File
 import java.nio.file.{Path, Paths}
 import java.util.UUID
-import java.util.regex.Pattern
 
-import com.google.common.io.PatternFilenameFilter
-import io.fabric8.kubernetes.api.model.Pod
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
-import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
-import org.scalatest.time.{Minutes, Seconds, Span}
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.deploy.k8s.integrationtest.TestConfig._
-import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
+import com.google.common.base.Charsets
+import com.google.common.io.Files
+import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
+import io.fabric8.kubernetes.client.Watcher.Action
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
+import org.scalatest.Matchers
+import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
+import org.scalatest.time.{Minutes, Seconds, Span}
 
-private[spark] class KubernetesSuite extends SparkFunSuite
+import org.apache.spark.{SPARK_VERSION, SparkFunSuite}
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
+import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+
+class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite {
+  with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
+  with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 
-  private var sparkHomeDir: Path = _
-  private var pyImage: String = _
-  private var rImage: String = _
+  protected var sparkHomeDir: Path = _
+  protected var pyImage: String = _
+  protected var rImage: String = _
 
   protected var image: String = _
   protected var testBackend: IntegrationTestBackend = _
@@ -61,6 +68,30 @@ private[spark] class KubernetesSuite extends SparkFunSuite
   private val extraExecTotalMemory =
     s"${(1024 + memOverheadConstant*1024 + additionalMemory).toInt}Mi"
 
+  /**
+   * Build the image ref for the given image name, taking the repo and tag from the
+   * test configuration.
+   */
+  private def testImageRef(name: String): String = {
+    val tag = sys.props.get(CONFIG_KEY_IMAGE_TAG_FILE)
+      .map { path =>
+        val tagFile = new File(path)
+        require(tagFile.isFile,
+          s"No file found for image tag at ${tagFile.getAbsolutePath}.")
+        Files.toString(tagFile, Charsets.UTF_8).trim
+      }
+      .orElse(sys.props.get(CONFIG_KEY_IMAGE_TAG))
+      .getOrElse {
+        throw new IllegalArgumentException(
+          s"One of $CONFIG_KEY_IMAGE_TAG_FILE or $CONFIG_KEY_IMAGE_TAG is required.")
+      }
+    val repo = sys.props.get(CONFIG_KEY_IMAGE_REPO)
+      .map { _ + "/" }
+      .getOrElse("")
+
+    s"$repo$name:$tag"
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     // The scalatest-maven-plugin gives system properties that are referenced but not set null
@@ -72,22 +103,21 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       System.clearProperty(key)
     }
 
-    val sparkDirProp = System.getProperty("spark.kubernetes.test.unpackSparkDir")
+    val sparkDirProp = System.getProperty(CONFIG_KEY_UNPACK_DIR)
     require(sparkDirProp != null, "Spark home directory must be provided in system properties.")
     sparkHomeDir = Paths.get(sparkDirProp)
     require(sparkHomeDir.toFile.isDirectory,
       s"No directory found for spark home specified at $sparkHomeDir.")
-    val imageTag = getTestImageTag
-    val imageRepo = getTestImageRepo
-    image = s"$imageRepo/spark:$imageTag"
-    pyImage = s"$imageRepo/spark-py:$imageTag"
-    rImage = s"$imageRepo/spark-r:$imageTag"
+    image = testImageRef("spark")
+    pyImage = testImageRef("spark-py")
+    rImage = testImageRef("spark-r")
 
-    val sparkDistroExamplesJarFile: File = sparkHomeDir.resolve(Paths.get("examples", "jars"))
-      .toFile
-      .listFiles(new PatternFilenameFilter(Pattern.compile("^spark-examples_.*\\.jar$")))(0)
-    containerLocalSparkDistroExamplesJar = s"local:///opt/spark/examples/jars/" +
-      s"${sparkDistroExamplesJarFile.getName}"
+    val scalaVersion = scala.util.Properties.versionNumberString
+      .split("\\.")
+      .take(2)
+      .mkString(".")
+    containerLocalSparkDistroExamplesJar =
+      s"local:///opt/spark/examples/jars/spark-examples_$scalaVersion-${SPARK_VERSION}.jar"
     testBackend = IntegrationTestBackendFactory.getTestBackend
     testBackend.initialize()
     kubernetesTestComponents = new KubernetesTestComponents(testBackend.getKubernetesClient)
@@ -109,6 +139,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       .set("spark.kubernetes.driver.pod.name", driverPodName)
       .set("spark.kubernetes.driver.label.spark-app-locator", appLocator)
       .set("spark.kubernetes.executor.label.spark-app-locator", appLocator)
+      .set(NETWORK_AUTH_ENABLED.key, "true")
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
       kubernetesTestComponents.createNamespace()
     }
@@ -223,17 +254,28 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       .getItems
       .get(0)
     driverPodChecker(driverPod)
-
-    val executorPods = kubernetesTestComponents.kubernetesClient
+    val execPods = scala.collection.mutable.Map[String, Pod]()
+    val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
       .withLabel("spark-app-locator", appLocator)
       .withLabel("spark-role", "executor")
-      .list()
-      .getItems
-    executorPods.asScala.foreach { pod =>
-      executorPodChecker(pod)
-    }
-
+      .watch(new Watcher[Pod] {
+        logInfo("Beginning watch of executors")
+        override def onClose(cause: KubernetesClientException): Unit =
+          logInfo("Ending watch of executors")
+        override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
+          val name = resource.getMetadata.getName
+          action match {
+            case Action.ADDED | Action.MODIFIED =>
+              execPods(name) = resource
+            case Action.DELETED | Action.ERROR =>
+              execPods.remove(name)
+          }
+        }
+      })
+    Eventually.eventually(TIMEOUT, INTERVAL) { execPods.values.nonEmpty should be (true) }
+    execWatcher.close()
+    execPods.values.foreach(executorPodChecker(_))
     Eventually.eventually(TIMEOUT, INTERVAL) {
       expectedLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
@@ -244,7 +286,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       }
     }
   }
-
   protected def doBasicDriverPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
     assert(driverPod.getSpec.getContainers.get(0).getImage === image)
@@ -273,21 +314,21 @@ private[spark] class KubernetesSuite extends SparkFunSuite
 
   protected def doBasicExecutorPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === image)
-    assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
+    assert(executorPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-executor")
     assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
       === baseMemory)
   }
 
   protected def doBasicExecutorPyPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === pyImage)
-    assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
+    assert(executorPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-executor")
     assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
       === standardNonJVMMemory)
   }
 
   protected def doBasicExecutorRPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === rImage)
-    assert(executorPod.getSpec.getContainers.get(0).getName === "executor")
+    assert(executorPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-executor")
     assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
       === standardNonJVMMemory)
   }

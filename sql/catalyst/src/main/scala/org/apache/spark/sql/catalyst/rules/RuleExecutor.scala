@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.rules
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -67,6 +68,17 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   protected def isPlanIntegral(plan: TreeType): Boolean = true
 
   /**
+   * Executes the batches of rules defined by the subclass, and also tracks timing info for each
+   * rule using the provided tracker.
+   * @see [[execute]]
+   */
+  def executeAndTrack(plan: TreeType, tracker: QueryPlanningTracker): TreeType = {
+    QueryPlanningTracker.withTracker(tracker) {
+      execute(plan)
+    }
+  }
+
+  /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
    * using the defined execution strategy. Within each batch, rules are also executed serially.
    */
@@ -74,6 +86,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     var curPlan = plan
     val queryExecutionMetrics = RuleExecutor.queryExecutionMeter
     val planChangeLogger = new PlanChangeLogger()
+    val tracker: Option[QueryPlanningTracker] = QueryPlanningTracker.get
 
     batches.foreach { batch =>
       val batchStartPlan = curPlan
@@ -88,14 +101,18 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             val startTime = System.nanoTime()
             val result = rule(plan)
             val runTime = System.nanoTime() - startTime
+            val effective = !result.fastEquals(plan)
 
-            if (!result.fastEquals(plan)) {
+            if (effective) {
               queryExecutionMetrics.incNumEffectiveExecution(rule.ruleName)
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
               planChangeLogger.log(rule.ruleName, plan, result)
             }
             queryExecutionMetrics.incExecutionTimeBy(rule.ruleName, runTime)
             queryExecutionMetrics.incNumExecution(rule.ruleName)
+
+            // Record timing information using QueryPlanningTracker
+            tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
 
             // Run the structural integrity checker against the plan after each rule.
             if (!isPlanIntegral(result)) {
@@ -144,7 +161,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
   private class PlanChangeLogger {
 
-    private val logLevel = SQLConf.get.optimizerPlanChangeLogLevel.toUpperCase
+    private val logLevel = SQLConf.get.optimizerPlanChangeLogLevel
 
     private val logRules = SQLConf.get.optimizerPlanChangeRules.map(Utils.stringToSeq)
 

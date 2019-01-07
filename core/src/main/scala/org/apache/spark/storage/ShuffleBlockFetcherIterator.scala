@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, IOException}
+import java.io.{InputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 import javax.annotation.concurrent.GuardedBy
@@ -28,8 +28,9 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempFileManager}
-import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.network.shuffle._
+import org.apache.spark.network.util.TransportConf
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
@@ -50,7 +51,7 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  *                        For each block we also require the size (in bytes as a long field) in
  *                        order to throttle the memory usage. Note that zero-sized blocks are
  *                        already excluded, which happened in
- *                        [[MapOutputTracker.convertMapStatuses]].
+ *                        [[org.apache.spark.MapOutputTracker.convertMapStatuses]].
  * @param streamWrapper A function to wrap the returned input stream.
  * @param maxBytesInFlight max size (in bytes) of remote blocks to fetch at any given point.
  * @param maxReqsInFlight max number of remote requests to fetch blocks at any given point.
@@ -58,6 +59,7 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  *                                    for a given remote host:port.
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
  * @param detectCorrupt whether to detect any corruption in fetched blocks.
+ * @param shuffleMetrics used to report shuffle metrics.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
@@ -70,8 +72,9 @@ final class ShuffleBlockFetcherIterator(
     maxReqsInFlight: Int,
     maxBlocksInFlightPerAddress: Int,
     maxReqSizeShuffleToMem: Long,
-    detectCorrupt: Boolean)
-  extends Iterator[(BlockId, InputStream)] with TempFileManager with Logging {
+    detectCorrupt: Boolean,
+    shuffleMetrics: ShuffleReadMetricsReporter)
+  extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
 
@@ -136,8 +139,6 @@ final class ShuffleBlockFetcherIterator(
    */
   private[this] val corruptedBlocks = mutable.HashSet[BlockId]()
 
-  private[this] val shuffleMetrics = context.taskMetrics().createTempShuffleReadMetrics()
-
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
    * longer place fetched blocks into [[results]].
@@ -150,7 +151,7 @@ final class ShuffleBlockFetcherIterator(
    * deleted when cleanup. This is a layer of defensiveness against disk file leaks.
    */
   @GuardedBy("this")
-  private[this] val shuffleFilesSet = mutable.HashSet[File]()
+  private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
 
   initialize()
 
@@ -164,11 +165,15 @@ final class ShuffleBlockFetcherIterator(
     currentResult = null
   }
 
-  override def createTempFile(): File = {
-    blockManager.diskBlockManager.createTempLocalBlock()._2
+  override def createTempFile(transportConf: TransportConf): DownloadFile = {
+    // we never need to do any encryption or decryption here, regardless of configs, because that
+    // is handled at another layer in the code.  When encryption is enabled, shuffle data is written
+    // to disk encrypted in the first place, and sent over the network still encrypted.
+    new SimpleDownloadFile(
+      blockManager.diskBlockManager.createTempLocalBlock()._2, transportConf)
   }
 
-  override def registerTempFileToClean(file: File): Boolean = synchronized {
+  override def registerTempFileToClean(file: DownloadFile): Boolean = synchronized {
     if (isZombie) {
       false
     } else {
@@ -204,7 +209,7 @@ final class ShuffleBlockFetcherIterator(
     }
     shuffleFilesSet.foreach { file =>
       if (!file.delete()) {
-        logWarning("Failed to cleanup shuffle fetch temp file " + file.getAbsolutePath())
+        logWarning("Failed to cleanup shuffle fetch temp file " + file.path())
       }
     }
   }
@@ -443,35 +448,35 @@ final class ShuffleBlockFetcherIterator(
               buf.release()
               throwFetchFailedException(blockId, address, e)
           }
-
-          input = streamWrapper(blockId, in)
-          // Only copy the stream if it's wrapped by compression or encryption, also the size of
-          // block is small (the decompressed block is smaller than maxBytesInFlight)
-          if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
-            val originalInput = input
-            val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
-            try {
+          var isStreamCopied: Boolean = false
+          try {
+            input = streamWrapper(blockId, in)
+            // Only copy the stream if it's wrapped by compression or encryption, also the size of
+            // block is small (the decompressed block is smaller than maxBytesInFlight)
+            if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
+              isStreamCopied = true
+              val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
               // Decompress the whole block at once to detect any corruption, which could increase
               // the memory usage tne potential increase the chance of OOM.
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
-              Utils.copyStream(input, out)
-              out.close()
+              Utils.copyStream(input, out, closeStreams = true)
               input = out.toChunkedByteBuffer.toInputStream(dispose = true)
-            } catch {
-              case e: IOException =>
-                buf.release()
-                if (buf.isInstanceOf[FileSegmentManagedBuffer]
-                  || corruptedBlocks.contains(blockId)) {
-                  throwFetchFailedException(blockId, address, e)
-                } else {
-                  logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
-                  corruptedBlocks += blockId
-                  fetchRequests += FetchRequest(address, Array((blockId, size)))
-                  result = null
-                }
-            } finally {
-              // TODO: release the buf here to free memory earlier
-              originalInput.close()
+            }
+          } catch {
+            case e: IOException =>
+              buf.release()
+              if (buf.isInstanceOf[FileSegmentManagedBuffer]
+                || corruptedBlocks.contains(blockId)) {
+                throwFetchFailedException(blockId, address, e)
+              } else {
+                logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
+                corruptedBlocks += blockId
+                fetchRequests += FetchRequest(address, Array((blockId, size)))
+                result = null
+              }
+          } finally {
+            // TODO: release the buf here to free memory earlier
+            if (isStreamCopied) {
               in.close()
             }
           }

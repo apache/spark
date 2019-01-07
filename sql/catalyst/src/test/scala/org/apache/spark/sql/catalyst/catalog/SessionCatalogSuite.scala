@@ -1427,6 +1427,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     Seq(true, false) foreach { caseSensitive =>
       val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
       val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
+      catalog.setCurrentDatabase("db1")
       try {
         val analyzer = new Analyzer(catalog, conf)
 
@@ -1440,9 +1441,25 @@ abstract class SessionCatalogSuite extends AnalysisTest {
         }
 
         assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
+        // SPARK-21318: the error message should contains the current database name
+        assert(cause.getMessage.contains("db1"))
       } finally {
         catalog.reset()
       }
+    }
+  }
+
+  test("SPARK-24544: test print actual failure cause when look up function failed") {
+    withBasicCatalog { catalog =>
+      val cause = intercept[NoSuchFunctionException] {
+        catalog.failFunctionLookup(FunctionIdentifier("failureFunc"),
+          Some(new Exception("Actual error")))
+      }
+
+      // fullStackTrace will be printed, but `cause.getMessage` has been
+      // override in `AnalysisException`,so here we get the root cause
+      // exception message for check.
+      assert(cause.cause.get.getMessage.contains("Actual error"))
     }
   }
 }

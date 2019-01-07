@@ -19,34 +19,38 @@ package org.apache.spark.deploy.history
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.Date
+import java.util.{Date, Locale}
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.commons.io.FileUtils
+import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
+import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.security.AccessControlException
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatcher
-import org.mockito.Matchers.{any, argThat}
+import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
+import org.apache.spark.internal.config.History._
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.security.GroupMappingServiceProvider
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
+import org.apache.spark.util.logging.DriverLogger
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
 
@@ -290,7 +294,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val maxAge = TimeUnit.SECONDS.toMillis(10)
     val clock = new ManualClock(maxAge / 2)
     val provider = new FsHistoryProvider(
-      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
+      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
 
     val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
     writeFile(log1, true, None,
@@ -330,13 +334,52 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(!log2.exists())
   }
 
+  test("should not clean inprogress application with lastUpdated time less than maxTime") {
+    val firstFileModifiedTime = TimeUnit.DAYS.toMillis(1)
+    val secondFileModifiedTime = TimeUnit.DAYS.toMillis(6)
+    val maxAge = TimeUnit.DAYS.toMillis(7)
+    val clock = new ManualClock(0)
+    val provider = new FsHistoryProvider(
+      createTestConf().set(MAX_LOG_AGE_S, maxAge / 1000), clock)
+    val log = newLogFile("inProgressApp1", None, inProgress = true)
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1"))
+    )
+    clock.setTime(firstFileModifiedTime)
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1")),
+      SparkListenerJobStart(0, 1L, Nil, null)
+    )
+
+    clock.setTime(secondFileModifiedTime)
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    clock.setTime(TimeUnit.DAYS.toMillis(10))
+    writeFile(log, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1")),
+      SparkListenerJobStart(0, 1L, Nil, null),
+      SparkListenerJobEnd(0, 1L, JobSucceeded)
+    )
+    log.setLastModified(clock.getTimeMillis())
+    provider.checkForLogs()
+    // This should not trigger any cleanup
+    updateAndCheck(provider) { list =>
+      list.size should be(1)
+    }
+  }
+
   test("log cleaner for inProgress files") {
     val firstFileModifiedTime = TimeUnit.SECONDS.toMillis(10)
     val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
     val maxAge = TimeUnit.SECONDS.toMillis(40)
     val clock = new ManualClock(0)
     val provider = new FsHistoryProvider(
-      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
+      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
 
     val log1 = newLogFile("inProgressApp1", None, inProgress = true)
     writeFile(log1, true, None,
@@ -411,6 +454,62 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       totalEntries should be (1)
       inputStream.close()
     }
+  }
+
+  test("driver log cleaner") {
+    val firstFileModifiedTime = TimeUnit.SECONDS.toMillis(10)
+    val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
+    val maxAge = TimeUnit.SECONDS.toSeconds(40)
+    val clock = new ManualClock(0)
+    val testConf = new SparkConf()
+    testConf.set(HISTORY_LOG_DIR, Utils.createTempDir(namePrefix = "eventLog").getAbsolutePath())
+    testConf.set(DRIVER_LOG_DFS_DIR, testDir.getAbsolutePath())
+    testConf.set(DRIVER_LOG_CLEANER_ENABLED, true)
+    testConf.set(DRIVER_LOG_CLEANER_INTERVAL, maxAge / 4)
+    testConf.set(MAX_DRIVER_LOG_AGE_S, maxAge)
+    val provider = new FsHistoryProvider(testConf, clock)
+
+    val log1 = FileUtils.getFile(testDir, "1" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    createEmptyFile(log1)
+    clock.setTime(firstFileModifiedTime)
+    log1.setLastModified(clock.getTimeMillis())
+    provider.cleanDriverLogs()
+
+    val log2 = FileUtils.getFile(testDir, "2" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    createEmptyFile(log2)
+    val log3 = FileUtils.getFile(testDir, "3" + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
+    createEmptyFile(log3)
+    clock.setTime(secondFileModifiedTime)
+    log2.setLastModified(clock.getTimeMillis())
+    log3.setLastModified(clock.getTimeMillis())
+    // This should not trigger any cleanup
+    provider.cleanDriverLogs()
+    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(3)
+
+    // Should trigger cleanup for first file but not second one
+    clock.setTime(firstFileModifiedTime + TimeUnit.SECONDS.toMillis(maxAge) + 1)
+    provider.cleanDriverLogs()
+    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(2)
+    assert(!log1.exists())
+    assert(log2.exists())
+    assert(log3.exists())
+
+    // Update the third file length while keeping the original modified time
+    Files.write("Add logs to file".getBytes(), log3)
+    log3.setLastModified(secondFileModifiedTime)
+    // Should cleanup the second file but not the third file, as filelength changed.
+    clock.setTime(secondFileModifiedTime + TimeUnit.SECONDS.toMillis(maxAge) + 1)
+    provider.cleanDriverLogs()
+    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(1)
+    assert(!log1.exists())
+    assert(!log2.exists())
+    assert(log3.exists())
+
+    // Should cleanup the third file as well.
+    clock.setTime(secondFileModifiedTime + 2 * TimeUnit.SECONDS.toMillis(maxAge) + 2)
+    provider.cleanDriverLogs()
+    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(0)
+    assert(!log3.exists())
   }
 
   test("SPARK-8372: new logs with no app ID are ignored") {
@@ -545,9 +644,9 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Test both history ui admin acls and application acls are configured.
     val conf1 = createTestConf()
-      .set("spark.history.ui.acls.enable", "true")
-      .set("spark.history.ui.admin.acls", "user1,user2")
-      .set("spark.history.ui.admin.acls.groups", "group1")
+      .set(UI_ACLS_ENABLE, true)
+      .set(UI_ADMIN_ACLS, "user1,user2")
+      .set(UI_ADMIN_ACLS_GROUPS, "group1")
       .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
 
     createAndCheck(conf1, ("spark.admin.acls", "user"), ("spark.admin.acls.groups", "group")) {
@@ -567,9 +666,9 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Test only history ui admin acls are configured.
     val conf2 = createTestConf()
-      .set("spark.history.ui.acls.enable", "true")
-      .set("spark.history.ui.admin.acls", "user1,user2")
-      .set("spark.history.ui.admin.acls.groups", "group1")
+      .set(UI_ACLS_ENABLE, true)
+      .set(UI_ADMIN_ACLS, "user1,user2")
+      .set(UI_ADMIN_ACLS_GROUPS, "group1")
       .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
     createAndCheck(conf2) { securityManager =>
       // Test whether user has permission to access UI.
@@ -587,7 +686,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // Test neither history ui admin acls nor application acls are configured.
      val conf3 = createTestConf()
-      .set("spark.history.ui.acls.enable", "true")
+      .set(UI_ACLS_ENABLE, true)
       .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
     createAndCheck(conf3) { securityManager =>
       // Test whether user has permission to access UI.
@@ -667,53 +766,54 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("clean up stale app information") {
-    val storeDir = Utils.createTempDir()
-    val conf = createTestConf().set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
-    val clock = new ManualClock()
-    val provider = spy(new FsHistoryProvider(conf, clock))
-    val appId = "new1"
+    withTempDir { storeDir =>
+      val conf = createTestConf().set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
+      val clock = new ManualClock()
+      val provider = spy(new FsHistoryProvider(conf, clock))
+      val appId = "new1"
 
-    // Write logs for two app attempts.
-    clock.advance(1)
-    val attempt1 = newLogFile(appId, Some("1"), inProgress = false)
-    writeFile(attempt1, true, None,
-      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("1")),
-      SparkListenerJobStart(0, 1L, Nil, null),
-      SparkListenerApplicationEnd(5L)
+      // Write logs for two app attempts.
+      clock.advance(1)
+      val attempt1 = newLogFile(appId, Some("1"), inProgress = false)
+      writeFile(attempt1, true, None,
+        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("1")),
+        SparkListenerJobStart(0, 1L, Nil, null),
+        SparkListenerApplicationEnd(5L)
       )
-    val attempt2 = newLogFile(appId, Some("2"), inProgress = false)
-    writeFile(attempt2, true, None,
-      SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("2")),
-      SparkListenerJobStart(0, 1L, Nil, null),
-      SparkListenerApplicationEnd(5L)
+      val attempt2 = newLogFile(appId, Some("2"), inProgress = false)
+      writeFile(attempt2, true, None,
+        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", Some("2")),
+        SparkListenerJobStart(0, 1L, Nil, null),
+        SparkListenerApplicationEnd(5L)
       )
-    updateAndCheck(provider) { list =>
-      assert(list.size === 1)
-      assert(list(0).id === appId)
-      assert(list(0).attempts.size === 2)
-    }
+      updateAndCheck(provider) { list =>
+        assert(list.size === 1)
+        assert(list(0).id === appId)
+        assert(list(0).attempts.size === 2)
+      }
 
-    // Load the app's UI.
-    val ui = provider.getAppUI(appId, Some("1"))
-    assert(ui.isDefined)
+      // Load the app's UI.
+      val ui = provider.getAppUI(appId, Some("1"))
+      assert(ui.isDefined)
 
-    // Delete the underlying log file for attempt 1 and rescan. The UI should go away, but since
-    // attempt 2 still exists, listing data should be there.
-    clock.advance(1)
-    attempt1.delete()
-    updateAndCheck(provider) { list =>
-      assert(list.size === 1)
-      assert(list(0).id === appId)
-      assert(list(0).attempts.size === 1)
-    }
-    assert(!ui.get.valid)
-    assert(provider.getAppUI(appId, None) === None)
+      // Delete the underlying log file for attempt 1 and rescan. The UI should go away, but since
+      // attempt 2 still exists, listing data should be there.
+      clock.advance(1)
+      attempt1.delete()
+      updateAndCheck(provider) { list =>
+        assert(list.size === 1)
+        assert(list(0).id === appId)
+        assert(list(0).attempts.size === 1)
+      }
+      assert(!ui.get.valid)
+      assert(provider.getAppUI(appId, None) === None)
 
-    // Delete the second attempt's log file. Now everything should go away.
-    clock.advance(1)
-    attempt2.delete()
-    updateAndCheck(provider) { list =>
-      assert(list.isEmpty)
+      // Delete the second attempt's log file. Now everything should go away.
+      clock.advance(1)
+      attempt2.delete()
+      updateAndCheck(provider) { list =>
+        assert(list.isEmpty)
+      }
     }
   }
 
@@ -833,8 +933,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val mockedFs = spy(provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
       argThat(new ArgumentMatcher[Path]() {
-        override def matches(path: Any): Boolean = {
-          path.asInstanceOf[Path].getName.toLowerCase == "accessdenied"
+        override def matches(path: Path): Boolean = {
+          path.asInstanceOf[Path].getName.toLowerCase(Locale.ROOT) == "accessdenied"
         }
       }))
     val mockedProvider = spy(provider)
@@ -854,6 +954,42 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
     mockedProvider.cleanLogs()
     assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+  }
+
+  test("check in-progress event logs absolute length") {
+    val path = new Path("testapp.inprogress")
+    val provider = new FsHistoryProvider(createTestConf())
+    val mockedProvider = spy(provider)
+    val mockedFs = mock(classOf[FileSystem])
+    val in = mock(classOf[FSDataInputStream])
+    val dfsIn = mock(classOf[DFSInputStream])
+    when(mockedProvider.fs).thenReturn(mockedFs)
+    when(mockedFs.open(path)).thenReturn(in)
+    when(in.getWrappedStream).thenReturn(dfsIn)
+    when(dfsIn.getFileLength).thenReturn(200)
+    // FileStatus.getLen is more than logInfo fileSize
+    var fileStatus = new FileStatus(200, false, 0, 0, 0, path)
+    var logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100)
+    assert(mockedProvider.shouldReloadLog(logInfo, fileStatus))
+
+    fileStatus = new FileStatus()
+    fileStatus.setPath(path)
+    // DFSInputStream.getFileLength is more than logInfo fileSize
+    logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100)
+    assert(mockedProvider.shouldReloadLog(logInfo, fileStatus))
+    // DFSInputStream.getFileLength is equal to logInfo fileSize
+    logInfo = new LogInfo(path.toString, 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 200)
+    assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
+    // in.getWrappedStream returns other than DFSInputStream
+    val bin = mock(classOf[BufferedInputStream])
+    when(in.getWrappedStream).thenReturn(bin)
+    assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
+    // fs.open throws exception
+    when(mockedFs.open(path)).thenThrow(new IOException("Throwing intentionally"))
+    assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
   }
 
   /**
@@ -899,7 +1035,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   private def createTestConf(inMemory: Boolean = false): SparkConf = {
     val conf = new SparkConf()
-      .set(EVENT_LOG_DIR, testDir.getAbsolutePath())
+      .set(HISTORY_LOG_DIR, testDir.getAbsolutePath())
       .set(FAST_IN_PROGRESS_PARSING, true)
 
     if (!inMemory) {

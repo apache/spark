@@ -28,6 +28,7 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -120,7 +121,7 @@ private[spark] class Executor(
   }
 
   // Whether to load classes in user jars before those in Spark jars
-  private val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)
+  private val userClassPathFirst = conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
 
   // Whether to monitor killed / interrupted tasks
   private val taskReaperEnabled = conf.getBoolean("spark.task.reaper.enabled", false)
@@ -136,6 +137,29 @@ private[spark] class Executor(
   // for fetching remote cached RDD blocks, so need to make sure it uses the right classloader too.
   env.serializerManager.setDefaultClassLoader(replClassLoader)
 
+  private val executorPlugins: Seq[ExecutorPlugin] = {
+    val pluginNames = conf.get(EXECUTOR_PLUGINS)
+    if (pluginNames.nonEmpty) {
+      logDebug(s"Initializing the following plugins: ${pluginNames.mkString(", ")}")
+
+      // Plugins need to load using a class loader that includes the executor's user classpath
+      val pluginList: Seq[ExecutorPlugin] =
+        Utils.withContextClassLoader(replClassLoader) {
+          val plugins = Utils.loadExtensions(classOf[ExecutorPlugin], pluginNames, conf)
+          plugins.foreach { plugin =>
+            plugin.init()
+            logDebug(s"Successfully loaded plugin " + plugin.getClass().getCanonicalName())
+          }
+          plugins
+        }
+
+      logDebug("Finished initializing plugins")
+      pluginList
+    } else {
+      Nil
+    }
+  }
+
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
   private val maxDirectResultSize = Math.min(
@@ -147,20 +171,34 @@ private[spark] class Executor(
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
-  // Executor for the heartbeat task.
-  private val heartbeater = new Heartbeater(env.memoryManager, reportHeartBeat,
-    "executor-heartbeater", conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
-
-  // must be initialized before running startDriverHeartbeat()
-  private val heartbeatReceiverRef =
-    RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
-
   /**
    * When an executor is unable to send heartbeats to the driver more than `HEARTBEAT_MAX_FAILURES`
    * times, it should kill itself. The default value is 60. It means we will retry to send
    * heartbeats about 10 minutes because the heartbeat interval is 10s.
    */
-  private val HEARTBEAT_MAX_FAILURES = conf.getInt("spark.executor.heartbeat.maxFailures", 60)
+  private val HEARTBEAT_MAX_FAILURES = conf.get(EXECUTOR_HEARTBEAT_MAX_FAILURES)
+
+  /**
+   * Whether to drop empty accumulators from heartbeats sent to the driver. Including the empty
+   * accumulators (that satisfy isZero) can make the size of the heartbeat message very large.
+   */
+  private val HEARTBEAT_DROP_ZEROES = conf.get(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES)
+
+  /**
+   * Interval to send heartbeats, in milliseconds
+   */
+  private val HEARTBEAT_INTERVAL_MS = conf.get(EXECUTOR_HEARTBEAT_INTERVAL)
+
+  // Executor for the heartbeat task.
+  private val heartbeater = new Heartbeater(
+    env.memoryManager,
+    () => Executor.this.reportHeartBeat(),
+    "executor-heartbeater",
+    HEARTBEAT_INTERVAL_MS)
+
+  // must be initialized before running startDriverHeartbeat()
+  private val heartbeatReceiverRef =
+    RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
   /**
    * Count the failure times of heartbeat. It should only be accessed in the heartbeat thread. Each
@@ -224,6 +262,18 @@ private[spark] class Executor(
         logWarning("Unable to stop heartbeater", e)
      }
     threadPool.shutdown()
+
+    // Notify plugins that executor is shutting down so they can terminate cleanly
+    Utils.withContextClassLoader(replClassLoader) {
+      executorPlugins.foreach { plugin =>
+        try {
+          plugin.shutdown()
+        } catch {
+          case e: Exception =>
+            logWarning("Plugin " + plugin.getClass().getCanonicalName() + " shutdown failed", e)
+        }
+      }
+    }
     if (!isLocal) {
       env.stop()
     }
@@ -469,7 +519,7 @@ private[spark] class Executor(
         executorSource.METRIC_OUTPUT_BYTES_WRITTEN
           .inc(task.metrics.outputMetrics.bytesWritten)
         executorSource.METRIC_OUTPUT_RECORDS_WRITTEN
-          .inc(task.metrics.inputMetrics.recordsRead)
+          .inc(task.metrics.outputMetrics.recordsWritten)
         executorSource.METRIC_RESULT_SIZE.inc(task.metrics.resultSize)
         executorSource.METRIC_DISK_BYTES_SPILLED.inc(task.metrics.diskBytesSpilled)
         executorSource.METRIC_MEMORY_BYTES_SPILLED.inc(task.metrics.memoryBytesSpilled)
@@ -799,7 +849,13 @@ private[spark] class Executor(
       if (taskRunner.task != null) {
         taskRunner.task.metrics.mergeShuffleReadMetrics()
         taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-        accumUpdates += ((taskRunner.taskId, taskRunner.task.metrics.accumulators()))
+        val accumulatorsToReport =
+          if (HEARTBEAT_DROP_ZEROES) {
+            taskRunner.task.metrics.accumulators().filterNot(_.isZero)
+          } else {
+            taskRunner.task.metrics.accumulators()
+          }
+        accumUpdates += ((taskRunner.taskId, accumulatorsToReport))
       }
     }
 
@@ -807,7 +863,7 @@ private[spark] class Executor(
       executorUpdates)
     try {
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
-          message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
+        message, new RpcTimeout(HEARTBEAT_INTERVAL_MS.millis, EXECUTOR_HEARTBEAT_INTERVAL.key))
       if (response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()

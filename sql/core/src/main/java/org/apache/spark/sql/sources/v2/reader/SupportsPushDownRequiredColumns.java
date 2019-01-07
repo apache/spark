@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * A mix-in interface for {@link ScanConfigBuilder}. Data sources can implement this
+ * A mix-in interface for {@link ScanBuilder}. Data sources can implement this
  * interface to push down required columns to the data source and only read these columns during
  * scan to reduce the size of the data to be read.
  */
-@InterfaceStability.Evolving
-public interface SupportsPushDownRequiredColumns extends ScanConfigBuilder {
+@Evolving
+public interface SupportsPushDownRequiredColumns extends ScanBuilder {
 
   /**
    * Applies column pruning w.r.t. the given requiredSchema.

@@ -50,7 +50,7 @@ object DateTimeUtils {
   final val MILLIS_PER_SECOND = 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
   final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
-
+  final val NANOS_PER_MICROS = 1000L
   final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
 
   // number of days in 400 years
@@ -109,16 +109,6 @@ object DateTimeUtils {
 
   def getTimeZone(timeZoneId: String): TimeZone = {
     computedTimeZones.computeIfAbsent(timeZoneId, computeTimeZone)
-  }
-
-  def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
-    val sdf = new SimpleDateFormat(formatString, Locale.US)
-    sdf.setTimeZone(timeZone)
-    // Enable strict parsing, if the input date/format is invalid, it will throw an exception.
-    // e.g. to parse invalid date '2016-13-12', or '2016-01-12' with  invalid format 'yyyy-aa-dd',
-    // an exception will be throwed.
-    sdf.setLenient(false)
-    sdf
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
@@ -274,7 +264,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Parses a given UTF8 date string to the corresponding a corresponding [[Long]] value.
+   * Trim and parse a given UTF8 date string to the corresponding a corresponding [[Long]] value.
    * The return type is [[Option]] in order to distinguish between 0L and null. The following
    * formats are allowed:
    *
@@ -300,28 +290,10 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
   def stringToTimestamp(s: UTF8String): Option[SQLTimestamp] = {
-    stringToTimestamp(s, defaultTimeZone(), rejectTzInString = false)
+    stringToTimestamp(s, defaultTimeZone())
   }
 
   def stringToTimestamp(s: UTF8String, timeZone: TimeZone): Option[SQLTimestamp] = {
-    stringToTimestamp(s, timeZone, rejectTzInString = false)
-  }
-
-  /**
-   * Converts a timestamp string to microseconds from the unix epoch, w.r.t. the given timezone.
-   * Returns None if the input string is not a valid timestamp format.
-   *
-   * @param s the input timestamp string.
-   * @param timeZone the timezone of the timestamp string, will be ignored if the timestamp string
-   *                 already contains timezone information and `forceTimezone` is false.
-   * @param rejectTzInString if true, rejects timezone in the input string, i.e., if the
-   *                         timestamp string contains timezone, like `2000-10-10 00:00:00+00:00`,
-   *                         return None.
-   */
-  def stringToTimestamp(
-      s: UTF8String,
-      timeZone: TimeZone,
-      rejectTzInString: Boolean): Option[SQLTimestamp] = {
     if (s == null) {
       return None
     }
@@ -329,7 +301,7 @@ object DateTimeUtils {
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
     var i = 0
     var currentSegmentValue = 0
-    val bytes = s.getBytes
+    val bytes = s.trim.getBytes
     var j = 0
     var digitsMilli = 0
     var justTime = false
@@ -439,8 +411,6 @@ object DateTimeUtils {
       return None
     }
 
-    if (tz.isDefined && rejectTzInString) return None
-
     val c = if (tz.isEmpty) {
       Calendar.getInstance(timeZone)
     } else {
@@ -461,7 +431,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Parses a given UTF8 date string to a corresponding [[Int]] value.
+   * Trim and parse a given UTF8 date string to a corresponding [[Int]] value.
    * The return type is [[Option]] in order to distinguish between 0 and null. The following
    * formats are allowed:
    *
@@ -479,7 +449,7 @@ object DateTimeUtils {
     val segments: Array[Int] = Array[Int](1, 1, 1)
     var i = 0
     var currentSegmentValue = 0
-    val bytes = s.getBytes
+    val bytes = s.trim.getBytes
     var j = 0
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
