@@ -29,6 +29,7 @@ import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.util.Instrumentation
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
@@ -79,6 +80,24 @@ import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
  * the cost of statistics computation on workers or by communicating the sufficient statistics.
  */
 private[spark] object RandomForest extends Logging with Serializable {
+
+  /**
+   * Train a random forest.
+   *
+   * @param input Training data: RDD of `LabeledPoint`
+   * @return an unweighted set of trees
+   */
+  def run(
+      input: RDD[LabeledPoint],
+      strategy: OldStrategy,
+      numTrees: Int,
+      featureSubsetStrategy: String,
+      seed: Long): Array[DecisionTreeModel] = {
+    val instances = input.map { case LabeledPoint(label, features) =>
+      Instance(label, 1.0, features.asML)
+    }
+    run(instances, strategy, numTrees, featureSubsetStrategy, seed, None)
+  }
 
   /**
    * Train a random forest.
