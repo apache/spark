@@ -145,6 +145,21 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(msg.contains("Similarity must be nonnegative"))
   }
 
+  test("check for invalid input types of weight") {
+    val invalidWeightData = spark.createDataFrame(Seq(
+      (0L, 1L, "a"),
+      (2L, 3L, "b")
+    )).toDF("src", "dst", "weight")
+
+    val msg = intercept[IllegalArgumentException] {
+      new PowerIterationClustering()
+        .setWeightCol("weight")
+        .assignClusters(invalidWeightData)
+    }.getMessage
+    assert(msg.contains("requirement failed: Column weight must be of type numeric" +
+      " but was actually of type string."))
+  }
+
   test("test default weight") {
     val dataWithoutWeight = data.sample(0.5, 1L).select('src, 'dst)
 
