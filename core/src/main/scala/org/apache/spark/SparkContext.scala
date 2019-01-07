@@ -230,7 +230,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def deployMode: String = _conf.getOption("spark.submit.deployMode").getOrElse("client")
   def appName: String = _conf.get("spark.app.name")
 
-  private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
+  private[spark] def isEventLogEnabled: Boolean = _conf.get(EVENT_LOG_ENABLED)
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
@@ -386,9 +386,9 @@ class SparkContext(config: SparkConf) extends Logging {
     // Set Spark driver host and port system properties. This explicitly sets the configuration
     // instead of relying on the default value of the config constant.
     _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
-    _conf.setIfMissing("spark.driver.port", "0")
+    _conf.setIfMissing(DRIVER_PORT, 0)
 
-    _conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
+    _conf.set(EXECUTOR_ID, SparkContext.DRIVER_IDENTIFIER)
 
     _jars = Utils.getUserJars(_conf)
     _files = _conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.nonEmpty))
@@ -396,15 +396,14 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _eventLogDir =
       if (isEventLogEnabled) {
-        val unresolvedDir = conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR)
-          .stripSuffix("/")
+        val unresolvedDir = conf.get(EVENT_LOG_DIR).stripSuffix("/")
         Some(Utils.resolveURI(unresolvedDir))
       } else {
         None
       }
 
     _eventLogCodec = {
-      val compress = _conf.getBoolean("spark.eventLog.compress", false)
+      val compress = _conf.get(EVENT_LOG_COMPRESS)
       if (compress && isEventLogEnabled) {
         Some(CompressionCodec.getCodecName(_conf)).map(CompressionCodec.getShortName)
       } else {
@@ -462,7 +461,7 @@ class SparkContext(config: SparkConf) extends Logging {
       files.foreach(addFile)
     }
 
-    _executorMemory = _conf.getOption("spark.executor.memory")
+    _executorMemory = _conf.getOption(EXECUTOR_MEMORY.key)
       .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
       .orElse(Option(System.getenv("SPARK_MEM"))
       .map(warnSparkMem))
@@ -2640,7 +2639,7 @@ object SparkContext extends Logging {
       case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
       case "yarn" =>
         if (conf != null && conf.getOption("spark.submit.deployMode").contains("cluster")) {
-          conf.getInt("spark.driver.cores", 0)
+          conf.getInt(DRIVER_CORES.key, 0)
         } else {
           0
         }
