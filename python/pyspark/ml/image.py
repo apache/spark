@@ -190,7 +190,13 @@ class _ImageSchema(object):
         # Running `bytearray(numpy.array([1]))` fails in specific Python versions
         # with a specific Numpy version, for example in Python 3.6.0 and NumPy 1.13.3.
         # Here, it avoids it by converting it to bytes.
-        data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
+        numpy_version = np.__version__.split('.')
+        numpy_version_major = int(numpy_version[0])
+        numpy_version_minor = int(numpy_version[1])
+        if numpy_version_major > 1 or (numpy_version_major == 1 and numpy_version_minor >= 9):
+            data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
+        else:
+            data = bytearray(array.astype(dtype=np.uint8).ravel().tostring())
 
         # Creating new Row with _create_row(), because Row(name = value, ... )
         # orders fields by name, which conflicts with expected schema order
