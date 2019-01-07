@@ -746,7 +746,7 @@ package object config {
   private[spark] val UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE =
     ConfigBuilder("spark.unsafe.sorter.spill.reader.buffer.size")
       .longConf
-      .createWithDefault(UnsafeSorterSpillReader.DEFAULT_BUFFER_SIZE_BYTES)
+      .createWithDefault(1024 * 1024)
 
   private[spark] val EXECUTOR_PLUGINS =
     ConfigBuilder("spark.executor.plugins")

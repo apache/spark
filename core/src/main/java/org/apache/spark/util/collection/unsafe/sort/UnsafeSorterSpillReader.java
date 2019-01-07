@@ -39,7 +39,6 @@ import java.io.*;
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
   private static final Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
-  public static final int DEFAULT_BUFFER_SIZE_BYTES = 1024 * 1024; // 1 MB
   private static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;
@@ -61,8 +60,9 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
-    ConfigEntry<Object> bufferSizeConfigEntry =
+    final ConfigEntry<Object> bufferSizeConfigEntry =
         package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE();
+    final int DEFAULT_BUFFER_SIZE_BYTES = (int)bufferSizeConfigEntry.defaultValue().get();
     long bufferSizeBytes =
         SparkEnv.get() == null ?
             DEFAULT_BUFFER_SIZE_BYTES:(long)SparkEnv.get().conf().get(bufferSizeConfigEntry);
