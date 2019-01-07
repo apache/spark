@@ -567,11 +567,11 @@ case class DataSource(
       }
       if (filteredOut.nonEmpty) {
         if (filteredIn.isEmpty) {
-          throw new AnalysisException(
-            s"All paths were ignored:\n${filteredOut.mkString("\n  ")}")
+          logWarning(
+            s"All paths were ignored:\n  ${filteredOut.mkString("\n  ")}")
         } else {
           logDebug(
-            s"Some paths were ignored:\n${filteredOut.mkString("\n  ")}")
+            s"Some paths were ignored:\n  ${filteredOut.mkString("\n  ")}")
         }
       }
     }
