@@ -306,7 +306,7 @@ object HistoryServer extends Logging {
     if (config.get(ACLS_ENABLE)) {
       logInfo(s"${ACLS_ENABLE.key} is configured, " +
         s"clearing it and only using ${History.HISTORY_SERVER_UI_ACLS_ENABLE.key}")
-      config.set(ACLS_ENABLE.key, "false")
+      config.set(ACLS_ENABLE, false)
     }
 
     new SecurityManager(config)
