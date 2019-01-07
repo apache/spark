@@ -249,13 +249,12 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       int prevIdx = 0;
       int[] prevBlock = originBlocks.get(0);
       for (int i = 1; i <= blockIds.length; i++) {
-        int[] curBlock = originBlocks.get(i);
-        if (i == blockIds.length || curBlock[0] != prevBlock[0]) {
+        if (i == blockIds.length || originBlocks.get(i)[0] != prevBlock[0]) {
+          prevBlock = originBlocks.get(prevIdx);
           shuffleBlockBatches[3 * capacity] = prevBlock[0];
           shuffleBlockBatches[3 * capacity + 1] = prevBlock[1];
           shuffleBlockBatches[3 * capacity + 2] = originBlocks.get(i - 1)[1] - prevBlock[1] + 1;
           chunkSizes[capacity++] = i - prevIdx;
-          prevBlock = curBlock;
           prevIdx = i;
         }
       }
