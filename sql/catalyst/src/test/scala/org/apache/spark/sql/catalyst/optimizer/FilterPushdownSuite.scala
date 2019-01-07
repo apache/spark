@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -818,19 +817,6 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = originalQuery.analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("broadcast hint") {
-    val originalQuery = ResolvedHint(testRelation)
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    val correctAnswer = ResolvedHint(testRelation.where('a === 2L))
-      .where('b + Rand(10).as("rnd") === 3)
-      .analyze
 
     comparePlans(optimized, correctAnswer)
   }
