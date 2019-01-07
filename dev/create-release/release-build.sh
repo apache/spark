@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -x # for debugging, remove before commit
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -181,10 +183,6 @@ if [[ "$1" == "package" ]]; then
   rm spark-$SPARK_VERSION/NOTICE-binary
   rm -r spark-$SPARK_VERSION/licenses-binary
   tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
-  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
-    --detach-sig spark-$SPARK_VERSION.tgz
-  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-    SHA512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
   rm -rf spark-$SPARK_VERSION
 
   ZINC_PORT=3035
@@ -236,39 +234,19 @@ if [[ "$1" == "package" ]]; then
     cd ..
 
     if [[ -n $R_FLAG ]]; then
-      echo "Copying and signing R source package"
+      echo "Copying R source package"
       R_DIST_NAME=SparkR_$SPARK_VERSION.tar.gz
       cp spark-$SPARK_VERSION-bin-$NAME/R/$R_DIST_NAME .
-
-      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
-        --output $R_DIST_NAME.asc \
-        --detach-sig $R_DIST_NAME
-      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-        SHA512 $R_DIST_NAME > \
-        $R_DIST_NAME.sha512
     fi
 
     if [[ -n $PIP_FLAG ]]; then
-      echo "Copying and signing python distribution"
+      echo "Copying python distribution"
       PYTHON_DIST_NAME=pyspark-$PYSPARK_VERSION.tar.gz
       cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_DIST_NAME .
-
-      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
-        --output $PYTHON_DIST_NAME.asc \
-        --detach-sig $PYTHON_DIST_NAME
-      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-        SHA512 $PYTHON_DIST_NAME > \
-        $PYTHON_DIST_NAME.sha512
     fi
 
-    echo "Copying and signing regular binary distribution"
+    echo "Copying regular binary distribution"
     cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
-    echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
-      --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
-      --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
-    echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-      SHA512 spark-$SPARK_VERSION-bin-$NAME.tgz > \
-      spark-$SPARK_VERSION-bin-$NAME.tgz.sha512
   }
 
   # List of binary packages built. Populates two associative arrays, where the key is the "name" of
@@ -313,23 +291,6 @@ if [[ "$1" == "package" ]]; then
   fi
 
   rm -rf spark-$SPARK_VERSION-bin-*/
-
-  if ! is_dry_run; then
-    svn co --depth=empty $RELEASE_STAGING_LOCATION svn-spark
-    rm -rf "svn-spark/${DEST_DIR_NAME}-bin"
-    mkdir -p "svn-spark/${DEST_DIR_NAME}-bin"
-
-    echo "Copying release tarballs"
-    cp spark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-    cp pyspark-* "svn-spark/${DEST_DIR_NAME}-bin/"
-    cp SparkR_* "svn-spark/${DEST_DIR_NAME}-bin/"
-    svn add "svn-spark/${DEST_DIR_NAME}-bin"
-
-    cd svn-spark
-    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION" --no-auth-cache
-    cd ..
-    rm -rf svn-spark
-  fi
 
   exit 0
 fi
