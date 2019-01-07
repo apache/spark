@@ -486,6 +486,7 @@ final class ShuffleBlockFetcherIterator(
                 logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
                 corruptedBlocks += blockId
                 fetchRequests += FetchRequest(address, Array((blockId, size)))
+                numBlocksToFetch += 1
                 result = null
               }
           } finally {

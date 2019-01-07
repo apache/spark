@@ -215,7 +215,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   private class ManagedBufferIterator implements Iterator<ManagedBuffer> {
 
     private int index = 0;
-    private int capacity = 0;
     private final String appId;
     private final String execId;
     private final int shuffleId;
