@@ -43,14 +43,12 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
    *
    * @param input a list of LogicalPlans to inner join and the type of inner join.
    * @param conditions a list of condition for join.
-   * @param leftPlans a list of LogicalPlans contained in the left join child.
-   * @param hintMap a map of relations to their corresponding hints.
+   * @param hintMap a map of relation output attribute sets to their corresponding hints.
    */
   @tailrec
   final def createOrderedJoin(
       input: Seq[(LogicalPlan, InnerLike)],
       conditions: Seq[Expression],
-      leftPlans: Seq[LogicalPlan],
       hintMap: Map[AttributeSet, HintInfo]): LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
@@ -88,8 +86,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         JoinHint(hintMap.get(left.outputSet), hintMap.get(right.outputSet)))
 
       // should not have reference to same logical plan
-      createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right),
-        others, leftPlans :+ right, hintMap)
+      createOrderedJoin(Seq((joined, Inner)) ++ rest.filterNot(_._1 eq right), others, hintMap)
     }
   }
 
@@ -100,12 +97,12 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
           val rest = input.filterNot(starJoinPlan.contains(_))
-          createOrderedJoin(starJoinPlan ++ rest, conditions, Seq(starJoinPlan.head._1), hintMap)
+          createOrderedJoin(starJoinPlan ++ rest, conditions, hintMap)
         } else {
-          createOrderedJoin(input, conditions, Seq(input.head._1), hintMap)
+          createOrderedJoin(input, conditions, hintMap)
         }
       } else {
-        createOrderedJoin(input, conditions, Seq(input.head._1), hintMap)
+        createOrderedJoin(input, conditions, hintMap)
       }
 
       if (p.sameOutput(reordered)) {

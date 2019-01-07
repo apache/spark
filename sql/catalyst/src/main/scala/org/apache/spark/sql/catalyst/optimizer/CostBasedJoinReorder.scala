@@ -87,8 +87,8 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
       // After reordering is finished, convert OrderedJoin back to Join.
       result transform {
         case OrderedJoin(left, right, jt, cond) =>
-          Join(left, right, jt, cond,
-            JoinHint(hintMap.get(left.outputSet), hintMap.get(right.outputSet)))
+          val joinHint = JoinHint(hintMap.get(left.outputSet), hintMap.get(right.outputSet))
+          Join(left, right, jt, cond, joinHint)
       }
     }
   }
