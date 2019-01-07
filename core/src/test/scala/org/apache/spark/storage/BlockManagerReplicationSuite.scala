@@ -32,6 +32,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DRIVER_PORT, MEMORY_OFFHEAP_SIZE}
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
@@ -69,8 +70,8 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
   protected def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    conf.set("spark.testing.memory", maxMem.toString)
-    conf.set(MEMORY_OFFHEAP_SIZE.key, maxMem.toString)
+    conf.set(TEST_MEMORY, maxMem)
+    conf.set(MEMORY_OFFHEAP_SIZE, maxMem)
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
@@ -87,7 +88,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
     conf.set("spark.authenticate", "false")
     conf.set(DRIVER_PORT, rpcEnv.address.port)
-    conf.set("spark.testing", "true")
+    conf.set(IS_TESTING, true)
     conf.set("spark.memory.fraction", "1")
     conf.set("spark.memory.storageFraction", "1")
     conf.set("spark.storage.unrollFraction", "0.4")
@@ -233,7 +234,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val failableTransfer = mock(classOf[BlockTransferService]) // this wont actually work
     when(failableTransfer.hostName).thenReturn("some-hostname")
     when(failableTransfer.port).thenReturn(1000)
-    conf.set("spark.testing.memory", "10000")
+    conf.set(TEST_MEMORY, 10000L)
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val failableStore = new BlockManager("failable-store", rpcEnv, master, serializerManager, conf,

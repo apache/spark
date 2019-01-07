@@ -26,6 +26,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
@@ -90,7 +91,7 @@ private[spark] class StandaloneSchedulerBackend(
     // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
     // when the assembly is built with the "*-provided" profiles enabled.
     val testingClassPath =
-      if (sys.props.contains("spark.testing")) {
+      if (sys.props.contains(IS_TESTING.key)) {
         sys.props("java.class.path").split(java.io.File.pathSeparator).toSeq
       } else {
         Nil
