@@ -169,6 +169,59 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(localAssignments === localAssignments2)
   }
 
+  test("Power Iteration failed to converge") {
+    /*
+         Graph:
+            1
+           /
+          /
+         0      2 -- 3
+     */
+    val data1 = spark.createDataFrame(Seq(
+      (0, 1),
+      (2, 3)
+    )).toDF("src", "dst")
+
+    val msg1 = intercept[SparkException] {
+      new PowerIterationClustering()
+        .setInitMode("random")
+        .setK(2)
+        .assignClusters(data1)
+    }.getMessage
+    assert(msg1.contains("Power Iteration fail to converge"))
+
+
+    /*
+         Graph:
+            1
+           /
+          /
+         0 - - 2     3 -- 4
+     */
+    val data2 = spark.createDataFrame(Seq(
+      (0, 1),
+      (0, 2),
+      (3, 4)
+    )).toDF("src", "dst")
+
+    var msg2 = intercept[SparkException] {
+      new PowerIterationClustering()
+        .setInitMode("random")
+        .setK(2)
+        .assignClusters(data2)
+    }.getMessage
+    assert(msg1.contains("Power Iteration fail to converge"))
+
+
+    msg2 = intercept[SparkException] {
+      new PowerIterationClustering()
+        .setInitMode("degree")
+        .setK(2)
+        .assignClusters(data2)
+    }.getMessage
+    assert(msg1.contains("Power Iteration fail to converge"))
+  }
+
   test("read/write") {
     val t = new PowerIterationClustering()
       .setK(4)
