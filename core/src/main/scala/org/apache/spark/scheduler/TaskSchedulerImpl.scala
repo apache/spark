@@ -323,7 +323,9 @@ private[spark] class TaskSchedulerImpl(
   }
 
   private def getSortedBarrierTaskSets: ArrayBuffer[TaskSetManager] = {
-    rootPool.getSortedTaskSetQueue.filter(_.isBarrier)
+    rootPool.getSortedTaskSetQueue.filter { ts =>
+      ts.isBarrier && ts.runningTasks == 0
+    }
   }
 
   private def excludeReservedCpus(
