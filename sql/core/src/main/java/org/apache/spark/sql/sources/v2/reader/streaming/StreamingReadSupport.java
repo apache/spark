@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.sql.sources.v2.reader.ReadSupport;
 
 /**
- * A base interface for streaming read support. This is package private and is invisible to data
- * sources. Data sources should implement concrete streaming read support interfaces:
- * {@link MicroBatchReadSupport} or {@link ContinuousReadSupport}.
+ * A base interface for streaming read support. Data sources should implement concrete streaming
+ * read support interfaces: {@link MicroBatchReadSupport} or {@link ContinuousReadSupport}.
+ * This is exposed for a testing purpose.
  */
-interface StreamingReadSupport extends ReadSupport {
+@VisibleForTesting
+public interface StreamingReadSupport extends ReadSupport {
 
   /**
    * Returns the initial offset for a streaming query to start reading from. Note that the
