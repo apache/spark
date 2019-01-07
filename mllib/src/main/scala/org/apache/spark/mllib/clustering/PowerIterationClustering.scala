@@ -381,14 +381,14 @@ object PowerIterationClustering extends Logging {
 
       if (math.abs(diffDelta) < tol) {
         /**
-          * Power Iteration fails to converge if absolute value of top 2 eigen values are equal,
-          * but with opposite sign. The resultant vector flip-flops between two vectors.
-          * We should give an exception, if we detect the failure of the convergence of the
-          * power iteration
-          */
+         * Power Iteration fails to converge if absolute value of top 2 eigen values are equal,
+         * but with opposite sign. The resultant vector flip-flops between two vectors.
+         * We should give an exception, if we detect the failure of the convergence of the
+         * power iteration
+         */
         val reileigh = curG.joinVertices(v) {
-          case (_, x, y) => x*y
-        }.vertices.values.sum() / curG.vertices.mapValues(x => x*x).values.sum()
+          case (_, x, y) => x * y
+        }.vertices.values.sum() / curG.vertices.mapValues(x => x * x).values.sum()
 
         if (math.abs(norm - math.abs(reileigh)) > tol) {
           throw new SparkException("Power Iteration fail to converge")
