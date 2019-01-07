@@ -252,7 +252,7 @@ class ContextTests(unittest.TestCase):
         # with an insecure gateway
         parameters = namedtuple('MockGatewayParameters', 'auth_token')(None)
         mock_insecure_gateway = namedtuple('MockJavaGateway', 'gateway_parameters')(parameters)
-        with self.assertRaises(Exception) as context:
+        with self.assertRaises(ValueError) as context:
             SparkContext(gateway=mock_insecure_gateway)
         self.assertIn("insecure Py4j gateway", str(context.exception))
 
