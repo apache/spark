@@ -63,7 +63,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     {
       // All bytes per partition are 0.
       val bytesByPartitionId = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionStartIndices = Array[Int](0)
+      val expectedPartitionStartIndices = Array[Int]()
       checkEstimation(coordinator, Array(bytesByPartitionId), expectedPartitionStartIndices)
     }
 
@@ -85,7 +85,14 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     {
       // There are a few large pre-shuffle partitions.
       val bytesByPartitionId = Array[Long](110, 10, 100, 110, 0)
-      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 3, 4)
+      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 3)
+      checkEstimation(coordinator, Array(bytesByPartitionId), expectedPartitionStartIndices)
+    }
+
+    {
+      // There are a few large pre-shuffle partitions and some bytes per partition are 0.
+      val bytesByPartitionId = Array[Long](110, 120, 0, 130, 0, 0, 100, 110, 0)
+      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 4, 7)
       checkEstimation(coordinator, Array(bytesByPartitionId), expectedPartitionStartIndices)
     }
 
@@ -123,7 +130,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       // All bytes per partition are 0.
       val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionStartIndices = Array[Int](0)
+      val expectedPartitionStartIndices = Array[Int]()
       checkEstimation(
         coordinator,
         Array(bytesByPartitionId1, bytesByPartitionId2),
@@ -206,7 +213,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       // the size of data is 0.
       val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
-      val expectedPartitionStartIndices = Array[Int](0)
+      val expectedPartitionStartIndices = Array[Int]()
       checkEstimation(
         coordinator,
         Array(bytesByPartitionId1, bytesByPartitionId2),
