@@ -25,6 +25,7 @@ import java.util.Locale
 import java.util.concurrent.{Callable, TimeUnit}
 
 import com.google.common.cache.CacheBuilder
+import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 
 trait DateTimeFormatterHelper {
   protected def toInstantWithZoneId(temporalAccessor: TemporalAccessor, zoneId: ZoneId): Instant = {
@@ -63,10 +64,16 @@ object DateTimeFormatterHelper {
   }
 
   def getFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
-    cache.get(
-      (pattern, locale),
-      new Callable[DateTimeFormatter]() {
-        override def call = buildFormatter(pattern, locale)
-      })
+    try {
+      cache.get(
+        (pattern, locale),
+        new Callable[DateTimeFormatter]() {
+          override def call = buildFormatter(pattern, locale)
+        })
+    } catch {
+      // Cache.get() may wrap the original exception.
+      case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
+        throw e.getCause
+    }
   }
 }
