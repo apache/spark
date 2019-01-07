@@ -242,7 +242,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 userSpecifiedSchema = Option(updatedTable.dataSchema),
                 bucketSpec = None,
                 options = options,
-                className = fileType).resolveRelation(),
+                className = fileFormatClass.getCanonicalName).resolveRelation(),
               table = updatedTable)
 
           catalogProxy.cacheTable(tableIdentifier, created)

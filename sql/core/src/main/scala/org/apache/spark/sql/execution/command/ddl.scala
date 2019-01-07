@@ -889,7 +889,8 @@ object DDLUtils {
             ParquetSchemaConverter.checkFieldNames(colNames)
           }
         case "parquet" => ParquetSchemaConverter.checkFieldNames(colNames)
-        case "orc" => OrcFileFormat.checkFieldNames(colNames)
+        case "orc" | "org.apache.spark.sql.execution.datasources.orc.orcfileformat" =>
+          OrcFileFormat.checkFieldNames(colNames)
         case _ =>
       }
     }

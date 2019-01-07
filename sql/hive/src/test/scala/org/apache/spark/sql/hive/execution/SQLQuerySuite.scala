@@ -428,7 +428,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             assert(r.options("path") === location)
           case None => // OK.
         }
-        assert(catalogTable.provider.get === format)
+        assert(catalogTable.provider.get.toLowerCase(Locale.ROOT).contains(format))
 
       case r: HiveTableRelation =>
         if (isDataSourceTable) {
