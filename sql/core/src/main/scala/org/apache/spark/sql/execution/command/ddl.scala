@@ -296,7 +296,6 @@ case class AlterTableUnsetPropertiesCommand(
 
 /**
  * A command to change the column for a table.  For now, this only supports:
- * column for now.
  * - changing the comment of a non-partition column
  * - adding sub columns to nested StructType columns
  *

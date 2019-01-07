@@ -1718,7 +1718,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col2 col2 INT")
     }
 
-    // Ensure that change column with in nested column with type change fails
+    // Ensure that change column changing type within nested-column fails
     intercept[AnalysisException] {
       val alterSql = "ALTER TABLE dbx.tab1 CHANGE COLUMN nested1 " +
           "nested1 struct<s1:string,s2:string,i1:string>"
