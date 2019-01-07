@@ -401,6 +401,7 @@ object SparkEnv extends Logging {
   private[spark]
   def environmentDetails(
       conf: SparkConf,
+      hadoopConf: Configuration,
       schedulingMode: String,
       addedJars: Seq[String],
       addedFiles: Seq[String]): Map[String, Seq[(String, String)]] = {
@@ -436,9 +437,13 @@ object SparkEnv extends Logging {
     val addedJarsAndFiles = (addedJars ++ addedFiles).map((_, "Added By User"))
     val classPaths = (addedJarsAndFiles ++ classPathEntries).sorted
 
+    // Add Hadoop properties, it will ignore configs including in Spark
+    val hadoopProperties = hadoopConf.asScala.filter(entry => !conf.contains("spark.hadoop." + entry.getKey)).
+      map(entry => (entry.getKey, entry.getValue)).toSeq
     Map[String, Seq[(String, String)]](
       "JVM Information" -> jvmInformation,
       "Spark Properties" -> sparkProperties,
+      "Hadoop Properties" -> hadoopProperties,
       "System Properties" -> otherProperties,
       "Classpath Entries" -> classPaths)
   }
