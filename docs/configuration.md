@@ -1506,6 +1506,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.network.io.preferDirectBufs</code></td>
+  <td>true</td>
+  <td>
+    If enabled then off-heap buffer allocations are preferred by the shared allocators.
+    Off-heap buffers are used to reduce garbage collection during shuffle and cache
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to
+    turn this off to force all allocations to be on-heap.
+    </td>
+</tr>
+<tr>
   <td><code>spark.port.maxRetries</code></td>
   <td>16</td>
   <td>
