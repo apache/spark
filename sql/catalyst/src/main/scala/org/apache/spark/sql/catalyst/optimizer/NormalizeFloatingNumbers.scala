@@ -28,26 +28,30 @@ import org.apache.spark.sql.types._
  * We need to take care of special floating numbers (NaN and -0.0) in several places:
  *   1. When compare values, different NaNs should be treated as same, `-0.0` and `0.0` should be
  *      treated as same.
- *   2. In GROUP BY, different NaNs should belong to the same group, -0.0 and 0.0 should belong
- *      to the same group.
+ *   2. In aggregate grouping keys, different NaNs should belong to the same group, -0.0 and 0.0
+ *      should belong to the same group.
  *   3. In join keys, different NaNs should be treated as same, `-0.0` and `0.0` should be
  *      treated as same.
- *   4. In window partition keys, different NaNs should be treated as same, `-0.0` and `0.0`
- *      should be treated as same.
+ *   4. In window partition keys, different NaNs should belong to the same partition, -0.0 and 0.0
+ *      should belong to the same partition.
  *
  * Case 1 is fine, as we handle NaN and -0.0 well during comparison. For complex types, we
  * recursively compare the fields/elements, so it's also fine.
  *
- * Case 2, 3 and 4 are problematic, as they compare `UnsafeRow` binary directly, and different
- * NaNs have different binary representation, and the same thing happens for -0.0 and 0.0.
+ * Case 2, 3 and 4 are problematic, as Spark SQL turns grouping/join/window partition keys into
+ * binary `UnsafeRow` and compare the binary data directly. Different NaNs have different binary
+ * representation, and the same thing happens for -0.0 and 0.0.
  *
- * This rule normalizes NaN and -0.0 in Window partition keys, Join keys and Aggregate grouping
- * expressions.
+ * This rule normalizes NaN and -0.0 in window partition keys, join keys and aggregate grouping
+ * keys.
  *
- * Note that, this rule should be an analyzer rule, as it must be applied to make the query result
- * corrected. Currently it's executed as an optimizer rule, because the optimizer may create new
- * joins(for subquery) and reorder joins(may change the join condition), and this rule needs to be
- * executed at the end.
+ * Ideally we should do the normalization in the physical operators that compare the
+ * binary `UnsafeRow` directly. We don't need this normalization if the Spark SQL execution engine
+ * is not optimized to run on binary data. This rule is created to simplify the implementation, so
+ * that we have a single place to do normalization, which is more maintainable.
+ *
+ * Note that, this rule must be executed at the end of optimizer, because the optimizer may create
+ * new joins(the subquery rewrite) and new join conditions(the join reorder).
  */
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
@@ -58,10 +62,18 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
     case _ => plan transform {
       case w: Window if w.partitionSpec.exists(p => needNormalize(p.dataType)) =>
+        // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need
+        // to normalize the `windowExpressions`, as they are executed per input row and should take
+        // the input row as it is.
         w.copy(partitionSpec = w.partitionSpec.map(normalize))
 
-      case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _)
-        if leftKeys.exists(k => needNormalize(k.dataType)) =>
+      // Only hash join and sort merge join need the normalization. Here we catch all Joins with
+      // join keys, assuming Joins with join keys are always planned as hash join or sort merge
+      // join. It's very unlikely that we will break this assumption in the near future.
+      case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _, _)
+          // The analyzer guarantees left and right joins keys are of the same data type. Here we
+          // only need to check join keys of one side.
+          if leftKeys.exists(k => needNormalize(k.dataType)) =>
         val newLeftJoinKeys = leftKeys.map(normalize)
         val newRightJoinKeys = rightKeys.map(normalize)
         val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
@@ -79,7 +91,9 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case FloatType | DoubleType => true
     case StructType(fields) => fields.exists(f => needNormalize(f.dataType))
     case ArrayType(et, _) => needNormalize(et)
-    // We don't need to handle MapType here, as it's not comparable.
+    // Currently MapType is not comparable and analyzer should fail earlier if this case happens.
+    case _: MapType =>
+      throw new IllegalStateException("grouping/join/window partition keys cannot be map type.")
     case _ => false
   }
 
