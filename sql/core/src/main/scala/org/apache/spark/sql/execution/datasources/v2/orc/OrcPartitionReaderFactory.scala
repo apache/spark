@@ -49,9 +49,9 @@ case class OrcPartitionReaderFactory(
     partitionSchema: StructType) extends FilePartitionReaderFactory {
   private val sqlConf = SQLConf.get
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-  val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
-  val copyToSpark = sqlConf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK)
-  val capacity = sqlConf.orcVectorizedReaderBatchSize
+  private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
+  private val copyToSpark = sqlConf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK)
+  private val capacity = sqlConf.orcVectorizedReaderBatchSize
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&

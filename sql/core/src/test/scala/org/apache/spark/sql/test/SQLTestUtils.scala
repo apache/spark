@@ -230,11 +230,12 @@ private[sql] trait SQLTestUtilsBase
     SparkSession.setActiveSession(spark)
     val sc = spark.sparkContext
     // Set all the specified SQL configs to local properties, so that they can be available at
-    // the executor side.
+    // the executor side. This is because DataFrame.rdd() doesn't propagate SQL configs. Before
+    // the issue is fixed, set the SparkContext's properties here to unblock related tests.
     // Note: `allSparkConfigs` may `overlap` with pairs, so use `.toMap` to reduce duplicated keys.
     val allSparkConfigs = (spark.sessionState.conf.getAllConfs ++ pairs.toSeq).filter {
       case (key, _) => key.startsWith("spark")
-    }.toMap
+    }
     val originalLocalProps = allSparkConfigs.map {
       case (key, value) =>
         val originalValue = sc.getLocalProperty(key)
