@@ -42,8 +42,8 @@ private[ui] class EnvironmentPage(
       propertyHeader, jvmRow, jvmInformation, fixedWidth = true)
     val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
       Utils.redact(conf, appEnv.sparkProperties.toSeq), fixedWidth = true)
-    val hadoopPropertiesTable = UIUtils.listingTable(
-      propertyHeader, propertyRow, listener.hadoopProperties.map(removePass), fixedWidth = true)
+    val hadoopPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(conf, appEnv.hadoopProperties.toSeq), fixedWidth = true)
     val systemPropertiesTable = UIUtils.listingTable(
       propertyHeader, propertyRow, appEnv.systemProperties, fixedWidth = true)
     val classpathEntriesTable = UIUtils.listingTable(

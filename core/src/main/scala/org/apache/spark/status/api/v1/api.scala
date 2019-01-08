@@ -352,6 +352,7 @@ class VersionInfo private[spark](
 class ApplicationEnvironmentInfo private[spark] (
     val runtime: RuntimeInfo,
     val sparkProperties: Seq[(String, String)],
+    val hadoopProperties: Seq[(String, String)],
     val systemProperties: Seq[(String, String)],
     val classpathEntries: Seq[(String, String)])
 
