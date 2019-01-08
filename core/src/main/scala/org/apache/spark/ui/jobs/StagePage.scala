@@ -188,11 +188,11 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           }}
           {if (hasBytesSpilled(stageData)) {
             <li>
-              <strong>Shuffle Spill (Memory): </strong>
+              <strong>Spill (Memory): </strong>
               {Utils.bytesToString(stageData.memoryBytesSpilled)}
             </li>
             <li>
-              <strong>Shuffle Spill (Disk): </strong>
+              <strong>Spill (Disk): </strong>
               {Utils.bytesToString(stageData.diskBytesSpilled)}
             </li>
           }}
@@ -797,8 +797,8 @@ private[spark] object ApiHelper {
   val HEADER_SHUFFLE_REMOTE_READS = "Shuffle Remote Reads"
   val HEADER_SHUFFLE_WRITE_TIME = "Write Time"
   val HEADER_SHUFFLE_WRITE_SIZE = "Shuffle Write Size / Records"
-  val HEADER_MEM_SPILL = "Shuffle Spill (Memory)"
-  val HEADER_DISK_SPILL = "Shuffle Spill (Disk)"
+  val HEADER_MEM_SPILL = "Spill (Memory)"
+  val HEADER_DISK_SPILL = "Spill (Disk)"
   val HEADER_ERROR = "Errors"
 
   private[ui] val COLUMN_TO_INDEX = Map(
