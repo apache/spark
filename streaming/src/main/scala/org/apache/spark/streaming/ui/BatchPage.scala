@@ -317,12 +317,10 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   }
 
   def render(request: HttpServletRequest): Seq[Node] = streamingListener.synchronized {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val batchTime =
-      Option(SparkUIUtils.stripXSS(request.getParameter("id"))).map(id => Time(id.toLong))
+    val batchTime = Option(request.getParameter("id")).map(id => Time(id.toLong))
       .getOrElse {
-      throw new IllegalArgumentException(s"Missing id parameter")
-    }
+        throw new IllegalArgumentException(s"Missing id parameter")
+      }
     val formattedBatchTime =
       UIUtils.formatBatchTime(batchTime.milliseconds, streamingListener.batchDuration)
 

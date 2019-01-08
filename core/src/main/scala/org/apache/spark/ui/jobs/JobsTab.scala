@@ -47,9 +47,7 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
 
   def handleKillRequest(request: HttpServletRequest): Unit = {
     if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
-      // stripXSS is called first to remove suspicious characters used in XSS attacks
-      val jobId = Option(UIUtils.stripXSS(request.getParameter("id"))).map(_.toInt)
-      jobId.foreach { id =>
+      Option(request.getParameter("id")).map(_.toInt).foreach { id =>
         store.asOption(store.job(id)).foreach { job =>
           if (job.status == JobExecutionStatus.RUNNING) {
             sc.foreach(_.cancelJob(id))
