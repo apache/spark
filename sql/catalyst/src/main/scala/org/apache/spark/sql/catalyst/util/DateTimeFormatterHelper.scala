@@ -22,10 +22,11 @@ import java.time.chrono.IsoChronology
 import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverStyle}
 import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.Locale
-import java.util.concurrent.{Callable, TimeUnit}
 
 import com.google.common.cache.CacheBuilder
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
+
+import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 
 trait DateTimeFormatterHelper {
   protected def toInstantWithZoneId(temporalAccessor: TemporalAccessor, zoneId: ZoneId): Instant = {
@@ -39,29 +40,8 @@ trait DateTimeFormatterHelper {
     val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
     Instant.from(zonedDateTime)
   }
-}
 
-object DateTimeFormatterHelper {
-  private val cache = CacheBuilder.newBuilder()
-    .maximumSize(128)
-    .build[(String, Locale), DateTimeFormatter]()
-
-
-  private def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
-    new DateTimeFormatterBuilder()
-      .parseCaseInsensitive()
-      .appendPattern(pattern)
-      .parseDefaulting(ChronoField.ERA, 1)
-      .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
-      .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
-      .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
-      .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
-      .toFormatter(locale)
-      .withChronology(IsoChronology.INSTANCE)
-      .withResolverStyle(ResolverStyle.STRICT)
-  }
-
-  def getFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
+  def getOrCreateFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
     try {
       val key = (pattern, locale)
       var formatter = cache.getIfPresent(key)
@@ -75,5 +55,25 @@ object DateTimeFormatterHelper {
       case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
         throw e.getCause
     }
+  }
+}
+
+private object DateTimeFormatterHelper {
+  val cache = CacheBuilder.newBuilder()
+    .maximumSize(128)
+    .build[(String, Locale), DateTimeFormatter]()
+
+  def buildFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
+    new DateTimeFormatterBuilder()
+      .parseCaseInsensitive()
+      .appendPattern(pattern)
+      .parseDefaulting(ChronoField.ERA, 1)
+      .parseDefaulting(ChronoField.MONTH_OF_YEAR, 1)
+      .parseDefaulting(ChronoField.DAY_OF_MONTH, 1)
+      .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
+      .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
+      .toFormatter(locale)
+      .withChronology(IsoChronology.INSTANCE)
+      .withResolverStyle(ResolverStyle.STRICT)
   }
 }

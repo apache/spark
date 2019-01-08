@@ -51,7 +51,7 @@ class Iso8601TimestampFormatter(
     timeZone: TimeZone,
     locale: Locale) extends TimestampFormatter with DateTimeFormatterHelper {
   @transient
-  private lazy val formatter = DateTimeFormatterHelper.getFormatter(pattern, locale)
+  private lazy val formatter = getOrCreateFormatter(pattern, locale)
 
   private def toInstant(s: String): Instant = {
     val temporalAccessor = formatter.parse(s)
