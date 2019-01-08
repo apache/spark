@@ -228,28 +228,7 @@ private[sql] trait SQLTestUtilsBase
 
   protected override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     SparkSession.setActiveSession(spark)
-    val sc = spark.sparkContext
-    // Set all the specified SQL configs to local properties, so that they can be available at
-    // the executor side. This is because DataFrame.rdd() doesn't propagate SQL configs. Before
-    // the issue is fixed, set the SparkContext's properties here to unblock related tests.
-    // Note: `allSparkConfigs` may `overlap` with pairs, so use `.toMap` to reduce duplicated keys.
-    val allSparkConfigs = (spark.sessionState.conf.getAllConfs ++ pairs.toSeq).filter {
-      case (key, _) => key.startsWith("spark")
-    }
-    val originalLocalProps = allSparkConfigs.map {
-      case (key, value) =>
-        val originalValue = sc.getLocalProperty(key)
-        sc.setLocalProperty(key, value)
-        (key, originalValue)
-    }
-
-    try {
-      super.withSQLConf(pairs: _*)(f)
-    } finally {
-      for ((key, value) <- originalLocalProps) {
-        sc.setLocalProperty(key, value)
-      }
-    }
+    super.withSQLConf(pairs: _*)(f)
   }
 
   /**
