@@ -21,9 +21,12 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -388,19 +391,19 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
     Seq("true", "false").foreach { allowPrecLoss =>
       withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> allowPrecLoss) {
-        checkEvaluationWithOptimization(Add(a, b), Decimal(BigDecimal(1334567891)))
-        checkEvaluationWithOptimization(Add(b, c), Decimal(BigDecimal(100123456.7891)))
-        checkEvaluationWithOptimization(Add(b, d), Decimal(BigDecimal(67900e6)))
-        checkEvaluationWithOptimization(Subtract(a, b), Decimal(BigDecimal(1134567891)))
-        checkEvaluationWithOptimization(Subtract(b, c), Decimal(BigDecimal(99876543.2109)))
-        checkEvaluationWithOptimization(Subtract(d, b), Decimal(BigDecimal(67700e6)))
-        checkEvaluationWithOptimization(Multiply(a, b), Decimal(BigDecimal(123456789100000000L)))
-        checkEvaluationWithOptimization(Multiply(b, c), Decimal(BigDecimal(12345678910000L)))
-        checkEvaluationWithOptimization(Multiply(d, b), Decimal(BigDecimal(67800e14)))
-        checkEvaluationWithOptimization(Divide(a, b), Decimal(BigDecimal(12.34567891)))
-        checkEvaluationWithOptimization(Divide(b, c), Decimal(BigDecimal(810.000007)))
-        checkEvaluationWithOptimization(Divide(c, b), Decimal(BigDecimal(0.001234567891)))
-        checkEvaluationWithOptimization(Divide(d, b), Decimal(BigDecimal(678)))
+        checkEvaluationWithAnalysis(Add(a, b), Decimal(BigDecimal(1334567891)))
+        checkEvaluationWithAnalysis(Add(b, c), Decimal(BigDecimal(100123456.7891)))
+        checkEvaluationWithAnalysis(Add(b, d), Decimal(BigDecimal(67900e6)))
+        checkEvaluationWithAnalysis(Subtract(a, b), Decimal(BigDecimal(1134567891)))
+        checkEvaluationWithAnalysis(Subtract(b, c), Decimal(BigDecimal(99876543.2109)))
+        checkEvaluationWithAnalysis(Subtract(d, b), Decimal(BigDecimal(67700e6)))
+        checkEvaluationWithAnalysis(Multiply(a, b), Decimal(BigDecimal(123456789100000000L)))
+        checkEvaluationWithAnalysis(Multiply(b, c), Decimal(BigDecimal(12345678910000L)))
+        checkEvaluationWithAnalysis(Multiply(d, b), Decimal(BigDecimal(67800e14)))
+        checkEvaluationWithAnalysis(Divide(a, b), Decimal(BigDecimal(12.34567891)))
+        checkEvaluationWithAnalysis(Divide(b, c), Decimal(BigDecimal(810.000007)))
+        checkEvaluationWithAnalysis(Divide(c, b), Decimal(BigDecimal(0.001234567891)))
+        checkEvaluationWithAnalysis(Divide(d, b), Decimal(BigDecimal(678)))
       }
     }
   }

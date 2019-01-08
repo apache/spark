@@ -28,7 +28,8 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry, ResolveTimeZone}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
@@ -43,6 +44,9 @@ import org.apache.spark.util.Utils
  */
 trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBase {
   self: SparkFunSuite =>
+
+  private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
+  private val analyzer = new Analyzer(catalog, conf)
 
   protected def create_row(values: Any*): InternalRow = {
     InternalRow.fromSeq(values.map(CatalystTypeConverters.convertToCatalyst))
@@ -300,6 +304,15 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation())
     val optimizedPlan = SimpleTestOptimizer.execute(plan)
     checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)
+  }
+
+  protected def checkEvaluationWithAnalysis(
+      expression: Expression,
+      expected: Any,
+      inputRow: InternalRow = EmptyRow): Unit = {
+    val plan = Project(Alias(expression, s"Analyzed($expression)")() :: Nil, OneRowRelation())
+    val analyzedPlan = analyzer.execute(plan)
+    checkEvaluationWithoutCodegen(analyzedPlan.expressions.head, expected, inputRow)
   }
 
   protected def checkDoubleEvaluation(
