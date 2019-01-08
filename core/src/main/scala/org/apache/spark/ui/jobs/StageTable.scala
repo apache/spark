@@ -42,17 +42,14 @@ private[ui] class StageTableBase(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
-  // stripXSS is called to remove suspicious characters used in XSS attacks
-  val allParameters = request.getParameterMap.asScala.toMap.map { case (k, v) =>
-    UIUtils.stripXSS(k) -> v.map(UIUtils.stripXSS).toSeq
-  }
-  val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
+  val parameterOtherTable = request.getParameterMap().asScala
+    .filterNot(_._1.startsWith(stageTag))
     .map(para => para._1 + "=" + para._2(0))
 
-  val parameterStagePage = UIUtils.stripXSS(request.getParameter(stageTag + ".page"))
-  val parameterStageSortColumn = UIUtils.stripXSS(request.getParameter(stageTag + ".sort"))
-  val parameterStageSortDesc = UIUtils.stripXSS(request.getParameter(stageTag + ".desc"))
-  val parameterStagePageSize = UIUtils.stripXSS(request.getParameter(stageTag + ".pageSize"))
+  val parameterStagePage = request.getParameter(stageTag + ".page")
+  val parameterStageSortColumn = request.getParameter(stageTag + ".sort")
+  val parameterStageSortDesc = request.getParameter(stageTag + ".desc")
+  val parameterStagePageSize = request.getParameter(stageTag + ".pageSize")
 
   val stagePage = Option(parameterStagePage).map(_.toInt).getOrElse(1)
   val stageSortColumn = Option(parameterStageSortColumn).map { sortColumn =>
