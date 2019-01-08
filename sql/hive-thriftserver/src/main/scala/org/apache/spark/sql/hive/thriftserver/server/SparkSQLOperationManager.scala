@@ -84,7 +84,7 @@ private[thriftserver] class SparkSQLOperationManager()
       tableTypes: JList[String]): MetadataOperation = synchronized {
     val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
     require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
-      s" initialized or had already closed.")
+      " initialized or had already closed.")
     val operation = new SparkGetTablesOperation(sqlContext, parentSession,
       catalogName, schemaName, tableName, tableTypes)
     handleToOperation.put(operation.getHandle, operation)
