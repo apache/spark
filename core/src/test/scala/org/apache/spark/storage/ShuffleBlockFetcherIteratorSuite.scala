@@ -577,4 +577,88 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val e = intercept[FetchFailedException] { iterator.next() }
     assert(e.getMessage.contains("Received a zero-size buffer"))
   }
+
+  test("adaptive execution: successful 2 local blocks + 3 remote blocks") {
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+
+    // Make sure blockManager.getBlockData would return the blocks
+    val localBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockBatchId(0, 0, 0, 2) -> createMockManagedBuffer(2),
+      ShuffleBlockBatchId(0, 1, 0, 1) -> createMockManagedBuffer())
+    localBlocks.foreach { case (blockId, buf) =>
+      doReturn(buf).when(blockManager).getBlockData(meq(blockId))
+    }
+
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val remoteBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockBatchId(0, 3, 0, 2) -> createMockManagedBuffer(2),
+      ShuffleBlockId(0, 4, 0) -> createMockManagedBuffer())
+    val transfer = mock(classOf[BlockTransferService])
+    when(transfer.fetchBlocks(any(), any(), any(), any(), any(), any(), any()))
+      .thenAnswer(new Answer[Unit] {
+        override def answer(invocation: InvocationOnMock): Unit = {
+          val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+          listener.onBlockFetchSuccess(Array("shuffle_0_3_0", "shuffle_0_3_1"),
+            remoteBlocks(ShuffleBlockBatchId(0, 3, 0, 2)))
+          listener.onBlockFetchSuccess(Array("shuffle_0_4_0"),
+            remoteBlocks(ShuffleBlockId(0, 4, 0)))
+        }
+      })
+
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
+      (localBmId, Seq((ShuffleBlockBatchId(0, 0, 0, 2), 2.asInstanceOf[Long]),
+        (ShuffleBlockBatchId(0, 1, 0, 1), 1.asInstanceOf[Long]))),
+      (remoteBmId, Seq((ShuffleBlockId(0, 3, 0), 1.asInstanceOf[Long]),
+        (ShuffleBlockId(0, 3, 1), 1.asInstanceOf[Long]),
+        (ShuffleBlockId(0, 4, 0), 1.asInstanceOf[Long])))
+    ).toIterator
+
+    val taskContext = TaskContext.empty()
+    val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val iterator = new ShuffleBlockFetcherIterator(
+      taskContext,
+      transfer,
+      blockManager,
+      blocksByAddress,
+      (_, in) => in,
+      48 * 1024 * 1024,
+      Int.MaxValue,
+      Int.MaxValue,
+      Int.MaxValue,
+      true,
+      metrics,
+      true)
+
+    // 2 local blocks fetched in initialization
+    verify(blockManager, times(2)).getBlockData(any())
+
+    for (i <- 0 until 4) {
+      assert(iterator.hasNext, s"iterator should have 4 elements but actually has $i elements")
+      val (blockId, inputStream) = iterator.next()
+
+      // Make sure we release buffers when a wrapped input stream is closed.
+      val mockBuf = localBlocks.getOrElse(blockId, remoteBlocks(blockId))
+      // Note: ShuffleBlockFetcherIterator wraps input streams in a BufferReleasingInputStream
+      val wrappedInputStream = inputStream.asInstanceOf[BufferReleasingInputStream]
+      verify(mockBuf, times(0)).release()
+      val delegateAccess = PrivateMethod[InputStream]('delegate)
+
+      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(0)).close()
+      wrappedInputStream.close()
+      verify(mockBuf, times(1)).release()
+      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
+      wrappedInputStream.close() // close should be idempotent
+      verify(mockBuf, times(1)).release()
+      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
+    }
+    assert(!iterator.hasNext, s"iterator should have 4 elements but actually has > 4 elements")
+
+    // 2 local blocks, and 3 remote blocks
+    // (but from the same block manager so one call to fetchBlocks)
+    verify(blockManager, times(2)).getBlockData(any())
+    verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any(), any(), any())
+  }
 }
