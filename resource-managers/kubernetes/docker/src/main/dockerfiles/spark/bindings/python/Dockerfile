@@ -26,7 +26,7 @@ USER 0
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN set -ex && \
-    apt-get update && apt-get install -y \
+    apt-get update && apt-get install -y --no-install-recommends \
       python \
       python-pip \
       python3 \

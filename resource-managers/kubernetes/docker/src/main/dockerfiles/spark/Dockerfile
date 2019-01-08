@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-ARG base_img
+ARG base_img=debian:stretch-slim
 
 FROM $base_img
 
@@ -30,8 +30,11 @@ ARG spark_uid=185
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN set -ex && \
-    apt-get update && apt-get install -y apt-utils && \
-    apt-get install -y openjdk-8-jre wget && \
+    apt-get update && apt-get install -y --no-install-recommends apt-utils && \
+    # Workaround for debian:stretch-slim.
+    # See https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=863199.
+    mkdir -p /usr/share/man/man1 && \
+    apt-get install -y --no-install-recommends openjdk-8-jre-headless wget && \
     rm -rf /var/lib/apt/lists/* && \
     wget -q -O /sbin/tini https://github.com/krallin/tini/releases/download/v0.18.0/tini && \
     chmod +x /sbin/tini && \
