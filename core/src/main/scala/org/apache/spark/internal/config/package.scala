@@ -228,6 +228,16 @@ package object config {
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("1m")
 
+  private[spark] val KERBEROS_RENEWAL_CREDENTIALS =
+    ConfigBuilder("spark.kerberos.renewal.credentials")
+      .doc(
+        "Which credentials to use when renewing delegation tokens for executors. Can be either " +
+        "'keytab', the default, which requires a keytab to be provided, or 'ccache', which uses " +
+        "the local credentials cache.")
+      .stringConf
+      .checkValues(Set("keytab", "ccache"))
+      .createWithDefault("keytab")
+
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .intConf
     .createOptional

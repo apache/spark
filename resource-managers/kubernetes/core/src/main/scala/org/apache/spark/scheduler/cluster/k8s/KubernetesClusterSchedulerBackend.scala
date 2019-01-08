@@ -143,8 +143,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     // Don't do anything else - let event handling from the Kubernetes API do the Spark changes
   }
 
-  override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
-    new KubernetesDriverEndpoint(sc.env.rpcEnv, properties)
+  override def createDriverEndpoint(): DriverEndpoint = {
+    new KubernetesDriverEndpoint()
   }
 
   override protected def createTokenManager(
@@ -152,8 +152,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, schedulerRef))
   }
 
-  private class KubernetesDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
-      extends DriverEndpoint(rpcEnv, sparkProperties) {
+  private class KubernetesDriverEndpoint extends DriverEndpoint {
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       // Don't do anything besides disabling the executor - allow the Kubernetes API events to

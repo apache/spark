@@ -100,7 +100,7 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: () => Set[Fil
       creds: Credentials): Credentials = {
 
     filesystems.foreach { fs =>
-      logInfo("getting token for: " + fs)
+      logInfo(s"getting token for: $fs with renewer $renewer")
       fs.addDelegationTokens(renewer, creds)
     }
 
@@ -114,7 +114,13 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: () => Set[Fil
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.
-    sparkConf.get(PRINCIPAL).flatMap { renewer =>
+    val user = sparkConf.get(KERBEROS_RENEWAL_CREDENTIALS) match {
+      case "keytab" => sparkConf.get(PRINCIPAL)
+      case "ccache" => Some(UserGroupInformation.getCurrentUser().getUserName())
+      case _ => None
+    }
+
+    user.flatMap { renewer =>
       val creds = new Credentials()
       fetchDelegationTokens(renewer, filesystems, creds)
 
