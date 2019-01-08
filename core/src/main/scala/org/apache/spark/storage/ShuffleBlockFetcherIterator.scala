@@ -60,7 +60,7 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
  * @param detectCorrupt whether to detect any corruption in fetched blocks.
  * @param shuffleMetrics used to report shuffle metrics.
- * @param allowShuffleBlockBatchFetch fetch contiguous shuffle blocks in one IO if server side
+ * @param shuffleBlockBatchFetch fetch contiguous shuffle blocks in one IO if server side
   *                                   supports.
  */
 private[spark]
@@ -76,7 +76,7 @@ final class ShuffleBlockFetcherIterator(
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean,
     shuffleMetrics: ShuffleReadMetricsReporter,
-    allowShuffleBlockBatchFetch: Boolean)
+    shuffleBlockBatchFetch: Boolean)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
@@ -273,10 +273,10 @@ final class ShuffleBlockFetcherIterator(
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, this, allowShuffleBlockBatchFetch)
+        blockFetchingListener, this, shuffleBlockBatchFetch)
     } else {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, null, allowShuffleBlockBatchFetch)
+        blockFetchingListener, null, shuffleBlockBatchFetch)
     }
   }
 

@@ -69,7 +69,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
       blockIds: Array[String],
       listener: BlockFetchingListener,
       tempFileManager: DownloadFileManager,
-      allowShuffleBlockBatchFetch: Boolean): Unit
+      shuffleBlockBatchFetch: Boolean): Unit
 
   /**
    * Upload a single block to a remote node, available only after [[init]] is invoked.
