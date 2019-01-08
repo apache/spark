@@ -15,7 +15,9 @@
 # limitations under the License.
 #
 
-FROM openjdk:8-alpine
+ARG base_img
+
+FROM $base_img
 
 ARG spark_uid=185
 
@@ -26,15 +28,13 @@ ARG spark_uid=185
 # of the Spark distribution. E.g.:
 # docker build -t spark:latest -f kubernetes/dockerfiles/spark/Dockerfile .
 
+ARG DEBIAN_FRONTEND=noninteractive
 RUN set -ex && \
-    apk upgrade --no-cache && \
-    apk add --no-cache bash tini libc6-compat linux-pam krb5 krb5-libs && \
-    mkdir -p /opt/spark && \
-    mkdir -p /opt/spark/examples && \
-    mkdir -p /opt/spark/work-dir && \
-    touch /opt/spark/RELEASE && \
-    rm /bin/sh && \
-    ln -sv /bin/bash /bin/sh && \
+    apt-get update && apt-get install -y apt-utils && \
+    apt-get install -y openjdk-8-jre wget && \
+    rm -rf /var/lib/apt/lists/* && \
+    wget -q -O /sbin/tini https://github.com/krallin/tini/releases/download/v0.18.0/tini && \
+    chmod +x /sbin/tini && \
     echo "auth required pam_wheel.so use_uid" >> /etc/pam.d/su && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd
 
@@ -46,6 +46,7 @@ COPY examples /opt/spark/examples
 COPY kubernetes/tests /opt/spark/tests
 COPY data /opt/spark/data
 
+ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64
 ENV SPARK_HOME /opt/spark
 
 WORKDIR /opt/spark/work-dir

@@ -160,16 +160,19 @@ function build {
     BUILD_ARGS+=(--build-arg spark_uid=$SPARK_UID)
   fi
 
+  # Use a different base image for GPU
+  if is_gpu_build; then
+    BUILD_ARGS+=(--build-arg base_img=nvidia/cuda:10.0-runtime-ubuntu18.04)
+  else
+    BUILD_ARGS+=(--build-arg base_img=ubuntu:18.04)
+  fi
+
   local BINDING_BUILD_ARGS=(
     ${BUILD_PARAMS}
     --build-arg
     base_img=$(image_ref spark)
   )
-  if is_gpu_build; then
-    local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile.gpu"}
-  else
-    local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile"}
-  fi
+  local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-false}
   local RDOCKERFILE=${RDOCKERFILE:-false}
 

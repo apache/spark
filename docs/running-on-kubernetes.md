@@ -110,10 +110,10 @@ Example usage is
 $ ./bin/docker-image-tool.sh -r <repo> -t my-tag -g build
 
 # To build additional PySpark GPU docker image
-$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -g -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile.gpu build
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -g -p ./kubernetes/dockerfiles/spark/bindings/python/Dockerfile build
 
 # To build additional SparkR GPU docker image
-$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -g -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile.gpu build
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag -g -R ./kubernetes/dockerfiles/spark/bindings/R/Dockerfile build
 ```
 
 ## Cluster Mode
