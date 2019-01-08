@@ -62,7 +62,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     assert (file.length() > 0);
     final ConfigEntry<Object> bufferSizeConfigEntry =
         package$.MODULE$.UNSAFE_SORTER_SPILL_READER_BUFFER_SIZE();
-    final int DEFAULT_BUFFER_SIZE_BYTES = (int)bufferSizeConfigEntry.defaultValue().get();
+    final long DEFAULT_BUFFER_SIZE_BYTES = (long)bufferSizeConfigEntry.defaultValue().get();
     long bufferSizeBytes =
         SparkEnv.get() == null ?
             DEFAULT_BUFFER_SIZE_BYTES:(long)SparkEnv.get().conf().get(bufferSizeConfigEntry);
