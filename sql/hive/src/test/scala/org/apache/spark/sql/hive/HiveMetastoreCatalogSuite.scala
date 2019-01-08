@@ -171,7 +171,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
       "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
     )),
 
-    "org.apache.spark.sql.hive.orc.OrcFileFormat" -> ((
+    "org.apache.spark.sql.hive.orc" -> ((
       "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
