@@ -60,8 +60,12 @@ private object PostgresDialect extends JdbcDialect {
     case "bytea" => Some(BinaryType)
     case "timestamp" | "timestamptz" | "time" | "timetz" => Some(TimestampType)
     case "date" => Some(DateType)
-    case "numeric" | "decimal" if precision != 0 => Some(DecimalType.bounded(precision, scale))
-    case "numeric" | "decimal" => Some(DecimalType.SYSTEM_DEFAULT)
+    case "numeric" | "decimal" => if (precision > 0) {
+      Some(DecimalType.bounded(precision, scale))
+    } else {
+      // SPARK-26538: handle numeric without explicit precision and scale.
+      Some(DecimalType. SYSTEM_DEFAULT)
+    }
     case _ => None
   }
 
