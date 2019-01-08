@@ -65,11 +65,13 @@ object DateTimeFormatterHelper {
 
   def getFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
     try {
-      cache.get(
-        (pattern, locale),
-        new Callable[DateTimeFormatter]() {
-          override def call = buildFormatter(pattern, locale)
-        })
+      val key = (pattern, locale)
+      var formatter = cache.getIfPresent(key)
+      if (formatter == null) {
+        formatter = buildFormatter(pattern, locale)
+        cache.put(key, formatter)
+      }
+      formatter
     } catch {
       // Cache.get() may wrap the original exception.
       case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
