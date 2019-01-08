@@ -216,9 +216,8 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         # Since 0.11.0, PyArrow supports the feature to raise an error for unsafe cast.
         if LooseVersion(pa.__version__) >= LooseVersion("0.11.0"):
-            with self.assertRaisesRegexp(
-                Exception,
-                "Exception thrown when converting pandas.Series"):
+            with self.assertRaisesRegexp(Exception,
+                                         "Exception thrown when converting pandas.Series"):
                     udf_df.collect()
 
 
