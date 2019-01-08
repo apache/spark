@@ -192,4 +192,54 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
       case p: HiveTableScanExec => p
     }.get
   }
+
+  test("HiveTableScanExec canonicalization for different orders of partition filters") {
+    withTable("table_old", "table_pt_old", "table_new", "table_pt_new") {
+      sql("set spark.sql.hive.fileInputFormat.enabled=true")
+      sql("set spark.sql.hive.fileInputFormat.split.maxsize=134217728")
+      sql("set spark.sql.hive.fileInputFormat.split.minsize=134217728")
+      sql(
+        s"""
+           |CREATE TABLE table_old (id int)
+           |STORED AS
+           |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+         """.stripMargin)
+      sql(
+        s"""
+           |CREATE TABLE table_pt_old (id int)
+           |PARTITIONED BY (a int, b int)
+           |STORED AS
+           |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+         """.stripMargin)
+      sql(
+        s"""
+           |CREATE TABLE table_new (id int)
+           |STORED AS
+           |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
+           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+       """.stripMargin)
+      sql(
+        s"""
+           |CREATE TABLE table_pt_new (id int)
+           |PARTITIONED BY (a int, b int)
+           |STORED AS
+           |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
+           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+       """.stripMargin)
+      intercept[Exception] {
+        sql("SELECT count(1) FROM table_old")
+      }
+      intercept[Exception] {
+        sql("SELECT count(1) FROM table_pt_old")
+      }
+      intercept[Exception] {
+        sql("SELECT count(1) FROM table_new")
+      }
+      intercept[Exception] {
+        sql("SELECT count(1) FROM table_pt_new")
+      }
+    }
+  }
 }
