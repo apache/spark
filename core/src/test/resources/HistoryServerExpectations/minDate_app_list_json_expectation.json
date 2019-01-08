@@ -1,18 +1,19 @@
 [ {
-  "id": "application_1536831636016_56998",
-  "name": "SparkSQL::10.210.21.211",
+  "id": "application_1536831636016_59384",
+  "name": "Spark Pi",
   "attempts": [
     {
-      "startTime": "2019-01-02T08:15:04.475GMT",
-      "endTime": "2019-01-02T08:16:45.206GMT",
+      "attemptId": "1",
+      "startTime": "2019-01-08T04:33:43.607GMT",
+      "endTime": "2019-01-08T04:33:58.745GMT",
       "lastUpdated": "",
-      "duration": 100731,
+      "duration": 15138,
       "sparkUser": "lajin",
       "completed": true,
       "appSparkVersion": "3.0.0-SNAPSHOT",
       "lastUpdatedEpoch": 0,
-      "startTimeEpoch": 1546416904475,
-      "endTimeEpoch": 1546417005206
+      "startTimeEpoch": 1546922023607,
+      "endTimeEpoch": 1546922038745
     }
   ]
 }, {

@@ -103,7 +103,6 @@ case object ProcessTreeMetrics extends ExecutorMetricType {
 }
 
 case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
-  import GC_TYPE._
   override val names = Seq(
     "MinorGCCount",
     "MinorGCTime",
@@ -111,24 +110,39 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
     "MajorGCTime"
   )
 
-  private lazy val youngGenGarbageCollector: Seq[String] = {
-    Seq(`copy`, `psScavenge`, `parNew`, `g1Young`) ++ /* additional young gc we added */
+  /* We builtin some common GC collectors which categorized as young generation and old */
+  private lazy val youngGenerationBuiltinGarbageCollectors = Seq(
+    "Copy",
+    "PS Scavenge",
+    "ParNew",
+    "G1 Young Generation"
+  )
+
+  private lazy val oldGenerationBuiltinGarbageCollectors = Seq(
+    "MarkSweepCompact",
+    "PS MarkSweep",
+    "ConcurrentMarkSweep",
+    "G1 Old Generation"
+  )
+
+  private lazy val youngGenerationGarbageCollector: Seq[String] = {
+    youngGenerationBuiltinGarbageCollectors ++ /* additional young gc we added */
       SparkEnv.get.conf.get(config.EVENT_LOG_ADDITIONAL_YOUNG_GENERATION_GARBAGE_COLLECTORS)
   }
 
-  private lazy val oldGenGarbageCollector: Seq[String] = {
-    Seq(`markSweepCompact`, `psMarkSweep`, `cms`, `g1Old`) ++ /* additional old gc we added */
+  private lazy val oldGenerationGarbageCollector: Seq[String] = {
+    oldGenerationBuiltinGarbageCollectors ++ /* additional old gc we added */
       SparkEnv.get.conf.get(config.EVENT_LOG_ADDITIONAL_OLD_GENERATION_GARBAGE_COLLECTORS)
   }
 
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
-    val gcMetrics = Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
+    val gcMetrics = new Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
     if (SparkEnv.get.conf.get(config.EVENT_LOG_GARBAGE_COLLECTION_METRICS)) {
       ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
-        if (youngGenGarbageCollector.contains(mxBean.getName)) {
+        if (youngGenerationGarbageCollector.contains(mxBean.getName)) {
           gcMetrics(0) = mxBean.getCollectionCount
           gcMetrics(1) = mxBean.getCollectionTime
-        } else if (oldGenGarbageCollector.contains(mxBean.getName)) {
+        } else if (oldGenerationGarbageCollector.contains(mxBean.getName)) {
           gcMetrics(2) = mxBean.getCollectionCount
           gcMetrics(3) = mxBean.getCollectionTime
         } else {
@@ -140,20 +154,6 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
     }
     gcMetrics
   }
-}
-
-private[spark] object GC_TYPE {
-  // Young Gen
-  val copy = "Copy"
-  val psScavenge = "PS Scavenge"
-  val parNew = "ParNew"
-  val g1Young = "G1 Young Generation"
-
-  // Old Gen
-  val markSweepCompact = "MarkSweepCompact"
-  val psMarkSweep = "PS MarkSweep"
-  val cms = "ConcurrentMarkSweep"
-  val g1Old = "G1 Old Generation"
 }
 
 case object OnHeapExecutionMemory extends MemoryManagerExecutorMetricType(
