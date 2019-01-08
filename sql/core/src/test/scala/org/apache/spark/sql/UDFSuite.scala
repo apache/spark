@@ -450,4 +450,19 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     })
     checkAnswer(df2.select(udf2($"col1")), Seq(Row(Map("a" -> "2011000000000002456556"))))
   }
+
+  test("SPARK-26323 Verify input type check - with udf()") {
+    val f = udf((x: Long, y: Any) => x)
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j").select(f($"i", $"j"))
+    checkAnswer(df, Seq(Row(1L), Row(2L)))
+  }
+
+  test("SPARK-26323 Verify input type check - with udf.register") {
+    withTable("t") {
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.format("json").saveAsTable("t")
+      spark.udf.register("f", (x: Long, y: Any) => x)
+      val df = spark.sql("SELECT f(i, j) FROM t")
+      checkAnswer(df, Seq(Row(1L), Row(2L)))
+    }
+  }
 }

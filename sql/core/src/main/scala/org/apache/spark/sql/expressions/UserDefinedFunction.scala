@@ -20,8 +20,8 @@ package org.apache.spark.sql.expressions
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.expressions.ScalaUDF
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
+import org.apache.spark.sql.types.{AnyDataType, DataType}
 
 /**
  * A user-defined function. To create one, use the `udf` functions in `functions`.
@@ -88,40 +88,47 @@ sealed abstract class UserDefinedFunction {
 private[sql] case class SparkUserDefinedFunction(
     f: AnyRef,
     dataType: DataType,
-    inputTypes: Option[Seq[DataType]],
-    nullableTypes: Option[Seq[Boolean]],
+    inputSchemas: Seq[Option[ScalaReflection.Schema]],
     name: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
 
   @scala.annotation.varargs
   override def apply(exprs: Column*): Column = {
-    // TODO: make sure this class is only instantiated through `SparkUserDefinedFunction.create()`
-    // and `nullableTypes` is always set.
-    if (inputTypes.isDefined) {
-      assert(inputTypes.get.length == nullableTypes.get.length)
-    }
-
-    val inputsNullSafe = nullableTypes.getOrElse {
-      ScalaReflection.getParameterTypeNullability(f)
-    }
-
-    Column(ScalaUDF(
-      f,
-      dataType,
-      exprs.map(_.expr),
-      inputsNullSafe,
-      inputTypes.getOrElse(Nil),
-      udfName = name,
-      nullable = nullable,
-      udfDeterministic = deterministic))
+    Column(createScalaUDF(exprs.map(_.expr)))
   }
 
-  override def withName(name: String): UserDefinedFunction = {
+  private[sql] def createScalaUDF(exprs: Seq[Expression]): ScalaUDF = {
+    // It's possible that some of the inputs don't have a specific type(e.g. `Any`),  skip type
+    // check and null check for them.
+    val inputTypes = inputSchemas.map(_.map(_.dataType).getOrElse(AnyDataType))
+
+    val inputsNullSafe = if (inputSchemas.isEmpty) {
+      // This is for backward compatibility of `functions.udf(AnyRef, DataType)`. We need to
+      // do reflection of the lambda function object and see if its arguments are nullable or not.
+      // This doesn't work for Scala 2.12 and we should consider removing this workaround, as Spark
+      // uses Scala 2.12 by default since 3.0.
+      ScalaReflection.getParameterTypeNullability(f)
+    } else {
+      inputSchemas.map(_.map(_.nullable).getOrElse(true))
+    }
+
+    ScalaUDF(
+      f,
+      dataType,
+      exprs,
+      inputsNullSafe,
+      inputTypes,
+      udfName = name,
+      nullable = nullable,
+      udfDeterministic = deterministic)
+  }
+
+  override def withName(name: String): SparkUserDefinedFunction = {
     copy(name = Option(name))
   }
 
-  override def asNonNullable(): UserDefinedFunction = {
+  override def asNonNullable(): SparkUserDefinedFunction = {
     if (!nullable) {
       this
     } else {
@@ -129,27 +136,11 @@ private[sql] case class SparkUserDefinedFunction(
     }
   }
 
-  override def asNondeterministic(): UserDefinedFunction = {
+  override def asNondeterministic(): SparkUserDefinedFunction = {
     if (!deterministic) {
       this
     } else {
       copy(deterministic = false)
     }
-  }
-}
-
-private[sql] object SparkUserDefinedFunction {
-
-  def create(
-      f: AnyRef,
-      dataType: DataType,
-      inputSchemas: Seq[Option[ScalaReflection.Schema]]): UserDefinedFunction = {
-    val inputTypes = if (inputSchemas.contains(None)) {
-      None
-    } else {
-      Some(inputSchemas.map(_.get.dataType))
-    }
-    val nullableTypes = Some(inputSchemas.map(_.map(_.nullable).getOrElse(true)))
-    SparkUserDefinedFunction(f, dataType, inputTypes, nullableTypes)
   }
 }
