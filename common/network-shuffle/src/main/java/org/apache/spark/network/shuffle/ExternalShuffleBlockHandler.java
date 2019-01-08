@@ -90,7 +90,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         OpenBlocks msg = (OpenBlocks) msgObj;
         checkAuth(client, msg.appId);
         ManagedBufferIterator iter = new ManagedBufferIterator(
-          msg.appId, msg.execId, msg.blockIds, msg.shuffleBlockBatchFetch);
+          msg.appId, msg.execId, msg.blockIds, msg.allowShuffleBlockBatchFetch);
         long streamId = streamManager.registerStream(client.getClientId(), iter);
         if (logger.isTraceEnabled()) {
           logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
@@ -236,7 +236,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       return parsedBlockId;
     }
 
-    private void consolidateShuffleBlockIds(String[] blockIds) {
+    private void mergeShuffleBlockIds(String[] blockIds) {
       ArrayList<int[]> originBlocks = new ArrayList<>(blockIds.length);
       for (String blockId : blockIds) {
         originBlocks.add(parseBlockId(blockId));
@@ -267,7 +267,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         String appId,
         String execId,
         String[] blockIds,
-        boolean shuffleBlockBatchFetch) {
+        boolean allowShuffleBlockBatchFetch) {
       this.appId = appId;
       this.execId = execId;
       String[] blockId0Parts = blockIds[0].split("_");
@@ -275,8 +275,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[0]);
       }
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
-      if (shuffleBlockBatchFetch) {
-        consolidateShuffleBlockIds(blockIds);
+      if (allowShuffleBlockBatchFetch) {
+        mergeShuffleBlockIds(blockIds);
       } else {
         shuffleBlockIds = new int[3 * blockIds.length];
         for (int i = 0; i < blockIds.length; i++) {

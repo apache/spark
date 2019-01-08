@@ -32,17 +32,20 @@ public class OpenBlocks extends BlockTransferMessage {
   public final String appId;
   public final String execId;
   public final String[] blockIds;
-  public final boolean shuffleBlockBatchFetch;
+  // When allowShuffleBlockBatchFetch == true, OpenBlocks could contains ShuffleBlockId or
+  // ShuffleBlockBatchId only. Normally, It contains ShuffleBlockId, but when fetch again happens
+  // (corrupted), openBlocks could contain ShuffleBlockBatchId.
+  public final boolean allowShuffleBlockBatchFetch;
 
   public OpenBlocks(
       String appId,
       String execId,
       String[] blockIds,
-      boolean shuffleBlockBatchFetch) {
+      boolean allowShuffleBlockBatchFetch) {
     this.appId = appId;
     this.execId = execId;
     this.blockIds = blockIds;
-    this.shuffleBlockBatchFetch = shuffleBlockBatchFetch;
+    this.allowShuffleBlockBatchFetch = allowShuffleBlockBatchFetch;
   }
 
   @Override
@@ -50,7 +53,7 @@ public class OpenBlocks extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, execId, shuffleBlockBatchFetch) * 41
+    return Objects.hashCode(appId, execId, allowShuffleBlockBatchFetch) * 41
         + Arrays.hashCode(blockIds);
   }
 
@@ -60,7 +63,7 @@ public class OpenBlocks extends BlockTransferMessage {
       .add("appId", appId)
       .add("execId", execId)
       .add("blockIds", Arrays.toString(blockIds))
-      .add("shuffleBlockBatchFetch", shuffleBlockBatchFetch)
+      .add("allowShuffleBlockBatchFetch", allowShuffleBlockBatchFetch)
       .toString();
   }
 
@@ -71,7 +74,7 @@ public class OpenBlocks extends BlockTransferMessage {
       return Objects.equal(appId, o.appId)
         && Objects.equal(execId, o.execId)
         && Arrays.equals(blockIds, o.blockIds)
-        && Objects.equal(shuffleBlockBatchFetch, o.shuffleBlockBatchFetch);
+        && Objects.equal(allowShuffleBlockBatchFetch, o.allowShuffleBlockBatchFetch);
     }
     return false;
   }
@@ -89,17 +92,17 @@ public class OpenBlocks extends BlockTransferMessage {
     Encoders.Strings.encode(buf, appId);
     Encoders.Strings.encode(buf, execId);
     Encoders.StringArrays.encode(buf, blockIds);
-    buf.writeBoolean(shuffleBlockBatchFetch);
+    buf.writeBoolean(allowShuffleBlockBatchFetch);
   }
 
   public static OpenBlocks decode(ByteBuf buf) {
     String appId = Encoders.Strings.decode(buf);
     String execId = Encoders.Strings.decode(buf);
     String[] blockIds = Encoders.StringArrays.decode(buf);
-    boolean shuffleBlockBatchFetch = false;
+    boolean allowShuffleBlockBatchFetch = false;
     if (buf.readableBytes() != 0) {
-      shuffleBlockBatchFetch = buf.readBoolean();
+      allowShuffleBlockBatchFetch = buf.readBoolean();
     }
-    return new OpenBlocks(appId, execId, blockIds, shuffleBlockBatchFetch);
+    return new OpenBlocks(appId, execId, blockIds, allowShuffleBlockBatchFetch);
   }
 }

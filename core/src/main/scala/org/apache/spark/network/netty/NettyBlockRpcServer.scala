@@ -48,7 +48,7 @@ class NettyBlockRpcServer(
 
   private val streamManager = new OneForOneStreamManager()
 
-  private def consolidateShuffleBlocks(blockIds: Array[String]) = {
+  private def mergeShuffleBlockIds(blockIds: Array[String]) = {
     val shuffleBlockIds = blockIds.map(id => BlockId(id).asInstanceOf[ShuffleBlockId])
     var shuffleBlockBatches = ArrayBuffer.empty[ShuffleBlockBatchId]
     var chunkSizes = ArrayBuffer.empty[Int]
@@ -86,8 +86,9 @@ class NettyBlockRpcServer(
     message match {
       case openBlocks: OpenBlocks =>
         val (blocksIds, sizes) =
-          if (openBlocks.shuffleBlockBatchFetch) {
-            consolidateShuffleBlocks(openBlocks.blockIds)
+          if (openBlocks.allowShuffleBlockBatchFetch
+            && BlockId(openBlocks.blockIds.head).isInstanceOf[ShuffleBlockId]) {
+            mergeShuffleBlockIds(openBlocks.blockIds)
           } else {
             (openBlocks.blockIds.map(BlockId.apply), Array[Int]())
           }

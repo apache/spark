@@ -107,14 +107,14 @@ private[spark] class NettyBlockTransferService(
       blockIds: Array[String],
       listener: BlockFetchingListener,
       tempFileManager: DownloadFileManager,
-      shuffleBlockBatchFetch: Boolean): Unit = {
+      allowShuffleBlockBatchFetch: Boolean): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
           new OneForOneBlockFetcher(client, appId, execId, blockIds, listener,
-            transportConf, tempFileManager, shuffleBlockBatchFetch).start()
+            transportConf, tempFileManager, allowShuffleBlockBatchFetch).start()
         }
       }
 

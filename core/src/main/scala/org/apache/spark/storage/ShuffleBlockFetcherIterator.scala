@@ -60,6 +60,8 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
  * @param detectCorrupt whether to detect any corruption in fetched blocks.
  * @param shuffleMetrics used to report shuffle metrics.
+ * @param allowShuffleBlockBatchFetch fetch contiguous shuffle blocks in one IO if server side
+  *                                   supports.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
@@ -74,7 +76,7 @@ final class ShuffleBlockFetcherIterator(
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean,
     shuffleMetrics: ShuffleReadMetricsReporter,
-    shuffleBlockBatchFetch: Boolean)
+    allowShuffleBlockBatchFetch: Boolean)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
@@ -271,10 +273,10 @@ final class ShuffleBlockFetcherIterator(
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, this, shuffleBlockBatchFetch)
+        blockFetchingListener, this, allowShuffleBlockBatchFetch)
     } else {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, null, shuffleBlockBatchFetch)
+        blockFetchingListener, null, allowShuffleBlockBatchFetch)
     }
   }
 
@@ -416,16 +418,16 @@ final class ShuffleBlockFetcherIterator(
       shuffleMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
 
       result match {
-        case r @ SuccessFetchResult(
-          blockId, address, size, buf, isNetworkReqDone, numFetchedBlocks) =>
-          numBlocksProcessed += numFetchedBlocks
+        case _ @ SuccessFetchResult(
+          blockId, address, size, buf, isNetworkReqDone, numBlocksFetched) =>
+          numBlocksProcessed += numBlocksFetched
           if (address != blockManager.blockManagerId) {
             numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
             shuffleMetrics.incRemoteBytesRead(buf.size)
             if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
               shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
             }
-            shuffleMetrics.incRemoteBlocksFetched(numFetchedBlocks)
+            shuffleMetrics.incRemoteBlocksFetched(numBlocksFetched)
           }
           if (!localBlocks.contains(blockId)) {
             bytesInFlight -= size
@@ -640,7 +642,7 @@ object ShuffleBlockFetcherIterator {
    *             Size of remote block(s) is used to calculate bytesInFlight.
    * @param buf `ManagedBuffer` for the content.
    * @param isNetworkReqDone Is this the last network request for this host in this fetch request.
-   * @param numFetchedBlocks number of fetched block(s) in buf
+   * @param numBlocksFetched number of fetched block(s) in buf
    */
   private[storage] case class SuccessFetchResult(
       blockId: BlockId,
@@ -648,7 +650,7 @@ object ShuffleBlockFetcherIterator {
       size: Long,
       buf: ManagedBuffer,
       isNetworkReqDone: Boolean,
-      numFetchedBlocks: Int) extends FetchResult {
+      numBlocksFetched: Int) extends FetchResult {
     require(buf != null)
     require(size >= 0)
   }

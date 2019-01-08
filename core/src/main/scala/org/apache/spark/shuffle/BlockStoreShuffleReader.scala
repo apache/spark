@@ -58,14 +58,14 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val shuffleBlockBatchFetch = supportsShuffleBlocksBatchFetch
+    val allowShuffleBlockBatchFetch = supportsShuffleBlocksBatchFetch
     val wrappedStreams = new ShuffleBlockFetcherIterator(
       context,
       blockManager.shuffleClient,
       blockManager,
       mapOutputTracker.getMapSizesByExecutorId(
         handle.shuffleId, startPartition, endPartition, blockManager.blockManagerId.executorId,
-        shuffleBlockBatchFetch),
+        allowShuffleBlockBatchFetch),
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,
@@ -74,7 +74,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
       SparkEnv.get.conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM),
       SparkEnv.get.conf.getBoolean("spark.shuffle.detectCorrupt", true),
       readMetrics,
-      shuffleBlockBatchFetch)
+      allowShuffleBlockBatchFetch)
 
     val serializerInstance = dep.serializer.newInstance()
 
