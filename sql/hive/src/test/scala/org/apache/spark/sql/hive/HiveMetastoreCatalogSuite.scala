@@ -159,7 +159,25 @@ class DataSourceWithHiveMetastoreCatalogSuite
       "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
     )),
 
+    "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat" -> ((
+      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+      "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+    )),
+
     "orc" -> ((
+      "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
+    )),
+
+    "org.apache.spark.sql.hive.orc.OrcFileFormat" -> ((
+      "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
+    )),
+
+    "org.apache.spark.sql.execution.datasources.orc.OrcFileFormat" -> ((
       "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
