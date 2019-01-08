@@ -100,10 +100,10 @@ function getColumnNameForTaskMetricSummary(columnKey) {
             return "Scheduler Delay";
 
         case "diskBytesSpilled":
-            return "Shuffle spill (disk)";
+            return "Spill (disk)";
 
         case "memoryBytesSpilled":
-            return "Shuffle spill (memory)";
+            return "Spill (memory)";
 
         case "shuffleReadMetrics":
             return "Shuffle Read Size / Records";
@@ -842,7 +842,7 @@ $(document).ready(function () {
                                     return "";
                                 }
                             },
-                            name: "Shuffle Spill (Memory)"
+                            name: "Spill (Memory)"
                         },
                         {
                             data : function (row, type) {
@@ -852,7 +852,7 @@ $(document).ready(function () {
                                     return "";
                                 }
                             },
-                            name: "Shuffle Spill (Disk)"
+                            name: "Spill (Disk)"
                         },
                         {
                             data : function (row, type) {
