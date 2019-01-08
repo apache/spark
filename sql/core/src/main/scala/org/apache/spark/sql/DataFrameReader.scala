@@ -217,10 +217,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         case _: SupportsBatchRead =>
           Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, finalOptions))
 
-        // If the FileDataSourceV2 doesn't implement read path, fall back to FileFormat.
-        case fileSource: FileDataSourceV2 =>
-          loadV1Source(fileSource.fallBackFileFormat.getCanonicalName, paths: _*)
-
         case _ => loadV1Source(cls.getCanonicalName, paths: _*)
       }
     } else {
