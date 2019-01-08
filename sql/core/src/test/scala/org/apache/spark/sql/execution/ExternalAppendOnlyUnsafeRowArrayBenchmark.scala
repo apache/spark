@@ -181,7 +181,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
     }
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("WITHOUT SPILL") {
       val spillThreshold = 100 * 1000
       testAgainstRawArrayBuffer(spillThreshold, 100 * 1000, 1 << 10)
