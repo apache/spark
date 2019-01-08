@@ -102,7 +102,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
   }
 
   test("Spark's own GetTablesOperation(SparkGetTablesOperation)") {
-    def testGetSchemasOperation((
+    def testGetTablesOperation(
         schema: String,
         tableNamePattern: String,
         tableTypes: JList[String])(f: HiveQueryResultSet => Unit): Unit = {
@@ -155,31 +155,32 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
     }
 
     withJdbcStatement("table1", "table2") { statement =>
-      Seq("CREATE TABLE table1(key INT, val STRING)",
+      Seq(
+        "CREATE TABLE table1(key INT, val STRING)",
         "CREATE TABLE table2(key INT, val STRING)",
         "CREATE VIEW view1 AS SELECT * FROM table2").foreach(statement.execute)
 
-      testGetSchemasOperation("%", "%", null) { rs =>
+      testGetTablesOperation("%", "%", null) { rs =>
         checkResult(Seq("table1", "table2", "view1"), rs)
       }
 
-      testGetSchemasOperation("%", "table1", null) { rs =>
+      testGetTablesOperation("%", "table1", null) { rs =>
         checkResult(Seq("table1"), rs)
       }
 
-      testGetSchemasOperation("%", "table_not_exist", null) { rs =>
+      testGetTablesOperation("%", "table_not_exist", null) { rs =>
         checkResult(Seq.empty, rs)
       }
 
-      testGetSchemasOperation("%", "%", JArrays.asList("TABLE")) { rs =>
+      testGetTablesOperation("%", "%", JArrays.asList("TABLE")) { rs =>
         checkResult(Seq("table1", "table2"), rs)
       }
 
-      testGetSchemasOperation("%", "%", JArrays.asList("VIEW")) { rs =>
+      testGetTablesOperation("%", "%", JArrays.asList("VIEW")) { rs =>
         checkResult(Seq("view1"), rs)
       }
 
-      testGetSchemasOperation("%", "%", JArrays.asList("TABLE", "VIEW")) { rs =>
+      testGetTablesOperation("%", "%", JArrays.asList("TABLE", "VIEW")) { rs =>
         checkResult(Seq("table1", "table2", "view1"), rs)
       }
     }

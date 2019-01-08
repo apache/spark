@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.{List => JList, UUID}
+import java.util.{List => JList}
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
 
@@ -27,10 +27,9 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetTablesOperation
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 
 /**
  * Spark's own GetTablesOperation
@@ -49,51 +48,19 @@ private[hive] class SparkGetTablesOperation(
     schemaName: String,
     tableName: String,
     tableTypes: JList[String])
-  extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
-  with Logging {
-
-  val catalog: SessionCatalog = sqlContext.sessionState.catalog
-
-  private final val RESULT_SET_SCHEMA = new TableSchema()
-    .addStringColumn("TABLE_CAT", "Catalog name. NULL if not applicable.")
-    .addStringColumn("TABLE_SCHEM", "Schema name.")
-    .addStringColumn("TABLE_NAME", "Table name.")
-    .addStringColumn("TABLE_TYPE", "The table type, e.g. \"TABLE\", \"VIEW\", etc.")
-    .addStringColumn("REMARKS", "Comments about the table.")
-
-  private val rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
-
-  private val sparkToClientMapping = Map(EXTERNAL -> "TABLE", MANAGED -> "TABLE", VIEW -> "VIEW")
+  extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes) {
 
   if (tableTypes != null) {
     this.tableTypes.addAll(tableTypes)
   }
 
-  private var statementId: String = _
-
-  override def close(): Unit = {
-    logInfo(s"Close get tables with $statementId")
-    setState(OperationState.CLOSED)
-  }
-
-  override def getNextRowSet(order: FetchOrientation, maxRows: Long): RowSet = {
-    validateDefaultFetchOrientation(order)
-    assertState(OperationState.FINISHED)
-    setHasResultSet(true)
-    if (order.equals(FetchOrientation.FETCH_FIRST)) {
-      rowSet.setStartOffset(0)
-    }
-    rowSet.extractSubset(maxRows.toInt)
-  }
-
   override def runInternal(): Unit = {
-    statementId = UUID.randomUUID().toString
-    logInfo(s"Getting tables with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
+    val catalog = sqlContext.sessionState.catalog
     val schemaPattern = convertSchemaPattern(schemaName)
     val matchingDbs = catalog.listDatabases(schemaPattern)
 
@@ -108,7 +75,7 @@ private[hive] class SparkGetTablesOperation(
     matchingDbs.foreach { dbName =>
       catalog.listTables(dbName, tablePattern).foreach { tableIdentifier =>
         val catalogTable = catalog.getTableMetadata(tableIdentifier)
-        val tableType = sparkToClientMapping(catalogTable.tableType)
+        val tableType = tableTypeString(catalogTable.tableType)
         if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(tableType)) {
           val rowData = Array[AnyRef](
             "",
@@ -120,12 +87,13 @@ private[hive] class SparkGetTablesOperation(
         }
       }
     }
-
     setState(OperationState.FINISHED)
   }
 
-  override def cancel(): Unit = {
-    logInfo(s"Cancel get tables with $statementId")
-    setState(OperationState.CANCELED)
+  private def tableTypeString(tableType: CatalogTableType): String = tableType match {
+    case EXTERNAL | MANAGED => "TABLE"
+    case VIEW => "VIEW"
+    case t =>
+      throw new IllegalArgumentException(s"Unknown table type is found at showCreateHiveTable: $t")
   }
 }
