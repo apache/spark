@@ -27,7 +27,7 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
 import static org.junit.Assert.*;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -79,6 +79,8 @@ public class ExternalShuffleBlockHandlerSuite {
   @SuppressWarnings("unchecked")
   @Test
   public void testOpenShuffleBlocks() {
+    when(client.getClientId()).thenReturn("app0");
+
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
     ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3]));

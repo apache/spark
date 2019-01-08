@@ -99,4 +99,10 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
       }
     }
   }
+
+  test("disable timestamp inferring") {
+    val json = """{"a": "2019-01-04T21:11:10.123Z"}"""
+    checkType(Map("inferTimestamp" -> "true"), json, TimestampType)
+    checkType(Map("inferTimestamp" -> "false"), json, StringType)
+  }
 }
