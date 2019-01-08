@@ -177,7 +177,7 @@ class DataFrameReader(OptionUtils):
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
-             dropFieldIfAllNull=None, encoding=None):
+             dropFieldIfAllNull=None, encoding=None, locale=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -211,7 +211,7 @@ class DataFrameReader(OptionUtils):
                      set, it uses the default value, ``PERMISSIVE``.
 
                 * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
@@ -226,11 +226,12 @@ class DataFrameReader(OptionUtils):
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param multiLine: parse one record, which may span multiple lines, per file. If None is
@@ -249,6 +250,9 @@ class DataFrameReader(OptionUtils):
         :param dropFieldIfAllNull: whether to ignore column of all null values or empty
                                    array/struct during schema inference. If None is set, it
                                    uses the default value, ``false``.
+        :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
+                       it uses the default value, ``en-US``. For instance, ``locale`` is used while
+                       parsing dates and timestamps.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -267,7 +271,8 @@ class DataFrameReader(OptionUtils):
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
-            samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding)
+            samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
+            locale=locale)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -349,7 +354,7 @@ class DataFrameReader(OptionUtils):
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
-            samplingRatio=None, enforceSchema=None, emptyValue=None):
+            samplingRatio=None, enforceSchema=None, emptyValue=None, locale=None, lineSep=None):
         r"""Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -402,11 +407,12 @@ class DataFrameReader(OptionUtils):
         :param negativeInf: sets the string representation of a negative infinity value. If None
                             is set, it uses the default value, ``Inf``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
@@ -420,7 +426,7 @@ class DataFrameReader(OptionUtils):
                      set, it uses the default value, ``PERMISSIVE``.
 
                 * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
                   fields to ``null``. To keep corrupt records, an user can set a string type \
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
@@ -446,6 +452,12 @@ class DataFrameReader(OptionUtils):
                               If None is set, it uses the default value, ``1.0``.
         :param emptyValue: sets the string representation of an empty value. If None is set, it uses
                            the default value, empty string.
+        :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
+                       it uses the default value, ``en-US``. For instance, ``locale`` is used while
+                       parsing dates and timestamps.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+                        Maximum length is 1 character.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -465,7 +477,7 @@ class DataFrameReader(OptionUtils):
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
-            enforceSchema=enforceSchema, emptyValue=emptyValue)
+            enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -793,11 +805,12 @@ class DataFrameWriter(OptionUtils):
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param encoding: specifies encoding (charset) of saved json files. If None is set,
@@ -861,7 +874,7 @@ class DataFrameWriter(OptionUtils):
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
             timestampFormat=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
-            charToEscapeQuoteEscaping=None, encoding=None, emptyValue=None):
+            charToEscapeQuoteEscaping=None, encoding=None, emptyValue=None, lineSep=None):
         r"""Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -894,11 +907,12 @@ class DataFrameWriter(OptionUtils):
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           follow the formats at ``java.time.format.DateTimeFormatter``. This
                            applies to date type. If None is set, it uses the
                            default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
+        :param timestampFormat: sets the string that indicates a timestamp format.
+                                Custom date formats follow the formats at
+                                ``java.time.format.DateTimeFormatter``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
@@ -915,6 +929,8 @@ class DataFrameWriter(OptionUtils):
                          the default UTF-8 charset will be used.
         :param emptyValue: sets the string representation of an empty value. If None is set, it uses
                            the default value, ``""``.
+        :param lineSep: defines the line separator that should be used for writing. If None is
+                        set, it uses the default value, ``\\n``. Maximum length is 1 character.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -925,7 +941,7 @@ class DataFrameWriter(OptionUtils):
                        ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
                        ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
                        charToEscapeQuoteEscaping=charToEscapeQuoteEscaping,
-                       encoding=encoding, emptyValue=emptyValue)
+                       encoding=encoding, emptyValue=emptyValue, lineSep=lineSep)
         self._jwrite.csv(path)
 
     @since(1.5)

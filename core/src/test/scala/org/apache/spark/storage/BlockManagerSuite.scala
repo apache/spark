@@ -27,7 +27,7 @@ import scala.language.{implicitConversions, postfixOps}
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.RandomUtils
-import org.mockito.{Matchers => mc}
+import org.mockito.{ArgumentMatchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
@@ -124,7 +124,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set("spark.storage.unrollMemoryThreshold", "512")
 
     rpcEnv = RpcEnv.create("test", "localhost", 0, conf, securityMgr)
-    conf.set("spark.driver.port", rpcEnv.address.port.toString)
+    conf.set(DRIVER_PORT, rpcEnv.address.port)
 
     // Mock SparkContext to reduce the memory usage of tests. It's fine since the only reason we
     // need to create a SparkContext is to initialize LiveListenerBus.
@@ -574,7 +574,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       "list1",
       StorageLevel.MEMORY_ONLY,
       ClassTag.Any,
-      () => throw new AssertionError("attempted to compute locally")).isLeft)
+      () => fail("attempted to compute locally")).isLeft)
   }
 
   test("in-memory LRU storage") {

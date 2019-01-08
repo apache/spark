@@ -66,9 +66,9 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
 ## to_avro() and from_avro()
 The Avro package provides function `to_avro` to encode a column as binary in Avro 
 format, and `from_avro()` to decode Avro binary data into a column. Both functions transform one column to 
-another column, and the input/output SQL data type can be complex type or primitive type.
+another column, and the input/output SQL data type can be a complex type or a primitive type.
 
-Using Avro record as columns are useful when reading from or writing to a streaming source like Kafka. Each 
+Using Avro record as columns is useful when reading from or writing to a streaming source like Kafka. Each
 Kafka key-value record will be augmented with some metadata, such as the ingestion timestamp into Kafka, the offset in Kafka, etc.
 * If the "value" field that contains your data is in Avro, you could use `from_avro()` to extract your data, enrich it, clean it, and then push it downstream to Kafka again or write it out to a file.
 * `to_avro()` can be used to turn structs into Avro records. This method is particularly useful when you would like to re-encode multiple columns into a single one when writing data out to Kafka.
@@ -142,13 +142,16 @@ StreamingQuery query = output
 
 ## Data Source Option
 
-Data source options of Avro can be set using the `.option` method on `DataFrameReader` or `DataFrameWriter`.
+Data source options of Avro can be set via:
+ * the `.option` method on `DataFrameReader` or `DataFrameWriter`.
+ * the `options` parameter in function `from_avro`.
+
 <table class="table">
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
-    <td>Optional Avro schema provided by an user in JSON format. The date type and naming of record fields
+    <td>Optional Avro schema provided by a user in JSON format. The date type and naming of record fields
     should match the input Avro data or Catalyst data, otherwise the read/write action will fail.</td>
     <td>read and write</td>
   </tr>
@@ -176,6 +179,19 @@ Data source options of Avro can be set using the `.option` method on `DataFrameR
     <td>The <code>compression</code> option allows to specify a compression codec used in write.<br>
   Currently supported codecs are <code>uncompressed</code>, <code>snappy</code>, <code>deflate</code>, <code>bzip2</code> and <code>xz</code>.<br> If the option is not set, the configuration <code>spark.sql.avro.compression.codec</code> config is taken into account.</td>
     <td>write</td>
+  </tr>
+  <tr>
+    <td><code>mode</code></td>
+    <td>FAILFAST</td>
+    <td>The <code>mode</code> option allows to specify parse mode for function <code>from_avro</code>.<br>
+      Currently supported modes are:
+      <ul>
+        <li><code>FAILFAST</code>: Throws an exception on processing corrupted record.</li>
+        <li><code>PERMISSIVE</code>: Corrupt records are processed as null result. Therefore, the
+        data schema is forced to be fully nullable, which might be different from the one user provided.</li>
+      </ul>
+    </td>
+    <td>function <code>from_avro</code></td>
   </tr>
 </table>
 

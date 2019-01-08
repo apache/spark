@@ -15,7 +15,7 @@ URL: http://www.apache.org/ http://spark.apache.org/
 BugReports: http://spark.apache.org/contributing.html
 SystemRequirements: Java (== 8)
 Depends:
-    R (>= 3.0),
+    R (>= 3.1),
     methods
 Suggests:
     knitr,

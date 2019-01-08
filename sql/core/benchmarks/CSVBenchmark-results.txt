@@ -1,0 +1,27 @@
+================================================================================================
+Benchmark to measure CSV read/write performance
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Parsing quoted values:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+One quoted string                           64733 / 64839          0.0     1294653.1       1.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Wide rows with 1000 columns:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Select 1000 columns                       185609 / 189735          0.0      185608.6       1.0X
+Select 100 columns                          50195 / 51808          0.0       50194.8       3.7X
+Select one column                           39266 / 39293          0.0       39265.6       4.7X
+count()                                     10959 / 11000          0.1       10958.5      16.9X
+
+OpenJDK 64-Bit Server VM 1.8.0_191-b12 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Count a dataset with 10 columns:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+Select 10 columns + count()                 24637 / 24768          0.4        2463.7       1.0X
+Select 1 column + count()                   20026 / 20076          0.5        2002.6       1.2X
+count()                                       3754 / 3877          2.7         375.4       6.6X
+

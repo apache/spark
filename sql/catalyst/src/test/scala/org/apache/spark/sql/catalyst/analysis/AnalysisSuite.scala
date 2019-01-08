@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
 
@@ -25,6 +25,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
   RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -603,5 +605,26 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))()), testRelation).analyze
       checkAnalysis(input, expected)
     }
+  }
+
+  test("SPARK-25691: AliasViewChild with different nullabilities") {
+    object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("View", Once, AliasViewChild(conf), EliminateView) :: Nil
+    }
+    val relation = LocalRelation('a.int.notNull, 'b.string)
+    val view = View(CatalogTable(
+        identifier = TableIdentifier("v1"),
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+      output = Seq('a.int, 'b.string),
+      child = relation)
+    val tz = Option(conf.sessionLocalTimeZone)
+    val expected = Project(Seq(
+        Alias(Cast('a.int.notNull, IntegerType, tz), "a")(),
+        Alias(Cast('b.string, StringType, tz), "b")()),
+      relation)
+    val res = ViewAnalyzer.execute(view)
+    comparePlans(res, expected)
   }
 }

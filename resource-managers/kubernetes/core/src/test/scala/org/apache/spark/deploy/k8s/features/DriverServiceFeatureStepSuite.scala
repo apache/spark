@@ -16,23 +16,19 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import io.fabric8.kubernetes.api.model.Service
-import org.mockito.{Mock, MockitoAnnotations}
-import org.mockito.Mockito.when
-import org.scalatest.BeforeAndAfter
 import scala.collection.JavaConverters._
 
+import io.fabric8.kubernetes.api.model.Service
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.util.Clock
+import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
+import org.apache.spark.internal.config._
+import org.apache.spark.util.ManualClock
 
-class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
-
-  private val SHORT_RESOURCE_NAME_PREFIX =
-    "a" * (DriverServiceFeatureStep.MAX_SERVICE_NAME_LENGTH -
-      DriverServiceFeatureStep.DRIVER_SVC_POSTFIX.length)
+class DriverServiceFeatureStepSuite extends SparkFunSuite {
 
   private val LONG_RESOURCE_NAME_PREFIX =
     "a" * (DriverServiceFeatureStep.MAX_SERVICE_NAME_LENGTH -
@@ -41,35 +37,14 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     "label1key" -> "label1value",
     "label2key" -> "label2value")
 
-  @Mock
-  private var clock: Clock = _
-
-  private var sparkConf: SparkConf = _
-
-  before {
-    MockitoAnnotations.initMocks(this)
-    sparkConf = new SparkConf(false)
-  }
-
   test("Headless service has a port for the driver RPC and the block manager.") {
-    sparkConf = sparkConf
-      .set("spark.driver.port", "9000")
-      .set(org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT, 8080)
-    val configurationStep = new DriverServiceFeatureStep(
-      KubernetesConf(
-        sparkConf,
-        KubernetesDriverSpecificConf(
-          None, "main", "app", Seq.empty),
-        SHORT_RESOURCE_NAME_PREFIX,
-        "app-id",
-        DRIVER_LABELS,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Nil,
-        Seq.empty[String],
-        hadoopConfSpec = None))
+    val sparkConf = new SparkConf(false)
+      .set(DRIVER_PORT, 9000)
+      .set(DRIVER_BLOCK_MANAGER_PORT, 8080)
+    val kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = DRIVER_LABELS)
+    val configurationStep = new DriverServiceFeatureStep(kconf)
     assert(configurationStep.configurePod(SparkPod.initialPod()) === SparkPod.initialPod())
     assert(configurationStep.getAdditionalKubernetesResources().size === 1)
     assert(configurationStep.getAdditionalKubernetesResources().head.isInstanceOf[Service])
@@ -80,52 +55,28 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     verifyService(
       9000,
       8080,
-      s"$SHORT_RESOURCE_NAME_PREFIX${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
+      s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
       driverService)
   }
 
   test("Hostname and ports are set according to the service name.") {
-    val configurationStep = new DriverServiceFeatureStep(
-      KubernetesConf(
-        sparkConf
-          .set("spark.driver.port", "9000")
-          .set(org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT, 8080)
-          .set(KUBERNETES_NAMESPACE, "my-namespace"),
-        KubernetesDriverSpecificConf(
-          None, "main", "app", Seq.empty),
-        SHORT_RESOURCE_NAME_PREFIX,
-        "app-id",
-        DRIVER_LABELS,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Nil,
-        Seq.empty[String],
-        hadoopConfSpec = None))
-    val expectedServiceName = SHORT_RESOURCE_NAME_PREFIX +
-      DriverServiceFeatureStep.DRIVER_SVC_POSTFIX
+    val sparkConf = new SparkConf(false)
+      .set(DRIVER_PORT, 9000)
+      .set(DRIVER_BLOCK_MANAGER_PORT, 8080)
+      .set(KUBERNETES_NAMESPACE, "my-namespace")
+    val kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = DRIVER_LABELS)
+    val configurationStep = new DriverServiceFeatureStep(kconf)
+    val expectedServiceName = kconf.resourceNamePrefix + DriverServiceFeatureStep.DRIVER_SVC_POSTFIX
     val expectedHostName = s"$expectedServiceName.my-namespace.svc"
     val additionalProps = configurationStep.getAdditionalPodSystemProperties()
     verifySparkConfHostNames(additionalProps, expectedHostName)
   }
 
   test("Ports should resolve to defaults in SparkConf and in the service.") {
-    val configurationStep = new DriverServiceFeatureStep(
-      KubernetesConf(
-        sparkConf,
-        KubernetesDriverSpecificConf(
-          None, "main", "app", Seq.empty),
-        SHORT_RESOURCE_NAME_PREFIX,
-        "app-id",
-        DRIVER_LABELS,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Nil,
-        Seq.empty[String],
-        hadoopConfSpec = None))
+    val kconf = KubernetesTestConf.createDriverConf(labels = DRIVER_LABELS)
+    val configurationStep = new DriverServiceFeatureStep(kconf)
     val resolvedService = configurationStep
       .getAdditionalKubernetesResources()
       .head
@@ -133,31 +84,23 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     verifyService(
       DEFAULT_DRIVER_PORT,
       DEFAULT_BLOCKMANAGER_PORT,
-      s"$SHORT_RESOURCE_NAME_PREFIX${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
+      s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
       resolvedService)
     val additionalProps = configurationStep.getAdditionalPodSystemProperties()
-    assert(additionalProps("spark.driver.port") === DEFAULT_DRIVER_PORT.toString)
-    assert(additionalProps(org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT.key)
-      === DEFAULT_BLOCKMANAGER_PORT.toString)
+    assert(additionalProps(DRIVER_PORT.key) === DEFAULT_DRIVER_PORT.toString)
+    assert(additionalProps(DRIVER_BLOCK_MANAGER_PORT.key) === DEFAULT_BLOCKMANAGER_PORT.toString)
   }
 
   test("Long prefixes should switch to using a generated name.") {
-    when(clock.getTimeMillis()).thenReturn(10000)
+    val clock = new ManualClock()
+    clock.setTime(10000)
+    val sparkConf = new SparkConf(false)
+      .set(KUBERNETES_NAMESPACE, "my-namespace")
     val configurationStep = new DriverServiceFeatureStep(
-      KubernetesConf(
-        sparkConf.set(KUBERNETES_NAMESPACE, "my-namespace"),
-        KubernetesDriverSpecificConf(
-          None, "main", "app", Seq.empty),
-        LONG_RESOURCE_NAME_PREFIX,
-        "app-id",
-        DRIVER_LABELS,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Map.empty,
-        Nil,
-        Seq.empty[String],
-        hadoopConfSpec = None),
+      KubernetesTestConf.createDriverConf(
+        sparkConf = sparkConf,
+        resourceNamePrefix = Some(LONG_RESOURCE_NAME_PREFIX),
+        labels = DRIVER_LABELS),
       clock)
     val driverService = configurationStep
       .getAdditionalKubernetesResources()
@@ -171,58 +114,27 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Disallow bind address and driver host to be set explicitly.") {
-    try {
-      new DriverServiceFeatureStep(
-        KubernetesConf(
-          sparkConf.set(org.apache.spark.internal.config.DRIVER_BIND_ADDRESS, "host"),
-          KubernetesDriverSpecificConf(
-            None, "main", "app", Seq.empty),
-          LONG_RESOURCE_NAME_PREFIX,
-          "app-id",
-          DRIVER_LABELS,
-          Map.empty,
-          Map.empty,
-          Map.empty,
-          Map.empty,
-          Nil,
-          Seq.empty[String],
-          hadoopConfSpec = None),
-        clock)
-      fail("The driver bind address should not be allowed.")
-    } catch {
-      case e: Throwable =>
-        assert(e.getMessage ===
-          s"requirement failed: ${DriverServiceFeatureStep.DRIVER_BIND_ADDRESS_KEY} is" +
-          " not supported in Kubernetes mode, as the driver's bind address is managed" +
-          " and set to the driver pod's IP address.")
+    val sparkConf = new SparkConf(false)
+      .set(DRIVER_BIND_ADDRESS, "host")
+      .set("spark.app.name", LONG_RESOURCE_NAME_PREFIX)
+    val e1 = intercept[IllegalArgumentException] {
+      new DriverServiceFeatureStep(KubernetesTestConf.createDriverConf(sparkConf = sparkConf))
     }
-    sparkConf.remove(org.apache.spark.internal.config.DRIVER_BIND_ADDRESS)
-    sparkConf.set(org.apache.spark.internal.config.DRIVER_HOST_ADDRESS, "host")
-    try {
-      new DriverServiceFeatureStep(
-        KubernetesConf(
-          sparkConf,
-          KubernetesDriverSpecificConf(
-            None, "main", "app", Seq.empty),
-          LONG_RESOURCE_NAME_PREFIX,
-          "app-id",
-          DRIVER_LABELS,
-          Map.empty,
-          Map.empty,
-          Map.empty,
-          Map.empty,
-          Nil,
-          Seq.empty[String],
-          hadoopConfSpec = None),
-        clock)
-      fail("The driver host address should not be allowed.")
-    } catch {
-      case e: Throwable =>
-        assert(e.getMessage ===
-          s"requirement failed: ${DriverServiceFeatureStep.DRIVER_HOST_KEY} is" +
-          " not supported in Kubernetes mode, as the driver's hostname will be managed via" +
-          " a Kubernetes service.")
+    assert(e1.getMessage ===
+      s"requirement failed: ${DriverServiceFeatureStep.DRIVER_BIND_ADDRESS_KEY} is" +
+      " not supported in Kubernetes mode, as the driver's bind address is managed" +
+      " and set to the driver pod's IP address.")
+
+    sparkConf.remove(DRIVER_BIND_ADDRESS)
+    sparkConf.set(DRIVER_HOST_ADDRESS, "host")
+
+    val e2 = intercept[IllegalArgumentException] {
+      new DriverServiceFeatureStep(KubernetesTestConf.createDriverConf(sparkConf = sparkConf))
     }
+    assert(e2.getMessage ===
+      s"requirement failed: ${DriverServiceFeatureStep.DRIVER_HOST_KEY} is" +
+      " not supported in Kubernetes mode, as the driver's hostname will be managed via" +
+      " a Kubernetes service.")
   }
 
   private def verifyService(
@@ -232,7 +144,9 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       service: Service): Unit = {
     assert(service.getMetadata.getName === expectedServiceName)
     assert(service.getSpec.getClusterIP === "None")
-    assert(service.getSpec.getSelector.asScala === DRIVER_LABELS)
+    DRIVER_LABELS.foreach { case (k, v) =>
+      assert(service.getSpec.getSelector.get(k) === v)
+    }
     assert(service.getSpec.getPorts.size() === 2)
     val driverServicePorts = service.getSpec.getPorts.asScala
     assert(driverServicePorts.head.getName === DRIVER_PORT_NAME)

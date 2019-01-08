@@ -228,7 +228,7 @@ object ConsumerStrategies {
     new Subscribe[K, V](
       new ju.ArrayList(topics.asJavaCollection),
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(l => new jl.Long(l)).asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(jl.Long.valueOf).asJava))
   }
 
   /**
@@ -307,7 +307,7 @@ object ConsumerStrategies {
     new SubscribePattern[K, V](
       pattern,
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(l => new jl.Long(l)).asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(jl.Long.valueOf).asJava))
   }
 
   /**
@@ -391,7 +391,7 @@ object ConsumerStrategies {
     new Assign[K, V](
       new ju.ArrayList(topicPartitions.asJavaCollection),
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(l => new jl.Long(l)).asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(jl.Long.valueOf).asJava))
   }
 
   /**

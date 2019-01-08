@@ -83,6 +83,26 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(submitResponse.success)
   }
 
+  test("create submission with multiple masters") {
+    val submittedDriverId = "your-driver-id"
+    val submitMessage = "my driver is submitted"
+    val masterUrl = startDummyServer(submitId = submittedDriverId, submitMessage = submitMessage)
+    val conf = new SparkConf(loadDefaults = false)
+    val RANDOM_PORT = 9000
+    val allMasters = s"$masterUrl,${Utils.localHostName()}:$RANDOM_PORT"
+    conf.set("spark.master", allMasters)
+    conf.set("spark.app.name", "dreamer")
+    val appArgs = Array("one", "two", "six")
+    // main method calls this
+    val response = new RestSubmissionClientApp().run("app-resource", "main-class", appArgs, conf)
+    val submitResponse = getSubmitResponse(response)
+    assert(submitResponse.action === Utils.getFormattedClassName(submitResponse))
+    assert(submitResponse.serverSparkVersion === SPARK_VERSION)
+    assert(submitResponse.message === submitMessage)
+    assert(submitResponse.submissionId === submittedDriverId)
+    assert(submitResponse.success)
+  }
+
   test("create submission from main method") {
     val submittedDriverId = "your-driver-id"
     val submitMessage = "my driver is submitted"
@@ -372,6 +392,18 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("client does not send 'SPARK_ENV_LOADED' env var by default") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_ENV_LOADED" -> "1")
+    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1"))
+  }
+
+  test("client does not send 'SPARK_HOME' env var by default") {
+    val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_HOME" -> "1")
+    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1"))
+  }
+
+  test("client does not send 'SPARK_CONF_DIR' env var by default") {
+    val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_CONF_DIR" -> "1")
     val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }

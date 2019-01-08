@@ -30,7 +30,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -467,7 +467,9 @@ class FetchFailureHidingRDD(
     } catch {
       case t: Throwable =>
         if (throwOOM) {
+          // scalastyle:off throwerror
           throw new OutOfMemoryError("OOM while handling another exception")
+          // scalastyle:on throwerror
         } else if (interrupt) {
           // make sure our test is setup correctly
           assert(TaskContext.get().asInstanceOf[TaskContextImpl].fetchFailed.isDefined)

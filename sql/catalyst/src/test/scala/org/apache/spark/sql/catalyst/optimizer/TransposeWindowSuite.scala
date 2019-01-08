@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class TransposeWindowSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("CollapseProject", FixedPoint(100), CollapseProject, RemoveRedundantProject) ::
+      Batch("CollapseProject", FixedPoint(100), CollapseProject, RemoveNoopOperators) ::
       Batch("FlipWindow", Once, CollapseWindow, TransposeWindow) :: Nil
   }
 

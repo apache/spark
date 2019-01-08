@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.text.DateFormat
-import java.util.{Calendar, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
@@ -28,7 +27,8 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -562,16 +562,17 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val df = DateTimeUtils.newDateFormat(format.toString, timeZone)
-    UTF8String.fromString(df.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
+    val df = TimestampFormatter(format.toString, timeZone, Locale.US)
+    UTF8String.fromString(df.format(timestamp.asInstanceOf[Long]))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
     val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val locale = ctx.addReferenceObj("locale", Locale.US)
     defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""UTF8String.fromString($dtu.newDateFormat($format.toString(), $tz)
-          .format(new java.util.Date($timestamp / 1000)))"""
+      s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $tz, $locale)
+          .format($timestamp))"""
     })
   }
 
@@ -612,9 +613,10 @@ case class ToUnixTimestamp(
 }
 
 /**
- * Converts time string with given pattern.
- * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
- * to Unix time stamp (in seconds), returns null if fail.
+ * Converts time string with given pattern to Unix time stamp (in seconds), returns null if fail.
+ * See [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html]
+ * if SQL config spark.sql.legacy.timeParser.enabled is set to true otherwise
+ * [https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html].
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  * If the second parameter is missing, use "yyyy-MM-dd HH:mm:ss".
  * If no parameters provided, the first parameter will be current_timestamp.
@@ -663,9 +665,9 @@ abstract class UnixTime
   override def nullable: Boolean = true
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
-  private lazy val formatter: DateFormat =
+  private lazy val formatter: TimestampFormatter =
     try {
-      DateTimeUtils.newDateFormat(constFormat.toString, timeZone)
+      TimestampFormatter(constFormat.toString, timeZone, Locale.US)
     } catch {
       case NonFatal(_) => null
     }
@@ -677,16 +679,16 @@ abstract class UnixTime
     } else {
       left.dataType match {
         case DateType =>
-          DateTimeUtils.daysToMillis(t.asInstanceOf[Int], timeZone) / 1000L
+          DateTimeUtils.daysToMillis(t.asInstanceOf[Int], timeZone) / MILLIS_PER_SECOND
         case TimestampType =>
-          t.asInstanceOf[Long] / 1000000L
+          t.asInstanceOf[Long] / MICROS_PER_SECOND
         case StringType if right.foldable =>
           if (constFormat == null || formatter == null) {
             null
           } else {
             try {
               formatter.parse(
-                t.asInstanceOf[UTF8String].toString).getTime / 1000L
+                t.asInstanceOf[UTF8String].toString) / MICROS_PER_SECOND
             } catch {
               case NonFatal(_) => null
             }
@@ -698,8 +700,8 @@ abstract class UnixTime
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              DateTimeUtils.newDateFormat(formatString, timeZone).parse(
-                t.asInstanceOf[UTF8String].toString).getTime / 1000L
+              TimestampFormatter(formatString, timeZone, Locale.US).parse(
+                t.asInstanceOf[UTF8String].toString) / MICROS_PER_SECOND
             } catch {
               case NonFatal(_) => null
             }
@@ -712,7 +714,7 @@ abstract class UnixTime
     val javaType = CodeGenerator.javaType(dataType)
     left.dataType match {
       case StringType if right.foldable =>
-        val df = classOf[DateFormat].getName
+        val df = classOf[TimestampFormatter].getName
         if (formatter == null) {
           ExprCode.forNullValue(dataType)
         } else {
@@ -724,23 +726,34 @@ abstract class UnixTime
             $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
-                ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getTime() / 1000L;
+                ${ev.value} = $formatterName.parse(${eval1.value}.toString()) / 1000000L;
+              } catch (java.lang.IllegalArgumentException e) {
+                ${ev.isNull} = true;
               } catch (java.text.ParseException e) {
+                ${ev.isNull} = true;
+              } catch (java.time.format.DateTimeParseException e) {
+                ${ev.isNull} = true;
+              } catch (java.time.DateTimeException e) {
                 ${ev.isNull} = true;
               }
             }""")
         }
       case StringType =>
         val tz = ctx.addReferenceObj("timeZone", timeZone)
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        val locale = ctx.addReferenceObj("locale", Locale.US)
+        val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
             try {
-              ${ev.value} = $dtu.newDateFormat($format.toString(), $tz)
-                .parse($string.toString()).getTime() / 1000L;
+              ${ev.value} = $tf$$.MODULE$$.apply($format.toString(), $tz, $locale)
+                .parse($string.toString()) / 1000000L;
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             } catch (java.text.ParseException e) {
+              ${ev.isNull} = true;
+            } catch (java.time.format.DateTimeParseException e) {
+              ${ev.isNull} = true;
+            } catch (java.time.DateTimeException e) {
               ${ev.isNull} = true;
             }
           """
@@ -806,9 +819,9 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     copy(timeZoneId = Option(timeZoneId))
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
-  private lazy val formatter: DateFormat =
+  private lazy val formatter: TimestampFormatter =
     try {
-      DateTimeUtils.newDateFormat(constFormat.toString, timeZone)
+      TimestampFormatter(constFormat.toString, timeZone, Locale.US)
     } catch {
       case NonFatal(_) => null
     }
@@ -823,8 +836,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           null
         } else {
           try {
-            UTF8String.fromString(formatter.format(
-              new java.util.Date(time.asInstanceOf[Long] * 1000L)))
+            UTF8String.fromString(formatter.format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null
           }
@@ -835,8 +847,8 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           null
         } else {
           try {
-            UTF8String.fromString(DateTimeUtils.newDateFormat(f.toString, timeZone)
-              .format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
+            UTF8String.fromString(TimestampFormatter(f.toString, timeZone, Locale.US)
+              .format(time.asInstanceOf[Long] * MICROS_PER_SECOND))
           } catch {
             case NonFatal(_) => null
           }
@@ -846,7 +858,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val df = classOf[DateFormat].getName
+    val df = classOf[TimestampFormatter].getName
     if (format.foldable) {
       if (formatter == null) {
         ExprCode.forNullValue(StringType)
@@ -859,8 +871,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             try {
-              ${ev.value} = UTF8String.fromString($formatterName.format(
-                new java.util.Date(${t.value} * 1000L)));
+              ${ev.value} = UTF8String.fromString($formatterName.format(${t.value} * 1000000L));
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             }
@@ -868,12 +879,13 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
       }
     } else {
       val tz = ctx.addReferenceObj("timeZone", timeZone)
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      val locale = ctx.addReferenceObj("locale", Locale.US)
+      val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
         try {
-          ${ev.value} = UTF8String.fromString($dtu.newDateFormat($f.toString(), $tz).format(
-            new java.util.Date($seconds * 1000L)));
+          ${ev.value} = UTF8String.fromString($tf.apply($f.toString(), $tz, $locale).
+            format($seconds * 1000000L));
         } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;
         }"""

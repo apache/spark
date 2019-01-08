@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -27,7 +27,7 @@ import org.apache.spark.sql.SparkSession
  * All these methods are thread-safe.
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 trait StreamingQuery {
 
   /**
