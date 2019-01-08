@@ -43,9 +43,7 @@ trait DateTimeFormatterHelper {
 
 object DateTimeFormatterHelper {
   private val cache = CacheBuilder.newBuilder()
-    .initialCapacity(8)
     .maximumSize(128)
-    .expireAfterAccess(1, TimeUnit.HOURS)
     .build[(String, Locale), DateTimeFormatter]()
 
 
