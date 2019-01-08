@@ -78,7 +78,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
   private def generateTestData(size: Long, rand: => Long): (Array[JLong], LongArray) = {
     val ref = Array.tabulate[Long](Ints.checkedCast(size)) { i => rand }
     val extended = ref ++ Array.fill[Long](Ints.checkedCast(size))(0)
-    (ref.map(i => new JLong(i)), new LongArray(MemoryBlock.fromLongArray(extended)))
+    (ref.map(i => JLong.valueOf(i)), new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
   private def generateKeyPrefixTestData(size: Long, rand: => Long): (LongArray, LongArray) = {

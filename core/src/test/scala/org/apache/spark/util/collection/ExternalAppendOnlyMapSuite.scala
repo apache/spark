@@ -19,6 +19,7 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.ref.WeakReference
 
 import org.scalatest.Matchers
@@ -26,6 +27,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.util.CompletionIterator
@@ -551,7 +553,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     val conf = createSparkConf(loadDefaults = false)
       .set("spark.shuffle.memoryFraction", "0.01")
       .set("spark.memory.useLegacyMode", "true")
-      .set("spark.testing.memory", "100000000")
+      .set(TEST_MEMORY, 100000000L)
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
     sc = new SparkContext("local", "test", conf)
     val N = 2e5.toInt

@@ -818,6 +818,22 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     }
   }
 
+  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*) {
+    val user = System.getProperty("user.name")
+    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
+    val statements = connections.map(_.createStatement())
+
+    try {
+      statements.zip(fs).foreach { case (s, f) => f(s) }
+    } finally {
+      dbNames.foreach { name =>
+        statements(0).execute(s"DROP DATABASE IF EXISTS $name")
+      }
+      statements.foreach(_.close())
+      connections.foreach(_.close())
+    }
+  }
+
   def withJdbcStatement(tableNames: String*)(f: Statement => Unit) {
     withMultipleConnectionJdbcStatement(tableNames: _*)(f)
   }

@@ -31,11 +31,12 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReadSupport, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
@@ -117,7 +118,9 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
+  override def toString: String = {
+    s"MemoryStream[${truncatedString(output, ",", SQLConf.get.maxToStringFields)}]"
+  }
 
   override def deserializeOffset(json: String): OffsetV2 = LongOffset(json.toLong)
 

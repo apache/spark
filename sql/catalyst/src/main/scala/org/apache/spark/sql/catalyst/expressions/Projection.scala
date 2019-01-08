@@ -169,26 +169,40 @@ object UnsafeProjection
 /**
  * A projection that could turn UnsafeRow into GenericInternalRow
  */
-object FromUnsafeProjection {
+object SafeProjection extends CodeGeneratorWithInterpretedFallback[Seq[Expression], Projection] {
 
-  /**
-   * Returns a Projection for given StructType.
-   */
-  def apply(schema: StructType): Projection = {
-    apply(schema.fields.map(_.dataType))
+  override protected def createCodeGeneratedObject(in: Seq[Expression]): Projection = {
+    GenerateSafeProjection.generate(in)
+  }
+
+  override protected def createInterpretedObject(in: Seq[Expression]): Projection = {
+    InterpretedSafeProjection.createProjection(in)
   }
 
   /**
-   * Returns an UnsafeProjection for given Array of DataTypes.
+   * Returns a SafeProjection for given StructType.
    */
-  def apply(fields: Seq[DataType]): Projection = {
-    create(fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true)))
+  def create(schema: StructType): Projection = create(schema.fields.map(_.dataType))
+
+  /**
+   * Returns a SafeProjection for given Array of DataTypes.
+   */
+  def create(fields: Array[DataType]): Projection = {
+    createObject(fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true)))
   }
 
   /**
-   * Returns a Projection for given sequence of Expressions (bounded).
+   * Returns a SafeProjection for given sequence of Expressions (bounded).
    */
-  private def create(exprs: Seq[Expression]): Projection = {
-    GenerateSafeProjection.generate(exprs)
+  def create(exprs: Seq[Expression]): Projection = {
+    createObject(exprs)
+  }
+
+  /**
+   * Returns a SafeProjection for given sequence of Expressions, which will be bound to
+   * `inputSchema`.
+   */
+  def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
+    create(toBoundExprs(exprs, inputSchema))
   }
 }

@@ -27,6 +27,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.History._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.util.{Clock, Utils}
 import org.apache.spark.util.kvstore.KVStore
@@ -49,8 +50,6 @@ private class HistoryServerDiskManager(
     path: File,
     listing: KVStore,
     clock: Clock) extends Logging {
-
-  import config._
 
   private val appStoreDir = new File(path, "apps")
   if (!appStoreDir.isDirectory() && !appStoreDir.mkdir()) {

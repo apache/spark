@@ -27,6 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.DDL_TIME
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
@@ -821,7 +822,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       schema = reorderedSchema,
       partitionColumnNames = partColumnNames,
       bucketSpec = getBucketSpecFromTableProperties(table),
-      tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG))
+      tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG),
+      properties = table.properties.filterKeys(!HIVE_GENERATED_TABLE_PROPERTIES(_)))
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
@@ -1328,6 +1330,7 @@ object HiveExternalCatalog {
 
   val CREATED_SPARK_VERSION = SPARK_SQL_PREFIX + "create.version"
 
+  val HIVE_GENERATED_TABLE_PROPERTIES = Set(DDL_TIME)
   val HIVE_GENERATED_STORAGE_PROPERTIES = Set(SERIALIZATION_FORMAT)
 
   // When storing data source tables in hive metastore, we need to set data schema to empty if the

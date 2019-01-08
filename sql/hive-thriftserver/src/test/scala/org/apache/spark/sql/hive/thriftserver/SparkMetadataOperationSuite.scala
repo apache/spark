@@ -29,48 +29,119 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
   override def mode: ServerMode.Value = ServerMode.binary
 
-  private def withHiveQueryResultSet(
-      schema: String,
-      tableNamePattern: String,
-      tableTypes: JList[String])(f: HiveQueryResultSet => Unit): Unit = {
-    val rawTransport = new TSocket("localhost", serverPort)
-    val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
-    val user = System.getProperty("user.name")
-    val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
-    val client = new TCLIService.Client(new TBinaryProtocol(transport))
-    transport.open()
+  test("Spark's own GetSchemasOperation(SparkGetSchemasOperation)") {
+    def testGetSchemasOperation(
+        catalog: String,
+        schemaPattern: String)(f: HiveQueryResultSet => Unit): Unit = {
+      val rawTransport = new TSocket("localhost", serverPort)
+      val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
+      val user = System.getProperty("user.name")
+      val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
+      val client = new TCLIService.Client(new TBinaryProtocol(transport))
+      transport.open()
+      var rs: HiveQueryResultSet = null
+      try {
+        val openResp = client.OpenSession(new TOpenSessionReq)
+        val sessHandle = openResp.getSessionHandle
+        val schemaReq = new TGetSchemasReq(sessHandle)
 
-    var rs: HiveQueryResultSet = null
+        if (catalog != null) {
+          schemaReq.setCatalogName(catalog)
+        }
 
-    try {
-      val openResp = client.OpenSession(new TOpenSessionReq)
-      val sessHandle = openResp.getSessionHandle
+        if (schemaPattern == null) {
+          schemaReq.setSchemaName("%")
+        } else {
+          schemaReq.setSchemaName(schemaPattern)
+        }
 
-      val getTableReq = new TGetTablesReq(sessHandle)
-      getTableReq.setSchemaName(schema)
-      getTableReq.setTableName(tableNamePattern)
-      getTableReq.setTableTypes(tableTypes)
+        val schemaResp = client.GetSchemas(schemaReq)
+        JdbcUtils.verifySuccess(schemaResp.getStatus)
 
-      val getTableResp = client.GetTables(getTableReq)
+        rs = new HiveQueryResultSet.Builder(connection)
+          .setClient(client)
+          .setSessionHandle(sessHandle)
+          .setStmtHandle(schemaResp.getOperationHandle)
+          .build()
+        f(rs)
+      } finally {
+        rs.close()
+        connection.close()
+        transport.close()
+        rawTransport.close()
+      }
+    }
 
-      JdbcUtils.verifySuccess(getTableResp.getStatus)
+    def checkResult(dbNames: Seq[String], rs: HiveQueryResultSet): Unit = {
+      if (dbNames.nonEmpty) {
+        for (i <- dbNames.indices) {
+          assert(rs.next())
+          assert(rs.getString("TABLE_SCHEM") === dbNames(i))
+        }
+      } else {
+        assert(!rs.next())
+      }
+    }
 
-      rs = new HiveQueryResultSet.Builder(connection)
-        .setClient(client)
-        .setSessionHandle(sessHandle)
-        .setStmtHandle(getTableResp.getOperationHandle)
-        .build()
+    withDatabase("db1", "db2") { statement =>
+      Seq("CREATE DATABASE db1", "CREATE DATABASE db2").foreach(statement.execute)
 
-      f(rs)
-    } finally {
-      rs.close()
-      connection.close()
-      transport.close()
-      rawTransport.close()
+      testGetSchemasOperation(null, "%") { rs =>
+        checkResult(Seq("db1", "db2"), rs)
+      }
+      testGetSchemasOperation(null, "db1") { rs =>
+        checkResult(Seq("db1"), rs)
+      }
+      testGetSchemasOperation(null, "db_not_exist") { rs =>
+        checkResult(Seq.empty, rs)
+      }
+      testGetSchemasOperation(null, "db*") { rs =>
+        checkResult(Seq("db1", "db2"), rs)
+      }
     }
   }
 
   test("Spark's own GetTablesOperation(SparkGetTablesOperation)") {
+    def testGetSchemasOperation((
+        schema: String,
+        tableNamePattern: String,
+        tableTypes: JList[String])(f: HiveQueryResultSet => Unit): Unit = {
+      val rawTransport = new TSocket("localhost", serverPort)
+      val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
+      val user = System.getProperty("user.name")
+      val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
+      val client = new TCLIService.Client(new TBinaryProtocol(transport))
+      transport.open()
+
+      var rs: HiveQueryResultSet = null
+
+      try {
+        val openResp = client.OpenSession(new TOpenSessionReq)
+        val sessHandle = openResp.getSessionHandle
+
+        val getTableReq = new TGetTablesReq(sessHandle)
+        getTableReq.setSchemaName(schema)
+        getTableReq.setTableName(tableNamePattern)
+        getTableReq.setTableTypes(tableTypes)
+
+        val getTableResp = client.GetTables(getTableReq)
+
+        JdbcUtils.verifySuccess(getTableResp.getStatus)
+
+        rs = new HiveQueryResultSet.Builder(connection)
+          .setClient(client)
+          .setSessionHandle(sessHandle)
+          .setStmtHandle(getTableResp.getOperationHandle)
+          .build()
+
+        f(rs)
+      } finally {
+        rs.close()
+        connection.close()
+        transport.close()
+        rawTransport.close()
+      }
+    }
 
     def checkResult(tableNames: Seq[String], rs: HiveQueryResultSet): Unit = {
       if (tableNames.nonEmpty) {
@@ -88,30 +159,29 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
         "CREATE TABLE table2(key INT, val STRING)",
         "CREATE VIEW view1 AS SELECT * FROM table2").foreach(statement.execute)
 
-      withHiveQueryResultSet("%", "%", null) { rs =>
+      testGetSchemasOperation("%", "%", null) { rs =>
         checkResult(Seq("table1", "table2", "view1"), rs)
       }
 
-      withHiveQueryResultSet("%", "table1", null) { rs =>
+      testGetSchemasOperation("%", "table1", null) { rs =>
         checkResult(Seq("table1"), rs)
       }
 
-      withHiveQueryResultSet("%", "table_not_exist", null) { rs =>
+      testGetSchemasOperation("%", "table_not_exist", null) { rs =>
         checkResult(Seq.empty, rs)
       }
 
-      withHiveQueryResultSet("%", "%", JArrays.asList("TABLE")) { rs =>
+      testGetSchemasOperation("%", "%", JArrays.asList("TABLE")) { rs =>
         checkResult(Seq("table1", "table2"), rs)
       }
 
-      withHiveQueryResultSet("%", "%", JArrays.asList("VIEW")) { rs =>
+      testGetSchemasOperation("%", "%", JArrays.asList("VIEW")) { rs =>
         checkResult(Seq("view1"), rs)
       }
 
-      withHiveQueryResultSet("%", "%", JArrays.asList("TABLE", "VIEW")) { rs =>
+      testGetSchemasOperation("%", "%", JArrays.asList("TABLE", "VIEW")) { rs =>
         checkResult(Seq("table1", "table2", "view1"), rs)
       }
     }
   }
-
 }

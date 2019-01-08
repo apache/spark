@@ -175,7 +175,7 @@ case class SparkListenerExecutorMetricsUpdate(
  * @param execId executor id
  * @param stageId stage id
  * @param stageAttemptId stage attempt
- * @param executorMetrics executor level metrics, indexed by MetricGetter.values
+ * @param executorMetrics executor level metrics, indexed by ExecutorMetricType.values
  */
 @DeveloperApi
 case class SparkListenerStageExecutorMetrics(

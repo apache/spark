@@ -309,8 +309,8 @@ public class TransportConf {
     }
     int chunkFetchHandlerThreadsPercent =
       conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 100);
-    return (int)Math.ceil(
-     (this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors()) *
-     chunkFetchHandlerThreadsPercent/(double)100);
+    int threads =
+      this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors();
+    return (int) Math.ceil(threads * (chunkFetchHandlerThreadsPercent / 100.0));
   }
 }

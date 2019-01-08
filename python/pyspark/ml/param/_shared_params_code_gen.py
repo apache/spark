@@ -164,7 +164,10 @@ if __name__ == "__main__":
          "False", "TypeConverters.toBoolean"),
         ("loss", "the loss function to be optimized.", None, "TypeConverters.toString"),
         ("distanceMeasure", "the distance measure. Supported options: 'euclidean' and 'cosine'.",
-         "'euclidean'", "TypeConverters.toString")]
+         "'euclidean'", "TypeConverters.toString"),
+        ("validationIndicatorCol", "name of the column that indicates whether each row is for " +
+         "training or for validation. False indicates training; true indicates validation.",
+         None, "TypeConverters.toString")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:
