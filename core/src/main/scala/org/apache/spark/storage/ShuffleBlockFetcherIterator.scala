@@ -74,7 +74,7 @@ final class ShuffleBlockFetcherIterator(
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean,
     shuffleMetrics: ShuffleReadMetricsReporter,
-    shuffleBlocksBatchFetch: Boolean)
+    shuffleBlockBatchFetch: Boolean)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
@@ -215,12 +215,14 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
-  private def consolidateBlockIds(blockIds: Seq[String]): BlockId = {
+  // To make the fetch again work (may corrupted), we need use ShuffleBlockId instead of
+  // ShuffleBlockBatchId when blockIds has only one blockId.
+  private def convertBlockIds(blockIds: Seq[String]): BlockId = {
     assert(blockIds.nonEmpty)
     val headBlockId = BlockId(blockIds.head).asInstanceOf[ShuffleBlockId]
     val lastBlockId = BlockId(blockIds.last).asInstanceOf[ShuffleBlockId]
     if (blockIds.size > 1) {
-      ContinuousShuffleBlockId(headBlockId.shuffleId, headBlockId.mapId, headBlockId.reduceId,
+      ShuffleBlockBatchId(headBlockId.shuffleId, headBlockId.mapId, headBlockId.reduceId,
         lastBlockId.reduceId - headBlockId.reduceId + 1)
     } else {
       headBlockId
@@ -241,7 +243,7 @@ final class ShuffleBlockFetcherIterator(
 
     val blockFetchingListener = new BlockFetchingListener {
       override def onBlockFetchSuccess(blockIds: Array[String], buf: ManagedBuffer): Unit = {
-        val blockId = consolidateBlockIds(blockIds)
+        val blockId = convertBlockIds(blockIds)
         // Only add the buffer to results queue if the iterator is not zombie,
         // i.e. cleanup() has not been called yet.
         ShuffleBlockFetcherIterator.this.synchronized {
@@ -269,10 +271,10 @@ final class ShuffleBlockFetcherIterator(
     // the data and write it to file directly.
     if (req.size > maxReqSizeShuffleToMem) {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, this, shuffleBlocksBatchFetch)
+        blockFetchingListener, this, shuffleBlockBatchFetch)
     } else {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
-        blockFetchingListener, null, shuffleBlocksBatchFetch)
+        blockFetchingListener, null, shuffleBlockBatchFetch)
     }
   }
 

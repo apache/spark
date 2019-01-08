@@ -1448,7 +1448,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         blockIds: Array[String],
         listener: BlockFetchingListener,
         tempFileManager: DownloadFileManager,
-        shuffleBlocksBatchFetch: Boolean): Unit = {
+        shuffleBlockBatchFetch: Boolean): Unit = {
       listener.onBlockFetchSuccess(
         Array("mockBlockId"), new NioManagedBuffer(ByteBuffer.allocate(1)))
     }

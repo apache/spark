@@ -55,7 +55,7 @@ public abstract class ShuffleClient implements Closeable {
       String[] blockIds,
       BlockFetchingListener listener,
       DownloadFileManager downloadFileManager,
-      boolean shuffleBlocksBatchFetch);
+      boolean shuffleBlockBatchFetch);
 
   /**
    * Get the shuffle MetricsSet from ShuffleClient, this will be used in MetricsSystem to

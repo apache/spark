@@ -209,7 +209,7 @@ private[spark] class IndexShuffleBlockResolver(
       val offset = in.readLong()
       var expectedPosition = 0
       blockId match {
-        case bid: ContinuousShuffleBlockId =>
+        case bid: ShuffleBlockBatchId =>
           val tempId = blockId.reduceId + bid.numBlocks
           channel.position(tempId * 8)
           expectedPosition = tempId * 8 + 8

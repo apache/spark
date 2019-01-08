@@ -27,7 +27,7 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockManagerId, ContinuousShuffleBlockId, ShuffleBlockId}
+import org.apache.spark.storage.{BlockManagerId, ShuffleBlockBatchId, ShuffleBlockId}
 
 class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
@@ -315,7 +315,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
       Array(size10000, size0, size1000, size0)))
     assert(tracker.containsShuffle(10))
-    assert(tracker.getMapSizesByExecutorId(10, 0, 4, "c", shuffleBlocksBatchFetch = true).toSeq ===
+    assert(tracker.getMapSizesByExecutorId(10, 0, 4, "c", shuffleBlockBatchFetch = true).toSeq ===
       Seq(
         (BlockManagerId("a", "hostA", 1000),
           Seq((ShuffleBlockId(10, 0, 1), size1000), (ShuffleBlockId(10, 0, 3), size10000))),
@@ -343,15 +343,15 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Array(1000L, 10000L, 2000L)))
     tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
       Array(10000L, 2000L, 1000L)))
-    val statuses1 = tracker.getMapSizesByExecutorId(10, 0, 2, "a", shuffleBlocksBatchFetch = true)
+    val statuses1 = tracker.getMapSizesByExecutorId(10, 0, 2, "a", shuffleBlockBatchFetch = true)
     assert(statuses1.toSet ===
       Seq((BlockManagerId("a", "hostA", 1000),
-        ArrayBuffer((ContinuousShuffleBlockId(10, 0, 0, 2), size1000 + size10000))),
+        ArrayBuffer((ShuffleBlockBatchId(10, 0, 0, 2), size1000 + size10000))),
         (BlockManagerId("b", "hostB", 1000),
           ArrayBuffer((ShuffleBlockId(10, 1, 0), size10000),
             (ShuffleBlockId(10, 1, 1), size2000))))
         .toSet)
-    val statuses2 = tracker.getMapSizesByExecutorId(10, 2, 3, "a", shuffleBlocksBatchFetch = true)
+    val statuses2 = tracker.getMapSizesByExecutorId(10, 2, 3, "a", shuffleBlockBatchFetch = true)
     assert(statuses2.toSet ===
       Seq((BlockManagerId("a", "hostA", 1000),
         ArrayBuffer((ShuffleBlockId(10, 0, 2), size2000))),

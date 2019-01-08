@@ -50,7 +50,7 @@ class NettyBlockRpcServer(
 
   private def consolidateShuffleBlocks(blockIds: Array[String]) = {
     val shuffleBlockIds = blockIds.map(id => BlockId(id).asInstanceOf[ShuffleBlockId])
-    var shuffleBlockBatches = ArrayBuffer.empty[ContinuousShuffleBlockId]
+    var shuffleBlockBatches = ArrayBuffer.empty[ShuffleBlockBatchId]
     var chunkSizes = ArrayBuffer.empty[Int]
 
     def sameMapFile(index: Int) = {
@@ -62,7 +62,7 @@ class NettyBlockRpcServer(
       var prev = 0
       (1 until shuffleBlockIds.length + 1).foreach { idx =>
         if (idx == shuffleBlockIds.length || !sameMapFile(idx)) {
-          shuffleBlockBatches += ContinuousShuffleBlockId(
+          shuffleBlockBatches += ShuffleBlockBatchId(
             shuffleBlockIds(prev).shuffleId,
             shuffleBlockIds(prev).mapId,
             shuffleBlockIds(prev).reduceId,
@@ -86,7 +86,7 @@ class NettyBlockRpcServer(
     message match {
       case openBlocks: OpenBlocks =>
         val (blocksIds, sizes) =
-          if (openBlocks.shuffleBlocksBatchFetch) {
+          if (openBlocks.shuffleBlockBatchFetch) {
             consolidateShuffleBlocks(openBlocks.blockIds)
           } else {
             (openBlocks.blockIds.map(BlockId.apply), Array[Int]())
