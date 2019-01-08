@@ -324,7 +324,7 @@ class KubernetesSuite extends SparkFunSuite
       // Sleep a small interval to ensure everything is registered.
       Thread.sleep(100)
       // Wait for the executors to become ready
-      Eventually.eventually(TIMEOUT, INTERVAL) {
+      Eventually.eventually(POD_RUNNING_TIMEOUT, INTERVAL) {
         val resourceConditions = execPods.values.flatMap{
           resource => resource.getStatus.getConditions().asScala}
         val podsReady = (resourceConditions
