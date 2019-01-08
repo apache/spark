@@ -8,7 +8,7 @@ this topic is generally a huge source of confusion.
 
 Delegation tokens (DTs from now on) are authentication tokens used by some services to replace
 Kerberos service tokens. Many services in the Hadoop ecosystem have support for DTs, since they
-have two very desirable advantages over Kerberos tokens:
+have some very desirable advantages over Kerberos tokens:
 
 * No need to distribute Kerberos credentials
 
@@ -199,6 +199,10 @@ is why the client-mode case is an issue) and to services that do not authenticat
 submitted as a proxy user will run as that particular user in the YARN cluster, obeying any
 Hadoop-to-local-OS-user mapping configured for the service. But the overall support should work
 for connecting to other services even when YARN is not being used.
+
+Also, if writing a new DT provider in Spark, be aware that providers need to explicitly handle
+impersonation. If a service does not support impersonation, the provider should either error out or
+not generate tokens, depending on what makes more sense in the context.
 
 
 ## Externally Generated DTs
