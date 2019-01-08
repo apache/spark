@@ -288,20 +288,22 @@ private[spark] class TaskSchedulerImpl(
 
   /**
    * SPARK-25250: Whenever any Result Task gets successfully completed, we simply mark the
-   * corresponding partition id as completed in all attempts for that particular stage. As a
-   * result, we do not see any Killed tasks due to TaskCommitDenied Exceptions showing up
-   * in the UI.
+   * corresponding partition id as completed in all attempts for that particular stage and
+   * additionally, for a Result Stage, we also kill the remaining task attempts running on the
+   * same partition. As a result, we do not see any Killed tasks due to
+   * TaskCommitDenied Exceptions showing up in the UI.
    */
-  override def markPartitionIdAsCompletedAndKillCorrespondingTaskAttempts(
-      partitionId: Int, stageId: Int): Unit = {
+  override def completeTasks(partitionId: Int, stageId: Int, killTasks: Boolean): Unit = {
     taskSetsByStageIdAndAttempt.getOrElse(stageId, Map()).values.foreach { tsm =>
       tsm.partitionToIndex.get(partitionId) match {
         case Some(index) =>
           tsm.markPartitionIdAsCompletedForTaskAttempt(index)
-          val taskInfoList = tsm.taskAttempts(index)
-          taskInfoList.filter(_.running).foreach { taskInfo =>
-            killTaskAttempt(taskInfo.taskId, false,
-              s"Corresponding Partition ID $partitionId has been marked as Completed")
+          if (killTasks) {
+            val taskInfoList = tsm.taskAttempts(index)
+            taskInfoList.filter(_.running).foreach { taskInfo =>
+              killTaskAttempt(taskInfo.taskId, false,
+                s"Corresponding Partition ID $partitionId has been marked as Completed")
+            }
           }
 
         case None =>

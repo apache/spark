@@ -1350,7 +1350,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val offersSecondAttempt = (0 until 10).map{ idx => WorkerOffer(s"exec-$idx", s"host-$idx", 1) }
     taskScheduler.resourceOffers(offersSecondAttempt)
 
-    taskScheduler.markPartitionIdAsCompletedAndKillCorrespondingTaskAttempts(2, 0)
+    taskScheduler.completeTasks(2, 0, true)
 
     val tsm1 = taskScheduler.taskSetManagerForAttempt(0, 1).get
     val indexInTsm = tsm1.partitionToIndex(2)

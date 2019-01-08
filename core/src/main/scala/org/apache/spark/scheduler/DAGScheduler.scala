@@ -1384,8 +1384,7 @@ private[spark] class DAGScheduler(
                 if (!job.finished(rt.outputId)) {
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
-                  taskScheduler.markPartitionIdAsCompletedAndKillCorrespondingTaskAttempts(
-                    task.partitionId, task.stageId)
+                  taskScheduler.completeTasks(task.partitionId, task.stageId, true)
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
                     markStageAsFinished(resultStage)
@@ -1429,6 +1428,7 @@ private[spark] class DAGScheduler(
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
+            taskScheduler.completeTasks(task.partitionId, task.stageId, false)
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
               logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
             } else {
