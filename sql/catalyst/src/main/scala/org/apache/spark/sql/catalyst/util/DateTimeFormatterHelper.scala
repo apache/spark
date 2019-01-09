@@ -40,7 +40,7 @@ trait DateTimeFormatterHelper {
     Instant.from(zonedDateTime)
   }
 
-  def getOrCreateFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
+  protected def getOrCreateFormatter(pattern: String, locale: Locale): DateTimeFormatter = {
     val key = (pattern, locale)
     var formatter = cache.getIfPresent(key)
     if (formatter == null) {
