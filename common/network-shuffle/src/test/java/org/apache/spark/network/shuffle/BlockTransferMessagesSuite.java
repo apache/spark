@@ -17,11 +17,16 @@
 
 package org.apache.spark.network.shuffle;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
 import org.apache.spark.network.shuffle.protocol.*;
+
+import java.nio.ByteBuffer;
 
 /** Verifies that all BlockTransferMessages can be serialized correctly. */
 public class BlockTransferMessagesSuite {
@@ -41,4 +46,50 @@ public class BlockTransferMessagesSuite {
     assertEquals(msg.hashCode(), msg2.hashCode());
     assertEquals(msg.toString(), msg2.toString());
   }
+
+  private BlockTransferMessage testFromByteBuffer(ByteBuffer msg) {
+    ByteBuf buf = Unpooled.wrappedBuffer(msg);
+    byte type = buf.readByte();
+    switch (type) {
+      case 0: return TestOpenBlocks.decode(buf);
+      case 3: return TestStreamHandle.decode(buf);
+      default: throw new IllegalArgumentException("Unknown message type: " + type);
+    }
+  }
+
+  private void checkOpenBlocks(OpenBlocks ob1, TestOpenBlocks ob2) {
+    assertEquals(ob1.appId, ob2.appId);
+    assertEquals(ob1.execId, ob2.execId);
+    assertArrayEquals(ob1.blockIds, ob2.blockIds);
+  }
+
+  @Test
+  public void checkOpenBlocksBackwardCompatibility() {
+    TestOpenBlocks ob1 = new TestOpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" });
+    OpenBlocks ob2 = (OpenBlocks)BlockTransferMessage.Decoder.fromByteBuffer(ob1.toByteBuffer());
+    checkOpenBlocks(ob2, ob1);
+    assertEquals(ob2.shuffleBlockBatchFetch, false);
+
+    OpenBlocks ob3 = new OpenBlocks("app-1", "exec-2", new String[] { "b1", "b2" }, true);
+    TestOpenBlocks ob4 = (TestOpenBlocks)testFromByteBuffer(ob3.toByteBuffer());
+    checkOpenBlocks(ob3, ob4);
+  }
+
+  private void checkStreamHandle(StreamHandle sh1, TestStreamHandle sh2) {
+    assertEquals(sh1.streamId, sh2.streamId);
+    assertEquals(sh1.numChunks, sh2.numChunks);
+  }
+
+  @Test
+  public void checkStreamHandleBackwardCompatibility() {
+    TestStreamHandle sh1 = new TestStreamHandle(12345, 16);
+    StreamHandle sh2 = (StreamHandle)BlockTransferMessage.Decoder.fromByteBuffer(sh1.toByteBuffer());
+    checkStreamHandle(sh2, sh1);
+    assertArrayEquals(sh2.chunkSizes, new int[0]);
+
+    StreamHandle sh3 = new StreamHandle(12345, 16, new int[0]);
+    TestStreamHandle sh4 = (TestStreamHandle)testFromByteBuffer(sh3.toByteBuffer());
+    checkStreamHandle(sh3, sh4);
+  }
+
 }
