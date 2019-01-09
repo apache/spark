@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.{LocalDate, LocalDateTime, ZoneId}
+import java.util.concurrent.TimeUnit
 import java.util.{Calendar, Locale, TimeZone}
 
 import org.apache.spark.SparkFunSuite
@@ -195,149 +197,152 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       }
 
       var c = Calendar.getInstance(tz)
-      c.set(1969, 11, 31, 16, 0, 0)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("1969-12-31 16:00:00", Option(c.getTimeInMillis * 1000))
-      c.set(1, 0, 1, 0, 0, 0)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("0001", Option(c.getTimeInMillis * 1000))
-      c = Calendar.getInstance(tz)
-      c.set(2015, 2, 1, 0, 0, 0)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("2015-03", Option(c.getTimeInMillis * 1000))
-      c = Calendar.getInstance(tz)
-      c.set(2015, 2, 18, 0, 0, 0)
-      c.set(Calendar.MILLISECOND, 0)
-
-      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
-        checkStringToTimestamp(s, Option(c.getTimeInMillis * 1000))
-      }
-
-      c = Calendar.getInstance(tz)
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("2015-03-18 12:03:17", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18T12:03:17", Option(c.getTimeInMillis * 1000))
-
-      // If the string value includes timezone string, it represents the timestamp string
-      // in the timezone regardless of the tz parameter.
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-13:53"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("2015-03-18T12:03:17-13:53", Option(c.getTimeInMillis * 1000))
-
-      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("2015-03-18T12:03:17Z", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18 12:03:17Z", Option(c.getTimeInMillis * 1000))
-
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("2015-03-18T12:03:17-1:0", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18T12:03:17-01:00", Option(c.getTimeInMillis * 1000))
+//      c.set(1969, 11, 31, 16, 0, 0)
+//      c.set(Calendar.MILLISECOND, 0)
+//      checkStringToTimestamp("1969-12-31 16:00:00", Option(c.getTimeInMillis * 1000))
+//      c.set(1, 0, 1, 0, 0, 0)
+//      c.set(Calendar.MILLISECOND, 0)
+//      val date = LocalDate.of(1, 1, 1)
+//        .atStartOfDay(tz.toZoneId)
+//      checkStringToTimestamp("0001", Option(TimeUnit.SECONDS.toMicros(date.toEpochSecond)))
+//      c = Calendar.getInstance(tz)
+//      c.set(2015, 2, 1, 0, 0, 0)
+//      c.set(Calendar.MILLISECOND, 0)
+//      checkStringToTimestamp("2015-03", Option(c.getTimeInMillis * 1000))
+//      c = Calendar.getInstance(tz)
+//      c.set(2015, 2, 18, 0, 0, 0)
+//      c.set(Calendar.MILLISECOND, 0)
+//
+//      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
+//        checkStringToTimestamp(s, Option(c.getTimeInMillis * 1000))
+//      }
+//
+//      c = Calendar.getInstance(tz)
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 0)
+//      checkStringToTimestamp("2015-03-18 12:03:17", Option(c.getTimeInMillis * 1000))
+//      checkStringToTimestamp("2015-03-18T12:03:17", Option(c.getTimeInMillis * 1000))
+//
+//      // If the string value includes timezone string, it represents the timestamp string
+//      // in the timezone regardless of the tz parameter.
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-13:53"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 0)
+//      checkStringToTimestamp("2015-03-18T12:03:17-13:53", Option(c.getTimeInMillis * 1000))
+//
+//      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 0)
+//      checkStringToTimestamp("2015-03-18T12:03:17Z", Option(c.getTimeInMillis * 1000))
+//      checkStringToTimestamp("2015-03-18 12:03:17Z", Option(c.getTimeInMillis * 1000))
+//
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 0)
+//      checkStringToTimestamp("2015-03-18T12:03:17-1:0", Option(c.getTimeInMillis * 1000))
+//      checkStringToTimestamp("2015-03-18T12:03:17-01:00", Option(c.getTimeInMillis * 1000))
+//
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 0)
+//      checkStringToTimestamp("2015-03-18T12:03:17+07:30", Option(c.getTimeInMillis * 1000))
+//
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:03"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 0)
+//      checkStringToTimestamp("2015-03-18T12:03:17+07:03", Option(c.getTimeInMillis * 1000))
+//
+//      // tests for the string including milliseconds.
+//      c = Calendar.getInstance(tz)
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 123)
+//      checkStringToTimestamp("2015-03-18 12:03:17.123", Option(c.getTimeInMillis * 1000))
+//      checkStringToTimestamp("2015-03-18T12:03:17.123", Option(c.getTimeInMillis * 1000))
+//
+//      // If the string value includes timezone string, it represents the timestamp string
+//      // in the timezone regardless of the tz parameter.
+//      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 456)
+//      checkStringToTimestamp("2015-03-18T12:03:17.456Z", Option(c.getTimeInMillis * 1000))
+//      checkStringToTimestamp("2015-03-18 12:03:17.456Z", Option(c.getTimeInMillis * 1000))
+//
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 123)
+//      checkStringToTimestamp("2015-03-18T12:03:17.123-1:0", Option(c.getTimeInMillis * 1000))
+//      checkStringToTimestamp("2015-03-18T12:03:17.123-01:00", Option(c.getTimeInMillis * 1000))
+//
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 123)
+//      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", Option(c.getTimeInMillis * 1000))
+//
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 123)
+//      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", Option(c.getTimeInMillis * 1000))
+//
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 123)
+//      checkStringToTimestamp(
+//        "2015-03-18T12:03:17.123121+7:30", Option(c.getTimeInMillis * 1000 + 121))
+//
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 123)
+//      checkStringToTimestamp(
+//        "2015-03-18T12:03:17.12312+7:30", Option(c.getTimeInMillis * 1000 + 120))
+//
+//      c = Calendar.getInstance(tz)
+//      c.set(Calendar.HOUR_OF_DAY, 18)
+//      c.set(Calendar.MINUTE, 12)
+//      c.set(Calendar.SECOND, 15)
+//      c.set(Calendar.MILLISECOND, 0)
+//      checkStringToTimestamp("18:12:15", Option(c.getTimeInMillis * 1000))
 
       c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("2015-03-18T12:03:17+07:30", Option(c.getTimeInMillis * 1000))
-
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:03"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("2015-03-18T12:03:17+07:03", Option(c.getTimeInMillis * 1000))
-
-      // tests for the string including milliseconds.
-      c = Calendar.getInstance(tz)
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 123)
-      checkStringToTimestamp("2015-03-18 12:03:17.123", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18T12:03:17.123", Option(c.getTimeInMillis * 1000))
-
-      // If the string value includes timezone string, it represents the timestamp string
-      // in the timezone regardless of the tz parameter.
-      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 456)
-      checkStringToTimestamp("2015-03-18T12:03:17.456Z", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18 12:03:17.456Z", Option(c.getTimeInMillis * 1000))
-
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT-01:00"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 123)
-      checkStringToTimestamp("2015-03-18T12:03:17.123-1:0", Option(c.getTimeInMillis * 1000))
-      checkStringToTimestamp("2015-03-18T12:03:17.123-01:00", Option(c.getTimeInMillis * 1000))
-
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 123)
-      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", Option(c.getTimeInMillis * 1000))
-
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 123)
-      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", Option(c.getTimeInMillis * 1000))
-
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 123)
-      checkStringToTimestamp(
-        "2015-03-18T12:03:17.123121+7:30", Option(c.getTimeInMillis * 1000 + 121))
-
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 123)
-      checkStringToTimestamp(
-        "2015-03-18T12:03:17.12312+7:30", Option(c.getTimeInMillis * 1000 + 120))
-
-      c = Calendar.getInstance(tz)
       c.set(Calendar.HOUR_OF_DAY, 18)
       c.set(Calendar.MINUTE, 12)
       c.set(Calendar.SECOND, 15)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp("18:12:15", Option(c.getTimeInMillis * 1000))
-
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
-      c.set(Calendar.HOUR_OF_DAY, 18)
-      c.set(Calendar.MINUTE, 12)
-      c.set(Calendar.SECOND, 15)
       c.set(Calendar.MILLISECOND, 123)
+      println(c.getTimeInMillis)
       checkStringToTimestamp("T18:12:15.12312+7:30", Option(c.getTimeInMillis * 1000 + 120))
 
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
-      c.set(Calendar.HOUR_OF_DAY, 18)
-      c.set(Calendar.MINUTE, 12)
-      c.set(Calendar.SECOND, 15)
-      c.set(Calendar.MILLISECOND, 123)
-      checkStringToTimestamp("18:12:15.12312+7:30", Option(c.getTimeInMillis * 1000 + 120))
-
-      c = Calendar.getInstance(tz)
-      c.set(2011, 4, 6, 7, 8, 9)
-      c.set(Calendar.MILLISECOND, 100)
-      checkStringToTimestamp("2011-05-06 07:08:09.1000", Option(c.getTimeInMillis * 1000))
-
-      checkStringToTimestamp("238", None)
-      checkStringToTimestamp("00238", None)
-      checkStringToTimestamp("2015-03-18 123142", None)
-      checkStringToTimestamp("2015-03-18T123123", None)
-      checkStringToTimestamp("2015-03-18X", None)
-      checkStringToTimestamp("2015/03/18", None)
-      checkStringToTimestamp("2015.03.18", None)
-      checkStringToTimestamp("20150318", None)
-      checkStringToTimestamp("2015-031-8", None)
-      checkStringToTimestamp("02015-01-18", None)
-      checkStringToTimestamp("015-01-18", None)
-      checkStringToTimestamp("2015-03-18T12:03.17-20:0", None)
-      checkStringToTimestamp("2015-03-18T12:03.17-0:70", None)
-      checkStringToTimestamp("2015-03-18T12:03.17-1:0:0", None)
-
-      // Truncating the fractional seconds
-      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+00:00"))
-      c.set(2015, 2, 18, 12, 3, 17)
-      c.set(Calendar.MILLISECOND, 0)
-      checkStringToTimestamp(
-        "2015-03-18T12:03:17.123456789+0:00", Option(c.getTimeInMillis * 1000 + 123456))
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+07:30"))
+//      c.set(Calendar.HOUR_OF_DAY, 18)
+//      c.set(Calendar.MINUTE, 12)
+//      c.set(Calendar.SECOND, 15)
+//      c.set(Calendar.MILLISECOND, 123)
+//      checkStringToTimestamp("18:12:15.12312+7:30", Option(c.getTimeInMillis * 1000 + 120))
+//
+//      c = Calendar.getInstance(tz)
+//      c.set(2011, 4, 6, 7, 8, 9)
+//      c.set(Calendar.MILLISECOND, 100)
+//      checkStringToTimestamp("2011-05-06 07:08:09.1000", Option(c.getTimeInMillis * 1000))
+//
+//      checkStringToTimestamp("238", None)
+//      checkStringToTimestamp("00238", None)
+//      checkStringToTimestamp("2015-03-18 123142", None)
+//      checkStringToTimestamp("2015-03-18T123123", None)
+//      checkStringToTimestamp("2015-03-18X", None)
+//      checkStringToTimestamp("2015/03/18", None)
+//      checkStringToTimestamp("2015.03.18", None)
+//      checkStringToTimestamp("20150318", None)
+//      checkStringToTimestamp("2015-031-8", None)
+//      checkStringToTimestamp("02015-01-18", None)
+//      checkStringToTimestamp("015-01-18", None)
+//      checkStringToTimestamp("2015-03-18T12:03.17-20:0", None)
+//      checkStringToTimestamp("2015-03-18T12:03.17-0:70", None)
+//      checkStringToTimestamp("2015-03-18T12:03.17-1:0:0", None)
+//
+//      // Truncating the fractional seconds
+//      c = Calendar.getInstance(TimeZone.getTimeZone("GMT+00:00"))
+//      c.set(2015, 2, 18, 12, 3, 17)
+//      c.set(Calendar.MILLISECOND, 0)
+//      checkStringToTimestamp(
+//        "2015-03-18T12:03:17.123456789+0:00", Option(c.getTimeInMillis * 1000 + 123456))
     }
   }
 

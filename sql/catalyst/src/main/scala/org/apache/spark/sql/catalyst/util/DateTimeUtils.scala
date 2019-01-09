@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
+import java.time._
 import java.util.{Calendar, Locale, TimeZone}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.function.{Function => JFunction}
+
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
-
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -427,23 +428,38 @@ object DateTimeUtils {
       return None
     }
 
-    val c = if (tz.isEmpty) {
-      Calendar.getInstance(timeZone)
+    val zoneId = if (tz.isEmpty) {
+      timeZone.toZoneId
     } else {
-      Calendar.getInstance(
-        getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
+      getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d").toZoneId
     }
-    c.set(Calendar.MILLISECOND, 0)
-
+    println(zoneId)
+    val nanoseconds = TimeUnit.MICROSECONDS.toNanos(segments(6))
+    val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
     if (justTime) {
-      c.set(Calendar.HOUR_OF_DAY, segments(3))
-      c.set(Calendar.MINUTE, segments(4))
-      c.set(Calendar.SECOND, segments(5))
+      val localDate = LocalDate.now(zoneId)
+      println(s"tz = ${timeZone.toZoneId} date = ${localDate}")
+      val localDateTime = LocalDateTime.of(localDate, localTime)
+      println(s"localDateTime = ${localDateTime}")
+      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+      val instant = Instant.from(zonedDateTime)
+
+      Some(instantToMicros(instant))
     } else {
-      c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
+      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+      val localDateTime = LocalDateTime.of(localDate, localTime)
+      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+      val instant = Instant.from(zonedDateTime)
+
+      Some(instantToMicros(instant))
     }
 
-    Some(c.getTimeInMillis * 1000 + segments(6))
+  }
+
+  def instantToMicros(instant: Instant): Long = {
+    val sec = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
+    val result = Math.addExact(sec, instant.getNano / NANOS_PER_MICROS)
+    result
   }
 
   /**
