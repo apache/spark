@@ -146,19 +146,21 @@ private[spark] class MemoryStore(
       memoryMode: MemoryMode,
       _bytes: () => ChunkedByteBuffer): Boolean = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-    if (memoryManager.acquireStorageMemory(blockId, size, memoryMode)) {
-      // We acquired enough memory for the block, so go ahead and put it
-      val bytes = _bytes()
-      assert(bytes.size == size)
-      val entry = new SerializedMemoryEntry[T](bytes, memoryMode, implicitly[ClassTag[T]])
-      entries.synchronized {
-        entries.put(blockId, entry)
+    memoryManager.synchronized {
+      if (memoryManager.acquireStorageMemory(blockId, size, memoryMode)) {
+        // We acquired enough memory for the block, so go ahead and put it
+        val bytes = _bytes()
+        assert(bytes.size == size)
+        val entry = new SerializedMemoryEntry[T](bytes, memoryMode, implicitly[ClassTag[T]])
+        entries.synchronized {
+          entries.put(blockId, entry)
+        }
+        logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
+          blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
+        true
+      } else {
+        false
       }
-      logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
-        blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
-      true
-    } else {
-      false
     }
   }
 
