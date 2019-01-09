@@ -220,7 +220,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
  * E.g, with temporary view `t` using [[FileDataSourceV2]], inserting into  view `t` fails
  * since there is no correspoding physical plan.
  * This is a temporary hack for making current data source V2 work. It should be removed
- * when catalog of data source v2 is finished.
+ * when write path of file data source v2 is finished.
  */
 class FallBackFileDataSourceToV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
